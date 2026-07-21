@@ -1,0 +1,47 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+*.lnk
+
+# Editors / IDEs
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+*.rej
+
+# Secrets
+.env
+.env.local
+.env.*.local
+.envrc
+
+# Logs
+*.log
+
+# AI tooling (local-only)
+.opencode/
+.claude/
+.codegraph/
+
+# Python (defensive — for any helper scripts)
+__pycache__/
+*.pyc
+
+# Scratch
+tmp/
+temp/
+*.tmp
+
+# SQLite WAL files (inner hapiy/.gitignore covers *.db itself)
+*.db-shm
+*.db-wal
+*.sqlite-journal
