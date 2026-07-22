@@ -18,13 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { AnimatedOutlet } from '@/components/page-transition'
 import { SkipToMain } from '@/components/skip-to-main'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { LayoutProvider } from '@/context/layout-provider'
 import { SearchProvider } from '@/context/search-provider'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 
-import { AppHeader } from './app-header'
 import { AppSidebar } from './app-sidebar'
 
 type AuthenticatedLayoutProps = {
@@ -37,17 +36,19 @@ export function AuthenticatedLayout(props: AuthenticatedLayoutProps) {
   return (
     <LayoutProvider>
       <SearchProvider>
-        <SidebarProvider defaultOpen={defaultOpen} className='flex-col'>
+        <SidebarProvider defaultOpen={defaultOpen}>
           <SkipToMain />
-          <AppHeader />
-          <div className='flex min-h-0 w-full flex-1'>
+          <div className='relative flex min-h-svh w-full flex-1'>
             <AppSidebar />
+            <SidebarTrigger
+              variant='ghost'
+              size='icon-sm'
+              className='fixed top-2 left-2 z-50 size-8'
+            />
             <SidebarInset
               className={cn(
                 '@container/content',
-                'h-[calc(100svh-var(--app-header-height,0px))]',
-                'min-h-0 overflow-hidden',
-                'peer-data-[variant=inset]:h-[calc(100svh-var(--app-header-height,0px)-(var(--spacing)*4))]'
+                'min-h-0 w-full overflow-hidden'
               )}
             >
               {props.children ?? <AnimatedOutlet />}

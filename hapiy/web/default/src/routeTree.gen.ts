@@ -21,7 +21,15 @@ import { Route as AboutIndexRouteImport } from './routes/about/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as ConsoleTopupRouteImport } from './routes/console/topup'
 import { Route as ConsoleLogRouteImport } from './routes/console/log'
+import { Route as AuthenticatedTokensNewRouteImport } from './routes/_authenticated/tokens-new'
+import { Route as AuthenticatedSwitchRulesRouteImport } from './routes/_authenticated/switch-rules'
+import { Route as AuthenticatedRequestModifiersRouteImport } from './routes/_authenticated/request-modifiers'
+import { Route as AuthenticatedProvidersRouteImport } from './routes/_authenticated/providers'
+import { Route as AuthenticatedPlaygroundNewRouteImport } from './routes/_authenticated/playground-new'
+import { Route as AuthenticatedLogsNewRouteImport } from './routes/_authenticated/logs-new'
+import { Route as AuthenticatedConcurrencyRulesRouteImport } from './routes/_authenticated/concurrency-rules'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
+import { Route as AuthenticatedAutoReplyRouteImport } from './routes/_authenticated/auto-reply'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -128,9 +136,53 @@ const ConsoleLogRoute = ConsoleLogRouteImport.update({
   path: '/console/log',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTokensNewRoute = AuthenticatedTokensNewRouteImport.update({
+  id: '/tokens-new',
+  path: '/tokens-new',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSwitchRulesRoute =
+  AuthenticatedSwitchRulesRouteImport.update({
+    id: '/switch-rules',
+    path: '/switch-rules',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedRequestModifiersRoute =
+  AuthenticatedRequestModifiersRouteImport.update({
+    id: '/request-modifiers',
+    path: '/request-modifiers',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedProvidersRoute = AuthenticatedProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPlaygroundNewRoute =
+  AuthenticatedPlaygroundNewRouteImport.update({
+    id: '/playground-new',
+    path: '/playground-new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedLogsNewRoute = AuthenticatedLogsNewRouteImport.update({
+  id: '/logs-new',
+  path: '/logs-new',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedConcurrencyRulesRoute =
+  AuthenticatedConcurrencyRulesRouteImport.update({
+    id: '/concurrency-rules',
+    path: '/concurrency-rules',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChat2linkRoute = AuthenticatedChat2linkRouteImport.update({
   id: '/chat2link',
   path: '/chat2link',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAutoReplyRoute = AuthenticatedAutoReplyRouteImport.update({
+  id: '/auto-reply',
+  path: '/auto-reply',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const errors503Route = errors503RouteImport.update({
@@ -416,7 +468,15 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/auto-reply': typeof AuthenticatedAutoReplyRoute
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/concurrency-rules': typeof AuthenticatedConcurrencyRulesRoute
+  '/logs-new': typeof AuthenticatedLogsNewRoute
+  '/playground-new': typeof AuthenticatedPlaygroundNewRoute
+  '/providers': typeof AuthenticatedProvidersRoute
+  '/request-modifiers': typeof AuthenticatedRequestModifiersRoute
+  '/switch-rules': typeof AuthenticatedSwitchRulesRoute
+  '/tokens-new': typeof AuthenticatedTokensNewRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
@@ -475,7 +535,15 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/auto-reply': typeof AuthenticatedAutoReplyRoute
   '/chat2link': typeof AuthenticatedChat2linkRoute
+  '/concurrency-rules': typeof AuthenticatedConcurrencyRulesRoute
+  '/logs-new': typeof AuthenticatedLogsNewRoute
+  '/playground-new': typeof AuthenticatedPlaygroundNewRoute
+  '/providers': typeof AuthenticatedProvidersRoute
+  '/request-modifiers': typeof AuthenticatedRequestModifiersRoute
+  '/switch-rules': typeof AuthenticatedSwitchRulesRoute
+  '/tokens-new': typeof AuthenticatedTokensNewRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
@@ -538,7 +606,15 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/auto-reply': typeof AuthenticatedAutoReplyRoute
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
+  '/_authenticated/concurrency-rules': typeof AuthenticatedConcurrencyRulesRoute
+  '/_authenticated/logs-new': typeof AuthenticatedLogsNewRoute
+  '/_authenticated/playground-new': typeof AuthenticatedPlaygroundNewRoute
+  '/_authenticated/providers': typeof AuthenticatedProvidersRoute
+  '/_authenticated/request-modifiers': typeof AuthenticatedRequestModifiersRoute
+  '/_authenticated/switch-rules': typeof AuthenticatedSwitchRulesRoute
+  '/_authenticated/tokens-new': typeof AuthenticatedTokensNewRoute
   '/console/log': typeof ConsoleLogRoute
   '/console/topup': typeof ConsoleTopupRoute
   '/oauth/$provider': typeof OauthProviderRoute
@@ -600,7 +676,15 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/auto-reply'
     | '/chat2link'
+    | '/concurrency-rules'
+    | '/logs-new'
+    | '/playground-new'
+    | '/providers'
+    | '/request-modifiers'
+    | '/switch-rules'
+    | '/tokens-new'
     | '/console/log'
     | '/console/topup'
     | '/oauth/$provider'
@@ -659,7 +743,15 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/auto-reply'
     | '/chat2link'
+    | '/concurrency-rules'
+    | '/logs-new'
+    | '/playground-new'
+    | '/providers'
+    | '/request-modifiers'
+    | '/switch-rules'
+    | '/tokens-new'
     | '/console/log'
     | '/console/topup'
     | '/oauth/$provider'
@@ -721,7 +813,15 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/auto-reply'
     | '/_authenticated/chat2link'
+    | '/_authenticated/concurrency-rules'
+    | '/_authenticated/logs-new'
+    | '/_authenticated/playground-new'
+    | '/_authenticated/providers'
+    | '/_authenticated/request-modifiers'
+    | '/_authenticated/switch-rules'
+    | '/_authenticated/tokens-new'
     | '/console/log'
     | '/console/topup'
     | '/oauth/$provider'
@@ -872,11 +972,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsoleLogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/tokens-new': {
+      id: '/_authenticated/tokens-new'
+      path: '/tokens-new'
+      fullPath: '/tokens-new'
+      preLoaderRoute: typeof AuthenticatedTokensNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/switch-rules': {
+      id: '/_authenticated/switch-rules'
+      path: '/switch-rules'
+      fullPath: '/switch-rules'
+      preLoaderRoute: typeof AuthenticatedSwitchRulesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/request-modifiers': {
+      id: '/_authenticated/request-modifiers'
+      path: '/request-modifiers'
+      fullPath: '/request-modifiers'
+      preLoaderRoute: typeof AuthenticatedRequestModifiersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/providers': {
+      id: '/_authenticated/providers'
+      path: '/providers'
+      fullPath: '/providers'
+      preLoaderRoute: typeof AuthenticatedProvidersRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/playground-new': {
+      id: '/_authenticated/playground-new'
+      path: '/playground-new'
+      fullPath: '/playground-new'
+      preLoaderRoute: typeof AuthenticatedPlaygroundNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/logs-new': {
+      id: '/_authenticated/logs-new'
+      path: '/logs-new'
+      fullPath: '/logs-new'
+      preLoaderRoute: typeof AuthenticatedLogsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/concurrency-rules': {
+      id: '/_authenticated/concurrency-rules'
+      path: '/concurrency-rules'
+      fullPath: '/concurrency-rules'
+      preLoaderRoute: typeof AuthenticatedConcurrencyRulesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/chat2link': {
       id: '/_authenticated/chat2link'
       path: '/chat2link'
       fullPath: '/chat2link'
       preLoaderRoute: typeof AuthenticatedChat2linkRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/auto-reply': {
+      id: '/_authenticated/auto-reply'
+      path: '/auto-reply'
+      fullPath: '/auto-reply'
+      preLoaderRoute: typeof AuthenticatedAutoReplyRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(errors)/503': {
@@ -1296,7 +1452,15 @@ const AuthenticatedSystemSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
+  AuthenticatedAutoReplyRoute: typeof AuthenticatedAutoReplyRoute
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
+  AuthenticatedConcurrencyRulesRoute: typeof AuthenticatedConcurrencyRulesRoute
+  AuthenticatedLogsNewRoute: typeof AuthenticatedLogsNewRoute
+  AuthenticatedPlaygroundNewRoute: typeof AuthenticatedPlaygroundNewRoute
+  AuthenticatedProvidersRoute: typeof AuthenticatedProvidersRoute
+  AuthenticatedRequestModifiersRoute: typeof AuthenticatedRequestModifiersRoute
+  AuthenticatedSwitchRulesRoute: typeof AuthenticatedSwitchRulesRoute
+  AuthenticatedTokensNewRoute: typeof AuthenticatedTokensNewRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1319,7 +1483,15 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemSettingsRouteRoute:
     AuthenticatedSystemSettingsRouteRouteWithChildren,
+  AuthenticatedAutoReplyRoute: AuthenticatedAutoReplyRoute,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
+  AuthenticatedConcurrencyRulesRoute: AuthenticatedConcurrencyRulesRoute,
+  AuthenticatedLogsNewRoute: AuthenticatedLogsNewRoute,
+  AuthenticatedPlaygroundNewRoute: AuthenticatedPlaygroundNewRoute,
+  AuthenticatedProvidersRoute: AuthenticatedProvidersRoute,
+  AuthenticatedRequestModifiersRoute: AuthenticatedRequestModifiersRoute,
+  AuthenticatedSwitchRulesRoute: AuthenticatedSwitchRulesRoute,
+  AuthenticatedTokensNewRoute: AuthenticatedTokensNewRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

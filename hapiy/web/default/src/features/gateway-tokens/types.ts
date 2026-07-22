@@ -16,10 +16,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { createFileRoute, redirect } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/')({
-  beforeLoad: () => {
-    throw redirect({ to: '/playground-new' })
-  },
-})
+export interface GatewayToken {
+  id: string
+  name: string
+  value: string
+  requests: number
+  status: 'active' | 'disabled' | 'expired'
+  groups: string[]
+  created_at: string
+  last_used: string
+}

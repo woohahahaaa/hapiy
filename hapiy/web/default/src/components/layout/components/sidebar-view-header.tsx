@@ -40,13 +40,22 @@ type SidebarViewHeaderProps = {
  *
  * Renders only the back affordance — workspace context is conveyed by
  * the nav groups below, not a redundant title row.
+ *
+ * The left padding widens when the sidebar is collapsed so the parent
+ * label clears the fixed-position sidebar trigger pinned to the rail.
  */
 export function SidebarViewHeader(props: SidebarViewHeaderProps) {
   const { t } = useTranslation()
-  const { setOpenMobile } = useSidebar()
+  const { setOpenMobile, state } = useSidebar()
+  const collapsed = state === 'collapsed'
 
   return (
-    <SidebarHeader className='border-sidebar-border border-b px-2 py-2'>
+    <SidebarHeader
+      className={cn(
+        'border-sidebar-border border-b py-2 pr-2 transition-[padding] duration-200 ease-linear',
+        collapsed ? 'pl-10' : 'pl-2'
+      )}
+    >
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton

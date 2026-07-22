@@ -16,11 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useNavigate } from '@tanstack/react-router'
+import { KeyRound, LogOut } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { useTranslation } from 'react-i18next'
 
-import { Sidebar, SidebarContent, SidebarRail } from '@/components/ui/sidebar'
+import { SignOutDialog } from '@/components/sign-out-dialog'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarRail,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+} from '@/components/ui/sidebar'
 import { useLayout } from '@/context/layout-provider'
 import { useSidebarView } from '@/hooks/use-sidebar-view'
+import useDialogState from '@/hooks/use-dialog'
 import { MOTION_TRANSITION, MOTION_VARIANTS } from '@/lib/motion'
 
 import { NavGroup } from './nav-group'
@@ -28,25 +40,14 @@ import { SidebarViewHeader } from './sidebar-view-header'
 
 /**
  * Application sidebar.
- *
- * Adopts the Vercel / Cloudflare "drill-in" pattern: the URL drives
- * which sidebar *view* is rendered. Clicking a top-level entry like
- * `System Settings` swaps the sidebar to a contextual workspace —
- * with a `← Back to Dashboard` affordance — instead of stacking the
- * sub-navigation inside the root tree.
- *
- * Architecture:
- *   - View resolution + filtering: {@link useSidebarView}
- *   - View registry: `layout/lib/sidebar-view-registry.ts`
- *   - Per-view header: {@link SidebarViewHeader}
- *
- * Adding a new nested view only requires registering a {@link SidebarView}
- * in the registry; this component requires no changes.
  */
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   const { key, view, navGroups } = useSidebarView()
   const shouldReduce = useReducedMotion()
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [signOutOpen, setSignOutOpen] = useDialogState()
 
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
@@ -67,9 +68,29 @@ export function AppSidebar() {
             {navGroups.map((props) => (
               <NavGroup key={props.id || props.title} {...props} />
             ))}
+
+            {/* 系统设置下的入口项 */}
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => navigate({ to: '/profile' })}
+                >
+                  <KeyRound className='size-4 shrink-0' />
+                  <span className='min-w-0 flex-1 truncate'>{t('Change Password')}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={() => setSignOutOpen(true)}>
+                  <LogOut className='size-4 shrink-0' />
+                  <span className='min-w-0 flex-1 truncate'>{t('Sign out')}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
           </motion.div>
         </AnimatePresence>
       </SidebarContent>
+
+      <SignOutDialog open={!!signOutOpen} onOpenChange={setSignOutOpen} />
 
       <SidebarRail />
     </Sidebar>

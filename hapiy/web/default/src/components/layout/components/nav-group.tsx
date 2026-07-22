@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { Link, useLocation } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 import { type ReactNode, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -46,13 +47,14 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 
 import { checkIsActive } from '../lib/url-utils'
-import {
-  type NavCollapsible,
-  type NavChatPresets,
-  type NavLink,
-  type NavGroup as NavGroupProps,
+import type {
+  NavCollapsible,
+  NavChatPresets,
+  NavLink,
+  NavGroup as NavGroupProps,
 } from '../types'
 import { ChatPresetsItem } from './chat-presets-item'
 
@@ -121,18 +123,36 @@ function NavBadge({ children }: { children: ReactNode }) {
  * Sidebar menu link item
  */
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
-  const { setOpenMobile } = useSidebar()
+  const { setOpenMobile, state } = useSidebar()
+  const { t } = useTranslation()
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={checkIsActive(href, item)}
-        tooltip={item.title}
-        render={<Link to={item.url} onClick={() => setOpenMobile(false)} />}
-      >
-        {item.icon && <item.icon className='shrink-0' />}
-        <span className='min-w-0 flex-1 truncate'>{item.title}</span>
-        {item.badge && <NavBadge>{item.badge}</NavBadge>}
-      </SidebarMenuButton>
+      <div className='relative'>
+        <SidebarMenuButton
+          isActive={checkIsActive(href, item)}
+          tooltip={item.title}
+          render={<Link to={item.url} onClick={() => setOpenMobile(false)} />}
+        >
+          {item.icon && <item.icon className='shrink-0' />}
+          <span className='min-w-0 flex-1 truncate'>{item.title}</span>
+          {item.badge && <NavBadge>{item.badge}</NavBadge>}
+        </SidebarMenuButton>
+        {item.actions?.map((action) => (
+          <Link
+            key={action.labelKey}
+            to={action.to}
+            onClick={() => setOpenMobile(false)}
+            title={t(action.labelKey)}
+            className={cn(
+              'text-muted-foreground hover:text-foreground absolute top-1/2 right-1 z-10 -translate-y-1/2 rounded-md px-1.5 py-0.5 text-xs font-medium transition-colors hover:bg-muted',
+              'group-data-[collapsible=icon]:hidden'
+            )}
+          >
+            {t(action.labelKey)}
+          </Link>
+        ))}
+        {state === 'collapsed' && null}
+      </div>
     </SidebarMenuItem>
   )
 }

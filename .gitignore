@@ -45,3 +45,8 @@ temp/
 *.db-shm
 *.db-wal
 *.sqlite-journal
+
+# Added by opencode auto-gitignore
+logs/
+*.db
+*.sqlite
