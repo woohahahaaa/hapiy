@@ -1,12 +1,11 @@
-# OS junk
+
+# Added by opencode auto-gitignore
 .DS_Store
 Thumbs.db
 desktop.ini
 ehthumbs.db
 $RECYCLE.BIN/
 *.lnk
-
-# Editors / IDEs
 .idea/
 .vscode/*
 !.vscode/settings.json
@@ -14,39 +13,15 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
-*.bak
-*.orig
-*.rej
-
-# Secrets
 .env
 .env.local
 .env.*.local
 .envrc
-
-# Logs
 *.log
-
-# AI tooling (local-only)
+logs/
 .opencode/
-.claude/
-.codegraph/
-
-# Python (defensive — for any helper scripts)
-__pycache__/
-*.pyc
-
-# Scratch
-tmp/
-temp/
-*.tmp
-
-# SQLite WAL files (inner hapiy/.gitignore covers *.db itself)
+*.db
 *.db-shm
 *.db-wal
-*.sqlite-journal
-
-# Added by opencode auto-gitignore
-logs/
-*.db
 *.sqlite
+*.sqlite-journal
