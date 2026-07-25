@@ -54,16 +54,12 @@ const MENU = [
     id: 'settings',
     label: '系统设置',
     icon: ICONS.settings,
-    children: [
-      { id: 'security', label: '安全' },
-      { id: 'performance', label: '性能' },
-    ],
+    children: null,
   },
 ];
 
-export default function Sidebar({ expanded, onToggle }) {
+export default function Sidebar({ expanded, onToggle, activeSection, activeSub, onNavigate }) {
   const [openMenus, setOpenMenus] = useState(new Set());
-  const [activeId, setActiveId] = useState('topology');
 
   function toggleMenu(id) {
     setOpenMenus((prev) => {
@@ -75,16 +71,24 @@ export default function Sidebar({ expanded, onToggle }) {
   }
 
   function handleItemClick(item) {
-    setActiveId(item.id);
     if (item.children) {
       toggleMenu(item.id);
     }
+    onNavigate(item.id, null);
   }
 
   function handleSubItemClick(parentId, subId) {
-    setActiveId(subId);
-    // ensure parent stays open when sub-item is clicked
     setOpenMenus((prev) => new Set(prev).add(parentId));
+    onNavigate(parentId, subId);
+  }
+
+  function isActive(id) {
+    if (activeSub) return id === activeSub;
+    return id === activeSection && !activeSub;
+  }
+
+  function isSectionActive(id) {
+    return id === activeSection;
   }
 
   return (
@@ -104,27 +108,24 @@ export default function Sidebar({ expanded, onToggle }) {
         </div>
         <div className="sidebar-menu">
           {MENU.map((item) => {
-            const isOpen = openMenus.has(item.id);
-            const isActive = activeId === item.id;
             const hasChildren = item.children && item.children.length > 0;
 
             return (
               <div key={item.id}>
-                {/* ── Top-level item ── */}
                 <button
                   type="button"
-                  className={`sidebar-item ${isActive ? 'active' : ''}`}
+                  className={`sidebar-item ${isSectionActive(item.id) ? 'active' : ''}`}
                   onClick={() => handleItemClick(item)}
                   title={!expanded ? item.label : undefined}
                   aria-label={item.label}
-                  aria-current={isActive ? 'page' : undefined}
-                  aria-expanded={hasChildren ? isOpen && expanded : undefined}
+                  aria-current={isSectionActive(item.id) ? 'page' : undefined}
+                  aria-expanded={hasChildren ? openMenus.has(item.id) && expanded : undefined}
                 >
                   <span className="material-symbols-outlined sidebar-item-icon" aria-hidden="true">{item.icon}</span>
                   <span className="sidebar-item-label">{item.label}</span>
                   {hasChildren && (
                     <span
-                      className={`material-symbols-outlined sidebar-item-arrow ${isOpen ? 'open' : ''}`}
+                      className={`material-symbols-outlined sidebar-item-arrow ${openMenus.has(item.id) ? 'open' : ''}`}
                       aria-hidden="true"
                     >
                       chevron_right
@@ -132,17 +133,16 @@ export default function Sidebar({ expanded, onToggle }) {
                   )}
                 </button>
 
-                {/* ── Sub-items ── */}
-                {hasChildren && isOpen && expanded && (
+                {hasChildren && openMenus.has(item.id) && expanded && (
                   <div className="sidebar-submenu">
                     {item.children.map((sub) => (
                       <button
                         type="button"
                         key={sub.id}
-                        className={`sidebar-subitem ${activeId === sub.id ? 'active' : ''}`}
+                        className={`sidebar-subitem ${isActive(sub.id) ? 'active' : ''}`}
                         onClick={() => handleSubItemClick(item.id, sub.id)}
                         aria-label={sub.label}
-                        aria-current={activeId === sub.id ? 'page' : undefined}
+                        aria-current={isActive(sub.id) ? 'page' : undefined}
                       >
                         {sub.label}
                       </button>
@@ -152,6 +152,26 @@ export default function Sidebar({ expanded, onToggle }) {
               </div>
             );
           })}
+        </div>
+
+        <div className="sidebar-user" onClick={() => onNavigate('profile')}>
+          <div className="sidebar-user-avatar">A</div>
+          {expanded && (
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">Admin</div>
+              <div className="sidebar-user-role">管理员</div>
+            </div>
+          )}
+          {expanded && (
+            <button
+              className="sidebar-logout-btn"
+              title="退出登录"
+              aria-label="退出登录"
+              onClick={(e) => { e.stopPropagation(); }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>logout</span>
+            </button>
+          )}
         </div>
 
       </nav>

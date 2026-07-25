@@ -1,42 +1,14 @@
 import { useEffect, useState } from 'react';
-import {
-  ReactFlow,
-  MiniMap,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Sidebar from './components/Sidebar';
-import EndpointNode from './nodes/EndpointNode';
-import RouteNode from './nodes/RouteNode';
-import ChannelNode from './nodes/ChannelNode';
-import AutoSwitchNode from './nodes/AutoSwitchNode';
-import AutoReplyNode from './nodes/AutoReplyNode';
-import { initialNodes, initialEdges } from './data/demoTopology';
+import TopologyPage from './pages/TopologyPage';
+import MonitorPage from './pages/MonitorPage';
+import ProviderPage from './pages/ProviderPage';
+import TokenPage from './pages/TokenPage';
+import PolicyPage from './pages/PolicyPage';
+import SettingsPage from './pages/SettingsPage';
+import ProfilePage from './pages/ProfilePage';
 import './App.css';
-
-const nodeTypes = {
-  endpoint: EndpointNode,
-  route: RouteNode,
-  channel: ChannelNode,
-  autoSwitch: AutoSwitchNode,
-  autoReply: AutoReplyNode,
-};
-
-const defaultEdgeOptions = {
-  animated: false,
-  style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 },
-};
-
-const minimapNodeColors = {
-  endpoint: 'var(--chart-1)',
-  route: 'var(--chart-2)',
-  channel: 'var(--chart-4)',
-  autoSwitch: 'var(--node-autoswitch)',
-  autoReply: 'var(--node-autoreply)',
-};
 
 const mobileSidebarQuery = '(max-width: 640px)';
 
@@ -60,46 +32,29 @@ function useResponsiveSidebar() {
 
 function App() {
   const [expanded, setExpanded] = useResponsiveSidebar();
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [page, setPage] = useState({ section: 'topology' });
+
+  function handleNavigate(section, sub) {
+    setPage({ section, sub: sub || null });
+  }
 
   return (
     <div className="app-shell">
-      <Sidebar expanded={expanded} onToggle={() => setExpanded((v) => !v)} />
+      <Sidebar
+        expanded={expanded}
+        onToggle={() => setExpanded((v) => !v)}
+        activeSection={page.section}
+        activeSub={page.sub}
+        onNavigate={handleNavigate}
+      />
       <main className={`main-area ${expanded ? 'sidebar-expanded' : 'sidebar-collapsed'}`}>
-        <div className="canvas-topbar" aria-hidden="true">
-          <span className="material-symbols-outlined canvas-topbar-icon">account_tree</span>
-          <div className="canvas-heading">
-            <strong>转发拓扑</strong>
-            <span>API routing workspace</span>
-          </div>
-          <span className="canvas-status">9 节点 · 6 连线</span>
-        </div>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          nodeTypes={nodeTypes}
-          defaultEdgeOptions={defaultEdgeOptions}
-          nodesConnectable={false}
-          edgesReconnectable={false}
-          deleteKeyCode={null}
-          proOptions={{ hideAttribution: true }}
-        >
-          <MiniMap
-            nodeColor={(node) => minimapNodeColors[node.type] || 'var(--muted-foreground)'}
-            nodeStrokeColor="var(--card-foreground)"
-            nodeStrokeWidth={1.5}
-            nodeBorderRadius={2}
-            maskColor="color-mix(in oklch, var(--background) 48%, transparent)"
-            maskStrokeColor="var(--ring)"
-            maskStrokeWidth={1.5}
-            ariaLabel="拓扑缩略图"
-          />
-          <Controls />
-          <Background color="var(--border)" gap={20} size={1} />
-        </ReactFlow>
+        {page.section === 'topology' && <TopologyPage />}
+        {page.section === 'monitor' && <MonitorPage sub={page.sub} />}
+        {page.section === 'provider' && <ProviderPage />}
+        {page.section === 'token' && <TokenPage />}
+        {page.section === 'policy' && <PolicyPage sub={page.sub} />}
+        {page.section === 'settings' && <SettingsPage />}
+        {page.section === 'profile' && <ProfilePage />}
       </main>
     </div>
   );

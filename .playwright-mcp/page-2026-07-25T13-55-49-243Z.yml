@@ -1,0 +1,64 @@
+- generic [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "折叠侧栏" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: menu_open
+    - generic [ref=e8]:
+      - button "转发拓扑" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+      - button "监控" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: monitoring
+        - generic [ref=e17]: chevron_right
+      - button "供应商" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: cloud
+      - button "令牌管理" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: key
+      - button "策略配置" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: tune
+        - generic [ref=e30]: chevron_right
+      - button "系统设置" [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: settings
+        - generic [ref=e35]: chevron_right
+    - generic [ref=e36] [cursor=pointer]:
+      - generic [ref=e37]: A
+      - generic [ref=e38]:
+        - generic [ref=e39]: Admin
+        - generic [ref=e40]: 管理员
+      - button "退出登录" [ref=e41]:
+        - generic [ref=e42]: logout
+  - main [ref=e43]:
+    - generic [ref=e183]:
+      - generic [ref=e185]:
+        - generic [ref=e186]: person
+        - generic [ref=e187]:
+          - strong [ref=e188]: 用户资料
+          - generic [ref=e189]: 管理员账户设置
+      - generic [ref=e190]:
+        - generic [ref=e191]: 用户头像
+        - generic [ref=e192]: 点击更换头像，支持 JPG / PNG，最大 2MB
+        - generic [ref=e194]:
+          - generic [ref=e195]: A
+          - generic [ref=e196]: 管理员头像
+      - generic [ref=e197]:
+        - generic [ref=e198]: 账户信息
+        - generic [ref=e199]: 修改登录用户名和密码
+        - generic [ref=e201]:
+          - generic [ref=e202]:
+            - generic [ref=e203]: 用户 ID
+            - textbox [ref=e204]: Admin
+            - generic [ref=e205]: 登录时使用的用户名，修改后需重新登录
+          - generic [ref=e206]:
+            - generic [ref=e207]: 当前密码
+            - textbox "请输入当前密码" [ref=e208]
+            - generic [ref=e209]: 输入当前密码以验证身份
+          - generic [ref=e210]:
+            - generic [ref=e211]: 新密码
+            - textbox "留空则不修改" [ref=e212]
+            - generic [ref=e213]: 留空则不修改密码
+      - generic [ref=e214]:
+        - generic [ref=e215]: 安全设置
+        - generic [ref=e216]: 增强账户安全性
+        - generic [ref=e219]:
+          - generic [ref=e220]:
+            - generic [ref=e221]: 启用微软验证器双重登录
+            - generic [ref=e222]: 开启后，登录时需要输入微软验证器生成的 6 位一次性验证码
+          - switch [ref=e223] [cursor=pointer]

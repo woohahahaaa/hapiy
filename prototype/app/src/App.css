@@ -86,6 +86,30 @@
   display: none !important;
 }
 
+/* Edge animation: flowing data effect */
+.react-flow__edge path {
+  stroke: var(--muted-foreground);
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.animated path {
+  stroke: color-mix(in oklch, var(--sidebar-primary) 50%, var(--muted-foreground));
+  stroke-width: 1.5;
+  animation: edge-flow 1.2s linear infinite;
+  stroke-dasharray: 6 12;
+}
+
+@keyframes edge-flow {
+  to { stroke-dashoffset: -18; }
+}
+
+/* Selected edge glow */
+.react-flow__edge.selected path {
+  stroke: var(--sidebar-primary) !important;
+  stroke-width: 2 !important;
+  filter: drop-shadow(0 0 4px color-mix(in oklch, var(--sidebar-primary) 40%, transparent));
+}
+
 .react-flow__minimap {
   width: 128px !important;
   height: 84px !important;

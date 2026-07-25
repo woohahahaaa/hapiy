@@ -1,52 +1,51 @@
 /* ============================================
-   Shared base styles for all React Flow nodes
+   Shared base — minimalist dark
    ============================================ */
 
 .node {
   position: relative;
+  width: 192px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 11px;
-  width: 192px;
+  border-radius: 10px;
   font-family: var(--font-sans);
   font-size: 12px;
-  box-shadow: var(--shadow-sm);
   z-index: 1;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.node::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--node-accent);
-  opacity: 0.12;
-  pointer-events: none;
+.node:hover {
+  border-color: color-mix(in oklch, var(--sidebar-primary) 40%, var(--border));
 }
 
 .react-flow__node.selected .node {
-  border-color: color-mix(in oklch, var(--sidebar-primary) 55%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--sidebar-primary) 28%, transparent), var(--shadow-sm);
-}
-
-.react-flow__node:focus-visible .node {
-  outline: 2px solid var(--sidebar-primary);
-  outline-offset: 2px;
+  border-color: var(--sidebar-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--sidebar-primary) 24%, transparent);
 }
 
 .node-header {
-  position: relative;
-  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 9px 12px;
   font-weight: 600;
   font-size: 13px;
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
-  border-left: 3px solid var(--node-accent);
+}
+
+.node-header::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sidebar-primary);
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .node-body {
-  position: relative;
-  padding: 8px 12px;
+  padding: 9px 12px 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -66,24 +65,22 @@
   overflow-wrap: anywhere;
 }
 
-/* React Flow Handle shared styling */
 .node .react-flow__handle {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   background: var(--muted-foreground);
   border: 2px solid var(--card);
   border-radius: 50%;
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
 .node .react-flow__handle:hover {
   background: var(--foreground);
-  border-color: var(--border);
-  transform: scale(1.2);
+  transform: scale(1.35);
 }
 
 .node .react-flow__handle-connecting {
-  background: var(--ring);
+  background: var(--sidebar-primary);
 }
 
 .node .react-flow__handle-valid {

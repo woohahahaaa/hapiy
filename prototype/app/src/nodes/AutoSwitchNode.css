@@ -1,6 +1,4 @@
-.node-autoswitch {
-  --node-accent: var(--node-autoswitch);
-}
+.node-autoswitch { --node-accent: var(--node-autoswitch); }
 
 .node-autoswitch .switch-slots {
   display: flex;
@@ -15,7 +13,7 @@
   padding: 6px 8px;
   border: 1px solid color-mix(in oklch, var(--node-accent) 30%, transparent);
   border-radius: 8px;
-  background: color-mix(in oklch, var(--node-accent) 4%, transparent);
+  background: color-mix(in oklch, var(--node-accent) 6%, transparent);
   font-size: 11px;
 }
 

@@ -1,0 +1,122 @@
+- generic [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "折叠侧栏" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: menu_open
+    - generic [ref=e8]:
+      - button "转发拓扑" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+      - button "监控" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: monitoring
+        - generic [ref=e17]: chevron_right
+      - button "供应商" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: cloud
+      - button "令牌管理" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: key
+      - button "策略配置" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: tune
+        - generic [ref=e30]: chevron_right
+      - button "系统设置" [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: settings
+        - generic [ref=e35]: chevron_right
+  - main [ref=e36]:
+    - generic [ref=e37]:
+      - generic [ref=e39]:
+        - generic [ref=e40]: account_tree
+        - generic [ref=e41]:
+          - strong [ref=e42]: 转发拓扑
+          - generic [ref=e43]: API routing workspace
+        - generic [ref=e44]: 9 节点 · 6 连线
+      - application [ref=e45]:
+        - generic [ref=e47]:
+          - generic:
+            - generic:
+              - img:
+                - group "Edge from ep1 to route1" [ref=e48] [cursor=pointer]
+              - img:
+                - group "Edge from route1 to ch1" [ref=e51] [cursor=pointer]
+              - img:
+                - group "Edge from route1 to ch2" [ref=e54] [cursor=pointer]
+              - img:
+                - group "Edge from route1 to as1" [ref=e57] [cursor=pointer]
+              - img:
+                - group "Edge from ep2 to route2" [ref=e60] [cursor=pointer]
+              - img:
+                - group "Edge from route2 to ch3" [ref=e63] [cursor=pointer]
+            - generic:
+              - group [ref=e66]:
+                - generic [ref=e67]:
+                  - generic [ref=e68]: GPT 入口
+                  - generic [ref=e69]:
+                    - generic [ref=e70]: "Model: gpt-4o / gpt-4o-mini"
+                    - generic [ref=e71]:
+                      - text: "Status:"
+                      - generic [ref=e72]: active
+              - group [ref=e75]:
+                - generic [ref=e76]:
+                  - generic [ref=e77]: Claude 入口
+                  - generic [ref=e78]:
+                    - generic [ref=e79]: "Model: claude-3.5-sonnet"
+                    - generic [ref=e80]:
+                      - text: "Status:"
+                      - generic [ref=e81]: active
+              - group [ref=e84]:
+                - generic [ref=e85]:
+                  - generic [ref=e87]: 优先路由
+                  - generic [ref=e88]:
+                    - generic [ref=e89]: "Rule: model contains 'gpt-4o'"
+                    - generic [ref=e90]: "Priority: 1"
+              - group [ref=e92]:
+                - generic [ref=e93]:
+                  - generic [ref=e95]: Claude 路由
+                  - generic [ref=e96]:
+                    - generic [ref=e97]: "Rule: model contains 'claude'"
+                    - generic [ref=e98]: "Priority: 2"
+              - group [ref=e100]:
+                - generic [ref=e101]:
+                  - generic [ref=e103]: OpenAI 官方
+                  - generic [ref=e104]:
+                    - generic [ref=e105]: "Provider: OpenAI"
+                    - generic [ref=e106]: "URL: https://api.openai.com"
+                    - generic [ref=e107]: "Latency: 230ms"
+              - group [ref=e108]:
+                - generic [ref=e109]:
+                  - generic [ref=e111]: Azure OpenAI
+                  - generic [ref=e112]:
+                    - generic [ref=e113]: "Provider: Azure"
+                    - generic [ref=e114]: "URL: https://xxx.openai.azure.com"
+                    - generic [ref=e115]: "Latency: 180ms"
+              - group [ref=e116]:
+                - generic [ref=e117]:
+                  - generic [ref=e119]: Anthropic
+                  - generic [ref=e120]:
+                    - generic [ref=e121]: "Provider: Anthropic"
+                    - generic [ref=e122]: "URL: https://api.anthropic.com"
+                    - generic [ref=e123]: "Latency: 310ms"
+              - group [ref=e124]:
+                - generic [ref=e125]:
+                  - generic [ref=e127]: 自动切换
+                  - generic [ref=e129]:
+                    - generic [ref=e130]:
+                      - generic [ref=e131]: 主
+                      - generic [ref=e132]: OpenAI
+                      - generic [ref=e133]: https://api.openai.com
+                    - generic [ref=e134]:
+                      - generic [ref=e135]: 备1
+                      - generic [ref=e136]: DeepSeek
+                      - generic [ref=e137]: https://api.deepseek.com
+                    - generic [ref=e138]:
+                      - generic [ref=e139]: 备2
+                      - generic [ref=e140]: Groq
+                      - generic [ref=e141]: https://api.groq.com
+              - group [ref=e143]:
+                - generic [ref=e144]:
+                  - generic [ref=e146]: 自动回复
+                  - generic [ref=e147]:
+                    - generic [ref=e148]: "Timeout: 30s"
+                    - generic [ref=e149]: "Message: 上游正在处理，请稍候..."
+        - img "拓扑缩略图" [ref=e152]
+        - generic "Control Panel" [ref=e162]:
+          - button "Zoom In" [ref=e163] [cursor=pointer]
+          - button "Zoom Out" [ref=e166] [cursor=pointer]
+          - button "Fit View" [ref=e169] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=e172] [cursor=pointer]

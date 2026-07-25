@@ -1,0 +1,85 @@
+- generic [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "折叠侧栏" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: menu_open
+    - generic [ref=e8]:
+      - button "转发拓扑" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+      - button "监控" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: monitoring
+        - generic [ref=e17]: chevron_right
+      - button "供应商" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: cloud
+      - button "令牌管理" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: key
+      - button "策略配置" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: tune
+        - generic [ref=e30]: chevron_right
+      - generic [ref=e31]:
+        - button "系统设置" [expanded] [active] [ref=e32] [cursor=pointer]:
+          - generic [ref=e33]: settings
+          - generic [ref=e35]: chevron_right
+        - generic [ref=e183]:
+          - button "安全" [ref=e184] [cursor=pointer]
+          - button "性能" [ref=e185] [cursor=pointer]
+          - button "用户资料" [ref=e186] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic [ref=e37]: A
+      - generic [ref=e38]:
+        - generic [ref=e39]: Admin
+        - generic [ref=e40]: 管理员
+      - button "退出登录" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: logout
+  - main [ref=e43]:
+    - generic [ref=e187]:
+      - generic [ref=e189]:
+        - generic [ref=e190]: shield
+        - generic [ref=e191]:
+          - strong [ref=e192]: 安全设置
+          - generic [ref=e193]: 认证、访问控制与防护
+      - generic [ref=e194]:
+        - generic [ref=e195]: 认证方式
+        - generic [ref=e196]: 配置用户登录和身份验证方式
+        - generic [ref=e197]:
+          - generic [ref=e198]:
+            - generic [ref=e199]: 基本认证
+            - generic [ref=e200]: 用户名 + 密码登录，支持多用户
+          - generic [ref=e201]:
+            - generic [ref=e202]:
+              - generic [ref=e203]: 启用用户名密码登录
+              - switch [checked] [ref=e205] [cursor=pointer]
+            - generic [ref=e206]:
+              - generic [ref=e207]:
+                - generic [ref=e208]: 微软验证器二次验证 (2FA)
+                - generic [ref=e209]: 登录时要求输入二次验证码
+              - switch [ref=e210] [cursor=pointer]
+        - generic [ref=e211]:
+          - generic [ref=e212]:
+            - generic [ref=e213]: Passkey / WebAuthn
+            - generic [ref=e214]: 使用生物识别或硬件密钥免密登录
+          - generic [ref=e216]:
+            - generic [ref=e217]:
+              - generic [ref=e218]: 启用 Passkey
+              - generic [ref=e219]: 支持指纹、面部识别或安全密钥
+            - switch [ref=e220] [cursor=pointer]
+      - generic [ref=e221]:
+        - generic [ref=e222]: 访问保护
+        - generic [ref=e223]: 防止暴力破解和恶意访问
+        - generic [ref=e226]:
+          - generic [ref=e227]:
+            - generic [ref=e228]: 启用防暴力破解
+            - generic [ref=e229]: 登录失败次数过多后临时锁定账户
+          - switch [checked] [ref=e230] [cursor=pointer]
+      - generic [ref=e231]:
+        - generic [ref=e232]: 请求限制
+        - generic [ref=e233]: 控制 API 请求频率限制
+        - generic [ref=e235]:
+          - generic [ref=e236]:
+            - generic [ref=e237]:
+              - generic [ref=e238]: 启用请求频率限制
+              - generic [ref=e239]: 限制每个令牌的每分钟请求次数
+            - switch [checked] [ref=e240] [cursor=pointer]
+          - generic [ref=e241]:
+            - generic [ref=e242]: 每分钟最大请求数
+            - spinbutton [ref=e243]: "1000"
+            - generic [ref=e244]: 超过限制后返回 429 Too Many Requests
