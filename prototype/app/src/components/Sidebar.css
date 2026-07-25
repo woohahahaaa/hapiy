@@ -1,0 +1,240 @@
+/* === Sidebar — collapsible nav === */
+
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  width: var(--sidebar-expanded-width);
+  display: flex;
+  flex-direction: column;
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-right: 1px solid var(--sidebar-border);
+  font-family: var(--font-sans);
+  transition: width 0.2s ease;
+  overflow: visible;
+  user-select: none;
+}
+
+.sidebar.expanded {
+  box-shadow: var(--shadow-md);
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* --- Logo header --- */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+/* --- Scrollable menu area --- */
+.sidebar-menu {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--sidebar-border) transparent;
+}
+
+.sidebar-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-menu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--sidebar-border);
+  background-clip: padding-box;
+}
+
+/* --- Menu item (top-level) --- */
+.sidebar-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
+  align-items: center;
+  column-gap: 8px;
+  text-align: left;
+  height: 32px;
+  width: calc(100% - 16px);
+  padding: 0 8px;
+  margin: 1px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  color: var(--muted-foreground);
+}
+
+.sidebar-item:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+.sidebar-item.active {
+  background: color-mix(in oklch, var(--sidebar-accent) 72%, var(--sidebar));
+  color: var(--sidebar-foreground);
+  font-weight: 500;
+}
+
+.sidebar-item.active .sidebar-item-icon {
+  color: var(--sidebar-primary);
+}
+
+.sidebar-item:focus-visible,
+.sidebar-subitem:focus-visible,
+.sidebar-toggle:focus-visible {
+  outline: 2px solid var(--sidebar-primary);
+  outline-offset: 2px;
+}
+
+.sidebar.collapsed .sidebar-item {
+  display: flex;
+  padding: 0;
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-item.active {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+/* --- Item icon --- */
+.sidebar-item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-variation-settings: 'wght' 450, 'GRAD' 0, 'opsz' 16;
+  line-height: 1;
+  color: var(--sidebar-foreground);
+}
+
+.sidebar.collapsed .sidebar-item-icon {
+  margin-right: 0;
+  font-size: 16px;
+  font-variation-settings: 'wght' 500, 'GRAD' 0, 'opsz' 16;
+}
+
+/* --- Item label --- */
+.sidebar-item-label {
+  min-width: 0;
+  justify-self: start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.sidebar.collapsed .sidebar-item-label {
+  display: none;
+}
+
+/* --- Expand arrow --- */
+.sidebar-item-arrow {
+  justify-self: end;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  color: var(--muted-foreground);
+}
+
+.sidebar-item-arrow.open {
+  transform: rotate(90deg);
+}
+
+.sidebar.collapsed .sidebar-item-arrow {
+  display: none;
+}
+
+/* --- Sub-menu --- */
+.sidebar-submenu {
+  overflow: hidden;
+}
+
+/* --- Sub-item --- */
+.sidebar-subitem {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  width: calc(100% - 16px);
+  padding: 0 8px 0 32px;
+  margin: 1px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-subitem:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+.sidebar-subitem.active {
+  background: color-mix(in oklch, var(--sidebar-accent) 72%, var(--sidebar));
+  color: var(--sidebar-foreground);
+  font-weight: 500;
+}
+
+/* --- Header toggle --- */
+.sidebar-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-toggle:hover {
+  background: var(--sidebar-accent);
+  color: var(--sidebar-foreground);
+}
+
+.sidebar-toggle-icon {
+  font-size: 16px;
+  font-variation-settings: 'wght' 450, 'GRAD' 0, 'opsz' 16;
+}
+
+@media (max-width: 640px) {
+  .sidebar.expanded {
+    width: var(--sidebar-mobile-width);
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebar-item,
+  .sidebar-item-arrow,
+  .sidebar-subitem,
+  .sidebar-toggle {
+    transition-duration: 0.01ms !important;
+  }
+}

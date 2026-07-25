@@ -1,0 +1,137 @@
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: bolt
+      - generic [ref=e7]: hapiy
+    - generic [ref=e8]:
+      - generic [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+        - generic [ref=e12]: 转发拓扑
+      - generic [ref=e13]:
+        - generic [ref=e14] [cursor=pointer]:
+          - generic [ref=e15]: monitoring
+          - generic [ref=e16]: 监控
+          - generic [ref=e17]: ▶
+        - generic:
+          - generic [ref=e18] [cursor=pointer]: 活动监视
+          - generic [ref=e19] [cursor=pointer]: 使用日志
+      - generic [ref=e21] [cursor=pointer]:
+        - generic [ref=e22]: cloud
+        - generic [ref=e23]: 供应商
+      - generic [ref=e25] [cursor=pointer]:
+        - generic [ref=e26]: key
+        - generic [ref=e27]: 令牌管理
+      - generic [ref=e28]:
+        - generic [ref=e29] [cursor=pointer]:
+          - generic [ref=e30]: tune
+          - generic [ref=e31]: 策略配置
+          - generic [ref=e32]: ▶
+        - generic:
+          - generic [ref=e33] [cursor=pointer]: 请求改写
+          - generic [ref=e34] [cursor=pointer]: 心跳回复
+          - generic [ref=e35] [cursor=pointer]: 并发控制
+          - generic [ref=e36] [cursor=pointer]: 故障转移
+      - generic [ref=e37]:
+        - generic [ref=e38] [cursor=pointer]:
+          - generic [ref=e39]: settings
+          - generic [ref=e40]: 系统设置
+          - generic [ref=e41]: ▶
+        - generic:
+          - generic [ref=e42] [cursor=pointer]: 安全
+          - generic [ref=e43] [cursor=pointer]: 性能
+    - button "menu_open" [ref=e44] [cursor=pointer]
+  - main [ref=e46]:
+    - application [ref=e47]:
+      - generic [ref=e49]:
+        - generic:
+          - generic:
+            - img:
+              - group "Edge from ep1 to route1" [ref=e50] [cursor=pointer]
+            - img:
+              - group "Edge from route1 to ch1" [ref=e53] [cursor=pointer]
+            - img:
+              - group "Edge from route1 to ch2" [ref=e56] [cursor=pointer]
+            - img:
+              - group "Edge from route1 to as1" [ref=e59] [cursor=pointer]
+            - img:
+              - group "Edge from ep2 to route2" [ref=e62] [cursor=pointer]
+            - img:
+              - group "Edge from route2 to ch3" [ref=e65] [cursor=pointer]
+          - generic:
+            - group [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]: GPT 入口
+                - generic [ref=e71]:
+                  - generic [ref=e72]: "Model: gpt-4o / gpt-4o-mini"
+                  - generic [ref=e73]:
+                    - text: "Status:"
+                    - generic [ref=e74]: active
+            - group [ref=e77]:
+              - generic [ref=e78]:
+                - generic [ref=e79]: Claude 入口
+                - generic [ref=e80]:
+                  - generic [ref=e81]: "Model: claude-3.5-sonnet"
+                  - generic [ref=e82]:
+                    - text: "Status:"
+                    - generic [ref=e83]: active
+            - group [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e89]: 优先路由
+                - generic [ref=e90]:
+                  - generic [ref=e91]: "Rule: model contains 'gpt-4o'"
+                  - generic [ref=e92]: "Priority: 1"
+            - group [ref=e94]:
+              - generic [ref=e95]:
+                - generic [ref=e97]: Claude 路由
+                - generic [ref=e98]:
+                  - generic [ref=e99]: "Rule: model contains 'claude'"
+                  - generic [ref=e100]: "Priority: 2"
+            - group [ref=e102]:
+              - generic [ref=e103]:
+                - generic [ref=e105]: OpenAI 官方
+                - generic [ref=e106]:
+                  - generic [ref=e107]: "Provider: OpenAI"
+                  - generic [ref=e108]: "URL: https://api.openai.com"
+                  - generic [ref=e109]: "Latency: 230ms"
+            - group [ref=e110]:
+              - generic [ref=e111]:
+                - generic [ref=e113]: Azure OpenAI
+                - generic [ref=e114]:
+                  - generic [ref=e115]: "Provider: Azure"
+                  - generic [ref=e116]: "URL: https://xxx.openai.azure.com"
+                  - generic [ref=e117]: "Latency: 180ms"
+            - group [ref=e118]:
+              - generic [ref=e119]:
+                - generic [ref=e121]: Anthropic
+                - generic [ref=e122]:
+                  - generic [ref=e123]: "Provider: Anthropic"
+                  - generic [ref=e124]: "URL: https://api.anthropic.com"
+                  - generic [ref=e125]: "Latency: 310ms"
+            - group [ref=e126]:
+              - generic [ref=e127]:
+                - generic [ref=e129]: 自动切换
+                - generic [ref=e131]:
+                  - generic [ref=e132]:
+                    - generic [ref=e133]: 主
+                    - generic [ref=e134]: OpenAI
+                    - generic [ref=e135]: https://api.openai.com
+                  - generic [ref=e136]:
+                    - generic [ref=e137]: 备1
+                    - generic [ref=e138]: DeepSeek
+                    - generic [ref=e139]: https://api.deepseek.com
+                  - generic [ref=e140]:
+                    - generic [ref=e141]: 备2
+                    - generic [ref=e142]: Groq
+                    - generic [ref=e143]: https://api.groq.com
+            - group [ref=e145]:
+              - generic [ref=e146]:
+                - generic [ref=e148]: 自动回复
+                - generic [ref=e149]:
+                  - generic [ref=e150]: "Timeout: 30s"
+                  - generic [ref=e151]: "Message: 上游正在处理，请稍候..."
+      - img "Mini Map" [ref=e154]
+      - generic "Control Panel" [ref=e155]:
+        - button "Zoom In" [ref=e156] [cursor=pointer]
+        - button "Zoom Out" [ref=e159] [cursor=pointer]
+        - button "Fit View" [ref=e162] [cursor=pointer]
+        - button "Toggle Interactivity" [ref=e165] [cursor=pointer]

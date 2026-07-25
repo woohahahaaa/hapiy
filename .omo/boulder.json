@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "active_work_id": "react-flow-homepage",
+  "works": {
+    "react-flow-homepage": {
+      "work_id": "react-flow-homepage",
+      "active_plan": ".omo/plans/react-flow-homepage.md",
+      "plan_name": "react-flow-homepage",
+      "session_ids": ["codex:current"],
+      "status": "completed",
+      "worktree_path": null
+    }
+  }
+}

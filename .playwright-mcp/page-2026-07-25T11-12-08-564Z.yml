@@ -1,0 +1,34 @@
+- generic [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "折叠侧栏" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: menu_open
+    - generic [ref=e8]:
+      - button "转发拓扑" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+      - button "监控" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: monitoring
+        - generic [ref=e17]: chevron_right
+      - button "供应商" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: cloud
+      - button "令牌管理" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: key
+      - button "策略配置" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: tune
+        - generic [ref=e30]: chevron_right
+      - button "系统设置" [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: settings
+        - generic [ref=e35]: chevron_right
+  - main [ref=e36]:
+    - generic:
+      - generic: account_tree
+      - generic:
+        - strong: 转发拓扑
+        - generic: API routing workspace
+      - generic: 9 节点 · 6 连线
+    - application [ref=e37]:
+      - img "拓扑缩略图" [ref=e41]
+      - generic "Control Panel" [ref=e42]:
+        - button "Zoom In" [ref=e43] [cursor=pointer]
+        - button "Zoom Out" [ref=e46] [cursor=pointer]
+        - button "Fit View" [ref=e49] [cursor=pointer]
+        - button "Toggle Interactivity" [ref=e52] [cursor=pointer]

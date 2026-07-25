@@ -1,0 +1,4 @@
+Browser: stopped and closed
+Production preview on port 28002: stopped
+Port 28002: free
+Source files/dependencies: unchanged

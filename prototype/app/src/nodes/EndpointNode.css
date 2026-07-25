@@ -1,0 +1,30 @@
+.node-endpoint {
+  --node-accent: var(--chart-1);
+}
+
+.node-endpoint .status-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.node-endpoint .status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.node-endpoint .status-active {
+  color: var(--chart-1);
+}
+
+.node-endpoint .status-inactive {
+  color: var(--destructive);
+}
+
+.node-endpoint .status-active .status-dot,
+.node-endpoint .status-inactive .status-dot {
+  background: currentColor;
+}

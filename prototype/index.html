@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>hapiy - API Hub</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/css/litegraph.min.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1117; color: #e1e4e8; height: 100vh; overflow: hidden; }
+  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 200px; background: #161b22; border-right: 1px solid #21262d; padding: 20px 0; z-index: 10; }
+  .sidebar h1 { font-size: 18px; font-weight: 600; padding: 0 16px 20px; }
+  .nav-item { display: block; padding: 7px 16px; color: #8b949e; text-decoration: none; font-size: 13px; border-left: 2px solid transparent; cursor: pointer; }
+  .nav-item:hover { color: #e1e4e8; background: #1c2128; }
+  .nav-item.active { color: #e1e4e8; border-left-color: #58a6ff; background: #1c2128; }
+  .graph-area { margin-left: 200px; height: 100vh; }
+  #graph-canvas { display: block; width: 100%; height: 100%; }
+
+  /* LiteGraph dark theme overrides */
+  .lgraphcanvas { background-color: #0d1117 !important; }
+  .litegraph .node-title { color: #e1e4e8 !important; }
+  .litegraph .node-content { background: #161b22 !important; }
+  .litegraph .node-selected { box-shadow: 0 0 0 2px #58a6ff !important; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>hapiy</h1>
+  <a class="nav-item active">路由拓扑</a>
+  <a class="nav-item">API Key</a>
+  <a class="nav-item">渠道管理</a>
+  <a class="nav-item">日志</a>
+  <a class="nav-item">设置</a>
+</aside>
+
+<div class="graph-area">
+  <canvas id="graph-canvas"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/build/litegraph.core.min.js"></script>
+<script>
+// --- Dark theme tune ---
+LiteGraph.NODE_TITLE_COLOR = "#161b22";
+LiteGraph.NODE_DEFAULT_BGCOLOR = "#1c2128";
+LiteGraph.NODE_TEXT_COLOR = "#e1e4e8";
+
+// --- Custom Nodes ---
+
+// Endpoint node (source) -- API client entry
+function EndpointNode() {
+  this.addOutput("→", "request");
+  this.properties = { name: "默认端点", model: "gpt-4o", status: "active" };
+  this.size = [180, 70];
+}
+EndpointNode.title = "Endpoint";
+EndpointNode.desc = "API 接入端点";
+EndpointNode.prototype.onDrawForeground = function(ctx) {
+  if (this.flags.collapsed) return;
+  var p = this.properties;
+  ctx.save();
+  ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.fillStyle = "#8b949e";
+  ctx.fillText(p.model, 10, this.size[1] - 42);
+  ctx.fillStyle = p.status === "active" ? "#3fb950" : "#f85149";
+  ctx.fillText("● " + p.status, 10, this.size[1] - 26);
+  ctx.restore();
+};
+EndpointNode.prototype.onDrawBackground = function(ctx) {
+  if (this.flags.collapsed) return;
+  var r = this.size[0] > this.size[1] ? this.size[1] : this.size[0];
+  ctx.save();
+  ctx.fillStyle = this.bgcolor || "#0d419d";
+  ctx.globalAlpha = 0.14;
+  ctx.beginPath();
+  ctx.rect(0, 0, this.size[0], this.size[1]);
+  ctx.fill();
+  ctx.restore();
+};
+
+// Route node (middle) -- routing rule
+function RouteNode() {
+  this.addInput("←", "request");
+  this.addOutput("→", "request");
+  this.properties = { name: "路由规则", rule: "model == gpt-4o", priority: 1 };
+  this.size = [190, 70];
+}
+RouteNode.title = "Route";
+RouteNode.desc = "请求路由规则";
+RouteNode.prototype.onDrawForeground = function(ctx) {
+  if (this.flags.collapsed) return;
+  var p = this.properties;
+  ctx.save();
+  ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.fillStyle = "#8b949e";
+  ctx.fillText(p.rule, 10, this.size[1] - 42);
+  ctx.fillStyle = "#d29922";
+  ctx.fillText("优先级: " + p.priority, 10, this.size[1] - 26);
+  ctx.restore();
+};
+RouteNode.prototype.onDrawBackground = function(ctx) {
+  if (this.flags.collapsed) return;
+  ctx.save();
+  ctx.fillStyle = "#1a3a2a";
+  ctx.globalAlpha = 0.14;
+  ctx.beginPath();
+  ctx.rect(0, 0, this.size[0], this.size[1]);
+  ctx.fill();
+  ctx.restore();
+};
+
+// Channel node (sink) -- backend API provider
+function ChannelNode() {
+  this.addInput("←", "request");
+  this.properties = { name: "上游渠道", provider: "OpenAI", url: "https://api.openai.com", latency: "230ms" };
+  this.size = [200, 80];
+}
+ChannelNode.title = "Channel";
+ChannelNode.desc = "上游 API 渠道";
+ChannelNode.prototype.onDrawForeground = function(ctx) {
+  if (this.flags.collapsed) return;
+  var p = this.properties;
+  ctx.save();
+  ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.fillStyle = "#8b949e";
+  ctx.fillText(p.provider, 10, this.size[1] - 52);
+  ctx.fillText(p.url, 10, this.size[1] - 36);
+  ctx.fillStyle = "#a371f7";
+  ctx.fillText("延迟 " + p.latency, 10, this.size[1] - 20);
+  ctx.restore();
+};
+ChannelNode.prototype.onDrawBackground = function(ctx) {
+  if (this.flags.collapsed) return;
+  ctx.save();
+  ctx.fillStyle = "#3a1a6e";
+  ctx.globalAlpha = 0.14;
+  ctx.beginPath();
+  ctx.rect(0, 0, this.size[0], this.size[1]);
+  ctx.fill();
+  ctx.restore();
+};
+
+// --- Register ---
+LiteGraph.registerNodeType("hapiy/endpoint", EndpointNode);
+LiteGraph.registerNodeType("hapiy/route", RouteNode);
+LiteGraph.registerNodeType("hapiy/channel", ChannelNode);
+
+// --- Build graph ---
+var graph = new LGraph();
+var canvas = new LGraphCanvas("#graph-canvas", graph);
+canvas.canvas.width = canvas.canvas.parentNode.clientWidth;
+canvas.canvas.height = canvas.canvas.parentNode.clientHeight;
+canvas.background_image = "";
+
+// Demo node layout
+var ep1 = LiteGraph.createNode("hapiy/endpoint");
+ep1.pos = [80, 100];
+ep1.properties = { name: "GPT 入口", model: "gpt-4o / gpt-4o-mini", status: "active" };
+ep1.bgcolor = "#0d419d";
+graph.add(ep1);
+
+var ep2 = LiteGraph.createNode("hapiy/endpoint");
+ep2.pos = [80, 280];
+ep2.properties = { name: "Claude 入口", model: "claude-3.5-sonnet", status: "active" };
+ep2.bgcolor = "#0d419d";
+graph.add(ep2);
+
+var route1 = LiteGraph.createNode("hapiy/route");
+route1.pos = [360, 120];
+route1.properties = { name: "优先路由", rule: "model contains 'gpt-4o'", priority: 1 };
+graph.add(route1);
+
+var route2 = LiteGraph.createNode("hapiy/route");
+route2.pos = [360, 280];
+route2.properties = { name: "Claude 路由", rule: "model contains 'claude'", priority: 2 };
+graph.add(route2);
+
+var ch1 = LiteGraph.createNode("hapiy/channel");
+ch1.pos = [640, 80];
+ch1.properties = { name: "OpenAI 官方", provider: "OpenAI", url: "https://api.openai.com", latency: "230ms" };
+graph.add(ch1);
+
+var ch2 = LiteGraph.createNode("hapiy/channel");
+ch2.pos = [640, 180];
+ch2.properties = { name: "Azure OpenAI", provider: "Azure", url: "https://xxx.openai.azure.com", latency: "180ms" };
+graph.add(ch2);
+
+var ch3 = LiteGraph.createNode("hapiy/channel");
+ch3.pos = [640, 280];
+ch3.properties = { name: "Anthropic", provider: "Anthropic", url: "https://api.anthropic.com", latency: "310ms" };
+graph.add(ch3);
+
+// Connections
+ep1.connect(0, route1, 0);
+route1.connect(0, ch1, 0);
+route1.connect(0, ch2, 0);  // one route → multiple channels
+ep2.connect(0, route2, 0);
+route2.connect(0, ch3, 0);
+
+graph.start();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,3 @@
+port_28002=FREE
+preview process stopped; browser closed via Playwright; port 28002 checked.
+QA verdict corrected after interpreting React Flow edge-centered handle geometry; no source blocker found.
