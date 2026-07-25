@@ -8,6 +8,7 @@ export default function ChannelNode({ data }) {
   return (
     <div className="node node-channel">
       <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
       <div className="node-header">{label || 'Channel'}</div>
       <div className="node-body">
         <div className="prop">

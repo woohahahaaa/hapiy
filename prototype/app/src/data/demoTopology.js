@@ -1,84 +1,25 @@
-// Demo topology replicating the LiteGraph prototype
-// 2 Endpoints → 2 Routes → 3 Channels + 1 AutoSwitch
-
 const initialNodes = [
-  {
-    id: 'ep1',
-    type: 'endpoint',
-    position: { x: 50, y: 80 },
-    data: { label: 'GPT 入口', model: 'gpt-4o / gpt-4o-mini', status: 'active' },
-  },
-  {
-    id: 'ep2',
-    type: 'endpoint',
-    position: { x: 50, y: 320 },
-    data: { label: 'Claude 入口', model: 'claude-3.5-sonnet', status: 'active' },
-  },
-  {
-    id: 'route1',
-    type: 'route',
-    position: { x: 340, y: 50 },
-    data: { label: '优先路由', rule: "model contains 'gpt-4o'", priority: 1 },
-  },
-  {
-    id: 'route2',
-    type: 'route',
-    position: { x: 340, y: 300 },
-    data: { label: 'Claude 路由', rule: "model contains 'claude'", priority: 2 },
-  },
-  {
-    id: 'ch1',
-    type: 'channel',
-    position: { x: 630, y: 20 },
-    data: { label: 'OpenAI 官方', provider: 'OpenAI', url: 'https://api.openai.com', latency: '230ms' },
-  },
-  {
-    id: 'ch2',
-    type: 'channel',
-    position: { x: 630, y: 130 },
-    data: { label: 'Azure OpenAI', provider: 'Azure', url: 'https://xxx.openai.azure.com', latency: '180ms' },
-  },
-  {
-    id: 'ch3',
-    type: 'channel',
-    position: { x: 630, y: 310 },
-    data: { label: 'Anthropic', provider: 'Anthropic', url: 'https://api.anthropic.com', latency: '310ms' },
-  },
-  {
-    id: 'as1',
-    type: 'autoSwitch',
-    position: { x: 340, y: 160 },
-    data: {
-      label: '自动切换',
-      slots: [
-        { key: '主', provider: 'OpenAI', baseURL: 'https://api.openai.com' },
-        { key: '备1', provider: 'DeepSeek', baseURL: 'https://api.deepseek.com' },
-        { key: '备2', provider: 'Groq', baseURL: 'https://api.groq.com' },
-      ],
-    },
-  },
-  {
-    id: 'ar1',
-    type: 'autoReply',
-    position: { x: 630, y: 430 },
-    data: { label: '自动回复', timeout: '30s', message: '上游正在处理，请稍候...' },
-  },
+  { id: 'ingress', type: 'ingress', position: { x: 10, y: 130 }, draggable: false },
+  { id: 'egress',  type: 'egress',  position: { x: 580, y: 130 }, draggable: false },
+  { id: 'hub',     type: 'modelHub',position: { x: 85, y: 105 },  draggable: false },
+  { id: 'ch-openai',      type: 'channel',    position: { x: 310, y: 30 },   data: { label: 'OpenAI', provider: 'OpenAI', url: 'https://api.openai.com', latency: '230ms' } },
+  { id: 'as-failover',    type: 'autoSwitch', position: { x: 310, y: 150 },  data: { label: '故障转移', slots: [{key:'主',provider:'Azure',baseURL:'https://xxx.openai.azure.com'},{key:'备1',provider:'DeepSeek',baseURL:'https://api.deepseek.com'},{key:'备2',provider:'Groq',baseURL:'https://api.groq.com'}] } },
+  { id: 'ch-azure',       type: 'channel',    position: { x: 440, y: 95 },   data: { label: 'Azure OpenAI', provider: 'Azure', url: 'https://xxx.openai.azure.com', latency: '180ms' } },
+  { id: 'ch-deepseek',    type: 'channel',    position: { x: 440, y: 200 },  data: { label: 'DeepSeek', provider: 'DeepSeek', url: 'https://api.deepseek.com', latency: '450ms' } },
+  { id: 'ch-anthropic',   type: 'channel',    position: { x: 310, y: 310 },  data: { label: 'Anthropic', provider: 'Anthropic', url: 'https://api.anthropic.com', latency: '310ms' } },
 ];
 
 const initialEdges = [
-  // ep1 → route1
-  { id: 'e1-r1', source: 'ep1', target: 'route1' },
-  // route1 → ch1
-  { id: 'r1-c1', source: 'route1', target: 'ch1' },
-  // route1 → ch2
-  { id: 'r1-c2', source: 'route1', target: 'ch2' },
-  // route1 → autoSwitch (attached but separate branch)
-  { id: 'r1-as1', source: 'route1', target: 'as1' },
-  // ep2 → route2
-  { id: 'e2-r2', source: 'ep2', target: 'route2' },
-  // route2 → ch3
-  { id: 'r2-c3', source: 'route2', target: 'ch3' },
-  // AutoReply is intentionally unconnected (placeholder)
+  { id: 'i-hub',       source: 'ingress',    target: 'hub',          animated: false },
+  { id: 'hub-openai',  source: 'hub',        target: 'ch-openai',    animated: true  },
+  { id: 'openai-eg',   source: 'ch-openai',  target: 'egress',       animated: true  },
+  { id: 'hub-as',      source: 'hub',        target: 'as-failover',  animated: true  },
+  { id: 'as-azure',    source: 'as-failover',target: 'ch-azure',     animated: true  },
+  { id: 'as-deepseek', source: 'as-failover',target: 'ch-deepseek',  animated: true  },
+  { id: 'azure-eg',    source: 'ch-azure',   target: 'egress',       animated: true  },
+  { id: 'deepseek-eg', source: 'ch-deepseek',target: 'egress',       animated: true  },
+  { id: 'hub-anth',    source: 'hub',        target: 'ch-anthropic', animated: true  },
+  { id: 'anth-eg',     source: 'ch-anthropic',target: 'egress',      animated: true  },
 ];
 
 export { initialNodes, initialEdges };

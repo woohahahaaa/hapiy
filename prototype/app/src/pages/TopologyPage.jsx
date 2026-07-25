@@ -7,20 +7,20 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import EndpointNode from '../nodes/EndpointNode';
-import RouteNode from '../nodes/RouteNode';
+import IngressNode from '../nodes/IngressNode';
+import ModelHubNode from '../nodes/ModelHubNode';
 import ChannelNode from '../nodes/ChannelNode';
 import AutoSwitchNode from '../nodes/AutoSwitchNode';
-import AutoReplyNode from '../nodes/AutoReplyNode';
+import EgressNode from '../nodes/EgressNode';
 import { initialNodes, initialEdges } from '../data/demoTopology';
 import PageHeader from './PageHeader';
 
 const nodeTypes = {
-  endpoint: EndpointNode,
-  route: RouteNode,
+  ingress: IngressNode,
+  modelHub: ModelHubNode,
   channel: ChannelNode,
   autoSwitch: AutoSwitchNode,
-  autoReply: AutoReplyNode,
+  egress: EgressNode,
 };
 
 const defaultEdgeOptions = {
@@ -29,16 +29,19 @@ const defaultEdgeOptions = {
 };
 
 const minimapNodeColors = {
-  endpoint: 'var(--chart-1)',
-  route: 'var(--chart-2)',
+  ingress: 'var(--sidebar-primary)',
+  modelHub: 'var(--sidebar-primary)',
   channel: 'var(--chart-4)',
   autoSwitch: 'var(--node-autoswitch)',
-  autoReply: 'var(--node-autoreply)',
+  egress: 'var(--muted)',
 };
 
 export default function TopologyPage() {
   const [nodes, , onNodesChange] = useNodesState(initialNodes);
   const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+
+  const nodeCount = nodes.length;
+  const edgeCount = edges.length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -47,7 +50,7 @@ export default function TopologyPage() {
           icon="account_tree"
           title="转发拓扑"
           subtitle="API routing workspace"
-          status="9 节点 · 6 连线"
+          status={`${nodeCount} 节点 · ${edgeCount} 连线`}
         />
       </div>
       <ReactFlow

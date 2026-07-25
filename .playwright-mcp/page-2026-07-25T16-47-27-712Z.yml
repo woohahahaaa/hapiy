@@ -1,0 +1,135 @@
+- generic [ref=e3]:
+  - navigation "主导航" [ref=e4]:
+    - button "折叠侧栏" [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: menu_open
+    - generic [ref=e8]:
+      - button "转发拓扑" [ref=e10] [cursor=pointer]:
+        - generic [ref=e11]: hub
+      - button "监控" [ref=e14] [cursor=pointer]:
+        - generic [ref=e15]: monitoring
+        - generic [ref=e17]: chevron_right
+      - button "供应商" [ref=e19] [cursor=pointer]:
+        - generic [ref=e20]: cloud
+      - button "令牌管理" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: key
+      - button "策略配置" [ref=e27] [cursor=pointer]:
+        - generic [ref=e28]: tune
+        - generic [ref=e30]: chevron_right
+      - button "系统设置" [ref=e32] [cursor=pointer]:
+        - generic [ref=e33]: settings
+    - generic [ref=e35] [cursor=pointer]:
+      - generic [ref=e36]: A
+      - generic [ref=e37]:
+        - generic [ref=e38]: Admin
+        - generic [ref=e39]: 管理员
+      - button "退出登录" [ref=e40]:
+        - generic [ref=e41]: logout
+  - main [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e45]:
+        - generic [ref=e46]: account_tree
+        - generic [ref=e47]:
+          - strong [ref=e48]: 转发拓扑
+          - generic [ref=e49]: API routing workspace
+        - generic [ref=e50]: 10 节点 · 12 连线
+      - application [ref=e51]:
+        - generic [ref=e53]:
+          - generic:
+            - generic:
+              - img:
+                - group "Edge from ingress to r-gpt4o" [ref=e54] [cursor=pointer]
+              - img:
+                - group "Edge from ingress to r-mini" [ref=e57] [cursor=pointer]
+              - img:
+                - group "Edge from ingress to r-claude" [ref=e60] [cursor=pointer]
+              - img:
+                - group "Edge from r-gpt4o to ch-openai" [ref=e63] [cursor=pointer]
+              - img:
+                - group "Edge from r-mini to as-failover" [ref=e66] [cursor=pointer]
+              - img:
+                - group "Edge from as-failover to ch-azure" [ref=e69] [cursor=pointer]
+              - img:
+                - group "Edge from as-failover to ch-deepseek" [ref=e72] [cursor=pointer]
+              - img:
+                - group "Edge from r-claude to ch-anthropic" [ref=e75] [cursor=pointer]
+            - generic:
+              - group [ref=e78] [cursor=pointer]:
+                - generic [ref=e81]:
+                  - generic [ref=e82]: ⬇
+                  - generic [ref=e83]:
+                    - generic [ref=e84]: API 入口
+                    - generic [ref=e85]: 请求源
+              - group [ref=e86] [cursor=pointer]:
+                - generic [ref=e89]:
+                  - generic [ref=e90]: ⬆
+                  - generic [ref=e91]:
+                    - generic [ref=e92]: 上游出口
+                    - generic [ref=e93]: 转发至上游
+              - group [ref=e94]:
+                - generic [ref=e95]:
+                  - generic [ref=e97]: GPT-4o 路由
+                  - generic [ref=e98]:
+                    - generic [ref=e99]: "Rule: model == 'gpt-4o'"
+                    - generic [ref=e100]: "Priority: 1"
+              - group [ref=e102]:
+                - generic [ref=e103]:
+                  - generic [ref=e105]: OpenAI 官方
+                  - generic [ref=e106]:
+                    - generic [ref=e107]: "Provider: OpenAI"
+                    - generic [ref=e108]: "URL: https://api.openai.com"
+                    - generic [ref=e109]: "Latency: 230ms"
+              - group [ref=e110]:
+                - generic [ref=e111]:
+                  - generic [ref=e113]: GPT-4o-mini 路由
+                  - generic [ref=e114]:
+                    - generic [ref=e115]: "Rule: model == 'gpt-4o-mini'"
+                    - generic [ref=e116]: "Priority: 2"
+              - group [ref=e118]:
+                - generic [ref=e119]:
+                  - generic [ref=e121]: 自动故障转移
+                  - generic [ref=e123]:
+                    - generic [ref=e124]:
+                      - generic [ref=e125]: 主
+                      - generic [ref=e126]: Azure
+                      - generic [ref=e127]: https://xxx.openai.azure.com
+                    - generic [ref=e128]:
+                      - generic [ref=e129]: 备1
+                      - generic [ref=e130]: DeepSeek
+                      - generic [ref=e131]: https://api.deepseek.com
+                    - generic [ref=e132]:
+                      - generic [ref=e133]: 备2
+                      - generic [ref=e134]: Groq
+                      - generic [ref=e135]: https://api.groq.com
+              - group [ref=e137]:
+                - generic [ref=e138]:
+                  - generic [ref=e140]: Azure OpenAI
+                  - generic [ref=e141]:
+                    - generic [ref=e142]: "Provider: Azure"
+                    - generic [ref=e143]: "URL: https://xxx.openai.azure.com"
+                    - generic [ref=e144]: "Latency: 180ms"
+              - group [ref=e145]:
+                - generic [ref=e146]:
+                  - generic [ref=e148]: DeepSeek
+                  - generic [ref=e149]:
+                    - generic [ref=e150]: "Provider: DeepSeek"
+                    - generic [ref=e151]: "URL: https://api.deepseek.com"
+                    - generic [ref=e152]: "Latency: 450ms"
+              - group [ref=e153]:
+                - generic [ref=e154]:
+                  - generic [ref=e156]: Claude 路由
+                  - generic [ref=e157]:
+                    - generic [ref=e158]: "Rule: model contains 'claude'"
+                    - generic [ref=e159]: "Priority: 3"
+              - group [ref=e161]:
+                - generic [ref=e162]:
+                  - generic [ref=e164]: Anthropic
+                  - generic [ref=e165]:
+                    - generic [ref=e166]: "Provider: Anthropic"
+                    - generic [ref=e167]: "URL: https://api.anthropic.com"
+                    - generic [ref=e168]: "Latency: 310ms"
+        - img "拓扑缩略图" [ref=e170]
+        - generic "Control Panel" [ref=e181]:
+          - button "Zoom In" [ref=e182] [cursor=pointer]
+          - button "Zoom Out" [ref=e185] [cursor=pointer]
+          - button "Fit View" [ref=e188] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=e191] [cursor=pointer]
