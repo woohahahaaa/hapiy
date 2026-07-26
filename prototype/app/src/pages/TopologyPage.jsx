@@ -77,10 +77,10 @@ export default function TopologyPage() {
     const rewriteRules = (rules.rewrite || []).filter((r) => r.status);
     const failoverRules = (rules.failover || []).filter((r) => r.status);
 
-    const channelNodes = providers.map((p, i) => ({
+const channelNodes = providers.map((p, i) => ({
       id: `ch-${p.id}`,
       type: 'channel',
-      position: { x: 140, y: 30 + i * 160 },
+      position: { x: 350, y: 30 + i * 160 },
       data: {
         label: p.name,
         baseURLCount: (p.baseUrls || []).length,
@@ -100,6 +100,7 @@ export default function TopologyPage() {
           label: '自动回复',
           rules: heartbeatRules.map((r) => ({ pattern: r.pattern, response: r.response })),
           count: heartbeatRules.length,
+          channelIds: providers.map((p) => `ch-${p.id}`),
         },
       },
       {
@@ -108,6 +109,7 @@ export default function TopologyPage() {
           label: '请求改写',
           transforms: rewriteRules.map((r) => ({ field: r.field, action: `${r.action} → ${r.value}` })),
           count: rewriteRules.length,
+          sourceIds: ['auto-reply'],
         },
       },
       {
@@ -116,6 +118,7 @@ export default function TopologyPage() {
           label: '故障转移',
           slots: failoverRules.map((r) => ({ key: r.name, provider: r.fallback, baseURL: r.condition === 'rate_limit' ? '限流触发' : r.condition === 'error' ? '错误触发' : '超时触发' })),
           count: failoverRules.length,
+          sourceIds: ['request-modify'],
         },
       },
     ];
@@ -130,11 +133,12 @@ export default function TopologyPage() {
         id: `${chId}->auto-reply`,
         source: chId,
         target: 'auto-reply',
+        targetHandle: chId,
         animated: true,
         style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 },
       })),
-      { id: 'auto-reply->request-modify', source: 'auto-reply', target: 'request-modify', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
-      { id: 'request-modify->auto-switch', source: 'request-modify', target: 'auto-switch', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'auto-reply->request-modify', source: 'auto-reply', target: 'request-modify', targetHandle: 'auto-reply', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'request-modify->auto-switch', source: 'request-modify', target: 'auto-switch', targetHandle: 'request-modify', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
     ];
   }, [providers]);
 
@@ -163,6 +167,7 @@ export default function TopologyPage() {
             baseURLCount: (prov?.baseUrls || []).length,
             keyCount: (prov?.keys || []).length,
             modelCount: (prov?.models || []).length,
+            models: (prov?.models || []).map((m) => m.model),
             active: prov?.status !== false,
             onToggle: () => toggleProvider(prov?.id),
           },

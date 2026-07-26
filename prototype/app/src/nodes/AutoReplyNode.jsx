@@ -1,13 +1,40 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
 import './node-base.css';
 import './AutoReplyNode.css';
 
-export default function AutoReplyNode({ data }) {
-  const { label, rules, count } = data;
+export default function AutoReplyNode({ data, id }) {
+  const { label, rules, count, channelIds } = data;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lenRef = useRef((channelIds || []).length);
+
+  useEffect(() => {
+    if ((channelIds || []).length !== lenRef.current) {
+      lenRef.current = (channelIds || []).length;
+      updateNodeInternals(id);
+    }
+  }, [id, channelIds, updateNodeInternals]);
+
+  const cids = channelIds || [];
+  const n = cids.length;
+  const segH = 20;
+  const gap = -2;
+  const barTotal = n * segH + (n - 1) * gap;
+  const barStart = -(barTotal / 2);
 
   return (
     <div className="node node-autoreply">
-      <Handle type="target" position={Position.Left} />
+      {cids.map((ch, i) => (
+        <Handle
+          key={ch}
+          type="target"
+          position={Position.Left}
+          id={ch}
+          className="handle-bar"
+          style={{ top: `calc(50% + ${barStart + i * (segH + gap)}px)`, height: segH, transform: 'translate(-50%, 0)' }}
+        />
+      ))}
+      <Handle type="source" position={Position.Right} />
       <div className="node-header">{label || '自动回复'}</div>
       <div className="node-body">
         {rules && rules.length > 0 ? (
@@ -26,7 +53,6 @@ export default function AutoReplyNode({ data }) {
       }}>
         {count ?? rules?.length ?? 0} rules
       </div>
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

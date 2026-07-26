@@ -1,13 +1,39 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
 import './node-base.css';
 import './AutoSwitchNode.css';
 
-export default function AutoSwitchNode({ data }) {
-  const { label, slots, count } = data;
+export default function AutoSwitchNode({ data, id }) {
+  const { label, slots, count, sourceIds } = data;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lenRef = useRef((sourceIds || []).length);
+
+  useEffect(() => {
+    if ((sourceIds || []).length !== lenRef.current) {
+      lenRef.current = (sourceIds || []).length;
+      updateNodeInternals(id);
+    }
+  }, [id, sourceIds, updateNodeInternals]);
+
+  const sids = sourceIds || [];
+  const n = sids.length;
+  const segH = 20;
+  const gap = -2;
+  const total = n * segH + (n - 1) * gap;
+  const start = -(total / 2);
 
   return (
     <div className="node node-autoswitch">
-      <Handle type="target" position={Position.Left} />
+      {sids.map((src, i) => (
+        <Handle
+          key={src}
+          type="target"
+          position={Position.Left}
+          id={src}
+          className="handle-bar"
+          style={{ top: `calc(50% + ${start + i * (segH + gap)}px)`, height: segH, transform: 'translate(-50%, 0)' }}
+        />
+      ))}
       <div className="node-header">{label || '自动切换'}</div>
       <div className="node-body">
         <div className="switch-slots">

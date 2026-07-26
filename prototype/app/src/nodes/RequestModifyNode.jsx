@@ -1,13 +1,40 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
 import './node-base.css';
 import './RequestModifyNode.css';
 
-export default function RequestModifyNode({ data }) {
-  const { label, transforms, count } = data;
+export default function RequestModifyNode({ data, id }) {
+  const { label, transforms, count, sourceIds } = data;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lenRef = useRef((sourceIds || []).length);
+
+  useEffect(() => {
+    if ((sourceIds || []).length !== lenRef.current) {
+      lenRef.current = (sourceIds || []).length;
+      updateNodeInternals(id);
+    }
+  }, [id, sourceIds, updateNodeInternals]);
+
+  const sids = sourceIds || [];
+  const n = sids.length;
+  const segH = 20;
+  const gap = -2;
+  const total = n * segH + (n - 1) * gap;
+  const start = -(total / 2);
 
   return (
     <div className="node node-requestmodify">
-      <Handle type="target" position={Position.Left} />
+      {sids.map((src, i) => (
+        <Handle
+          key={src}
+          type="target"
+          position={Position.Left}
+          id={src}
+          className="handle-bar"
+          style={{ top: `calc(50% + ${start + i * (segH + gap)}px)`, height: segH, transform: 'translate(-50%, 0)' }}
+        />
+      ))}
+      <Handle type="source" position={Position.Right} />
       <div className="node-header">{label || '请求修改'}</div>
       <div className="node-body">
         <div className="modify-transforms">

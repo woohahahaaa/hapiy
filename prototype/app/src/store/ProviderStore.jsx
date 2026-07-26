@@ -78,7 +78,7 @@ export function generateProviderEdges(providers) {
         source: 'hub',
         sourceHandle: m.model,
         target: `ch-${p.id}`,
-        targetHandle: 'in',
+        targetHandle: m.model,
         animated: p.status,
         className: p.status ? undefined : 'edge-inactive',
       });

@@ -1,0 +1,43 @@
+- generic [ref=f5e3]:
+  - navigation "主导航" [ref=f5e4]:
+    - button "折叠侧栏" [ref=f5e6] [cursor=pointer]:
+      - generic [ref=f5e7]: menu_open
+    - generic [ref=f5e8]:
+      - button "转发拓扑" [ref=f5e10] [cursor=pointer]:
+        - generic [ref=f5e11]: hub
+      - button "监控" [ref=f5e14] [cursor=pointer]:
+        - generic [ref=f5e15]: monitoring
+        - generic [ref=f5e17]: chevron_right
+      - button "供应商" [ref=f5e19] [cursor=pointer]:
+        - generic [ref=f5e20]: cloud
+      - button "令牌管理" [ref=f5e23] [cursor=pointer]:
+        - generic [ref=f5e24]: key
+      - button "价格配置" [ref=f5e27] [cursor=pointer]:
+        - generic [ref=f5e28]: monetization_on
+      - button "策略配置" [ref=f5e31] [cursor=pointer]:
+        - generic [ref=f5e32]: tune
+        - generic [ref=f5e34]: chevron_right
+      - button "系统设置" [ref=f5e36] [cursor=pointer]:
+        - generic [ref=f5e37]: settings
+    - generic [ref=f5e39] [cursor=pointer]:
+      - generic [ref=f5e40]: A
+      - generic [ref=f5e41]:
+        - generic [ref=f5e42]: Admin
+        - generic [ref=f5e43]: 管理员
+      - button "退出登录" [ref=f5e44]:
+        - generic [ref=f5e45]: logout
+  - main [ref=f5e46]:
+    - generic [ref=f5e47]:
+      - generic [ref=f5e49]:
+        - generic [ref=f5e50]:
+          - strong [ref=f5e51]: 转发拓扑
+          - generic [ref=f5e52]: API routing workspace
+        - generic [ref=f5e53]: 7 节点 · 12 连线
+      - application [ref=f5e54]:
+        - generic "Control Panel" [ref=f5e57]:
+          - button "Zoom In" [ref=f5e58] [cursor=pointer]
+          - button "Zoom Out" [ref=f5e61] [cursor=pointer]
+          - button "Fit View" [ref=f5e64] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=f5e67] [cursor=pointer]
+        - button "自动布局" [ref=f5e71] [cursor=pointer]:
+          - generic [ref=f5e72]: auto_awesome

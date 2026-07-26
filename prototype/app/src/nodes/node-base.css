@@ -74,6 +74,18 @@
   transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
+.node .react-flow__handle.handle-bar {
+  width: 3px !important;
+  min-width: 3px !important;
+  border: none !important;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.node .react-flow__handle.handle-bar:hover {
+  background: var(--foreground);
+}
+
 .node .react-flow__handle:hover {
   background: var(--foreground);
   transform: scale(1.35);

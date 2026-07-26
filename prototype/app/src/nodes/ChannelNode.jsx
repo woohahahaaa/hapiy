@@ -1,13 +1,39 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
 import './node-base.css';
 import './ChannelNode.css';
 
-export default function ChannelNode({ data }) {
-  const { label, baseURLCount, keyCount, modelCount, active, onToggle } = data;
+export default function ChannelNode({ data, id }) {
+  const { label, baseURLCount, keyCount, modelCount, models, active, onToggle } = data;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lenRef = useRef((models || []).length);
+
+  useEffect(() => {
+    if ((models || []).length !== lenRef.current) {
+      lenRef.current = (models || []).length;
+      updateNodeInternals(id);
+    }
+  }, [id, models, updateNodeInternals]);
+
+  const modelList = models || [];
+  const n = modelList.length;
+  const segH = 20;
+  const gap = -2;
+  const total = n * segH + (n - 1) * gap;
+  const start = -(total / 2);
 
   return (
     <div className={`node node-channel ${!active ? 'off' : ''}`}>
-      <Handle type="target" position={Position.Left} id="in" />
+      {modelList.map((m, i) => (
+        <Handle
+          key={m}
+          type="target"
+          position={Position.Left}
+          id={m}
+          className="handle-bar"
+          style={{ top: `calc(50% + ${start + i * (segH + gap)}px)`, height: segH, transform: 'translate(-50%, 0)' }}
+        />
+      ))}
       <Handle type="source" position={Position.Right} />
       <div className="node-header channel-header">
         <span className="channel-header-label">{label || 'Channel'}</span>

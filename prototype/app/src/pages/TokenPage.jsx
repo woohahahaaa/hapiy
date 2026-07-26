@@ -18,9 +18,9 @@ function Modal({ title, onClose, children }) {
 }
 
 const SEED = [
-  { id: 1, name: '生产环境', key: 'sk-prod-xxxxxxxxxxxxxxxx', quota: '无限制', status: true },
-  { id: 2, name: '测试环境', key: 'sk-test-xxxxxxxxxxxxxxxx', quota: '¥100.00', status: true },
-  { id: 3, name: '开发环境', key: 'sk-dev-xxxxxxxxxxxxxxxx', quota: '¥50.00', status: false },
+  { id: 1, name: '生产环境', key: 'sk-prod-xxxxxxxxxxxxxxxx', quota: '', status: true },
+  { id: 2, name: '测试环境', key: 'sk-test-xxxxxxxxxxxxxxxx', quota: '100.00', status: true },
+  { id: 3, name: '开发环境', key: 'sk-dev-xxxxxxxxxxxxxxxx', quota: '50.00', status: false },
 ];
 
 function TokenForm({ initial, onSave, onCancel }) {
@@ -48,8 +48,8 @@ function TokenForm({ initial, onSave, onCancel }) {
         <input className="settings-field-input" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-xxxxxxxx" />
       </div>
       <div className="settings-field">
-        <label className="settings-field-label">额度</label>
-        <input className="settings-field-input" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="无限制 / ¥100.00" />
+        <label className="settings-field-label">额度 (¥)</label>
+        <input className="settings-field-input" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空则表示不限制" />
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
         <button className="settings-btn" onClick={onCancel}>取消</button>
@@ -114,7 +114,7 @@ export default function TokenPage() {
               <tr key={t.id} style={{ borderTop: '1px solid var(--border)', color: 'var(--foreground)' }}>
                 <td style={{ padding: '10px 14px', fontWeight: 500, fontSize: 13 }}>{t.name}</td>
                 <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted-foreground)' }}>{t.key}</td>
-                <td style={{ padding: '10px 14px', fontSize: 12 }}>{t.quota}</td>
+                <td style={{ padding: '10px 14px', fontSize: 12, fontFamily: 'var(--font-mono)' }}>{t.quota ? `¥ ${t.quota}` : '不限制'}</td>
                 <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                   <button
                     className={`settings-toggle ${t.status ? 'on' : ''}`}
