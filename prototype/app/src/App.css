@@ -10,9 +10,9 @@
   flex: 1;
   position: relative;
   min-width: 0;
-  height: 100vh;
-  transition: margin-left 0.2s ease;
+  min-height: 0;
   overflow: hidden;
+  transition: margin-left 0.2s ease;
 }
 
 .main-area.sidebar-expanded {
@@ -128,6 +128,37 @@
   overflow: visible;
 }
 
+.topology-minimap,
+.topology-controls,
+.topology-auto-layout {
+  position: fixed !important;
+  bottom: 15px !important;
+  margin: 0 !important;
+  z-index: 10;
+}
+
+.topology-minimap {
+  left: calc(var(--sidebar-expanded-width) + 15px) !important;
+}
+
+.main-area.sidebar-collapsed .topology-minimap {
+  left: calc(var(--sidebar-collapsed-width) + 15px) !important;
+}
+
+.topology-controls {
+  right: 15px !important;
+}
+
+.topology-auto-layout {
+  right: 57px !important;
+}
+
+/* Inactive (provider toggled off) edges */
+.edge-inactive .react-flow__edge-path {
+  stroke: var(--muted-foreground) !important;
+  opacity: 0.25 !important;
+}
+
 .react-flow__controls-button {
   width: 34px !important;
   height: 34px !important;
@@ -184,6 +215,11 @@
   .react-flow__minimap {
     width: 104px !important;
     height: 72px !important;
+  }
+
+  .main-area.sidebar-expanded .topology-minimap,
+  .main-area.sidebar-collapsed .topology-minimap {
+    left: calc(var(--sidebar-collapsed-width) + 15px) !important;
   }
 }
 

@@ -71,7 +71,7 @@ export default function PerformancePage() {
   return (
     <div className="settings-scroll">
       <div style={{ marginBottom: 24 }}>
-        <PageHeader icon="bolt" title="性能设置" subtitle="缓存、监控与连接池" />
+        <PageHeader title="性能设置" subtitle="缓存、监控与连接池" />
       </div>
 
       <div className="settings-section">

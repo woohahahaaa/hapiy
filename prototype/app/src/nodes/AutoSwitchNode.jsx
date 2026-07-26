@@ -3,7 +3,7 @@ import './node-base.css';
 import './AutoSwitchNode.css';
 
 export default function AutoSwitchNode({ data }) {
-  const { label, slots } = data;
+  const { label, slots, count } = data;
 
   return (
     <div className="node node-autoswitch">
@@ -23,6 +23,12 @@ export default function AutoSwitchNode({ data }) {
             <div className="prop">No slots configured</div>
           )}
         </div>
+      </div>
+      <div style={{
+        padding: '4px 8px', borderTop: '1px solid var(--border)',
+        fontSize: 10, color: 'var(--muted-foreground)',
+      }}>
+        {count ?? slots?.length ?? 0} rules
       </div>
       <Handle type="source" position={Position.Right} />
     </div>

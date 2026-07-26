@@ -1,51 +1,58 @@
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react';
+import { useEffect, useRef } from 'react';
+import './node-base.css';
 
-const models = [
-  { id: 'gpt-4o',          label: 'GPT-4o',      provider: 'OpenAI' },
-  { id: 'gpt-4o-mini',     label: 'GPT-4o-mini', provider: 'OpenAI, Azure' },
-  { id: 'claude-sonnet',   label: 'Claude 3.5 Sonnet', provider: 'Anthropic' },
-  { id: 'deepseek-chat',   label: 'DeepSeek V3', provider: 'DeepSeek' },
-  { id: 'gemini-pro',      label: 'Gemini Pro',  provider: 'Google' },
-  { id: 'qwen-max',        label: 'Qwen Max',    provider: 'Alibaba' },
-];
+export default function ModelHubNode({ data, id }) {
+  const models = data.models || [];
+  const updateNodeInternals = useUpdateNodeInternals();
+  const lenRef = useRef(models.length);
 
-export default function ModelHubNode() {
+  useEffect(() => {
+    if (models.length !== lenRef.current) {
+      lenRef.current = models.length;
+      updateNodeInternals(id);
+    }
+  }, [id, models.length, updateNodeInternals]);
+
   return (
-    <div style={{
-      background: 'var(--card)',
-      border: '1px solid var(--border)',
-      borderRadius: 12,
-      width: 220,
-      fontFamily: 'var(--font-sans)',
-      cursor: 'default',
-      userSelect: 'none',
-    }}>
-      <Handle type="target" position={Position.Left} style={{ top: '50%', background: 'var(--sidebar-primary)', border: '2px solid var(--background)', width: 10, height: 10 }} />
-      <Handle type="source" position={Position.Right} style={{ top: '50%', background: 'var(--sidebar-primary)', border: '2px solid var(--background)', width: 10, height: 10 }} />
-
-      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--foreground)' }}>模型中心</div>
-        <div style={{ fontSize: 10, color: 'var(--muted-foreground)', marginTop: 1 }}>Model Hub</div>
+    <div className="node" style={{ width: 220, cursor: 'default' }}>
+      <div className="node-header" style={{ borderBottom: '1px solid var(--border)' }}>
+        模型中心
       </div>
-
-      <div style={{ padding: '8px 10px 10px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {models.map((m) => (
-          <div key={m.id} style={{
-            fontSize: 11,
-            padding: '3px 8px',
-            borderRadius: 6,
-            background: 'color-mix(in oklch, var(--sidebar-primary) 12%, var(--card))',
-            color: 'var(--foreground)',
-            border: '1px solid color-mix(in oklch, var(--sidebar-primary) 20%, var(--border))',
-            lineHeight: 1.3,
-          }}>
-            {m.label}
+      <div className="node-body" style={{ gap: 0, padding: 0 }}>
+        {models.map((m, i) => (
+          <div
+            key={m.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              padding: '4px 10px',
+              fontSize: 12,
+              gap: 6,
+              borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+              color: m.disabled ? 'var(--muted-foreground)' : 'var(--foreground)',
+              position: 'relative',
+              opacity: m.disabled ? 0.4 : 1,
+            }}
+          >
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: 'var(--sidebar-primary)', flexShrink: 0, opacity: 0.7,
+            }} />
+            <span style={{ fontSize: 11 }}>{m.label}</span>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id={m.id}
+            />
           </div>
         ))}
       </div>
-
-      <div style={{ padding: '6px 12px', borderTop: '1px solid var(--border)', fontSize: 10, color: 'var(--muted-foreground)' }}>
-        6 models · 5 providers
+      <div style={{
+        padding: '5px 10px', borderTop: '1px solid var(--border)',
+        fontSize: 10, color: 'var(--muted-foreground)',
+      }}>
+        {models.length} models
       </div>
     </div>
   );

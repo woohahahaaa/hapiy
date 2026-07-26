@@ -1,0 +1,28 @@
+.node-requestmodify .modify-transforms {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.node-requestmodify .modify-transform {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--muted);
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.node-requestmodify .transform-field {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.node-requestmodify .transform-action {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

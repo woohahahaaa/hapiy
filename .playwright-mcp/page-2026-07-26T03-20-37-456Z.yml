@@ -1,0 +1,115 @@
+- generic [ref=f1e3]:
+  - navigation "主导航" [ref=f1e4]:
+    - button "折叠侧栏" [ref=f1e6] [cursor=pointer]:
+      - generic [ref=f1e7]: menu_open
+    - generic [ref=f1e8]:
+      - button "转发拓扑" [ref=f1e10] [cursor=pointer]:
+        - generic [ref=f1e11]: hub
+      - button "监控" [ref=f1e14] [cursor=pointer]:
+        - generic [ref=f1e15]: monitoring
+        - generic [ref=f1e17]: chevron_right
+      - button "供应商" [ref=f1e19] [cursor=pointer]:
+        - generic [ref=f1e20]: cloud
+      - button "令牌管理" [ref=f1e23] [cursor=pointer]:
+        - generic [ref=f1e24]: key
+      - button "策略配置" [ref=f1e27] [cursor=pointer]:
+        - generic [ref=f1e28]: tune
+        - generic [ref=f1e30]: chevron_right
+      - button "系统设置" [ref=f1e32] [cursor=pointer]:
+        - generic [ref=f1e33]: settings
+    - generic [ref=f1e35] [cursor=pointer]:
+      - generic [ref=f1e36]: A
+      - generic [ref=f1e37]:
+        - generic [ref=f1e38]: Admin
+        - generic [ref=f1e39]: 管理员
+      - button "退出登录" [ref=f1e40]:
+        - generic [ref=f1e41]: logout
+  - main [ref=f1e42]:
+    - generic [ref=f1e73]:
+      - generic [ref=f1e75]:
+        - generic [ref=f1e76]: cloud
+        - generic [ref=f1e77]:
+          - strong [ref=f1e78]: 供应商
+          - generic [ref=f1e79]: 上游厂商配置
+      - button "+ 添加供应商" [active] [ref=f1e81] [cursor=pointer]
+      - table [ref=f1e83]:
+        - rowgroup [ref=f1e84]:
+          - row [ref=f1e85]:
+            - columnheader "名称" [ref=f1e86]
+            - columnheader "状态" [ref=f1e87]
+            - columnheader "Base URLs" [ref=f1e88]
+            - columnheader "Keys" [ref=f1e89]
+            - columnheader "Models" [ref=f1e90]
+            - columnheader "操作" [ref=f1e91]
+        - rowgroup [ref=f1e92]:
+          - row [ref=f1e93]:
+            - cell "OpenAI" [ref=f1e94]
+            - cell "激活" [ref=f1e95]
+            - cell "2" [ref=f1e96]
+            - cell "3" [ref=f1e97]
+            - cell "2" [ref=f1e98]
+            - cell [ref=f1e99]:
+              - button "编辑" [ref=f1e100] [cursor=pointer]
+              - button "删除" [ref=f1e101] [cursor=pointer]
+          - row [ref=f1e102]:
+            - cell "Azure" [ref=f1e103]
+            - cell "激活" [ref=f1e104]
+            - cell "1" [ref=f1e105]
+            - cell "2" [ref=f1e106]
+            - cell "2" [ref=f1e107]
+            - cell [ref=f1e108]:
+              - button "编辑" [ref=f1e109] [cursor=pointer]
+              - button "删除" [ref=f1e110] [cursor=pointer]
+          - row [ref=f1e111]:
+            - cell "Anthropic" [ref=f1e112]
+            - cell "激活" [ref=f1e113]
+            - cell "1" [ref=f1e114]
+            - cell "1" [ref=f1e115]
+            - cell "1" [ref=f1e116]
+            - cell [ref=f1e117]:
+              - button "编辑" [ref=f1e118] [cursor=pointer]
+              - button "删除" [ref=f1e119] [cursor=pointer]
+          - row [ref=f1e120]:
+            - cell "DeepSeek" [ref=f1e121]
+            - cell "禁用" [ref=f1e122]
+            - cell "3" [ref=f1e123]
+            - cell "4" [ref=f1e124]
+            - cell "1" [ref=f1e125]
+            - cell [ref=f1e126]:
+              - button "编辑" [ref=f1e127] [cursor=pointer]
+              - button "删除" [ref=f1e128] [cursor=pointer]
+      - generic [ref=f1e130]:
+        - generic [ref=f1e131]:
+          - generic [ref=f1e132]: 添加供应商
+          - button "×" [ref=f1e133] [cursor=pointer]
+        - generic [ref=f1e135]:
+          - generic [ref=f1e136]:
+            - generic [ref=f1e137]: 名称
+            - textbox "Provider 名称" [ref=f1e138]
+          - generic [ref=f1e139]:
+            - generic [ref=f1e140]: Base URL
+            - generic [ref=f1e141]:
+              - generic [ref=f1e142]:
+                - textbox "https://api.example.com" [ref=f1e143]
+                - button "×" [ref=f1e144] [cursor=pointer]
+              - button "+ 添加" [ref=f1e145] [cursor=pointer]
+          - generic [ref=f1e146]:
+            - generic [ref=f1e147]: Key
+            - generic [ref=f1e148]:
+              - generic [ref=f1e149]:
+                - textbox "sk-xxxxxxxx" [ref=f1e150]
+                - button "×" [ref=f1e151] [cursor=pointer]
+              - button "+ 添加" [ref=f1e152] [cursor=pointer]
+          - generic [ref=f1e153]:
+            - generic [ref=f1e154]: 支持的模型
+            - generic [ref=f1e155]:
+              - generic [ref=f1e156]:
+                - textbox "model-id" [ref=f1e157]
+                - button "×" [ref=f1e158] [cursor=pointer]
+              - button "+ 添加" [ref=f1e159] [cursor=pointer]
+          - generic [ref=f1e160]:
+            - generic [ref=f1e161]: 启用
+            - switch [checked] [ref=f1e163] [cursor=pointer]
+          - generic [ref=f1e164]:
+            - button "取消" [ref=f1e165] [cursor=pointer]
+            - button "保存" [ref=f1e166] [cursor=pointer]

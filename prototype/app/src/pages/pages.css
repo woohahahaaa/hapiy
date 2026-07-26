@@ -22,6 +22,7 @@
   flex-direction: column;
   min-width: 0;
   line-height: 1.2;
+  gap: 3px;
 }
 
 .page-header-title {

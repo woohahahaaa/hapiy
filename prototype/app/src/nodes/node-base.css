@@ -9,7 +9,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 11px;
   z-index: 1;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -28,8 +28,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px 9px 12px;
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 500;
+  font-size: 11px;
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
 }
@@ -53,7 +53,7 @@
 
 .node-body .prop {
   color: var(--muted-foreground);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .node-body .prop-value {

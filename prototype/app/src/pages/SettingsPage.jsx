@@ -71,7 +71,7 @@ export default function SettingsPage() {
   return (
     <div className="settings-scroll">
       <div style={{ marginBottom: 24 }}>
-        <PageHeader icon="settings" title="系统设置" subtitle="安全、缓存与性能监控" />
+        <PageHeader title="系统设置" subtitle="安全、缓存与性能监控" />
       </div>
 
       <div className="settings-section">

@@ -6,7 +6,8 @@
   padding: 24px 32px;
   scrollbar-width: thin;
   scrollbar-color: var(--sidebar-border) transparent;
-  max-width: 720px;
+  max-width: 1300px;
+  margin: 0 auto;
 }
 
 .settings-section {
@@ -230,6 +231,65 @@
 
 .settings-btn.danger:hover {
   background: color-mix(in oklch, var(--destructive) 10%, transparent);
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.modal-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.3));
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.modal-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.modal-body {
+  padding: 0;
 }
 
 @media (max-width: 640px) {

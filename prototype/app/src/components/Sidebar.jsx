@@ -8,6 +8,7 @@ const ICONS = {
   provider: 'cloud',        // 供应商
   token: 'key',             // 令牌管理
   policy: 'tune',           // 策略配置
+  price: 'monetization_on', // 价格配置
   settings: 'settings',     // 系统设置
 };
 
@@ -37,6 +38,12 @@ const MENU = [
     id: 'token',
     label: '令牌管理',
     icon: ICONS.token,
+    children: null,
+  },
+  {
+    id: 'price',
+    label: '价格配置',
+    icon: ICONS.price,
     children: null,
   },
   {

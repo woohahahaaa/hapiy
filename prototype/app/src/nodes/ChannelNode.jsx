@@ -3,22 +3,31 @@ import './node-base.css';
 import './ChannelNode.css';
 
 export default function ChannelNode({ data }) {
-  const { label, provider, url, latency } = data;
+  const { label, baseURLCount, keyCount, modelCount, active, onToggle } = data;
 
   return (
-    <div className="node node-channel">
-      <Handle type="target" position={Position.Left} />
+    <div className={`node node-channel ${!active ? 'off' : ''}`}>
+      <Handle type="target" position={Position.Left} id="in" />
       <Handle type="source" position={Position.Right} />
-      <div className="node-header">{label || 'Channel'}</div>
+      <div className="node-header channel-header">
+        <span className="channel-header-label">{label || 'Channel'}</span>
+        <div className="enable-row" onClick={() => onToggle?.()}>
+          <button
+            type="button"
+            className={`enable-switch ${active !== false ? 'on' : ''}`}
+            role="switch"
+            aria-checked={active !== false}
+            tabIndex={-1}
+          />
+        </div>
+      </div>
       <div className="node-body">
-        <div className="prop">
-          Provider: <span className="prop-value">{provider || '—'}</span>
-        </div>
-        <div className="prop">
-          URL: <span className="prop-value">{url || '—'}</span>
-        </div>
-        <div className="prop">
-          Latency: <span className="prop-value">{latency || '—'}</span>
+        <div className="channel-counts">
+          <span className="channel-count">{baseURLCount ?? 0} Base URLs</span>
+          <span className="channel-count-sep">·</span>
+          <span className="channel-count">{keyCount ?? 0} Keys</span>
+          <span className="channel-count-sep">·</span>
+          <span className="channel-count">{modelCount ?? 0} Models</span>
         </div>
       </div>
     </div>

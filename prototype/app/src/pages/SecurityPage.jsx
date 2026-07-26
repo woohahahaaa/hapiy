@@ -47,7 +47,7 @@ export default function SecurityPage() {
   return (
     <div className="settings-scroll">
       <div style={{ marginBottom: 24 }}>
-        <PageHeader icon="shield" title="安全设置" subtitle="认证、访问控制与防护" />
+        <PageHeader title="安全设置" subtitle="认证、访问控制与防护" />
       </div>
 
       <div className="settings-section">

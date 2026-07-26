@@ -45,7 +45,7 @@ export default function ProfilePage() {
   return (
     <div className="settings-scroll">
       <div style={{ marginBottom: 24 }}>
-        <PageHeader icon="person" title="用户资料" subtitle="管理员账户设置" />
+        <PageHeader title="用户资料" subtitle="管理员账户设置" />
       </div>
 
       <div className="settings-section">
