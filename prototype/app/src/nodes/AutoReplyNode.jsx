@@ -35,7 +35,7 @@ export default function AutoReplyNode({ data, id }) {
         />
       ))}
       <Handle type="source" position={Position.Right} />
-      <div className="node-header">{label || '自动回复'}</div>
+      <div className="node-header">{label || '心跳回复'}</div>
       <div className="node-body">
         {rules && rules.length > 0 ? (
           rules.map((r, i) => (

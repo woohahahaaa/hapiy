@@ -131,13 +131,13 @@ export default function ProviderPage() {
   return (
     <div className="settings-scroll">
       <div style={{ marginBottom: 24 }}>
-        <PageHeader title="供应商" subtitle="上游厂商配置" />
+        <PageHeader title="渠道" subtitle="上游厂商配置" />
       </div>
 
       <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
         <button className="settings-btn" style={{ background: 'var(--sidebar-primary)', color: 'var(--sidebar-primary-foreground)', borderColor: 'var(--sidebar-primary)' }}
           onClick={() => { setEditingId(null); setModal({}); }}>
-          + 添加供应商
+          + 添加渠道
         </button>
         <button className="settings-btn" style={{ marginLeft: 'auto' }} onClick={() => setJsonOpen(true)}>
           编辑 JSON
@@ -190,7 +190,7 @@ export default function ProviderPage() {
       </div>
 
       {modal && (
-        <Modal title={editingId != null ? '编辑供应商' : '添加供应商'} onClose={() => { setModal(null); setEditingId(null); }}>
+        <Modal title={editingId != null ? '编辑渠道' : '添加渠道'} onClose={() => { setModal(null); setEditingId(null); }}>
           <ProviderForm initial={editingId != null ? modal : null} onSave={handleSave} onCancel={() => { setModal(null); setEditingId(null); }} />
         </Modal>
       )}

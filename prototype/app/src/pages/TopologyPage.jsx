@@ -15,6 +15,7 @@ import AutoReplyNode from '../nodes/AutoReplyNode';
 import RequestModifyNode from '../nodes/RequestModifyNode';
 import AutoSwitchNode from '../nodes/AutoSwitchNode';
 import ConcurrencyNode from '../nodes/ConcurrencyNode';
+import DebugNode from '../nodes/DebugNode';
 import { useProviders, getModelsUnion, generateProviderEdges } from '../store/ProviderStore';
 import { useRules } from '../store/RuleStore';
 import PageHeader from './PageHeader';
@@ -26,6 +27,7 @@ const nodeTypes = {
   requestModify: RequestModifyNode,
   autoSwitch: AutoSwitchNode,
   concurrency: ConcurrencyNode,
+  debug: DebugNode,
 };
 
 const defaultEdgeOptions = {
@@ -35,11 +37,11 @@ const defaultEdgeOptions = {
 
 const NODE_W = {
   modelHub: 220, channel: 192, autoReply: 192,
-  requestModify: 192, autoSwitch: 192, concurrency: 192,
+  requestModify: 192, autoSwitch: 192, concurrency: 192, debug: 200,
 };
 const NODE_H = {
   modelHub: 210, channel: 140, autoReply: 130,
-  requestModify: 130, autoSwitch: 300, concurrency: 100,
+  requestModify: 130, autoSwitch: 300, concurrency: 100, debug: 150,
 };
 
 function getLayoutedElements(nodes, edges) {
@@ -90,13 +92,17 @@ export default function TopologyPage() {
       { id: 'hub', type: 'modelHub', position: { x: 20, y: 30 }, data: { models: getModelsUnion(providers) } },
       ...chNodes,
       { id: 'reply-A', type: 'autoReply', position: { x: 380, y: 20 },
-        data: { label: '自动回复 A', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-1', 'ch-2'] } },
+        data: { label: '心跳回复 A', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-1', 'ch-2'] } },
       { id: 'reply-B', type: 'autoReply', position: { x: 380, y: 250 },
-        data: { label: '自动回复 B', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-3', 'ch-5'] } },
+        data: { label: '心跳回复 B', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-3', 'ch-5'] } },
       { id: 'concurrency-main', type: 'concurrency', position: { x: 640, y: 20 },
         data: { label: '并发控制', ruleItems: cc.map((r) => ({ name: r.name, scope: r.scope, max: r.maxConcurrent })), count: cc.length, sourceIds: ['reply-A'] } },
+      { id: 'debug-A', type: 'debug', position: { x: 640, y: 140 },
+        data: { label: '调试 A', enabled: true, selected: ['请求体', '延迟', '状态码'], filePath: '/var/log/hapiy/openai/', sourceIds: ['reply-A'] } },
+      { id: 'debug-B', type: 'debug', position: { x: 640, y: 250 },
+        data: { label: '调试 B', enabled: false, sourceIds: ['ch-4'] } },
       { id: 'rewrite-A', type: 'requestModify', position: { x: 640, y: 200 },
-        data: { label: '请求改写', transforms: rw.map((r) => ({ field: r.field, action: `${r.action} → ${r.value}` })), count: rw.length, sourceIds: ['concurrency-main', 'ch-4'] } },
+        data: { label: '请求改写', transforms: rw.map((r) => ({ field: r.field, action: `${r.action} → ${r.value}` })), count: rw.length, sourceIds: ['concurrency-main', 'debug-B'] } },
       { id: 'switch-main', type: 'autoSwitch', position: { x: 900, y: 80 },
         data: { label: '故障转移(主)', slots: fo.map((r) => ({ key: r.name, provider: r.fallback, baseURL: r.condition })), count: fo.length, sourceIds: ['rewrite-A', 'ch-5'] } },
       { id: 'switch-backup', type: 'autoSwitch', position: { x: 900, y: 350 },
@@ -109,15 +115,17 @@ export default function TopologyPage() {
 
     // Custom pipeline edges — flexible, per-channel routing
     const custom = [
-      { id: 'ch-1→reply-A',              source: 'ch-1', target: 'reply-A',           targetHandle: 'ch-1', style: { stroke: 'var(--chart-1)', strokeWidth: 1.5 } },
-      { id: 'ch-2→reply-A',              source: 'ch-2', target: 'reply-A',           targetHandle: 'ch-2', style: { stroke: 'var(--chart-2)', strokeWidth: 1.5 } },
-      { id: 'reply-A→concurrency-main',  source: 'reply-A', target: 'concurrency-main', targetHandle: 'reply-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+{ id: 'ch-1→reply-A',      source: 'ch-1', target: 'reply-A',   targetHandle: 'ch-1', style: { stroke: 'var(--chart-1)', strokeWidth: 1.5 } },
+      { id: 'ch-2→reply-A',      source: 'ch-2', target: 'reply-A',   targetHandle: 'ch-2', style: { stroke: 'var(--chart-2)', strokeWidth: 1.5 } },
+      { id: 'reply-A→debug-A',   source: 'reply-A', target: 'debug-A', targetHandle: 'reply-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'debug-A→concurrency-main', source: 'debug-A', target: 'concurrency-main', targetHandle: 'debug-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
       { id: 'concurrency-main→rewrite-A', source: 'concurrency-main', target: 'rewrite-A', targetHandle: 'concurrency-main', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
-      { id: 'rewrite-A→switch-main',     source: 'rewrite-A', target: 'switch-main',  targetHandle: 'rewrite-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
-      { id: 'ch-4→rewrite-A',            source: 'ch-4', target: 'rewrite-A',         targetHandle: 'ch-4', style: { stroke: 'var(--chart-4)', strokeWidth: 1.5 } },
-      { id: 'ch-5→switch-main',          source: 'ch-5', target: 'switch-main',       targetHandle: 'ch-5', style: { stroke: 'var(--chart-5)', strokeWidth: 1.5 } },
-      { id: 'ch-3→reply-B',              source: 'ch-3', target: 'reply-B',           targetHandle: 'ch-3', style: { stroke: 'var(--chart-3)', strokeWidth: 1.5 } },
-      { id: 'reply-B→switch-backup',    source: 'reply-B', target: 'switch-backup',   targetHandle: 'reply-B', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'rewrite-A→switch-main', source: 'rewrite-A', target: 'switch-main', targetHandle: 'rewrite-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'ch-4→debug-B',      source: 'ch-4', target: 'debug-B',   targetHandle: 'ch-4', style: { stroke: 'var(--chart-4)', strokeWidth: 1.5 } },
+      { id: 'debug-B→rewrite-A',   source: 'debug-B', target: 'rewrite-A', targetHandle: 'debug-B', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'ch-5→switch-main',  source: 'ch-5', target: 'switch-main', targetHandle: 'ch-5', style: { stroke: 'var(--chart-5)', strokeWidth: 1.5 } },
+      { id: 'ch-3→reply-B',      source: 'ch-3', target: 'reply-B',   targetHandle: 'ch-3', style: { stroke: 'var(--chart-3)', strokeWidth: 1.5 } },
+      { id: 'reply-B→switch-backup', source: 'reply-B', target: 'switch-backup', targetHandle: 'reply-B', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
     ];
 
     return [...providerEdges, ...custom];

@@ -56,7 +56,6 @@ export default function RequestModifyNode({ data, id }) {
       }}>
         {count ?? transforms?.length ?? 0} rules
       </div>
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }

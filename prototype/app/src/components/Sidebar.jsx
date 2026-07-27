@@ -30,7 +30,7 @@ const MENU = [
   },
   {
     id: 'provider',
-    label: '供应商',
+    label: '渠道',
     icon: ICONS.provider,
     children: null,
   },
