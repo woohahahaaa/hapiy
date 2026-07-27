@@ -40,7 +40,10 @@ export default function AutoReplyNode({ data, id }) {
         {rules && rules.length > 0 ? (
           rules.map((r, i) => (
             <div className="prop" key={i}>
-              {r.pattern}: <span className="prop-value">{r.response}</span>
+              <span className="prop-value">{r.name}</span>
+              <span style={{ fontSize: 10, color: 'var(--muted-foreground)', marginLeft: 6 }}>
+                {r.window}s / {r.minTokens}tk
+              </span>
             </div>
           ))
         ) : (

@@ -20,39 +20,152 @@ function Modal({ title, onClose, children }) {
 }
 
 /* ── 心跳回复 ── */
+const HEARTBEAT_SCRIPT = `// ==UserScript==
+// @name         hapiy 心跳零宽字符替换
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  将零宽字符实时替换为可见心跳文本
+// @author       hapiy
+// @match        *://*/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    // ===== 用户可在此修改 =====
+    const MARKER = '\\u200B';          // 零宽字符 — 与后台「流中心跳」字段保持一致
+    const REPLACEMENT = '⏳ 正在生成中……'; // 替换为的可见文字
+    // =========================
+
+    function replaceText(node) {
+        if (node.nodeValue && node.nodeValue.includes(MARKER))
+            node.nodeValue = node.nodeValue.replaceAll(MARKER, REPLACEMENT);
+    }
+
+    // 方案 A：劫持 fetch 响应流（SSE）
+    const orig = window.fetch;
+    window.fetch = async (...a) => {
+        const r = await orig(...a);
+        if (!r.body || !/text\\/event-stream/.test(r.headers.get('content-type')||'')) return r;
+        const rd = r.body.getReader(), td = new TextDecoder(), te = new TextEncoder();
+        let b = '';
+        return new Response(new ReadableStream({async pull(c){const{done,v}=await rd.read();if(done){c.close();return}b+=td.decode(v,{stream:true});b=b.replaceAll(MARKER,REPLACEMENT);c.enqueue(te.encode(b));b=''}}),r);
+    };
+
+    // 方案 B：MutationObserver 兜底（已有 DOM 文本）
+    const obs = new MutationObserver(muts => {for(const m of muts)for(const n of m.addedNodes){const w=document.createTreeWalker(n,NodeFilter.SHOW_TEXT);let x;while(x=w.nextNode())replaceText(x)}});
+    obs.observe(document.body,{childList:true,subtree:true});
+})();`;
+
 function HeartbeatForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
-  const [pattern, setPattern] = useState(initial?.pattern || '');
-  const [response, setResponse] = useState(initial?.response || '');
-  const [timeout, setTimeout_] = useState(initial?.timeout ?? 30);
+  const [scope, setScope] = useState(initial?.scope || 'all');
+  const [window_, setWindow_] = useState(initial?.window ?? 60);
+  const [minTokens, setMinTokens] = useState(initial?.minTokens ?? 3);
+  const [interval_, setInterval_] = useState(initial?.interval ?? 15);
+  const [firstTokenTimeout, setFirstTokenTimeout] = useState(initial?.firstTokenTimeout ?? 0);
+  const [onDisconnect, setOnDisconnect] = useState(initial?.onDisconnect !== false);
+  const [streamMarker, setStreamMarker] = useState(initial?.streamMarker || '\u200B');
+  const [disconnectMessage, setDisconnectMessage] = useState(initial?.disconnectMessage || '请求断开');
   const [status, setStatus] = useState(initial?.status !== false);
+  const [showScript, setShowScript] = useState(false);
 
   function save() {
-    onSave({ name: name.trim() || 'New Rule', pattern: pattern.trim() || '*', response: response.trim(), timeout: Number(timeout) || 30, status });
+    onSave({
+      name: name.trim() || 'New Rule',
+      scope,
+      window: Number(window_) || 60,
+      minTokens: Number(minTokens) || 0,
+      interval: Number(interval_) || 15,
+      firstTokenTimeout: Number(firstTokenTimeout) || 0,
+      onDisconnect,
+      streamMarker: streamMarker || '\u200B',
+      disconnectMessage: disconnectMessage.trim() || '请求断开',
+      status,
+    });
   }
 
+  const sectionStyle = { fontSize: 12, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', paddingTop: 8, borderTop: '1px solid var(--border)', marginTop: 4 };
+
   return (
-    <div className="settings-card-body" style={{ gap: 14 }}>
+    <div className="settings-card-body" style={{ gap: 12 }}>
+      {/* 基本信息 */}
       <div className="settings-switch-row">
         <div className="settings-switch-label">启用</div>
         <button className={`settings-toggle ${status ? 'on' : ''}`} role="switch" aria-checked={status} onClick={() => setStatus((v) => !v)} />
       </div>
       <div className="settings-field">
-        <label className="settings-field-label">名称</label>
+        <label className="settings-field-label">规则名称</label>
         <input className="settings-field-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="规则名称" />
       </div>
       <div className="settings-field">
-        <label className="settings-field-label">匹配条件</label>
-        <input className="settings-field-input" value={pattern} onChange={(e) => setPattern(e.target.value)} placeholder="* 或 stream_timeout" />
+        <label className="settings-field-label">作用范围</label>
+        <select className="settings-field-input" style={{ cursor: 'pointer' }} value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="all">全部渠道 · 全部模型</option>
+          <option value="per_channel">按渠道指定</option>
+          <option value="per_model">按模型指定</option>
+        </select>
+      </div>
+
+      {/* 触发条件 */}
+      <div style={sectionStyle}>触发条件</div>
+      <div className="settings-field">
+        <label className="settings-field-label">监测窗口（秒）</label>
+        <input className="settings-field-input" type="number" value={window_} onChange={(e) => setWindow_(e.target.value)} />
+        <span className="settings-field-hint">多长时间统计一次吐字速度</span>
       </div>
       <div className="settings-field">
-        <label className="settings-field-label">回复内容</label>
-        <input className="settings-field-input" value={response} onChange={(e) => setResponse(e.target.value)} placeholder="回复消息" />
+        <label className="settings-field-label">最低 Token 数</label>
+        <input className="settings-field-input" type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} />
+        <span className="settings-field-hint">窗口内新 Token 低于此值 → 触发心跳</span>
       </div>
       <div className="settings-field">
-        <label className="settings-field-label">超时 (秒)</label>
-        <input className="settings-field-input" type="number" value={timeout} onChange={(e) => setTimeout_(e.target.value)} />
+        <label className="settings-field-label">心跳间隔（秒）</label>
+        <input className="settings-field-input" type="number" value={interval_} onChange={(e) => setInterval_(e.target.value)} />
+        <span className="settings-field-hint">触发后每隔多久发一次心跳，避免过密</span>
       </div>
+      <div className="settings-field">
+        <label className="settings-field-label">首 Token 超时（秒）</label>
+        <input className="settings-field-input" type="number" value={firstTokenTimeout} onChange={(e) => setFirstTokenTimeout(e.target.value)} placeholder="留空 = 不启用" />
+        <span className="settings-field-hint">请求发出后首个 Token 还没出来就触发，0 表示不启用</span>
+      </div>
+      <div className="settings-switch-row">
+        <div>
+          <div className="settings-switch-label">断连时触发</div>
+          <div className="settings-switch-desc">上游直接断开也发一次心跳</div>
+        </div>
+        <button className={`settings-toggle ${onDisconnect ? 'on' : ''}`} role="switch" aria-checked={onDisconnect} onClick={() => setOnDisconnect((v) => !v)} />
+      </div>
+
+      {/* 心跳内容 */}
+      <div style={sectionStyle}>心跳内容</div>
+      <div className="settings-field">
+        <label className="settings-field-label">流中心跳</label>
+        <input className="settings-field-input" value={streamMarker} onChange={(e) => setStreamMarker(e.target.value)} placeholder="\u200B" />
+        <span className="settings-field-hint">真正下发的字符，预设零宽空格（不影响模型思考）</span>
+      </div>
+      <div className="settings-field">
+        <label className="settings-field-label">断连心跳</label>
+        <input className="settings-field-input" value={disconnectMessage} onChange={(e) => setDisconnectMessage(e.target.value)} placeholder="请求断开" />
+        <span className="settings-field-hint">断连时直接下发的文本</span>
+      </div>
+
+      {/* 辅助前端脚本 */}
+      <div style={{ ...sectionStyle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setShowScript((v) => !v)}>
+        <span>前端替换脚本（篡改猴）</span>
+        <span style={{ fontSize: 14, fontWeight: 400, transition: 'transform 0.2s', transform: showScript ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+      </div>
+      {showScript && (
+        <pre style={{
+          margin: 0, padding: 12, borderRadius: 8,
+          background: 'var(--muted)', border: '1px solid var(--border)',
+          fontSize: 11, fontFamily: '"JetBrains Mono", "Fira Code", var(--font-mono), monospace',
+          lineHeight: 1.5, color: 'var(--foreground)', overflowX: 'auto',
+          whiteSpace: 'pre', tabSize: 2,
+        }}>
+          {HEARTBEAT_SCRIPT}
+        </pre>
+      )}
+
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
         <button className="settings-btn" onClick={onCancel}>取消</button>
         <button className="settings-btn" style={{ background: 'var(--sidebar-primary)', color: 'var(--sidebar-primary-foreground)', borderColor: 'var(--sidebar-primary)' }} onClick={save}>保存</button>
@@ -250,8 +363,8 @@ SET model = "gpt-4o"\n...`}
 const RULE_CFG = {
   heartbeat: {
     title: '心跳回复', subtitle: 'Heartbeat injector',
-    columns: ['名称', '匹配条件', '回复内容', '超时', '状态', '操作'],
-    renderRow: (r) => [r.name, r.pattern, r.response, `${r.timeout}s`],
+    columns: ['名称', '范围', '窗口', '最低Token', '间隔', '断连', '状态', '操作'],
+    renderRow: (r) => [r.name, r.scope === 'per_channel' ? '按渠道' : r.scope === 'per_model' ? '按模型' : '全部', `${r.window}s`, r.minTokens, `${r.interval}s`, r.onDisconnect ? '是' : '否'],
     Form: HeartbeatForm,
   },
   failover: {
