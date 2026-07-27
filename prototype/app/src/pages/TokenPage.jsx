@@ -18,19 +18,38 @@ function Modal({ title, onClose, children }) {
 }
 
 const SEED = [
-  { id: 1, name: '生产环境', key: 'sk-prod-xxxxxxxxxxxxxxxx', quota: '', status: true },
-  { id: 2, name: '测试环境', key: 'sk-test-xxxxxxxxxxxxxxxx', quota: '100.00', status: true },
-  { id: 3, name: '开发环境', key: 'sk-dev-xxxxxxxxxxxxxxxx', quota: '50.00', status: false },
+  { id: 1, name: '生产环境', key: 'sk-prod-v2-xxxxxxxxxxxx', keyHistory: ['sk-prod-v1-xxxxxxxxxxxx'], quota: '', status: true },
+  { id: 2, name: '测试环境', key: 'sk-test-xxxxxxxxxxxxxxxx', keyHistory: [], quota: '100.00', status: true },
+  { id: 3, name: '开发环境', key: 'sk-dev-xxxxxxxxxxxxxxxx', keyHistory: [], quota: '50.00', status: false },
 ];
+
+function randomKey() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = 'sk-';
+  for (let i = 0; i < 24; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
 
 function TokenForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [key, setKey] = useState(initial?.key || '');
   const [quota, setQuota] = useState(initial?.quota || '');
   const [status, setStatus] = useState(initial?.status !== false);
+  const [keyHistory, setKeyHistory] = useState(initial?.keyHistory || []);
+
+  function handleUpdateKey() {
+    setKeyHistory((h) => [key, ...h]);
+    setKey(randomKey());
+  }
 
   function save() {
-    onSave({ name: name.trim() || 'New Token', key: key.trim() || 'sk-xxxxxxxx', quota: quota.trim() || '无限制', status });
+    onSave({
+      name: name.trim() || 'New Token',
+      key: key.trim() || 'sk-xxxxxxxx',
+      quota: quota.trim() || '无限制',
+      status,
+      keyHistory,
+    });
   }
 
   return (
@@ -45,8 +64,36 @@ function TokenForm({ initial, onSave, onCancel }) {
       </div>
       <div className="settings-field">
         <label className="settings-field-label">Key</label>
-        <input className="settings-field-input" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-xxxxxxxx" />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input className="settings-field-input" style={{ flex: 1, height: 34, fontSize: 12, fontFamily: 'var(--font-mono)' }} value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-xxxxxxxx" />
+          <button
+            className="settings-btn"
+            style={{ fontSize: 11, height: 34, whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={handleUpdateKey}
+            title="生成新 Key，旧 Key 移入历史记录"
+          >
+            更新 Key
+          </button>
+        </div>
       </div>
+      {keyHistory.length > 0 && (
+        <div className="settings-field">
+          <label className="settings-field-label" style={{ color: 'var(--muted-foreground)' }}>历史 Key</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {keyHistory.map((hk, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '6px 10px', borderRadius: 6,
+                background: 'var(--muted)', fontSize: 11,
+                fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)',
+              }}>
+                <span style={{ flex: 1, wordBreak: 'break-all' }}>{hk}</span>
+                <span style={{ fontSize: 10, opacity: 0.5, flexShrink: 0 }}>已废弃</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="settings-field">
         <label className="settings-field-label">额度 (¥)</label>
         <input className="settings-field-input" value={quota} onChange={(e) => setQuota(e.target.value)} placeholder="留空则表示不限制" />
@@ -82,6 +129,20 @@ export default function TokenPage() {
 
   function handleToggle(id) {
     setTokens((ts) => ts.map((t) => (t.id === id ? { ...t, status: !t.status } : t)));
+  }
+
+  function handleRenewKey(id) {
+    setTokens((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const newKey = randomKey();
+        return {
+          ...t,
+          key: newKey,
+          keyHistory: [t.key, ...(t.keyHistory || [])],
+        };
+      })
+    );
   }
 
   return (
@@ -124,7 +185,9 @@ export default function TokenPage() {
                     onClick={() => handleToggle(t.id)}
                   />
                 </td>
-                <td style={{ padding: '10px 14px', display: 'flex', gap: 6 }}>
+                <td style={{ padding: '10px 14px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button className="settings-btn" style={{ fontSize: 11, height: 28, padding: '0 10px' }}
+                    onClick={() => handleRenewKey(t.id)}>更新</button>
                   <button className="settings-btn" style={{ fontSize: 11, height: 28, padding: '0 10px' }}
                     onClick={() => { setEditingId(t.id); setModal(t); }}>编辑</button>
                   <button className="settings-btn danger" style={{ fontSize: 11, height: 28, padding: '0 10px' }}

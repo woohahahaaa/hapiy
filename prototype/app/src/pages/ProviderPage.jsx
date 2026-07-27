@@ -24,7 +24,7 @@ function ProviderForm({ initial, onSave, onCancel }) {
   const [baseUrls, setBaseUrls] = useState(initial?.baseUrls || ['']);
   const [keys, setKeys] = useState(initial?.keys || ['']);
   const [endpoints, setEndpoints] = useState(initial?.endpoints || ['']);
-  const [models, setModels] = useState(initial?.models || [{ model: '', endpoint: '', discount: '' }]);
+  const [models, setModels] = useState(initial?.models || [{ model: '', endpoints: [], discount: '' }]);
 
   function save() {
     onSave({
@@ -77,25 +77,83 @@ function MultiField({ label, items, setItems, placeholder }) {
 }
 
 function ModelField({ label, models, setModels, endpoints }) {
+  const [openPopIdx, setOpenPopIdx] = useState(null);
   const activeEndpoints = endpoints.filter(Boolean);
+
+  function toggleEndpoint(mIdx, ep) {
+    setModels(models.map((m, i) => {
+      if (i !== mIdx) return m;
+      const cur = m.endpoints || [];
+      const next = cur.includes(ep) ? cur.filter(e => e !== ep) : [...cur, ep];
+      return { ...m, endpoints: next };
+    }));
+  }
+
+  function endpointLabel(m) {
+    const eps = m.endpoints || [];
+    if (eps.length === 0 || eps.length === activeEndpoints.length) return '不限';
+    return eps.join(', ');
+  }
+
   return (
     <div className="settings-field">
       <label className="settings-field-label">{label}</label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {models.map((m, i) => (
-          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input className="settings-field-input" style={{ flex: 1, height: 34, fontSize: 12 }} value={m.model} onChange={(e) => { const n = [...models]; n[i] = { ...n[i], model: e.target.value }; setModels(n); }} placeholder="model-id" />
-            <select
-              className="settings-field-input"
-              style={{ width: 160, height: 34, fontSize: 11, flexShrink: 0, cursor: 'pointer' }}
-              value={m.endpoint}
-              onChange={(e) => { const n = [...models]; n[i] = { ...n[i], endpoint: e.target.value }; setModels(n); }}
-            >
-              {activeEndpoints.length === 0 && <option value="">—</option>}
-              {activeEndpoints.map((ep) => (
-                <option key={ep} value={ep}>{ep}</option>
-              ))}
-            </select>
+          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="settings-field-input" style={{ flex: 1, minWidth: 120, height: 34, fontSize: 12 }} value={m.model} onChange={(e) => { const n = [...models]; n[i] = { ...n[i], model: e.target.value }; setModels(n); }} placeholder="model-id" />
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="settings-btn"
+                style={{ height: 34, fontSize: 11, minWidth: 120, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}
+                onClick={() => setOpenPopIdx(openPopIdx === i ? null : i)}
+              >
+                {endpointLabel(m)}
+                <span style={{ marginLeft: 4, fontSize: 10 }}>{openPopIdx === i ? '▲' : '▼'}</span>
+              </button>
+              {openPopIdx === i && activeEndpoints.length > 0 && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpenPopIdx(null)} />
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, zIndex: 50,
+                    background: 'var(--background)', border: '1px solid var(--border)', borderRadius: 8,
+                    minWidth: 220, padding: 4, marginTop: 4, boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModels(models.map((mm, j) => j === i ? { ...mm, endpoints: [] } : mm));
+                      }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px',
+                        border: 'none', background: (m.endpoints || []).length === 0 ? 'var(--muted)' : 'transparent',
+                        color: 'var(--foreground)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                    >
+                      <span style={{ color: (m.endpoints || []).length === 0 ? 'var(--chart-1)' : 'var(--muted-foreground)', marginRight: 4 }}>{(m.endpoints || []).length === 0 ? '✓' : '○'}</span>
+                      不限
+                    </button>
+                    <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+                    {activeEndpoints.map(ep => {
+                      const selected = (m.endpoints || []).includes(ep);
+                      return (
+                        <button
+                          key={ep}
+                          type="button"
+                          onClick={() => toggleEndpoint(i, ep)}
+                          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px',
+                            border: 'none', background: selected ? 'var(--muted)' : 'transparent',
+                            color: selected ? 'var(--foreground)' : 'var(--muted-foreground)',
+                            borderRadius: 4, cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                        >
+                          <span style={{ color: selected ? 'var(--chart-1)' : 'var(--muted-foreground)', marginRight: 4 }}>{selected ? '✓' : '○'}</span>
+                          {ep}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             <input
               className="settings-field-input"
               style={{ width: 72, height: 34, fontSize: 11, flexShrink: 0 }}
@@ -106,7 +164,7 @@ function ModelField({ label, models, setModels, endpoints }) {
             <button onClick={() => setModels(models.filter((_, j) => j !== i))} style={{ width: 28, height: 28, border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>×</button>
           </div>
         ))}
-        <button onClick={() => setModels([...models, { model: '', endpoint: activeEndpoints[0] || '', discount: '' }])} className="settings-btn" style={{ justifyContent: 'center', borderStyle: 'dashed', fontSize: 12 }}>+ 添加</button>
+        <button onClick={() => setModels([...models, { model: '', endpoints: [], discount: '' }])} className="settings-btn" style={{ justifyContent: 'center', borderStyle: 'dashed', fontSize: 12 }}>+ 添加</button>
       </div>
     </div>
   );

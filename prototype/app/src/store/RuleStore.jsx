@@ -15,9 +15,37 @@ const SEED = {
     { id: 3, name: '令牌限流', scope: 'per_token', maxConcurrent: 50, queueEnabled: true, status: true },
   ],
   rewrite: [
-    { id: 1, name: '模型替换', field: 'model', action: '替换', value: 'gpt-4o', status: true },
-    { id: 2, name: 'Token 上限', field: 'max_tokens', action: '替换', value: '4096', status: true },
-    { id: 3, name: '注入 Header', field: 'headers', action: '添加', value: 'X-Forwarded-By: hapiy', status: false },
+    {
+      id: 1,
+      name: '模型统一替换',
+      status: true,
+      script: `# 将所有请求的模型统一替换
+SET model = "gpt-4o"
+SET max_tokens = 4096`
+    },
+    {
+      id: 2,
+      name: '条件路由 + 清理参数',
+      status: true,
+      script: `# 根据原始模型做条件替换
+IF model == "gpt-3.5-turbo" THEN SET model = "gpt-4o-mini"
+IF model ~ "claude-*" THEN { SET model = "claude-sonnet"; SET max_tokens = 8192 }
+
+# 移除不需要的参数
+DELETE top_p
+DELETE frequency_penalty
+DELETE presence_penalty
+DELETE logit_bias`
+    },
+    {
+      id: 3,
+      name: '注入请求头',
+      status: false,
+      script: `# 为所有请求注入自定义 Header
+SET header.X-Gateway = "hapiy"
+SET header.X-Request-Id = "{{request_id}}"
+DELETE header.X-Forwarded-For`
+    },
   ],
 };
 
