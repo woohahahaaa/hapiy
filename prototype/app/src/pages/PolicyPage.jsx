@@ -20,28 +20,64 @@ function Modal({ title, onClose, children }) {
 }
 
 /* ── 心跳回复 ── */
-const HEARTBEAT_SCRIPT = `// ==UserScript==
-// @name         hapiy 心跳零宽字符替换
+const CHAR_PRESETS = [
+  {
+    group: '零宽字符',
+    chars: [
+      { label: 'U+200B', name: '零宽空格', value: '\u200B' },
+      { label: 'U+200C', name: '零宽非连接符', value: '\u200C' },
+      { label: 'U+200D', name: '零宽连接符', value: '\u200D' },
+      { label: 'U+FEFF', name: '零宽不换行空格', value: '\uFEFF' },
+    ],
+  },
+  {
+    group: '窄空格',
+    chars: [
+      { label: 'U+200A', name: '发丝空格', value: '\u200A' },
+      { label: 'U+2009', name: '窄空格', value: '\u2009' },
+      { label: 'U+2006', name: '六分空格', value: '\u2006' },
+    ],
+  },
+  {
+    group: '不可见分隔符',
+    chars: [
+      { label: 'U+00AD', name: '软连字符', value: '\u00AD' },
+      { label: 'U+2060', name: '词连接符', value: '\u2060' },
+      { label: 'U+2063', name: '不可见分隔符', value: '\u2063' },
+    ],
+  },
+];
+
+function escapeCharForJS(c) {
+  return c.split('').map(ch => {
+    const code = ch.charCodeAt(0).toString(16).padStart(4, '0').toUpperCase();
+    return `\\u${code}`;
+  }).join('');
+}
+
+function buildScript(marker, replacement) {
+  const escaped = escapeCharForJS(marker);
+  const safeRepl = replacement.replace(/'/g, "\\'");
+  return `// ==UserScript==
+// @name         hapiy 心跳字符替换
 // @namespace    http://tampermonkey.net/
 // @version      1.0
-// @description  将零宽字符实时替换为可见心跳文本
+// @description  将心跳标记字符实时替换为可见文本
 // @author       hapiy
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
 
 (function() {
-    // ===== 用户可在此修改 =====
-    const MARKER = '\\u200B';          // 零宽字符 — 与后台「流中心跳」字段保持一致
-    const REPLACEMENT = '⏳ 正在生成中……'; // 替换为的可见文字
-    // =========================
+    const MARKER = '${escaped}';
+    const REPLACEMENT = '${safeRepl}';
 
     function replaceText(node) {
         if (node.nodeValue && node.nodeValue.includes(MARKER))
             node.nodeValue = node.nodeValue.replaceAll(MARKER, REPLACEMENT);
     }
 
-    // 方案 A：劫持 fetch 响应流（SSE）
+    // 劫持 fetch SSE 流，实时替换
     const orig = window.fetch;
     window.fetch = async (...a) => {
         const r = await orig(...a);
@@ -51,23 +87,80 @@ const HEARTBEAT_SCRIPT = `// ==UserScript==
         return new Response(new ReadableStream({async pull(c){const{done,v}=await rd.read();if(done){c.close();return}b+=td.decode(v,{stream:true});b=b.replaceAll(MARKER,REPLACEMENT);c.enqueue(te.encode(b));b=''}}),r);
     };
 
-    // 方案 B：MutationObserver 兜底（已有 DOM 文本）
+    // MutationObserver 兜底
     const obs = new MutationObserver(muts => {for(const m of muts)for(const n of m.addedNodes){const w=document.createTreeWalker(n,NodeFilter.SHOW_TEXT);let x;while(x=w.nextNode())replaceText(x)}});
     obs.observe(document.body,{childList:true,subtree:true});
 })();`;
+}
+
+function CharSelector({ label, hint, mode, value, name, onChange }) {
+  const presetChars = CHAR_PRESETS.flatMap(g => g.chars);
+  const currentPreset = presetChars.find(c => c.value === value);
+
+  return (
+    <div className="settings-field" style={{ gap: 8 }}>
+      <label className="settings-field-label">{label}</label>
+      <div style={{ display: 'flex', gap: 14 }}>
+        <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: 'var(--foreground)' }}>
+          <input type="radio" name={`${name}_mode`} checked={mode === 'preset'} onChange={() => { const def = presetChars[0].value; onChange('preset', def); }} />
+          预设字符
+        </label>
+        <label style={{ fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: 'var(--foreground)' }}>
+          <input type="radio" name={`${name}_mode`} checked={mode === 'manual'} onChange={() => onChange('manual', value || '')} />
+          手动输入
+        </label>
+      </div>
+      {mode === 'preset' ? (
+        <>
+          <select
+            className="settings-field-input" style={{ cursor: 'pointer' }}
+            value={value}
+            onChange={(e) => onChange('preset', e.target.value)}
+          >
+            {CHAR_PRESETS.map(g => (
+              <optgroup key={g.group} label={g.group}>
+                {g.chars.map(c => (
+                  <option key={c.label} value={c.value}>{c.label} — {c.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <div style={{
+            fontSize: 13, padding: '8px 10px', borderRadius: 8,
+            background: 'var(--muted)', border: '1px solid var(--border)',
+            color: 'var(--muted-foreground)', fontFamily: 'var(--font-mono)',
+          }}>
+            字符在此后<span style={{
+              background: 'color-mix(in oklch, var(--sidebar-primary) 30%, transparent)',
+              border: '1px dashed color-mix(in oklch, var(--sidebar-primary) 60%, transparent)',
+              borderRadius: 2, padding: '0 2px', margin: '0 3px',
+              color: 'var(--foreground)',
+            }}>{value}</span>字符在此前
+          </div>
+        </>
+      ) : (
+        <input className="settings-field-input" value={value} onChange={(e) => onChange('manual', e.target.value)} placeholder="输入字符或文本" />
+      )}
+      {hint && <span className="settings-field-hint">{hint}</span>}
+    </div>
+  );
+}
 
 function HeartbeatForm({ initial, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [scope, setScope] = useState(initial?.scope || 'all');
   const [window_, setWindow_] = useState(initial?.window ?? 60);
   const [minTokens, setMinTokens] = useState(initial?.minTokens ?? 3);
-  const [interval_, setInterval_] = useState(initial?.interval ?? 15);
   const [firstTokenTimeout, setFirstTokenTimeout] = useState(initial?.firstTokenTimeout ?? 0);
   const [onDisconnect, setOnDisconnect] = useState(initial?.onDisconnect !== false);
+  const [streamMode, setStreamMode] = useState(initial?.streamMode || 'preset');
   const [streamMarker, setStreamMarker] = useState(initial?.streamMarker || '\u200B');
+  const [disconnectMode, setDisconnectMode] = useState(initial?.disconnectMode || 'manual');
   const [disconnectMessage, setDisconnectMessage] = useState(initial?.disconnectMessage || '请求断开');
+  const [replacement, setReplacement] = useState(initial?.replacement || '⏳ 正在生成中……');
   const [status, setStatus] = useState(initial?.status !== false);
-  const [showScript, setShowScript] = useState(false);
+
+  const script = buildScript(streamMarker, replacement);
 
   function save() {
     onSave({
@@ -75,11 +168,11 @@ function HeartbeatForm({ initial, onSave, onCancel }) {
       scope,
       window: Number(window_) || 60,
       minTokens: Number(minTokens) || 0,
-      interval: Number(interval_) || 15,
       firstTokenTimeout: Number(firstTokenTimeout) || 0,
       onDisconnect,
-      streamMarker: streamMarker || '\u200B',
-      disconnectMessage: disconnectMessage.trim() || '请求断开',
+      streamMode, streamMarker: streamMarker || '\u200B',
+      disconnectMode, disconnectMessage: disconnectMessage.trim() || '请求断开',
+      replacement: replacement.trim() || '⏳ 正在生成中……',
       status,
     });
   }
@@ -87,7 +180,7 @@ function HeartbeatForm({ initial, onSave, onCancel }) {
   const sectionStyle = { fontSize: 12, fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.05em', paddingTop: 8, borderTop: '1px solid var(--border)', marginTop: 4 };
 
   return (
-    <div className="settings-card-body" style={{ gap: 12 }}>
+    <div className="settings-card-body" style={{ gap: 12, maxHeight: '72vh', overflowY: 'auto' }}>
       {/* 基本信息 */}
       <div className="settings-switch-row">
         <div className="settings-switch-label">启用</div>
@@ -111,17 +204,12 @@ function HeartbeatForm({ initial, onSave, onCancel }) {
       <div className="settings-field">
         <label className="settings-field-label">监测窗口（秒）</label>
         <input className="settings-field-input" type="number" value={window_} onChange={(e) => setWindow_(e.target.value)} />
-        <span className="settings-field-hint">多长时间统计一次吐字速度</span>
+        <span className="settings-field-hint">统计吐字速度的时间窗口，同时也是心跳发送间隔</span>
       </div>
       <div className="settings-field">
         <label className="settings-field-label">最低 Token 数</label>
         <input className="settings-field-input" type="number" value={minTokens} onChange={(e) => setMinTokens(e.target.value)} />
         <span className="settings-field-hint">窗口内新 Token 低于此值 → 触发心跳</span>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label">心跳间隔（秒）</label>
-        <input className="settings-field-input" type="number" value={interval_} onChange={(e) => setInterval_(e.target.value)} />
-        <span className="settings-field-hint">触发后每隔多久发一次心跳，避免过密</span>
       </div>
       <div className="settings-field">
         <label className="settings-field-label">首 Token 超时（秒）</label>
@@ -138,33 +226,58 @@ function HeartbeatForm({ initial, onSave, onCancel }) {
 
       {/* 心跳内容 */}
       <div style={sectionStyle}>心跳内容</div>
-      <div className="settings-field">
-        <label className="settings-field-label">流中心跳</label>
-        <input className="settings-field-input" value={streamMarker} onChange={(e) => setStreamMarker(e.target.value)} placeholder="\u200B" />
-        <span className="settings-field-hint">真正下发的字符，预设零宽空格（不影响模型思考）</span>
-      </div>
-      <div className="settings-field">
-        <label className="settings-field-label">断连心跳</label>
-        <input className="settings-field-input" value={disconnectMessage} onChange={(e) => setDisconnectMessage(e.target.value)} placeholder="请求断开" />
-        <span className="settings-field-hint">断连时直接下发的文本</span>
-      </div>
+      <CharSelector
+        label="流中心跳"
+        hint="真正下发的字符，预设零宽空格不影响模型思考。前端 JS 可将其替换为可见文字"
+        name="stream"
+        mode={streamMode}
+        value={streamMarker}
+        onChange={(m, v) => { setStreamMode(m); setStreamMarker(v); }}
+      />
+      <CharSelector
+        label="断连心跳"
+        hint="断连时直接下发的文本"
+        name="disconnect"
+        mode={disconnectMode}
+        value={disconnectMessage}
+        onChange={(m, v) => { setDisconnectMode(m); setDisconnectMessage(v); }}
+      />
 
-      {/* 辅助前端脚本 */}
-      <div style={{ ...sectionStyle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setShowScript((v) => !v)}>
-        <span>前端替换脚本（篡改猴）</span>
-        <span style={{ fontSize: 14, fontWeight: 400, transition: 'transform 0.2s', transform: showScript ? 'rotate(90deg)' : 'rotate(0deg)' }}>›</span>
+      {/* Web 端前端增强显示 JS */}
+      <div style={sectionStyle}>Web 端前端增强显示 JS</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 12, color: 'var(--muted-foreground)' }}>将心跳标记字符实时替换为可见文本，通过篡改猴等脚本管理器在网页端运行</span>
+        {/* tooltip */}
+        <span style={{
+          position: 'relative', display: 'inline-flex', cursor: 'help',
+          width: 18, height: 18, borderRadius: '50%',
+          background: 'var(--muted)', border: '1px solid var(--border)',
+          alignItems: 'center', justifyContent: 'center',
+          fontSize: 11, fontWeight: 600, color: 'var(--muted-foreground)',
+        }}
+          title="心跳内容中的特殊字符不会显示在网页端。将此脚本安装到 Tampermonkey / Violentmonkey 后，浏览器会自动拦截 SSE 流，把标记字符实时替换为下方设定的可见文字。大模型收到的仍然是原始标记字符，不受影响。"
+        >?</span>
       </div>
-      {showScript && (
+      <div className="settings-field">
+        <label className="settings-field-label">替换显示的文本</label>
+        <input className="settings-field-input" value={replacement} onChange={(e) => setReplacement(e.target.value)} placeholder="⏳ 正在生成中……" />
+      </div>
+      <div style={{ position: 'relative' }}>
         <pre style={{
           margin: 0, padding: 12, borderRadius: 8,
           background: 'var(--muted)', border: '1px solid var(--border)',
           fontSize: 11, fontFamily: '"JetBrains Mono", "Fira Code", var(--font-mono), monospace',
           lineHeight: 1.5, color: 'var(--foreground)', overflowX: 'auto',
-          whiteSpace: 'pre', tabSize: 2,
+          whiteSpace: 'pre', tabSize: 2, maxHeight: 260, overflowY: 'auto',
         }}>
-          {HEARTBEAT_SCRIPT}
+          {script}
         </pre>
-      )}
+        <button
+          className="settings-btn"
+          style={{ position: 'absolute', top: 8, right: 8, fontSize: 11, height: 26, padding: '0 10px' }}
+          onClick={() => navigator.clipboard.writeText(script).catch(() => {})}
+        >复制</button>
+      </div>
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
         <button className="settings-btn" onClick={onCancel}>取消</button>
@@ -363,8 +476,8 @@ SET model = "gpt-4o"\n...`}
 const RULE_CFG = {
   heartbeat: {
     title: '心跳回复', subtitle: 'Heartbeat injector',
-    columns: ['名称', '范围', '窗口', '最低Token', '间隔', '断连', '状态', '操作'],
-    renderRow: (r) => [r.name, r.scope === 'per_channel' ? '按渠道' : r.scope === 'per_model' ? '按模型' : '全部', `${r.window}s`, r.minTokens, `${r.interval}s`, r.onDisconnect ? '是' : '否'],
+    columns: ['名称', '范围', '窗口', '最低Token', '断连', '状态', '操作'],
+    renderRow: (r) => [r.name, r.scope === 'per_channel' ? '按渠道' : r.scope === 'per_model' ? '按模型' : '全部', `${r.window}s`, r.minTokens, r.onDisconnect ? '是' : '否'],
     Form: HeartbeatForm,
   },
   failover: {

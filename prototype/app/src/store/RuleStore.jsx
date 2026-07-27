@@ -2,8 +2,8 @@ import { createContext, useContext, useState, useCallback } from 'react';
 
 const SEED = {
   heartbeat: [
-    { id: 1, name: '默认心跳', scope: 'all', window: 60, minTokens: 3, interval: 15, firstTokenTimeout: 0, onDisconnect: true, streamMarker: '\u200B', disconnectMessage: '请求断开', status: true },
-    { id: 2, name: '低速流式中断', scope: 'all', window: 30, minTokens: 1, interval: 10, firstTokenTimeout: 5, onDisconnect: true, streamMarker: '\u200B', disconnectMessage: '请求断开', status: true },
+    { id: 1, name: '默认心跳', scope: 'all', window: 60, minTokens: 3, firstTokenTimeout: 0, onDisconnect: true, streamMode: 'preset', streamMarker: '\u200B', disconnectMode: 'manual', disconnectMessage: '请求断开', replacement: '⏳ 正在生成中……', status: true },
+    { id: 2, name: '低速流式中断', scope: 'all', window: 30, minTokens: 1, firstTokenTimeout: 5, onDisconnect: true, streamMode: 'preset', streamMarker: '\u200B', disconnectMode: 'manual', disconnectMessage: '请求断开', replacement: '⏳ 正在生成中……', status: true },
   ],
   failover: [
     { id: 1, name: '主备切换', primary: 'Open Code Go', fallback: '字节跳动', condition: 'timeout', status: true },

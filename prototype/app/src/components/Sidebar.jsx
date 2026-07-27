@@ -51,7 +51,7 @@ const MENU = [
     label: '策略配置',
     icon: ICONS.policy,
     children: [
-      { id: 'req_rewrite', label: '请求改写' },
+      { id: 'rewrite', label: '请求改写' },
       { id: 'heartbeat', label: '心跳回复' },
       { id: 'concurrency', label: '并发控制' },
       { id: 'failover', label: '故障转移' },
