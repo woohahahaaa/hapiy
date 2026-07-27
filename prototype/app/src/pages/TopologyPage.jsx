@@ -14,6 +14,7 @@ import ModelHubNode from '../nodes/ModelHubNode';
 import AutoReplyNode from '../nodes/AutoReplyNode';
 import RequestModifyNode from '../nodes/RequestModifyNode';
 import AutoSwitchNode from '../nodes/AutoSwitchNode';
+import ConcurrencyNode from '../nodes/ConcurrencyNode';
 import { useProviders, getModelsUnion, generateProviderEdges } from '../store/ProviderStore';
 import { useRules } from '../store/RuleStore';
 import PageHeader from './PageHeader';
@@ -24,6 +25,7 @@ const nodeTypes = {
   autoReply: AutoReplyNode,
   requestModify: RequestModifyNode,
   autoSwitch: AutoSwitchNode,
+  concurrency: ConcurrencyNode,
 };
 
 const defaultEdgeOptions = {
@@ -32,34 +34,25 @@ const defaultEdgeOptions = {
 };
 
 const NODE_W = {
-  modelHub: 220,
-  channel: 192,
-  autoReply: 192,
-  requestModify: 192,
-  autoSwitch: 192,
+  modelHub: 220, channel: 192, autoReply: 192,
+  requestModify: 192, autoSwitch: 192, concurrency: 192,
 };
 const NODE_H = {
-  modelHub: 210,
-  channel: 140,
-  autoReply: 130,
-  requestModify: 130,
-  autoSwitch: 300,
+  modelHub: 210, channel: 140, autoReply: 130,
+  requestModify: 130, autoSwitch: 300, concurrency: 100,
 };
 
 function getLayoutedElements(nodes, edges) {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 80, marginx: 20, marginy: 30 });
-
   for (const node of nodes) {
     g.setNode(node.id, { width: NODE_W[node.type] || 192, height: NODE_H[node.type] || 80 });
   }
   for (const edge of edges) {
     g.setEdge(edge.source, edge.target);
   }
-
   dagre.layout(g);
-
   return nodes.map((node) => {
     const { x, y } = g.node(node.id);
     const w = NODE_W[node.type] || 192;
@@ -73,73 +66,61 @@ export default function TopologyPage() {
   const { rules } = useRules();
 
   const baseNodes = useMemo(() => {
-    const heartbeatRules = (rules.heartbeat || []).filter((r) => r.status);
-    const rewriteRules = (rules.rewrite || []).filter((r) => r.status);
-    const failoverRules = (rules.failover || []).filter((r) => r.status);
+    const hb = (rules.heartbeat || []).filter((r) => r.status);
+    const rw = (rules.rewrite || []).filter((r) => r.status);
+    const fo = (rules.failover || []).filter((r) => r.status);
+    const cc = (rules.concurrency || []).filter((r) => r.status);
 
-const channelNodes = providers.map((p, i) => ({
-      id: `ch-${p.id}`,
-      type: 'channel',
-      position: { x: 350, y: 30 + i * 160 },
+    const activeProvs = providers.filter((p) => p.status);
+    const chNodes = providers.map((p, i) => ({
+      id: `ch-${p.id}`, type: 'channel', position: { x: 350, y: 30 + i * 120 },
       data: {
-        label: p.name,
-        baseURLCount: (p.baseUrls || []).length,
-        keyCount: (p.keys || []).length,
-        modelCount: (p.models || []).length,
-        models: (p.models || []).map((m) => m.model),
-        active: p.status,
+        label: p.name, baseURLCount: (p.baseUrls || []).length,
+        keyCount: (p.keys || []).length, modelCount: (p.models || []).length,
+        models: (p.models || []).map((m) => m.model), active: p.status,
       },
     }));
 
+    // ch-1,ch-2 → reply-A → concurrency → rewrite-A → switch-main
+    // ch-4 → rewrite-A → switch-main (skip reply+concur)
+    // ch-5 → switch-main (no processing)
+    // ch-3 → reply-B → switch-backup
+
     return [
       { id: 'hub', type: 'modelHub', position: { x: 20, y: 30 }, data: { models: getModelsUnion(providers) } },
-      ...channelNodes,
-      {
-        id: 'auto-reply', type: 'autoReply', position: { x: 380, y: 30 },
-        data: {
-          label: '自动回复',
-          rules: heartbeatRules.map((r) => ({ pattern: r.pattern, response: r.response })),
-          count: heartbeatRules.length,
-          channelIds: providers.map((p) => `ch-${p.id}`),
-        },
-      },
-      {
-        id: 'request-modify', type: 'requestModify', position: { x: 640, y: 180 },
-        data: {
-          label: '请求改写',
-          transforms: rewriteRules.map((r) => ({ field: r.field, action: `${r.action} → ${r.value}` })),
-          count: rewriteRules.length,
-          sourceIds: ['auto-reply'],
-        },
-      },
-      {
-        id: 'auto-switch', type: 'autoSwitch', position: { x: 900, y: 330 },
-        data: {
-          label: '故障转移',
-          slots: failoverRules.map((r) => ({ key: r.name, provider: r.fallback, baseURL: r.condition === 'rate_limit' ? '限流触发' : r.condition === 'error' ? '错误触发' : '超时触发' })),
-          count: failoverRules.length,
-          sourceIds: ['request-modify'],
-        },
-      },
+      ...chNodes,
+      { id: 'reply-A', type: 'autoReply', position: { x: 380, y: 20 },
+        data: { label: '自动回复 A', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-1', 'ch-2'] } },
+      { id: 'reply-B', type: 'autoReply', position: { x: 380, y: 250 },
+        data: { label: '自动回复 B', rules: hb.map((r) => ({ pattern: r.pattern, response: r.response })), count: hb.length, channelIds: ['ch-3', 'ch-5'] } },
+      { id: 'concurrency-main', type: 'concurrency', position: { x: 640, y: 20 },
+        data: { label: '并发控制', ruleItems: cc.map((r) => ({ name: r.name, scope: r.scope, max: r.maxConcurrent })), count: cc.length, sourceIds: ['reply-A'] } },
+      { id: 'rewrite-A', type: 'requestModify', position: { x: 640, y: 200 },
+        data: { label: '请求改写', transforms: rw.map((r) => ({ field: r.field, action: `${r.action} → ${r.value}` })), count: rw.length, sourceIds: ['concurrency-main', 'ch-4'] } },
+      { id: 'switch-main', type: 'autoSwitch', position: { x: 900, y: 80 },
+        data: { label: '故障转移(主)', slots: fo.map((r) => ({ key: r.name, provider: r.fallback, baseURL: r.condition })), count: fo.length, sourceIds: ['rewrite-A', 'ch-5'] } },
+      { id: 'switch-backup', type: 'autoSwitch', position: { x: 900, y: 350 },
+        data: { label: '故障转移(备)', slots: fo.map((r) => ({ key: r.name, provider: r.fallback, baseURL: r.condition })), count: fo.length, sourceIds: ['reply-B'] } },
     ];
   }, [providers, rules]);
 
   const baseEdges = useMemo(() => {
     const providerEdges = generateProviderEdges(providers);
-    const channelIds = providers.map((p) => `ch-${p.id}`);
-    return [
-      ...providerEdges,
-      ...channelIds.map((chId) => ({
-        id: `${chId}->auto-reply`,
-        source: chId,
-        target: 'auto-reply',
-        targetHandle: chId,
-        animated: true,
-        style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 },
-      })),
-      { id: 'auto-reply->request-modify', source: 'auto-reply', target: 'request-modify', targetHandle: 'auto-reply', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
-      { id: 'request-modify->auto-switch', source: 'request-modify', target: 'auto-switch', targetHandle: 'request-modify', animated: true, style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+
+    // Custom pipeline edges — flexible, per-channel routing
+    const custom = [
+      { id: 'ch-1→reply-A',              source: 'ch-1', target: 'reply-A',           targetHandle: 'ch-1', style: { stroke: 'var(--chart-1)', strokeWidth: 1.5 } },
+      { id: 'ch-2→reply-A',              source: 'ch-2', target: 'reply-A',           targetHandle: 'ch-2', style: { stroke: 'var(--chart-2)', strokeWidth: 1.5 } },
+      { id: 'reply-A→concurrency-main',  source: 'reply-A', target: 'concurrency-main', targetHandle: 'reply-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'concurrency-main→rewrite-A', source: 'concurrency-main', target: 'rewrite-A', targetHandle: 'concurrency-main', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'rewrite-A→switch-main',     source: 'rewrite-A', target: 'switch-main',  targetHandle: 'rewrite-A', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
+      { id: 'ch-4→rewrite-A',            source: 'ch-4', target: 'rewrite-A',         targetHandle: 'ch-4', style: { stroke: 'var(--chart-4)', strokeWidth: 1.5 } },
+      { id: 'ch-5→switch-main',          source: 'ch-5', target: 'switch-main',       targetHandle: 'ch-5', style: { stroke: 'var(--chart-5)', strokeWidth: 1.5 } },
+      { id: 'ch-3→reply-B',              source: 'ch-3', target: 'reply-B',           targetHandle: 'ch-3', style: { stroke: 'var(--chart-3)', strokeWidth: 1.5 } },
+      { id: 'reply-B→switch-backup',    source: 'reply-B', target: 'switch-backup',   targetHandle: 'reply-B', style: { stroke: 'var(--muted-foreground)', strokeWidth: 1.5 } },
     ];
+
+    return [...providerEdges, ...custom];
   }, [providers]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes);
@@ -161,16 +142,13 @@ const channelNodes = providers.map((p, i) => ({
         const prov = providers.find((p) => `ch-${p.id}` === n.id);
         return {
           ...n,
-          data: {
-            ...n.data,
-            label: prov?.name || n.data.label,
+          data: { ...n.data, label: prov?.name || n.data.label,
             baseURLCount: (prov?.baseUrls || []).length,
             keyCount: (prov?.keys || []).length,
             modelCount: (prov?.models || []).length,
             models: (prov?.models || []).map((m) => m.model),
             active: prov?.status !== false,
-            onToggle: () => toggleProvider(prov?.id),
-          },
+            onToggle: () => toggleProvider(prov?.id) },
         };
       }
       if (n.type === 'modelHub') {
@@ -180,21 +158,14 @@ const channelNodes = providers.map((p, i) => ({
     }),
   [nodes, providers, toggleProvider]);
 
-  const displayEdges = edges;
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ position: 'absolute', zIndex: 5, top: 12, left: 12 }}>
-        <PageHeader
-         
-          title="转发拓扑"
-          subtitle="API routing workspace"
-          status={`${nodes.length} 节点 · ${edges.length} 连线`}
-        />
+        <PageHeader title="转发拓扑" subtitle="API routing workspace" status={`${nodes.length} 节点 · ${edges.length} 连线`} />
       </div>
       <ReactFlow
         nodes={displayNodes}
-        edges={displayEdges}
+        edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
@@ -207,24 +178,8 @@ const channelNodes = providers.map((p, i) => ({
         <Controls className="topology-controls" position="bottom-right" />
         <Background color="var(--border)" gap={20} size={1} />
         <Panel className="topology-auto-layout" position="bottom-right">
-          <button
-            title="自动布局"
-            aria-label="自动布局"
-            onClick={handleAutoLayout}
-            style={{
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              width: 34,
-              height: 34,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: 'var(--foreground)',
-              boxShadow: 'var(--shadow-md)',
-            }}
-          >
+          <button title="自动布局" aria-label="自动布局" onClick={handleAutoLayout}
+            style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--foreground)', boxShadow: 'var(--shadow-md)' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'wght' 400" }}>auto_awesome</span>
           </button>
         </Panel>
