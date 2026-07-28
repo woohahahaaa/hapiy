@@ -1,1 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Cookie&display=swap');
 @import "tailwindcss";
+
+@theme {
+  --font-hapiy-logo: 'Cookie', cursive;
+}
+
+/* --- React Flow controls positioning fix ---
+   Force position:fixed so +/- buttons stay in viewport on iPad/Safari
+   where absolute positioning relative to the flow canvas fails. */
+
+.react-flow__controls {
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-md) !important;
+  overflow: visible;
+}
+
+.react-flow__controls-button {
+  width: 34px !important;
+  height: 34px !important;
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  fill: var(--foreground) !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--accent) !important;
+}
+
+.react-flow__controls-button:focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px;
+}
+
+.topology-controls,
+.topology-auto-layout {
+  position: fixed !important;
+  bottom: 15px !important;
+  margin: 0 !important;
+  z-index: 10;
+}
+
+.topology-controls {
+  right: 15px !important;
+}
+
+.topology-auto-layout {
+  right: 57px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__controls-button {
+    transition-duration: 0.01ms !important;
+  }
+}

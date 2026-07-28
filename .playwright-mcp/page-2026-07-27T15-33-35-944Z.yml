@@ -1,0 +1,124 @@
+- generic [ref=f1e3]:
+  - complementary [ref=f1e4]:
+    - generic [ref=f1e5]:
+      - generic [ref=f1e6]: Hapiy
+      - button [ref=f1e7]
+    - navigation [ref=f1e9]:
+      - link "转发拓扑" [ref=f1e11] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f1e18]:
+        - button "监控" [ref=f1e19]
+        - generic [ref=f1e26]:
+          - link "活动监视" [ref=f1e27] [cursor=pointer]:
+            - /url: /monitor
+          - link "使用日志" [ref=f1e30] [cursor=pointer]:
+            - /url: /logs
+      - link "供应商" [ref=f1e34] [cursor=pointer]:
+        - /url: /provider
+      - link "令牌管理" [ref=f1e40] [cursor=pointer]:
+        - /url: /token
+      - link "价格配置" [ref=f1e47] [cursor=pointer]:
+        - /url: /price
+      - generic [ref=f1e52]:
+        - button "策略配置" [ref=f1e53]
+        - generic [ref=f1e61]:
+          - link "请求改写" [ref=f1e62] [cursor=pointer]:
+            - /url: /policy/rewrite
+          - link "心跳回复" [ref=f1e65] [cursor=pointer]:
+            - /url: /policy/heartbeat
+          - link "并发控制" [ref=f1e68] [cursor=pointer]:
+            - /url: /policy/concurrency
+          - link "故障转移" [ref=f1e71] [cursor=pointer]:
+            - /url: /policy/failover
+      - link "系统设置" [ref=f1e75] [cursor=pointer]:
+        - /url: /settings
+      - link "个人资料" [ref=f1e81] [cursor=pointer]:
+        - /url: /profile
+    - generic [ref=f1e86]: Hapiy v0.1.0
+  - main [ref=f1e88]:
+    - generic [ref=f1e89]:
+      - generic [ref=f1e92]:
+        - heading "系统设置" [level=1] [ref=f1e93]
+        - paragraph [ref=f1e94]: Security, performance, and system status
+      - generic [ref=f1e95]:
+        - generic [ref=f1e96]:
+          - generic [ref=f1e97]:
+            - generic [ref=f1e98]: 安全设置
+            - generic [ref=f1e102]: 防暴力破解和访问保护
+          - generic [ref=f1e103]:
+            - generic [ref=f1e104]:
+              - generic [ref=f1e105]:
+                - generic [ref=f1e106]: 防暴力破解
+                - paragraph [ref=f1e107]: 多次登录失败后自动锁定
+              - switch [checked] [ref=f1e108]
+              - checkbox [checked] [ref=f1e109]
+            - separator
+            - generic [ref=f1e110]:
+              - generic [ref=f1e111]:
+                - generic [ref=f1e112]: 最大尝试次数
+                - spinbutton [ref=f1e113]: "5"
+              - generic [ref=f1e114]:
+                - generic [ref=f1e115]: 锁定时长 (秒)
+                - spinbutton [ref=f1e116]: "300"
+        - generic [ref=f1e117]:
+          - generic [ref=f1e118]:
+            - generic [ref=f1e119]: 磁盘缓存
+            - generic [ref=f1e123]: 大请求体自动写入临时文件
+          - generic [ref=f1e124]:
+            - generic [ref=f1e125]:
+              - generic [ref=f1e126]:
+                - generic [ref=f1e127]: 启用磁盘缓存
+                - paragraph [ref=f1e128]: 请求体超过阈值时写入磁盘
+              - switch [checked] [ref=f1e129]
+              - checkbox [checked] [ref=f1e130]
+            - separator
+            - generic [ref=f1e131]:
+              - generic [ref=f1e132]:
+                - generic [ref=f1e133]: 阈值 (MB)
+                - spinbutton [ref=f1e134]: "10"
+              - generic [ref=f1e135]:
+                - generic [ref=f1e136]: 最大容量 (MB)
+                - spinbutton [ref=f1e137]: "1024"
+              - generic [ref=f1e138]:
+                - generic [ref=f1e139]: 缓存路径
+                - textbox [ref=f1e140]: /tmp/hapiy/cache
+        - generic [ref=f1e141]:
+          - generic [ref=f1e142]:
+            - generic [ref=f1e143]: 性能监控
+            - generic [ref=f1e147]: 过载保护和性能指标采集
+          - generic [ref=f1e148]:
+            - generic [ref=f1e149]:
+              - generic [ref=f1e150]:
+                - generic [ref=f1e151]: 启用性能监控
+                - paragraph [ref=f1e152]: 超阈值时返回 503 过载保护
+              - switch [checked] [ref=f1e153]
+              - checkbox [checked] [ref=f1e154]
+            - separator
+            - generic [ref=f1e155]:
+              - generic [ref=f1e156]:
+                - generic [ref=f1e157]: CPU 阈值 (%)
+                - spinbutton [ref=f1e158]: "80"
+              - generic [ref=f1e159]:
+                - generic [ref=f1e160]: 内存阈值 (%)
+                - spinbutton [ref=f1e161]: "85"
+              - generic [ref=f1e162]:
+                - generic [ref=f1e163]: 磁盘阈值 (%)
+                - spinbutton [ref=f1e164]: "90"
+        - generic [ref=f1e165]:
+          - generic [ref=f1e166]:
+            - generic [ref=f1e167]: 系统状态
+            - generic [ref=f1e172]: 实时系统资源使用情况
+          - generic [ref=f1e174]:
+            - generic [ref=f1e175]:
+              - generic [ref=f1e176]: 磁盘用量
+              - generic [ref=f1e177]: 45%
+            - generic [ref=f1e181]:
+              - generic [ref=f1e182]: 内存用量
+              - generic [ref=f1e183]: 62%
+            - generic [ref=f1e187]:
+              - generic [ref=f1e188]: 活跃连接
+              - generic [ref=f1e189]: "128"
+            - generic [ref=f1e190]:
+              - generic [ref=f1e191]: 队列深度
+              - generic [ref=f1e192]: "12"
+        - button "保存设置" [ref=f1e194]

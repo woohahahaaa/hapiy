@@ -1,0 +1,112 @@
+- generic [ref=f2e3]:
+  - complementary [ref=f2e4]:
+    - generic [ref=f2e5]:
+      - generic [ref=f2e6]: Hapiy
+      - button [ref=f2e7]
+    - navigation [ref=f2e9]:
+      - link "转发拓扑" [ref=f2e11] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f2e18]:
+        - button "监控" [ref=f2e19]
+        - generic [ref=f2e26]:
+          - link "活动监视" [ref=f2e27] [cursor=pointer]:
+            - /url: /monitor
+          - link "使用日志" [ref=f2e30] [cursor=pointer]:
+            - /url: /logs
+      - link "供应商" [ref=f2e34] [cursor=pointer]:
+        - /url: /provider
+      - link "令牌管理" [ref=f2e40] [cursor=pointer]:
+        - /url: /token
+      - link "价格配置" [ref=f2e47] [cursor=pointer]:
+        - /url: /price
+      - generic [ref=f2e52]:
+        - button "策略配置" [ref=f2e53]
+        - generic [ref=f2e61]:
+          - link "请求改写" [ref=f2e62] [cursor=pointer]:
+            - /url: /policy/rewrite
+          - link "心跳回复" [ref=f2e65] [cursor=pointer]:
+            - /url: /policy/heartbeat
+          - link "并发控制" [ref=f2e68] [cursor=pointer]:
+            - /url: /policy/concurrency
+          - link "故障转移" [ref=f2e71] [cursor=pointer]:
+            - /url: /policy/failover
+      - link "系统设置" [ref=f2e75] [cursor=pointer]:
+        - /url: /settings
+      - link "个人资料" [ref=f2e81] [cursor=pointer]:
+        - /url: /profile
+    - generic [ref=f2e86]: Hapiy v0.1.0
+  - main [ref=f2e88]:
+    - generic [ref=f2e89]:
+      - generic [ref=f2e91]:
+        - generic [ref=f2e92]:
+          - heading "活动监视" [level=1] [ref=f2e93]
+          - paragraph [ref=f2e94]: Real-time request monitoring
+        - generic [ref=f2e95]: 3 请求 · 640 tokens
+      - generic [ref=f2e96]:
+        - generic [ref=f2e97]:
+          - generic [ref=f2e98]:
+            - generic [ref=f2e99]: 分组方式：
+            - combobox [ref=f2e100]:
+              - generic [ref=f2e101]: user
+              - img: ▼
+            - textbox [ref=f2e102]: user
+          - button "设置" [ref=f2e103]
+        - generic [ref=f2e104]:
+          - generic [ref=f2e105]:
+            - generic [ref=f2e106]:
+              - generic [ref=f2e107]:
+                - generic [ref=f2e109]: user-1
+                - generic [ref=f2e110]: 2 请求
+                - generic [ref=f2e111]: 640 tokens
+              - generic [ref=f2e112]: user
+            - table [ref=f2e114]:
+              - rowgroup [ref=f2e115]:
+                - row [ref=f2e116]:
+                  - columnheader "状态" [ref=f2e117]
+                  - columnheader "IP" [ref=f2e118]
+                  - columnheader "Token" [ref=f2e119]
+                  - columnheader "模型" [ref=f2e120]
+                  - columnheader "耗时" [ref=f2e121]
+                  - columnheader "Tokens" [ref=f2e122]
+              - rowgroup [ref=f2e123]:
+                - row [ref=f2e124]:
+                  - cell "收数据中" [ref=f2e125]
+                  - cell "192.168.1.100" [ref=f2e129]
+                  - cell "prod-token" [ref=f2e130]
+                  - cell "gpt-4" [ref=f2e131]
+                  - cell "3.2s" [ref=f2e133]
+                  - cell "512" [ref=f2e134]
+                - row [ref=f2e135]:
+                  - cell "发数据中" [ref=f2e136]
+                  - cell "192.168.1.100" [ref=f2e140]
+                  - cell "prod-token" [ref=f2e141]
+                  - cell "claude-3" [ref=f2e142]
+                  - cell "0.8s" [ref=f2e144]
+                  - cell "128" [ref=f2e145]
+          - generic [ref=f2e146]:
+            - generic [ref=f2e147]:
+              - generic [ref=f2e148]:
+                - generic [ref=f2e150]: 192.168.1.101
+                - generic [ref=f2e151]: 1 请求
+                - generic [ref=f2e152]: 0 tokens
+              - generic [ref=f2e153]: ip
+            - table [ref=f2e155]:
+              - rowgroup [ref=f2e156]:
+                - row [ref=f2e157]:
+                  - columnheader "状态" [ref=f2e158]
+                  - columnheader "IP" [ref=f2e159]
+                  - columnheader "Token" [ref=f2e160]
+                  - columnheader "模型" [ref=f2e161]
+                  - columnheader "耗时" [ref=f2e162]
+                  - columnheader "Tokens" [ref=f2e163]
+              - rowgroup [ref=f2e164]:
+                - row [ref=f2e165]:
+                  - cell "排队中 排队 4.5s" [ref=f2e166]:
+                    - generic [ref=f2e167]:
+                      - generic [ref=f2e169]: 排队中
+                      - generic [ref=f2e170]: 排队 4.5s
+                  - cell "192.168.1.101" [ref=f2e171]
+                  - cell "test-token" [ref=f2e172]
+                  - cell "gpt-3.5" [ref=f2e173]
+                  - cell "-" [ref=f2e175]
+                  - cell "-" [ref=f2e176]

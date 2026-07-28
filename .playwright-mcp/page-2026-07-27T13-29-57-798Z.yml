@@ -1,0 +1,141 @@
+- generic [ref=f16e3]:
+  - complementary [ref=f16e4]:
+    - generic [ref=f16e5]:
+      - generic [ref=f16e6]: Hapiy
+      - button [ref=f16e7]
+    - navigation [ref=f16e9]:
+      - link "转发拓扑" [ref=f16e11] [cursor=pointer]:
+        - /url: /
+      - generic [ref=f16e18]:
+        - button "监控" [ref=f16e19]
+        - generic [ref=f16e26]:
+          - link "活动监视" [ref=f16e27] [cursor=pointer]:
+            - /url: /monitor
+          - link "使用日志" [ref=f16e30] [cursor=pointer]:
+            - /url: /logs
+      - link "供应商" [ref=f16e34] [cursor=pointer]:
+        - /url: /provider
+      - link "令牌管理" [ref=f16e40] [cursor=pointer]:
+        - /url: /token
+      - link "价格配置" [ref=f16e47] [cursor=pointer]:
+        - /url: /price
+      - generic [ref=f16e52]:
+        - button "策略配置" [ref=f16e53]
+        - generic [ref=f16e61]:
+          - link "请求改写" [ref=f16e62] [cursor=pointer]:
+            - /url: /policy/rewrite
+          - link "心跳回复" [ref=f16e65] [cursor=pointer]:
+            - /url: /policy/heartbeat
+          - link "并发控制" [ref=f16e68] [cursor=pointer]:
+            - /url: /policy/concurrency
+          - link "故障转移" [ref=f16e71] [cursor=pointer]:
+            - /url: /policy/failover
+      - link "系统设置" [ref=f16e75] [cursor=pointer]:
+        - /url: /settings
+      - link "个人资料" [ref=f16e81] [cursor=pointer]:
+        - /url: /profile
+    - generic [ref=f16e86]: Hapiy v0.1.0
+  - main [ref=f16e88]:
+    - generic [ref=f16e89]:
+      - generic [ref=f16e91]:
+        - generic [ref=f16e92]:
+          - heading "转发拓扑" [level=1] [ref=f16e93]
+          - paragraph [ref=f16e94]: API routing workspace
+        - generic [ref=f16e95]: 8 节点 · 7 连线
+      - application [ref=f16e97]:
+        - generic [ref=f16e99]:
+          - generic:
+            - generic:
+              - img:
+                - group "Edge from hub to ch-1" [ref=f16e100] [cursor=pointer]
+              - img:
+                - group "Edge from hub to ch-2" [ref=f16e103] [cursor=pointer]
+              - img:
+                - group "Edge from ch-1 to reply-A" [ref=f16e106] [cursor=pointer]
+              - img:
+                - group "Edge from ch-2 to reply-A" [ref=f16e109] [cursor=pointer]
+              - img:
+                - group "Edge from reply-A to concurrency-main" [ref=f16e112] [cursor=pointer]
+              - img:
+                - group "Edge from concurrency-main to rewrite-A" [ref=f16e115] [cursor=pointer]
+              - img:
+                - group "Edge from rewrite-A to switch-main" [ref=f16e118] [cursor=pointer]
+            - generic:
+              - group [ref=f16e121]:
+                - generic [ref=f16e122]:
+                  - generic [ref=f16e123]: 模型中心
+                  - generic [ref=f16e124]:
+                    - generic [ref=f16e125]: gpt-4
+                    - generic [ref=f16e129]: claude-3
+                  - generic [ref=f16e133]: 2 models
+              - group [ref=f16e134]:
+                - generic [ref=f16e135]:
+                  - generic [ref=f16e138]:
+                    - generic [ref=f16e139]: OpenAI
+                    - switch [checked] [ref=f16e140]
+                    - checkbox [checked] [ref=f16e141]
+                  - generic [ref=f16e143]:
+                    - generic [ref=f16e144]: 1 URLs
+                    - generic [ref=f16e145]: 1 Keys
+                    - generic [ref=f16e146]: 1 Models
+              - group [ref=f16e147]:
+                - generic [ref=f16e148]:
+                  - generic [ref=f16e151]:
+                    - generic [ref=f16e152]: Anthropic
+                    - switch [checked] [ref=f16e153]
+                    - checkbox [checked] [ref=f16e154]
+                  - generic [ref=f16e156]:
+                    - generic [ref=f16e157]: 1 URLs
+                    - generic [ref=f16e158]: 1 Keys
+                    - generic [ref=f16e159]: 1 Models
+              - group [ref=f16e160]:
+                - generic [ref=f16e161]:
+                  - generic [ref=f16e165]: 心跳回复
+                  - generic [ref=f16e167]:
+                    - generic [ref=f16e168]: 默认心跳
+                    - generic [ref=f16e169]: 30s / 10tk
+                  - generic [ref=f16e170]: 1 rules
+              - group [ref=f16e171]:
+                - generic [ref=f16e172]:
+                  - generic [ref=f16e175]: 并发控制
+                  - generic [ref=f16e177]:
+                    - generic [ref=f16e178]: 全局限流
+                    - generic [ref=f16e179]: global / 10
+                  - generic [ref=f16e180]: 1 rules
+              - group [ref=f16e181]:
+                - generic [ref=f16e182]:
+                  - generic [ref=f16e185]: 请求改写
+                  - generic [ref=f16e187]:
+                    - generic [ref=f16e188]: model
+                    - generic [ref=f16e189]: SET → gpt-4
+                  - generic [ref=f16e190]: 1 rules
+              - group [ref=f16e191]:
+                - generic [ref=f16e192]:
+                  - generic [ref=f16e195]: 故障转移
+                  - generic [ref=f16e197]:
+                    - generic [ref=f16e198]: 主备切换
+                    - generic [ref=f16e199]: ch-2
+                  - generic [ref=f16e200]: 1 rules
+              - group [ref=f16e201]:
+                - generic [ref=f16e202]:
+                  - generic [ref=f16e205]:
+                    - generic [ref=f16e206]: 调试
+                    - switch [checked] [ref=f16e207]
+                    - checkbox [checked] [ref=f16e208]
+                  - generic [ref=f16e209]:
+                    - generic [ref=f16e210]: 记录字段：
+                    - generic [ref=f16e211]:
+                      - button "请求体" [ref=f16e212]
+                      - button "响应体" [ref=f16e213]
+                      - button "Headers" [ref=f16e214]
+                      - button "延迟" [ref=f16e215]
+                      - button "Token消耗" [ref=f16e216]
+                      - button "状态码" [ref=f16e217]
+                    - generic [ref=f16e218]: 存储路径：
+                    - textbox /var/log/hapiy/ [ref=f16e219]
+        - generic "Control Panel" [ref=f16e220]:
+          - button "Zoom In" [ref=f16e221] [cursor=pointer]
+          - button "Zoom Out" [ref=f16e224] [cursor=pointer]
+          - button "Fit View" [ref=f16e227] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=f16e230] [cursor=pointer]
+        - button "✨" [ref=f16e234]

@@ -1,0 +1,191 @@
+package handler
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/hapiy/hapiy/internal/common"
+	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
+	"github.com/gin-gonic/gin"
+)
+
+// Relay handles OpenAI-compatible API requests
+func Relay(engine *relay.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		startTime := time.Now()
+		common.Global().BeginRequest()
+
+		// Get token info from context (set by TokenAuth middleware)
+		_, _ = c.Get("token_id")
+		tokenName, _ := c.Get("token_name")
+		userID, _ := c.Get("user_id")
+
+		// Parse request body
+		bodyBytes, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+			return
+		}
+
+		var relayReq relay.RelayRequest
+		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
+			return
+		}
+
+		// Store full body for potential rewrite
+		relayReq.Body = make(map[string]interface{})
+		json.Unmarshal(bodyBytes, &relayReq.Body)
+
+		// Copy headers
+		relayReq.Headers = make(map[string]string)
+		for k, v := range c.Request.Header {
+			if len(v) > 0 {
+				relayReq.Headers[k] = v[0]
+			}
+		}
+
+		// Select channel for the model
+		channel, err := engine.SelectChannel(relayReq.Model)
+		if err != nil {
+			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"error": gin.H{
+					"message": fmt.Sprintf("no channel available for model: %s", relayReq.Model),
+					"type":    "service_unavailable",
+				},
+			})
+			return
+		}
+
+		// Get execution plan
+		plan, err := engine.GetPlan(channel.ID)
+		if err != nil {
+			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": gin.H{
+					"message": "failed to get execution plan",
+					"type":    "internal_error",
+				},
+			})
+			return
+		}
+
+		// Execute relay request
+		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
+		if err != nil {
+			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": gin.H{
+					"message": "upstream error: " + err.Error(),
+					"type":    "upstream_error",
+				},
+			})
+			return
+		}
+
+		// Log successful request
+		useTime := int(time.Since(startTime).Milliseconds())
+		logEntry := model.Log{
+			UserID:           getString(userID),
+			TokenName:        getString(tokenName),
+			ChannelName:      channel.Name,
+			ModelName:        relayReq.Model,
+			IsStream:         relayReq.Stream,
+			Status:           "success",
+			IP:               c.ClientIP(),
+			RequestID:        c.GetString("request_id"),
+			UseTime:          useTime,
+		}
+		if resp.Usage != nil {
+			logEntry.PromptTokens = resp.Usage.PromptTokens
+			logEntry.CompletionTokens = resp.Usage.CompletionTokens
+		}
+
+		service.Logs().Write(&logEntry)
+		common.Global().EndRequest(relayReq.Model, true, int64(useTime),
+			int64(logEntry.PromptTokens+logEntry.CompletionTokens))
+
+		// Set response headers
+		for k, v := range resp.Headers {
+			c.Header(k, v)
+		}
+
+		// Handle streaming vs non-streaming response
+		if relayReq.Stream {
+			handleStreamingResponse(c, resp)
+		} else {
+			handleNonStreamingResponse(c, resp)
+		}
+	}
+}
+
+func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
+	defer resp.Body.Close()
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read response"})
+		return
+	}
+	c.Data(resp.StatusCode, "application/json", bodyBytes)
+}
+
+func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
+	defer resp.Body.Close()
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
+		return
+	}
+
+	// Stream the response
+	buf := make([]byte, 4096)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			c.Writer.Write(buf[:n])
+			flusher.Flush()
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+	}
+}
+
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, err error, startTime time.Time) {
+	useTime := int(time.Since(startTime).Milliseconds())
+	service.Logs().Write(&model.Log{
+		UserID:       getString(userID),
+		TokenName:    getString(tokenName),
+		ModelName:    modelName,
+		Status:       "failed",
+		IP:           c.ClientIP(),
+		RequestID:    c.GetString("request_id"),
+		ErrorMessage: err.Error(),
+		UseTime:      useTime,
+	})
+	common.Global().EndRequest(modelName, false, int64(useTime), 0)
+}
+
+func getString(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}

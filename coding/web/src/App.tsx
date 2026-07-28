@@ -1,20 +1,32 @@
-import { Button } from "@/components/ui/button"
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AppShell } from '@/layouts/AppShell'
+import { TopologyPage } from '@/pages/TopologyPage'
+import { MonitorPage } from '@/pages/MonitorPage'
+import { LogsPage } from '@/pages/LogsPage'
+import { ProviderPage } from '@/pages/ProviderPage'
+import { TokenPage } from '@/pages/TokenPage'
+import { PricePage } from '@/pages/PricePage'
+import { PolicyPage } from '@/pages/PolicyPage'
+import { SettingsPage } from '@/pages/SettingsPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 
-export function App() {
+function App() {
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
-        </div>
-        <div className="font-mono text-xs text-muted-foreground">
-          (Press <kbd>d</kbd> to toggle dark mode)
-        </div>
-      </div>
-    </div>
+    <BrowserRouter>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<TopologyPage />} />
+          <Route path="/monitor" element={<MonitorPage />} />
+          <Route path="/logs" element={<LogsPage />} />
+          <Route path="/provider" element={<ProviderPage />} />
+          <Route path="/token" element={<TokenPage />} />
+          <Route path="/price" element={<PricePage />} />
+          <Route path="/policy/:type" element={<PolicyPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Routes>
+      </AppShell>
+    </BrowserRouter>
   )
 }
 

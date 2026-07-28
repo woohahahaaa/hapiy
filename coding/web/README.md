@@ -2,6 +2,16 @@
 
 This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
 
+## Development Server
+
+Always start the frontend with the project launcher:
+
+```bash
+./start.sh
+```
+
+It runs Vite on `0.0.0.0:28001`. Open `http://localhost:28001` locally, or use the machine's LAN address with port `28001` from another device.
+
 ## Adding components
 
 To add components to your app, run the following command:
