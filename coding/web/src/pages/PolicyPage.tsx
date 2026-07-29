@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Loader2, Code } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
+import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -21,8 +22,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsList } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
 import {
   dashboardApi,
   type RewriteRule,
@@ -32,44 +31,17 @@ import {
   type RuleType,
 } from '@/lib/dashboard-api'
 
-const policyTabs = [
-  { id: 'rewrite', label: '请求改写' },
-  { id: 'heartbeat', label: '心跳回复' },
-  { id: 'concurrency', label: '并发控制' },
-  { id: 'failover', label: '故障转移' },
-] as const
-
 export function PolicyPage() {
   const { type } = useParams<{ type: string }>()
   const activeTab = (type || 'rewrite') as RuleType
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader title="策略配置" subtitle="Policy rules" />
-      <div className="flex-1 p-6">
-        <Tabs value={activeTab} className="w-full">
-          <TabsList className="mb-4">
-            {policyTabs.map((tab) => (
-              <Link
-                key={tab.id}
-                to={`/policy/${tab.id}`}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground',
-                  activeTab === tab.id && 'bg-background text-foreground shadow-sm'
-                )}
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </TabsList>
-
-          {activeTab === 'rewrite' && <RewritePage />}
-          {activeTab === 'heartbeat' && <HeartbeatPage />}
-          {activeTab === 'concurrency' && <ConcurrencyPage />}
-          {activeTab === 'failover' && <FailoverPage />}
-        </Tabs>
-      </div>
-    </div>
+    <>
+      {activeTab === 'rewrite' && <RewritePage />}
+      {activeTab === 'heartbeat' && <HeartbeatPage />}
+      {activeTab === 'concurrency' && <ConcurrencyPage />}
+      {activeTab === 'failover' && <FailoverPage />}
+    </>
   )
 }
 
@@ -141,7 +113,7 @@ function useRulesApi<T>(type: RuleType) {
     }
   }
 
-  return { rules, loading, error, mutating, fetch, create, update, remove }
+  return { rules, loading, error, mutating, setMutating, fetch, create, update, remove }
 }
 
 // ── Empty / Error / Loading helpers ──
@@ -179,12 +151,64 @@ function RuleTableLoading() {
   )
 }
 
+// ── Diff-based JSON save helper ──
+
+async function diffAndSave<T extends { id: string; status: boolean }>(
+  data: unknown,
+  rules: readonly T[],
+  type: RuleType,
+  fetch: () => Promise<void>,
+  setMutating: (v: boolean) => void,
+  idMap: JsonEditorIdMap,
+) {
+  setMutating(true)
+  try {
+    const parsed = parseJsonEditorArray<T>(data)
+    const currentMap = new Map(rules.map((r) => [r.id, r]))
+    const retainedIds = new Set<string>()
+    const ops: Promise<unknown>[] = []
+
+    for (const item of parsed) {
+      const id = idMap.get(item.id)
+      if (id && currentMap.has(id)) {
+        retainedIds.add(id)
+        const { id: _editorId, ...edited } = item
+        const currentRecord = currentMap.get(id)
+        if (!currentRecord) continue
+        const { id: _backendId, ...current } = currentRecord
+        if (JSON.stringify(edited) !== JSON.stringify(current)) {
+          ops.push(dashboardApi.updateRule(type, id, { ...edited, status: item.status }))
+        }
+      } else {
+        const { id: _editorId, ...created } = item
+        ops.push(dashboardApi.createRule(type, { ...created, status: item.status }))
+      }
+    }
+
+    for (const id of currentMap.keys()) {
+      if (!retainedIds.has(id)) {
+        ops.push(dashboardApi.deleteRule(type, id))
+      }
+    }
+
+    const results = await Promise.allSettled(ops)
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    await fetch()
+    if (failures.length > 0) {
+      throw new Error(`${failures.length} 项保存失败`)
+    }
+  } finally {
+    setMutating(false)
+  }
+}
+
 // ── Rewrite ──
 
 function RewritePage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<RewriteRule>('rewrite')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<RewriteRule>('rewrite')
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -207,56 +231,68 @@ function RewritePage() {
     }
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          使用 DSL 语法修改请求体字段
-        </div>
-        <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加规则
-        </Button>
-      </div>
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    await diffAndSave(data, rules, 'rewrite', fetch, setMutating, idMap)
+  }
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>脚本预览</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && <RuleTableLoading />}
-            {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-            {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无请求改写规则，点击"添加规则"创建第一条' />}
-            {!loading && !error && rules.map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">
-                  {rule.script.slice(0, 50)}
-                  {rule.script.length > 50 && '...'}
-                </TableCell>
-                <TableCell>
-                  <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="请求改写" subtitle="Rewrite rules" status={`${rules.length} rules`} />
+      <div className="flex-1 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            使用 DSL 语法修改请求体字段
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+              <Code className="mr-2 h-4 w-4" />编辑 JSON
+            </Button>
+            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加规则
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>脚本预览</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && <RuleTableLoading />}
+              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
+              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无请求改写规则，点击"添加规则"创建第一条' />}
+              {!loading && !error && rules.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell className="font-medium">{rule.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {rule.script.slice(0, 50)}
+                    {rule.script.length > 50 && '...'}
+                  </TableCell>
+                  <TableCell>
+                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -267,6 +303,14 @@ function RewritePage() {
           <RewriteForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
         </DialogContent>
       </Dialog>
+
+      {jsonOpen && (
+        <JsonEditModal
+          data={rules}
+          onSave={handleJsonSave}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -295,9 +339,12 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
           语法参考：SET field = value | DELETE field | IF cond THEN {'{...}'} | header.X-Name
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        <Label>启用</Label>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+        <Label className="text-sm">启用状态</Label>
+        <div className="flex items-center gap-1.5">
+          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -310,9 +357,10 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
 // ── Heartbeat ──
 
 function HeartbeatPage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<HeartbeatRule>('heartbeat')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<HeartbeatRule>('heartbeat')
   const [editing, setEditing] = useState<HeartbeatRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -335,57 +383,69 @@ function HeartbeatPage() {
     }
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          上游无输出超时时自动插入自定义消息
-        </div>
-        <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加规则
-        </Button>
-      </div>
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    await diffAndSave(data, rules, 'heartbeat', fetch, setMutating, idMap)
+  }
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>匹配条件</TableHead>
-              <TableHead>回复内容</TableHead>
-              <TableHead>超时</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && <RuleTableLoading />}
-            {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-            {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无心跳规则，点击"添加规则"创建第一条' />}
-            {!loading && !error && rules.map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="text-xs">{rule.matchCondition}</TableCell>
-                <TableCell className="text-xs max-w-[200px] truncate">{rule.replyContent}</TableCell>
-                <TableCell className="text-xs">{rule.timeout}s</TableCell>
-                <TableCell>
-                  <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="心跳回复" subtitle="Heartbeat rules" status={`${rules.length} rules`} />
+      <div className="flex-1 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            上游无输出超时时自动插入自定义消息
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+              <Code className="mr-2 h-4 w-4" />编辑 JSON
+            </Button>
+            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加规则
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>匹配条件</TableHead>
+                <TableHead>回复内容</TableHead>
+                <TableHead>超时</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && <RuleTableLoading />}
+              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
+              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无心跳规则，点击"添加规则"创建第一条' />}
+              {!loading && !error && rules.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell className="font-medium">{rule.name}</TableCell>
+                  <TableCell className="text-xs">{rule.matchCondition}</TableCell>
+                  <TableCell className="text-xs max-w-[200px] truncate">{rule.replyContent}</TableCell>
+                  <TableCell className="text-xs">{rule.timeout}s</TableCell>
+                  <TableCell>
+                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -396,6 +456,14 @@ function HeartbeatPage() {
           <HeartbeatForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
         </DialogContent>
       </Dialog>
+
+      {jsonOpen && (
+        <JsonEditModal
+          data={rules}
+          onSave={handleJsonSave}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -423,9 +491,12 @@ function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null;
         <Label>超时时间 (秒)</Label>
         <Input type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
       </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        <Label>启用</Label>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+        <Label className="text-sm">启用状态</Label>
+        <div className="flex items-center gap-1.5">
+          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -438,9 +509,10 @@ function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null;
 // ── Concurrency ──
 
 function ConcurrencyPage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<ConcurrencyRule>('concurrency')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<ConcurrencyRule>('concurrency')
   const [editing, setEditing] = useState<ConcurrencyRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -463,59 +535,71 @@ function ConcurrencyPage() {
     }
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          限制并发请求数量，支持排队
-        </div>
-        <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加规则
-        </Button>
-      </div>
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    await diffAndSave(data, rules, 'concurrency', fetch, setMutating, idMap)
+  }
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>作用域</TableHead>
-              <TableHead>最大并发</TableHead>
-              <TableHead>排队</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && <RuleTableLoading />}
-            {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-            {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无并发规则，点击"添加规则"创建第一条' />}
-            {!loading && !error && rules.map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="text-xs">
-                  {rule.scope === 'global' ? '全局' : rule.scope === 'per_user' ? '每用户' : '每令牌'}
-                </TableCell>
-                <TableCell className="text-xs">{rule.maxConcurrent}</TableCell>
-                <TableCell className="text-xs">{rule.queueEnabled ? '是' : '否'}</TableCell>
-                <TableCell>
-                  <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="并发控制" subtitle="Concurrency rules" status={`${rules.length} rules`} />
+      <div className="flex-1 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            限制并发请求数量，支持排队
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+              <Code className="mr-2 h-4 w-4" />编辑 JSON
+            </Button>
+            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加规则
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>作用域</TableHead>
+                <TableHead>最大并发</TableHead>
+                <TableHead>排队</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && <RuleTableLoading />}
+              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
+              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无并发规则，点击"添加规则"创建第一条' />}
+              {!loading && !error && rules.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell className="font-medium">{rule.name}</TableCell>
+                  <TableCell className="text-xs">
+                    {rule.scope === 'global' ? '全局' : rule.scope === 'per_user' ? '每用户' : '每令牌'}
+                  </TableCell>
+                  <TableCell className="text-xs">{rule.maxConcurrent}</TableCell>
+                  <TableCell className="text-xs">{rule.queueEnabled ? '是' : '否'}</TableCell>
+                  <TableCell>
+                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -526,6 +610,14 @@ function ConcurrencyPage() {
           <ConcurrencyForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
         </DialogContent>
       </Dialog>
+
+      {jsonOpen && (
+        <JsonEditModal
+          data={rules}
+          onSave={handleJsonSave}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -557,13 +649,19 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
         <Label>最大并发数</Label>
         <Input type="number" value={form.maxConcurrent} onChange={(e) => setForm((p) => ({ ...p, maxConcurrent: Number(e.target.value) }))} />
       </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
-        <Label>允许排队</Label>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+        <Label className="text-sm">允许排队</Label>
+        <div className="flex items-center gap-1.5">
+          <span className={form.queueEnabled ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.queueEnabled ? '已开启' : '已关闭'}</span>
+          <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        <Label>启用</Label>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+        <Label className="text-sm">启用状态</Label>
+        <div className="flex items-center gap-1.5">
+          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -576,9 +674,10 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
 // ── Failover ──
 
 function FailoverPage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<FailoverRule>('failover')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<FailoverRule>('failover')
   const [editing, setEditing] = useState<FailoverRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -601,59 +700,71 @@ function FailoverPage() {
     }
   }
 
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          主渠道失败时自动切换到备选渠道
-        </div>
-        <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-          <Plus className="mr-2 h-4 w-4" />
-          添加规则
-        </Button>
-      </div>
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    await diffAndSave(data, rules, 'failover', fetch, setMutating, idMap)
+  }
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>名称</TableHead>
-              <TableHead>主渠道</TableHead>
-              <TableHead>备选</TableHead>
-              <TableHead>触发条件</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && <RuleTableLoading />}
-            {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-            {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无故障转移规则，点击"添加规则"创建第一条' />}
-            {!loading && !error && rules.map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell className="font-medium">{rule.name}</TableCell>
-                <TableCell className="text-xs">{rule.primaryChannel}</TableCell>
-                <TableCell className="text-xs">{rule.fallbackChannel}</TableCell>
-                <TableCell className="text-xs">
-                  {rule.condition === 'timeout' ? '超时' : rule.condition === 'error' ? '错误' : '限流'}
-                </TableCell>
-                <TableCell>
-                  <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
-                </TableCell>
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="故障转移" subtitle="Failover rules" status={`${rules.length} rules`} />
+      <div className="flex-1 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            主渠道失败时自动切换到备选渠道
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+              <Code className="mr-2 h-4 w-4" />编辑 JSON
+            </Button>
+            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Plus className="mr-2 h-4 w-4" />
+              添加规则
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>主渠道</TableHead>
+                <TableHead>备选</TableHead>
+                <TableHead>触发条件</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && <RuleTableLoading />}
+              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
+              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无故障转移规则，点击"添加规则"创建第一条' />}
+              {!loading && !error && rules.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell className="font-medium">{rule.name}</TableCell>
+                  <TableCell className="text-xs">{rule.primaryChannel}</TableCell>
+                  <TableCell className="text-xs">{rule.fallbackChannel}</TableCell>
+                  <TableCell className="text-xs">
+                    {rule.condition === 'timeout' ? '超时' : rule.condition === 'error' ? '错误' : '限流'}
+                  </TableCell>
+                  <TableCell>
+                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -664,6 +775,14 @@ function FailoverPage() {
           <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
         </DialogContent>
       </Dialog>
+
+      {jsonOpen && (
+        <JsonEditModal
+          data={rules}
+          onSave={handleJsonSave}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -699,9 +818,12 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
           <option value="rate_limit">限流</option>
         </select>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        <Label>启用</Label>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+        <Label className="text-sm">启用状态</Label>
+        <div className="flex items-center gap-1.5">
+          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>

@@ -134,7 +134,7 @@ export function Sidebar({ expanded, onToggle }: SidebarProps) {
         <div className="flex h-14 items-center justify-between border-b px-3">
           {expanded && (
             <span className="font-hapiy-logo text-2xl leading-none text-sidebar-foreground">
-              Hapiy
+              hapiy
             </span>
           )}
           <Button
@@ -228,7 +228,7 @@ export function Sidebar({ expanded, onToggle }: SidebarProps) {
         {expanded && (
           <div className="border-t p-3">
             <div className="text-xs text-muted-foreground">
-              Hapiy v0.1.0
+              hapiy v0.1.0
             </div>
           </div>
         )}

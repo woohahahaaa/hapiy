@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Code } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
+import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
@@ -31,6 +32,7 @@ export function ProviderPage() {
   const [providers, setProviders] = useState<readonly Provider[]>([])
   const [editing, setEditing] = useState<Provider | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,21 +76,80 @@ export function ProviderPage() {
     }
   }
 
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    setIsSaving(true)
+    setError(null)
+    try {
+      const parsed = parseJsonEditorArray<Provider>(data)
+      const currentMap = new Map(providers.map((p) => [p.id, p]))
+      const retainedIds = new Set<string>()
+      const ops: Promise<unknown>[] = []
+
+      for (const item of parsed) {
+        const id = idMap.get(item.id)
+        const providerInput: ProviderInput = {
+          name: item.name, baseUrls: item.baseUrls, keys: item.keys,
+          endpoints: item.endpoints, models: item.models,
+          status: item.status, weight: item.weight,
+        }
+        if (id && currentMap.has(id)) {
+          retainedIds.add(id)
+          const { id: _editorId, ...edited } = item
+          const currentRecord = currentMap.get(id)
+          if (!currentRecord) continue
+          const { id: _backendId, ...current } = currentRecord
+          if (JSON.stringify(edited) !== JSON.stringify(current)) {
+            ops.push(dashboardApi.updateProvider(id, providerInput))
+          }
+        } else {
+          ops.push(dashboardApi.createProvider(providerInput))
+        }
+      }
+
+      for (const id of currentMap.keys()) {
+        if (!retainedIds.has(id)) {
+          ops.push(dashboardApi.deleteProvider(id))
+        }
+      }
+
+      const results = await Promise.allSettled(ops)
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      await loadProviders()
+      if (failures.length > 0) {
+        throw new Error(`${failures.length} 项保存失败`)
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="供应商" subtitle="Channel management" status={`${providers.length} 渠道`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">管理上游 API 渠道配置</div>
-          <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
-            <Plus className="mr-2 h-4 w-4" />添加渠道
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
+              <Code className="mr-2 h-4 w-4" />编辑 JSON
+            </Button>
+            <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
+              <Plus className="mr-2 h-4 w-4" />添加渠道
+            </Button>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl">
               <DialogHeader><DialogTitle>{editing ? '编辑渠道' : '添加渠道'}</DialogTitle></DialogHeader>
               <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} />
             </DialogContent>
           </Dialog>
+          {jsonOpen && (
+            <JsonEditModal
+              data={providers}
+              onSave={handleJsonSave}
+              onClose={() => setJsonOpen(false)}
+            />
+          )}
         </div>
 
         {error && (
@@ -137,7 +198,13 @@ function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProp
       <div className="space-y-2"><Label>API Keys（每行一个）</Label><Textarea value={form.keys.join('\n')} onChange={(event) => setForm((current) => ({ ...current, keys: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) }))} placeholder="sk-xxx" rows={2} /></div>
       <div className="space-y-2"><Label>Endpoints</Label><div className="flex gap-2"><Input value={newEndpoint.name} onChange={(event) => setNewEndpoint((current) => ({ ...current, name: event.target.value }))} placeholder="名称" /><Input value={newEndpoint.pathSuffix} onChange={(event) => setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value }))} placeholder="路径后缀" /><Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><Plus className="h-4 w-4" /></Button></div><div className="flex flex-wrap gap-2">{form.endpoints.map((endpoint) => <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline h-3 w-3" /></button></Badge>)}</div></div>
       <div className="space-y-2"><Label>模型</Label><div className="flex gap-2"><Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" /><Input type="number" value={newModel.discount ?? 1} onChange={(event) => setNewModel((current) => ({ ...current, discount: Number(event.target.value) || 1 }))} placeholder="折扣" className="w-24" /><Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [], discount: 1 }) }}><Plus className="h-4 w-4" /></Button></div><div className="flex flex-wrap gap-2">{form.models.map((model) => <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1">{model.discount * 10}折</span>}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline h-3 w-3" /></button></Badge>)}</div></div>
-      <div className="flex items-center gap-2"><Switch checked={form.status} onCheckedChange={(status) => setForm((current) => ({ ...current, status }))} /><Label>启用</Label></div>
+      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <Label className="text-sm">启用状态</Label>
+            <div className="flex items-center gap-1.5">
+              <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+              <Switch checked={form.status} onCheckedChange={(status) => setForm((current) => ({ ...current, status }))} />
+            </div>
+          </div>
       <div className="flex justify-end gap-2"><Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button><Button disabled={isSaving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{isSaving ? '保存中...' : '保存'}</Button></div>
     </div>
   )

@@ -40,6 +40,9 @@ export type TokenInput = {
   readonly name: string
   readonly quota: number | null
   readonly status: boolean
+  readonly key?: string
+  readonly historyKeys?: readonly string[]
+  readonly usedQuota?: number
 }
 
 export type UsageLog = {
@@ -294,7 +297,14 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
 }
 
 function serializeToken(token: TokenInput): JsonRecord {
-  return { name: token.name, quota: token.quota, status: token.status }
+  return {
+    name: token.name,
+    quota: token.quota,
+    status: token.status,
+    ...(token.key !== undefined ? { key: token.key } : {}),
+    ...(token.historyKeys !== undefined ? { history_keys: JSON.stringify(token.historyKeys) } : {}),
+    ...(token.usedQuota !== undefined ? { used_quota: token.usedQuota } : {}),
+  }
 }
 
 // ── Rule types ──
