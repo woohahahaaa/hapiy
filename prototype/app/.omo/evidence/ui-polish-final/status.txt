@@ -1,2 +1,0 @@
-lint_status=0
-build_status=0
