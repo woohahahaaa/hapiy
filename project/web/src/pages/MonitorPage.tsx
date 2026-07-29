@@ -48,7 +48,7 @@ function MetricCard({ icon, label, value, sub, className }: MetricCardProps) {
             <p className="mt-1 text-2xl font-bold tabular-nums truncate">{value}</p>
             {sub && <p className="mt-0.5 text-xs text-muted-foreground truncate">{sub}</p>}
           </div>
-          <div className="ml-2 shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
+          <div className="ml-2 shrink-0 rounded-lg bg-muted p-2 text-muted-foreground [&>svg]:size-4">
             {icon}
           </div>
         </div>
@@ -129,7 +129,7 @@ export function MonitorPage() {
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
             <p className="text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={fetchMetrics}>
-              <RefreshCw className="mr-2 h-4 w-4" />
+              <RefreshCw data-icon="inline-start" />
               重试
             </Button>
           </div>
@@ -158,7 +158,7 @@ export function MonitorPage() {
           <div className="flex items-center gap-2">
             {error && (
               <Badge variant="destructive" className="gap-1">
-                <AlertCircle className="h-3 w-3" />
+                <AlertCircle data-icon="inline-start" />
                 错误
               </Badge>
             )}
@@ -166,8 +166,8 @@ export function MonitorPage() {
               最后刷新：{refreshTime}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchMetrics} disabled={loading}>
-            <RefreshCw className={cn('mr-2 h-4 w-4', loading && 'animate-spin')} />
+            <Button variant="outline" size="sm" onClick={fetchMetrics} disabled={loading}>
+            <RefreshCw data-icon="inline-start" className={cn(loading && 'animate-spin')} />
             刷新
           </Button>
         </div>
@@ -175,30 +175,30 @@ export function MonitorPage() {
         {/* Core metrics grid */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <MetricCard
-            icon={<Server className="h-4 w-4" />}
+            icon={<Server />}
             label="运行时长"
             value={formatUptime(m.uptime_seconds)}
           />
           <MetricCard
-            icon={<Zap className="h-4 w-4" />}
+            icon={<Zap />}
             label="活跃请求"
             value={String(m.active_requests)}
             sub={`排队 ${m.queued_requests}`}
           />
           <MetricCard
-            icon={<Hash className="h-4 w-4" />}
+            icon={<Hash />}
             label="总请求"
             value={String(m.requests_total)}
             sub={`成功 ${m.requests_success} · 失败 ${m.requests_failed}`}
           />
           <MetricCard
-            icon={<Clock className="h-4 w-4" />}
+            icon={<Clock />}
             label="平均延迟"
             value={formatLatency(m.avg_latency_ms)}
             sub={`成功率 ${successRate}`}
           />
           <MetricCard
-            icon={<MessageSquare className="h-4 w-4" />}
+            icon={<MessageSquare />}
             label="总 Token"
             value={formatTokens(m.total_tokens)}
             sub={`均 ${m.requests_total > 0 ? formatTokens(Math.round(m.total_tokens / m.requests_total)) : '--'} / 请求`}
@@ -209,7 +209,7 @@ export function MonitorPage() {
         {modelEntries.length > 0 && (
           <div className="mt-6">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <Layers className="h-4 w-4 text-muted-foreground" />
+              <Layers className="text-muted-foreground" />
               按模型
             </h3>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">

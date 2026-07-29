@@ -41,7 +41,7 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
   return (
     <div
       className={cn(
-        'w-48 rounded-lg border bg-card shadow-sm',
+        'w-48 rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         !active && 'opacity-60'
       )}
     >
@@ -52,7 +52,7 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
           type="target"
           position={Position.Left}
           id={m}
-          className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+          className="!size-3 !rounded-full !border-2 !border-border !bg-background"
           style={{
             top: `calc(50% + ${start + i * (segH + gap)}px)`,
             height: segH,
@@ -65,11 +65,11 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+        className="!size-3 !rounded-full !border-2 !border-border !bg-background"
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-sm font-medium">{label || 'Channel'}</span>
         <Switch
           checked={active}
@@ -79,7 +79,7 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       </div>
 
       {/* Body */}
-      <div className="space-y-1 p-3">
+      <div className="flex flex-col gap-1 p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="secondary" className="text-[10px]">
             {baseURLCount} URLs

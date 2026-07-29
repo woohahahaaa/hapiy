@@ -47,7 +47,7 @@ export function DebugNode({ data, id }: DebugNodeProps) {
   }
 
   return (
-    <div className="w-52 rounded-lg border bg-card shadow-sm">
+    <div className="w-52 rounded-lg border border-border bg-card text-card-foreground shadow-sm">
       {/* Target handles */}
       {sourceIds.map((src, i) => (
         <Handle
@@ -55,7 +55,7 @@ export function DebugNode({ data, id }: DebugNodeProps) {
           type="target"
           position={Position.Left}
           id={src}
-          className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+          className="!size-3 !rounded-full !border-2 !border-border !bg-background"
           style={{
             top: `calc(50% + ${start + i * (segH + gap)}px)`,
             height: segH,
@@ -68,11 +68,11 @@ export function DebugNode({ data, id }: DebugNodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+        className="!size-3 !rounded-full !border-2 !border-border !bg-background"
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-sm font-medium">{label}</span>
         <Switch
           checked={enabled}
@@ -104,7 +104,7 @@ export function DebugNode({ data, id }: DebugNodeProps) {
             </div>
             <div className="mb-1 text-[10px] text-muted-foreground">存储路径：</div>
             <input
-              className="w-full rounded border bg-background px-2 py-1 text-[10px] font-mono outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded border border-input bg-background px-2 py-1 text-[10px] font-mono text-foreground outline-none focus:ring-1 focus:ring-ring"
               value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="/var/log/hapiy/"

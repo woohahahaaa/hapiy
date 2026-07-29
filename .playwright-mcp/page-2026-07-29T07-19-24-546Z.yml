@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: hapiy
+      - button [ref=e7]
+    - navigation [ref=e9]:
+      - link "转发拓扑" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e18]:
+        - button "监控" [ref=e19]
+        - generic [ref=e26]:
+          - link "活动监视" [ref=e27] [cursor=pointer]:
+            - /url: /monitor
+          - link "使用日志" [ref=e30] [cursor=pointer]:
+            - /url: /logs
+      - link "供应商" [ref=e34] [cursor=pointer]:
+        - /url: /provider
+      - link "令牌管理" [ref=e40] [cursor=pointer]:
+        - /url: /token
+      - link "价格配置" [ref=e47] [cursor=pointer]:
+        - /url: /price
+      - generic [ref=e52]:
+        - button "策略配置" [ref=e53]
+        - generic [ref=e61]:
+          - link "请求改写" [ref=e62] [cursor=pointer]:
+            - /url: /policy/rewrite
+          - link "心跳回复" [ref=e65] [cursor=pointer]:
+            - /url: /policy/heartbeat
+          - link "并发控制" [ref=e68] [cursor=pointer]:
+            - /url: /policy/concurrency
+          - link "故障转移" [ref=e71] [cursor=pointer]:
+            - /url: /policy/failover
+      - link "系统设置" [ref=e75] [cursor=pointer]:
+        - /url: /settings
+      - link "个人资料" [ref=e81] [cursor=pointer]:
+        - /url: /profile
+    - generic [ref=e86]: hapiy v0.1.0
+  - main [ref=e88]:
+    - generic [ref=e89]:
+      - generic [ref=e91]:
+        - generic [ref=e92]:
+          - heading "转发拓扑" [level=1] [ref=e93]
+          - paragraph [ref=e94]: API routing workspace
+        - generic [ref=e95]: 2 节点 · 1 连线
+      - application [ref=e97]:
+        - generic [ref=e99]:
+          - generic:
+            - generic:
+              - img:
+                - group "Edge from hub to ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b" [ref=e100] [cursor=pointer]
+            - generic:
+              - group [ref=e103]:
+                - generic [ref=e104]:
+                  - generic [ref=e105]: 模型中心
+                  - generic [ref=e106]: gpt-4
+                  - generic [ref=e111]: 1 models
+              - group [ref=e112]:
+                - generic [ref=e113]:
+                  - generic [ref=e116]:
+                    - generic [ref=e117]: OpenAI
+                    - switch [checked] [ref=e118]
+                    - checkbox [checked] [ref=e119]
+                  - generic [ref=e121]:
+                    - generic [ref=e122]: 1 URLs
+                    - generic [ref=e123]: 1 Keys
+                    - generic [ref=e124]: 1 Models
+        - generic "Control Panel" [ref=e125]:
+          - button "Zoom In" [ref=e126] [cursor=pointer]
+          - button "Zoom Out" [ref=e129] [cursor=pointer]
+          - button "Fit View" [ref=e132] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=e135] [cursor=pointer]
+        - button "自动布局" [ref=e139]

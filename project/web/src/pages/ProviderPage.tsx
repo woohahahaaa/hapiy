@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel } from '@/lib/dashboard-api'
@@ -131,10 +131,10 @@ export function ProviderPage() {
           <div className="text-sm text-muted-foreground">管理上游 API 渠道配置</div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-              <Code className="mr-2 h-4 w-4" />编辑 JSON
+              <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
-              <Plus className="mr-2 h-4 w-4" />添加渠道
+              <Plus data-icon="inline-start" />添加渠道
             </Button>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -158,7 +158,7 @@ export function ProviderPage() {
           </div>
         )}
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>Base URLs</TableHead><TableHead>Keys</TableHead><TableHead>Endpoints</TableHead><TableHead>模型</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>
@@ -173,8 +173,8 @@ export function ProviderPage() {
                   <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <Badge key={model.model} variant="outline" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1 text-primary">{model.discount * 10}折</span>}</Badge>)}</div></TableCell>
                   <TableCell><Switch checked={provider.status} disabled={isSaving} onCheckedChange={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))} /></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2">
-                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><Pencil /></Button>
+                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><Trash2 /></Button>
                   </div></TableCell>
                 </TableRow>
               ))}
@@ -192,20 +192,66 @@ function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProp
   const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], discount: 1 })
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>名称</Label><Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" /></div><div className="space-y-2"><Label>权重</Label><Input type="number" value={form.weight} onChange={(event) => setForm((current) => ({ ...current, weight: Number(event.target.value) || 1 }))} placeholder="1" /></div></div>
-      <div className="space-y-2"><Label>Base URLs（每行一个）</Label><Textarea value={form.baseUrls.join('\n')} onChange={(event) => setForm((current) => ({ ...current, baseUrls: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) }))} placeholder="https://api.openai.com/v1" rows={3} /></div>
-      <div className="space-y-2"><Label>API Keys（每行一个）</Label><Textarea value={form.keys.join('\n')} onChange={(event) => setForm((current) => ({ ...current, keys: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) }))} placeholder="sk-xxx" rows={2} /></div>
-      <div className="space-y-2"><Label>Endpoints</Label><div className="flex gap-2"><Input value={newEndpoint.name} onChange={(event) => setNewEndpoint((current) => ({ ...current, name: event.target.value }))} placeholder="名称" /><Input value={newEndpoint.pathSuffix} onChange={(event) => setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value }))} placeholder="路径后缀" /><Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><Plus className="h-4 w-4" /></Button></div><div className="flex flex-wrap gap-2">{form.endpoints.map((endpoint) => <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline h-3 w-3" /></button></Badge>)}</div></div>
-      <div className="space-y-2"><Label>模型</Label><div className="flex gap-2"><Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" /><Input type="number" value={newModel.discount ?? 1} onChange={(event) => setNewModel((current) => ({ ...current, discount: Number(event.target.value) || 1 }))} placeholder="折扣" className="w-24" /><Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [], discount: 1 }) }}><Plus className="h-4 w-4" /></Button></div><div className="flex flex-wrap gap-2">{form.models.map((model) => <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1">{model.discount * 10}折</span>}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline h-3 w-3" /></button></Badge>)}</div></div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-            <Label className="text-sm">启用状态</Label>
-            <div className="flex items-center gap-1.5">
-              <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
-              <Switch checked={form.status} onCheckedChange={(status) => setForm((current) => ({ ...current, status }))} />
-            </div>
+    <FieldGroup>
+      <div className="grid grid-cols-2 gap-4">
+        <Field>
+          <FieldLabel htmlFor="provider-name">名称</FieldLabel>
+          <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="provider-weight">权重</FieldLabel>
+          <Input id="provider-weight" type="number" value={form.weight} onChange={(event) => setForm((current) => ({ ...current, weight: Number(event.target.value) || 1 }))} placeholder="1" />
+        </Field>
+      </div>
+      <Field>
+        <FieldLabel htmlFor="provider-baseurls">Base URLs（每行一个）</FieldLabel>
+        <Textarea id="provider-baseurls" value={form.baseUrls.join('\n')} onChange={(event) => setForm((current) => ({ ...current, baseUrls: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) }))} placeholder="https://api.openai.com/v1" rows={3} />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="provider-keys">API Keys（每行一个）</FieldLabel>
+        <Textarea id="provider-keys" value={form.keys.join('\n')} onChange={(event) => setForm((current) => ({ ...current, keys: event.target.value.split('\n').map((value) => value.trim()).filter(Boolean) }))} placeholder="sk-xxx" rows={2} />
+      </Field>
+      <Field>
+        <FieldLabel>Endpoints</FieldLabel>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input value={newEndpoint.name} onChange={(event) => setNewEndpoint((current) => ({ ...current, name: event.target.value }))} placeholder="名称" />
+            <Input value={newEndpoint.pathSuffix} onChange={(event) => setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value }))} placeholder="路径后缀" />
+            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><Plus /></Button>
           </div>
-      <div className="flex justify-end gap-2"><Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button><Button disabled={isSaving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{isSaving ? '保存中...' : '保存'}</Button></div>
-    </div>
+          <div className="flex flex-wrap gap-2">
+            {form.endpoints.map((endpoint) => (
+              <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></Badge>
+            ))}
+          </div>
+        </div>
+      </Field>
+      <Field>
+        <FieldLabel>模型</FieldLabel>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" />
+            <Input type="number" value={newModel.discount ?? 1} onChange={(event) => setNewModel((current) => ({ ...current, discount: Number(event.target.value) || 1 }))} placeholder="折扣" className="w-24" />
+            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [], discount: 1 }) }}><Plus /></Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {form.models.map((model) => (
+              <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1">{model.discount * 10}折</span>}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></Badge>
+            ))}
+          </div>
+        </div>
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
+        <div className="flex items-center gap-1.5">
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
+          <Switch checked={form.status} onCheckedChange={(status) => setForm((current) => ({ ...current, status }))} />
+        </div>
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
+        <Button disabled={isSaving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{isSaving ? '保存中...' : '保存'}</Button>
+      </div>
+    </FieldGroup>
   )
 }

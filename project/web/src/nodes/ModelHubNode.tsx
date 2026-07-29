@@ -24,36 +24,36 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   }, [id, models.length, updateNodeInternals])
 
   return (
-    <div className="w-56 rounded-lg border bg-card shadow-sm">
+    <div className="w-56 rounded-lg border border-border bg-card text-card-foreground shadow-sm">
       {/* Header */}
-      <div className="border-b px-3 py-2">
+      <div className="border-b border-border px-3 py-2">
         <span className="text-sm font-medium">模型中心</span>
       </div>
 
       {/* Model list */}
-      <div className="divide-y">
+      <div className="divide-y divide-border">
         {models.map((m) => (
           <div
             key={m.id}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 text-xs',
+              'flex items-center gap-2 px-3 py-1.5 text-xs text-card-foreground',
               m.disabled && 'opacity-40'
             )}
           >
-            <span className="h-2 w-2 rounded-full bg-primary/70" />
+            <span className="size-2 rounded-full bg-primary" />
             <span>{m.label}</span>
             <Handle
               type="source"
               position={Position.Right}
               id={m.id}
-              className="!w-2.5 !h-2.5 !rounded-full !border-2 !bg-background"
+              className="!size-2.5 !rounded-full !border-2 !border-border !bg-background"
             />
           </div>
         ))}
       </div>
 
       {/* Footer */}
-      <div className="border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+      <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
         {models.length} models
       </div>
     </div>

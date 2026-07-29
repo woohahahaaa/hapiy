@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, Loader2, Code } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import {
   Table,
@@ -20,7 +21,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import {
   dashboardApi,
@@ -132,7 +134,7 @@ function RuleTableError({ message, onRetry }: { message: string; onRetry: () => 
   return (
     <TableRow>
       <TableCell colSpan={99} className="py-10 text-center">
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <p className="text-sm text-destructive">{message}</p>
           <Button variant="outline" size="sm" onClick={onRetry}>重试</Button>
         </div>
@@ -245,16 +247,16 @@ function RewritePage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code className="mr-2 h-4 w-4" />编辑 JSON
+              <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus data-icon="inline-start" />
               添加规则
             </Button>
           </div>
         </div>
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -281,10 +283,10 @@ function RewritePage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </TableCell>
@@ -321,36 +323,37 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
   )
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>名称</Label>
-        <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </div>
-      <div className="space-y-2">
-        <Label>DSL 脚本</Label>
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="rewrite-name">名称</FieldLabel>
+        <Input id="rewrite-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="rewrite-script">DSL 脚本</FieldLabel>
         <Textarea
+          id="rewrite-script"
           value={form.script}
           onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))}
           placeholder={`SET model = "gpt-4"\nDELETE temperature\nIF model ~ "gpt-*" THEN { SET max_tokens = 4096 }`}
           rows={8}
           className="font-mono text-sm"
         />
-        <div className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           语法参考：SET field = value | DELETE field | IF cond THEN {'{...}'} | header.X-Name
-        </div>
-      </div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-        <Label className="text-sm">启用状态</Label>
+        </p>
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
         </div>
-      </div>
+      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button onClick={() => onSave(form)}>保存</Button>
       </div>
-    </div>
+    </FieldGroup>
   )
 }
 
@@ -397,16 +400,16 @@ function HeartbeatPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code className="mr-2 h-4 w-4" />编辑 JSON
+              <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus data-icon="inline-start" />
               添加规则
             </Button>
           </div>
         </div>
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -434,10 +437,10 @@ function HeartbeatPage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </TableCell>
@@ -474,35 +477,35 @@ function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null;
   )
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>名称</Label>
-        <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </div>
-      <div className="space-y-2">
-        <Label>匹配条件 (* 表示全部)</Label>
-        <Input value={form.matchCondition} onChange={(e) => setForm((p) => ({ ...p, matchCondition: e.target.value }))} placeholder="*" />
-      </div>
-      <div className="space-y-2">
-        <Label>回复内容</Label>
-        <Textarea value={form.replyContent} onChange={(e) => setForm((p) => ({ ...p, replyContent: e.target.value }))} placeholder="连接正常，正在生成内容..." />
-      </div>
-      <div className="space-y-2">
-        <Label>超时时间 (秒)</Label>
-        <Input type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
-      </div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-        <Label className="text-sm">启用状态</Label>
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="heartbeat-name">名称</FieldLabel>
+        <Input id="heartbeat-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="heartbeat-match">匹配条件 (* 表示全部)</FieldLabel>
+        <Input id="heartbeat-match" value={form.matchCondition} onChange={(e) => setForm((p) => ({ ...p, matchCondition: e.target.value }))} placeholder="*" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="heartbeat-reply">回复内容</FieldLabel>
+        <Textarea id="heartbeat-reply" value={form.replyContent} onChange={(e) => setForm((p) => ({ ...p, replyContent: e.target.value }))} placeholder="连接正常，正在生成内容..." />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="heartbeat-timeout">超时时间 (秒)</FieldLabel>
+        <Input id="heartbeat-timeout" type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
         </div>
-      </div>
+      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button onClick={() => onSave(form)}>保存</Button>
       </div>
-    </div>
+    </FieldGroup>
   )
 }
 
@@ -549,16 +552,16 @@ function ConcurrencyPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code className="mr-2 h-4 w-4" />编辑 JSON
+              <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus data-icon="inline-start" />
               添加规则
             </Button>
           </div>
         </div>
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -588,10 +591,10 @@ function ConcurrencyPage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </TableCell>
@@ -628,46 +631,52 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
   )
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>名称</Label>
-        <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </div>
-      <div className="space-y-2">
-        <Label>作用域</Label>
-        <select
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="concurrency-name">名称</FieldLabel>
+        <Input id="concurrency-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="concurrency-scope">作用域</FieldLabel>
+        <Select
           value={form.scope}
-          onChange={(e) => setForm((p) => ({ ...p, scope: e.target.value as typeof p.scope }))}
-          className="w-full rounded-md border px-3 py-2 text-sm"
+          onValueChange={(value) => setForm((p) => ({ ...p, scope: value as typeof p.scope }))}
         >
-          <option value="global">全局</option>
-          <option value="per_user">每用户</option>
-          <option value="per_token">每令牌</option>
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label>最大并发数</Label>
-        <Input type="number" value={form.maxConcurrent} onChange={(e) => setForm((p) => ({ ...p, maxConcurrent: Number(e.target.value) }))} />
-      </div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-        <Label className="text-sm">允许排队</Label>
+          <SelectTrigger id="concurrency-scope" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="global">全局</SelectItem>
+              <SelectItem value="per_user">每用户</SelectItem>
+              <SelectItem value="per_token">每令牌</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="concurrency-max">最大并发数</FieldLabel>
+        <Input id="concurrency-max" type="number" value={form.maxConcurrent} onChange={(e) => setForm((p) => ({ ...p, maxConcurrent: Number(e.target.value) }))} />
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>允许排队</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <span className={form.queueEnabled ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.queueEnabled ? '已开启' : '已关闭'}</span>
+          <Badge variant={form.queueEnabled ? 'default' : 'secondary'}>{form.queueEnabled ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
         </div>
-      </div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-        <Label className="text-sm">启用状态</Label>
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
         </div>
-      </div>
+      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button onClick={() => onSave(form)}>保存</Button>
       </div>
-    </div>
+    </FieldGroup>
   )
 }
 
@@ -714,16 +723,16 @@ function FailoverPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code className="mr-2 h-4 w-4" />编辑 JSON
+              <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus data-icon="inline-start" />
               添加规则
             </Button>
           </div>
         </div>
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>
@@ -753,10 +762,10 @@ function FailoverPage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 />
                       </Button>
                     </div>
                   </TableCell>
@@ -793,42 +802,48 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
   )
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>名称</Label>
-        <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </div>
-      <div className="space-y-2">
-        <Label>主渠道</Label>
-        <Input value={form.primaryChannel} onChange={(e) => setForm((p) => ({ ...p, primaryChannel: e.target.value }))} placeholder="OpenAI" />
-      </div>
-      <div className="space-y-2">
-        <Label>备选渠道</Label>
-        <Input value={form.fallbackChannel} onChange={(e) => setForm((p) => ({ ...p, fallbackChannel: e.target.value }))} placeholder="Anthropic" />
-      </div>
-      <div className="space-y-2">
-        <Label>触发条件</Label>
-        <select
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="failover-name">名称</FieldLabel>
+        <Input id="failover-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="failover-primary">主渠道</FieldLabel>
+        <Input id="failover-primary" value={form.primaryChannel} onChange={(e) => setForm((p) => ({ ...p, primaryChannel: e.target.value }))} placeholder="OpenAI" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="failover-fallback">备选渠道</FieldLabel>
+        <Input id="failover-fallback" value={form.fallbackChannel} onChange={(e) => setForm((p) => ({ ...p, fallbackChannel: e.target.value }))} placeholder="Anthropic" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="failover-condition">触发条件</FieldLabel>
+        <Select
           value={form.condition}
-          onChange={(e) => setForm((p) => ({ ...p, condition: e.target.value as typeof p.condition }))}
-          className="w-full rounded-md border px-3 py-2 text-sm"
+          onValueChange={(value) => setForm((p) => ({ ...p, condition: value as typeof p.condition }))}
         >
-          <option value="timeout">超时</option>
-          <option value="error">错误</option>
-          <option value="rate_limit">限流</option>
-        </select>
-      </div>
-      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-        <Label className="text-sm">启用状态</Label>
+          <SelectTrigger id="failover-condition" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="timeout">超时</SelectItem>
+              <SelectItem value="error">错误</SelectItem>
+              <SelectItem value="rate_limit">限流</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <span className={form.status ? 'rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground' : 'text-xs text-muted-foreground'}>{form.status ? '已开启' : '已关闭'}</span>
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
         </div>
-      </div>
+      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button onClick={() => onSave(form)}>保存</Button>
       </div>
-    </div>
+    </FieldGroup>
   )
 }

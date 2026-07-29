@@ -34,7 +34,7 @@ export function AutoSwitchNode({ data, id }: AutoSwitchNodeProps) {
   const start = -(total / 2)
 
   return (
-    <div className="w-48 rounded-lg border bg-card shadow-sm">
+    <div className="w-48 rounded-lg border border-border bg-card text-card-foreground shadow-sm">
       {/* Target handles */}
       {sourceIds.map((src, i) => (
         <Handle
@@ -42,7 +42,7 @@ export function AutoSwitchNode({ data, id }: AutoSwitchNodeProps) {
           type="target"
           position={Position.Left}
           id={src}
-          className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+          className="!size-3 !rounded-full !border-2 !border-border !bg-background"
           style={{
             top: `calc(50% + ${start + i * (segH + gap)}px)`,
             height: segH,
@@ -55,11 +55,11 @@ export function AutoSwitchNode({ data, id }: AutoSwitchNodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !rounded-full !border-2 !bg-background"
+        className="!size-3 !rounded-full !border-2 !border-border !bg-background"
       />
 
       {/* Header */}
-      <div className="border-b px-3 py-2">
+      <div className="border-b border-border px-3 py-2">
         <span className="text-sm font-medium">{label}</span>
       </div>
 
@@ -80,7 +80,7 @@ export function AutoSwitchNode({ data, id }: AutoSwitchNodeProps) {
       </div>
 
       {/* Footer */}
-      <div className="border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+      <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
         {count ?? slots.length ?? 0} rules
       </div>
     </div>

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -114,10 +115,12 @@ export function LogsPage() {
               <SelectValue placeholder="模型" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部模型</SelectItem>
-              {models.map((m) => (
-                <SelectItem key={m} value={m}>{m}</SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectItem value="all">全部模型</SelectItem>
+                {models.map((m) => (
+                  <SelectItem key={m} value={m}>{m}</SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Select
@@ -128,9 +131,11 @@ export function LogsPage() {
               <SelectValue placeholder="状态" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="success">成功</SelectItem>
-              <SelectItem value="failed">失败</SelectItem>
+              <SelectGroup>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="success">成功</SelectItem>
+                <SelectItem value="failed">失败</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" className="ml-auto">
@@ -138,7 +143,7 @@ export function LogsPage() {
           </Button>
         </div>
 
-        <div className="rounded-md border">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>

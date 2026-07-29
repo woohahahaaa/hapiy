@@ -53,7 +53,7 @@ export function SettingsPage() {
         title="运行状态"
         subtitle="Runtime metrics and system health"
       />
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 flex flex-col gap-6 p-6">
         {state.kind === 'loading' && <MetricsSkeleton />}
 
         {state.kind === 'error' && (
@@ -61,7 +61,7 @@ export function SettingsPage() {
             <CardContent className="flex flex-col items-center gap-4 py-12">
               <p className="text-sm text-destructive">{state.message}</p>
               <Button variant="outline" size="sm" onClick={fetchMetrics}>
-                <RefreshCw className="mr-2 h-4 w-4" />
+                <RefreshCw data-icon="inline-start" />
                 重试
               </Button>
             </CardContent>
@@ -89,7 +89,7 @@ function MetricsSkeleton() {
         <CardContent>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="space-y-2">
+              <div key={i} className="flex flex-col gap-2">
                 <Skeleton className="h-3 w-16" />
                 <Skeleton className="h-6 w-20" />
               </div>
@@ -102,7 +102,7 @@ function MetricsSkeleton() {
           <Skeleton className="h-5 w-24" />
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-8 w-full" />
             ))}
@@ -130,8 +130,8 @@ function MetricsCards({
     <>
       {/* Controls */}
       <div className="flex items-center justify-end">
-        <Button variant="outline" size="sm" onClick={onRefresh}>
-          <RefreshCw className="mr-2 h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw data-icon="inline-start" />
           刷新
         </Button>
       </div>
@@ -150,7 +150,7 @@ function MetricsCards({
             <MetricItem
               label="运行时长"
               value={formatUptime(metrics.uptime_seconds)}
-              icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+              icon={<Clock className="text-muted-foreground" />}
             />
             <MetricItem
               label="总请求"
@@ -195,7 +195,7 @@ function MetricsCards({
             <MetricItem
               label="总 Token 数"
               value={formatNumber(metrics.total_tokens)}
-              icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />}
+              icon={<BarChart3 className="text-muted-foreground" />}
             />
           </div>
         </CardContent>
@@ -215,7 +215,7 @@ function MetricsCards({
         </CardHeader>
         {modelEntries.length > 0 && (
           <CardContent>
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {modelEntries.map(([model, count]) => {
                 const pct =
                   metrics.requests_total > 0
@@ -271,7 +271,7 @@ function MetricItem({
   readonly children?: React.ReactNode
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         {icon}
         <span>{label}</span>

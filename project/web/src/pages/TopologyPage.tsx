@@ -416,7 +416,7 @@ export function TopologyPage() {
             <AlertTriangle className="size-10 text-destructive" />
             <p className="max-w-md text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" onClick={loadData}>
-              <RefreshCw className="mr-2 size-4" />
+              <RefreshCw data-icon="inline-start" />
               重试
             </Button>
           </div>
@@ -469,7 +469,7 @@ export function TopologyPage() {
               onClick={handleAutoLayout}
               title="自动布局"
             >
-              <Wand2 className="size-4" />
+              <Wand2 />
             </Button>
           </Panel>
         </ReactFlow>
