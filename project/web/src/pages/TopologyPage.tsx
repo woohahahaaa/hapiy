@@ -24,6 +24,7 @@ import { AutoReplyNode } from '@/nodes/AutoReplyNode'
 import { AutoSwitchNode } from '@/nodes/AutoSwitchNode'
 import { LogOutputNode } from '@/nodes/LogOutputNode'
 import { SlotNode } from '@/nodes/SlotNode'
+import { NodeMenu, type SlotTypeForMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { Provider } from '@/lib/dashboard-api'
 
@@ -342,6 +343,27 @@ export function TopologyPage() {
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
+
+  const handleMenuPick = useCallback((slotType: SlotTypeForMenu) => {
+    if (providers && providers.length > 0) {
+      handleAddSlotNode(providers[0].id, slotType)
+    }
+    setMenuState((s) => ({ ...s, open: false }))
+  }, [providers])
+
+  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setMenuState({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      open: true,
+    })
+  }, [])
+
+  const handleCenterMenu = useCallback(() => {
+    setMenuState({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 150, open: true })
+  }, [])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -463,7 +485,7 @@ export function TopologyPage() {
         subtitle="API routing workspace"
         status={`${providers.length} 渠道 · ${nodes.length} 节点`}
       />
-      <div className="relative flex-1">
+      <div className="relative flex-1" onDoubleClick={handleCanvasDoubleClick}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -489,7 +511,25 @@ export function TopologyPage() {
               <Wand2 />
             </Button>
           </Panel>
+          <Panel className="topology-add-node" position="bottom-right">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleCenterMenu}
+              title="添加节点"
+            >
+              <Plus />
+            </Button>
+          </Panel>
         </ReactFlow>
+        {menuState.open && (
+          <NodeMenu
+            x={menuState.x}
+            y={menuState.y}
+            onSelect={handleMenuPick}
+            onClose={() => setMenuState((s) => ({ ...s, open: false }))}
+          />
+        )}
       </div>
     </div>
   )
