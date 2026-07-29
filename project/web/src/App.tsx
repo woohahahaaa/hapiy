@@ -9,6 +9,7 @@ import { PricePage } from '@/pages/PricePage'
 import { PolicyPage } from '@/pages/PolicyPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { ToastContainer } from '@/components/ui/toast'
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
         </Routes>
       </AppShell>
+      <ToastContainer />
     </BrowserRouter>
   )
 }

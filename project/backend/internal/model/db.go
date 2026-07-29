@@ -23,6 +23,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&Token{},
 		&Log{},
 		&RewriteRule{},
+		&ResponseRewriteRule{},
 		&HeartbeatRule{},
 		&ConcurrencyRule{},
 		&FailoverRule{},

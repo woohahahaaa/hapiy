@@ -111,6 +111,21 @@ func (r *RewriteRule) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ResponseRewriteRule model
+type ResponseRewriteRule struct {
+	ID     string `gorm:"primaryKey;type:uuid" json:"id"`
+	Name   string `gorm:"not null" json:"name"`
+	Script string `gorm:"type:text" json:"script"`
+	Status bool   `gorm:"default:true" json:"status"`
+}
+
+func (r *ResponseRewriteRule) BeforeCreate(tx *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // HeartbeatRule model
 type HeartbeatRule struct {
 	ID             string `gorm:"primaryKey;type:uuid" json:"id"`

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 
 interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean }>
+  simplified?: boolean
 }
 
 interface ModelHubNodeProps {
@@ -13,6 +14,7 @@ interface ModelHubNodeProps {
 
 export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   const models = data.models || []
+  const simplified = data.simplified === true
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
 
@@ -25,13 +27,13 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
 
   return (
     <div className="w-56 rounded-lg border border-border bg-card text-card-foreground shadow-sm">
-      {/* Header */}
-      <div className="border-b border-border px-3 py-2">
-        <span className="text-sm font-medium">模型中心</span>
-      </div>
+      {!simplified && (
+        <div className="border-b border-border px-3 py-2">
+          <span className="text-sm font-medium">模型中心</span>
+        </div>
+      )}
 
-      {/* Model list */}
-      <div className="divide-y divide-border">
+      <div className={cn(simplified ? 'p-0' : 'divide-y divide-border')}>
         {models.map((m) => (
           <div
             key={m.id}
@@ -52,10 +54,11 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
-        {models.length} models
-      </div>
+      {!simplified && (
+        <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
+          {models.length} models
+        </div>
+      )}
     </div>
   )
 }

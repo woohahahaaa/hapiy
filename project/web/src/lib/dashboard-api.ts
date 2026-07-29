@@ -343,7 +343,14 @@ export type FailoverRule = {
   readonly status: boolean
 }
 
-export type RuleType = 'rewrite' | 'heartbeat' | 'concurrency' | 'failover'
+export type ResponseRewriteRule = {
+  readonly id: string
+  readonly name: string
+  readonly script: string
+  readonly status: boolean
+}
+
+export type RuleType = 'rewrite' | 'heartbeat' | 'concurrency' | 'failover' | 'rewrite-response'
 
 // ── Rule parse / serialize ──
 
@@ -397,6 +404,16 @@ function parseFailoverRule(value: unknown): FailoverRule {
   }
 }
 
+function parseResponseRewriteRule(value: unknown): ResponseRewriteRule {
+  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
+  return {
+    id: readString(value.id, 'rule.id'),
+    name: readString(value.name, 'rule.name'),
+    script: readString(value.script, 'rule.script'),
+    status: readBoolean(value.status, 'rule.status'),
+  }
+}
+
 type RuleSerializer<T> = (rule: Partial<T> & { readonly status: boolean }) => JsonRecord
 
 const serializeRewriteRule: RuleSerializer<RewriteRule> = (rule) => ({
@@ -429,21 +446,29 @@ const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
   status: rule.status,
 })
 
+const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
+  name: rule.name,
+  script: (rule as ResponseRewriteRule).script ?? '',
+  status: rule.status,
+})
+
 function ruleParserForType(type: RuleType): (value: unknown) => unknown {
   switch (type) {
-    case 'rewrite':     return parseRewriteRule
-    case 'heartbeat':   return parseHeartbeatRule
-    case 'concurrency': return parseConcurrencyRule
-    case 'failover':    return parseFailoverRule
+    case 'rewrite':           return parseRewriteRule
+    case 'heartbeat':         return parseHeartbeatRule
+    case 'concurrency':       return parseConcurrencyRule
+    case 'failover':          return parseFailoverRule
+    case 'rewrite-response':  return parseResponseRewriteRule
   }
 }
 
 function ruleSerializerForType(type: RuleType): RuleSerializer<unknown> {
   switch (type) {
-    case 'rewrite':     return serializeRewriteRule as RuleSerializer<unknown>
-    case 'heartbeat':   return serializeHeartbeatRule as RuleSerializer<unknown>
-    case 'concurrency': return serializeConcurrencyRule as RuleSerializer<unknown>
-    case 'failover':    return serializeFailoverRule as RuleSerializer<unknown>
+    case 'rewrite':           return serializeRewriteRule as RuleSerializer<unknown>
+    case 'heartbeat':         return serializeHeartbeatRule as RuleSerializer<unknown>
+    case 'concurrency':       return serializeConcurrencyRule as RuleSerializer<unknown>
+    case 'failover':          return serializeFailoverRule as RuleSerializer<unknown>
+    case 'rewrite-response':  return serializeResponseRewriteRule as RuleSerializer<unknown>
   }
 }
 

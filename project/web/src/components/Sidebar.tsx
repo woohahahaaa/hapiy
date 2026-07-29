@@ -84,6 +84,7 @@ const navigation: NavItem[] = [
     icon: <FileText />,
     children: [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
+      { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
       { id: 'heartbeat', label: '心跳回复', href: '/policy/heartbeat' },
       { id: 'concurrency', label: '并发控制', href: '/policy/concurrency' },
       { id: 'failover', label: '故障转移', href: '/policy/failover' },

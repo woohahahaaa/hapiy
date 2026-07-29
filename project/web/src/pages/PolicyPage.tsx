@@ -30,6 +30,7 @@ import {
   type HeartbeatRule,
   type ConcurrencyRule,
   type FailoverRule,
+  type ResponseRewriteRule,
   type RuleType,
 } from '@/lib/dashboard-api'
 
@@ -43,6 +44,7 @@ export function PolicyPage() {
       {activeTab === 'heartbeat' && <HeartbeatPage />}
       {activeTab === 'concurrency' && <ConcurrencyPage />}
       {activeTab === 'failover' && <FailoverPage />}
+      {activeTab === 'rewrite-response' && <RewriteResponsePage />}
     </>
   )
 }
@@ -843,6 +845,133 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button onClick={() => onSave(form)}>保存</Button>
+      </div>
+    </FieldGroup>
+  )
+}
+
+// ── Response Rewrite ──
+
+function RewriteResponsePage() {
+  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<ResponseRewriteRule>('rewrite-response')
+  const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+
+  const handleToggle = async (id: string) => {
+    const rule = rules.find((r) => r.id === id)
+    if (!rule || mutating) return
+    await update(id, { name: rule.name, script: rule.script, status: !rule.status })
+  }
+
+  const handleDelete = async (id: string) => {
+    if (mutating) return
+    await remove(id)
+  }
+
+  const handleSave = async (rule: ResponseRewriteRule) => {
+    if (editing) {
+      const result = await update(rule.id, { name: rule.name, script: rule.script, status: rule.status })
+      if (result) { setEditing(null); setIsOpen(false) }
+    } else {
+      const result = await create({ name: rule.name, script: rule.script, status: rule.status })
+      if (result) { setIsOpen(false) }
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="响应改写" subtitle="Response rewrite rules" status={`${rules.length} rules`} />
+      <div className="flex-1 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            使用 DSL 语法修改响应体字段
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Plus data-icon="inline-start" />
+              添加规则
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>名称</TableHead>
+                <TableHead>脚本预览</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading && <RuleTableLoading />}
+              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
+              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无响应改写规则，点击"添加规则"创建第一条' />}
+              {!loading && !error && rules.map((rule) => (
+                <TableRow key={rule.id}>
+                  <TableCell className="font-medium">{rule.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {rule.script.slice(0, 50)}
+                    {rule.script.length > 50 && '...'}
+                  </TableCell>
+                  <TableCell>
+                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
+                        <Pencil />
+                      </Button>
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
+          </DialogHeader>
+          <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function RewriteResponseForm({ rule, onSave, onCancel }: { rule: ResponseRewriteRule | null; onSave: (r: ResponseRewriteRule) => void; onCancel: () => void }) {
+  const [form, setForm] = useState<ResponseRewriteRule>(
+    rule || { id: '', name: '', script: '', status: true }
+  )
+
+  return (
+    <FieldGroup>
+      <Field>
+        <FieldLabel htmlFor="rr-name">名称</FieldLabel>
+        <Input id="rr-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="rr-script">DSL 脚本</FieldLabel>
+        <Textarea id="rr-script" value={form.script} onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))} placeholder="response.body.name = 'updated'" rows={6} />
+      </Field>
+      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
+        <FieldLabel>启用状态</FieldLabel>
+        <div className="flex items-center gap-1.5">
+          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
+          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
+        </div>
+      </Field>
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button disabled={!form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>保存</Button>
       </div>
     </FieldGroup>
   )

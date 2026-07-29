@@ -45,6 +45,14 @@ export interface PolicyRules {
   rewrite: RewriteRule[]
   failover: FailoverRule[]
   concurrency: ConcurrencyRule[]
+  responseRewrite: ResponseRewriteRule[]
+}
+
+export interface ResponseRewriteRule {
+  id: string
+  name: string
+  script: string
+  status: boolean
 }
 
 export interface HeartbeatRule {
@@ -110,9 +118,10 @@ export type NodeType =
   | 'channel'
   | 'autoReply'
   | 'requestModify'
+  | 'responseModify'
   | 'autoSwitch'
   | 'concurrency'
-  | 'debug'
+  | 'logOutput'
   | 'endpoint'
 
 export interface TopologyEdge {
@@ -123,4 +132,28 @@ export interface TopologyEdge {
   sourceHandle?: string
   animated?: boolean
   style?: Record<string, unknown>
+}
+
+// 插槽配置类型 — 持久化在 topology_configs.nodes JSON 中
+export type SlotType =
+  | 'requestModify'
+  | 'responseModify'
+  | 'autoReply'
+  | 'concurrency'
+  | 'autoSwitch'
+  | 'logOutput'
+
+export interface SlotNodeConfig {
+  index: number
+  ruleId: string
+}
+
+export interface SlotConfig {
+  type: SlotType
+  nodes: SlotNodeConfig[]
+}
+
+export interface ProviderSlotConfig {
+  providerId: string
+  slots: SlotConfig[]
 }

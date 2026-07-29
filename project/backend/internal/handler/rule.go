@@ -13,7 +13,8 @@ const (
 	RuleTypeRewrite     = "rewrite"
 	RuleTypeHeartbeat   = "heartbeat"
 	RuleTypeConcurrency = "concurrency"
-	RuleTypeFailover    = "failover"
+	RuleTypeFailover          = "failover"
+	RuleTypeRewriteResponse   = "rewrite-response"
 )
 
 func ListRules(db *gorm.DB) gin.HandlerFunc {
@@ -45,6 +46,13 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 			rules = r
 		case RuleTypeFailover:
 			var r []model.FailoverRule
+			if err := db.Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			rules = r
+		case RuleTypeRewriteResponse:
+			var r []model.ResponseRewriteRule
 			if err := db.Find(&r).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -88,6 +96,13 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 			rule = &r
 		case RuleTypeFailover:
 			var r model.FailoverRule
+			if err := c.ShouldBindJSON(&r); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			rule = &r
+		case RuleTypeRewriteResponse:
+			var r model.ResponseRewriteRule
 			if err := c.ShouldBindJSON(&r); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
@@ -159,6 +174,17 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 			rule = &r
+		case RuleTypeRewriteResponse:
+			var r model.ResponseRewriteRule
+			if err := db.First(&r, "id = ?", id).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+				return
+			}
+			if err := c.ShouldBindJSON(&r); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			rule = &r
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule type"})
 			return
@@ -189,6 +215,8 @@ func DeleteRule(db *gorm.DB) gin.HandlerFunc {
 			modelType = &model.ConcurrencyRule{}
 		case RuleTypeFailover:
 			modelType = &model.FailoverRule{}
+		case RuleTypeRewriteResponse:
+			modelType = &model.ResponseRewriteRule{}
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule type"})
 			return
