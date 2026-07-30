@@ -24,9 +24,9 @@ import { AutoReplyNode } from '@/nodes/AutoReplyNode'
 import { AutoSwitchNode } from '@/nodes/AutoSwitchNode'
 import { LogOutputNode } from '@/nodes/LogOutputNode'
 import { SlotNode } from '@/nodes/SlotNode'
-import { NodeMenu, type SlotTypeForMenu } from '@/components/topology/NodeMenu'
+import { NodeMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
-import type { Provider, RuleType } from '@/lib/dashboard-api'
+import type { Provider } from '@/lib/dashboard-api'
 
 const SLOT_ORDER = [
   'requestModify',
@@ -226,7 +226,12 @@ function buildSlotNodes(
         providerId,
         title: SLOT_LABELS[slotType],
         nodes: slotEntries,
-        onAddNode: () => handleAddSlotNode(providerId, slotType),
+        onAddNode: () => handleAddSlotNode(
+          providerId,
+          slotType,
+          `placeholder-${providerId}-${slotType}`,
+          `${SLOT_LABELS[slotType]} #${slotEntries.length + 1}`,
+        ),
         onDeleteNode: (idx: number) => handleDeleteSlotNode(providerId, slotType, idx),
       },
     })
@@ -300,15 +305,6 @@ function handleAddSlotNode(providerId: string, slotType: SlotType, ruleId: strin
   refreshTopologyNodes()
 }
 
-const SLOT_RULE_TYPE: Record<SlotType, RuleType | null> = {
-  requestModify: 'rewrite',
-  responseModify: 'rewrite-response',
-  autoReply: 'heartbeat',
-  concurrency: 'concurrency',
-  autoSwitch: 'failover',
-  logOutput: null,
-}
-
 function handleDeleteSlotNode(providerId: string, slotType: SlotType, idx: number): void {
   const slots = slotsStateRef.current.get(providerId) ?? emptySlots()
   const list = slots[slotType] ?? []
@@ -323,13 +319,7 @@ function handleDeleteSlotNode(providerId: string, slotType: SlotType, idx: numbe
 function refreshTopologyNodes(): void {
   const providers = slotsStateRef.providersRef.current
   if (providers.length === 0) return
-  const slotStatesObj: Record<string, ProviderSlotState['slots']> = {}
-  for (const [providerId, slots] of slotsStateRef.current.entries()) {
-    slotStatesObj[providerId] = slots
-  }
-  slotsStateRef.setNodes(() => {
-    void 0
-  })
+  slotsStateRef.setNodes((nodes) => [...nodes])
 }
 
 export function TopologyPage() {
@@ -338,32 +328,6 @@ export function TopologyPage() {
   const [error, setError] = useState<string | null>(null)
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 
-  const handleMenuPick = useCallback((slotType: SlotTypeForMenu) => {
-    void (async () => {
-      const ruleType = SLOT_RULE_TYPE[slotType]
-      const providerId = providers?.[0]?.id
-      if (!providerId) {
-        setMenuState((s) => ({ ...s, open: false }))
-        return
-      }
-      let ruleId = `placeholder-${providerId}-${slotType}`
-      let ruleName = `${SLOT_LABELS[slotType]} #1`
-      if (ruleType) {
-        try {
-          const rules = await dashboardApi.listRules<{ id: string; name: string }>(ruleType)
-          if (rules.length > 0) {
-            ruleId = rules[0].id
-            ruleName = rules[0].name
-          }
-        } catch (err) {
-          toast(err instanceof Error ? err.message : '加载规则失败', 'error')
-        }
-      }
-      handleAddSlotNode(providerId, slotType, ruleId, ruleName)
-      setMenuState((s) => ({ ...s, open: false }))
-    })()
-  }, [providers])
-
   const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setMenuState({
@@ -371,10 +335,6 @@ export function TopologyPage() {
       y: e.clientY - rect.top,
       open: true,
     })
-  }, [])
-
-  const handleCenterMenu = useCallback(() => {
-    setMenuState({ x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 150, open: true })
   }, [])
 
   const loadData = useCallback(async () => {
@@ -578,17 +538,6 @@ export function TopologyPage() {
           edges={edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
-          onPaneClick={(event, _node) => {
-            const mouseEvent = event as MouseEvent
-            if (mouseEvent.detail < 2) return
-            const target = mouseEvent.currentTarget as HTMLElement | null
-            const rect = target?.getBoundingClientRect() ?? { left: 0, top: 0 }
-            setMenuState({
-              x: mouseEvent.clientX - rect.left,
-              y: mouseEvent.clientY - rect.top,
-              open: true,
-            })
-          }}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           nodesConnectable={false}
@@ -609,22 +558,12 @@ export function TopologyPage() {
               <Wand2 />
             </Button>
           </Panel>
-          <Panel className="topology-add-node" position="bottom-right">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleCenterMenu}
-              title="添加节点"
-            >
-              <Plus />
-            </Button>
-          </Panel>
         </ReactFlow>
         {menuState.open && (
           <NodeMenu
             x={menuState.x}
             y={menuState.y}
-            onSelect={handleMenuPick}
+            onSelect={handleAddProvider}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}

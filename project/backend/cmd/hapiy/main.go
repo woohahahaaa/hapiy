@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/config"
 	"github.com/hapiy/hapiy/internal/handler"
@@ -11,7 +12,6 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -112,6 +112,8 @@ func main() {
 
 			// Users
 			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))
+			dashboardAuthed.PUT("/users/me/username", handler.UpdateUsername(db, sessions))
+			dashboardAuthed.PUT("/users/me/password", handler.UpdatePassword(db))
 
 			// Rules (rewrite, heartbeat, concurrency, failover)
 			dashboard.GET("/rules/:type", handler.ListRules(db))

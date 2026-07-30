@@ -4,8 +4,10 @@ import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, Token } from '@/lib/dashboard-api'
+import type { CurrentUser, Provider, Token } from '@/lib/dashboard-api'
 
 type ProfileSummary = {
   readonly user: { readonly id: string; readonly username: string; readonly role: string }
@@ -25,6 +27,12 @@ export function ProfilePage() {
     | { readonly kind: 'error'; readonly message: string }
     | { readonly kind: 'ready'; readonly summary: ProfileSummary; readonly me: { id: string; username: string; role: string } | null }
   >({ kind: 'loading' })
+  const [username, setUsername] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [savingUsername, setSavingUsername] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
 
   const load = async () => {
     setState({ kind: 'loading' })
@@ -47,6 +55,7 @@ export function ProfilePage() {
           activeTokenCount: activeTokens,
         },
       })
+      setUsername(me?.username ?? '')
     } catch (err) {
       setState({ kind: 'error', message: err instanceof DashboardApiError ? err.message : (err as Error).message })
     }
@@ -55,6 +64,60 @@ export function ProfilePage() {
   useEffect(() => {
     void load()
   }, [])
+
+  const updateReadyUser = (user: CurrentUser) => {
+    setState((previous) => previous.kind === 'ready'
+      ? { ...previous, me: user, summary: { ...previous.summary, user } }
+      : previous)
+  }
+
+  const handleUsernameSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const nextUsername = username.trim()
+    if (!nextUsername) {
+      toast('用户名不能为空', 'error')
+      return
+    }
+    setSavingUsername(true)
+    try {
+      const user = await dashboardApi.updateUsername(nextUsername)
+      setUsername(user.username)
+      updateReadyUser(user)
+      toast('用户名已更新')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '更新用户名失败', 'error')
+    } finally {
+      setSavingUsername(false)
+    }
+  }
+
+  const handlePasswordSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!currentPassword || !newPassword || !passwordConfirmation) {
+      toast('请填写所有密码字段', 'error')
+      return
+    }
+    if (newPassword.length < 8) {
+      toast('新密码至少需要 8 个字符', 'error')
+      return
+    }
+    if (newPassword !== passwordConfirmation) {
+      toast('两次输入的新密码不一致', 'error')
+      return
+    }
+    setSavingPassword(true)
+    try {
+      await dashboardApi.updatePassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setPasswordConfirmation('')
+      toast('密码已更新')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '更新密码失败', 'error')
+    } finally {
+      setSavingPassword(false)
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -102,6 +165,68 @@ export function ProfilePage() {
                 <Row label="登录状态" value={
                   state.me === null ? <Badge variant="outline">本地默认</Badge> : <Badge>已登录</Badge>
                 } />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Shield className="size-4" /> 安全设置
+                </CardTitle>
+                <CardDescription>更新登录用户名和密码</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-6 lg:grid-cols-2">
+                <form className="space-y-3" onSubmit={handleUsernameSave}>
+                  <label className="grid gap-1.5 text-sm" htmlFor="profile-username">
+                    用户名
+                    <Input
+                      id="profile-username"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      disabled={savingUsername}
+                    />
+                  </label>
+                  <Button type="submit" disabled={savingUsername}>
+                    {savingUsername && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                    保存用户名
+                  </Button>
+                </form>
+                <form className="space-y-3" onSubmit={handlePasswordSave}>
+                  <label className="grid gap-1.5 text-sm" htmlFor="profile-current-password">
+                    当前密码
+                    <Input
+                      id="profile-current-password"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(event) => setCurrentPassword(event.target.value)}
+                      disabled={savingPassword}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm" htmlFor="profile-new-password">
+                    新密码
+                    <Input
+                      id="profile-new-password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      disabled={savingPassword}
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm" htmlFor="profile-password-confirmation">
+                    确认新密码
+                    <Input
+                      id="profile-password-confirmation"
+                      type="password"
+                      value={passwordConfirmation}
+                      onChange={(event) => setPasswordConfirmation(event.target.value)}
+                      disabled={savingPassword}
+                    />
+                  </label>
+                  <Button type="submit" disabled={savingPassword}>
+                    {savingPassword && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                    保存密码
+                  </Button>
+                </form>
               </CardContent>
             </Card>
 

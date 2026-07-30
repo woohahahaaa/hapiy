@@ -90,6 +90,12 @@ export type PriceConfigInput = {
   readonly cacheReadPrice: number
 }
 
+export type CurrentUser = {
+  readonly id: string
+  readonly username: string
+  readonly role: string
+}
+
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
@@ -642,7 +648,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     await request(`/rules/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 
-  async currentUser(): Promise<{ readonly id: string; readonly username: string; readonly role: string }> {
+  async currentUser(): Promise<CurrentUser> {
     const body = await request('/users/me')
     if (!isRecord(body)) {
       throw new DashboardApiError('服务端返回的用户信息格式无效', null)
@@ -652,6 +658,26 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       username: readString(body.username, 'user.username'),
       role: readString(body.role, 'user.role'),
     }
+  },
+  async updateUsername(username: string): Promise<CurrentUser> {
+    const body = await request('/users/me/username', {
+      method: 'PUT',
+      body: JSON.stringify({ username }),
+    })
+    if (!isRecord(body)) {
+      throw new DashboardApiError('服务端返回的用户信息格式无效', null)
+    }
+    return {
+      id: readString(body.id, 'user.id'),
+      username: readString(body.username, 'user.username'),
+      role: readString(body.role, 'user.role'),
+    }
+  },
+  async updatePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await request('/users/me/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    })
   },
 
   async listPrices(): Promise<readonly PriceConfig[]> {
