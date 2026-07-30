@@ -1,6 +1,7 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import { topologyConfig } from '@/config/topology-config'
 
 interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean }>
@@ -26,7 +27,10 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   }, [id, models.length, updateNodeInternals])
 
   return (
-    <div className="w-56 rounded-lg border border-border bg-card text-card-foreground shadow-sm">
+    <div
+      className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+      style={{ width: topologyConfig.nodeDimensions.modelHub.width }}
+    >
       {!simplified && (
         <div className="border-b border-border px-3 py-2">
           <span className="text-sm font-medium">模型中心</span>
@@ -48,7 +52,12 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
               type="source"
               position={Position.Right}
               id={m.id}
-              className="!size-2.5 !rounded-full !border-2 !border-border !bg-background"
+              className="!rounded-full !border-border !bg-background"
+              style={{
+                width: topologyConfig.handles.modelHub.source.width,
+                height: topologyConfig.handles.modelHub.source.height,
+                borderWidth: topologyConfig.handles.modelHub.source.borderWidth,
+              }}
             />
           </div>
         ))}

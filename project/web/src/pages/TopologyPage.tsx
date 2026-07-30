@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import {
   ReactFlow,
-  Controls,
   Background,
   Panel,
   useNodesState,
@@ -27,6 +26,7 @@ import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { Provider } from '@/lib/dashboard-api'
+import { getTopologyNodeDimension, topologyConfig } from '@/config/topology-config'
 
 const SLOT_ORDER = [
   'requestModify',
@@ -61,32 +61,8 @@ const nodeTypes = {
 }
 
 const defaultEdgeOptions = {
-  animated: true,
-  style: { strokeWidth: 1.5 },
-}
-
-const NODE_W: Record<string, number> = {
-  modelHub: 224,
-  channel: 192,
-  autoReply: 192,
-  requestModify: 192,
-  responseModify: 192,
-  logOutput: 192,
-  autoSwitch: 192,
-  concurrency: 192,
-  slot: 220,
-}
-
-const NODE_H: Record<string, number> = {
-  modelHub: 200,
-  channel: 100,
-  autoReply: 120,
-  requestModify: 120,
-  responseModify: 120,
-  logOutput: 220,
-  autoSwitch: 140,
-  concurrency: 100,
-  slot: 180,
+  animated: topologyConfig.edge.animated,
+  style: { strokeWidth: topologyConfig.edge.strokeWidth },
 }
 
 interface SlotNodeEntry {
@@ -157,12 +133,19 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
 function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 80, marginx: 20, marginy: 30 })
+  g.setGraph({
+    rankdir: topologyConfig.dagre.direction,
+    nodesep: topologyConfig.dagre.nodeSeparation,
+    ranksep: topologyConfig.dagre.rankSeparation,
+    marginx: topologyConfig.dagre.margin.x,
+    marginy: topologyConfig.dagre.margin.y,
+  })
 
   for (const node of nodes) {
+    const dimension = getTopologyNodeDimension(node.type)
     g.setNode(node.id, {
-      width: NODE_W[node.type as string] ?? 192,
-      height: NODE_H[node.type as string] ?? 80,
+      width: dimension.width,
+      height: dimension.height,
     })
   }
 
@@ -175,9 +158,8 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   return nodes.map((node) => {
     const pos = g.node(node.id)
     if (!pos) return node
-    const w = NODE_W[node.type as string] ?? 192
-    const h = NODE_H[node.type as string] ?? 80
-    return { ...node, position: { x: pos.x - w / 2, y: pos.y - h / 2 } }
+    const dimension = getTopologyNodeDimension(node.type)
+    return { ...node, position: { x: pos.x - dimension.width / 2, y: pos.y - dimension.height / 2 } }
   })
 }
 
@@ -198,7 +180,10 @@ function buildModelNodes(
     nodes.push({
       id: nodeId,
       type: 'modelHub',
-      position: layout[nodeId] ?? { x: 20, y: 20 + idx * 60 },
+      position: layout[nodeId] ?? {
+        x: topologyConfig.initialPositions.modelHub.x,
+        y: topologyConfig.initialPositions.modelHub.y + idx * topologyConfig.initialPositions.modelHub.verticalOffset,
+      },
       data: { models: [{ id: modelName, label: modelName, disabled: false }], simplified: true },
     })
   })
@@ -220,7 +205,10 @@ function buildSlotNodes(
     nodes.push({
       id: slotId,
       type: 'slot',
-      position: layout[slotId] ?? { x: 700 + i * 220, y: 20 + verticalOffset * 60 },
+      position: layout[slotId] ?? {
+        x: topologyConfig.initialPositions.slot.x + i * topologyConfig.initialPositions.slot.horizontalOffset,
+        y: topologyConfig.initialPositions.slot.y + verticalOffset * topologyConfig.initialPositions.slot.verticalOffset,
+      },
       data: {
         slotType,
         providerId,
@@ -252,8 +240,8 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
         sourceHandle: model.model,
         target: `ch-${provider.id}`,
         targetHandle: model.model,
-        animated: true,
-        style: { strokeWidth: 1.5 },
+        animated: topologyConfig.edge.animated,
+        style: { strokeWidth: topologyConfig.edge.strokeWidth },
       })
     }
     for (let i = 0; i < SLOT_ORDER.length - 1; i++) {
@@ -265,8 +253,8 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
         id: `${fromId}→${toId}`,
         source: fromId,
         target: toId,
-        animated: true,
-        style: { strokeWidth: 1.5 },
+        animated: topologyConfig.edge.animated,
+        style: { strokeWidth: topologyConfig.edge.strokeWidth },
       })
     }
 
@@ -275,8 +263,8 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
       id: `ch-${provider.id}→${firstSlotId}`,
       source: `ch-${provider.id}`,
       target: firstSlotId,
-      animated: true,
-      style: { strokeWidth: 1.5 },
+      animated: topologyConfig.edge.animated,
+      style: { strokeWidth: topologyConfig.edge.strokeWidth },
     })
   }
 
@@ -328,11 +316,12 @@ export function TopologyPage() {
   const [error, setError] = useState<string | null>(null)
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 
-  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const handlePaneDoubleClick = useCallback((event: ReactMouseEvent) => {
+    if (!(event.target instanceof Element)) return
+    if (!event.target.closest('.react-flow__pane')) return
     setMenuState({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: event.clientX,
+      y: event.clientY,
       open: true,
     })
   }, [])
@@ -386,7 +375,10 @@ export function TopologyPage() {
       nodes.push({
         id: `ch-${provider.id}`,
         type: 'channel',
-        position: layoutSnapshot[`ch-${provider.id}`] ?? { x: 450, y: 20 + verticalOffset * 60 },
+        position: layoutSnapshot[`ch-${provider.id}`] ?? {
+          x: topologyConfig.initialPositions.channel.x,
+          y: topologyConfig.initialPositions.channel.y + verticalOffset * topologyConfig.initialPositions.channel.verticalOffset,
+        },
         data: {
           label: provider.name,
           baseURLCount: provider.baseUrls.length,
@@ -532,12 +524,13 @@ export function TopologyPage() {
         subtitle="API routing workspace"
         status={`${providers.length} 渠道 · ${nodes.length} 节点`}
       />
-      <div className="relative flex-1" onDoubleClick={handleCanvasDoubleClick}>
+      <div className="relative flex-1">
         <ReactFlow
           nodes={nodes}
           edges={edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
+          onDoubleClick={handlePaneDoubleClick}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           nodesConnectable={false}
@@ -545,10 +538,19 @@ export function TopologyPage() {
           deleteKeyCode={null}
           proOptions={{ hideAttribution: true }}
           fitView
+          zoomOnDoubleClick={false}
         >
-          <Controls className="topology-controls" position="bottom-right" />
-          <Background color="var(--border)" gap={20} size={1} />
-          <Panel className="topology-auto-layout" position="bottom-right">
+          <Background color={topologyConfig.grid.color} gap={topologyConfig.grid.gap} size={topologyConfig.grid.size} />
+          <Panel className="topology-actions" position="bottom-right">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleAddProvider}
+              title="添加 Provider"
+              aria-label="添加 Provider"
+            >
+              <Plus />
+            </Button>
             <Button
               variant="outline"
               size="icon"

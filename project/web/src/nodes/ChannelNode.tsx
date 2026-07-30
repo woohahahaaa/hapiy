@@ -2,6 +2,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
+import { topologyConfig } from '@/config/topology-config'
 
 interface ChannelNodeData {
   label: string
@@ -38,8 +39,10 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
   }, [id, models, updateNodeInternals])
 
   const n = models.length
-  const segH = 20
-  const gap = -2
+  const targetHandle = topologyConfig.handles.channel.target
+  const gap = topologyConfig.handles.channel.segmentGap
+  const sourceHandle = topologyConfig.handles.channel.source
+  const segH = targetHandle.height
   const total = n * segH + (n - 1) * gap
   const start = -(total / 2)
 
@@ -53,9 +56,10 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
   return (
     <div
       className={cn(
-        'w-48 rounded-lg border border-border bg-card text-card-foreground shadow-sm',
+        'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         !active && 'opacity-60'
       )}
+      style={{ width: topologyConfig.nodeDimensions.channel.width }}
     >
       {models.map((m, i) => (
         <Handle
@@ -63,10 +67,12 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
           type="target"
           position={Position.Left}
           id={m}
-          className="!size-3 !rounded-full !border-2 !border-border !bg-background"
+          className="!rounded-full !border-border !bg-background"
           style={{
             top: `calc(50% + ${start + i * (segH + gap)}px)`,
-            height: segH,
+            width: targetHandle.width,
+            height: targetHandle.height,
+            borderWidth: targetHandle.borderWidth,
             transform: 'translate(-50%, 0)',
           }}
         />
@@ -75,7 +81,12 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!size-3 !rounded-full !border-2 !border-border !bg-background"
+        className="!rounded-full !border-border !bg-background"
+        style={{
+          width: sourceHandle.width,
+          height: sourceHandle.height,
+          borderWidth: sourceHandle.borderWidth,
+        }}
       />
 
       <div className="flex items-center justify-between border-b border-border px-3 py-2">

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -8,6 +8,7 @@ interface SlotContainerProps {
   onAddNode?: () => void
   children?: ReactNode
   className?: string
+  style?: CSSProperties
 }
 
 export function SlotContainer({
@@ -15,6 +16,7 @@ export function SlotContainer({
   onAddNode,
   children,
   className,
+  style,
 }: SlotContainerProps) {
   const hasNodes = Boolean(children)
 
@@ -24,6 +26,7 @@ export function SlotContainer({
         'border-2 border-dashed border-border rounded-lg p-4 relative',
         className,
       )}
+      style={style}
     >
       <div className="text-sm font-medium text-muted-foreground mb-3">
         {title}
