@@ -26,7 +26,7 @@ import { LogOutputNode } from '@/nodes/LogOutputNode'
 import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu, type SlotTypeForMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
-import type { Provider } from '@/lib/dashboard-api'
+import type { Provider, RuleType } from '@/lib/dashboard-api'
 
 const SLOT_ORDER = [
   'requestModify',
@@ -132,6 +132,28 @@ function saveSlotsToStorage(providerId: string, slots: ProviderSlotState['slots'
   }
 }
 
+type LayoutSnapshot = Record<string, { x: number; y: number }>
+
+function loadLayoutFromStorage(): LayoutSnapshot {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem('hapiy-layout')
+    if (!raw) return {}
+    return JSON.parse(raw) as LayoutSnapshot
+  } catch {
+    return {}
+  }
+}
+
+function saveLayoutToStorage(layout: LayoutSnapshot): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem('hapiy-layout', JSON.stringify(layout))
+  } catch {
+    // storage may be full — silently skip
+  }
+}
+
 function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
@@ -162,41 +184,34 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
 function buildNodes(
   providers: readonly Provider[],
   slotStates: Record<string, ProviderSlotState['slots']>,
+  modelNodeIds: Record<string, string>,
+  layout: LayoutSnapshot,
 ): Node[] {
   const nodes: Node[] = []
-  const seenModels = new Map<string, string>()
 
+  // Collect unique model names across providers, sort alphabetically so GPT
+  // appears before Kimi and the order stays stable across re-renders.
+  const uniqueModels = new Set<string>()
   for (const provider of providers) {
-    for (const model of provider.models) {
-      const modelName = model.model
-      if (!seenModels.has(modelName)) {
-        seenModels.set(modelName, `model-${provider.id}-${modelName}`)
-        nodes.push({
-          id: `model-${provider.id}-${modelName}`,
-          type: 'modelHub',
-          position: { x: 20, y: 20 + nodes.length * 60 },
-          data: { models: [{ id: modelName, label: modelName, disabled: false }], simplified: true },
-        })
-      }
-    }
+    for (const model of provider.models) uniqueModels.add(model.model)
   }
+  const sortedModels = Array.from(uniqueModels).sort((a, b) => a.localeCompare(b))
+
+  sortedModels.forEach((modelName, idx) => {
+    const nodeId = modelNodeIds[modelName] ?? `model-${modelName}`
+    nodes.push({
+      id: nodeId,
+      type: 'modelHub',
+      position: layout[nodeId] ?? { x: 20, y: 20 + idx * 60 },
+      data: { models: [{ id: modelName, label: modelName, disabled: false }], simplified: true },
+    })
+  })
 
   for (const provider of providers) {
-    for (const model of provider.models) {
-      const modelNodeId = seenModels.get(model.model)
-      if (!modelNodeId) continue
-      nodes.push({
-        id: `provide-${provider.id}-${model.model}`,
-        type: 'default',
-        position: { x: 0, y: 0 },
-        data: { hiddenBridge: true, sourceModel: modelNodeId, providerId: provider.id },
-      } as unknown as Node)
-    }
-
     nodes.push({
       id: `ch-${provider.id}`,
       type: 'channel',
-      position: { x: 450, y: 20 + (nodes.length) * 60 },
+      position: layout[`ch-${provider.id}`] ?? { x: 450, y: 20 + nodes.length * 60 },
       data: {
         label: provider.name,
         baseURLCount: provider.baseUrls.length,
@@ -212,10 +227,11 @@ function buildNodes(
     const slotsForThisProvider = slotStates[provider.id] ?? emptySlots()
     SLOT_ORDER.forEach((slotType, i) => {
       const slotEntries = slotsForThisProvider[slotType] ?? []
+      const slotId = `slot-${provider.id}-${slotType}`
       nodes.push({
-        id: `slot-${provider.id}-${slotType}`,
+        id: slotId,
         type: 'slot',
-        position: { x: 700 + i * 220, y: 20 + (nodes.length) * 60 },
+        position: layout[slotId] ?? { x: 700 + i * 220, y: 20 + nodes.length * 60 },
         data: {
           slotType,
           providerId: provider.id,
@@ -231,16 +247,16 @@ function buildNodes(
   return nodes
 }
 
-function buildEdges(providers: readonly Provider[], nodes: Node[]): Edge[] {
+function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string, string>): Edge[] {
   const edges: Edge[] = []
-  const nodeIds = new Set(nodes.map((n) => n.id))
 
   for (const provider of providers) {
     for (const model of provider.models) {
-      const seenModelKey = `model-${provider.id}-${model.model}`
+      const modelNodeId = modelNodeIds[model.model]
+      if (!modelNodeId) continue
       edges.push({
-        id: `${seenModelKey}→ch-${provider.id}`,
-        source: seenModelKey,
+        id: `${modelNodeId}→ch-${provider.id}-${model.model}`,
+        source: modelNodeId,
         sourceHandle: model.model,
         target: `ch-${provider.id}`,
         targetHandle: model.model,
@@ -248,33 +264,28 @@ function buildEdges(providers: readonly Provider[], nodes: Node[]): Edge[] {
         style: { strokeWidth: 1.5 },
       })
     }
-
     for (let i = 0; i < SLOT_ORDER.length - 1; i++) {
       const fromType = SLOT_ORDER[i]
       const toType = SLOT_ORDER[i + 1]
       const fromId = `slot-${provider.id}-${fromType}`
       const toId = `slot-${provider.id}-${toType}`
-      if (nodeIds.has(fromId) && nodeIds.has(toId)) {
-        edges.push({
-          id: `${fromId}→${toId}`,
-          source: fromId,
-          target: toId,
-          animated: true,
-          style: { strokeWidth: 1.5 },
-        })
-      }
-    }
-
-    const firstSlotId = `slot-${provider.id}-${SLOT_ORDER[0]}`
-    if (nodeIds.has(firstSlotId)) {
       edges.push({
-        id: `ch-${provider.id}→${firstSlotId}`,
-        source: `ch-${provider.id}`,
-        target: firstSlotId,
+        id: `${fromId}→${toId}`,
+        source: fromId,
+        target: toId,
         animated: true,
         style: { strokeWidth: 1.5 },
       })
     }
+
+    const firstSlotId = `slot-${provider.id}-${SLOT_ORDER[0]}`
+    edges.push({
+      id: `ch-${provider.id}→${firstSlotId}`,
+      source: `ch-${provider.id}`,
+      target: firstSlotId,
+      animated: true,
+      style: { strokeWidth: 1.5 },
+    })
   }
 
   return edges
@@ -288,18 +299,27 @@ const slotsStateRef: { current: Map<string, ProviderSlotState['slots']>; setNode
   providersRef: { current: [] },
 }
 
-function handleAddSlotNode(providerId: string, slotType: SlotType): void {
+function handleAddSlotNode(providerId: string, slotType: SlotType, ruleId: string, ruleName: string): void {
   const slots = slotsStateRef.current.get(providerId) ?? emptySlots()
   const list = slots[slotType] ?? []
   const newEntry: SlotNodeEntry = {
     index: list.length + 1,
-    ruleId: `${providerId}-${slotType}-${Date.now()}`,
-    ruleName: `${SLOT_LABELS[slotType]} #${list.length + 1}`,
+    ruleId,
+    ruleName,
   }
   slots[slotType] = [...list, newEntry]
   slotsStateRef.current.set(providerId, slots)
   saveSlotsToStorage(providerId, slots)
   refreshTopologyNodes()
+}
+
+const SLOT_RULE_TYPE: Record<SlotType, RuleType | null> = {
+  requestModify: 'rewrite',
+  responseModify: 'rewrite-response',
+  autoReply: 'heartbeat',
+  concurrency: 'concurrency',
+  autoSwitch: 'failover',
+  logOutput: null,
 }
 
 function handleDeleteSlotNode(providerId: string, slotType: SlotType, idx: number): void {
@@ -346,10 +366,29 @@ export function TopologyPage() {
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
 
   const handleMenuPick = useCallback((slotType: SlotTypeForMenu) => {
-    if (providers && providers.length > 0) {
-      handleAddSlotNode(providers[0].id, slotType)
-    }
-    setMenuState((s) => ({ ...s, open: false }))
+    void (async () => {
+      const ruleType = SLOT_RULE_TYPE[slotType]
+      const providerId = providers?.[0]?.id
+      if (!providerId) {
+        setMenuState((s) => ({ ...s, open: false }))
+        return
+      }
+      let ruleId = `placeholder-${providerId}-${slotType}`
+      let ruleName = `${SLOT_LABELS[slotType]} #1`
+      if (ruleType) {
+        try {
+          const rules = await dashboardApi.listRules<{ id: string; name: string }>(ruleType)
+          if (rules.length > 0) {
+            ruleId = rules[0].id
+            ruleName = rules[0].name
+          }
+        } catch (err) {
+          toast(err instanceof Error ? err.message : '加载规则失败', 'error')
+        }
+      }
+      handleAddSlotNode(providerId, slotType, ruleId, ruleName)
+      setMenuState((s) => ({ ...s, open: false }))
+    })()
   }, [providers])
 
   const handleCanvasDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -388,19 +427,32 @@ export function TopologyPage() {
     loadData()
   }, [loadData])
 
+  const layoutSnapshot = useMemo(() => loadLayoutFromStorage(), [])
+
+  const modelNodeIds = useMemo(() => {
+    const ids: Record<string, string> = {}
+    if (!providers) return ids
+    const unique = new Set<string>()
+    for (const provider of providers) for (const model of provider.models) unique.add(model.model)
+    Array.from(unique).sort((a, b) => a.localeCompare(b)).forEach((name) => {
+      ids[name] = `model-${name}`
+    })
+    return ids
+  }, [providers])
+
   const baseNodes = useMemo(() => {
     if (!providers) return []
     const slotStatesObj: Record<string, ProviderSlotState['slots']> = {}
     for (const [providerId, slots] of slotsStateRef.current.entries()) {
       slotStatesObj[providerId] = slots
     }
-    return buildNodes(providers, slotStatesObj)
-  }, [providers])
+    return buildNodes(providers, slotStatesObj, modelNodeIds, layoutSnapshot)
+  }, [providers, modelNodeIds, layoutSnapshot])
 
   const baseEdges = useMemo(() => {
     if (!providers) return []
-    return buildEdges(providers, baseNodes)
-  }, [providers, baseNodes])
+    return buildEdges(providers, modelNodeIds)
+  }, [providers, modelNodeIds])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
 
@@ -422,8 +474,25 @@ export function TopologyPage() {
   edgesRef.current = edges
 
   const handleAutoLayout = useCallback(() => {
-    setNodes((nds) => getLayoutedElements(nds, edgesRef.current))
+    setNodes((nds) => {
+      const layouted = getLayoutedElements(nds, edgesRef.current)
+      const next: LayoutSnapshot = {}
+      for (const node of layouted) next[node.id] = node.position
+      saveLayoutToStorage(next)
+      return layouted
+    })
   }, [setNodes])
+
+  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
+    onNodesChange(changes)
+    for (const change of changes) {
+      if (change.type === 'position' && change.position && !change.dragging) {
+        const snapshot = loadLayoutFromStorage()
+        snapshot[change.id] = change.position
+        saveLayoutToStorage(snapshot)
+      }
+    }
+  }, [onNodesChange])
 
   const handleAddProvider = useCallback(() => {
     window.location.href = '/provider'
@@ -489,8 +558,19 @@ export function TopologyPage() {
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
+          onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
+          onPaneClick={(event, _node) => {
+            const mouseEvent = event as MouseEvent
+            if (mouseEvent.detail < 2) return
+            const target = mouseEvent.currentTarget as HTMLElement | null
+            const rect = target?.getBoundingClientRect() ?? { left: 0, top: 0 }
+            setMenuState({
+              x: mouseEvent.clientX - rect.left,
+              y: mouseEvent.clientY - rect.top,
+              open: true,
+            })
+          }}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           nodesConnectable={false}

@@ -71,11 +71,16 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-sm font-medium">{label || 'Channel'}</span>
-        <Switch
-          checked={active}
-          onCheckedChange={onToggle}
-          className="scale-75"
-        />
+        <div
+          className="nodrag nopan"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <Switch
+            checked={active}
+            onCheckedChange={onToggle}
+            className="scale-75"
+          />
+        </div>
       </div>
 
       {/* Body */}

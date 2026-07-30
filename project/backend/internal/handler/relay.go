@@ -28,12 +28,14 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Parse request body
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
+			common.Global().EndRequest("", false, int64(time.Since(startTime).Milliseconds()), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 			return
 		}
 
 		var relayReq relay.RelayRequest
 		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
+			common.Global().EndRequest("", false, int64(time.Since(startTime).Milliseconds()), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
 			return
 		}

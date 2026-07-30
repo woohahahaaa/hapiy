@@ -601,6 +601,18 @@ export const dashboardApi = {
   async deleteRule(type: RuleType, id: string): Promise<void> {
     await request(`/rules/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
+  async currentUser(): Promise<{ readonly id: string; readonly username: string; readonly role: string }> {
+    const body = await request('/users/me')
+    if (!isRecord(body)) {
+      throw new DashboardApiError('服务端返回的用户信息格式无效', null)
+    }
+    return {
+      id: readString(body.id, 'user.id'),
+      username: readString(body.username, 'user.username'),
+      role: readString(body.role, 'user.role'),
+    }
+  },
+
   async getRuntimeMetrics(): Promise<RuntimeMetrics> {
     let response: Response
     try {

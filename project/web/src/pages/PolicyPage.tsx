@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Loader2, Code } from 'lucide-react'
+import { useParams, Link } from 'react-router-dom'
+import { Plus, Pencil, Trash2, Loader2, Code, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
-import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
+import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -34,9 +34,39 @@ import {
   type RuleType,
 } from '@/lib/dashboard-api'
 
+const KNOWN_RULE_TYPES: readonly RuleType[] = [
+  'rewrite',
+  'heartbeat',
+  'concurrency',
+  'failover',
+  'rewrite-response',
+]
+
 export function PolicyPage() {
   const { type } = useParams<{ type: string }>()
   const activeTab = (type || 'rewrite') as RuleType
+
+  if (type !== undefined && !KNOWN_RULE_TYPES.includes(activeTab)) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader title="未知策略类型" subtitle={`/policy/${type}`} />
+        <div className="flex-1 p-6">
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-md border border-border bg-card p-8 text-center">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">该策略类型不存在</p>
+              <p className="text-xs text-muted-foreground">
+                可用的策略类型：{KNOWN_RULE_TYPES.join('、')}
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/policy/rewrite">返回请求改写</Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
