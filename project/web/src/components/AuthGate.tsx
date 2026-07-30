@@ -3,10 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { dashboardApi } from '@/lib/dashboard-api'
 
-interface LocationState {
-  from?: string
-}
-
 interface AuthGateProps {
   readonly children: ReactNode
 }

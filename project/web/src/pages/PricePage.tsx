@@ -51,7 +51,7 @@ async function diffAndSave(
     const ops: Promise<unknown>[] = []
 
     for (const item of parsed) {
-      const id = idMap.get(item.model)
+      const id = idMap.get(item.id)
       if (id && currentMap.has(id)) {
         retainedIds.add(id)
         if (

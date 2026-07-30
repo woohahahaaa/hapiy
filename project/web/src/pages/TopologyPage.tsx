@@ -384,7 +384,7 @@ export function TopologyPage() {
                 (x) => x.id !== p.id && x.name === p.name && x.status,
               )
               if (other) {
-                toast('当前已有一个同名渠道在启用，请先将另一个关闭', 'error')
+                toast.add({ title: '当前已有一个同名渠道在启用，请先将另一个关闭', type: 'error' })
                 return
               }
             }
@@ -395,7 +395,7 @@ export function TopologyPage() {
                 )
               })
               .catch((err) => {
-                toast(err instanceof Error ? err.message : '切换渠道状态失败', 'error')
+                toast.add({ title: err instanceof Error ? err.message : '切换渠道状态失败', type: 'error' })
               })
           },
         },

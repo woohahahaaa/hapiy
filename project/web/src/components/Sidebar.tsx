@@ -184,7 +184,7 @@ export function AppSidebar() {
   return (
     <SidebarRoot collapsible="icon">
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
+        <div className="flex items-center gap-2 py-2">
           <span
             className={
               showLabel
@@ -194,7 +194,7 @@ export function AppSidebar() {
           >
             hapiy
           </span>
-          <SidebarTrigger className="ml-auto" />
+          <SidebarTrigger className="ml-auto" size="icon" />
         </div>
       </SidebarHeader>
       <SidebarContent>

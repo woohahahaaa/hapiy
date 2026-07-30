@@ -11,7 +11,7 @@ import { PolicyPage } from '@/pages/PolicyPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AuthGate } from '@/components/AuthGate'
-import { ToastContainer } from '@/components/ui/toast'
+import { Toaster } from '@/components/ui/toast'
 
 function App() {
   return (
@@ -40,7 +40,7 @@ function App() {
           }
         />
       </Routes>
-      <ToastContainer />
+      <Toaster />
     </BrowserRouter>
   )
 }

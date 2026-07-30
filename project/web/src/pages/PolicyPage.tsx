@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { Plus, Pencil, Trash2, Loader2, Code, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
@@ -59,9 +61,9 @@ export function PolicyPage() {
                 可用的策略类型：{KNOWN_RULE_TYPES.join('、')}
               </p>
             </div>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/policy/rewrite">返回请求改写</Link>
-            </Button>
+            <Link to="/policy/rewrite" className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}>
+              返回请求改写
+            </Link>
           </div>
         </div>
       </div>
@@ -883,7 +885,7 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
 // ── Response Rewrite ──
 
 function RewriteResponsePage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<ResponseRewriteRule>('rewrite-response')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<ResponseRewriteRule>('rewrite-response')
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)

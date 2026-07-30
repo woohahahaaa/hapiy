@@ -75,7 +75,7 @@ export function ProfilePage() {
     event.preventDefault()
     const nextUsername = username.trim()
     if (!nextUsername) {
-      toast('用户名不能为空', 'error')
+      toast.add({ title: '用户名不能为空', type: 'error' })
       return
     }
     setSavingUsername(true)
@@ -83,9 +83,9 @@ export function ProfilePage() {
       const user = await dashboardApi.updateUsername(nextUsername)
       setUsername(user.username)
       updateReadyUser(user)
-      toast('用户名已更新')
+      toast.add({ title: '用户名已更新' })
     } catch (error) {
-      toast(error instanceof Error ? error.message : '更新用户名失败', 'error')
+      toast.add({ title: error instanceof Error ? error.message : '更新用户名失败', type: 'error' })
     } finally {
       setSavingUsername(false)
     }
@@ -94,15 +94,15 @@ export function ProfilePage() {
   const handlePasswordSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentPassword || !newPassword || !passwordConfirmation) {
-      toast('请填写所有密码字段', 'error')
+      toast.add({ title: '请填写所有密码字段', type: 'error' })
       return
     }
     if (newPassword.length < 8) {
-      toast('新密码至少需要 8 个字符', 'error')
+      toast.add({ title: '新密码至少需要 8 个字符', type: 'error' })
       return
     }
     if (newPassword !== passwordConfirmation) {
-      toast('两次输入的新密码不一致', 'error')
+      toast.add({ title: '两次输入的新密码不一致', type: 'error' })
       return
     }
     setSavingPassword(true)
@@ -111,9 +111,9 @@ export function ProfilePage() {
       setCurrentPassword('')
       setNewPassword('')
       setPasswordConfirmation('')
-      toast('密码已更新')
+      toast.add({ title: '密码已更新' })
     } catch (error) {
-      toast(error instanceof Error ? error.message : '更新密码失败', 'error')
+      toast.add({ title: error instanceof Error ? error.message : '更新密码失败', type: 'error' })
     } finally {
       setSavingPassword(false)
     }
