@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils'
 
 interface SlotContainerProps {
   title: string
-  slotType: string
   onAddNode?: () => void
   children?: ReactNode
   className?: string

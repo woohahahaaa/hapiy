@@ -36,14 +36,13 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       lenRef.current = models.length
       updateNodeInternals(id)
     }
-  }, [id, models, updateNodeInternals])
+  }, [id, models.length, updateNodeInternals])
 
-  const n = models.length
   const targetHandle = topologyConfig.handles.channel.target
-  const gap = topologyConfig.handles.channel.segmentGap
   const sourceHandle = topologyConfig.handles.channel.source
   const segH = targetHandle.height
-  const total = n * segH + (n - 1) * gap
+  const gap = topologyConfig.handles.channel.segmentGap
+  const total = models.length * segH + Math.max(0, models.length - 1) * gap
   const start = -(total / 2)
 
   const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -67,16 +66,26 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
           type="target"
           position={Position.Left}
           id={m}
-          className="!rounded-full !border-border !bg-background"
           style={{
             top: `calc(50% + ${start + i * (segH + gap)}px)`,
             width: targetHandle.width,
-            height: targetHandle.height,
-            borderWidth: targetHandle.borderWidth,
+            height: segH,
             transform: 'translate(-50%, 0)',
+            background: 'transparent',
+            border: 'none',
+            opacity: 0,
           }}
         />
       ))}
+
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-r-0 border-solid border-border bg-background"
+        style={{
+          width: targetHandle.width,
+          height: total,
+        }}
+      />
 
       <Handle
         type="source"

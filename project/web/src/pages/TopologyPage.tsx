@@ -16,96 +16,33 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
 import { ChannelNode } from '@/nodes/ChannelNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
-import { RequestModifyNode } from '@/nodes/RequestModifyNode'
-import { ResponseModifyNode } from '@/nodes/ResponseModifyNode'
-import { ConcurrencyNode } from '@/nodes/ConcurrencyNode'
-import { AutoReplyNode } from '@/nodes/AutoReplyNode'
-import { AutoSwitchNode } from '@/nodes/AutoSwitchNode'
-import { LogOutputNode } from '@/nodes/LogOutputNode'
 import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { Provider } from '@/lib/dashboard-api'
 import { getTopologyNodeDimension, topologyConfig } from '@/config/topology-config'
+import {
+  SLOT_ORDER,
+  SLOT_LABELS,
+  emptySlotEntryMap,
+  useSlotRules,
+  type SlotEntry,
+  type SlotEntryMap,
+  type SlotRuleMap,
+  type SlotType,
+} from '@/components/topology/slot-items'
 
-const SLOT_ORDER = [
-  'requestModify',
-  'responseModify',
-  'autoReply',
-  'concurrency',
-  'autoSwitch',
-  'logOutput',
-] as const
-
-type SlotType = (typeof SLOT_ORDER)[number]
-
-const SLOT_LABELS: Record<SlotType, string> = {
-  requestModify: '请求改写',
-  responseModify: '响应改写',
-  autoReply: '心跳回复',
-  concurrency: '并发控制',
-  autoSwitch: '故障转移',
-  logOutput: '日志输出',
-}
+const SLOT_KEYS: readonly SlotType[] = SLOT_ORDER
 
 const nodeTypes = {
   modelHub: ModelHubNode,
   channel: ChannelNode,
-  autoReply: AutoReplyNode,
-  requestModify: RequestModifyNode,
-  responseModify: ResponseModifyNode,
-  logOutput: LogOutputNode,
-  autoSwitch: AutoSwitchNode,
-  concurrency: ConcurrencyNode,
   slot: SlotNode,
 }
 
 const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
-}
-
-interface SlotNodeEntry {
-  index: number
-  ruleId: string
-  ruleName: string
-}
-
-interface ProviderSlotState {
-  providerId: string
-  slots: Record<SlotType, SlotNodeEntry[]>
-}
-
-function loadSlotsFromStorage(providerId: string): ProviderSlotState['slots'] {
-  if (typeof window === 'undefined') return emptySlots()
-  try {
-    const raw = window.localStorage.getItem(`hapiy-slots-${providerId}`)
-    if (!raw) return emptySlots()
-    const parsed = JSON.parse(raw) as ProviderSlotState['slots']
-    return parsed
-  } catch {
-    return emptySlots()
-  }
-}
-
-function emptySlots(): ProviderSlotState['slots'] {
-  return {
-    requestModify: [],
-    responseModify: [],
-    autoReply: [],
-    concurrency: [],
-    autoSwitch: [],
-    logOutput: [],
-  }
-}
-
-function saveSlotsToStorage(providerId: string, slots: ProviderSlotState['slots']): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(`hapiy-slots-${providerId}`, JSON.stringify(slots))
-  } catch {
-    // storage may be full — silently skip
-  }
 }
 
 type LayoutSnapshot = Record<string, { x: number; y: number }>
@@ -125,6 +62,61 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.setItem('hapiy-layout', JSON.stringify(layout))
+  } catch {
+    // storage may be full — silently skip
+  }
+}
+
+function loadSlotsFromStorage(providerId: string): SlotEntryMap {
+  if (typeof window === 'undefined') return emptySlotEntryMap()
+  try {
+    const raw = window.localStorage.getItem(`hapiy-slots-${providerId}`)
+    if (!raw) return emptySlotEntryMap()
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object') return emptySlotEntryMap()
+    return migrateSlotEntryMap(parsed as Partial<SlotEntryMap>)
+  } catch {
+    return emptySlotEntryMap()
+  }
+}
+
+// Older schema stored flat `{ index, ruleId, ruleName }` rows. Coerce those into
+// the new typed entries so existing browser localStorage keeps working.
+function migrateSlotEntryMap(parsed: Partial<SlotEntryMap>): SlotEntryMap {
+  const empty = emptySlotEntryMap()
+  for (const key of SLOT_KEYS) {
+    const list = parsed[key]
+    if (!Array.isArray(list)) continue
+    const migrated = list.map((raw: unknown, i: number): SlotEntry => {
+      const idx = i + 1
+      const ruleId = typeof (raw as { ruleId?: unknown }).ruleId === 'string'
+        ? (raw as { ruleId: string }).ruleId
+        : null
+      if (key === 'logOutput') {
+        return {
+          slotType: 'logOutput',
+          index: idx,
+          enabled: true,
+          logTarget: 'file',
+          logLevel: 'info',
+          logPath: '',
+          recordRequestBefore: true,
+          recordRequestAfter: true,
+          recordResponseBefore: true,
+          recordResponseAfter: true,
+        }
+      }
+      return { slotType: key, index: idx, ruleId, enabled: true }
+    })
+    setSlotList(empty, key, migrated as SlotEntryMap[typeof key])
+  }
+  return empty
+}
+
+function saveSlotsToStorage(providerId: string, slots: SlotEntryMap): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(`hapiy-slots-${providerId}`, JSON.stringify(slots))
   } catch {
     // storage may be full — silently skip
   }
@@ -193,14 +185,16 @@ function buildModelNodes(
 
 function buildSlotNodes(
   providerId: string,
-  slotStates: Record<string, ProviderSlotState['slots']>,
+  slots: SlotEntryMap,
+  rules: SlotRuleMap,
   layout: LayoutSnapshot,
   verticalOffset: number,
+  onChangeEntry: (providerId: string, slotType: SlotType, next: SlotEntry) => void,
+  onDeleteEntry: (providerId: string, slotType: SlotType, index: number) => void,
 ): Node[] {
-  const slotsForThisProvider = slotStates[providerId] ?? emptySlots()
   const nodes: Node[] = []
   SLOT_ORDER.forEach((slotType, i) => {
-    const slotEntries = slotsForThisProvider[slotType] ?? []
+    const entries = slots[slotType] ?? []
     const slotId = `slot-${providerId}-${slotType}`
     nodes.push({
       id: slotId,
@@ -213,14 +207,10 @@ function buildSlotNodes(
         slotType,
         providerId,
         title: SLOT_LABELS[slotType],
-        nodes: slotEntries,
-        onAddNode: () => handleAddSlotNode(
-          providerId,
-          slotType,
-          `placeholder-${providerId}-${slotType}`,
-          `${SLOT_LABELS[slotType]} #${slotEntries.length + 1}`,
-        ),
-        onDeleteNode: (idx: number) => handleDeleteSlotNode(providerId, slotType, idx),
+        entries,
+        rules,
+        onChangeEntry: (next: SlotEntry) => onChangeEntry(providerId, slotType, next),
+        onDeleteEntry: (index: number) => onDeleteEntry(providerId, slotType, index),
       },
     })
   })
@@ -271,54 +261,24 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
   return edges
 }
 
-// slotsState container, kept in closure for the add/delete handlers
-const slotsStateRef: { current: Map<string, ProviderSlotState['slots']>; setNodes: (updater: (n: Node[]) => Node[]) => void; getNodes: () => Node[]; providersRef: { current: readonly Provider[] } } = {
-  current: new Map(),
-  setNodes: () => {},
-  getNodes: () => [],
-  providersRef: { current: [] },
-}
-
-function handleAddSlotNode(providerId: string, slotType: SlotType, ruleId: string, ruleName: string): void {
-  const slots = slotsStateRef.current.get(providerId) ?? emptySlots()
-  const list = slots[slotType] ?? []
-  const newEntry: SlotNodeEntry = {
-    index: list.length + 1,
-    ruleId,
-    ruleName,
-  }
-  slots[slotType] = [...list, newEntry]
-  slotsStateRef.current.set(providerId, slots)
-  saveSlotsToStorage(providerId, slots)
-  refreshTopologyNodes()
-}
-
-function handleDeleteSlotNode(providerId: string, slotType: SlotType, idx: number): void {
-  const slots = slotsStateRef.current.get(providerId) ?? emptySlots()
-  const list = slots[slotType] ?? []
-  slots[slotType] = list
-    .filter((n) => n.index !== idx)
-    .map((n, i) => ({ ...n, index: i + 1 }))
-  slotsStateRef.current.set(providerId, slots)
-  saveSlotsToStorage(providerId, slots)
-  refreshTopologyNodes()
-}
-
-function refreshTopologyNodes(): void {
-  const providers = slotsStateRef.providersRef.current
-  if (providers.length === 0) return
-  slotsStateRef.setNodes((nodes) => [...nodes])
-}
-
 export function TopologyPage() {
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
+  const { rules } = useSlotRules()
+
+  // Slots live in a ref so ReactFlow can mutate freely without re-rendering
+  // the whole tree on every add/delete/change.
+  const slotsStateRef = useRef<Map<string, SlotEntryMap>>(new Map())
+  // Bumped on each write so the ReactFlow nodes tree re-derives.
+  const [slotsVersion, setSlotsVersion] = useState(0)
+  const bumpSlots = useCallback(() => setSlotsVersion((v) => v + 1), [])
 
   const handlePaneDoubleClick = useCallback((event: ReactMouseEvent) => {
     if (!(event.target instanceof Element)) return
     if (!event.target.closest('.react-flow__pane')) return
+    if (event.target.closest('.react-flow__node')) return
     setMenuState({
       x: event.clientX,
       y: event.clientY,
@@ -332,22 +292,54 @@ export function TopologyPage() {
     try {
       const channels = await dashboardApi.listProviders()
       setProviders(channels)
-      slotsStateRef.providersRef.current = channels
-      const slotStatesObj: Record<string, ProviderSlotState['slots']> = {}
+      const next = new Map<string, SlotEntryMap>()
       for (const provider of channels) {
-        slotStatesObj[provider.id] = loadSlotsFromStorage(provider.id)
-        slotsStateRef.current.set(provider.id, slotStatesObj[provider.id])
+        next.set(provider.id, loadSlotsFromStorage(provider.id))
       }
+      slotsStateRef.current = next
+      bumpSlots()
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [bumpSlots])
 
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const handleChangeEntry = useCallback(
+    (providerId: string, slotType: SlotType, next: SlotEntry) => {
+      const current = slotsStateRef.current.get(providerId) ?? emptySlotEntryMap()
+      const list = current[slotType] ?? []
+      const idx = list.findIndex((e) => e.index === next.index)
+      const nextList =
+        idx >= 0
+          ? list.map((e) => (e.index === next.index ? next : e))
+          : [...list, next].map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
+      slotsStateRef.current.set(providerId, current)
+      saveSlotsToStorage(providerId, current)
+      bumpSlots()
+    },
+    [bumpSlots],
+  )
+
+  const handleDeleteEntry = useCallback(
+    (providerId: string, slotType: SlotType, index: number) => {
+      const current = slotsStateRef.current.get(providerId) ?? emptySlotEntryMap()
+      const list = current[slotType] ?? []
+      const nextList = list
+        .filter((e) => e.index !== index)
+        .map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
+      slotsStateRef.current.set(providerId, current)
+      saveSlotsToStorage(providerId, current)
+      bumpSlots()
+    },
+    [bumpSlots],
+  )
 
   const layoutSnapshot = useMemo(() => loadLayoutFromStorage(), [])
 
@@ -364,14 +356,11 @@ export function TopologyPage() {
 
   const baseNodes = useMemo(() => {
     if (!providers) return []
-    const slotStatesObj: Record<string, ProviderSlotState['slots']> = {}
-    for (const [providerId, slots] of slotsStateRef.current.entries()) {
-      slotStatesObj[providerId] = slots
-    }
     const modelNodes = buildModelNodes(providers, modelNodeIds, layoutSnapshot)
     const nodes: Node[] = [...modelNodes]
     providers.forEach((provider) => {
       const verticalOffset = nodes.length
+      const slots = slotsStateRef.current.get(provider.id) ?? emptySlotEntryMap()
       nodes.push({
         id: `ch-${provider.id}`,
         type: 'channel',
@@ -388,10 +377,10 @@ export function TopologyPage() {
           active: provider.status,
           providerId: provider.id,
           onToggle: () => {
-            const p = slotsStateRef.providersRef.current.find((x) => x.id === provider.id)
+            const p = providers.find((x) => x.id === provider.id)
             if (!p) return
             if (!p.status) {
-              const other = slotsStateRef.providersRef.current.find(
+              const other = providers.find(
                 (x) => x.id !== p.id && x.name === p.name && x.status,
               )
               if (other) {
@@ -401,9 +390,6 @@ export function TopologyPage() {
             }
             dashboardApi.toggleProvider(p.id)
               .then((updated) => {
-                slotsStateRef.providersRef.current = slotsStateRef.providersRef.current.map((x) =>
-                  x.id === updated.id ? updated : x,
-                )
                 setProviders((prev) =>
                   prev?.map((x) => (x.id === updated.id ? updated : x)) ?? prev,
                 )
@@ -414,10 +400,21 @@ export function TopologyPage() {
           },
         },
       })
-      nodes.push(...buildSlotNodes(provider.id, slotStatesObj, layoutSnapshot, nodes.length))
+      nodes.push(
+        ...buildSlotNodes(
+          provider.id,
+          slots,
+          rules,
+          layoutSnapshot,
+          nodes.length,
+          handleChangeEntry,
+          handleDeleteEntry,
+        ),
+      )
     })
     return nodes
-  }, [providers, modelNodeIds, layoutSnapshot])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers, modelNodeIds, layoutSnapshot, slotsVersion, rules])
 
   const baseEdges = useMemo(() => {
     if (!providers) return []
@@ -429,10 +426,6 @@ export function TopologyPage() {
   useEffect(() => {
     setNodes(baseNodes)
   }, [baseNodes, setNodes])
-
-  useEffect(() => {
-    slotsStateRef.setNodes = (updater) => setNodes((prev) => updater(prev))
-  }, [setNodes])
 
   const [edges, _setEdges, onEdgesChange] = useEdgesState(baseEdges)
 
@@ -572,4 +565,21 @@ export function TopologyPage() {
       </div>
     </div>
   )
+}
+
+// When the order of items changes (insert/delete), every surviving entry
+// must be renumbered to keep the slot's badges contiguous.
+function reindexSlotItem(entry: SlotEntry, newIndex: number, slotType: SlotType): SlotEntry {
+  if (entry.slotType !== slotType) return entry
+  return { ...entry, index: newIndex } as SlotEntry
+}
+
+// Typed writer — works around TS's inability to narrow `Map[K] = V` when V is
+// a union that varies per key.
+function setSlotList<K extends SlotType>(
+  map: SlotEntryMap,
+  key: K,
+  list: SlotEntryMap[K],
+): void {
+  map[key] = list
 }

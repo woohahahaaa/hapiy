@@ -3,12 +3,6 @@ import topologyJson from './topology.json'
 type NodeType =
   | 'modelHub'
   | 'channel'
-  | 'autoReply'
-  | 'requestModify'
-  | 'responseModify'
-  | 'logOutput'
-  | 'autoSwitch'
-  | 'concurrency'
   | 'slot'
 
 type Dimension = {

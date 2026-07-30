@@ -8,19 +8,13 @@
   "nodeDimensions": {
     "modelHub": { "width": 224, "height": 200 },
     "channel": { "width": 192, "height": 100 },
-    "autoReply": { "width": 192, "height": 120 },
-    "requestModify": { "width": 192, "height": 120 },
-    "responseModify": { "width": 192, "height": 120 },
-    "logOutput": { "width": 192, "height": 220 },
-    "autoSwitch": { "width": 192, "height": 140 },
-    "concurrency": { "width": 192, "height": 100 },
-    "slot": { "width": 220, "height": 180 }
+    "slot": { "width": 240, "height": 180 }
   },
   "fallbackNodeDimension": { "width": 192, "height": 80 },
   "initialPositions": {
     "modelHub": { "x": 20, "y": 20, "verticalOffset": 60 },
     "channel": { "x": 450, "y": 20, "verticalOffset": 60 },
-    "slot": { "x": 700, "y": 20, "horizontalOffset": 220, "verticalOffset": 60 }
+    "slot": { "x": 700, "y": 20, "horizontalOffset": 260, "verticalOffset": 60 }
   },
   "edge": { "animated": true, "strokeWidth": 1.5 },
   "grid": { "color": "var(--border)", "gap": 20, "size": 1 },

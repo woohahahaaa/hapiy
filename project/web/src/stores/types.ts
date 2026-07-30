@@ -116,13 +116,7 @@ export interface TopologyNode {
 export type NodeType =
   | 'modelHub'
   | 'channel'
-  | 'autoReply'
-  | 'requestModify'
-  | 'responseModify'
-  | 'autoSwitch'
-  | 'concurrency'
-  | 'logOutput'
-  | 'endpoint'
+  | 'slot'
 
 export interface TopologyEdge {
   id: string

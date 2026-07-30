@@ -106,7 +106,7 @@ const navigation: NavItem[] = [
 
 function isPathActive(currentPath: string, href: string) {
   if (href === '/') return currentPath === '/'
-  return currentPath.startsWith(href)
+  return currentPath === href || currentPath.startsWith(href + '/')
 }
 
 function NavLink({
