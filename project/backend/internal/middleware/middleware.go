@@ -14,7 +14,14 @@ import (
 // CORS middleware
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Vary", "Origin")
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
 		if c.Request.Method == "OPTIONS" {
@@ -38,14 +45,50 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
-// AuthRequired middleware (dashboard authentication)
-func AuthRequired(db *gorm.DB) gin.HandlerFunc {
+func AuthRequired(db *gorm.DB, sessions *SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Implement JWT authentication
-		// For now, skip authentication in development
-		c.Set("user_id", "admin")
+		if sessions == nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "session store not initialised"})
+			return
+		}
+		cookie, err := c.Cookie(sessionCookieName)
+		if err != nil || cookie == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthenticated"})
+			return
+		}
+		username, ok := sessions.Lookup(cookie)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "session expired"})
+			return
+		}
+		c.Set("user_id", username)
 		c.Next()
 	}
+}
+
+const sessionCookieName = "hapiy_admin_session"
+
+type SessionStore struct {
+	tokens map[string]string
+}
+
+func NewSessionStore() *SessionStore {
+	return &SessionStore{tokens: make(map[string]string)}
+}
+
+func (s *SessionStore) Issue(username string) string {
+	token := uuid.New().String()
+	s.tokens[token] = username
+	return token
+}
+
+func (s *SessionStore) Lookup(token string) (string, bool) {
+	username, ok := s.tokens[token]
+	return username, ok
+}
+
+func (s *SessionStore) Revoke(token string) {
+	delete(s.tokens, token)
 }
 
 // TokenAuth middleware (API token authentication)

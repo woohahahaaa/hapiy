@@ -53,8 +53,12 @@ func main() {
 	service.InitLogWriter(db)
 	defer service.Logs().Stop()
 
+	service.InitQuotaLedger(db)
+
 	// Create Gin router
 	r := gin.Default()
+
+	sessions := middleware.NewSessionStore()
 
 	// Middleware
 	r.Use(middleware.CORS())
@@ -79,41 +83,47 @@ func main() {
 	{
 		// Overload protection on all relay endpoints
 		v1.Use(middleware.OverloadProtection(nil))
-		// Dashboard API (requires auth in production)
 		dashboard := v1.Group("/dashboard")
-		dashboard.Use(middleware.AuthRequired(db))
+		dashboard.POST("/users/login", handler.Login(db, sessions))
+		dashboard.POST("/users/logout", handler.Logout(db, sessions))
+		dashboardAuthed := dashboard.Group("")
+		dashboardAuthed.Use(middleware.AuthRequired(db, sessions))
 		{
 			// Channels
-			dashboard.GET("/channels", handler.ListChannels(db))
-			dashboard.POST("/channels", handler.CreateChannel(db, engine))
-			dashboard.GET("/channels/:id", handler.GetChannel(db))
-			dashboard.PUT("/channels/:id", handler.UpdateChannel(db, engine))
-			dashboard.DELETE("/channels/:id", handler.DeleteChannel(db, engine))
-			dashboard.POST("/channels/:id/toggle", handler.ToggleChannel(db, engine))
+			dashboardAuthed.GET("/channels", handler.ListChannels(db))
+			dashboardAuthed.POST("/channels", handler.CreateChannel(db, engine))
+			dashboardAuthed.GET("/channels/:id", handler.GetChannel(db))
+			dashboardAuthed.PUT("/channels/:id", handler.UpdateChannel(db, engine))
+			dashboardAuthed.DELETE("/channels/:id", handler.DeleteChannel(db, engine))
+			dashboardAuthed.POST("/channels/:id/toggle", handler.ToggleChannel(db, engine))
 
 			// Tokens
-			dashboard.GET("/tokens", handler.ListTokens(db))
-			dashboard.POST("/tokens", handler.CreateToken(db))
-			dashboard.GET("/tokens/:id", handler.GetToken(db))
-			dashboard.PUT("/tokens/:id", handler.UpdateToken(db))
-			dashboard.DELETE("/tokens/:id", handler.DeleteToken(db))
-			dashboard.POST("/tokens/:id/toggle", handler.ToggleToken(db))
-			dashboard.POST("/tokens/:id/rotate", handler.RotateTokenKey(db))
+			dashboardAuthed.GET("/tokens", handler.ListTokens(db))
+			dashboardAuthed.POST("/tokens", handler.CreateToken(db))
+			dashboardAuthed.GET("/tokens/:id", handler.GetToken(db))
+			dashboardAuthed.PUT("/tokens/:id", handler.UpdateToken(db))
+			dashboardAuthed.DELETE("/tokens/:id", handler.DeleteToken(db))
+			dashboardAuthed.POST("/tokens/:id/toggle", handler.ToggleToken(db))
+			dashboardAuthed.POST("/tokens/:id/rotate", handler.RotateTokenKey(db))
 
 			// Logs
-			dashboard.GET("/logs", handler.ListLogs(db))
-			dashboard.GET("/logs/stats", handler.GetLogStats(db))
+			dashboardAuthed.GET("/logs", handler.ListLogs(db))
+			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
 
 			// Users
-			dashboard.GET("/users/me", handler.GetCurrentUser(db))
-			dashboard.POST("/users/login", handler.Login(db))
-			dashboard.POST("/users/logout", handler.Logout(db))
+			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))
 
 			// Rules (rewrite, heartbeat, concurrency, failover)
 			dashboard.GET("/rules/:type", handler.ListRules(db))
 			dashboard.POST("/rules/:type", handler.CreateRule(db))
 			dashboard.PUT("/rules/:type/:id", handler.UpdateRule(db))
 			dashboard.DELETE("/rules/:type/:id", handler.DeleteRule(db))
+
+			// Prices (per-model pricing)
+			dashboard.GET("/prices", handler.ListPrices(db))
+			dashboard.POST("/prices", handler.CreatePrice(db))
+			dashboard.PUT("/prices/:id", handler.UpdatePrice(db))
+			dashboard.DELETE("/prices/:id", handler.DeletePrice(db))
 
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))

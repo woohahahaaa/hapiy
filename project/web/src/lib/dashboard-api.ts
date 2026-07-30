@@ -73,6 +73,23 @@ export type LogListResult = {
   readonly total: number
 }
 
+export type PriceConfig = {
+  readonly id: string
+  readonly model: string
+  readonly inputPrice: number
+  readonly outputPrice: number
+  readonly cacheWritePrice: number
+  readonly cacheReadPrice: number
+}
+
+export type PriceConfigInput = {
+  readonly model: string
+  readonly inputPrice: number
+  readonly outputPrice: number
+  readonly cacheWritePrice: number
+  readonly cacheReadPrice: number
+}
+
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
@@ -116,6 +133,30 @@ function parseJson(value: string, field: string): unknown {
     return JSON.parse(value) as unknown
   } catch {
     throw new DashboardApiError(`服务端返回的 ${field} 不是有效 JSON`, null)
+  }
+}
+
+function parsePrice(value: unknown): PriceConfig {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的价格格式无效', null)
+  }
+  return {
+    id: readString(value.id, 'price.id'),
+    model: readString(value.model, 'price.model'),
+    inputPrice: readNumber(value.input_price, 'price.input_price', 0),
+    outputPrice: readNumber(value.output_price, 'price.output_price', 0),
+    cacheWritePrice: readNumber(value.cache_write_price, 'price.cache_write_price', 0),
+    cacheReadPrice: readNumber(value.cache_read_price, 'price.cache_read_price', 0),
+  }
+}
+
+function serializePrice(input: PriceConfigInput): JsonRecord {
+  return {
+    model: input.model,
+    input_price: input.inputPrice,
+    output_price: input.outputPrice,
+    cache_write_price: input.cacheWritePrice,
+    cache_read_price: input.cacheReadPrice,
   }
 }
 
@@ -234,6 +275,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   try {
     response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     })
   } catch (error) {
@@ -252,14 +294,12 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   return parseEnvelope(body)
 }
 
-// requestFull returns the raw API response envelope (with data + total) instead of
-// unwrapping to just `data` like request() does. Used by paginated list endpoints
-// that need access to the outer `total` field alongside `data`.
 async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord> {
   let response: Response
   try {
     response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
     })
   } catch (error) {
@@ -598,9 +638,10 @@ export const dashboardApi = {
       { method: 'PUT', body: JSON.stringify(serializer(rule)) },
     )) as T
   },
-  async deleteRule(type: RuleType, id: string): Promise<void> {
+async deleteRule(type: RuleType, id: string): Promise<void> {
     await request(`/rules/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
+
   async currentUser(): Promise<{ readonly id: string; readonly username: string; readonly role: string }> {
     const body = await request('/users/me')
     if (!isRecord(body)) {
@@ -611,6 +652,50 @@ export const dashboardApi = {
       username: readString(body.username, 'user.username'),
       role: readString(body.role, 'user.role'),
     }
+  },
+
+  async listPrices(): Promise<readonly PriceConfig[]> {
+    const data = await request('/prices')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的价格列表格式无效', null)
+    }
+    return data.map(parsePrice)
+  },
+  async login(username: string, password: string): Promise<void> {
+    const response = await fetch(`${apiBaseUrl}/v1/dashboard/users/login`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      const body = text === '' ? null : parseJson(text, '登录响应')
+      const message = isRecord(body) && typeof body.error === 'string' ? body.error : `登录失败（HTTP ${response.status}）`
+      throw new DashboardApiError(message, response.status)
+    }
+  },
+  async logout(): Promise<void> {
+    try {
+      await fetch(`${apiBaseUrl}/v1/dashboard/users/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch {
+      // ignore — logout must always succeed client-side
+    }
+  },
+  async createPrice(input: PriceConfigInput): Promise<PriceConfig> {
+    return parsePrice(await request('/prices', { method: 'POST', body: JSON.stringify(serializePrice(input)) }))
+  },
+  async updatePrice(id: string, input: PriceConfigInput): Promise<PriceConfig> {
+    return parsePrice(await request(`/prices/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(serializePrice(input)),
+    }))
+  },
+  async deletePrice(id: string): Promise<void> {
+    await request(`/prices/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 
   async getRuntimeMetrics(): Promise<RuntimeMetrics> {

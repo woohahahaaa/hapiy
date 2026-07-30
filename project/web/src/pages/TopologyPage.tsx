@@ -181,16 +181,12 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   })
 }
 
-function buildNodes(
+function buildModelNodes(
   providers: readonly Provider[],
-  slotStates: Record<string, ProviderSlotState['slots']>,
   modelNodeIds: Record<string, string>,
   layout: LayoutSnapshot,
 ): Node[] {
   const nodes: Node[] = []
-
-  // Collect unique model names across providers, sort alphabetically so GPT
-  // appears before Kimi and the order stays stable across re-renders.
   const uniqueModels = new Set<string>()
   for (const provider of providers) {
     for (const model of provider.models) uniqueModels.add(model.model)
@@ -207,43 +203,34 @@ function buildNodes(
     })
   })
 
-  for (const provider of providers) {
+  return nodes
+}
+
+function buildSlotNodes(
+  providerId: string,
+  slotStates: Record<string, ProviderSlotState['slots']>,
+  layout: LayoutSnapshot,
+  verticalOffset: number,
+): Node[] {
+  const slotsForThisProvider = slotStates[providerId] ?? emptySlots()
+  const nodes: Node[] = []
+  SLOT_ORDER.forEach((slotType, i) => {
+    const slotEntries = slotsForThisProvider[slotType] ?? []
+    const slotId = `slot-${providerId}-${slotType}`
     nodes.push({
-      id: `ch-${provider.id}`,
-      type: 'channel',
-      position: layout[`ch-${provider.id}`] ?? { x: 450, y: 20 + nodes.length * 60 },
+      id: slotId,
+      type: 'slot',
+      position: layout[slotId] ?? { x: 700 + i * 220, y: 20 + verticalOffset * 60 },
       data: {
-        label: provider.name,
-        baseURLCount: provider.baseUrls.length,
-        keyCount: provider.keys.length,
-        modelCount: provider.models.length,
-        models: provider.models.map((m) => m.model),
-        active: provider.status,
-        providerId: provider.id,
-        onToggle: () => handleChannelToggle(provider),
+        slotType,
+        providerId,
+        title: SLOT_LABELS[slotType],
+        nodes: slotEntries,
+        onAddNode: () => handleAddSlotNode(providerId, slotType),
+        onDeleteNode: (idx: number) => handleDeleteSlotNode(providerId, slotType, idx),
       },
     })
-
-    const slotsForThisProvider = slotStates[provider.id] ?? emptySlots()
-    SLOT_ORDER.forEach((slotType, i) => {
-      const slotEntries = slotsForThisProvider[slotType] ?? []
-      const slotId = `slot-${provider.id}-${slotType}`
-      nodes.push({
-        id: slotId,
-        type: 'slot',
-        position: layout[slotId] ?? { x: 700 + i * 220, y: 20 + nodes.length * 60 },
-        data: {
-          slotType,
-          providerId: provider.id,
-          title: SLOT_LABELS[slotType],
-          nodes: slotEntries,
-          onAddNode: () => handleAddSlotNode(provider.id, slotType),
-          onDeleteNode: (idx: number) => handleDeleteSlotNode(provider.id, slotType, idx),
-        },
-      })
-    })
-  }
-
+  })
   return nodes
 }
 
@@ -340,22 +327,8 @@ function refreshTopologyNodes(): void {
   for (const [providerId, slots] of slotsStateRef.current.entries()) {
     slotStatesObj[providerId] = slots
   }
-  const newNodes = buildNodes(providers, slotStatesObj)
-  slotsStateRef.setNodes(() => newNodes)
-}
-
-function handleChannelToggle(provider: Provider): void {
-  if (!provider.status) {
-    const other = slotsStateRef.providersRef.current.find(
-      (p) => p.id !== provider.id && p.name === provider.name && p.status,
-    )
-    if (other) {
-      toast('当前已有一个同名渠道在启用，请先将另一个关闭', 'error')
-      return
-    }
-  }
-  dashboardApi.toggleProvider(provider.id).catch((err) => {
-    toast(err instanceof Error ? err.message : '切换渠道状态失败', 'error')
+  slotsStateRef.setNodes(() => {
+    void 0
   })
 }
 
@@ -446,7 +419,52 @@ export function TopologyPage() {
     for (const [providerId, slots] of slotsStateRef.current.entries()) {
       slotStatesObj[providerId] = slots
     }
-    return buildNodes(providers, slotStatesObj, modelNodeIds, layoutSnapshot)
+    const modelNodes = buildModelNodes(providers, modelNodeIds, layoutSnapshot)
+    const nodes: Node[] = [...modelNodes]
+    providers.forEach((provider) => {
+      const verticalOffset = nodes.length
+      nodes.push({
+        id: `ch-${provider.id}`,
+        type: 'channel',
+        position: layoutSnapshot[`ch-${provider.id}`] ?? { x: 450, y: 20 + verticalOffset * 60 },
+        data: {
+          label: provider.name,
+          baseURLCount: provider.baseUrls.length,
+          keyCount: provider.keys.length,
+          modelCount: provider.models.length,
+          models: provider.models.map((m) => m.model),
+          active: provider.status,
+          providerId: provider.id,
+          onToggle: () => {
+            const p = slotsStateRef.providersRef.current.find((x) => x.id === provider.id)
+            if (!p) return
+            if (!p.status) {
+              const other = slotsStateRef.providersRef.current.find(
+                (x) => x.id !== p.id && x.name === p.name && x.status,
+              )
+              if (other) {
+                toast('当前已有一个同名渠道在启用，请先将另一个关闭', 'error')
+                return
+              }
+            }
+            dashboardApi.toggleProvider(p.id)
+              .then((updated) => {
+                slotsStateRef.providersRef.current = slotsStateRef.providersRef.current.map((x) =>
+                  x.id === updated.id ? updated : x,
+                )
+                setProviders((prev) =>
+                  prev?.map((x) => (x.id === updated.id ? updated : x)) ?? prev,
+                )
+              })
+              .catch((err) => {
+                toast(err instanceof Error ? err.message : '切换渠道状态失败', 'error')
+              })
+          },
+        },
+      })
+      nodes.push(...buildSlotNodes(provider.id, slotStatesObj, layoutSnapshot, nodes.length))
+    })
+    return nodes
   }, [providers, modelNodeIds, layoutSnapshot])
 
   const baseEdges = useMemo(() => {

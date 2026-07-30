@@ -30,7 +30,7 @@ export function ProfilePage() {
     setState({ kind: 'loading' })
     try {
       const [me, providers, tokens] = await Promise.all([
-        dashboardApi.currentUser().catch(() => null),
+        dashboardApi.currentUser().catch(() => null) as Promise<{ id: string; username: string; role: string } | null>,
         dashboardApi.listProviders() as Promise<readonly Provider[]>,
         dashboardApi.listTokens() as Promise<readonly Token[]>,
       ])

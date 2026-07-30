@@ -48,25 +48,38 @@ func NewEngine(db *gorm.DB) *Engine {
 	}
 }
 
-// LoadChannels loads all channels from database and compiles execution plans
+// LoadChannels loads all enabled channels from database and compiles execution plans.
+// It rebuilds the cache from scratch so that disabled or deleted channels are dropped
+// from in-memory state without waiting for a process restart.
 func (e *Engine) LoadChannels() error {
 	var channels []model.Channel
 	if err := e.db.Where("status = ?", true).Find(&channels).Error; err != nil {
 		return err
 	}
 
-	e.channelsMu.Lock()
+	fresh := make(map[string]*model.Channel, len(channels))
 	for i := range channels {
-		e.channels[channels[i].ID] = &channels[i]
+		fresh[channels[i].ID] = &channels[i]
 	}
+
+	e.channelsMu.Lock()
+	e.channels = fresh
 	e.channelsMu.Unlock()
 
-	// Compile execution plans for each channel
-	for _, ch := range channels {
-		if err := e.compilePlan(&ch); err != nil {
+	freshPlans := make(map[string]*ExecutionPlan, len(channels))
+	for i := range channels {
+		ch := channels[i]
+		plan := &ExecutionPlan{ID: ch.ID, Channel: &ch}
+		if err := e.populatePlan(plan); err != nil {
 			log.Printf("Failed to compile plan for channel %s: %v", ch.Name, err)
+			continue
 		}
+		freshPlans[ch.ID] = plan
 	}
+
+	e.plansMu.Lock()
+	e.plans = freshPlans
+	e.plansMu.Unlock()
 
 	return nil
 }
@@ -134,11 +147,18 @@ func (e *Engine) compilePlan(ch *model.Channel) error {
 		ID:      ch.ID,
 		Channel: ch,
 	}
+	if err := e.populatePlan(plan); err != nil {
+		return err
+	}
 
-	// Load associated rules
-	// TODO: Parse channel's rule associations from topology config or channel metadata
-	// For now, load all active rules (simplified)
+	e.plansMu.Lock()
+	e.plans[ch.ID] = plan
+	e.plansMu.Unlock()
 
+	return nil
+}
+
+func (e *Engine) populatePlan(plan *ExecutionPlan) error {
 	var rewriteRules []model.RewriteRule
 	e.db.Where("status = ?", true).Find(&rewriteRules)
 	plan.RewriteRules = make([]*model.RewriteRule, 0)
@@ -159,17 +179,13 @@ func (e *Engine) compilePlan(ch *model.Channel) error {
 	}
 
 	var failoverRules []model.FailoverRule
-	e.db.Where("status = ? AND primary_channel = ?", true, ch.Name).Find(&failoverRules)
+	e.db.Where("status = ? AND primary_channel = ?", true, plan.Channel.Name).Find(&failoverRules)
 	plan.FailoverRules = make([]*model.FailoverRule, 0)
 	for i := range failoverRules {
 		plan.FailoverRules = append(plan.FailoverRules, &failoverRules[i])
 	}
 
-	plan.DebugEnabled = false // TODO: Load from topology config
-
-	e.plansMu.Lock()
-	e.plans[ch.ID] = plan
-	e.plansMu.Unlock()
+	plan.DebugEnabled = false
 
 	return nil
 }

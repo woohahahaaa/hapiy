@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AppShell } from '@/layouts/AppShell'
+import { LoginPage } from '@/pages/LoginPage'
 import { TopologyPage } from '@/pages/TopologyPage'
 import { MonitorPage } from '@/pages/MonitorPage'
 import { LogsPage } from '@/pages/LogsPage'
@@ -9,24 +10,36 @@ import { PricePage } from '@/pages/PricePage'
 import { PolicyPage } from '@/pages/PolicyPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { AuthGate } from '@/components/AuthGate'
 import { ToastContainer } from '@/components/ui/toast'
 
 function App() {
   return (
     <BrowserRouter>
-      <AppShell>
-        <Routes>
-          <Route path="/" element={<TopologyPage />} />
-          <Route path="/monitor" element={<MonitorPage />} />
-          <Route path="/logs" element={<LogsPage />} />
-          <Route path="/provider" element={<ProviderPage />} />
-          <Route path="/token" element={<TokenPage />} />
-          <Route path="/price" element={<PricePage />} />
-          <Route path="/policy/:type" element={<PolicyPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Routes>
-      </AppShell>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/*"
+          element={
+            <AuthGate>
+              <AppShell>
+                <Routes>
+                  <Route path="/" element={<TopologyPage />} />
+                  <Route path="/monitor" element={<MonitorPage />} />
+                  <Route path="/logs" element={<LogsPage />} />
+                  <Route path="/provider" element={<ProviderPage />} />
+                  <Route path="/token" element={<TokenPage />} />
+                  <Route path="/price" element={<PricePage />} />
+                  <Route path="/policy/:type" element={<PolicyPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </AppShell>
+            </AuthGate>
+          }
+        />
+      </Routes>
       <ToastContainer />
     </BrowserRouter>
   )

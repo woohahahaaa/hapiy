@@ -28,5 +28,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&ConcurrencyRule{},
 		&FailoverRule{},
 		&TopologyConfig{},
+		&PriceConfig{},
 	)
 }

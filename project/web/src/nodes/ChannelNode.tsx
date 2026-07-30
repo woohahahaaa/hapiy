@@ -1,8 +1,7 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 
 interface ChannelNodeData {
   label: string
@@ -20,9 +19,16 @@ interface ChannelNodeProps {
 }
 
 export function ChannelNode({ data, id }: ChannelNodeProps) {
-  const { label, baseURLCount = 0, keyCount = 0, modelCount = 0, models = [], active = true, onToggle } = data
+  const { label, baseURLCount = 0, keyCount = 0, modelCount = 0, models = [], onToggle } = data
+  const dataActive = data.active ?? true
+  const [optimisticActive, setOptimisticActive] = useState<boolean | null>(null)
+  const active = optimisticActive ?? dataActive
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
+
+  useEffect(() => {
+    setOptimisticActive(null)
+  }, [dataActive])
 
   useEffect(() => {
     if (models.length !== lenRef.current) {
@@ -31,12 +37,18 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
     }
   }, [id, models, updateNodeInternals])
 
-  // Calculate handle positions for models
   const n = models.length
   const segH = 20
   const gap = -2
   const total = n * segH + (n - 1) * gap
   const start = -(total / 2)
+
+  const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    setOptimisticActive(!active)
+    onToggle?.()
+  }
+  const stopPointer = (e: ReactPointerEvent<HTMLButtonElement>) => e.stopPropagation()
 
   return (
     <div
@@ -45,7 +57,6 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
         !active && 'opacity-60'
       )}
     >
-      {/* Target handles for each model */}
       {models.map((m, i) => (
         <Handle
           key={m}
@@ -60,30 +71,41 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
           }}
         />
       ))}
-      
-      {/* Source handle */}
+
       <Handle
         type="source"
         position={Position.Right}
         className="!size-3 !rounded-full !border-2 !border-border !bg-background"
       />
 
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <span className="text-sm font-medium">{label || 'Channel'}</span>
-        <div
-          className="nodrag nopan"
-          onPointerDown={(e) => e.stopPropagation()}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={active}
+          aria-label={active ? `${label} 当前启用，点击关闭` : `${label} 当前关闭，点击启用`}
+          data-no-drag="true"
+          onClick={handleClick}
+          onPointerDown={stopPointer}
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          className={cn(
+            'nodrag nopan relative inline-flex h-5 w-9 shrink-0 cursor-pointer touch-manipulation items-center rounded-full transition-colors',
+            'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            active ? 'bg-primary' : 'bg-input'
+          )}
         >
-          <Switch
-            checked={active}
-            onCheckedChange={onToggle}
-            className="scale-75"
+          <span
+            aria-hidden="true"
+            className={cn(
+              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform',
+              active ? 'translate-x-4' : 'translate-x-0.5'
+            )}
           />
-        </div>
+        </button>
       </div>
 
-      {/* Body */}
       <div className="flex flex-col gap-1 p-3">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Badge variant="secondary" className="text-[10px]">

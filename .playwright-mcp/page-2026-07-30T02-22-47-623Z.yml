@@ -1,0 +1,129 @@
+- generic [ref=f2e4]:
+  - generic [ref=f2e7]:
+    - generic [ref=f2e9]:
+      - generic [ref=f2e10]: hapiy
+      - button "Toggle Sidebar" [ref=f2e11]
+    - generic [ref=f2e14]:
+      - generic [ref=f2e15]: 导航
+      - list [ref=f2e17]:
+        - listitem [ref=f2e18]:
+          - link "转发拓扑" [ref=f2e19] [cursor=pointer]:
+            - /url: /
+        - listitem [ref=f2e26]:
+          - button "监控" [ref=f2e27]
+          - list [ref=f2e33]:
+            - listitem [ref=f2e34]:
+              - link "活动监视" [ref=f2e35] [cursor=pointer]:
+                - /url: /monitor
+            - listitem [ref=f2e37]:
+              - link "使用日志" [ref=f2e38] [cursor=pointer]:
+                - /url: /logs
+        - listitem [ref=f2e40]:
+          - link "供应商" [ref=f2e41] [cursor=pointer]:
+            - /url: /provider
+        - listitem [ref=f2e46]:
+          - link "令牌管理" [ref=f2e47] [cursor=pointer]:
+            - /url: /token
+        - listitem [ref=f2e53]:
+          - link "价格配置" [ref=f2e54] [cursor=pointer]:
+            - /url: /price
+        - listitem [ref=f2e59]:
+          - button "策略配置" [ref=f2e60]
+          - list [ref=f2e67]:
+            - listitem [ref=f2e68]:
+              - link "请求改写" [ref=f2e69] [cursor=pointer]:
+                - /url: /policy/rewrite
+            - listitem [ref=f2e71]:
+              - link "响应改写" [ref=f2e72] [cursor=pointer]:
+                - /url: /policy/rewrite-response
+            - listitem [ref=f2e74]:
+              - link "心跳回复" [ref=f2e75] [cursor=pointer]:
+                - /url: /policy/heartbeat
+            - listitem [ref=f2e77]:
+              - link "并发控制" [ref=f2e78] [cursor=pointer]:
+                - /url: /policy/concurrency
+            - listitem [ref=f2e80]:
+              - link "故障转移" [ref=f2e81] [cursor=pointer]:
+                - /url: /policy/failover
+        - listitem [ref=f2e83]:
+          - link "系统设置" [ref=f2e84] [cursor=pointer]:
+            - /url: /settings
+        - listitem [ref=f2e89]:
+          - link "个人资料" [ref=f2e90] [cursor=pointer]:
+            - /url: /profile
+    - paragraph [ref=f2e96]: hapiy v0.1.0
+    - button "Toggle Sidebar" [ref=f2e97]
+  - main [ref=f2e98]:
+    - generic [ref=f2e99]:
+      - generic [ref=f2e100]:
+        - generic [ref=f2e101]:
+          - generic [ref=f2e102]:
+            - heading "转发拓扑" [level=1] [ref=f2e103]
+            - paragraph [ref=f2e104]: API routing workspace
+          - generic [ref=f2e105]: 1 渠道 · 9 节点
+        - separator
+      - application [ref=f2e107]:
+        - generic [ref=f2e109]:
+          - generic:
+            - generic:
+              - img:
+                - group "Edge from model-gpt-4 to ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b" [ref=f2e110] [cursor=pointer]
+              - img:
+                - group "Edge from model-kimi to ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b" [ref=f2e113] [cursor=pointer]
+              - img:
+                - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-requestModify to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-responseModify"
+              - img:
+                - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-responseModify to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoReply"
+              - img:
+                - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoReply to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-concurrency"
+              - img:
+                - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-concurrency to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoSwitch"
+              - img:
+                - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoSwitch to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-logOutput"
+              - img:
+                - group "Edge from ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-requestModify" [ref=f2e116] [cursor=pointer]
+            - generic:
+              - group [ref=f2e119]:
+                - generic [ref=f2e120]: gpt-4
+              - group [ref=f2e126]:
+                - generic [ref=f2e127]: kimi
+              - group [ref=f2e133]:
+                - generic [ref=f2e134]:
+                  - generic [ref=f2e138]:
+                    - generic [ref=f2e139]: OpenAI
+                    - switch "OpenAI 当前关闭，点击启用" [ref=f2e140] [cursor=pointer]
+                  - generic [ref=f2e142]:
+                    - generic [ref=f2e143]: 1 URLs
+                    - generic [ref=f2e144]: 1 Keys
+                    - generic [ref=f2e145]: 2 Models
+              - group [ref=f2e146]:
+                - generic [ref=f2e148]:
+                  - generic [ref=f2e149]: 请求改写
+                  - button "添加" [ref=f2e150]
+              - group [ref=f2e153]:
+                - generic [ref=f2e155]:
+                  - generic [ref=f2e156]: 响应改写
+                  - button "添加" [ref=f2e157]
+              - group [ref=f2e160]:
+                - generic [ref=f2e162]:
+                  - generic [ref=f2e163]: 心跳回复
+                  - button "添加" [ref=f2e164]
+              - group [ref=f2e167]:
+                - generic [ref=f2e169]:
+                  - generic [ref=f2e170]: 并发控制
+                  - button "添加" [ref=f2e171]
+              - group [ref=f2e174]:
+                - generic [ref=f2e176]:
+                  - generic [ref=f2e177]: 故障转移
+                  - button "添加" [ref=f2e178]
+              - group [ref=f2e181]:
+                - generic [ref=f2e183]:
+                  - generic [ref=f2e184]: 日志输出
+                  - button "添加" [ref=f2e185]
+        - generic "Control Panel" [ref=f2e188]:
+          - button "Zoom In" [ref=f2e189] [cursor=pointer]
+          - button "Zoom Out" [disabled]
+          - button "Fit View" [ref=f2e192] [cursor=pointer]
+          - button "Toggle Interactivity" [ref=f2e195] [cursor=pointer]
+        - button "自动布局" [ref=f2e199]
+        - button "添加节点" [ref=f2e201]

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -21,7 +22,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		common.Global().BeginRequest()
 
 		// Get token info from context (set by TokenAuth middleware)
-		_, _ = c.Get("token_id")
+		tokenIDRaw, _ := c.Get("token_id")
 		tokenName, _ := c.Get("token_name")
 		userID, _ := c.Get("user_id")
 
@@ -110,6 +111,14 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		service.Logs().Write(&logEntry)
+
+		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
+			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
+			if err := service.Quota().Charge(tokenID, tokens); err != nil {
+				log.Printf("Failed to charge quota for token %s: %v", tokenID, err)
+			}
+		}
+
 		common.Global().EndRequest(relayReq.Model, true, int64(useTime),
 			int64(logEntry.PromptTokens+logEntry.CompletionTokens))
 

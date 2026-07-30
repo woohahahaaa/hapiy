@@ -1,0 +1,80 @@
+- main [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - heading "转发拓扑" [level=1] [ref=e10]
+          - paragraph [ref=e11]: API routing workspace
+        - generic [ref=e12]: 1 渠道 · 9 节点
+      - separator
+    - application [ref=e14]:
+      - generic [ref=e16]:
+        - generic:
+          - generic:
+            - img:
+              - group "Edge from model-gpt-4 to ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b" [ref=e17] [cursor=pointer]
+            - img:
+              - group "Edge from model-kimi to ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b" [ref=e20] [cursor=pointer]
+            - img:
+              - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-requestModify to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-responseModify" [ref=e23] [cursor=pointer]
+            - img:
+              - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-responseModify to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoReply" [ref=e26] [cursor=pointer]
+            - img:
+              - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoReply to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-concurrency" [ref=e29] [cursor=pointer]
+            - img:
+              - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-concurrency to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoSwitch" [ref=e32] [cursor=pointer]
+            - img:
+              - group "Edge from slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-autoSwitch to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-logOutput" [ref=e35] [cursor=pointer]
+            - img:
+              - group "Edge from ch-7e5f0833-69ec-4407-92d4-f9c86f0d757b to slot-7e5f0833-69ec-4407-92d4-f9c86f0d757b-requestModify" [ref=e38] [cursor=pointer]
+          - generic:
+            - group [ref=e41]:
+              - generic [ref=e42]: gpt-4
+            - group [ref=e48]:
+              - generic [ref=e49]: kimi
+            - group [ref=e55]:
+              - generic [ref=e56]:
+                - generic [ref=e60]:
+                  - generic [ref=e61]: OpenAI
+                  - generic [ref=e62]:
+                    - switch [ref=e63]
+                    - checkbox [ref=e64]
+                - generic [ref=e66]:
+                  - generic [ref=e67]: 1 URLs
+                  - generic [ref=e68]: 1 Keys
+                  - generic [ref=e69]: 2 Models
+            - group [ref=e70]:
+              - generic [ref=e72]:
+                - generic [ref=e73]: 请求改写
+                - generic [ref=e75]:
+                  - generic [ref=e76]: "1"
+                  - generic [ref=e77]: 示例改写
+                  - button [ref=e78]
+                - button "添加" [ref=e82]
+            - group [ref=e85]:
+              - generic [ref=e87]:
+                - generic [ref=e88]: 响应改写
+                - button "添加" [ref=e89]
+            - group [ref=e92]:
+              - generic [ref=e94]:
+                - generic [ref=e95]: 心跳回复
+                - button "添加" [ref=e96]
+            - group [ref=e99]:
+              - generic [ref=e101]:
+                - generic [ref=e102]: 并发控制
+                - button "添加" [ref=e103]
+            - group [ref=e106]:
+              - generic [ref=e108]:
+                - generic [ref=e109]: 故障转移
+                - button "添加" [ref=e110]
+            - group [ref=e113]:
+              - generic [ref=e115]:
+                - generic [ref=e116]: 日志输出
+                - button "添加" [ref=e117]
+      - generic "Control Panel" [ref=e120]:
+        - button "Zoom In" [ref=e121] [cursor=pointer]
+        - button "Zoom Out" [disabled]
+        - button "Fit View" [ref=e124] [cursor=pointer]
+        - button "Toggle Interactivity" [ref=e127] [cursor=pointer]
+      - button "自动布局" [ref=e131]
+      - button "添加节点" [ref=e133]

@@ -886,6 +886,7 @@ function RewriteResponsePage() {
   const { rules, loading, error, mutating, fetch, create, update, remove } = useRulesApi<ResponseRewriteRule>('rewrite-response')
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -908,6 +909,10 @@ function RewriteResponsePage() {
     }
   }
 
+  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
+    await diffAndSave(data, rules, 'rewrite-response', fetch, setMutating, idMap)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="响应改写" subtitle="Response rewrite rules" status={`${rules.length} rules`} />
@@ -917,6 +922,9 @@ function RewriteResponsePage() {
             使用 DSL 语法修改响应体字段
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+              <Code data-icon="inline-start" />编辑 JSON
+            </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
               <Plus data-icon="inline-start" />
               添加规则
@@ -973,6 +981,14 @@ function RewriteResponsePage() {
           <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
         </DialogContent>
       </Dialog>
+
+      {jsonOpen && (
+        <JsonEditModal
+          data={rules}
+          onSave={handleJsonSave}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
     </div>
   )
 }

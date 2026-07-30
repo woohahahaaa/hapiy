@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/hapiy/hapiy/internal/middleware"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -12,16 +13,28 @@ import (
 func GetCurrentUser(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("user_id")
+		username, _ := c.Get("user_id")
+		_ = userID
 		var user model.User
-		if err := db.First(&user, "id = ?", userID).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
+		if err := db.Where("username = ?", username).First(&user).Error; err != nil {
+			user = model.User{
+				Username: fmtUsername(username),
+				Role:     "admin",
+				Status:   true,
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{"data": user})
 	}
 }
 
-func Login(db *gorm.DB) gin.HandlerFunc {
+func fmtUsername(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return "admin"
+}
+
+func Login(db *gorm.DB, sessions *middleware.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
 			Username string `json:"username" binding:"required"`
@@ -38,13 +51,13 @@ func Login(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		// Check password
 		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 			return
 		}
 
-		// TODO: Generate JWT token
+		token := sessions.Issue(user.Username)
+		c.SetCookie("hapiy_admin_session", token, 3600*8, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{
 			"message": "login successful",
 			"user":    user,
@@ -52,9 +65,12 @@ func Login(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-func Logout(db *gorm.DB) gin.HandlerFunc {
+func Logout(db *gorm.DB, sessions *middleware.SessionStore) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Invalidate JWT token
+		if cookie, err := c.Cookie("hapiy_admin_session"); err == nil {
+			sessions.Revoke(cookie)
+		}
+		c.SetCookie("hapiy_admin_session", "", -1, "/", "", false, true)
 		c.JSON(http.StatusOK, gin.H{"message": "logout successful"})
 	}
 }

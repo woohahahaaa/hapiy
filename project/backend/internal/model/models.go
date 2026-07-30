@@ -187,6 +187,25 @@ type TopologyConfig struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// PriceConfig model — per-model pricing; units are per 1M tokens.
+type PriceConfig struct {
+	ID             string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Model          string    `gorm:"uniqueIndex;not null" json:"model"`
+	InputPrice     float64   `gorm:"default:0" json:"input_price"`
+	OutputPrice    float64   `gorm:"default:0" json:"output_price"`
+	CacheWritePrice float64  `gorm:"default:0" json:"cache_write_price"`
+	CacheReadPrice  float64  `gorm:"default:0" json:"cache_read_price"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+func (p *PriceConfig) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
+	}
+	return nil
+}
+
 func (t *TopologyConfig) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
