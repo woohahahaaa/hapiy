@@ -11,6 +11,7 @@ import {
   User,
   ChevronRight,
 } from 'lucide-react'
+import { ModeToggle } from '@/components/ModeToggle'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -183,8 +184,14 @@ export function AppSidebar() {
 
   return (
     <SidebarRoot collapsible="icon">
-      <SidebarHeader>
-        <div className="flex items-center gap-2 py-2">
+      <SidebarHeader className="group-data-[collapsible=icon]:p-1.5">
+        <div
+          className={
+            showLabel
+              ? 'flex items-center justify-between gap-2 py-2'
+              : 'flex flex-col items-center justify-center gap-1 py-1'
+          }
+        >
           <span
             className={
               showLabel
@@ -194,7 +201,16 @@ export function AppSidebar() {
           >
             hapiy
           </span>
-          <SidebarTrigger className="ml-auto" size="icon" />
+          <div
+            className={
+              showLabel
+                ? 'flex items-center gap-1.5'
+                : 'flex flex-col items-center gap-1'
+            }
+          >
+            <ModeToggle size={collapsed ? 'icon-sm' : 'icon'} />
+            <SidebarTrigger size={collapsed ? 'icon-sm' : 'icon'} />
+          </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
