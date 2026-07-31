@@ -6,11 +6,11 @@
     "margin": { "x": 20, "y": 30 }
   },
   "nodeDimensions": {
-    "modelHub": { "width": 224, "height": 200 },
-    "channel": { "width": 192, "height": 100 },
-    "slot": { "width": 240, "height": 180 }
+    "modelHub": { "minWidth": 224, "maxWidth": 320, "height": 200 },
+    "channel": { "minWidth": 192, "maxWidth": 320, "height": 100 },
+    "slot": { "minWidth": 240, "maxWidth": 360, "height": 180 }
   },
-  "fallbackNodeDimension": { "width": 192, "height": 80 },
+  "fallbackNodeDimension": { "minWidth": 192, "maxWidth": 320, "height": 80 },
   "initialPositions": {
     "modelHub": { "x": 20, "y": 20, "verticalOffset": 60 },
     "channel": { "x": 450, "y": 20, "verticalOffset": 60 },

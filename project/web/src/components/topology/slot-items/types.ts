@@ -20,41 +20,52 @@ export type LogLevel = 'info' | 'warn' | 'error'
 // Each slot type carries its own per-item config (selected rule, overrides, etc).
 // LogOutput has no upstream rule — its config is self-contained.
 export type RequestModifySlotEntry = {
+  readonly id: string
   readonly slotType: 'requestModify'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type ResponseModifySlotEntry = {
+  readonly id: string
   readonly slotType: 'responseModify'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type AutoReplySlotEntry = {
+  readonly id: string
   readonly slotType: 'autoReply'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type ConcurrencySlotEntry = {
+  readonly id: string
   readonly slotType: 'concurrency'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type AutoSwitchSlotEntry = {
+  readonly id: string
   readonly slotType: 'autoSwitch'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type LogOutputSlotEntry = {
+  readonly id: string
   readonly slotType: 'logOutput'
   readonly index: number
   readonly enabled: boolean
@@ -65,6 +76,7 @@ export type LogOutputSlotEntry = {
   readonly recordRequestAfter: boolean
   readonly recordResponseBefore: boolean
   readonly recordResponseAfter: boolean
+  readonly config: Readonly<Record<string, unknown>>
 }
 
 export type SlotEntry =
@@ -122,20 +134,22 @@ export function emptySlotEntryMap(): SlotEntryMap {
   }
 }
 
-export function makeEmptyEntry(slotType: SlotType, index: number): SlotEntry {
+export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () => string = crypto.randomUUID): SlotEntry {
+  const id = idFactory()
   switch (slotType) {
     case 'requestModify':
-      return { slotType, index, ruleId: null, enabled: true }
+      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'responseModify':
-      return { slotType, index, ruleId: null, enabled: true }
+      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'autoReply':
-      return { slotType, index, ruleId: null, enabled: true }
+      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'concurrency':
-      return { slotType, index, ruleId: null, enabled: true }
+      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'autoSwitch':
-      return { slotType, index, ruleId: null, enabled: true }
+      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'logOutput':
       return {
+        id,
         slotType,
         index,
         enabled: true,
@@ -146,6 +160,7 @@ export function makeEmptyEntry(slotType: SlotType, index: number): SlotEntry {
         recordRequestAfter: true,
         recordResponseBefore: true,
         recordResponseAfter: true,
+        config: {},
       }
   }
 }

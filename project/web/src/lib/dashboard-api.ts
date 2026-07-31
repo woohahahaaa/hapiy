@@ -1,3 +1,6 @@
+import { parseTopologyDocument, type TopologyDocument } from './topology-document'
+export { parseTopologyDocument, type TopologyDocument } from './topology-document'
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 type JsonRecord = Record<string, unknown>
@@ -99,10 +102,12 @@ export type CurrentUser = {
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
+  readonly currentRevision: number | null
 
-  constructor(message: string, status: number | null) {
+  constructor(message: string, status: number | null, currentRevision: number | null = null) {
     super(message)
     this.status = status
+    this.currentRevision = currentRevision
   }
 }
 
@@ -295,7 +300,10 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   const body = text === '' ? null : parseJson(text, '响应体')
   if (!response.ok) {
     const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
-    throw new DashboardApiError(message, response.status)
+    const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
+      ? body.current_revision
+      : null
+    throw new DashboardApiError(message, response.status, currentRevision)
   }
   return parseEnvelope(body)
 }
@@ -319,7 +327,10 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
   const body = text === '' ? null : parseJson(text, '响应体')
   if (!response.ok) {
     const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
-    throw new DashboardApiError(message, response.status)
+    const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
+      ? body.current_revision
+      : null
+    throw new DashboardApiError(message, response.status, currentRevision)
   }
   if (!isRecord(body)) {
     throw new DashboardApiError('服务端返回格式无效', null)
@@ -722,6 +733,17 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async deletePrice(id: string): Promise<void> {
     await request(`/prices/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  async getTopology(): Promise<TopologyDocument> {
+    return parseTopologyDocument(await requestFull('/topology'))
+  },
+  async saveTopology(document: TopologyDocument): Promise<TopologyDocument> {
+    const data = await requestFull('/topology', {
+      method: 'PUT',
+      body: JSON.stringify(document),
+    })
+    return parseTopologyDocument(data)
   },
 
   async getRuntimeMetrics(): Promise<RuntimeMetrics> {

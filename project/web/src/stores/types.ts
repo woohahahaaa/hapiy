@@ -105,14 +105,6 @@ export interface UserInfo {
   role: string
 }
 
-// 节点图相关类型
-export interface TopologyNode {
-  id: string
-  type: NodeType
-  position: { x: number; y: number }
-  data: Record<string, unknown>
-}
-
 export type NodeType =
   | 'modelHub'
   | 'channel'

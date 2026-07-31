@@ -27,7 +27,7 @@ export function SlotContainer({
       )}
       style={style}
     >
-      <div className="text-sm font-medium text-muted-foreground mb-3">
+      <div className="mb-3 min-w-0 truncate text-sm font-medium text-muted-foreground">
         {title}
       </div>
 

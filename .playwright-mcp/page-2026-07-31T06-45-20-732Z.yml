@@ -1,0 +1,106 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: hapiy
+        - generic [ref=e11]:
+          - button "切换到深色主题" [ref=e12]:
+            - generic [ref=e13]: 切换主题
+          - button "Toggle Sidebar" [ref=e14]
+      - generic [ref=e17]:
+        - generic [ref=e18]: 导航
+        - list [ref=e20]:
+          - listitem [ref=e21]:
+            - link "转发拓扑" [ref=e22] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e29]:
+            - button "监控" [ref=e30]
+            - list [ref=e36]:
+              - listitem [ref=e37]:
+                - link "活动监视" [ref=e38] [cursor=pointer]:
+                  - /url: /monitor
+              - listitem [ref=e40]:
+                - link "使用日志" [ref=e41] [cursor=pointer]:
+                  - /url: /logs
+          - listitem [ref=e43]:
+            - link "供应商" [ref=e44] [cursor=pointer]:
+              - /url: /provider
+          - listitem [ref=e49]:
+            - link "令牌管理" [ref=e50] [cursor=pointer]:
+              - /url: /token
+          - listitem [ref=e56]:
+            - link "价格配置" [ref=e57] [cursor=pointer]:
+              - /url: /price
+          - listitem [ref=e62]:
+            - button "策略配置" [ref=e63]
+            - list [ref=e70]:
+              - listitem [ref=e71]:
+                - link "请求改写" [ref=e72] [cursor=pointer]:
+                  - /url: /policy/rewrite
+              - listitem [ref=e74]:
+                - link "响应改写" [ref=e75] [cursor=pointer]:
+                  - /url: /policy/rewrite-response
+              - listitem [ref=e77]:
+                - link "心跳回复" [ref=e78] [cursor=pointer]:
+                  - /url: /policy/heartbeat
+              - listitem [ref=e80]:
+                - link "并发控制" [ref=e81] [cursor=pointer]:
+                  - /url: /policy/concurrency
+              - listitem [ref=e83]:
+                - link "故障转移" [ref=e84] [cursor=pointer]:
+                  - /url: /policy/failover
+          - listitem [ref=e86]:
+            - link "系统设置" [ref=e87] [cursor=pointer]:
+              - /url: /settings
+          - listitem [ref=e92]:
+            - link "个人资料" [ref=e93] [cursor=pointer]:
+              - /url: /profile
+      - paragraph [ref=e99]: hapiy v0.1.0
+      - button "Toggle Sidebar" [ref=e100]
+    - main [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e105]:
+            - heading "个人资料" [level=1] [ref=e106]
+            - paragraph [ref=e107]: Account information
+          - separator [ref=e108]
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - generic [ref=e112]: 账户信息
+              - generic [ref=e116]: 当前登录的账户信息
+            - generic [ref=e117]:
+              - generic [ref=e118]:
+                - generic [ref=e119]: 用户名
+                - generic [ref=e120]: wooh
+              - generic [ref=e121]:
+                - generic [ref=e122]: 用户 ID
+                - generic [ref=e123]: 4afb1740-0412-43be-9841-0ea21a5a218b
+              - generic [ref=e124]:
+                - generic [ref=e125]: 登录状态
+                - generic [ref=e127]:
+                  - generic [ref=e128]: 已登录
+                  - button "退出登录" [ref=e129]
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - generic [ref=e132]: 安全设置
+              - generic [ref=e135]: 更新登录用户名和密码
+            - generic [ref=e136]:
+              - generic [ref=e137]:
+                - generic [ref=e138]:
+                  - text: 用户名
+                  - textbox "用户名" [ref=e139]: wooh
+                - button "保存用户名" [ref=e140]
+              - generic [ref=e141]:
+                - generic [ref=e142]:
+                  - text: 当前密码
+                  - textbox "当前密码" [ref=e143]
+                - generic [ref=e144]:
+                  - text: 新密码
+                  - textbox "新密码" [ref=e145]
+                - generic [ref=e146]:
+                  - text: 确认新密码
+                  - textbox "确认新密码" [ref=e147]
+                - button "保存密码" [ref=e148]
+  - generic:
+    - region "Notifications"

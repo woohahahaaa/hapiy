@@ -9,79 +9,17 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
-	"gorm.io/gorm"
 )
-
-// ExecutionPlan represents a compiled request processing pipeline
-type ExecutionPlan struct {
-	ID             string
-	Channel        *model.Channel
-	RewriteRules   []*model.RewriteRule
-	HeartbeatRule  *model.HeartbeatRule
-	ConcurrencyRule *model.ConcurrencyRule
-	FailoverRules  []*model.FailoverRule
-	DebugEnabled   bool
-	DebugFields    []string
-}
-
-// Engine manages channel configurations and compiled execution plans
-type Engine struct {
-	db       *gorm.DB
-	channels map[string]*model.Channel
-	plans    map[string]*ExecutionPlan // key: channelID
-	plansMu  sync.RWMutex
-	channelsMu sync.RWMutex
-	stopCh   chan struct{}
-}
-
-func NewEngine(db *gorm.DB) *Engine {
-	return &Engine{
-		db:       db,
-		channels: make(map[string]*model.Channel),
-		plans:    make(map[string]*ExecutionPlan),
-		stopCh:   make(chan struct{}),
-	}
-}
 
 // LoadChannels loads all enabled channels from database and compiles execution plans.
 // It rebuilds the cache from scratch so that disabled or deleted channels are dropped
 // from in-memory state without waiting for a process restart.
 func (e *Engine) LoadChannels() error {
-	var channels []model.Channel
-	if err := e.db.Where("status = ?", true).Find(&channels).Error; err != nil {
-		return err
-	}
-
-	fresh := make(map[string]*model.Channel, len(channels))
-	for i := range channels {
-		fresh[channels[i].ID] = &channels[i]
-	}
-
-	e.channelsMu.Lock()
-	e.channels = fresh
-	e.channelsMu.Unlock()
-
-	freshPlans := make(map[string]*ExecutionPlan, len(channels))
-	for i := range channels {
-		ch := channels[i]
-		plan := &ExecutionPlan{ID: ch.ID, Channel: &ch}
-		if err := e.populatePlan(plan); err != nil {
-			log.Printf("Failed to compile plan for channel %s: %v", ch.Name, err)
-			continue
-		}
-		freshPlans[ch.ID] = plan
-	}
-
-	e.plansMu.Lock()
-	e.plans = freshPlans
-	e.plansMu.Unlock()
-
-	return nil
+	return e.RefreshPlans()
 }
 
 // SyncLoop periodically reloads channel configuration (hot reload)
@@ -130,10 +68,6 @@ func (e *Engine) GetPlan(channelID string) (*ExecutionPlan, error) {
 
 // InvalidatePlan forces recompilation of a channel's execution plan
 func (e *Engine) InvalidatePlan(channelID string) {
-	e.plansMu.Lock()
-	delete(e.plans, channelID)
-	e.plansMu.Unlock()
-
 	ch, err := e.GetChannel(channelID)
 	if err != nil {
 		return
@@ -147,45 +81,13 @@ func (e *Engine) compilePlan(ch *model.Channel) error {
 		ID:      ch.ID,
 		Channel: ch,
 	}
-	if err := e.populatePlan(plan); err != nil {
+	if err := e.populatePlan(e.db, plan); err != nil {
 		return err
 	}
 
 	e.plansMu.Lock()
 	e.plans[ch.ID] = plan
 	e.plansMu.Unlock()
-
-	return nil
-}
-
-func (e *Engine) populatePlan(plan *ExecutionPlan) error {
-	var rewriteRules []model.RewriteRule
-	e.db.Where("status = ?", true).Find(&rewriteRules)
-	plan.RewriteRules = make([]*model.RewriteRule, 0)
-	for i := range rewriteRules {
-		plan.RewriteRules = append(plan.RewriteRules, &rewriteRules[i])
-	}
-
-	var heartbeatRules []model.HeartbeatRule
-	e.db.Where("status = ?", true).First(&heartbeatRules)
-	if len(heartbeatRules) > 0 {
-		plan.HeartbeatRule = &heartbeatRules[0]
-	}
-
-	var concurrencyRules []model.ConcurrencyRule
-	e.db.Where("status = ?", true).First(&concurrencyRules)
-	if len(concurrencyRules) > 0 {
-		plan.ConcurrencyRule = &concurrencyRules[0]
-	}
-
-	var failoverRules []model.FailoverRule
-	e.db.Where("status = ? AND primary_channel = ?", true, plan.Channel.Name).Find(&failoverRules)
-	plan.FailoverRules = make([]*model.FailoverRule, 0)
-	for i := range failoverRules {
-		plan.FailoverRules = append(plan.FailoverRules, &failoverRules[i])
-	}
-
-	plan.DebugEnabled = false
 
 	return nil
 }
@@ -227,10 +129,11 @@ func (e *Engine) SelectChannel(modelName string) (*model.Channel, error) {
 func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	// Pipeline order (fixed, not configurable):
 	// 1. Concurrency control
-	// 2. Request rewrite
+	// 2. Request logging and rewrite
 	// 3. Relay to upstream (with failover)
-	// 4. Heartbeat monitoring (response wrapping)
-	// 5. Debug logging
+	// 4. Response logging and rewrite
+	// 5. Heartbeat monitoring (response wrapping)
+	// 6. Debug logging
 
 	// Step 1: Concurrency control
 	if plan.ConcurrencyRule != nil {
@@ -239,12 +142,14 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		}
 	}
 
-	// Step 2: Request rewrite
+	// Step 2: Request logging and rewrite
+	e.runTopologyLogOutputs(topologyStageRequestBefore, plan.LogOutputs, req, nil)
 	if len(plan.RewriteRules) > 0 {
 		if err := e.applyRewriteRules(plan.RewriteRules, req); err != nil {
 			return nil, err
 		}
 	}
+	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, req, nil)
 
 	// Step 3: Relay to upstream (with failover)
 	resp, err := e.relayWithFailover(ctx, plan, req)
@@ -252,12 +157,19 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		return nil, err
 	}
 
-	// Step 4: Heartbeat monitoring (if streaming)
+	// Step 4: Response logging and rewrite
+	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, req, resp)
+	if len(plan.ResponseRewriteRules) > 0 {
+		e.applyResponseRewriteRules(plan.ResponseRewriteRules, resp)
+	}
+	e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, req, resp)
+
+	// Step 5: Heartbeat monitoring (if streaming)
 	if plan.HeartbeatRule != nil && req.Stream {
 		resp = e.wrapWithHeartbeat(resp, plan.HeartbeatRule)
 	}
 
-	// Step 5: Debug logging
+	// Step 6: Debug logging
 	if plan.DebugEnabled {
 		e.logDebug(plan, req, resp)
 	}
@@ -267,13 +179,13 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 
 // RelayRequest represents an incoming request
 type RelayRequest struct {
-	Model       string                 `json:"model"`
+	Model       string                   `json:"model"`
 	Messages    []map[string]interface{} `json:"messages,omitempty"`
-	Stream      bool                   `json:"stream,omitempty"`
-	MaxTokens   int                    `json:"max_tokens,omitempty"`
-	Temperature float64                `json:"temperature,omitempty"`
-	Body        map[string]interface{} `json:"-"` // Full request body
-	Headers     map[string]string      `json:"-"`
+	Stream      bool                     `json:"stream,omitempty"`
+	MaxTokens   int                      `json:"max_tokens,omitempty"`
+	Temperature float64                  `json:"temperature,omitempty"`
+	Body        map[string]interface{}   `json:"-"` // Full request body
+	Headers     map[string]string        `json:"-"`
 }
 
 // RelayResponse represents the upstream response
@@ -303,6 +215,29 @@ func (e *Engine) applyRewriteRules(rules []*model.RewriteRule, req *RelayRequest
 	// TODO: Implement DSL parser and executor
 	// For now, just a placeholder
 	return nil
+}
+
+// applyResponseRewriteRules is a deterministic no-op until the response DSL exists.
+// It deliberately does not read or replace the response body to preserve streaming.
+func (e *Engine) applyResponseRewriteRules(rules []*model.ResponseRewriteRule, resp *RelayResponse) {
+	_ = resp
+	e.recordTopologyStage(topologyStageEvent{Stage: topologyStageResponseRewrite, ResponseRewriteRules: rules})
+}
+
+// runTopologyLogOutputs is a deterministic no-op until log output backends exist.
+func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, req *RelayRequest, resp *RelayResponse) {
+	_ = req
+	_ = resp
+	if len(assignments) == 0 {
+		return
+	}
+	e.recordTopologyStage(topologyStageEvent{Stage: stage, LogOutputs: assignments})
+}
+
+func (e *Engine) recordTopologyStage(event topologyStageEvent) {
+	if e.topologyStageHook != nil {
+		e.topologyStageHook(event)
+	}
 }
 
 // relayWithFailover sends the request to upstream with automatic failover

@@ -15,6 +15,7 @@ import {
   AutoSwitchSlotItem,
   LogOutputSlotItem,
 } from '@/components/topology/slot-items'
+import { makeEmptyEntry } from '@/components/topology/slot-items'
 
 interface SlotNodeData {
   slotType: keyof SlotEntryMap
@@ -37,7 +38,7 @@ export function SlotNode({ data }: SlotNodeProps) {
   const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 
   function handleAdd() {
-    onChangeEntry(makePlaceholder(slotType, entries.length + 1))
+    onChangeEntry(makeEmptyEntry(slotType, entries.length + 1))
   }
 
   return (
@@ -55,7 +56,11 @@ export function SlotNode({ data }: SlotNodeProps) {
       <SlotContainer
         title={title}
         onAddNode={handleAdd}
-        style={{ width: topologyConfig.nodeDimensions.slot.width }}
+        style={{
+          width: 'fit-content',
+          minWidth: topologyConfig.nodeDimensions.slot.minWidth,
+          maxWidth: topologyConfig.nodeDimensions.slot.maxWidth,
+        }}
       >
         {entries.map((entry) =>
           renderItem(
@@ -83,34 +88,6 @@ export function SlotNode({ data }: SlotNodeProps) {
   )
 }
 
-function makePlaceholder(slotType: keyof SlotEntryMap, index: number): SlotEntry {
-  switch (slotType) {
-    case 'requestModify':
-      return { slotType, index, ruleId: null, enabled: true }
-    case 'responseModify':
-      return { slotType, index, ruleId: null, enabled: true }
-    case 'autoReply':
-      return { slotType, index, ruleId: null, enabled: true }
-    case 'concurrency':
-      return { slotType, index, ruleId: null, enabled: true }
-    case 'autoSwitch':
-      return { slotType, index, ruleId: null, enabled: true }
-    case 'logOutput':
-      return {
-        slotType,
-        index,
-        enabled: true,
-        logTarget: 'file',
-        logLevel: 'info',
-        logPath: '',
-        recordRequestBefore: true,
-        recordRequestAfter: true,
-        recordResponseBefore: true,
-        recordResponseAfter: true,
-      }
-  }
-}
-
 function renderItem(
   entry: SlotEntry,
   rules: SlotRuleMap,
@@ -125,7 +102,7 @@ function renderItem(
     case 'requestModify':
       return (
         <RequestModifySlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           rules={rules.requestModify}
           onChange={change}
@@ -135,7 +112,7 @@ function renderItem(
     case 'responseModify':
       return (
         <ResponseModifySlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           rules={rules.responseModify}
           onChange={change}
@@ -145,7 +122,7 @@ function renderItem(
     case 'autoReply':
       return (
         <AutoReplySlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           rules={rules.autoReply}
           onChange={change}
@@ -155,7 +132,7 @@ function renderItem(
     case 'concurrency':
       return (
         <ConcurrencySlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           rules={rules.concurrency}
           onChange={change}
@@ -165,7 +142,7 @@ function renderItem(
     case 'autoSwitch':
       return (
         <AutoSwitchSlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           rules={rules.autoSwitch}
           onChange={change}
@@ -175,7 +152,7 @@ function renderItem(
     case 'logOutput':
       return (
         <LogOutputSlotItem
-          key={entry.index}
+          key={entry.id}
           entry={entry}
           onChange={change}
           onDelete={onDelete}

@@ -3,6 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 
+export function confirmJsonSave(): boolean {
+  if (typeof window === 'undefined') return true
+  return window.confirm(
+    '你修改了 JSON 内容，确认保存到后端吗？\n\n注意：JSON 里的 ID 字段与使用日志、历史记录等按 ID 关联的数据强绑定，修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。',
+  )
+}
+
 export type JsonEditorIdMap = ReadonlyMap<number, string>
 
 export type JsonEditorItem = {
@@ -48,6 +55,7 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = async () => {
+    if (!confirmJsonSave()) return
     try {
       const parsed = JSON.parse(text)
       await onSave(parsed, idMap)

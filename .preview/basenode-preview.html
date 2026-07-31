@@ -3,154 +3,262 @@
 <head>
 <meta charset="UTF-8" />
 <title>BaseNode 设想预览</title>
-<script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { background: #0a0a0a; }
-  .grid-bg {
-    background-image:
-      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-    background-size: 20px 20px;
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: #fafafa;
+    color: #18181b;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
+  .wrap { max-width: 1024px; margin: 0 auto; padding: 40px 24px; }
+  .section { margin-bottom: 56px; }
+  .section h2 {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #52525b;
+  }
+  .section p.hint {
+    margin: 0 0 16px;
+    font-size: 12px;
+    color: #71717a;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 24px; padding-top: 8px; }
+
+  /* Node card base */
+  .node {
+    border: 1px solid #d4d4d8;
+    background: #ffffff;
+    color: #18181b;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    width: 288px;
+    user-select: none;
+  }
+  .node.dim { opacity: 0.6; }
+  .node .header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #e4e4e7;
+    padding: 8px 12px;
+    cursor: grab;
+  }
+  .node .header:active { cursor: grabbing; }
+  .node .body { padding: 12px; font-size: 12px; color: #52525b; }
+
+  /* Drag handle */
+  .handle {
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: #a1a1aa;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+  .handle:hover { color: #52525b; background: #f4f4f5; }
+  .handle svg { width: 14px; height: 14px; fill: currentColor; }
+
+  /* Collapse chevron */
+  .chev {
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    color: #71717a;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .chev:hover { color: #18181b; background: #f4f4f5; }
+  .chev svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+  .title {
+    font-size: 13px; font-weight: 500;
+    flex: 1;
+    color: #18181b;
+  }
+
+  /* Switch */
+  .switch {
+    position: relative;
+    display: inline-flex; align-items: center;
+    height: 16px; width: 28px;
+    border-radius: 9999px;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color .15s;
+  }
+  .switch.on { background: #2563eb; }
+  .switch.off { background: #d4d4d8; }
+  .switch .knob {
+    position: absolute;
+    height: 12px; width: 12px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transition: transform .15s;
+  }
+  .switch.on .knob { transform: translateX(14px); }
+  .switch.off .knob { transform: translateX(2px); }
+
+  /* Form controls inside body */
+  .label { font-size: 11px; color: #71717a; margin-bottom: 4px; }
+  .select, .input {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #d4d4d8;
+    background: #fafafa;
+    color: #18181b;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    outline: none;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .row-fields { display: flex; flex-direction: column; gap: 6px; }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #3f3f46; }
+  .cb { width: 12px; height: 12px; border: 1px solid #d4d4d8; border-radius: 3px; display: inline-block; }
+  .cb.on { background: #2563eb; border-color: #2563eb; }
+  pre {
+    margin: 0;
+    background: #f4f4f5;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    line-height: 1.3;
+    color: #52525b;
+    overflow: hidden;
+    white-space: pre;
+  }
+  .model-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; color: #18181b; }
+  .dot { width: 8px; height: 8px; border-radius: 9999px; background: #2563eb; }
+
+  /* Drag preview highlight */
+  .node.dragging { border-color: #2563eb; box-shadow: 0 8px 24px rgba(37,99,235,0.25); transform: scale(1.03); }
+
+  footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid #e4e4e7; font-size: 11px; color: #a1a1aa; }
+  footer code { background: #f4f4f5; padding: 1px 4px; border-radius: 3px; color: #52525b; }
 </style>
 </head>
-<body class="grid-bg min-h-screen text-foreground antialiased" style="font-family: ui-sans-serif, system-ui, sans-serif;">
+<body>
 
-<div class="max-w-5xl mx-auto px-6 py-10 space-y-12">
+<div class="wrap">
 
-  <header class="space-y-2">
-    <h1 class="text-2xl font-semibold text-white">BaseNode 设想预览</h1>
-    <p class="text-sm text-zinc-400">
-      每个卡片就是一个 BaseNode。左边折叠箭头 + 中间标题 + 右上开关。
+  <header class="section" style="margin-bottom: 32px;">
+    <h1 style="margin:0 0 6px; font-size: 22px; font-weight: 600; color:#18181b;">BaseNode 设想预览</h1>
+    <p style="margin:0; font-size: 13px; color:#52525b;">
+      每个卡片就是一个 BaseNode。左边拖拽手柄 + 可选折叠箭头 + 中间标题 + 右上开关（可选）。
       body 里塞任意内容（input、select、checkbox…）。整张卡可以拖（光标变抓手）。
     </p>
   </header>
 
-  <!-- ── Section 1：basic ────────────────────────────────────────── -->
-  <section class="space-y-3">
-    <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wider">1. 基础形态</h2>
-    <p class="text-xs text-zinc-500">有标题 + 开关，没折叠。body 简单塞点文字。</p>
+  <!-- ── 1. 基础形态 ── -->
+  <section class="section">
+    <h2>1. 基础形态</h2>
+    <p class="hint">有标题 + 开关，没折叠。body 简单塞点文字。第二张演示关掉开关后整节点变灰。</p>
 
-    <div class="flex flex-wrap gap-6 pt-2">
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none cursor-grab active:cursor-grabbing">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500 hover:text-zinc-300" title="拖拽">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+    <div class="row">
+      <div class="node">
+        <div class="header">
+          <span class="handle" title="拖拽">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">Channel</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500 transition-colors" aria-checked="true" role="switch">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5 transition-transform"></span>
-          </button>
+          <span class="title">Channel</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 text-xs text-zinc-400">
-          这里是 body 区域。可以塞任何内容。
-        </div>
+        <div class="body">这里是 body 区域。可以塞任何内容。</div>
       </div>
 
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none cursor-grab active:cursor-grabbing opacity-60">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <div class="node dim">
+        <div class="header">
+          <span class="handle">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">Channel (off)</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-zinc-700 transition-colors" aria-checked="false" role="switch">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-0.5 transition-transform"></span>
-          </button>
+          <span class="title">Channel (off)</span>
+          <button class="switch off" type="button" aria-checked="false"><span class="knob"></span></button>
         </div>
-        <div class="p-3 text-xs text-zinc-400">开关关闭 → 整节点半透明</div>
+        <div class="body">开关关闭 → 整节点半透明</div>
       </div>
     </div>
   </section>
 
-  <!-- ── Section 2：collapsible ─────────────────────────────────── -->
-  <section class="space-y-3">
-    <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wider">2. 可折叠</h2>
-    <p class="text-xs text-zinc-500">标题左边多一个 chevron 按钮，点击折叠/展开 body。</p>
+  <!-- ── 2. 可折叠 ── -->
+  <section class="section">
+    <h2>2. 可折叠</h2>
+    <p class="hint">标题左边多一个 chevron 按钮，点击折叠/展开 body。</p>
 
-    <div class="flex flex-wrap gap-6 pt-2">
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none cursor-grab active:cursor-grabbing">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500 hover:text-zinc-300" title="拖拽">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+    <div class="row">
+      <div class="node">
+        <div class="header">
+          <span class="handle" title="拖拽">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <button class="inline-flex items-center justify-center size-5 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 nodrag" title="折叠">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
+          <button class="chev" type="button" title="折叠">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <span class="text-sm font-medium flex-1">可折叠节点</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">可折叠节点</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 text-xs text-zinc-400 space-y-1.5">
+        <div class="body">
           <div>body 默认展开</div>
-          <div>可以塞任意内容</div>
+          <div style="margin-top:6px;">可以塞任意内容</div>
         </div>
       </div>
 
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none cursor-grab active:cursor-grabbing">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <div class="node">
+        <div class="header">
+          <span class="handle">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <button class="inline-flex items-center justify-center size-5 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800" title="展开">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="9 6 15 12 9 18"/>
-            </svg>
+          <button class="chev" type="button" title="展开">
+            <svg viewBox="0 0 24 24"><polyline points="9 6 15 12 9 18"/></svg>
           </button>
-          <span class="text-sm font-medium flex-1">折叠中…</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">折叠中…</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
+        <!-- body 收起 -->
       </div>
     </div>
   </section>
 
-  <!-- ── Section 3：real content ─────────────────────────────────── -->
-  <section class="space-y-3">
-    <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wider">3. 实际用法：body 里塞业务内容</h2>
-    <p class="text-xs text-zinc-500">调用方只关心 body 内容，header / 折叠 / 开关全交给 BaseNode。</p>
+  <!-- ── 3. 实际用法 ── -->
+  <section class="section">
+    <h2>3. 实际用法：body 里塞业务内容</h2>
+    <p class="hint">调用方只关心 body 内容，header / 折叠 / 开关全交给 BaseNode。</p>
 
-    <div class="flex flex-wrap gap-6 pt-2">
+    <div class="row">
 
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2 cursor-grab active:cursor-grabbing">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <!-- 表单类 -->
+      <div class="node">
+        <div class="header">
+          <span class="handle">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">请求改写</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">请求改写</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 space-y-2 text-xs">
-          <div class="space-y-1">
-            <div class="text-zinc-400">规则</div>
-            <div class="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200 flex items-center justify-between">
+        <div class="body row-fields">
+          <div>
+            <div class="label">规则</div>
+            <div class="select" style="display:flex; justify-content:space-between; align-items:center;">
               <span>选择规则…</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
             </div>
           </div>
-          <div class="space-y-1">
-            <div class="text-zinc-400">脚本预览</div>
-            <pre class="rounded bg-zinc-950 px-2 py-1 font-mono text-[10px] text-zinc-400 leading-tight overflow-hidden">SET model = "gpt-4"
+          <div>
+            <div class="label">脚本预览</div>
+            <pre>SET model = "gpt-4"
 DELETE temperature
 IF model ~ "gpt-*" THEN {
   SET max_tokens = 4096
@@ -159,130 +267,100 @@ IF model ~ "gpt-*" THEN {
         </div>
       </div>
 
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2 cursor-grab active:cursor-grabbing">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <!-- 日志类 -->
+      <div class="node">
+        <div class="header">
+          <span class="handle">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <button class="inline-flex items-center justify-center size-5 rounded text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
+          <button class="chev" type="button">
+            <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
           </button>
-          <span class="text-sm font-medium flex-1">日志输出</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">日志输出</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 space-y-2 text-xs">
-          <div class="grid grid-cols-2 gap-1.5">
-            <div class="space-y-0.5">
-              <div class="text-zinc-400">目标</div>
-              <div class="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200 flex items-center justify-between">
+        <div class="body row-fields">
+          <div class="grid-2">
+            <div>
+              <div class="label">目标</div>
+              <div class="select" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>文件</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
-            <div class="space-y-0.5">
-              <div class="text-zinc-400">级别</div>
-              <div class="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200 flex items-center justify-between">
+            <div>
+              <div class="label">级别</div>
+              <div class="select" style="display:flex; justify-content:space-between; align-items:center;">
                 <span>Info</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </div>
             </div>
           </div>
-          <div class="space-y-0.5">
-            <div class="text-zinc-400">路径</div>
-            <input class="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-200 font-mono" placeholder="/var/log/hapiy/" />
+          <div>
+            <div class="label">路径</div>
+            <input class="input" placeholder="/var/log/hapiy/" />
           </div>
-          <div class="space-y-1">
-            <div class="text-zinc-400">记录内容</div>
-            <div class="grid grid-cols-2 gap-x-2 gap-y-1 text-zinc-300">
-              <label class="flex items-center gap-1"><span class="size-3 rounded-sm border border-zinc-600 bg-blue-500 inline-block"></span>请求修改前</label>
-              <label class="flex items-center gap-1"><span class="size-3 rounded-sm border border-zinc-600 bg-blue-500 inline-block"></span>请求修改后</label>
-              <label class="flex items-center gap-1"><span class="size-3 rounded-sm border border-zinc-600 bg-blue-500 inline-block"></span>响应修改前</label>
-              <label class="flex items-center gap-1"><span class="size-3 rounded-sm border border-zinc-600 inline-block"></span>响应修改后</label>
+          <div>
+            <div class="label">记录内容</div>
+            <div class="grid-2">
+              <label class="checkbox-row"><span class="cb on"></span>请求修改前</label>
+              <label class="checkbox-row"><span class="cb on"></span>请求修改后</label>
+              <label class="checkbox-row"><span class="cb on"></span>响应修改前</label>
+              <label class="checkbox-row"><span class="cb"></span>响应修改后</label>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2 cursor-grab active:cursor-grabbing">
-          <span class="inline-flex items-center justify-center size-5 rounded text-zinc-500">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <!-- 无开关 -->
+      <div class="node">
+        <div class="header">
+          <span class="handle">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">模型中心（无开关）</span>
+          <span class="title">模型中心（无开关）</span>
         </div>
-        <div class="p-3 space-y-1 text-xs">
-          <div class="flex items-center gap-2 px-3 py-1.5 text-zinc-200">
-            <span class="size-2 rounded-full bg-blue-500"></span>
-            <span>gpt-4</span>
-          </div>
-          <div class="flex items-center gap-2 px-3 py-1.5 text-zinc-200">
-            <span class="size-2 rounded-full bg-blue-500"></span>
-            <span>kimi</span>
-          </div>
+        <div class="body" style="padding: 0;">
+          <div class="model-row"><span class="dot"></span><span>gpt-4</span></div>
+          <div class="model-row"><span class="dot"></span><span>kimi</span></div>
         </div>
       </div>
 
     </div>
   </section>
 
-  <!-- ── Section 4：交互示意 ─────────────────────────────────────── -->
-  <section class="space-y-3">
-    <h2 class="text-sm font-medium text-zinc-300 uppercase tracking-wider">4. 交互示意</h2>
-    <p class="text-xs text-zinc-500">鼠标悬停 / 拖拽时的视觉反馈（静态展示，不真的能交互）。</p>
+  <!-- ── 4. 交互示意 ── -->
+  <section class="section">
+    <h2>4. 交互示意</h2>
+    <p class="hint">鼠标悬停 / 拖拽时的视觉反馈（静态展示，不真的能交互）。</p>
 
-    <div class="flex flex-wrap gap-6 pt-2">
-
-      <div class="rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-sm w-72 select-none">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2 cursor-grab">
-          <span class="inline-flex items-center justify-center size-5 rounded bg-zinc-800 text-zinc-100">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+    <div class="row">
+      <div class="node">
+        <div class="header">
+          <span class="handle" style="color:#52525b; background:#f4f4f5;">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">悬停 drag handle</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">悬停 drag handle</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 text-xs text-zinc-500">
-          ↑ 鼠标 hover 到拖拽手柄上时的颜色加深
-        </div>
+        <div class="body">↑ 鼠标 hover 到拖拽手柄上时的颜色加深</div>
       </div>
 
-      <div class="rounded-lg border-2 border-blue-500 bg-zinc-900 text-zinc-100 shadow-2xl w-72 select-none cursor-grabbing scale-105 transition-transform">
-        <div class="flex items-center gap-2 border-b border-zinc-700 px-3 py-2">
-          <span class="inline-flex items-center justify-center size-5 rounded bg-zinc-800 text-zinc-100">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/>
-              <circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-            </svg>
+      <div class="node dragging">
+        <div class="header">
+          <span class="handle" style="color:#52525b; background:#f4f4f5;">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
           </span>
-          <span class="text-sm font-medium flex-1">正在拖拽</span>
-          <button class="relative inline-flex h-4 w-7 items-center rounded-full bg-blue-500" role="switch" aria-checked="true">
-            <span class="inline-block h-3 w-3 rounded-full bg-white shadow translate-x-3.5"></span>
-          </button>
+          <span class="title">正在拖拽</span>
+          <button class="switch on" type="button" aria-checked="true"><span class="knob"></span></button>
         </div>
-        <div class="p-3 text-xs text-zinc-400">
-          ↑ 拖拽中：边框变蓝 + 轻微放大
-        </div>
+        <div class="body">↑ 拖拽中：边框变蓝 + 轻微放大</div>
       </div>
-
     </div>
   </section>
 
-  <footer class="text-xs text-zinc-600 pt-8 border-t border-zinc-800">
-    文件位置：<code class="text-zinc-400">/Users/Agent/Desktop/vcfiles/hapiy/.preview/basenode-preview.html</code>
+  <footer>
+    文件位置：<code>/Users/Agent/Desktop/vcfiles/hapiy/.preview/basenode-preview.html</code>
   </footer>
 
 </div>

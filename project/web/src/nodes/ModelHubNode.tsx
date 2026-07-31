@@ -29,7 +29,11 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   return (
     <div
       className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
-      style={{ width: topologyConfig.nodeDimensions.modelHub.width }}
+      style={{
+        width: 'fit-content',
+        minWidth: topologyConfig.nodeDimensions.modelHub.minWidth,
+        maxWidth: topologyConfig.nodeDimensions.modelHub.maxWidth,
+      }}
     >
       {!simplified && (
         <div className="border-b border-border px-3 py-2">

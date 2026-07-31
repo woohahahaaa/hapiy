@@ -127,6 +127,9 @@ func main() {
 			dashboard.PUT("/prices/:id", handler.UpdatePrice(db))
 			dashboard.DELETE("/prices/:id", handler.DeletePrice(db))
 
+			dashboardAuthed.GET("/topology", handler.TopologyGet(db))
+			dashboardAuthed.PUT("/topology", handler.TopologyPut(db, engine))
+
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))
 		}

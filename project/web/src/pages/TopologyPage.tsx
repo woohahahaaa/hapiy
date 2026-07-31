@@ -10,7 +10,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from '@dagrejs/dagre'
-import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
@@ -19,8 +19,11 @@ import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
-import type { Provider } from '@/lib/dashboard-api'
-import { getTopologyNodeDimension, topologyConfig } from '@/config/topology-config'
+import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
+import { getTopologyLayoutDimension, topologyConfig } from '@/config/topology-config'
+import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
+import { slotMapsFromDocument, topologyDocumentFromSlotMaps, type TopologyDocument } from '@/lib/topology-document'
+import { TopologySaveQueue } from '@/lib/topology-save-queue'
 import {
   SLOT_ORDER,
   SLOT_LABELS,
@@ -31,8 +34,6 @@ import {
   type SlotRuleMap,
   type SlotType,
 } from '@/components/topology/slot-items'
-
-const SLOT_KEYS: readonly SlotType[] = SLOT_ORDER
 
 const nodeTypes = {
   modelHub: ModelHubNode,
@@ -67,60 +68,6 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
   }
 }
 
-function loadSlotsFromStorage(providerId: string): SlotEntryMap {
-  if (typeof window === 'undefined') return emptySlotEntryMap()
-  try {
-    const raw = window.localStorage.getItem(`hapiy-slots-${providerId}`)
-    if (!raw) return emptySlotEntryMap()
-    const parsed = JSON.parse(raw) as unknown
-    if (!parsed || typeof parsed !== 'object') return emptySlotEntryMap()
-    return migrateSlotEntryMap(parsed as Partial<SlotEntryMap>)
-  } catch {
-    return emptySlotEntryMap()
-  }
-}
-
-// Older schema stored flat `{ index, ruleId, ruleName }` rows. Coerce those into
-// the new typed entries so existing browser localStorage keeps working.
-function migrateSlotEntryMap(parsed: Partial<SlotEntryMap>): SlotEntryMap {
-  const empty = emptySlotEntryMap()
-  for (const key of SLOT_KEYS) {
-    const list = parsed[key]
-    if (!Array.isArray(list)) continue
-    const migrated = list.map((raw: unknown, i: number): SlotEntry => {
-      const idx = i + 1
-      const ruleId = typeof (raw as { ruleId?: unknown }).ruleId === 'string'
-        ? (raw as { ruleId: string }).ruleId
-        : null
-      if (key === 'logOutput') {
-        return {
-          slotType: 'logOutput',
-          index: idx,
-          enabled: true,
-          logTarget: 'file',
-          logLevel: 'info',
-          logPath: '',
-          recordRequestBefore: true,
-          recordRequestAfter: true,
-          recordResponseBefore: true,
-          recordResponseAfter: true,
-        }
-      }
-      return { slotType: key, index: idx, ruleId, enabled: true }
-    })
-    setSlotList(empty, key, migrated as SlotEntryMap[typeof key])
-  }
-  return empty
-}
-
-function saveSlotsToStorage(providerId: string, slots: SlotEntryMap): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(`hapiy-slots-${providerId}`, JSON.stringify(slots))
-  } catch {
-    // storage may be full — silently skip
-  }
-}
 
 function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   const g = new dagre.graphlib.Graph()
@@ -134,7 +81,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   })
 
   for (const node of nodes) {
-    const dimension = getTopologyNodeDimension(node.type)
+    const dimension = getTopologyLayoutDimension(node.type)
     g.setNode(node.id, {
       width: dimension.width,
       height: dimension.height,
@@ -150,7 +97,7 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
   return nodes.map((node) => {
     const pos = g.node(node.id)
     if (!pos) return node
-    const dimension = getTopologyNodeDimension(node.type)
+    const dimension = getTopologyLayoutDimension(node.type)
     return { ...node, position: { x: pos.x - dimension.width / 2, y: pos.y - dimension.height / 2 } }
   })
 }
@@ -271,6 +218,8 @@ export function TopologyPage() {
   // Slots live in a ref so ReactFlow can mutate freely without re-rendering
   // the whole tree on every add/delete/change.
   const slotsStateRef = useRef<Map<string, SlotEntryMap>>(new Map())
+  const documentRef = useRef<TopologyDocument | null>(null)
+  const saveQueueRef = useRef<TopologySaveQueue | null>(null)
   // Bumped on each write so the ReactFlow nodes tree re-derives.
   const [slotsVersion, setSlotsVersion] = useState(0)
   const bumpSlots = useCallback(() => setSlotsVersion((v) => v + 1), [])
@@ -290,13 +239,16 @@ export function TopologyPage() {
     setLoading(true)
     setError(null)
     try {
-      const channels = await dashboardApi.listProviders()
+      const [channels, document] = await Promise.all([
+        dashboardApi.listProviders(),
+        dashboardApi.getTopology(),
+      ])
       setProviders(channels)
-      const next = new Map<string, SlotEntryMap>()
-      for (const provider of channels) {
-        next.set(provider.id, loadSlotsFromStorage(provider.id))
-      }
-      slotsStateRef.current = next
+      documentRef.current = document
+      slotsStateRef.current = slotMapsFromDocument(document, channels.map((provider) => provider.id))
+      saveQueueRef.current = new TopologySaveQueue(document.revision, dashboardApi.saveTopology, (conflict) => {
+        toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
+      })
       bumpSlots()
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
@@ -309,6 +261,18 @@ export function TopologyPage() {
     loadData()
   }, [loadData])
 
+  const persistTopology = useCallback(async () => {
+    const queue = saveQueueRef.current
+    if (!providers || !queue) return
+    const document = topologyDocumentFromSlotMaps(queue.revision, slotsStateRef.current)
+    try {
+      documentRef.current = await queue.enqueue(document)
+    } catch (err) {
+      if (err instanceof DashboardApiError && err.status === 409) return
+      toast.add({ title: err instanceof Error ? err.message : '拓扑节点保存失败', type: 'error' })
+    }
+  }, [providers])
+
   const handleChangeEntry = useCallback(
     (providerId: string, slotType: SlotType, next: SlotEntry) => {
       const current = slotsStateRef.current.get(providerId) ?? emptySlotEntryMap()
@@ -320,10 +284,10 @@ export function TopologyPage() {
           : [...list, next].map((e, i) => reindexSlotItem(e, i + 1, slotType))
       setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
       slotsStateRef.current.set(providerId, current)
-      saveSlotsToStorage(providerId, current)
       bumpSlots()
+      void persistTopology()
     },
-    [bumpSlots],
+    [bumpSlots, persistTopology],
   )
 
   const handleDeleteEntry = useCallback(
@@ -335,10 +299,28 @@ export function TopologyPage() {
         .map((e, i) => reindexSlotItem(e, i + 1, slotType))
       setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
       slotsStateRef.current.set(providerId, current)
-      saveSlotsToStorage(providerId, current)
+      bumpSlots()
+      void persistTopology()
+    },
+    [bumpSlots, persistTopology],
+  )
+
+  const [jsonDocument, setJsonDocument] = useState<TopologyDocument | null>(null)
+  const handleOpenJson = useCallback(() => {
+    const queue = saveQueueRef.current
+    if (!queue) return
+    setJsonDocument(topologyDocumentFromSlotMaps(queue.revision, slotsStateRef.current))
+  }, [])
+  const handleJsonSave = useCallback(
+    async (document: TopologyDocument) => {
+      const queue = saveQueueRef.current
+      if (!queue) throw new Error('拓扑尚未加载完成')
+      const saved = await queue.saveNow(document)
+      documentRef.current = saved
+      slotsStateRef.current = slotMapsFromDocument(saved, providers?.map((provider) => provider.id) ?? [])
       bumpSlots()
     },
-    [bumpSlots],
+    [bumpSlots, providers],
   )
 
   const layoutSnapshot = useMemo(() => loadLayoutFromStorage(), [])
@@ -552,6 +534,15 @@ export function TopologyPage() {
             >
               <Wand2 />
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleOpenJson}
+              title="编辑 JSON"
+              aria-label="编辑 JSON"
+            >
+              <Code />
+            </Button>
           </Panel>
         </ReactFlow>
         {menuState.open && (
@@ -560,6 +551,13 @@ export function TopologyPage() {
             y={menuState.y}
             onSelect={handleAddProvider}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
+          />
+        )}
+        {jsonDocument && (
+          <TopologyJsonEditModal
+            document={jsonDocument}
+            onSave={handleJsonSave}
+            onClose={() => setJsonDocument(null)}
           />
         )}
       </div>

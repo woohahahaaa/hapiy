@@ -30,9 +30,9 @@ type Channel struct {
 	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
 	Name      string    `gorm:"not null" json:"name"`
 	BaseURLs  string    `gorm:"type:text" json:"base_urls"` // JSON array
-	Keys      string    `gorm:"type:text" json:"keys"`       // JSON array
-	Endpoints string    `gorm:"type:text" json:"endpoints"`  // JSON array
-	Models    string    `gorm:"type:text" json:"models"`     // JSON array
+	Keys      string    `gorm:"type:text" json:"keys"`      // JSON array
+	Endpoints string    `gorm:"type:text" json:"endpoints"` // JSON array
+	Models    string    `gorm:"type:text" json:"models"`    // JSON array
 	Status    bool      `gorm:"default:true" json:"status"`
 	Weight    int       `gorm:"default:1" json:"weight"`
 	Priority  int       `gorm:"default:0" json:"priority"`
@@ -101,7 +101,7 @@ type RewriteRule struct {
 	ID     string `gorm:"primaryKey;type:uuid" json:"id"`
 	Name   string `gorm:"not null" json:"name"`
 	Script string `gorm:"type:text" json:"script"`
-	Status bool   `gorm:"default:true" json:"status"`
+	Status bool   `gorm:"not null" json:"status"`
 }
 
 func (r *RewriteRule) BeforeCreate(tx *gorm.DB) error {
@@ -116,7 +116,7 @@ type ResponseRewriteRule struct {
 	ID     string `gorm:"primaryKey;type:uuid" json:"id"`
 	Name   string `gorm:"not null" json:"name"`
 	Script string `gorm:"type:text" json:"script"`
-	Status bool   `gorm:"default:true" json:"status"`
+	Status bool   `gorm:"not null" json:"status"`
 }
 
 func (r *ResponseRewriteRule) BeforeCreate(tx *gorm.DB) error {
@@ -133,7 +133,7 @@ type HeartbeatRule struct {
 	MatchCondition string `gorm:"default:'*'" json:"match_condition"`
 	ReplyContent   string `gorm:"not null" json:"reply_content"`
 	Timeout        int    `gorm:"default:30" json:"timeout"`
-	Status         bool   `gorm:"default:true" json:"status"`
+	Status         bool   `gorm:"not null" json:"status"`
 }
 
 func (r *HeartbeatRule) BeforeCreate(tx *gorm.DB) error {
@@ -150,7 +150,7 @@ type ConcurrencyRule struct {
 	Scope         string `gorm:"default:'global'" json:"scope"`
 	MaxConcurrent int    `gorm:"default:10" json:"max_concurrent"`
 	QueueEnabled  bool   `gorm:"default:true" json:"queue_enabled"`
-	Status        bool   `gorm:"default:true" json:"status"`
+	Status        bool   `gorm:"not null" json:"status"`
 }
 
 func (r *ConcurrencyRule) BeforeCreate(tx *gorm.DB) error {
@@ -162,12 +162,12 @@ func (r *ConcurrencyRule) BeforeCreate(tx *gorm.DB) error {
 
 // FailoverRule model
 type FailoverRule struct {
-	ID             string `gorm:"primaryKey;type:uuid" json:"id"`
-	Name           string `gorm:"not null" json:"name"`
-	PrimaryChannel string `json:"primary_channel"`
+	ID              string `gorm:"primaryKey;type:uuid" json:"id"`
+	Name            string `gorm:"not null" json:"name"`
+	PrimaryChannel  string `json:"primary_channel"`
 	FallbackChannel string `json:"fallback_channel"`
-	Condition      string `gorm:"default:'timeout'" json:"condition"`
-	Status         bool   `gorm:"default:true" json:"status"`
+	Condition       string `gorm:"default:'timeout'" json:"condition"`
+	Status          bool   `gorm:"not null" json:"status"`
 }
 
 func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
@@ -189,14 +189,14 @@ type TopologyConfig struct {
 
 // PriceConfig model — per-model pricing; units are per 1M tokens.
 type PriceConfig struct {
-	ID             string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Model          string    `gorm:"uniqueIndex;not null" json:"model"`
-	InputPrice     float64   `gorm:"default:0" json:"input_price"`
-	OutputPrice    float64   `gorm:"default:0" json:"output_price"`
-	CacheWritePrice float64  `gorm:"default:0" json:"cache_write_price"`
-	CacheReadPrice  float64  `gorm:"default:0" json:"cache_read_price"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Model           string    `gorm:"uniqueIndex;not null" json:"model"`
+	InputPrice      float64   `gorm:"default:0" json:"input_price"`
+	OutputPrice     float64   `gorm:"default:0" json:"output_price"`
+	CacheWritePrice float64   `gorm:"default:0" json:"cache_write_price"`
+	CacheReadPrice  float64   `gorm:"default:0" json:"cache_read_price"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (p *PriceConfig) BeforeCreate(tx *gorm.DB) error {
@@ -209,6 +209,29 @@ func (p *PriceConfig) BeforeCreate(tx *gorm.DB) error {
 func (t *TopologyConfig) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// TopologyNode model — hard data of a topology node (id/type/parent/slot/payload).
+// Positions are intentionally NOT stored; the frontend derives layout locally.
+type TopologyNode struct {
+	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Type         string    `gorm:"not null;index" json:"type"` // modelHub | channel | slot
+	ParentID     *string   `gorm:"index" json:"parent_id"`     // for slot nodes: the channel id
+	SlotType     *string   `json:"slot_type"`                  // requestModify / responseModify / autoReply / concurrency / autoSwitch / logOutput
+	ChannelID    *string   `gorm:"index" json:"channel_id"`    // for slot nodes: the parent channel id
+	ModelHubID   *string   `json:"model_hub_id"`               // future use
+	Name         string    `gorm:"not null" json:"name"`
+	ProviderName *string   `json:"provider_name"`            // backend channel name when type=channel
+	Payload      string    `gorm:"type:text" json:"payload"` // free-form per-type JSON blob
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func (n *TopologyNode) BeforeCreate(tx *gorm.DB) error {
+	if n.ID == "" {
+		n.ID = uuid.New().String()
 	}
 	return nil
 }

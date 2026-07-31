@@ -14,7 +14,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as LocationState | null)?.from ?? '/'
-  const [username, setUsername] = useState('admin')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,7 +79,7 @@ export function LoginPage() {
           </div>
         )}
 
-        <Button type="submit" className="w-full" disabled={submitting || !password}>
+        <Button type="submit" className="w-full" disabled={submitting || !username.trim() || !password}>
           {submitting ? (
             <>
               <Loader2 className="size-4 animate-spin" /> 登录中…
@@ -88,8 +88,6 @@ export function LoginPage() {
             '登录'
           )}
         </Button>
-
-        <p className="text-center text-xs text-muted-foreground">默认管理员：admin / admin123</p>
       </form>
     </div>
   )

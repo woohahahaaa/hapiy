@@ -1,0 +1,15 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e4]:
+    - generic [ref=f1e10]:
+      - heading "hapiy 控制台" [level=1] [ref=f1e11]
+      - paragraph [ref=f1e12]: 登录以管理渠道、规则与价格配置
+    - generic [ref=f1e13]:
+      - group [ref=f1e14]:
+        - generic [ref=f1e15]: 用户名
+        - textbox "用户名" [ref=f1e16]
+      - group [ref=f1e17]:
+        - generic [ref=f1e18]: 密码
+        - textbox "密码" [ref=f1e19]
+    - button "登录" [disabled]
+  - generic:
+    - region "Notifications"
