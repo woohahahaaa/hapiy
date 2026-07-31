@@ -31,7 +31,7 @@ func newTopologyTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	if err := db.AutoMigrate(
-		&model.Channel{},
+		&model.Provider{},
 		&model.RewriteRule{},
 		&model.ResponseRewriteRule{},
 		&model.HeartbeatRule{},
@@ -57,49 +57,35 @@ func topologyRequest(t *testing.T, method, body string, handler gin.HandlerFunc)
 	return rec
 }
 
-func TestTopologyGet_returns_empty_revision_without_writing_on_new_database(t *testing.T) {
-	// Given
+func TestTopologyGet_returns_empty_array_on_new_database(t *testing.T) {
 	db := newTopologyTestDB(t)
-
-	// When
 	rec := topologyRequest(t, http.MethodGet, "", TopologyGet(db))
-
-	// Then
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if rec.Body.String() != `{"schema_version":1,"revision":0,"slots":[]}` {
+	if rec.Body.String() != `[]` {
 		t.Fatalf("body: got %s", rec.Body.String())
-	}
-	var count int64
-	if err := db.Model(&model.TopologyState{}).Count(&count).Error; err != nil {
-		t.Fatalf("count topology state: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("GET wrote topology state: count=%d", count)
 	}
 }
 
-func TestTopologyPut_replaces_assignments_in_canonical_order_and_increments_revision(t *testing.T) {
-	// Given
+func TestTopologyPut_saves_workflow_and_returns_canonical_order(t *testing.T) {
 	db := newTopologyTestDB(t)
-	channel := model.Channel{ID: "channel-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
-	rule := model.RewriteRule{ID: "rewrite-a", Name: "rewrite", Status: true}
-	if err := db.Create(&channel).Error; err != nil {
-		t.Fatalf("create channel: %v", err)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	rule := model.RewriteRule{ID: "rewrite-a", Name: "rewrite", Script: "", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
 	}
 	if err := db.Create(&rule).Error; err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 	refresher := &topologyRefreshFake{}
-	body := `{"schema_version":1,"revision":0,"slots":[` +
-		`{"id":"log","channel_id":"channel-a","slot_type":"logOutput","order":1,"enabled":true,"rule_id":null,"config":{"log_target":"file","record_request_before":true}},` +
-		`{"id":"rewrite","channel_id":"channel-a","slot_type":"requestModify","order":1,"enabled":true,"rule_id":"rewrite-a","config":{}}]}`
+	body := `[[` +
+		`{"type":"provider","name":"A","provider_id":"provider-a"},` +
+		`{"type":"requestModify","name":"rewrite","rule_id":"rewrite-a","order":1,"enabled":true},` +
+		`{"type":"logOutput","name":"log","enabled":true,"config":{"log_target":"file","log_level":"info","log_path":"","record_request_before":true,"record_request_after":true,"record_response_before":true,"record_response_after":true}}` +
+		`]]`
 
-	// When
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
-
-	// Then
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -107,62 +93,59 @@ func TestTopologyPut_replaces_assignments_in_canonical_order_and_increments_revi
 	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if document.Revision != 1 || len(document.Slots) != 2 {
-		t.Fatalf("unexpected document: %+v", document)
+	if len(document) != 1 || len(document[0]) != 3 {
+		t.Fatalf("unexpected document: %v", document)
 	}
-	if document.Slots[0].ID != "rewrite" || document.Slots[1].ID != "log" {
-		t.Fatalf("slots not canonically sorted: %+v", document.Slots)
+	if document[0][1].Type != "requestModify" || document[0][2].Type != "logOutput" {
+		t.Fatalf("nodes not canonically sorted: %v", document[0])
 	}
 	if refresher.calls != 1 {
 		t.Fatalf("refresh calls: want 1, got %d", refresher.calls)
 	}
 }
 
-func TestTopologyPut_rejects_unknown_fields_without_modifying_existing_assignments(t *testing.T) {
-	// Given
+func TestTopologyPut_resolves_rule_by_name_when_rule_id_omitted(t *testing.T) {
 	db := newTopologyTestDB(t)
-	state := model.TopologyState{ID: 1, SchemaVersion: 1, Revision: 4}
-	assignment := model.TopologySlotAssignment{ID: "existing", ChannelID: "channel-a", SlotType: "logOutput", Order: 1, Enabled: true, Config: `{}`}
-	if err := db.Create(&state).Error; err != nil {
-		t.Fatalf("create state: %v", err)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	rule := model.RewriteRule{ID: "rewrite-a", Name: "my rewrite", Script: "", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
 	}
-	if err := db.Create(&assignment).Error; err != nil {
-		t.Fatalf("create assignment: %v", err)
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatalf("create rule: %v", err)
 	}
 	refresher := &topologyRefreshFake{}
-	body := `{"schema_version":1,"revision":4,"slots":[],"unexpected":true}`
+	body := `[[` +
+		`{"type":"provider","name":"A"},` +
+		`{"type":"requestModify","name":"my rewrite","order":1}` +
+		`]]`
 
-	// When
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
-
-	// Then
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status: want 422, got %d: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var count int64
-	if err := db.Model(&model.TopologySlotAssignment{}).Where("id = ?", "existing").Count(&count).Error; err != nil {
-		t.Fatalf("count assignment: %v", err)
+	var document TopologyDocument
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if count != 1 || refresher.calls != 0 {
-		t.Fatalf("old topology changed or refresh called: count=%d calls=%d", count, refresher.calls)
+	if len(document) != 1 || len(document[0]) != 2 {
+		t.Fatalf("unexpected document: %v", document)
+	}
+	if document[0][1].RuleID == nil || *document[0][1].RuleID != "rewrite-a" {
+		t.Fatalf("rule_id not backfilled: %v", document[0][1])
 	}
 }
 
-func TestTopologyPut_rejects_camel_case_log_output_config_keys(t *testing.T) {
-	// Given
+func TestTopologyPut_rejects_unknown_node_type(t *testing.T) {
 	db := newTopologyTestDB(t)
-	channel := model.Channel{ID: "channel-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
-	if err := db.Create(&channel).Error; err != nil {
-		t.Fatalf("create channel: %v", err)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
 	}
 	refresher := &topologyRefreshFake{}
-	body := `{"schema_version":1,"revision":0,"slots":[` +
-		`{"id":"log","channel_id":"channel-a","slot_type":"logOutput","order":1,"enabled":true,"rule_id":null,"config":{"logTarget":"file"}}]}`
+	body := `[[{"type":"provider","name":"A","provider_id":"provider-a"},{"type":"unknown","name":"x","order":1}]]`
 
-	// When
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
-
-	// Then
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status: want 422, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -171,62 +154,41 @@ func TestTopologyPut_rejects_camel_case_log_output_config_keys(t *testing.T) {
 	}
 }
 
-func TestTopologyPut_returns_revision_conflict_without_modifying_assignments(t *testing.T) {
-	// Given
+func TestTopologyPut_rejects_camel_case_log_output_config_keys(t *testing.T) {
 	db := newTopologyTestDB(t)
-	state := model.TopologyState{ID: 1, SchemaVersion: 1, Revision: 3}
-	if err := db.Create(&state).Error; err != nil {
-		t.Fatalf("create state: %v", err)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
 	}
 	refresher := &topologyRefreshFake{}
-	body := `{"schema_version":1,"revision":2,"slots":[]}`
+	body := `[[{"type":"provider","name":"A","provider_id":"provider-a"},` +
+		`{"type":"logOutput","name":"log","enabled":true,"config":{"logTarget":"file"}}]]`
 
-	// When
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
-
-	// Then
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status: want 409, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if rec.Body.String() != `{"current_revision":3,"error":"topology_revision_conflict"}` {
-		t.Fatalf("body: got %s", rec.Body.String())
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status: want 422, got %d: %s", rec.Code, rec.Body.String())
 	}
 	if refresher.calls != 0 {
-		t.Fatalf("refresh called on conflict: %d", refresher.calls)
+		t.Fatalf("refresh called for rejected document: %d", refresher.calls)
 	}
 }
 
 func TestTopologyPut_keeps_database_unchanged_when_candidate_refresh_fails(t *testing.T) {
-	// Given
 	db := newTopologyTestDB(t)
-	channel := model.Channel{ID: "channel-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
-	existing := model.TopologySlotAssignment{ID: "existing", ChannelID: channel.ID, SlotType: "logOutput", Order: 1, Enabled: true, Config: `{}`}
-	state := model.TopologyState{ID: 1, SchemaVersion: 1, Revision: 2}
-	if err := db.Create(&channel).Error; err != nil {
-		t.Fatalf("create channel: %v", err)
-	}
-	if err := db.Create(&state).Error; err != nil {
-		t.Fatalf("create state: %v", err)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	existing := model.TopologySlotAssignment{ID: "existing", ProviderID: provider.ID, SlotType: "logOutput", Order: 1, Enabled: true, Config: `{}`}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
 	}
 	if err := db.Create(&existing).Error; err != nil {
 		t.Fatalf("create assignment: %v", err)
 	}
 	refresher := &topologyRefreshFake{err: errors.New("candidate failed")}
-	body := `{"schema_version":1,"revision":2,"slots":[]}`
+	body := `[[{"type":"provider","name":"A","provider_id":"provider-a"}]]`
 
-	// When
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
-
-	// Then
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status: want 500, got %d: %s", rec.Code, rec.Body.String())
-	}
-	var savedState model.TopologyState
-	if err := db.First(&savedState, 1).Error; err != nil {
-		t.Fatalf("load state: %v", err)
-	}
-	if savedState.Revision != 2 {
-		t.Fatalf("revision changed after failed candidate refresh: %d", savedState.Revision)
 	}
 	var count int64
 	if err := db.Model(&model.TopologySlotAssignment{}).Where("id = ?", existing.ID).Count(&count).Error; err != nil {

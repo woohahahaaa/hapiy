@@ -43,11 +43,11 @@ export function AutoSwitchSlotItem({
         <div className="flex flex-col gap-0.5 text-[10px] text-muted-foreground">
           <span className="truncate">
             <span className="text-foreground/70">主：</span>
-            {selected.primaryChannel || '—'}
+            {selected.primaryProvider || '—'}
           </span>
           <span className="truncate">
             <span className="text-foreground/70">备：</span>
-            {selected.fallbackChannel || '—'}
+            {selected.fallbackProvider || '—'}
           </span>
           <span>
             <span className="text-foreground/70">触发：</span>

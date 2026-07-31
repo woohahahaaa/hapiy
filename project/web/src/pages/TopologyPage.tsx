@@ -14,7 +14,7 @@ import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code } from 'lucide-rea
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
-import { ChannelNode } from '@/nodes/ChannelNode'
+import { ProviderNode } from '@/nodes/ProviderNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
@@ -22,7 +22,7 @@ import { dashboardApi } from '@/lib/dashboard-api'
 import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
 import { getTopologyLayoutDimension, topologyConfig } from '@/config/topology-config'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
-import { slotMapsFromDocument, topologyDocumentFromSlotMaps, type TopologyDocument } from '@/lib/topology-document'
+import { slotMapsFromWorkflows, workflowsFromSlotMaps, type Workflow } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
 import {
   SLOT_ORDER,
@@ -37,7 +37,7 @@ import {
 
 const nodeTypes = {
   modelHub: ModelHubNode,
-  channel: ChannelNode,
+  provider: ProviderNode,
   slot: SlotNode,
 }
 
@@ -172,10 +172,10 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
       const modelNodeId = modelNodeIds[model.model]
       if (!modelNodeId) continue
       edges.push({
-        id: `${modelNodeId}→ch-${provider.id}-${model.model}`,
+        id: `${modelNodeId}→pv-${provider.id}-${model.model}`,
         source: modelNodeId,
         sourceHandle: model.model,
-        target: `ch-${provider.id}`,
+        target: `pv-${provider.id}`,
         targetHandle: model.model,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth },
@@ -197,8 +197,8 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
 
     const firstSlotId = `slot-${provider.id}-${SLOT_ORDER[0]}`
     edges.push({
-      id: `ch-${provider.id}→${firstSlotId}`,
-      source: `ch-${provider.id}`,
+      id: `pv-${provider.id}→${firstSlotId}`,
+      source: `pv-${provider.id}`,
       target: firstSlotId,
       animated: topologyConfig.edge.animated,
       style: { strokeWidth: topologyConfig.edge.strokeWidth },
@@ -215,12 +215,9 @@ export function TopologyPage() {
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
   const { rules } = useSlotRules()
 
-  // Slots live in a ref so ReactFlow can mutate freely without re-rendering
-  // the whole tree on every add/delete/change.
   const slotsStateRef = useRef<Map<string, SlotEntryMap>>(new Map())
-  const documentRef = useRef<TopologyDocument | null>(null)
+  const workflowsRef = useRef<Workflow[] | null>(null)
   const saveQueueRef = useRef<TopologySaveQueue | null>(null)
-  // Bumped on each write so the ReactFlow nodes tree re-derives.
   const [slotsVersion, setSlotsVersion] = useState(0)
   const bumpSlots = useCallback(() => setSlotsVersion((v) => v + 1), [])
 
@@ -239,14 +236,14 @@ export function TopologyPage() {
     setLoading(true)
     setError(null)
     try {
-      const [channels, document] = await Promise.all([
+      const [providers, workflows] = await Promise.all([
         dashboardApi.listProviders(),
         dashboardApi.getTopology(),
       ])
-      setProviders(channels)
-      documentRef.current = document
-      slotsStateRef.current = slotMapsFromDocument(document, channels.map((provider) => provider.id))
-      saveQueueRef.current = new TopologySaveQueue(document.revision, dashboardApi.saveTopology, (conflict) => {
+      setProviders(providers)
+      workflowsRef.current = workflows
+      slotsStateRef.current = slotMapsFromWorkflows(workflows)
+      saveQueueRef.current = new TopologySaveQueue(dashboardApi.saveTopology, (conflict) => {
         toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
       })
       bumpSlots()
@@ -264,14 +261,21 @@ export function TopologyPage() {
   const persistTopology = useCallback(async () => {
     const queue = saveQueueRef.current
     if (!providers || !queue) return
-    const document = topologyDocumentFromSlotMaps(queue.revision, slotsStateRef.current)
+    const providerNames = new Map(providers.map((p) => [p.id, p.name]))
+    const ruleNames = new Map<string, string>()
+    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
+      for (const rule of rules[slotType]) {
+        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
+      }
+    }
+    const workflows = workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
     try {
-      documentRef.current = await queue.enqueue(document)
+      workflowsRef.current = await queue.enqueue(workflows)
     } catch (err) {
       if (err instanceof DashboardApiError && err.status === 409) return
       toast.add({ title: err instanceof Error ? err.message : '拓扑节点保存失败', type: 'error' })
     }
-  }, [providers])
+  }, [providers, rules])
 
   const handleChangeEntry = useCallback(
     (providerId: string, slotType: SlotType, next: SlotEntry) => {
@@ -305,22 +309,29 @@ export function TopologyPage() {
     [bumpSlots, persistTopology],
   )
 
-  const [jsonDocument, setJsonDocument] = useState<TopologyDocument | null>(null)
+  const [jsonWorkflows, setJsonWorkflows] = useState<Workflow[] | null>(null)
   const handleOpenJson = useCallback(() => {
     const queue = saveQueueRef.current
-    if (!queue) return
-    setJsonDocument(topologyDocumentFromSlotMaps(queue.revision, slotsStateRef.current))
-  }, [])
+    if (!queue || !providers) return
+    const providerNames = new Map(providers.map((p) => [p.id, p.name]))
+    const ruleNames = new Map<string, string>()
+    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
+      for (const rule of rules[slotType]) {
+        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
+      }
+    }
+    setJsonWorkflows(workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames))
+  }, [providers, rules])
   const handleJsonSave = useCallback(
-    async (document: TopologyDocument) => {
+    async (workflows: Workflow[]) => {
       const queue = saveQueueRef.current
       if (!queue) throw new Error('拓扑尚未加载完成')
-      const saved = await queue.saveNow(document)
-      documentRef.current = saved
-      slotsStateRef.current = slotMapsFromDocument(saved, providers?.map((provider) => provider.id) ?? [])
+      const saved = await queue.saveNow(workflows)
+      workflowsRef.current = saved
+      slotsStateRef.current = slotMapsFromWorkflows(saved)
       bumpSlots()
     },
-    [bumpSlots, providers],
+    [bumpSlots],
   )
 
   const layoutSnapshot = useMemo(() => loadLayoutFromStorage(), [])
@@ -344,11 +355,11 @@ export function TopologyPage() {
       const verticalOffset = nodes.length
       const slots = slotsStateRef.current.get(provider.id) ?? emptySlotEntryMap()
       nodes.push({
-        id: `ch-${provider.id}`,
-        type: 'channel',
-        position: layoutSnapshot[`ch-${provider.id}`] ?? {
-          x: topologyConfig.initialPositions.channel.x,
-          y: topologyConfig.initialPositions.channel.y + verticalOffset * topologyConfig.initialPositions.channel.verticalOffset,
+        id: `pv-${provider.id}`,
+        type: 'provider',
+        position: layoutSnapshot[`pv-${provider.id}`] ?? {
+          x: topologyConfig.initialPositions.provider.x,
+          y: topologyConfig.initialPositions.provider.y + verticalOffset * topologyConfig.initialPositions.provider.verticalOffset,
         },
         data: {
           label: provider.name,
@@ -361,12 +372,12 @@ export function TopologyPage() {
           onToggle: () => {
             const p = providers.find((x) => x.id === provider.id)
             if (!p) return
-            if (!p.status) {
+              if (!p.status) {
               const other = providers.find(
                 (x) => x.id !== p.id && x.name === p.name && x.status,
               )
               if (other) {
-                toast.add({ title: '当前已有一个同名渠道在启用，请先将另一个关闭', type: 'error' })
+                toast.add({ title: '当前已有一个同名供应商在启用，请先将另一个关闭', type: 'error' })
                 return
               }
             }
@@ -377,7 +388,7 @@ export function TopologyPage() {
                 )
               })
               .catch((err) => {
-                toast.add({ title: err instanceof Error ? err.message : '切换渠道状态失败', type: 'error' })
+                toast.add({ title: err instanceof Error ? err.message : '切换供应商状态失败', type: 'error' })
               })
           },
         },
@@ -479,13 +490,13 @@ export function TopologyPage() {
         <PageHeader title="转发拓扑" subtitle="API routing workspace" />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              暂无渠道配置。请先在「渠道管理」中添加至少一个模型供应商。
-            </p>
-            <Button onClick={handleAddProvider}>
-              <Plus data-icon="inline-start" />
-              添加渠道
-            </Button>
+          <p className="text-sm text-muted-foreground">
+            暂无供应商配置。请先在「供应商管理」中添加至少一个模型供应商。
+          </p>
+          <Button onClick={handleAddProvider}>
+            <Plus data-icon="inline-start" />
+            添加供应商
+          </Button>
           </div>
         </div>
       </div>
@@ -497,7 +508,7 @@ export function TopologyPage() {
       <PageHeader
         title="转发拓扑"
         subtitle="API routing workspace"
-        status={`${providers.length} 渠道 · ${nodes.length} 节点`}
+        status={`${providers.length} 供应商 · ${nodes.length} 节点`}
       />
       <div className="relative flex-1">
         <ReactFlow
@@ -553,11 +564,11 @@ export function TopologyPage() {
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}
-        {jsonDocument && (
+        {jsonWorkflows && (
           <TopologyJsonEditModal
-            document={jsonDocument}
+            workflows={jsonWorkflows}
             onSave={handleJsonSave}
-            onClose={() => setJsonDocument(null)}
+            onClose={() => setJsonWorkflows(null)}
           />
         )}
       </div>

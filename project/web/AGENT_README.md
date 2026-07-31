@@ -36,7 +36,13 @@ pnpm install --frozen-lockfile
 
 agent 会执行 `scripts/dev.sh`，把 Vite 放到后台 detach 运行，写入 pid 与日志，并报告监听端口。
 
-> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port.*
+后端同理，把项目路径告诉 agent 并说：
+
+> **帮我按 AGENT_README.md 启动后端**
+
+agent 会执行 `project/backend/scripts/backend.sh`，把 Go 后端 detach 启动到 `:8080`，并写入 pid 与日志。
+
+> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port. For the backend, say "Start backend per AGENT_README.md" and the agent runs `project/backend/scripts/backend.sh` to launch the Go binary detached on `:8080`.*
 
 ### 🌍 打开浏览器
 
@@ -49,6 +55,27 @@ http://<lan-ip>:28001         # 反代后的局域网地址
 
 > *The dev server listens on `0.0.0.0:28001` by default. Access it locally or via your reverse proxy.*
 
+### 🛰️ 后端服务
+
+dev server 必须配合后端才能跑完整链路。后端默认监听 `0.0.0.0:8080`：
+
+```bash
+cd project/backend
+./scripts/backend.sh             # 后台启动（缺产物时自动 build）
+./scripts/backend.sh --status    # 查看 pid / 端口 / 日志
+./scripts/backend.sh --stop      # 停止
+```
+
+| 命令 | 作用 |
+|---|---|
+| `scripts/backend.sh` 或 `scripts/backend.sh start` | 缺 `hapiy` 二进制时跑 `go build`；`nohup hapiy` 后台启动；记录 pid 与日志 |
+| `scripts/backend.sh --status` | 显示 pid 文件、监听状态、最近 20 行日志 |
+| `scripts/backend.sh --stop` | 按 pid 优雅终止，超时则 `kill -9` |
+
+环境变量可覆盖默认行为：`PORT=8080 LOG_FILE=/var/log/hapiy-backend.log PID_FILE=/var/run/hapiy-backend.pid ./scripts/backend.sh`。
+
+> *Backend dev server mirrors `scripts/dev.sh`'s design: detached `nohup` launch of the Go binary, with `--status` / `--stop` subcommands and the same `PORT` / `LOG_FILE` / `PID_FILE` overrides. Listen address defaults to `0.0.0.0:8080`.*
+
 ### 🛟 兜底：手动启动
 
 ```bash
@@ -58,7 +85,14 @@ cd project/web
 ./scripts/dev.sh --stop      # 停止
 ```
 
-> *Manual fallback: run `scripts/dev.sh` in the background, then `--status` to inspect or `--stop` to terminate.*
+```bash
+cd project/backend
+./scripts/backend.sh         # 后台启动
+./scripts/backend.sh --status # 查看 pid / 端口 / 日志
+./scripts/backend.sh --stop   # 停止
+```
+
+> *Manual fallback: run `scripts/dev.sh` for the frontend and `scripts/backend.sh` for the backend in the background, then `--status` to inspect or `--stop` to terminate.*
 
 ---
 

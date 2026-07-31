@@ -15,14 +15,14 @@ import (
 	"github.com/hapiy/hapiy/internal/service"
 )
 
-// LoadChannels loads all enabled channels from database and compiles execution plans.
-// It rebuilds the cache from scratch so that disabled or deleted channels are dropped
+// LoadProviders loads all enabled providers from database and compiles execution plans.
+// It rebuilds the cache from scratch so that disabled or deleted providers are dropped
 // from in-memory state without waiting for a process restart.
-func (e *Engine) LoadChannels() error {
+func (e *Engine) LoadProviders() error {
 	return e.RefreshPlans()
 }
 
-// SyncLoop periodically reloads channel configuration (hot reload)
+// SyncLoop periodically reloads provider configuration (hot reload)
 func (e *Engine) SyncLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -30,8 +30,8 @@ func (e *Engine) SyncLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			if err := e.LoadChannels(); err != nil {
-				log.Printf("Failed to sync channels: %v", err)
+			if err := e.LoadProviders(); err != nil {
+				log.Printf("Failed to sync providers: %v", err)
 			}
 		case <-e.stopCh:
 			return
@@ -44,81 +44,81 @@ func (e *Engine) Stop() {
 	close(e.stopCh)
 }
 
-// GetChannel retrieves a channel by ID
-func (e *Engine) GetChannel(id string) (*model.Channel, error) {
-	e.channelsMu.RLock()
-	defer e.channelsMu.RUnlock()
-	ch, ok := e.channels[id]
+// GetProvider retrieves a provider by ID
+func (e *Engine) GetProvider(id string) (*model.Provider, error) {
+	e.providersMu.RLock()
+	defer e.providersMu.RUnlock()
+	p, ok := e.providers[id]
 	if !ok {
-		return nil, errors.New("channel not found")
+		return nil, errors.New("provider not found")
 	}
-	return ch, nil
+	return p, nil
 }
 
-// GetPlan retrieves the compiled execution plan for a channel
-func (e *Engine) GetPlan(channelID string) (*ExecutionPlan, error) {
+// GetPlan retrieves the compiled execution plan for a provider
+func (e *Engine) GetPlan(providerID string) (*ExecutionPlan, error) {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
-	plan, ok := e.plans[channelID]
+	plan, ok := e.plans[providerID]
 	if !ok {
 		return nil, errors.New("plan not found")
 	}
 	return plan, nil
 }
 
-// InvalidatePlan forces recompilation of a channel's execution plan
-func (e *Engine) InvalidatePlan(channelID string) {
-	ch, err := e.GetChannel(channelID)
+// InvalidatePlan forces recompilation of a provider's execution plan
+func (e *Engine) InvalidatePlan(providerID string) {
+	p, err := e.GetProvider(providerID)
 	if err != nil {
 		return
 	}
-	e.compilePlan(ch)
+	e.compilePlan(p)
 }
 
-// compilePlan builds an execution plan from channel configuration
-func (e *Engine) compilePlan(ch *model.Channel) error {
+// compilePlan builds an execution plan from provider configuration
+func (e *Engine) compilePlan(p *model.Provider) error {
 	plan := &ExecutionPlan{
-		ID:      ch.ID,
-		Channel: ch,
+		ID:       p.ID,
+		Provider: p,
 	}
 	if err := e.populatePlan(e.db, plan); err != nil {
 		return err
 	}
 
 	e.plansMu.Lock()
-	e.plans[ch.ID] = plan
+	e.plans[p.ID] = plan
 	e.plansMu.Unlock()
 
 	return nil
 }
 
-// SelectChannel selects a channel for the given model using round-robin with weight
-func (e *Engine) SelectChannel(modelName string) (*model.Channel, error) {
-	e.channelsMu.RLock()
-	defer e.channelsMu.RUnlock()
+// SelectProvider selects a provider for the given model using round-robin with weight
+func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
+	e.providersMu.RLock()
+	defer e.providersMu.RUnlock()
 
-	var candidates []*model.Channel
-	for _, ch := range e.channels {
-		if !ch.Status {
+	var candidates []*model.Provider
+	for _, p := range e.providers {
+		if !p.Status {
 			continue
 		}
 
-		// Check if channel supports the model
+		// Check if provider supports the model
 		var models []map[string]interface{}
-		if err := json.Unmarshal([]byte(ch.Models), &models); err != nil {
+		if err := json.Unmarshal([]byte(p.Models), &models); err != nil {
 			continue
 		}
 
 		for _, m := range models {
 			if name, ok := m["model"].(string); ok && name == modelName {
-				candidates = append(candidates, ch)
+				candidates = append(candidates, p)
 				break
 			}
 		}
 	}
 
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no channel available for model %s", modelName)
+		return nil, fmt.Errorf("no provider available for model %s", modelName)
 	}
 
 	// Simple round-robin (TODO: implement weighted selection)
@@ -242,9 +242,9 @@ func (e *Engine) recordTopologyStage(event topologyStageEvent) {
 
 // relayWithFailover sends the request to upstream with automatic failover
 func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
-	// Get channel configuration
+	// Get provider configuration
 	var baseURLs []string
-	if err := json.Unmarshal([]byte(plan.Channel.BaseURLs), &baseURLs); err != nil {
+	if err := json.Unmarshal([]byte(plan.Provider.BaseURLs), &baseURLs); err != nil {
 		return nil, err
 	}
 	if len(baseURLs) == 0 {
@@ -252,7 +252,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 
 	var keys []string
-	if err := json.Unmarshal([]byte(plan.Channel.Keys), &keys); err != nil {
+	if err := json.Unmarshal([]byte(plan.Provider.Keys), &keys); err != nil {
 		return nil, err
 	}
 	if len(keys) == 0 {

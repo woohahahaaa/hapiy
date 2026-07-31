@@ -150,7 +150,7 @@ export function LogsPage() {
                 <TableHead>时间</TableHead>
                 <TableHead>用户</TableHead>
                 <TableHead>令牌</TableHead>
-                <TableHead>渠道</TableHead>
+                <TableHead>供应商</TableHead>
                 <TableHead>模型</TableHead>
                 <TableHead>Tokens</TableHead>
                 <TableHead>流式</TableHead>
@@ -189,7 +189,7 @@ export function LogsPage() {
                     <TableCell className="font-mono text-xs">{log.createdAt}</TableCell>
                     <TableCell className="text-xs">{log.userId}</TableCell>
                     <TableCell className="text-xs">{log.tokenName}</TableCell>
-                    <TableCell className="text-xs">{log.channelName}</TableCell>
+                    <TableCell className="text-xs">{log.providerName}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-[10px]">
                         {log.modelName}

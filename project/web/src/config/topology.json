@@ -7,19 +7,19 @@
   },
   "nodeDimensions": {
     "modelHub": { "minWidth": 224, "maxWidth": 320, "height": 200 },
-    "channel": { "minWidth": 192, "maxWidth": 320, "height": 100 },
+    "provider": { "minWidth": 192, "maxWidth": 320, "height": 100 },
     "slot": { "minWidth": 240, "maxWidth": 360, "height": 180 }
   },
   "fallbackNodeDimension": { "minWidth": 192, "maxWidth": 320, "height": 80 },
   "initialPositions": {
     "modelHub": { "x": 20, "y": 20, "verticalOffset": 60 },
-    "channel": { "x": 450, "y": 20, "verticalOffset": 60 },
+    "provider": { "x": 450, "y": 20, "verticalOffset": 60 },
     "slot": { "x": 700, "y": 20, "horizontalOffset": 260, "verticalOffset": 60 }
   },
   "edge": { "animated": true, "strokeWidth": 1.5 },
   "grid": { "color": "var(--border)", "gap": 20, "size": 1 },
   "handles": {
-    "channel": {
+    "provider": {
       "target": { "width": 12, "height": 20, "borderWidth": 2 },
       "source": { "width": 12, "height": 12, "borderWidth": 2 },
       "segmentGap": -2

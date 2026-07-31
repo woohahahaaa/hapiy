@@ -3,16 +3,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { confirmJsonSave } from '@/components/JsonEditModal'
-import { parseTopologyDocument, type TopologyDocument } from '@/lib/topology-document'
+import { parseTopologyDocument, type Workflow } from '@/lib/topology-document'
 
 interface TopologyJsonEditModalProps {
-  readonly document: TopologyDocument
-  readonly onSave: (document: TopologyDocument) => Promise<void>
+  readonly workflows: Workflow[]
+  readonly onSave: (workflows: Workflow[]) => Promise<void>
   readonly onClose: () => void
 }
 
-export function TopologyJsonEditModal({ document, onSave, onClose }: TopologyJsonEditModalProps) {
-  const [text, setText] = useState(() => JSON.stringify(document, null, 2))
+export function TopologyJsonEditModal({ workflows, onSave, onClose }: TopologyJsonEditModalProps) {
+  const [text, setText] = useState(() => JSON.stringify(workflows, null, 2))
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = async (): Promise<void> => {

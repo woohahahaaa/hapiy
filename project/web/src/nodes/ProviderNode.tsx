@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { topologyConfig } from '@/config/topology-config'
 
-interface ChannelNodeData {
+interface ProviderNodeData {
   label: string
   baseURLCount?: number
   keyCount?: number
@@ -14,12 +14,12 @@ interface ChannelNodeData {
   onToggle?: () => void
 }
 
-interface ChannelNodeProps {
-  data: ChannelNodeData
+interface ProviderNodeProps {
+  data: ProviderNodeData
   id: string
 }
 
-export function ChannelNode({ data, id }: ChannelNodeProps) {
+export function ProviderNode({ data, id }: ProviderNodeProps) {
   const { label, baseURLCount = 0, keyCount = 0, modelCount = 0, models = [], onToggle } = data
   const dataActive = data.active ?? true
   const [optimisticActive, setOptimisticActive] = useState<boolean | null>(null)
@@ -38,10 +38,10 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
     }
   }, [id, models.length, updateNodeInternals])
 
-  const targetHandle = topologyConfig.handles.channel.target
-  const sourceHandle = topologyConfig.handles.channel.source
+  const targetHandle = topologyConfig.handles.provider.target
+  const sourceHandle = topologyConfig.handles.provider.source
   const segH = targetHandle.height
-  const gap = topologyConfig.handles.channel.segmentGap
+  const gap = topologyConfig.handles.provider.segmentGap
   const total = models.length * segH + Math.max(0, models.length - 1) * gap
   const start = -(total / 2)
 
@@ -60,8 +60,8 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       )}
       style={{
         width: 'fit-content',
-        minWidth: topologyConfig.nodeDimensions.channel.minWidth,
-        maxWidth: topologyConfig.nodeDimensions.channel.maxWidth,
+        minWidth: topologyConfig.nodeDimensions.provider.minWidth,
+        maxWidth: topologyConfig.nodeDimensions.provider.maxWidth,
       }}
     >
       {models.map((m, i) => (
@@ -103,7 +103,7 @@ export function ChannelNode({ data, id }: ChannelNodeProps) {
       />
 
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label || 'Channel'}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label || 'Provider'}</span>
         <button
           type="button"
           role="switch"

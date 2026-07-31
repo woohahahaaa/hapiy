@@ -39,13 +39,13 @@ func main() {
 		log.Printf("Warning: Failed to create default admin: %v", err)
 	}
 
-	// Initialize relay engine (loads channels and compiles execution plans)
+	// Initialize relay engine (loads providers and compiles execution plans)
 	engine := relay.NewEngine(db)
-	if err := engine.LoadChannels(); err != nil {
-		log.Printf("Warning: Failed to load channels: %v", err)
+	if err := engine.LoadProviders(); err != nil {
+		log.Printf("Warning: Failed to load providers: %v", err)
 	}
 
-	// Start background sync for channel config changes
+	// Start background sync for provider config changes
 	go engine.SyncLoop()
 	defer engine.Stop()
 
@@ -89,13 +89,13 @@ func main() {
 		dashboardAuthed := dashboard.Group("")
 		dashboardAuthed.Use(middleware.AuthRequired(db, sessions))
 		{
-			// Channels
-			dashboardAuthed.GET("/channels", handler.ListChannels(db))
-			dashboardAuthed.POST("/channels", handler.CreateChannel(db, engine))
-			dashboardAuthed.GET("/channels/:id", handler.GetChannel(db))
-			dashboardAuthed.PUT("/channels/:id", handler.UpdateChannel(db, engine))
-			dashboardAuthed.DELETE("/channels/:id", handler.DeleteChannel(db, engine))
-			dashboardAuthed.POST("/channels/:id/toggle", handler.ToggleChannel(db, engine))
+			// Providers
+			dashboardAuthed.GET("/providers", handler.ListProviders(db))
+			dashboardAuthed.POST("/providers", handler.CreateProvider(db, engine))
+			dashboardAuthed.GET("/providers/:id", handler.GetProvider(db))
+			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
+			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
+			dashboardAuthed.POST("/providers/:id/toggle", handler.ToggleProvider(db, engine))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))

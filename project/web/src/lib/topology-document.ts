@@ -7,22 +7,21 @@ import {
   type SlotEntryMap,
   type SlotType,
 } from '@/components/topology/slot-items/types'
+import type { Workflow, WorkflowNode } from '@/components/topology/node-types/node-data'
 
-export type TopologySlot = {
-  readonly id: string
-  readonly channel_id: string
-  readonly slot_type: SlotType
-  readonly order: number
-  readonly enabled: boolean
-  readonly rule_id: string | null
-  readonly config: Readonly<Record<string, unknown>>
-}
+// ── Wire format types ──
+//
+// The topology JSON is a bare array of workflows. Each workflow is an array of
+// nodes. The first node is always a provider; subsequent nodes are operations.
+//
+// User-authored JSON may omit id fields (rule_id / provider_id), writing only
+// `name`. On save, the backend matches name → id and backfills. On reload both
+// are present.
+//
+// Execution order = slot-type major order (SLOT_ORDER) → order field minor order.
+// Array position within a workflow does NOT affect execution.
 
-export type TopologyDocument = {
-  readonly schema_version: 1
-  readonly revision: number
-  readonly slots: readonly TopologySlot[]
-}
+export type { Workflow, WorkflowNode } from '@/components/topology/node-types/node-data'
 
 export class TopologyDocumentError extends Error {
   readonly name = 'TopologyDocumentError'
@@ -32,16 +31,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function requireExactKeys(value: Record<string, unknown>, allowed: readonly string[], field: string): void {
-  const allowedKeys = new Set(allowed)
-  const unknownKey = Object.keys(value).find((key) => !allowedKeys.has(key))
-  if (unknownKey) throw new TopologyDocumentError(`${field} 包含未知字段 ${unknownKey}`)
-}
-
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new TopologyDocumentError(`${field} 必须是非空字符串`)
   }
+  return value
+}
+
+function optionalString(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TopologyDocumentError(`${field} 必须是非空字符串`)
+  }
+  return value
+}
+
+function requiredBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== 'boolean') throw new TopologyDocumentError(`${field} 必须是布尔值`)
   return value
 }
 
@@ -52,128 +58,198 @@ function requiredInteger(value: unknown, field: string): number {
   return value
 }
 
-function parseSlotType(value: unknown): SlotType {
-  if (typeof value === 'string' && SLOT_ORDER.includes(value as SlotType)) return value as SlotType
-  throw new TopologyDocumentError('slot_type 不合法')
+function optionalInteger(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined
+  return requiredInteger(value, field)
 }
 
-function parseTopologySlot(value: unknown): TopologySlot {
-  if (!isRecord(value)) throw new TopologyDocumentError('拓扑槽位必须是对象')
-  requireExactKeys(value, ['id', 'channel_id', 'slot_type', 'order', 'enabled', 'rule_id', 'config'], '拓扑槽位')
-  const ruleId = value.rule_id
-  if (ruleId !== null && typeof ruleId !== 'string') {
-    throw new TopologyDocumentError('rule_id 必须是字符串或 null')
-  }
-  if (typeof value.enabled !== 'boolean') throw new TopologyDocumentError('enabled 必须是布尔值')
-  if (!isRecord(value.config)) throw new TopologyDocumentError('config 必须是对象')
-  return {
-    id: requiredString(value.id, 'id'),
-    channel_id: requiredString(value.channel_id, 'channel_id'),
-    slot_type: parseSlotType(value.slot_type),
-    order: requiredInteger(value.order, 'order'),
-    enabled: value.enabled,
-    rule_id: ruleId,
-    config: { ...value.config },
-  }
-}
+const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput'])
+const VALID_LOG_TARGETS = new Set(['file', 'console', 'both'])
+const VALID_LOG_LEVELS = new Set(['info', 'warn', 'error'])
 
-export function parseTopologyDocument(value: unknown): TopologyDocument {
-  if (!isRecord(value)) throw new TopologyDocumentError('拓扑文档必须是对象')
-  requireExactKeys(value, ['schema_version', 'revision', 'slots'], '拓扑文档')
-  if (value.schema_version !== 1) throw new TopologyDocumentError('schema_version 必须为 1')
-  if (!Array.isArray(value.slots)) throw new TopologyDocumentError('slots 必须是数组')
-  const slots = value.slots.map(parseTopologySlot)
-  const ids = new Set<string>()
-  for (const slot of slots) {
-    if (ids.has(slot.id)) throw new TopologyDocumentError(`拓扑槽位 ID ${slot.id} 重复`)
-    ids.add(slot.id)
-  }
-  return { schema_version: 1, revision: requiredInteger(value.revision, 'revision'), slots }
-}
+function parseNode(value: unknown): WorkflowNode {
+  if (!isRecord(value)) throw new TopologyDocumentError('节点必须是对象')
+  const type = requiredString(value.type, 'type')
+  if (!VALID_NODE_TYPES.has(type)) throw new TopologyDocumentError(`未知的节点类型: ${type}`)
+  const name = requiredString(value.name, 'name')
 
-function configString<T extends string>(config: Readonly<Record<string, unknown>>, key: string, fallback: T, allowed: readonly T[]): T {
-  const value = config[key]
-  return typeof value === 'string' && allowed.includes(value as T) ? value as T : fallback
-}
-
-function configBoolean(config: Readonly<Record<string, unknown>>, key: string, fallback: boolean): boolean {
-  const value = config[key]
-  return typeof value === 'boolean' ? value : fallback
-}
-
-function entryFromSlot(slot: TopologySlot, index: number): SlotEntry {
-  const base = { id: slot.id, index, enabled: slot.enabled, config: slot.config }
-  switch (slot.slot_type) {
-    case 'requestModify': return { ...base, slotType: slot.slot_type, ruleId: slot.rule_id }
-    case 'responseModify': return { ...base, slotType: slot.slot_type, ruleId: slot.rule_id }
-    case 'autoReply': return { ...base, slotType: slot.slot_type, ruleId: slot.rule_id }
-    case 'concurrency': return { ...base, slotType: slot.slot_type, ruleId: slot.rule_id }
-    case 'autoSwitch': return { ...base, slotType: slot.slot_type, ruleId: slot.rule_id }
+  switch (type) {
+    case 'provider':
+      return {
+        type: 'provider',
+        name,
+        provider_id: optionalString(value.provider_id, 'provider_id'),
+      }
     case 'logOutput':
       return {
-        ...base,
-        slotType: slot.slot_type,
-        logTarget: configString<LogTarget>(slot.config, 'log_target', 'file', ['file', 'console', 'both']),
-        logLevel: configString<LogLevel>(slot.config, 'log_level', 'info', ['info', 'warn', 'error']),
-        logPath: typeof slot.config.log_path === 'string' ? slot.config.log_path : '',
-        recordRequestBefore: configBoolean(slot.config, 'record_request_before', true),
-        recordRequestAfter: configBoolean(slot.config, 'record_request_after', true),
-        recordResponseBefore: configBoolean(slot.config, 'record_response_before', true),
-        recordResponseAfter: configBoolean(slot.config, 'record_response_after', true),
+        type: 'logOutput',
+        name,
+        enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
+        log_target: VALID_LOG_TARGETS.has(value.log_target as string) ? (value.log_target as 'file' | 'console' | 'both') : 'file',
+        log_level: VALID_LOG_LEVELS.has(value.log_level as string) ? (value.log_level as 'info' | 'warn' | 'error') : 'info',
+        log_path: typeof value.log_path === 'string' ? value.log_path : '',
+        record_request_before: typeof value.record_request_before === 'boolean' ? value.record_request_before : true,
+        record_request_after: typeof value.record_request_after === 'boolean' ? value.record_request_after : true,
+        record_response_before: typeof value.record_response_before === 'boolean' ? value.record_response_before : true,
+        record_response_after: typeof value.record_response_after === 'boolean' ? value.record_response_after : true,
       }
+    default: {
+      const node: WorkflowNode = {
+        type: type as 'requestModify' | 'responseModify' | 'autoReply' | 'concurrency' | 'autoSwitch',
+        name,
+        order: requiredInteger(value.order, 'order'),
+        enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
+      }
+      const rid = optionalString(value.rule_id, 'rule_id')
+      if (rid !== undefined) (node as { rule_id?: string }).rule_id = rid
+      return node
+    }
   }
 }
 
-export function slotMapsFromDocument(document: TopologyDocument, channelIds: readonly string[]): Map<string, SlotEntryMap> {
-  const maps = new Map(channelIds.map((id) => [id, emptySlotEntryMap()]))
-  const ranks = new Map(SLOT_ORDER.map((type, index) => [type, index]))
-  const sorted = [...document.slots].sort((left, right) =>
-    (ranks.get(left.slot_type) ?? 99) - (ranks.get(right.slot_type) ?? 99)
-      || left.order - right.order
-      || left.id.localeCompare(right.id))
-  for (const slot of sorted) {
-    const map = maps.get(slot.channel_id) ?? emptySlotEntryMap()
-    const list = map[slot.slot_type] as SlotEntry[]
-    list.push(entryFromSlot(slot, list.length + 1))
-    maps.set(slot.channel_id, map)
+// Parse a bare array of workflows (array of arrays of nodes).
+export function parseTopologyDocument(value: unknown): Workflow[] {
+  if (!Array.isArray(value)) throw new TopologyDocumentError('拓扑文档必须是数组')
+  return value.map((workflow, i) => {
+    if (!Array.isArray(workflow)) throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 必须是数组`)
+    if (workflow.length === 0) throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 不能为空`)
+    const nodes = workflow.map(parseNode)
+    if (nodes[0].type !== 'provider') {
+      throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 的第一个节点必须是 provider`)
+    }
+    return nodes
+  })
+}
+
+// ── Conversion to/from SlotEntryMap (for the existing visual components) ──
+
+function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
+  const base = { id: '', index, enabled: node.type === 'provider' ? true : (node as { enabled: boolean }).enabled, config: {} }
+  switch (node.type) {
+    case 'requestModify':
+    case 'responseModify':
+    case 'autoReply':
+    case 'concurrency':
+    case 'autoSwitch': {
+      const rn = node as Extract<WorkflowNode, { order: number }>
+      return { ...base, slotType: node.type, ruleId: rn.rule_id ?? null } as SlotEntry
+    }
+    case 'logOutput': {
+      const ln = node as Extract<WorkflowNode, { log_target: string }>
+      return {
+        ...base,
+        slotType: 'logOutput',
+        logTarget: ln.log_target as LogTarget,
+        logLevel: ln.log_level as LogLevel,
+        logPath: ln.log_path,
+        recordRequestBefore: ln.record_request_before,
+        recordRequestAfter: ln.record_request_after,
+        recordResponseBefore: ln.record_response_before,
+        recordResponseAfter: ln.record_response_after,
+      } as SlotEntry
+    }
+    default:
+      throw new TopologyDocumentError(`无法转换节点类型: ${node.type}`)
   }
+}
+
+// Convert workflows JSON → SlotEntryMap keyed by provider name (visual layer needs this).
+// Nodes are grouped by slot type (major order = SLOT_ORDER), then by order field (minor).
+export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<string, SlotEntryMap> {
+  const maps = new Map<string, SlotEntryMap>()
+  const ranks = new Map(SLOT_ORDER.map((type, index) => [type, index]))
+
+  for (const workflow of workflows) {
+    const providerNode = workflow[0]
+    if (providerNode.type !== 'provider') continue
+    const key = providerNode.provider_id ?? providerNode.name
+    if (!maps.has(key)) maps.set(key, emptySlotEntryMap())
+
+    const map = maps.get(key)!
+    const nonProviderNodes = workflow.slice(1)
+    const sorted = [...nonProviderNodes].sort((a, b) => {
+      const ta = a.type
+      const tb = b.type
+      const rankA = ranks.has(ta) ? ranks.get(ta)! : 99
+      const rankB = ranks.has(tb) ? ranks.get(tb)! : 99
+      if (rankA !== rankB) return rankA - rankB
+      const oa = (a as { order?: number }).order ?? 0
+      const ob = (b as { order?: number }).order ?? 0
+      return oa - ob
+    })
+
+    for (const node of sorted) {
+      if (node.type === 'provider') continue
+      const slotType = node.type as SlotType
+      const list = map[slotType] as SlotEntry[]
+      list.push(nodeToEntry(node, list.length + 1))
+    }
+  }
+
   return maps
 }
 
-function configFromEntry(entry: SlotEntry): Readonly<Record<string, unknown>> {
-  if (entry.slotType !== 'logOutput') return entry.config
-  return {
-    ...entry.config,
-    log_target: entry.logTarget,
-    log_level: entry.logLevel,
-    log_path: entry.logPath,
-    record_request_before: entry.recordRequestBefore,
-    record_request_after: entry.recordRequestAfter,
-    record_response_before: entry.recordResponseBefore,
-    record_response_after: entry.recordResponseAfter,
+function entryToNode(entry: SlotEntry, providerName: string): WorkflowNode | null {
+  switch (entry.slotType) {
+    case 'requestModify':
+    case 'responseModify':
+    case 'autoReply':
+    case 'concurrency':
+    case 'autoSwitch':
+      if (entry.ruleId === null) return null
+      return {
+        type: entry.slotType,
+        name: '', // name is filled by the caller from rule lookup
+        rule_id: entry.ruleId,
+        order: entry.index,
+        enabled: entry.enabled,
+      }
+    case 'logOutput':
+      return {
+        type: 'logOutput',
+        name: '',
+        enabled: entry.enabled,
+        log_target: entry.logTarget,
+        log_level: entry.logLevel,
+        log_path: entry.logPath,
+        record_request_before: entry.recordRequestBefore,
+        record_request_after: entry.recordRequestAfter,
+        record_response_before: entry.recordResponseBefore,
+        record_response_after: entry.recordResponseAfter,
+      }
   }
 }
 
-export function topologyDocumentFromSlotMaps(revision: number, maps: ReadonlyMap<string, SlotEntryMap>): TopologyDocument {
-  const slots: TopologySlot[] = []
-  for (const [channelId, map] of maps) {
+// Convert SlotEntryMap → workflows JSON.
+// providerNames maps provider_id → provider name for the provider node.
+// ruleNames maps slotType+ruleId → rule name for rule-bound nodes.
+export function workflowsFromSlotMaps(
+  maps: ReadonlyMap<string, SlotEntryMap>,
+  providerNames: ReadonlyMap<string, string>,
+  ruleNames: ReadonlyMap<string, string>,
+): Workflow[] {
+  const workflows: Workflow[] = []
+  for (const [providerId, map] of maps) {
+    const providerName = providerNames.get(providerId) ?? providerId
+    const providerNode: WorkflowNode = {
+      type: 'provider',
+      name: providerName,
+      provider_id: providerId,
+    }
+    const nodes: WorkflowNode[] = [providerNode]
     for (const slotType of SLOT_ORDER) {
-      let order = 0
       for (const entry of map[slotType]) {
-        const ruleId = 'ruleId' in entry ? entry.ruleId : null
-        if (entry.slotType !== 'logOutput' && ruleId === null) continue
-        order += 1
-        slots.push({
-          id: entry.id,
-          channel_id: channelId,
-          slot_type: entry.slotType,
-          order,
-          enabled: entry.enabled,
-          rule_id: ruleId,
-          config: configFromEntry(entry),
-        })
+        const node = entryToNode(entry, providerName)
+        if (node === null) continue
+        // Fill in name from ruleNames lookup for rule-bound nodes
+        if ('rule_id' in node && node.rule_id) {
+          const lookupKey = `${entry.slotType}:${node.rule_id}`
+          ;(node as { name: string }).name = ruleNames.get(lookupKey) ?? ''
+        }
+        nodes.push(node)
       }
     }
+    if (nodes.length > 1) workflows.push(nodes)
   }
-  return { schema_version: 1, revision, slots }
+  return workflows
 }

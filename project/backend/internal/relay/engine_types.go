@@ -9,7 +9,7 @@ import (
 
 type ExecutionPlan struct {
 	ID                   string
-	Channel              *model.Channel
+	Provider             *model.Provider
 	RewriteRules         []*model.RewriteRule
 	ResponseRewriteRules []*model.ResponseRewriteRule
 	HeartbeatRule        *model.HeartbeatRule
@@ -43,21 +43,21 @@ type topologyStageEvent struct {
 }
 
 type Engine struct {
-	db         *gorm.DB
-	channels   map[string]*model.Channel
-	plans      map[string]*ExecutionPlan
-	plansMu    sync.RWMutex
-	channelsMu sync.RWMutex
-	stopCh     chan struct{}
+	db          *gorm.DB
+	providers   map[string]*model.Provider
+	plans       map[string]*ExecutionPlan
+	plansMu     sync.RWMutex
+	providersMu sync.RWMutex
+	stopCh      chan struct{}
 
 	topologyStageHook func(topologyStageEvent)
 }
 
 func NewEngine(db *gorm.DB) *Engine {
 	return &Engine{
-		db:       db,
-		channels: make(map[string]*model.Channel),
-		plans:    make(map[string]*ExecutionPlan),
-		stopCh:   make(chan struct{}),
+		db:        db,
+		providers: make(map[string]*model.Provider),
+		plans:     make(map[string]*ExecutionPlan),
+		stopCh:    make(chan struct{}),
 	}
 }

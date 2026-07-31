@@ -19,7 +19,7 @@ func InitDB(path string) (*gorm.DB, error) {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&User{},
-		&Channel{},
+		&Provider{},
 		&Token{},
 		&Log{},
 		&RewriteRule{},

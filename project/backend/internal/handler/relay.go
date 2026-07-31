@@ -53,13 +53,13 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			}
 		}
 
-		// Select channel for the model
-		channel, err := engine.SelectChannel(relayReq.Model)
+		// Select provider for the model
+		provider, err := engine.SelectProvider(relayReq.Model)
 		if err != nil {
 			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
-					"message": fmt.Sprintf("no channel available for model: %s", relayReq.Model),
+					"message": fmt.Sprintf("no provider available for model: %s", relayReq.Model),
 					"type":    "service_unavailable",
 				},
 			})
@@ -67,7 +67,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		// Get execution plan
-		plan, err := engine.GetPlan(channel.ID)
+		plan, err := engine.GetPlan(provider.ID)
 		if err != nil {
 			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -97,7 +97,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		logEntry := model.Log{
 			UserID:           getString(userID),
 			TokenName:        getString(tokenName),
-			ChannelName:      channel.Name,
+			ProviderName:     provider.Name,
 			ModelName:        relayReq.Model,
 			IsStream:         relayReq.Stream,
 			Status:           "success",

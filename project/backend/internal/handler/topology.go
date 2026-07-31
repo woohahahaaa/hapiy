@@ -15,21 +15,17 @@ import (
 
 const topologySchemaVersion = 1
 
-type TopologySlot struct {
-	ID        string          `json:"id"`
-	ChannelID string          `json:"channel_id"`
-	SlotType  string          `json:"slot_type"`
-	Order     int             `json:"order"`
-	Enabled   bool            `json:"enabled"`
-	RuleID    *string         `json:"rule_id"`
-	Config    json.RawMessage `json:"config"`
+type TopologyNode struct {
+	Type       string          `json:"type"`
+	Name       string          `json:"name"`
+	ProviderID *string         `json:"provider_id,omitempty"`
+	RuleID     *string         `json:"rule_id,omitempty"`
+	Order      *int            `json:"order,omitempty"`
+	Enabled    *bool           `json:"enabled,omitempty"`
+	Config     json.RawMessage `json:"config,omitempty"`
 }
 
-type TopologyDocument struct {
-	SchemaVersion int            `json:"schema_version"`
-	Revision      uint64         `json:"revision"`
-	Slots         []TopologySlot `json:"slots"`
-}
+type TopologyDocument [][]TopologyNode
 
 type TopologyRefresher interface {
 	PrepareTopologyRefresh(*gorm.DB) (func(), error)
@@ -58,19 +54,7 @@ func TopologyPut(db *gorm.DB, refresher TopologyRefresher) gin.HandlerFunc {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-
-		currentRevision, publish, err := replaceTopology(db, document, rows, refresher)
-		if errors.Is(err, errTopologyRevisionConflict) {
-			c.JSON(http.StatusConflict, gin.H{
-				"current_revision": currentRevision,
-				"error":            "topology_revision_conflict",
-			})
-			return
-		}
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		publish, err := replaceTopology(db, rows, refresher)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -78,7 +62,6 @@ func TopologyPut(db *gorm.DB, refresher TopologyRefresher) gin.HandlerFunc {
 		if publish != nil {
 			publish()
 		}
-
 		saved, err := loadTopologyDocument(db)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -93,65 +76,66 @@ func decodeTopologyDocument(reader io.Reader) (TopologyDocument, error) {
 	decoder.DisallowUnknownFields()
 	var document TopologyDocument
 	if err := decoder.Decode(&document); err != nil {
-		return TopologyDocument{}, fmt.Errorf("decode topology: %w", err)
+		return nil, fmt.Errorf("decode topology: %w", err)
 	}
 	var trailing json.RawMessage
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		if err == nil {
-			return TopologyDocument{}, errors.New("decode topology: trailing JSON value")
+			return nil, errors.New("decode topology: trailing JSON value")
 		}
-		return TopologyDocument{}, fmt.Errorf("decode topology trailing value: %w", err)
-	}
-	if document.Slots == nil {
-		return TopologyDocument{}, errors.New("slots must be an array")
+		return nil, fmt.Errorf("decode topology trailing value: %w", err)
 	}
 	return document, nil
 }
 
 func loadTopologyDocument(db *gorm.DB) (TopologyDocument, error) {
-	document := TopologyDocument{SchemaVersion: topologySchemaVersion, Slots: []TopologySlot{}}
-	var state model.TopologyState
-	err := db.First(&state, 1).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return TopologyDocument{}, fmt.Errorf("load topology state: %w", err)
-	}
-	if err == nil {
-		document.SchemaVersion = state.SchemaVersion
-		document.Revision = state.Revision
-	}
-
 	var rows []model.TopologySlotAssignment
 	if err := db.Find(&rows).Error; err != nil {
-		return TopologyDocument{}, fmt.Errorf("load topology assignments: %w", err)
+		return nil, fmt.Errorf("load topology assignments: %w", err)
 	}
+	byProvider := make(map[string][]model.TopologySlotAssignment)
 	for _, row := range rows {
-		document.Slots = append(document.Slots, TopologySlot{
-			ID: row.ID, ChannelID: row.ChannelID, SlotType: row.SlotType,
-			Order: row.Order, Enabled: row.Enabled, RuleID: row.RuleID,
-			Config: json.RawMessage(row.Config),
-		})
+		byProvider[row.ProviderID] = append(byProvider[row.ProviderID], row)
 	}
-	sortTopologySlots(document.Slots)
+	document := TopologyDocument{}
+	for providerID, assignments := range byProvider {
+		workflow := []TopologyNode{}
+		var provider model.Provider
+		providerName := ""
+		if err := db.Where("id = ?", providerID).First(&provider).Error; err == nil {
+			providerName = provider.Name
+		}
+		pid := providerID
+		workflow = append(workflow, TopologyNode{
+			Type: "provider", Name: providerName, ProviderID: &pid,
+		})
+		sortTopologyAssignments(assignments)
+		for _, a := range assignments {
+			node := TopologyNode{
+				Type: a.SlotType, Name: a.Name, Enabled: &a.Enabled,
+			}
+			if a.RuleID != nil {
+				rid := *a.RuleID
+				node.RuleID = &rid
+			}
+			if a.SlotType != "logOutput" {
+				order := a.Order
+				node.Order = &order
+			}
+			if a.SlotType == "logOutput" {
+				node.Config = json.RawMessage(a.Config)
+			}
+			workflow = append(workflow, node)
+		}
+		document = append(document, workflow)
+	}
+	sortWorkflowsByProvider(document)
 	return document, nil
 }
 
-var errTopologyRevisionConflict = errors.New("topology revision conflict")
-
-func replaceTopology(db *gorm.DB, document TopologyDocument, rows []model.TopologySlotAssignment, refresher TopologyRefresher) (uint64, func(), error) {
-	currentRevision := uint64(0)
+func replaceTopology(db *gorm.DB, rows []model.TopologySlotAssignment, refresher TopologyRefresher) (func(), error) {
 	var publish func()
 	err := db.Transaction(func(tx *gorm.DB) error {
-		var state model.TopologyState
-		err := tx.First(&state, 1).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("load topology revision: %w", err)
-		}
-		if err == nil {
-			currentRevision = state.Revision
-		}
-		if currentRevision != document.Revision {
-			return errTopologyRevisionConflict
-		}
 		if err := tx.Where("1 = 1").Delete(&model.TopologySlotAssignment{}).Error; err != nil {
 			return fmt.Errorf("replace topology assignments: %w", err)
 		}
@@ -160,16 +144,9 @@ func replaceTopology(db *gorm.DB, document TopologyDocument, rows []model.Topolo
 				return fmt.Errorf("create topology assignments: %w", err)
 			}
 		}
-		next := model.TopologyState{ID: 1, SchemaVersion: topologySchemaVersion, Revision: currentRevision + 1}
-		if err == nil {
-			if err := tx.Model(&model.TopologyState{}).Where("id = ?", 1).Updates(map[string]any{
-				"schema_version": next.SchemaVersion,
-				"revision":       next.Revision,
-			}).Error; err != nil {
-				return err
-			}
-		} else if err := tx.Create(&next).Error; err != nil {
-			return err
+		state := model.TopologyState{ID: 1, SchemaVersion: topologySchemaVersion}
+		if err := tx.Where("id = ?", 1).FirstOrCreate(&state).Error; err != nil {
+			return fmt.Errorf("upsert topology state: %w", err)
 		}
 		if refresher != nil {
 			candidate, err := refresher.PrepareTopologyRefresh(tx)
@@ -180,15 +157,12 @@ func replaceTopology(db *gorm.DB, document TopologyDocument, rows []model.Topolo
 		}
 		return nil
 	})
-	return currentRevision, publish, err
+	return publish, err
 }
 
-func sortTopologySlots(slots []TopologySlot) {
-	sort.Slice(slots, func(i, j int) bool {
-		left, right := slots[i], slots[j]
-		if left.ChannelID != right.ChannelID {
-			return left.ChannelID < right.ChannelID
-		}
+func sortTopologyAssignments(assignments []model.TopologySlotAssignment) {
+	sort.Slice(assignments, func(i, j int) bool {
+		left, right := assignments[i], assignments[j]
 		if slotRank(left.SlotType) != slotRank(right.SlotType) {
 			return slotRank(left.SlotType) < slotRank(right.SlotType)
 		}
@@ -196,5 +170,18 @@ func sortTopologySlots(slots []TopologySlot) {
 			return left.Order < right.Order
 		}
 		return left.ID < right.ID
+	})
+}
+
+func sortWorkflowsByProvider(document TopologyDocument) {
+	sort.Slice(document, func(i, j int) bool {
+		pi, pj := "", ""
+		if len(document[i]) > 0 && document[i][0].ProviderID != nil {
+			pi = *document[i][0].ProviderID
+		}
+		if len(document[j]) > 0 && document[j][0].ProviderID != nil {
+			pj = *document[j][0].ProviderID
+		}
+		return pi < pj
 	})
 }

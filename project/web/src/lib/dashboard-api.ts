@@ -1,5 +1,8 @@
-import { parseTopologyDocument, type TopologyDocument } from './topology-document'
-export { parseTopologyDocument, type TopologyDocument } from './topology-document'
+import { parseTopologyDocument } from './topology-document'
+import type { Workflow } from './topology-document'
+export { parseTopologyDocument } from './topology-document'
+export type { Workflow } from './topology-document'
+export type TopologyDocument = Workflow[]
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -53,7 +56,7 @@ export type UsageLog = {
   readonly createdAt: string
   readonly userId: string
   readonly tokenName: string
-  readonly channelName: string
+  readonly providerName: string
   readonly modelName: string
   readonly promptTokens: number
   readonly completionTokens: number
@@ -217,17 +220,17 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
 
 function parseProvider(value: unknown): Provider {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的渠道格式无效', null)
+    throw new DashboardApiError('服务端返回的供应商格式无效', null)
   }
   return {
-    id: readString(value.id, 'channel.id'),
-    name: readString(value.name, 'channel.name'),
+    id: readString(value.id, 'provider.id'),
+    name: readString(value.name, 'provider.name'),
     baseUrls: readStringArray(value.base_urls, 'base_urls'),
     keys: readStringArray(value.keys, 'keys'),
     endpoints: readObjectArray(value.endpoints, 'endpoints', parseEndpoint),
     models: readObjectArray(value.models, 'models', parseModel),
-    status: readBoolean(value.status, 'channel.status'),
-    weight: readNumber(value.weight, 'channel.weight', 1),
+    status: readBoolean(value.status, 'provider.status'),
+    weight: readNumber(value.weight, 'provider.weight', 1),
   }
 }
 
@@ -260,7 +263,7 @@ function parseLog(value: unknown): UsageLog {
     createdAt: readString(value.created_at, 'log.created_at'),
     userId: readString(value.user_id, 'log.user_id'),
     tokenName: readString(value.token_name, 'log.token_name'),
-    channelName: readString(value.channel_name, 'log.channel_name'),
+    providerName: readString(value.provider_name, 'log.provider_name'),
     modelName: readString(value.model_name, 'log.model_name'),
     promptTokens: readNumber(value.prompt_tokens, 'log.prompt_tokens'),
     completionTokens: readNumber(value.completion_tokens, 'log.completion_tokens'),
@@ -341,6 +344,29 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
   return body
 }
 
+async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
+  let response: Response
+  try {
+    response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    })
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new DashboardApiError(`无法连接后端：${error.message}`, null)
+    }
+    throw new DashboardApiError('无法连接后端', null)
+  }
+  const text = await response.text()
+  const body = text === '' ? null : parseJson(text, '响应体')
+  if (!response.ok) {
+    const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
+    throw new DashboardApiError(message, response.status)
+  }
+  return body
+}
+
 function serializeProvider(provider: ProviderInput): JsonRecord {
   return {
     name: provider.name,
@@ -394,8 +420,8 @@ export type ConcurrencyRule = {
 export type FailoverRule = {
   readonly id: string
   readonly name: string
-  readonly primaryChannel: string
-  readonly fallbackChannel: string
+  readonly primaryProvider: string
+  readonly fallbackProvider: string
   readonly condition: 'timeout' | 'error' | 'rate_limit'
   readonly status: boolean
 }
@@ -454,8 +480,8 @@ function parseFailoverRule(value: unknown): FailoverRule {
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
-    primaryChannel: readString(value.primary_channel, 'rule.primary_channel'),
-    fallbackChannel: readString(value.fallback_channel, 'rule.fallback_channel'),
+    primaryProvider: readString(value.primary_provider, 'rule.primary_provider'),
+    fallbackProvider: readString(value.fallback_provider, 'rule.fallback_provider'),
     condition,
     status: readBoolean(value.status, 'rule.status'),
   }
@@ -497,8 +523,8 @@ const serializeConcurrencyRule: RuleSerializer<ConcurrencyRule> = (rule) => ({
 
 const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
   name: rule.name,
-  primary_channel: (rule as FailoverRule).primaryChannel ?? '',
-  fallback_channel: (rule as FailoverRule).fallbackChannel ?? '',
+  primary_provider: (rule as FailoverRule).primaryProvider ?? '',
+  fallback_provider: (rule as FailoverRule).fallbackProvider ?? '',
   condition: (rule as FailoverRule).condition ?? 'timeout',
   status: rule.status,
 })
@@ -572,23 +598,23 @@ function parseMetrics(value: unknown): RuntimeMetrics {
 export const dashboardApi = {
   // ── Providers ──
   async listProviders(): Promise<readonly Provider[]> {
-    const data = await request('/channels')
+    const data = await request('/providers')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的渠道列表格式无效', null)
+      throw new DashboardApiError('服务端返回的供应商列表格式无效', null)
     }
     return data.map(parseProvider)
   },
   async createProvider(provider: ProviderInput): Promise<Provider> {
-    return parseProvider(await request('/channels', { method: 'POST', body: JSON.stringify(serializeProvider(provider)) }))
+    return parseProvider(await request('/providers', { method: 'POST', body: JSON.stringify(serializeProvider(provider)) }))
   },
   async updateProvider(id: string, provider: ProviderInput): Promise<Provider> {
-    return parseProvider(await request(`/channels/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ id, ...serializeProvider(provider) }) }))
+    return parseProvider(await request(`/providers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ id, ...serializeProvider(provider) }) }))
   },
   async deleteProvider(id: string): Promise<void> {
-    await request(`/channels/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    await request(`/providers/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
   async toggleProvider(id: string): Promise<Provider> {
-    return parseProvider(await request(`/channels/${encodeURIComponent(id)}/toggle`, { method: 'POST' }))
+    return parseProvider(await request(`/providers/${encodeURIComponent(id)}/toggle`, { method: 'POST' }))
   },
 
   // ── Tokens ──
@@ -736,14 +762,15 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
 
   async getTopology(): Promise<TopologyDocument> {
-    return parseTopologyDocument(await requestFull('/topology'))
+    const body = await requestRaw('/topology')
+    return parseTopologyDocument(body)
   },
   async saveTopology(document: TopologyDocument): Promise<TopologyDocument> {
-    const data = await requestFull('/topology', {
+    const body = await requestRaw('/topology', {
       method: 'PUT',
       body: JSON.stringify(document),
     })
-    return parseTopologyDocument(data)
+    return parseTopologyDocument(body)
   },
 
   async getRuntimeMetrics(): Promise<RuntimeMetrics> {

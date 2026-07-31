@@ -2,147 +2,125 @@ import { describe, expect, it } from 'vitest'
 import { emptySlotEntryMap } from '@/components/topology/slot-items/types'
 import {
   parseTopologyDocument,
-  slotMapsFromDocument,
-  topologyDocumentFromSlotMaps,
+  slotMapsFromWorkflows,
+  workflowsFromSlotMaps,
 } from './topology-document'
 
 describe('parseTopologyDocument', () => {
-  it('preserves every valid wire field when the response is authoritative', () => {
-    // Given
-    const raw = {
-      schema_version: 1,
-      revision: 7,
-      slots: [{
-        id: 'assignment-real-id',
-        channel_id: 'channel-real-id',
-        slot_type: 'requestModify',
-        order: 3,
-        enabled: false,
-        rule_id: 'rule-real-id',
-        config: { custom: 'kept' },
-      }],
-    }
+  it('parses a bare array of workflows', () => {
+    const raw = [[
+      { type: 'provider', name: 'OpenAI', provider_id: 'p-001' },
+      { type: 'requestModify', name: '改写', rule_id: 'r-101', order: 1, enabled: true },
+      { type: 'logOutput', name: 'log', enabled: true, log_target: 'file', log_level: 'info', log_path: '/tmp/a.log', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true },
+    ]]
 
-    // When
-    const document = parseTopologyDocument(raw)
+    const workflows = parseTopologyDocument(raw)
 
-    // Then
-    expect(document).toEqual(raw)
+    expect(workflows).toHaveLength(1)
+    expect(workflows[0]).toHaveLength(3)
+    expect(workflows[0][0].type).toBe('provider')
+    expect(workflows[0][1].type).toBe('requestModify')
   })
 
-  it('rejects duplicate assignment IDs', () => {
-    // Given
-    const raw = {
-      schema_version: 1,
-      revision: 0,
-      slots: [
-        { id: 'same', channel_id: 'a', slot_type: 'autoReply', order: 1, enabled: true, rule_id: 'r1', config: {} },
-        { id: 'same', channel_id: 'b', slot_type: 'autoReply', order: 2, enabled: true, rule_id: 'r2', config: {} },
-      ],
-    }
+  it('rejects workflow without provider as first node', () => {
+    const raw = [[
+      { type: 'requestModify', name: 'x', rule_id: 'r-1', order: 1, enabled: true },
+    ]]
+    expect(() => parseTopologyDocument(raw)).toThrow('第一个节点必须是 provider')
+  })
 
-    // When / Then
-    expect(() => parseTopologyDocument(raw)).toThrow('拓扑槽位 ID same 重复')
+  it('rejects empty workflow', () => {
+    expect(() => parseTopologyDocument([[]])).toThrow('不能为空')
+  })
+
+  it('rejects non-array input', () => {
+    expect(() => parseTopologyDocument({})).toThrow('必须是数组')
+  })
+
+  it('allows omitting rule_id (user writes only name)', () => {
+    const raw = [[
+      { type: 'provider', name: 'P' },
+      { type: 'requestModify', name: 'rule-a', order: 1, enabled: true },
+    ]]
+    const workflows = parseTopologyDocument(raw)
+    expect(workflows[0][1]).not.toHaveProperty('rule_id')
+  })
+
+  it('allows omitting order for non-logOutput when user lets backend auto-assign', () => {
+    const raw = [[
+      { type: 'provider', name: 'P' },
+      { type: 'requestModify', name: 'rule-a', enabled: true },
+    ]]
+    expect(() => parseTopologyDocument(raw)).toThrow('order')
+  })
+
+  it('logOutput has no order field', () => {
+    const raw = [[
+      { type: 'provider', name: 'P' },
+      { type: 'logOutput', name: 'log', enabled: true, log_target: 'file', log_level: 'info', log_path: '', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true },
+    ]]
+    const workflows = parseTopologyDocument(raw)
+    expect(workflows[0][1]).not.toHaveProperty('order')
   })
 })
 
-describe('topology slot transformations', () => {
-  it('sorts assignments and restores immutable IDs, enabled state, and log config', () => {
-    // Given
-    const document = parseTopologyDocument({
-      schema_version: 1,
-      revision: 4,
-      slots: [
-        { id: 'log-b', channel_id: 'channel-a', slot_type: 'logOutput', order: 2, enabled: false, rule_id: null, config: { log_target: 'both', log_level: 'warn', log_path: '/tmp/a.log', record_request_before: false, record_request_after: true, record_response_before: false, record_response_after: true } },
-        { id: 'request-a', channel_id: 'channel-a', slot_type: 'requestModify', order: 1, enabled: true, rule_id: 'rule-a', config: { custom: 1 } },
-      ],
-    })
+describe('slotMapsFromWorkflows', () => {
+  it('groups nodes by slot type and sorts by order within slot', () => {
+    const workflows = parseTopologyDocument([[
+      { type: 'provider', name: 'P', provider_id: 'p-1' },
+      { type: 'requestModify', name: 'b', rule_id: 'r-2', order: 2, enabled: true },
+      { type: 'requestModify', name: 'a', rule_id: 'r-1', order: 1, enabled: true },
+      { type: 'logOutput', name: 'log', enabled: false, log_target: 'both', log_level: 'warn', log_path: '/tmp/a.log', record_request_before: false, record_request_after: true, record_response_before: false, record_response_after: true },
+    ]])
 
-    // When
-    const maps = slotMapsFromDocument(document, ['channel-a'])
+    const maps = slotMapsFromWorkflows(workflows)
 
-    // Then
-    expect(maps.get('channel-a')?.requestModify[0]).toMatchObject({ id: 'request-a', enabled: true, ruleId: 'rule-a', config: { custom: 1 } })
-    expect(maps.get('channel-a')?.logOutput[0]).toMatchObject({ id: 'log-b', enabled: false, logTarget: 'both', logLevel: 'warn', logPath: '/tmp/a.log', recordRequestBefore: false })
+    const providerSlots = maps.get('p-1')
+    expect(providerSlots?.requestModify).toHaveLength(2)
+    expect(providerSlots?.requestModify[0]).toMatchObject({ ruleId: 'r-1' })
+    expect(providerSlots?.requestModify[1]).toMatchObject({ ruleId: 'r-2' })
+    expect(providerSlots?.logOutput[0]).toMatchObject({ enabled: false, logTarget: 'both' })
   })
+})
 
-  it('sorts two-digit wire order numerically instead of lexically', () => {
-    // Given
-    const document = parseTopologyDocument({
-      schema_version: 1,
-      revision: 1,
-      slots: [
-        { id: 'rule-ten', channel_id: 'channel-a', slot_type: 'requestModify', order: 10, enabled: true, rule_id: 'r10', config: {} },
-        { id: 'rule-two', channel_id: 'channel-a', slot_type: 'requestModify', order: 2, enabled: true, rule_id: 'r2', config: {} },
-      ],
-    })
-
-    // When
-    const maps = slotMapsFromDocument(document, ['channel-a'])
-
-    // Then
-    expect(maps.get('channel-a')?.requestModify.map((entry) => entry.id)).toEqual(['rule-two', 'rule-ten'])
-  })
-
-  it('emits only real assignments and filters null-rule drafts without placeholder rows', () => {
-    // Given
-    const channelSlots = emptySlotEntryMap()
-    channelSlots.requestModify.push(
+describe('workflowsFromSlotMaps', () => {
+  it('filters null-rule drafts and emits only real assignments', () => {
+    const providerSlots = emptySlotEntryMap()
+    providerSlots.requestModify.push(
       { id: 'draft', slotType: 'requestModify', index: 1, enabled: true, ruleId: null, config: {} },
-      { id: 'saved', slotType: 'requestModify', index: 2, enabled: false, ruleId: 'rule-a', config: { custom: true } },
+      { id: 'saved', slotType: 'requestModify', index: 2, enabled: false, ruleId: 'rule-a', config: {} },
     )
-    const maps = new Map([['channel-a', channelSlots]])
+    const maps = new Map([['p-1', providerSlots]])
+    const providerNames = new Map([['p-1', 'P']])
+    const ruleNames = new Map([['requestModify:rule-a', 'rule-a']])
 
-    // When
-    const document = topologyDocumentFromSlotMaps(9, maps)
+    const workflows = workflowsFromSlotMaps(maps, providerNames, ruleNames)
 
-    // Then
-    expect(document).toEqual({
-      schema_version: 1,
-      revision: 9,
-      slots: [{ id: 'saved', channel_id: 'channel-a', slot_type: 'requestModify', order: 1, enabled: false, rule_id: 'rule-a', config: { custom: true } }],
-    })
+    expect(workflows).toHaveLength(1)
+    expect(workflows[0][0].type).toBe('provider')
+    expect(workflows[0][1].type).toBe('requestModify')
+    expect(workflows[0][1].name).toBe('rule-a')
   })
 
-  it('serializes log settings with backend snake_case keys and contiguous order', () => {
-    // Given
-    const channelSlots = emptySlotEntryMap()
-    channelSlots.logOutput.push({
-      id: 'log-real-id',
-      slotType: 'logOutput',
-      index: 8,
-      enabled: false,
-      logTarget: 'console',
-      logLevel: 'error',
-      logPath: '/var/log/hapiy.log',
-      recordRequestBefore: false,
-      recordRequestAfter: true,
-      recordResponseBefore: false,
-      recordResponseAfter: true,
-      config: { custom: 'kept' },
+  it('serializes logOutput with snake_case config keys', () => {
+    const providerSlots = emptySlotEntryMap()
+    providerSlots.logOutput.push({
+      id: 'log-1', slotType: 'logOutput', index: 1, enabled: false,
+      logTarget: 'console', logLevel: 'error', logPath: '/var/log/hapiy.log',
+      recordRequestBefore: false, recordRequestAfter: true,
+      recordResponseBefore: false, recordResponseAfter: true,
+      config: {},
     })
+    const maps = new Map([['p-1', providerSlots]])
+    const providerNames = new Map([['p-1', 'P']])
 
-    // When
-    const document = topologyDocumentFromSlotMaps(10, new Map([['channel-a', channelSlots]]))
+    const workflows = workflowsFromSlotMaps(maps, providerNames, new Map())
+    const logNode = workflows[0][1] as any
 
-    // Then
-    expect(document.slots).toEqual([{
-      id: 'log-real-id',
-      channel_id: 'channel-a',
-      slot_type: 'logOutput',
-      order: 1,
-      enabled: false,
-      rule_id: null,
-      config: {
-        custom: 'kept',
-        log_target: 'console',
-        log_level: 'error',
-        log_path: '/var/log/hapiy.log',
-        record_request_before: false,
-        record_request_after: true,
-        record_response_before: false,
-        record_response_after: true,
-      },
-    }])
+    expect(logNode.type).toBe('logOutput')
+    expect(logNode.log_target).toBe('console')
+    expect(logNode.log_level).toBe('error')
+    expect(logNode.log_path).toBe('/var/log/hapiy.log')
+    expect(logNode.record_request_after).toBe(true)
   })
 })

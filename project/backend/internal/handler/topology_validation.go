@@ -3,17 +3,12 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"regexp"
 	"sort"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
 )
-
-var topologyIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
 
 var topologySlotRanks = map[string]int{
 	"requestModify":  0,
@@ -25,112 +20,169 @@ var topologySlotRanks = map[string]int{
 }
 
 func validateTopologyDocument(db *gorm.DB, document TopologyDocument) ([]model.TopologySlotAssignment, error) {
-	if document.SchemaVersion != topologySchemaVersion {
-		return nil, fmt.Errorf("schema_version must be %d", topologySchemaVersion)
-	}
-	sortTopologySlots(document.Slots)
-	seenIDs := make(map[string]struct{}, len(document.Slots))
-	nextOrder := make(map[string]int)
-	rows := make([]model.TopologySlotAssignment, 0, len(document.Slots))
-	for _, slot := range document.Slots {
-		if err := validateTopologySlot(db, slot, seenIDs, nextOrder); err != nil {
-			return nil, err
+	rows := make([]model.TopologySlotAssignment, 0)
+	for wi, workflow := range document {
+		if len(workflow) == 0 {
+			return nil, fmt.Errorf("workflow %d is empty", wi+1)
 		}
-		config, err := canonicalTopologyConfig(slot)
+		providerNode := workflow[0]
+		if providerNode.Type != "provider" {
+			return nil, fmt.Errorf("workflow %d first node must be provider, got %s", wi+1, providerNode.Type)
+		}
+		providerID, err := resolveProviderID(db, providerNode)
 		if err != nil {
-			return nil, fmt.Errorf("slot %s: %w", slot.ID, err)
+			return nil, fmt.Errorf("workflow %d: %w", wi+1, err)
 		}
-		rows = append(rows, model.TopologySlotAssignment{
-			ID: slot.ID, ChannelID: slot.ChannelID, SlotType: slot.SlotType,
-			Order: slot.Order, Enabled: slot.Enabled, RuleID: slot.RuleID, Config: config,
-		})
+		nextOrder := make(map[string]int)
+		for ni, node := range workflow[1:] {
+			row, err := validateAndConvertNode(db, node, providerID, ni+1, nextOrder)
+			if err != nil {
+				return nil, fmt.Errorf("workflow %d node %d: %w", wi+1, ni+2, err)
+			}
+			rows = append(rows, row)
+		}
 	}
 	return rows, nil
 }
 
-func validateTopologySlot(db *gorm.DB, slot TopologySlot, seenIDs map[string]struct{}, nextOrder map[string]int) error {
-	if !topologyIDPattern.MatchString(slot.ID) {
-		return fmt.Errorf("slot id %q is invalid", slot.ID)
+func resolveProviderID(db *gorm.DB, node TopologyNode) (string, error) {
+	if node.ProviderID != nil && *node.ProviderID != "" {
+		var count int64
+		if err := db.Model(&model.Provider{}).Where("id = ?", *node.ProviderID).Count(&count).Error; err != nil {
+			return "", fmt.Errorf("check provider: %w", err)
+		}
+		if count != 1 {
+			return "", fmt.Errorf("provider_id %s not found", *node.ProviderID)
+		}
+		return *node.ProviderID, nil
 	}
-	if _, exists := seenIDs[slot.ID]; exists {
-		return fmt.Errorf("duplicate slot id %q", slot.ID)
+	var provider model.Provider
+	if err := db.Where("name = ?", node.Name).First(&provider).Error; err != nil {
+		return "", fmt.Errorf("provider name %q not found", node.Name)
 	}
-	seenIDs[slot.ID] = struct{}{}
-	if !topologyIDPattern.MatchString(slot.ChannelID) {
-		return fmt.Errorf("channel_id %q is invalid", slot.ChannelID)
-	}
-	if _, exists := topologySlotRanks[slot.SlotType]; !exists {
-		return fmt.Errorf("slot %s has invalid slot_type %q", slot.ID, slot.SlotType)
-	}
-	key := slot.ChannelID + "\x00" + slot.SlotType
-	expected := nextOrder[key] + 1
-	if slot.Order != expected {
-		return fmt.Errorf("slot %s order must be contiguous from 1", slot.ID)
-	}
-	nextOrder[key] = expected
-	var channelCount int64
-	if err := db.Model(&model.Channel{}).Where("id = ?", slot.ChannelID).Count(&channelCount).Error; err != nil {
-		return fmt.Errorf("check channel %s: %w", slot.ChannelID, err)
-	}
-	if channelCount != 1 {
-		return fmt.Errorf("slot %s references missing channel %s", slot.ID, slot.ChannelID)
-	}
-	return validateTopologyRule(db, slot)
+	return provider.ID, nil
 }
 
-func validateTopologyRule(db *gorm.DB, slot TopologySlot) error {
-	if slot.SlotType == "logOutput" {
-		if slot.RuleID != nil {
-			return fmt.Errorf("slot %s logOutput rule_id must be null", slot.ID)
+func validateAndConvertNode(db *gorm.DB, node TopologyNode, providerID string, nodeIndex int, nextOrder map[string]int) (model.TopologySlotAssignment, error) {
+	if _, exists := topologySlotRanks[node.Type]; !exists {
+		return model.TopologySlotAssignment{}, fmt.Errorf("invalid node type %q", node.Type)
+	}
+	if node.Name == "" {
+		return model.TopologySlotAssignment{}, fmt.Errorf("name is required")
+	}
+	row := model.TopologySlotAssignment{
+		ProviderID: providerID,
+		SlotType:   node.Type,
+		Name:       node.Name,
+	}
+	if node.Enabled != nil {
+		row.Enabled = *node.Enabled
+	} else {
+		row.Enabled = true
+	}
+	if node.Type == "logOutput" {
+		config, err := validateLogOutputNode(node)
+		if err != nil {
+			return row, err
 		}
-		return nil
+		row.Config = config
+		row.RuleID = nil
+		return row, nil
 	}
-	if slot.RuleID == nil || !topologyIDPattern.MatchString(*slot.RuleID) {
-		return fmt.Errorf("slot %s requires a valid rule_id", slot.ID)
+	ruleID, err := resolveRuleID(db, node)
+	if err != nil {
+		return row, err
 	}
-	var count int64
-	query := db.Where("id = ? AND status = ?", *slot.RuleID, true)
+	row.RuleID = &ruleID
+	if node.Order != nil {
+		row.Order = *node.Order
+	} else {
+		key := providerID + "\x00" + node.Type
+		row.Order = nextOrder[key] + 1
+	}
+	nextOrder[providerID+"\x00"+node.Type] = row.Order
+	row.Config = "{}"
+	return row, nil
+}
+
+func resolveRuleID(db *gorm.DB, node TopologyNode) (string, error) {
+	if node.RuleID != nil && *node.RuleID != "" {
+		ruleID := *node.RuleID
+		if err := validateRuleExists(db, node.Type, ruleID); err != nil {
+			return "", err
+		}
+		return ruleID, nil
+	}
+	return resolveRuleByName(db, node.Type, node.Name)
+}
+
+func resolveRuleByName(db *gorm.DB, slotType, name string) (string, error) {
+	query := db.Where("name = ? AND status = ?", name, true)
+	var id string
 	var err error
-	switch slot.SlotType {
+	switch slotType {
 	case "requestModify":
-		err = query.Model(&model.RewriteRule{}).Count(&count).Error
+		var rule model.RewriteRule
+		err = query.First(&rule).Error
+		id = rule.ID
 	case "responseModify":
-		err = query.Model(&model.ResponseRewriteRule{}).Count(&count).Error
+		var rule model.ResponseRewriteRule
+		err = query.First(&rule).Error
+		id = rule.ID
 	case "autoReply":
-		err = query.Model(&model.HeartbeatRule{}).Count(&count).Error
+		var rule model.HeartbeatRule
+		err = query.First(&rule).Error
+		id = rule.ID
 	case "concurrency":
-		err = query.Model(&model.ConcurrencyRule{}).Count(&count).Error
+		var rule model.ConcurrencyRule
+		err = query.First(&rule).Error
+		id = rule.ID
 	case "autoSwitch":
-		err = query.Model(&model.FailoverRule{}).Count(&count).Error
+		var rule model.FailoverRule
+		err = query.First(&rule).Error
+		id = rule.ID
+	default:
+		return "", fmt.Errorf("cannot resolve rule for slot type %s", slotType)
 	}
 	if err != nil {
-		return fmt.Errorf("check rule %s: %w", *slot.RuleID, err)
+		return "", fmt.Errorf("%s rule name %q not found or disabled", slotType, name)
+	}
+	return id, nil
+}
+
+func validateRuleExists(db *gorm.DB, slotType, ruleID string) error {
+	var count int64
+	query := db.Where("id = ? AND status = ?", ruleID, true)
+	switch slotType {
+	case "requestModify":
+		query.Model(&model.RewriteRule{}).Count(&count)
+	case "responseModify":
+		query.Model(&model.ResponseRewriteRule{}).Count(&count)
+	case "autoReply":
+		query.Model(&model.HeartbeatRule{}).Count(&count)
+	case "concurrency":
+		query.Model(&model.ConcurrencyRule{}).Count(&count)
+	case "autoSwitch":
+		query.Model(&model.FailoverRule{}).Count(&count)
+	default:
+		return fmt.Errorf("unknown slot type %s", slotType)
 	}
 	if count != 1 {
-		return fmt.Errorf("slot %s references missing or disabled %s rule %s", slot.ID, slot.SlotType, *slot.RuleID)
+		return fmt.Errorf("%s rule %s not found or disabled", slotType, ruleID)
 	}
 	return nil
 }
 
-func canonicalTopologyConfig(slot TopologySlot) (string, error) {
-	decoder := json.NewDecoder(bytes.NewReader(slot.Config))
-	decoder.UseNumber()
+func validateLogOutputNode(node TopologyNode) (string, error) {
 	var config map[string]any
-	if err := decoder.Decode(&config); err != nil {
-		return "", fmt.Errorf("config must be an object: %w", err)
-	}
-	var trailing json.RawMessage
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return "", errors.New("config has trailing JSON value")
+	if len(node.Config) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(node.Config))
+		decoder.UseNumber()
+		if err := decoder.Decode(&config); err != nil {
+			return "", fmt.Errorf("config must be an object: %w", err)
 		}
-		return "", fmt.Errorf("decode config trailing value: %w", err)
-	}
-	if slot.SlotType != "logOutput" {
-		if len(config) != 0 {
-			return "", errors.New("rule-backed config must be exactly {}")
-		}
-		return `{}`, nil
+	} else {
+		config = map[string]any{}
 	}
 	if err := validateLogOutputConfig(config); err != nil {
 		return "", err

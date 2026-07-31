@@ -2,7 +2,7 @@ import topologyJson from './topology.json'
 
 type NodeType =
   | 'modelHub'
-  | 'channel'
+  | 'provider'
   | 'slot'
 
 type NodeDimension = {
@@ -31,7 +31,7 @@ type TopologyConfig = {
   readonly fallbackNodeDimension: NodeDimension
   readonly initialPositions: {
     readonly modelHub: Readonly<{ readonly x: number; readonly y: number; readonly verticalOffset: number }>
-    readonly channel: Readonly<{ readonly x: number; readonly y: number; readonly verticalOffset: number }>
+    readonly provider: Readonly<{ readonly x: number; readonly y: number; readonly verticalOffset: number }>
     readonly slot: Readonly<{
       readonly x: number
       readonly y: number
@@ -42,7 +42,7 @@ type TopologyConfig = {
   readonly edge: Readonly<{ readonly animated: boolean; readonly strokeWidth: number }>
   readonly grid: Readonly<{ readonly color: string; readonly gap: number; readonly size: number }>
   readonly handles: {
-    readonly channel: Readonly<{
+    readonly provider: Readonly<{
       readonly target: HandleMetric
       readonly source: HandleMetric
       readonly segmentGap: number

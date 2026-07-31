@@ -25,8 +25,8 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// Channel model (upstream provider)
-type Channel struct {
+// Provider model (upstream API provider)
+type Provider struct {
 	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
 	Name      string    `gorm:"not null" json:"name"`
 	BaseURLs  string    `gorm:"type:text" json:"base_urls"` // JSON array
@@ -42,9 +42,9 @@ type Channel struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (c *Channel) BeforeCreate(tx *gorm.DB) error {
-	if c.ID == "" {
-		c.ID = uuid.New().String()
+func (p *Provider) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == "" {
+		p.ID = uuid.New().String()
 	}
 	return nil
 }
@@ -75,7 +75,7 @@ type Log struct {
 	ID               string    `gorm:"primaryKey;type:uuid" json:"id"`
 	UserID           string    `json:"user_id"`
 	TokenName        string    `json:"token_name"`
-	ChannelName      string    `json:"channel_name"`
+	ProviderName     string    `json:"provider_name"`
 	ModelName        string    `json:"model_name"`
 	PromptTokens     int       `json:"prompt_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
@@ -164,8 +164,8 @@ func (r *ConcurrencyRule) BeforeCreate(tx *gorm.DB) error {
 type FailoverRule struct {
 	ID              string `gorm:"primaryKey;type:uuid" json:"id"`
 	Name            string `gorm:"not null" json:"name"`
-	PrimaryChannel  string `json:"primary_channel"`
-	FallbackChannel string `json:"fallback_channel"`
+	PrimaryProvider string `json:"primary_provider"`
+	FallbackProvider string `json:"fallback_provider"`
 	Condition       string `gorm:"default:'timeout'" json:"condition"`
 	Status          bool   `gorm:"not null" json:"status"`
 }
@@ -217,14 +217,14 @@ func (t *TopologyConfig) BeforeCreate(tx *gorm.DB) error {
 // Positions are intentionally NOT stored; the frontend derives layout locally.
 type TopologyNode struct {
 	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Type         string    `gorm:"not null;index" json:"type"` // modelHub | channel | slot
-	ParentID     *string   `gorm:"index" json:"parent_id"`     // for slot nodes: the channel id
+	Type         string    `gorm:"not null;index" json:"type"` // modelHub | provider | slot
+	ParentID     *string   `gorm:"index" json:"parent_id"`     // for slot nodes: the provider id
 	SlotType     *string   `json:"slot_type"`                  // requestModify / responseModify / autoReply / concurrency / autoSwitch / logOutput
-	ChannelID    *string   `gorm:"index" json:"channel_id"`    // for slot nodes: the parent channel id
+	ProviderID   *string   `gorm:"index" json:"provider_id"`  // for slot nodes: the parent provider id
 	ModelHubID   *string   `json:"model_hub_id"`               // future use
 	Name         string    `gorm:"not null" json:"name"`
-	ProviderName *string   `json:"provider_name"`            // backend channel name when type=channel
-	Payload      string    `gorm:"type:text" json:"payload"` // free-form per-type JSON blob
+	ProviderName *string   `json:"provider_name"`              // backend provider name when type=provider
+	Payload      string    `gorm:"type:text" json:"payload"`   // free-form per-type JSON blob
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

@@ -125,21 +125,21 @@ export function ProviderPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="供应商" subtitle="Channel management" status={`${providers.length} 渠道`} />
+      <PageHeader title="供应商" subtitle="Provider management" status={`${providers.length} 供应商`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">管理上游 API 渠道配置</div>
+          <div className="text-sm text-muted-foreground">管理上游 API 供应商配置</div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
               <Code data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
-              <Plus data-icon="inline-start" />添加渠道
+              <Plus data-icon="inline-start" />添加供应商
             </Button>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle>{editing ? '编辑渠道' : '添加渠道'}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editing ? '编辑供应商' : '添加供应商'}</DialogTitle></DialogHeader>
               <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} />
             </DialogContent>
           </Dialog>
@@ -162,8 +162,8 @@ export function ProviderPage() {
           <Table>
             <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>Base URLs</TableHead><TableHead>Keys</TableHead><TableHead>Endpoints</TableHead><TableHead>模型</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">正在加载渠道...</TableCell></TableRow>}
-              {!isLoading && providers.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">暂无渠道。添加一个渠道开始配置。</TableCell></TableRow>}
+              {isLoading && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">正在加载供应商...</TableCell></TableRow>}
+              {!isLoading && providers.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">暂无供应商。添加一个供应商开始配置。</TableCell></TableRow>}
               {providers.map((provider) => (
                 <TableRow key={provider.id}>
                   <TableCell className="font-medium">{provider.name}</TableCell>

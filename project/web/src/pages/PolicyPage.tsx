@@ -725,7 +725,7 @@ function FailoverPage() {
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
     if (!rule || mutating) return
-    await update(id, { name: rule.name, primaryChannel: rule.primaryChannel, fallbackChannel: rule.fallbackChannel, condition: rule.condition, status: !rule.status })
+    await update(id, { name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: !rule.status })
   }
 
   const handleDelete = async (id: string) => {
@@ -735,10 +735,10 @@ function FailoverPage() {
 
   const handleSave = async (rule: FailoverRule) => {
     if (editing) {
-      const result = await update(rule.id, { name: rule.name, primaryChannel: rule.primaryChannel, fallbackChannel: rule.fallbackChannel, condition: rule.condition, status: rule.status })
+      const result = await update(rule.id, { name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: rule.status })
       if (result) { setEditing(null); setIsOpen(false) }
     } else {
-      const result = await create({ name: rule.name, primaryChannel: rule.primaryChannel, fallbackChannel: rule.fallbackChannel, condition: rule.condition, status: rule.status })
+      const result = await create({ name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: rule.status })
       if (result) { setIsOpen(false) }
     }
   }
@@ -753,7 +753,7 @@ function FailoverPage() {
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            主渠道失败时自动切换到备选渠道
+            主供应商失败时自动切换到备选供应商
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
@@ -771,7 +771,7 @@ function FailoverPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>名称</TableHead>
-                <TableHead>主渠道</TableHead>
+                <TableHead>主供应商</TableHead>
                 <TableHead>备选</TableHead>
                 <TableHead>触发条件</TableHead>
                 <TableHead>状态</TableHead>
@@ -785,8 +785,8 @@ function FailoverPage() {
               {!loading && !error && rules.map((rule) => (
                 <TableRow key={rule.id}>
                   <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="text-xs">{rule.primaryChannel}</TableCell>
-                  <TableCell className="text-xs">{rule.fallbackChannel}</TableCell>
+                  <TableCell className="text-xs">{rule.primaryProvider}</TableCell>
+                  <TableCell className="text-xs">{rule.fallbackProvider}</TableCell>
                   <TableCell className="text-xs">
                     {rule.condition === 'timeout' ? '超时' : rule.condition === 'error' ? '错误' : '限流'}
                   </TableCell>
@@ -832,7 +832,7 @@ function FailoverPage() {
 
 function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void }) {
   const [form, setForm] = useState<FailoverRule>(
-    rule || { id: '', name: '', primaryChannel: '', fallbackChannel: '', condition: 'timeout', status: true }
+    rule || { id: '', name: '', primaryProvider: '', fallbackProvider: '', condition: 'timeout', status: true }
   )
 
   return (
@@ -842,12 +842,12 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
         <Input id="failover-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="failover-primary">主渠道</FieldLabel>
-        <Input id="failover-primary" value={form.primaryChannel} onChange={(e) => setForm((p) => ({ ...p, primaryChannel: e.target.value }))} placeholder="OpenAI" />
+        <FieldLabel htmlFor="failover-primary">主供应商</FieldLabel>
+        <Input id="failover-primary" value={form.primaryProvider} onChange={(e) => setForm((p) => ({ ...p, primaryProvider: e.target.value }))} placeholder="OpenAI" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="failover-fallback">备选渠道</FieldLabel>
-        <Input id="failover-fallback" value={form.fallbackChannel} onChange={(e) => setForm((p) => ({ ...p, fallbackChannel: e.target.value }))} placeholder="Anthropic" />
+        <FieldLabel htmlFor="failover-fallback">备选供应商</FieldLabel>
+        <Input id="failover-fallback" value={form.fallbackProvider} onChange={(e) => setForm((p) => ({ ...p, fallbackProvider: e.target.value }))} placeholder="Anthropic" />
       </Field>
       <Field>
         <FieldLabel htmlFor="failover-condition">触发条件</FieldLabel>

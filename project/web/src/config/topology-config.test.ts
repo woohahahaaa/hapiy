@@ -16,9 +16,9 @@ describe('topology-config dimensions', () => {
   })
 
   it('getTopologyNodeDimension returns the configured range, not a fixed width', () => {
-    const channel = getTopologyNodeDimension('channel')
-    expect(channel).toEqual(topologyConfig.nodeDimensions.channel)
-    expect(channel).not.toHaveProperty('width')
+    const provider = getTopologyNodeDimension('provider')
+    expect(provider).toEqual(topologyConfig.nodeDimensions.provider)
+    expect(provider).not.toHaveProperty('width')
   })
 
   it('getTopologyNodeDimension falls back to the fallback range for unknown types', () => {

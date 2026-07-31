@@ -8,48 +8,48 @@ import (
 )
 
 func (e *Engine) RefreshPlans() error {
-	freshChannels, freshPlans, err := e.buildPlans(e.db)
+	freshProviders, freshPlans, err := e.buildPlans(e.db)
 	if err != nil {
 		return err
 	}
-	e.publishPlans(freshChannels, freshPlans)
+	e.publishPlans(freshProviders, freshPlans)
 	return nil
 }
 
 func (e *Engine) PrepareTopologyRefresh(tx *gorm.DB) (func(), error) {
-	freshChannels, freshPlans, err := e.buildPlans(tx)
+	freshProviders, freshPlans, err := e.buildPlans(tx)
 	if err != nil {
 		return nil, err
 	}
-	return func() { e.publishPlans(freshChannels, freshPlans) }, nil
+	return func() { e.publishPlans(freshProviders, freshPlans) }, nil
 }
 
-func (e *Engine) buildPlans(db *gorm.DB) (map[string]*model.Channel, map[string]*ExecutionPlan, error) {
-	var channels []model.Channel
-	if err := db.Where("status = ?", true).Find(&channels).Error; err != nil {
-		return nil, nil, fmt.Errorf("load enabled channels: %w", err)
+func (e *Engine) buildPlans(db *gorm.DB) (map[string]*model.Provider, map[string]*ExecutionPlan, error) {
+	var providers []model.Provider
+	if err := db.Where("status = ?", true).Find(&providers).Error; err != nil {
+		return nil, nil, fmt.Errorf("load enabled providers: %w", err)
 	}
-	freshChannels := make(map[string]*model.Channel, len(channels))
-	freshPlans := make(map[string]*ExecutionPlan, len(channels))
-	for i := range channels {
-		channel := &channels[i]
-		freshChannels[channel.ID] = channel
-		plan := &ExecutionPlan{ID: channel.ID, Channel: channel}
+	freshProviders := make(map[string]*model.Provider, len(providers))
+	freshPlans := make(map[string]*ExecutionPlan, len(providers))
+	for i := range providers {
+		provider := &providers[i]
+		freshProviders[provider.ID] = provider
+		plan := &ExecutionPlan{ID: provider.ID, Provider: provider}
 		if err := e.populatePlan(db, plan); err != nil {
-			return nil, nil, fmt.Errorf("compile plan for channel %s: %w", channel.ID, err)
+			return nil, nil, fmt.Errorf("compile plan for provider %s: %w", provider.ID, err)
 		}
-		freshPlans[channel.ID] = plan
+		freshPlans[provider.ID] = plan
 	}
-	return freshChannels, freshPlans, nil
+	return freshProviders, freshPlans, nil
 }
 
-func (e *Engine) publishPlans(freshChannels map[string]*model.Channel, freshPlans map[string]*ExecutionPlan) {
-	e.channelsMu.Lock()
+func (e *Engine) publishPlans(freshProviders map[string]*model.Provider, freshPlans map[string]*ExecutionPlan) {
+	e.providersMu.Lock()
 	e.plansMu.Lock()
-	e.channels = freshChannels
+	e.providers = freshProviders
 	e.plans = freshPlans
 	e.plansMu.Unlock()
-	e.channelsMu.Unlock()
+	e.providersMu.Unlock()
 }
 
 func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
@@ -59,7 +59,7 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 		WHEN 'autoReply' THEN 2 WHEN 'concurrency' THEN 3
 		WHEN 'autoSwitch' THEN 4 WHEN 'logOutput' THEN 5 ELSE 6 END,
 		"order" ASC, id ASC`
-	if err := db.Where("channel_id = ? AND enabled = ?", plan.Channel.ID, true).
+	if err := db.Where("provider_id = ? AND enabled = ?", plan.Provider.ID, true).
 		Order(orderClause).Find(&assignments).Error; err != nil {
 		return fmt.Errorf("load topology assignments: %w", err)
 	}
@@ -96,7 +96,7 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		plan.ResponseRewriteRules = append(plan.ResponseRewriteRules, &rule)
 	case "autoReply":
 		if plan.HeartbeatRule != nil {
-			return fmt.Errorf("channel %s has multiple enabled autoReply assignments", plan.Channel.ID)
+			return fmt.Errorf("provider %s has multiple enabled autoReply assignments", plan.Provider.ID)
 		}
 		var rule model.HeartbeatRule
 		if err := query.First(&rule).Error; err != nil {
@@ -105,7 +105,7 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		plan.HeartbeatRule = &rule
 	case "concurrency":
 		if plan.ConcurrencyRule != nil {
-			return fmt.Errorf("channel %s has multiple enabled concurrency assignments", plan.Channel.ID)
+			return fmt.Errorf("provider %s has multiple enabled concurrency assignments", plan.Provider.ID)
 		}
 		var rule model.ConcurrencyRule
 		if err := query.First(&rule).Error; err != nil {

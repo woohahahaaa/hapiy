@@ -3,9 +3,9 @@
 // 参考: prototype/app/src/store/*.jsx
 
 export interface AppState {
-  // 供应商 (channels/providers)
-  providers: Provider[]
-  providersVersion: number
+// 供应商 (providers)
+providers: Provider[]
+providersVersion: number
 
   // 策略规则
   rules: PolicyRules
@@ -76,8 +76,8 @@ export interface RewriteRule {
 export interface FailoverRule {
   id: string
   name: string
-  primaryChannel: string
-  fallbackChannel: string
+  primaryProvider: string
+  fallbackProvider: string
   condition: 'timeout' | 'error' | 'rate_limit'
   status: boolean
 }
@@ -107,7 +107,7 @@ export interface UserInfo {
 
 export type NodeType =
   | 'modelHub'
-  | 'channel'
+  | 'provider'
   | 'slot'
 
 export interface TopologyEdge {

@@ -45,7 +45,7 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold">hapiy 控制台</h1>
-            <p className="text-sm text-muted-foreground">登录以管理渠道、规则与价格配置</p>
+            <p className="text-sm text-muted-foreground">登录以管理供应商、规则与价格配置</p>
           </div>
         </div>
 
