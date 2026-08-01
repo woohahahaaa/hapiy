@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
 )
 
-const topologySchemaVersion = 1
+const (
+	topologySchemaVersion = 1
+	topologyConfigRowID   = "topology-main"
+)
 
 type TopologyNode struct {
 	Type       string          `json:"type"`
@@ -49,12 +51,12 @@ func TopologyPut(db *gorm.DB, refresher TopologyRefresher) gin.HandlerFunc {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-		rows, err := validateTopologyDocument(db, document)
+		canonical, rows, err := validateTopologyDocument(db, document)
 		if err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-		publish, err := replaceTopology(db, rows, refresher)
+		publish, err := replaceTopology(db, canonical, rows, refresher)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -62,12 +64,7 @@ func TopologyPut(db *gorm.DB, refresher TopologyRefresher) gin.HandlerFunc {
 		if publish != nil {
 			publish()
 		}
-		saved, err := loadTopologyDocument(db)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, saved)
+		c.JSON(http.StatusOK, canonical)
 	}
 }
 
@@ -89,53 +86,42 @@ func decodeTopologyDocument(reader io.Reader) (TopologyDocument, error) {
 }
 
 func loadTopologyDocument(db *gorm.DB) (TopologyDocument, error) {
-	var rows []model.TopologySlotAssignment
-	if err := db.Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("load topology assignments: %w", err)
-	}
-	byProvider := make(map[string][]model.TopologySlotAssignment)
-	for _, row := range rows {
-		byProvider[row.ProviderID] = append(byProvider[row.ProviderID], row)
-	}
-	document := TopologyDocument{}
-	for providerID, assignments := range byProvider {
-		workflow := []TopologyNode{}
-		var provider model.Provider
-		providerName := ""
-		if err := db.Where("id = ?", providerID).First(&provider).Error; err == nil {
-			providerName = provider.Name
+	var config model.TopologyConfig
+	if err := db.Where("id = ?", topologyConfigRowID).First(&config).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return TopologyDocument{}, nil
 		}
-		pid := providerID
-		workflow = append(workflow, TopologyNode{
-			Type: "provider", Name: providerName, ProviderID: &pid,
-		})
-		sortTopologyAssignments(assignments)
-		for _, a := range assignments {
-			node := TopologyNode{
-				Type: a.SlotType, Name: a.Name, Enabled: &a.Enabled,
-			}
-			if a.RuleID != nil {
-				rid := *a.RuleID
-				node.RuleID = &rid
-			}
-			if a.SlotType != "logOutput" {
-				order := a.Order
-				node.Order = &order
-			}
-			if a.SlotType == "logOutput" {
-				node.Config = json.RawMessage(a.Config)
-			}
-			workflow = append(workflow, node)
-		}
-		document = append(document, workflow)
+		return nil, fmt.Errorf("load topology config: %w", err)
 	}
-	sortWorkflowsByProvider(document)
+	var document TopologyDocument
+	if err := json.Unmarshal([]byte(config.Nodes), &document); err != nil {
+		return nil, fmt.Errorf("decode stored topology document: %w", err)
+	}
 	return document, nil
 }
 
-func replaceTopology(db *gorm.DB, rows []model.TopologySlotAssignment, refresher TopologyRefresher) (func(), error) {
+// replaceTopology persists the canonical JSON document as the source of truth
+// and derives the normalized assignment rows from it in the same transaction,
+// so the two can never diverge.
+func replaceTopology(db *gorm.DB, document TopologyDocument, rows []model.TopologySlotAssignment, refresher TopologyRefresher) (func(), error) {
 	var publish func()
 	err := db.Transaction(func(tx *gorm.DB) error {
+		encoded, err := json.Marshal(document)
+		if err != nil {
+			return fmt.Errorf("encode topology document: %w", err)
+		}
+		config := model.TopologyConfig{
+			ID:      topologyConfigRowID,
+			Version: topologySchemaVersion,
+			Nodes:   string(encoded),
+			Edges:   "[]",
+		}
+		if err := tx.Where("id = ?", topologyConfigRowID).Delete(&model.TopologyConfig{}).Error; err != nil {
+			return fmt.Errorf("replace topology config: %w", err)
+		}
+		if err := tx.Create(&config).Error; err != nil {
+			return fmt.Errorf("create topology config: %w", err)
+		}
 		if err := tx.Where("1 = 1").Delete(&model.TopologySlotAssignment{}).Error; err != nil {
 			return fmt.Errorf("replace topology assignments: %w", err)
 		}
@@ -158,30 +144,4 @@ func replaceTopology(db *gorm.DB, rows []model.TopologySlotAssignment, refresher
 		return nil
 	})
 	return publish, err
-}
-
-func sortTopologyAssignments(assignments []model.TopologySlotAssignment) {
-	sort.Slice(assignments, func(i, j int) bool {
-		left, right := assignments[i], assignments[j]
-		if slotRank(left.SlotType) != slotRank(right.SlotType) {
-			return slotRank(left.SlotType) < slotRank(right.SlotType)
-		}
-		if left.Order != right.Order {
-			return left.Order < right.Order
-		}
-		return left.ID < right.ID
-	})
-}
-
-func sortWorkflowsByProvider(document TopologyDocument) {
-	sort.Slice(document, func(i, j int) bool {
-		pi, pj := "", ""
-		if len(document[i]) > 0 && document[i][0].ProviderID != nil {
-			pi = *document[i][0].ProviderID
-		}
-		if len(document[j]) > 0 && document[j][0].ProviderID != nil {
-			pj = *document[j][0].ProviderID
-		}
-		return pi < pj
-	})
 }

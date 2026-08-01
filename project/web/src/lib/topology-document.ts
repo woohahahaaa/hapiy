@@ -249,7 +249,7 @@ export function workflowsFromSlotMaps(
         nodes.push(node)
       }
     }
-    if (nodes.length > 1) workflows.push(nodes)
+    workflows.push(nodes)
   }
   return workflows
 }

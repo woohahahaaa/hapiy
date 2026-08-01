@@ -19,48 +19,77 @@ var topologySlotRanks = map[string]int{
 	"logOutput":      5,
 }
 
-func validateTopologyDocument(db *gorm.DB, document TopologyDocument) ([]model.TopologySlotAssignment, error) {
+// validateTopologyDocument validates the user-supplied document and produces
+// two outputs: the canonical document (with provider_id / rule_id / order
+// backfilled) that is stored verbatim as the source of truth, and the
+// normalized assignment rows that the relay engine consumes.
+func validateTopologyDocument(db *gorm.DB, document TopologyDocument) (TopologyDocument, []model.TopologySlotAssignment, error) {
+	canonical := make(TopologyDocument, 0, len(document))
 	rows := make([]model.TopologySlotAssignment, 0)
 	for wi, workflow := range document {
 		if len(workflow) == 0 {
-			return nil, fmt.Errorf("workflow %d is empty", wi+1)
+			return nil, nil, fmt.Errorf("workflow %d is empty", wi+1)
 		}
 		providerNode := workflow[0]
 		if providerNode.Type != "provider" {
-			return nil, fmt.Errorf("workflow %d first node must be provider, got %s", wi+1, providerNode.Type)
+			return nil, nil, fmt.Errorf("workflow %d first node must be provider, got %s", wi+1, providerNode.Type)
 		}
-		providerID, err := resolveProviderID(db, providerNode)
+		provider, err := resolveProvider(db, providerNode)
 		if err != nil {
-			return nil, fmt.Errorf("workflow %d: %w", wi+1, err)
+			return nil, nil, fmt.Errorf("workflow %d: %w", wi+1, err)
 		}
+		canonicalWorkflow := []TopologyNode{{
+			Type:       "provider",
+			Name:       provider.Name,
+			ProviderID: &provider.ID,
+		}}
 		nextOrder := make(map[string]int)
 		for ni, node := range workflow[1:] {
-			row, err := validateAndConvertNode(db, node, providerID, ni+1, nextOrder)
+			row, err := validateAndConvertNode(db, node, provider.ID, ni+1, nextOrder)
 			if err != nil {
-				return nil, fmt.Errorf("workflow %d node %d: %w", wi+1, ni+2, err)
+				return nil, nil, fmt.Errorf("workflow %d node %d: %w", wi+1, ni+2, err)
 			}
 			rows = append(rows, row)
+			canonicalWorkflow = append(canonicalWorkflow, rowToNode(row))
 		}
+		canonical = append(canonical, canonicalWorkflow)
 	}
-	return rows, nil
+	return canonical, rows, nil
 }
 
-func resolveProviderID(db *gorm.DB, node TopologyNode) (string, error) {
+func resolveProvider(db *gorm.DB, node TopologyNode) (*model.Provider, error) {
 	if node.ProviderID != nil && *node.ProviderID != "" {
-		var count int64
-		if err := db.Model(&model.Provider{}).Where("id = ?", *node.ProviderID).Count(&count).Error; err != nil {
-			return "", fmt.Errorf("check provider: %w", err)
+		var provider model.Provider
+		if err := db.Where("id = ?", *node.ProviderID).First(&provider).Error; err != nil {
+			return nil, fmt.Errorf("provider_id %s not found", *node.ProviderID)
 		}
-		if count != 1 {
-			return "", fmt.Errorf("provider_id %s not found", *node.ProviderID)
-		}
-		return *node.ProviderID, nil
+		return &provider, nil
 	}
 	var provider model.Provider
 	if err := db.Where("name = ?", node.Name).First(&provider).Error; err != nil {
-		return "", fmt.Errorf("provider name %q not found", node.Name)
+		return nil, fmt.Errorf("provider name %q not found", node.Name)
 	}
-	return provider.ID, nil
+	return &provider, nil
+}
+
+func rowToNode(row model.TopologySlotAssignment) TopologyNode {
+	enabled := row.Enabled
+	node := TopologyNode{
+		Type:    row.SlotType,
+		Name:    row.Name,
+		Enabled: &enabled,
+	}
+	if row.RuleID != nil {
+		rid := *row.RuleID
+		node.RuleID = &rid
+	}
+	if row.SlotType != "logOutput" {
+		order := row.Order
+		node.Order = &order
+	} else {
+		node.Config = json.RawMessage(row.Config)
+	}
+	return node
 }
 
 func validateAndConvertNode(db *gorm.DB, node TopologyNode, providerID string, nodeIndex int, nextOrder map[string]int) (model.TopologySlotAssignment, error) {
@@ -242,11 +271,4 @@ func containsString(values []string, candidate string) bool {
 		}
 	}
 	return false
-}
-
-func slotRank(slotType string) int {
-	if rank, exists := topologySlotRanks[slotType]; exists {
-		return rank
-	}
-	return len(topologySlotRanks)
 }

@@ -38,6 +38,7 @@ func newTopologyTestDB(t *testing.T) *gorm.DB {
 		&model.ConcurrencyRule{},
 		&model.FailoverRule{},
 		&model.TopologyState{},
+		&model.TopologyConfig{},
 		&model.TopologySlotAssignment{},
 	); err != nil {
 		t.Fatalf("automigrate: %v", err)
@@ -65,6 +66,50 @@ func TestTopologyGet_returns_empty_array_on_new_database(t *testing.T) {
 	}
 	if rec.Body.String() != `[]` {
 		t.Fatalf("body: got %s", rec.Body.String())
+	}
+}
+
+func TestTopologyPut_preserves_provider_only_workflows(t *testing.T) {
+	db := newTopologyTestDB(t)
+	providers := []model.Provider{
+		{ID: "p-a", Name: "wooh-anthropic", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true},
+		{ID: "p-b", Name: "wooh-openai-r", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true},
+		{ID: "p-c", Name: "wooh-openai-c", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true},
+	}
+	if err := db.Create(&providers).Error; err != nil {
+		t.Fatalf("create providers: %v", err)
+	}
+	refresher := &topologyRefreshFake{}
+	body := `[[{"type":"provider","name":"wooh-anthropic","provider_id":"p-a"}],` +
+		`[{"type":"provider","name":"wooh-openai-r","provider_id":"p-b"}],` +
+		`[{"type":"provider","name":"wooh-openai-c","provider_id":"p-c"}]]`
+
+	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var document TopologyDocument
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(document) != 3 {
+		t.Fatalf("provider-only workflows lost: got %d workflows", len(document))
+	}
+	for i, workflow := range document {
+		if len(workflow) != 1 || workflow[0].Type != "provider" {
+			t.Fatalf("workflow %d: want single provider node, got %v", i, workflow)
+		}
+	}
+
+	rec = topologyRequest(t, http.MethodGet, "", TopologyGet(db))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode GET response: %v", err)
+	}
+	if len(document) != 3 {
+		t.Fatalf("GET: provider-only workflows lost after reload, got %d", len(document))
 	}
 }
 

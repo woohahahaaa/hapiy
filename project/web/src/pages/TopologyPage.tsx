@@ -49,6 +49,13 @@ const defaultEdgeOptions = {
 
 type LayoutSnapshot = Record<string, { x: number; y: number }>
 
+function providerIdFromSlotId(slotId: string): string | null {
+  if (!slotId.startsWith('slot-')) return null
+  const rest = slotId.slice(5)
+  const lastDash = rest.lastIndexOf('-')
+  return lastDash >= 0 ? rest.slice(0, lastDash) : rest
+}
+
 function loadLayoutFromStorage(): LayoutSnapshot {
   if (typeof window === 'undefined') return {}
   try {
@@ -210,7 +217,11 @@ export function TopologyPage() {
       ])
       setProviders(providers)
       workflowsRef.current = workflows
-      slotsStateRef.current = slotMapsFromWorkflows(workflows)
+      const maps = slotMapsFromWorkflows(workflows)
+      for (const provider of providers) {
+        if (!maps.has(provider.id)) maps.set(provider.id, emptySlotEntryMap())
+      }
+      slotsStateRef.current = maps
       saveQueueRef.current = new TopologySaveQueue(dashboardApi.saveTopology, (conflict) => {
         toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
       })
@@ -303,6 +314,10 @@ export function TopologyPage() {
   )
 
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
+  const layoutSnapshotRef = useRef(layoutSnapshot)
+  layoutSnapshotRef.current = layoutSnapshot
+  const prevSlotSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map())
+  const didInitialMeasure = useRef(false)
 
   const modelNodeIds = useMemo(() => {
     const ids: Record<string, string> = {}
@@ -415,6 +430,85 @@ export function TopologyPage() {
     setLayoutSnapshot(next)
     setNodes(layouted)
   }, [nodes, setNodes, sizesRef])
+
+  // Incremental position adjustment: when a slot's size changes (add/delete
+  // entry), push surrounding nodes instead of re-running auto-layout.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const slotEls = document.querySelectorAll('.react-flow__node[data-id^="slot-"]')
+      const currentSizes = new Map<string, { width: number; height: number }>()
+      for (const el of Array.from(slotEls)) {
+        const sid = el.getAttribute('data-id')
+        if (!sid) continue
+        currentSizes.set(sid, {
+          width: (el as HTMLElement).offsetWidth,
+          height: (el as HTMLElement).offsetHeight,
+        })
+      }
+
+      if (!didInitialMeasure.current) {
+        prevSlotSizesRef.current = currentSizes
+        didInitialMeasure.current = true
+        return
+      }
+
+      const snapshot: LayoutSnapshot = {}
+      Object.assign(snapshot, layoutSnapshotRef.current)
+      let changed = false
+
+      for (const [id, size] of currentSizes) {
+        const prev = prevSlotSizesRef.current.get(id)
+        if (!prev) continue
+
+        const deltaH = size.height - prev.height
+        const deltaW = size.width - prev.width
+        if (deltaH === 0 && deltaW === 0) continue
+
+        const providerId = providerIdFromSlotId(id)
+        if (!providerId) continue
+        const pvId = `pv-${providerId}`
+        const pvPos = snapshot[pvId]
+        const slotPos = snapshot[id]
+        if (!pvPos || !slotPos) continue
+
+        if (deltaH !== 0) {
+          for (const [nodeId, pos] of Object.entries(snapshot)) {
+            if (nodeId.startsWith('model-')) continue
+            if (nodeId === id || nodeId === pvId) continue
+            const nodePvId = nodeId.startsWith('pv-')
+              ? nodeId
+              : (() => { const pid = providerIdFromSlotId(nodeId); return pid ? `pv-${pid}` : null })()
+            if (!nodePvId || nodePvId === pvId) continue
+            const nodePvPos = snapshot[nodePvId]
+            if (!nodePvPos) continue
+            if (nodePvPos.y > pvPos.y) {
+              snapshot[nodeId] = { ...pos, y: pos.y + deltaH }
+              changed = true
+            }
+          }
+        }
+
+        if (deltaW !== 0) {
+          for (const [nodeId, pos] of Object.entries(snapshot)) {
+            if (!nodeId.startsWith('slot-') || nodeId === id) continue
+            const nodePid = providerIdFromSlotId(nodeId)
+            if (nodePid !== providerId) continue
+            if (pos.x > slotPos.x) {
+              snapshot[nodeId] = { ...pos, x: pos.x + deltaW }
+              changed = true
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        saveLayoutToStorage(snapshot)
+        setLayoutSnapshot(snapshot)
+      }
+      prevSlotSizesRef.current = currentSizes
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [slotsVersion])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)
