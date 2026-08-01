@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Switch } from '@/components/ui/switch'
 import { nodeRenderBounds } from '@/config/topology-config'
 
 interface SlotItemCardProps {
@@ -43,12 +42,14 @@ export function SlotItemCard({
           {index}
         </span>
         <div className="flex items-center gap-1">
-          <Switch
-            checked={enabled}
-            onCheckedChange={onToggleEnabled}
-            size="sm"
-            aria-label="启用"
-          />
+          <button
+            type="button"
+            onClick={() => onToggleEnabled(!enabled)}
+            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={enabled ? '禁用' : '启用'}
+          >
+            {enabled ? '禁用' : '启用'}
+          </button>
           <button
             type="button"
             onClick={onDelete}

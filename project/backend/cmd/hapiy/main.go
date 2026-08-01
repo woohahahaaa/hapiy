@@ -96,6 +96,7 @@ func main() {
 			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/toggle", handler.ToggleProvider(db, engine))
+			dashboardAuthed.POST("/providers/:id/workflow-toggle", handler.ToggleWorkflow(db, engine))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))

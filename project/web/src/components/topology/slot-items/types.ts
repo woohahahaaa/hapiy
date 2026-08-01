@@ -134,7 +134,7 @@ export function emptySlotEntryMap(): SlotEntryMap {
   }
 }
 
-export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () => string = crypto.randomUUID): SlotEntry {
+export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () => string = () => crypto.randomUUID()): SlotEntry {
   const id = idFactory()
   switch (slotType) {
     case 'requestModify':

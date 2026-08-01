@@ -4,7 +4,6 @@ import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -166,8 +165,8 @@ export function TokenPage() {
                   <TableCell className="font-medium">{token.name}</TableCell>
                   <TableCell><div className="flex items-center gap-2"><code className="rounded bg-muted px-2 py-1 text-xs font-mono">{token.key.slice(0, 12)}...</code><Button variant="ghost" size="icon" onClick={() => void copyToClipboard(token.key)}><Copy /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.rotateToken(token.id))} title="Rotate Key"><RefreshCw /></Button></div>{token.historyKeys.length > 0 && <div className="mt-1 text-[10px] text-muted-foreground">历史: {token.historyKeys.length} 个旧 key</div>}</TableCell>
                   <TableCell>{token.quota === null ? <Badge variant="secondary" className="text-[10px]">无限制</Badge> : <div className="flex items-center gap-2"><span className="text-xs">¥{token.usedQuota} / ¥{token.quota}</span><div className="h-1.5 w-16 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min((token.usedQuota / token.quota) * 100, 100)}%` }} /></div></div>}</TableCell>
-                  <TableCell><Switch checked={token.status} disabled={isSaving} onCheckedChange={() => void runMutation(() => dashboardApi.toggleToken(token.id))} /></TableCell>
-                  <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setIsDialogOpen(true) }}><Pencil /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><Trash2 /></Button></div></TableCell>
+                  <TableCell><span className={token.status ? '' : 'text-muted-foreground'}>{token.status ? '启用' : '禁用'}</span></TableCell>
+                  <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleToken(token.id))}>{token.status ? '禁用' : '启用'}</Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setIsDialogOpen(true) }}><Pencil /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><Trash2 /></Button></div></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -181,7 +180,6 @@ export function TokenPage() {
 function TokenForm({ token, onSave, onCancel, isSaving }: TokenFormProps) {
   const [name, setName] = useState(token?.name ?? '')
   const [quota, setQuota] = useState(token?.quota?.toString() ?? '')
-  const [status, setStatus] = useState(token?.status ?? true)
 
   return (
     <FieldGroup>
@@ -202,16 +200,9 @@ function TokenForm({ token, onSave, onCancel, isSaving }: TokenFormProps) {
         <FieldLabel htmlFor="token-quota">额度 (¥，留空=无限制)</FieldLabel>
         <Input id="token-quota" type="number" value={quota} onChange={(event) => setQuota(event.target.value)} placeholder="无限制" />
       </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={status ? 'default' : 'secondary'}>{status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={status} onCheckedChange={setStatus} />
-        </div>
-      </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
-        <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status })}>
+        <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
           {isSaving ? '保存中...' : '保存'}
         </Button>
       </div>

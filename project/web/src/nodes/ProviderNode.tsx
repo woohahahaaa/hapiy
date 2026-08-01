@@ -63,8 +63,11 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
 
   const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    setOptimisticActive(!active)
-    onToggle?.()
+    const next = !active
+    setOptimisticActive(next)
+    void Promise.resolve()
+      .then(() => onToggle?.())
+      .catch(() => setOptimisticActive(null))
   }
   const stopPointer = (e: ReactPointerEvent<HTMLButtonElement>) => e.stopPropagation()
 
@@ -125,7 +128,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
           type="button"
           role="switch"
           aria-checked={active}
-          aria-label={active ? `${label} 当前启用，点击关闭` : `${label} 当前关闭，点击启用`}
+          aria-label={active ? `${label} 工作流已启用，点击关闭` : `${label} 工作流已停用，点击启用`}
           data-no-drag="true"
           onClick={handleClick}
           onPointerDown={stopPointer}

@@ -302,7 +302,7 @@ export function TopologyPage() {
     [bumpSlots],
   )
 
-  const layoutSnapshot = useMemo(() => loadLayoutFromStorage(), [])
+  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
 
   const modelNodeIds = useMemo(() => {
     const ids: Record<string, string> = {}
@@ -335,28 +335,29 @@ export function TopologyPage() {
           keyCount: provider.keys.length,
           modelCount: provider.models.length,
           models: provider.models.map((m) => m.model),
-          active: provider.status,
+          active: provider.workflowEnabled,
           providerId: provider.id,
           onToggle: () => {
             const p = providers.find((x) => x.id === provider.id)
-            if (!p) return
-              if (!p.status) {
+            if (!p) return Promise.resolve()
+            if (!p.workflowEnabled) {
               const other = providers.find(
-                (x) => x.id !== p.id && x.name === p.name && x.status,
+                (x) => x.id !== p.id && x.name === p.name && x.workflowEnabled,
               )
               if (other) {
-                toast.add({ title: '当前已有一个同名供应商在启用，请先将另一个关闭', type: 'error' })
-                return
+                toast.add({ title: '当前已有一个同名供应商的工作流在启用，请先将另一个关闭', type: 'error' })
+                return Promise.reject(new Error('duplicate-active-workflow'))
               }
             }
-            dashboardApi.toggleProvider(p.id)
+            return dashboardApi.toggleWorkflow(p.id)
               .then((updated) => {
                 setProviders((prev) =>
                   prev?.map((x) => (x.id === updated.id ? updated : x)) ?? prev,
                 )
               })
               .catch((err) => {
-                toast.add({ title: err instanceof Error ? err.message : '切换供应商状态失败', type: 'error' })
+                toast.add({ title: err instanceof Error ? err.message : '切换工作流状态失败', type: 'error' })
+                throw err
               })
           },
         },
@@ -400,21 +401,20 @@ export function TopologyPage() {
   const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
 
   const handleAutoLayout = useCallback(() => {
-    setNodes((nds) => {
-      const layouted = getLayoutedElements(nds, edgesRef.current, {
-        nodeGap: topologyConfig.layout.nodeGap,
-        rowGap: topologyConfig.layout.rowGap,
-        modelHubGap: topologyConfig.layout.modelHubGap,
-        groupGap: topologyConfig.layout.groupGap,
-        marginX: topologyConfig.layout.marginX,
-        marginY: topologyConfig.layout.marginY,
-      }, sizesRef.current)
-      const next: LayoutSnapshot = {}
-      for (const node of layouted) next[node.id] = node.position
-      saveLayoutToStorage(next)
-      return layouted
-    })
-  }, [setNodes, sizesRef])
+    const layouted = getLayoutedElements(nodes, edgesRef.current, {
+      nodeGap: topologyConfig.layout.nodeGap,
+      rowGap: topologyConfig.layout.rowGap,
+      modelHubGap: topologyConfig.layout.modelHubGap,
+      groupGap: topologyConfig.layout.groupGap,
+      marginX: topologyConfig.layout.marginX,
+      marginY: topologyConfig.layout.marginY,
+    }, sizesRef.current)
+    const next: LayoutSnapshot = {}
+    for (const node of layouted) next[node.id] = node.position
+    saveLayoutToStorage(next)
+    setLayoutSnapshot(next)
+    setNodes(layouted)
+  }, [nodes, setNodes, sizesRef])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)
@@ -423,6 +423,7 @@ export function TopologyPage() {
         const snapshot = loadLayoutFromStorage()
         snapshot[change.id] = change.position
         saveLayoutToStorage(snapshot)
+        setLayoutSnapshot(snapshot)
       }
     }
   }, [onNodesChange])

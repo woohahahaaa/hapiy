@@ -112,3 +112,42 @@ func ToggleProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"data": provider})
 	}
 }
+
+// ToggleWorkflow switches the workflow-level enable flag of a provider
+// (the switch on the topology node), independent of the channel-level Status.
+// Only one workflow per provider name may be enabled at a time.
+func ToggleWorkflow(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var provider model.Provider
+		if err := db.First(&provider, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			return
+		}
+
+		next := !provider.WorkflowEnabled
+		if next {
+			var count int64
+			if err := db.Model(&model.Provider{}).
+				Where("name = ? AND id <> ? AND workflow_enabled = ?", provider.Name, provider.ID, true).
+				Count(&count).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if count > 0 {
+				c.JSON(http.StatusConflict, gin.H{"error": "当前已有一个同名供应商的工作流在启用，请先将另一个关闭"})
+				return
+			}
+		}
+
+		provider.WorkflowEnabled = next
+		if err := db.Save(&provider).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		engine.LoadProviders()
+
+		c.JSON(http.StatusOK, gin.H{"data": provider})
+	}
+}

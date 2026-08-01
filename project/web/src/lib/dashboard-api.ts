@@ -27,6 +27,7 @@ export type Provider = {
   readonly endpoints: readonly ProviderEndpoint[]
   readonly models: readonly ProviderModel[]
   readonly status: boolean
+  readonly workflowEnabled: boolean
   readonly weight: number
 }
 
@@ -230,6 +231,7 @@ function parseProvider(value: unknown): Provider {
     endpoints: readObjectArray(value.endpoints, 'endpoints', parseEndpoint),
     models: readObjectArray(value.models, 'models', parseModel),
     status: readBoolean(value.status, 'provider.status'),
+    workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
     weight: readNumber(value.weight, 'provider.weight', 1),
   }
 }
@@ -375,6 +377,7 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     endpoints: JSON.stringify(provider.endpoints),
     models: JSON.stringify(provider.models),
     status: provider.status,
+    workflow_enabled: provider.workflowEnabled,
     weight: provider.weight,
   }
 }
@@ -615,6 +618,9 @@ export const dashboardApi = {
   },
   async toggleProvider(id: string): Promise<Provider> {
     return parseProvider(await request(`/providers/${encodeURIComponent(id)}/toggle`, { method: 'POST' }))
+  },
+  async toggleWorkflow(id: string): Promise<Provider> {
+    return parseProvider(await request(`/providers/${encodeURIComponent(id)}/workflow-toggle`, { method: 'POST' }))
   },
 
   // ── Tokens ──

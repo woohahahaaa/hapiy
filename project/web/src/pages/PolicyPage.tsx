@@ -164,6 +164,18 @@ function RuleTableEmpty({ message }: { message: string }) {
   )
 }
 
+function RuleStatusBadge({ active }: { active: boolean }) {
+  return <span className={active ? '' : 'text-muted-foreground'}>{active ? '启用' : '禁用'}</span>
+}
+
+function RuleToggleButton({ active, disabled, onClick }: { active: boolean; disabled: boolean; onClick: () => void }) {
+  return (
+    <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
+      {active ? '禁用' : '启用'}
+    </Button>
+  )
+}
+
 function RuleTableError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <TableRow>
@@ -311,11 +323,10 @@ function RewritePage() {
                     {rule.script.slice(0, 50)}
                     {rule.script.length > 50 && '...'}
                   </TableCell>
-                  <TableCell>
-                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                  </TableCell>
+                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <Pencil />
                       </Button>
@@ -375,13 +386,6 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
         <p className="text-xs text-muted-foreground">
           语法参考：SET field = value | DELETE field | IF cond THEN {'{...}'} | header.X-Name
         </p>
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        </div>
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -465,11 +469,10 @@ function HeartbeatPage() {
                   <TableCell className="text-xs">{rule.matchCondition}</TableCell>
                   <TableCell className="text-xs max-w-[200px] truncate">{rule.replyContent}</TableCell>
                   <TableCell className="text-xs">{rule.timeout}s</TableCell>
-                  <TableCell>
-                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                  </TableCell>
+                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <Pencil />
                       </Button>
@@ -527,13 +530,6 @@ function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null;
       <Field>
         <FieldLabel htmlFor="heartbeat-timeout">超时时间 (秒)</FieldLabel>
         <Input id="heartbeat-timeout" type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        </div>
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -619,11 +615,10 @@ function ConcurrencyPage() {
                   </TableCell>
                   <TableCell className="text-xs">{rule.maxConcurrent}</TableCell>
                   <TableCell className="text-xs">{rule.queueEnabled ? '是' : '否'}</TableCell>
-                  <TableCell>
-                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                  </TableCell>
+                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <Pencil />
                       </Button>
@@ -697,13 +692,6 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
         <div className="flex items-center gap-1.5">
           <Badge variant={form.queueEnabled ? 'default' : 'secondary'}>{form.queueEnabled ? '已开启' : '已关闭'}</Badge>
           <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
-        </div>
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
         </div>
       </Field>
       <div className="flex justify-end gap-2">
@@ -790,11 +778,10 @@ function FailoverPage() {
                   <TableCell className="text-xs">
                     {rule.condition === 'timeout' ? '超时' : rule.condition === 'error' ? '错误' : '限流'}
                   </TableCell>
-                  <TableCell>
-                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                  </TableCell>
+                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <Pencil />
                       </Button>
@@ -866,13 +853,6 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
             </SelectGroup>
           </SelectContent>
         </Select>
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        </div>
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -955,11 +935,10 @@ function RewriteResponsePage() {
                     {rule.script.slice(0, 50)}
                     {rule.script.length > 50 && '...'}
                   </TableCell>
-                  <TableCell>
-                    <Switch checked={rule.status} disabled={mutating} onCheckedChange={() => handleToggle(rule.id)} />
-                  </TableCell>
+                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <Pencil />
                       </Button>
@@ -1009,13 +988,6 @@ function RewriteResponseForm({ rule, onSave, onCancel }: { rule: ResponseRewrite
       <Field>
         <FieldLabel htmlFor="rr-script">DSL 脚本</FieldLabel>
         <Textarea id="rr-script" value={form.script} onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))} placeholder="response.body.name = 'updated'" rows={6} />
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(v) => setForm((p) => ({ ...p, status: v }))} />
-        </div>
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>

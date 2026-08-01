@@ -99,7 +99,7 @@ func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
 
 	var candidates []*model.Provider
 	for _, p := range e.providers {
-		if !p.Status {
+		if !p.Status || !p.WorkflowEnabled {
 			continue
 		}
 

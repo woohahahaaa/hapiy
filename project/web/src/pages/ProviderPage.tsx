@@ -4,7 +4,6 @@ import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -21,7 +20,7 @@ type ProviderFormProps = {
 }
 
 const emptyProvider: ProviderInput = {
-  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, weight: 1,
+  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, weight: 1,
 }
 
 function toErrorMessage(error: unknown): string {
@@ -90,7 +89,7 @@ export function ProviderPage() {
         const providerInput: ProviderInput = {
           name: item.name, baseUrls: item.baseUrls, keys: item.keys,
           endpoints: item.endpoints, models: item.models,
-          status: item.status, weight: item.weight,
+          status: item.status, workflowEnabled: item.workflowEnabled, weight: item.weight,
         }
         if (id && currentMap.has(id)) {
           retainedIds.add(id)
@@ -171,8 +170,9 @@ export function ProviderPage() {
                   <TableCell><Badge variant="secondary" className="text-[10px]">{provider.keys.length} Keys</Badge></TableCell>
                   <TableCell><Badge variant="secondary" className="text-[10px]">{provider.endpoints.length} Endpoints</Badge></TableCell>
                   <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <Badge key={model.model} variant="outline" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1 text-primary">{model.discount * 10}折</span>}</Badge>)}</div></TableCell>
-                  <TableCell><Switch checked={provider.status} disabled={isSaving} onCheckedChange={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))} /></TableCell>
+                  <TableCell><span className={provider.status ? '' : 'text-muted-foreground'}>{provider.status ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2">
+                    <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
                     <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><Pencil /></Button>
                     <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><Trash2 /></Button>
                   </div></TableCell>
@@ -239,13 +239,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProp
               <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1">{model.discount * 10}折</span>}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></Badge>
             ))}
           </div>
-        </div>
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>启用状态</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <Badge variant={form.status ? 'default' : 'secondary'}>{form.status ? '已开启' : '已关闭'}</Badge>
-          <Switch checked={form.status} onCheckedChange={(status) => setForm((current) => ({ ...current, status }))} />
         </div>
       </Field>
       <div className="flex justify-end gap-2">

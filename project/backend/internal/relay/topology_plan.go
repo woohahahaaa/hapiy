@@ -26,7 +26,7 @@ func (e *Engine) PrepareTopologyRefresh(tx *gorm.DB) (func(), error) {
 
 func (e *Engine) buildPlans(db *gorm.DB) (map[string]*model.Provider, map[string]*ExecutionPlan, error) {
 	var providers []model.Provider
-	if err := db.Where("status = ?", true).Find(&providers).Error; err != nil {
+	if err := db.Where("status = ? AND workflow_enabled = ?", true, true).Find(&providers).Error; err != nil {
 		return nil, nil, fmt.Errorf("load enabled providers: %w", err)
 	}
 	freshProviders := make(map[string]*model.Provider, len(providers))

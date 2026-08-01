@@ -33,8 +33,9 @@ type Provider struct {
 	Keys      string    `gorm:"type:text" json:"keys"`      // JSON array
 	Endpoints string    `gorm:"type:text" json:"endpoints"` // JSON array
 	Models    string    `gorm:"type:text" json:"models"`    // JSON array
-	Status    bool      `gorm:"default:true" json:"status"`
-	Weight    int       `gorm:"default:1" json:"weight"`
+	Status          bool `gorm:"default:true" json:"status"`
+	WorkflowEnabled bool `gorm:"default:true" json:"workflow_enabled"`
+	Weight          int  `gorm:"default:1" json:"weight"`
 	Priority  int       `gorm:"default:0" json:"priority"`
 	AutoBan   bool      `gorm:"default:true" json:"auto_ban"`
 	Group     string    `gorm:"default:''" json:"group"`
