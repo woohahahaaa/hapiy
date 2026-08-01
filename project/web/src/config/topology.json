@@ -1,16 +1,18 @@
 {
-  "dagre": {
-    "direction": "LR",
-    "nodeSeparation": 50,
-    "rankSeparation": 80,
-    "margin": { "x": 20, "y": 30 }
+  "render": {
+    "node": { "minWidth": 200, "maxWidth": 300 },
+    "slot": { "padding": 16, "contentGap": 8 },
+    "modelHub": { "paddingX": 12, "paddingY": 6 }
   },
-  "nodeDimensions": {
-    "modelHub": { "minWidth": 224, "maxWidth": 320, "height": 200 },
-    "provider": { "minWidth": 192, "maxWidth": 320, "height": 100 },
-    "slot": { "minWidth": 240, "maxWidth": 360, "height": 180 }
+  "layout": {
+    "nodeGap": 20,
+    "rowGap": 20,
+    "modelHubGap": 20,
+    "groupGap": 20,
+    "marginX": 20,
+    "marginY": 30
   },
-  "fallbackNodeDimension": { "minWidth": 192, "maxWidth": 320, "height": 80 },
+  "fallbackNodeSize": { "width": 224, "height": 80 },
   "initialPositions": {
     "modelHub": { "x": 20, "y": 20, "verticalOffset": 60 },
     "provider": { "x": 450, "y": 20, "verticalOffset": 60 },

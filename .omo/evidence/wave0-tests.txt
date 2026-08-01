@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/Agent/Desktop/vcfiles/hapiy/project/web
+
+
+ Test Files  4 passed (4)
+      Tests  36 passed (36)
+   Start at  18:37:19
+   Duration  452ms (transform 656ms, setup 0ms, import 822ms, tests 94ms, environment 0ms)
+

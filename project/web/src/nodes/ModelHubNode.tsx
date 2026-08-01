@@ -26,17 +26,20 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
     }
   }, [id, models.length, updateNodeInternals])
 
+  const pad = topologyConfig.render.modelHub
+
   return (
     <div
       className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
       style={{
         width: 'fit-content',
-        minWidth: topologyConfig.nodeDimensions.modelHub.minWidth,
-        maxWidth: topologyConfig.nodeDimensions.modelHub.maxWidth,
       }}
     >
       {!simplified && (
-        <div className="border-b border-border px-3 py-2">
+        <div
+          className="border-b border-border"
+          style={{ padding: `${pad.paddingY + 2}px ${pad.paddingX}px` }}
+        >
           <span className="text-sm font-medium">模型中心</span>
         </div>
       )}
@@ -46,9 +49,10 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
           <div
             key={m.id}
             className={cn(
-              'flex items-center gap-2 px-3 py-1.5 text-xs text-card-foreground',
+              'flex items-center gap-2 text-xs text-card-foreground',
               m.disabled && 'opacity-40'
             )}
+            style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >
             <span className="size-2 rounded-full bg-primary" />
             <span>{m.label}</span>
@@ -68,7 +72,10 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
       </div>
 
       {!simplified && (
-        <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
+        <div
+          className="border-t border-border text-[10px] text-muted-foreground"
+          style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
+        >
           {models.length} models
         </div>
       )}

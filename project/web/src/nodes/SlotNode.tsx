@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
-import { topologyConfig } from '@/config/topology-config'
+import { topologyConfig, nodeRenderBounds } from '@/config/topology-config'
 import type {
   SlotEntry,
   SlotEntryMap,
@@ -58,8 +58,7 @@ export function SlotNode({ data }: SlotNodeProps) {
         onAddNode={handleAdd}
         style={{
           width: 'fit-content',
-          minWidth: topologyConfig.nodeDimensions.slot.minWidth,
-          maxWidth: topologyConfig.nodeDimensions.slot.maxWidth,
+          minWidth: nodeRenderBounds.minWidth,
         }}
       >
         {entries.map((entry) =>

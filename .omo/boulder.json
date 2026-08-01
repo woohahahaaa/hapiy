@@ -1,13 +1,13 @@
 {
   "schema_version": 2,
-  "active_work_id": "react-flow-homepage",
+  "active_work_id": "topology-magic-layout",
   "works": {
-    "react-flow-homepage": {
-      "work_id": "react-flow-homepage",
-      "active_plan": ".omo/plans/react-flow-homepage.md",
-      "plan_name": "react-flow-homepage",
+    "topology-magic-layout": {
+      "work_id": "topology-magic-layout",
+      "active_plan": ".omo/plans/topology-magic-layout.md",
+      "plan_name": "topology-magic-layout",
       "session_ids": ["codex:current"],
-      "status": "completed",
+      "status": "active",
       "worktree_path": null
     }
   }

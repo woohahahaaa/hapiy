@@ -1,19 +1,32 @@
 import topologyJson from './topology.json'
 
-type NodeType =
-  | 'modelHub'
-  | 'provider'
-  | 'slot'
-
-type NodeDimension = {
-  readonly minWidth: number
-  readonly maxWidth: number
-  readonly height: number
-}
-
 type Dimension = {
   readonly width: number
   readonly height: number
+}
+
+type NodeRenderBounds = {
+  readonly minWidth: number
+  readonly maxWidth: number
+}
+
+type SlotRender = {
+  readonly padding: number
+  readonly contentGap: number
+}
+
+type ModelHubRender = {
+  readonly paddingX: number
+  readonly paddingY: number
+}
+
+type LayoutGaps = {
+  readonly nodeGap: number
+  readonly rowGap: number
+  readonly modelHubGap: number
+  readonly groupGap: number
+  readonly marginX: number
+  readonly marginY: number
 }
 
 type HandleMetric = Dimension & {
@@ -21,14 +34,13 @@ type HandleMetric = Dimension & {
 }
 
 type TopologyConfig = {
-  readonly dagre: {
-    readonly direction: string
-    readonly nodeSeparation: number
-    readonly rankSeparation: number
-    readonly margin: Readonly<{ readonly x: number; readonly y: number }>
+  readonly render: {
+    readonly node: NodeRenderBounds
+    readonly slot: SlotRender
+    readonly modelHub: ModelHubRender
   }
-  readonly nodeDimensions: Readonly<Record<string, NodeDimension>> & Readonly<Record<NodeType, NodeDimension>>
-  readonly fallbackNodeDimension: NodeDimension
+  readonly layout: LayoutGaps
+  readonly fallbackNodeSize: Dimension
   readonly initialPositions: {
     readonly modelHub: Readonly<{ readonly x: number; readonly y: number; readonly verticalOffset: number }>
     readonly provider: Readonly<{ readonly x: number; readonly y: number; readonly verticalOffset: number }>
@@ -54,11 +66,6 @@ type TopologyConfig = {
 
 export const topologyConfig: TopologyConfig = topologyJson satisfies TopologyConfig
 
-export function getTopologyNodeDimension(nodeType: string | undefined): NodeDimension {
-  return topologyConfig.nodeDimensions[nodeType ?? ''] ?? topologyConfig.fallbackNodeDimension
-}
+export const nodeRenderBounds: NodeRenderBounds = topologyConfig.render.node
 
-export function getTopologyLayoutDimension(nodeType: string | undefined): Dimension {
-  const d = getTopologyNodeDimension(nodeType)
-  return { width: d.maxWidth, height: d.height }
-}
+export const fallbackNodeSize: Dimension = topologyConfig.fallbackNodeSize

@@ -184,12 +184,12 @@ export function AppSidebar() {
 
   return (
     <SidebarRoot collapsible="icon">
-      <SidebarHeader className="group-data-[collapsible=icon]:p-1.5">
+      <SidebarHeader>
         <div
           className={
             showLabel
               ? 'flex items-center justify-between gap-2 py-2'
-              : 'flex flex-col items-center justify-center gap-1 py-1'
+              : 'flex flex-col items-start justify-center gap-1 py-1'
           }
         >
           <span
@@ -208,8 +208,8 @@ export function AppSidebar() {
                 : 'flex flex-col items-center gap-1'
             }
           >
-            <ModeToggle size={collapsed ? 'icon-sm' : 'icon'} />
-            <SidebarTrigger size={collapsed ? 'icon-sm' : 'icon'} />
+            <ModeToggle size="icon" />
+            <SidebarTrigger size="icon" />
           </div>
         </div>
       </SidebarHeader>

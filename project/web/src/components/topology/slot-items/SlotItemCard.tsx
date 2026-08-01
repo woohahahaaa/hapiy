@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
+import { nodeRenderBounds } from '@/config/topology-config'
 
 interface SlotItemCardProps {
   index: number
@@ -32,6 +33,10 @@ export function SlotItemCard({
         !enabled && 'opacity-60',
         className,
       )}
+      style={{
+        minWidth: nodeRenderBounds.minWidth,
+        maxWidth: nodeRenderBounds.maxWidth,
+      }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">

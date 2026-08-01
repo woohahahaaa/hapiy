@@ -2,7 +2,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { topologyConfig } from '@/config/topology-config'
+import { topologyConfig, nodeRenderBounds } from '@/config/topology-config'
 
 interface ProviderNodeData {
   label: string
@@ -60,8 +60,8 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
       )}
       style={{
         width: 'fit-content',
-        minWidth: topologyConfig.nodeDimensions.provider.minWidth,
-        maxWidth: topologyConfig.nodeDimensions.provider.maxWidth,
+        minWidth: nodeRenderBounds.minWidth,
+        maxWidth: nodeRenderBounds.maxWidth,
       }}
     >
       {models.map((m, i) => (

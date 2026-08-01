@@ -9,7 +9,6 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import dagre from '@dagrejs/dagre'
 import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -20,7 +19,9 @@ import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
-import { getTopologyLayoutDimension, topologyConfig } from '@/config/topology-config'
+import { topologyConfig } from '@/config/topology-config'
+import { getLayoutedElements } from '@/lib/topology-auto-layout'
+import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
 import { slotMapsFromWorkflows, workflowsFromSlotMaps, type Workflow } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
@@ -68,39 +69,6 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
   }
 }
 
-
-function getLayoutedElements(nodes: Node[], edges: Edge[]): Node[] {
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({
-    rankdir: topologyConfig.dagre.direction,
-    nodesep: topologyConfig.dagre.nodeSeparation,
-    ranksep: topologyConfig.dagre.rankSeparation,
-    marginx: topologyConfig.dagre.margin.x,
-    marginy: topologyConfig.dagre.margin.y,
-  })
-
-  for (const node of nodes) {
-    const dimension = getTopologyLayoutDimension(node.type)
-    g.setNode(node.id, {
-      width: dimension.width,
-      height: dimension.height,
-    })
-  }
-
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target)
-  }
-
-  dagre.layout(g)
-
-  return nodes.map((node) => {
-    const pos = g.node(node.id)
-    if (!pos) return node
-    const dimension = getTopologyLayoutDimension(node.type)
-    return { ...node, position: { x: pos.x - dimension.width / 2, y: pos.y - dimension.height / 2 } }
-  })
-}
 
 function buildModelNodes(
   providers: readonly Provider[],
@@ -429,15 +397,24 @@ export function TopologyPage() {
   const edgesRef = useRef(edges)
   edgesRef.current = edges
 
+  const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
+
   const handleAutoLayout = useCallback(() => {
     setNodes((nds) => {
-      const layouted = getLayoutedElements(nds, edgesRef.current)
+      const layouted = getLayoutedElements(nds, edgesRef.current, {
+        nodeGap: topologyConfig.layout.nodeGap,
+        rowGap: topologyConfig.layout.rowGap,
+        modelHubGap: topologyConfig.layout.modelHubGap,
+        groupGap: topologyConfig.layout.groupGap,
+        marginX: topologyConfig.layout.marginX,
+        marginY: topologyConfig.layout.marginY,
+      }, sizesRef.current)
       const next: LayoutSnapshot = {}
       for (const node of layouted) next[node.id] = node.position
       saveLayoutToStorage(next)
       return layouted
     })
-  }, [setNodes])
+  }, [setNodes, sizesRef])
 
   const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
     onNodesChange(changes)
@@ -510,7 +487,7 @@ export function TopologyPage() {
         subtitle="API routing workspace"
         status={`${providers.length} 供应商 · ${nodes.length} 节点`}
       />
-      <div className="relative flex-1">
+      <div ref={setContainerEl} className="relative flex-1">
         <ReactFlow
           nodes={nodes}
           edges={edges}

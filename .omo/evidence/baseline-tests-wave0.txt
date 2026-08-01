@@ -1,0 +1,14 @@
+
+ RUN  v4.1.10 /Users/Agent/Desktop/vcfiles/hapiy/project/web
+
+ ❯ src/lib/topology-auto-layout.test.ts (7 tests | 4 failed) 31ms
+     × single workflow: nodes share y (row) and stack left-to-right with ranksep 10ms
+     × model column is vertically centered with workflows 1ms
+     × ranksep = 0 makes in-row nodes touch 1ms
+     × nodesep = 0 makes stacked model rows touch 1ms
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  4 failed | 21 passed (25)
+   Start at  18:24:03
+   Duration  740ms (transform 745ms, setup 0ms, import 1.00s, tests 63ms, environment 1ms)
+
