@@ -26,6 +26,8 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
   const active = optimisticActive ?? dataActive
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [nodeHeight, setNodeHeight] = useState(0)
 
   useEffect(() => {
     setOptimisticActive(null)
@@ -38,11 +40,25 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
     }
   }, [id, models.length, updateNodeInternals])
 
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setNodeHeight(el.offsetHeight))
+    ro.observe(el)
+    setNodeHeight(el.offsetHeight)
+    return () => ro.disconnect()
+  }, [])
+
   const targetHandle = topologyConfig.handles.provider.target
   const sourceHandle = topologyConfig.handles.provider.source
-  const segH = targetHandle.height
-  const gap = topologyConfig.handles.provider.segmentGap
-  const total = models.length * segH + Math.max(0, models.length - 1) * gap
+  const baseSegH = targetHandle.height
+  const baseGap = topologyConfig.handles.provider.segmentGap
+  const baseTotal = models.length * baseSegH + Math.max(0, models.length - 1) * baseGap
+  const maxTotal = nodeHeight > 0 ? nodeHeight - 8 : 0
+  const scale = maxTotal > 0 && baseTotal > maxTotal ? maxTotal / baseTotal : 1
+  const segH = baseSegH * scale
+  const gap = baseGap * scale
+  const total = baseTotal * scale
   const start = -(total / 2)
 
   const handleClick = (e: ReactMouseEvent<HTMLButtonElement>) => {
@@ -54,6 +70,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         !active && 'opacity-60'
@@ -84,7 +101,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-r-0 border-solid border-border bg-background"
+        className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-border bg-background"
         style={{
           width: targetHandle.width,
           height: total,

@@ -5,12 +5,12 @@
     "modelHub": { "paddingX": 12, "paddingY": 6 }
   },
   "layout": {
-    "nodeGap": 20,
-    "rowGap": 20,
+    "nodeGap": 80,
+    "rowGap": 80,
     "modelHubGap": 20,
-    "groupGap": 20,
-    "marginX": 20,
-    "marginY": 30
+    "groupGap": 80,
+    "marginX": 80,
+    "marginY": 80
   },
   "fallbackNodeSize": { "width": 224, "height": 80 },
   "initialPositions": {
