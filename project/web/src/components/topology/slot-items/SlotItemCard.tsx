@@ -44,11 +44,24 @@ export function SlotItemCard({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={() => onToggleEnabled(!enabled)}
-            className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            role="switch"
+            aria-checked={enabled}
             aria-label={enabled ? '禁用' : '启用'}
+            data-no-drag="true"
+            onClick={() => onToggleEnabled(!enabled)}
+            className={cn(
+              'nodrag nopan relative inline-flex h-4 w-7 shrink-0 cursor-pointer touch-manipulation items-center rounded-none transition-colors',
+              'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              enabled ? 'bg-primary' : 'bg-input',
+            )}
           >
-            {enabled ? '禁用' : '启用'}
+            <span
+              aria-hidden="true"
+              className={cn(
+                'pointer-events-none block h-3 w-3 bg-background shadow transition-transform',
+                enabled ? 'translate-x-3.5' : 'translate-x-0.5',
+              )}
+            />
           </button>
           <button
             type="button"

@@ -1,0 +1,289 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e7]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: hapiy
+        - generic [ref=e11]:
+          - button "切换到深色主题" [ref=e12]:
+            - generic [ref=e13]: 切换主题
+          - button "Toggle Sidebar" [ref=e14]
+      - generic [ref=e17]:
+        - generic [ref=e18]: 导航
+        - list [ref=e20]:
+          - listitem [ref=e21]:
+            - link "转发拓扑" [ref=e22] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e29]:
+            - button "监控" [ref=e30]
+            - list [ref=e36]:
+              - listitem [ref=e37]:
+                - link "活动监视" [ref=e38] [cursor=pointer]:
+                  - /url: /monitor
+              - listitem [ref=e40]:
+                - link "使用日志" [ref=e41] [cursor=pointer]:
+                  - /url: /logs
+          - listitem [ref=e43]:
+            - link "供应商" [ref=e44] [cursor=pointer]:
+              - /url: /provider
+          - listitem [ref=e49]:
+            - link "令牌管理" [ref=e50] [cursor=pointer]:
+              - /url: /token
+          - listitem [ref=e56]:
+            - link "价格配置" [ref=e57] [cursor=pointer]:
+              - /url: /price
+          - listitem [ref=e62]:
+            - button "策略配置" [ref=e63]
+            - list [ref=e70]:
+              - listitem [ref=e71]:
+                - link "请求改写" [ref=e72] [cursor=pointer]:
+                  - /url: /policy/rewrite
+              - listitem [ref=e74]:
+                - link "响应改写" [ref=e75] [cursor=pointer]:
+                  - /url: /policy/rewrite-response
+              - listitem [ref=e77]:
+                - link "心跳回复" [ref=e78] [cursor=pointer]:
+                  - /url: /policy/heartbeat
+              - listitem [ref=e80]:
+                - link "并发控制" [ref=e81] [cursor=pointer]:
+                  - /url: /policy/concurrency
+              - listitem [ref=e83]:
+                - link "故障转移" [ref=e84] [cursor=pointer]:
+                  - /url: /policy/failover
+          - listitem [ref=e86]:
+            - link "系统设置" [ref=e87] [cursor=pointer]:
+              - /url: /settings
+          - listitem [ref=e92]:
+            - link "个人资料" [ref=e93] [cursor=pointer]:
+              - /url: /profile
+      - paragraph [ref=e99]: hapiy v0.1.0
+      - button "Toggle Sidebar" [ref=e100]
+    - main [ref=e101]:
+      - generic [ref=e102]:
+        - generic [ref=e103]:
+          - generic [ref=e104]:
+            - generic [ref=e105]:
+              - heading "转发拓扑" [level=1] [ref=e106]
+              - paragraph [ref=e107]: API routing workspace
+            - generic [ref=e108]: 3 供应商 · 37 节点
+          - separator [ref=e109]
+        - generic [ref=e110]:
+          - application [ref=e111]:
+            - generic [ref=e113]:
+              - generic:
+                - generic:
+                  - img:
+                    - group "Edge from model-MiniMax-M3 to pv-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0" [ref=e475] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-MiniMax-M2.7 to pv-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0" [ref=e478] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-claude-opus-4-8 to pv-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0" [ref=e481] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-grok-4.5 to pv-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0" [ref=e484] [cursor=pointer]
+                  - img:
+                    - group "Edge from slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-requestModify to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-responseModify"
+                  - img:
+                    - group "Edge from slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-responseModify to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-autoReply"
+                  - img:
+                    - group "Edge from slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-autoReply to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-concurrency"
+                  - img:
+                    - group "Edge from slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-concurrency to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-autoSwitch"
+                  - img:
+                    - group "Edge from slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-autoSwitch to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-logOutput"
+                  - img:
+                    - group "Edge from pv-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0 to slot-w-5c8d835e-d7ce-4faa-b8e7-3136a9a4d27e-0-requestModify" [ref=e487] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-luna to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e490] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-sol to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e493] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-terra to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e496] [cursor=pointer]
+                  - img:
+                    - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-requestModify to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-responseModify"
+                  - img:
+                    - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-responseModify to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoReply"
+                  - img:
+                    - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoReply to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-concurrency"
+                  - img:
+                    - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-concurrency to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoSwitch"
+                  - img:
+                    - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoSwitch to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-logOutput"
+                  - img:
+                    - group "Edge from pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0 to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-requestModify" [ref=e499] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-deepseek-v4-pro to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e502] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-glm-5.2 to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e505] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-kimi-k3 to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e508] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-deepseek-v4-flash-free to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e511] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-mimo-v2.5-free to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e514] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-hy3-free to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e517] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-nemotron-3-ultra-free to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e520] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-north-mini-code-free to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e523] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-qwen3.7-max to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e526] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-luna to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e529] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-sol to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e532] [cursor=pointer]
+                  - img:
+                    - group "Edge from model-gpt-5.6-terra to pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0" [ref=e535] [cursor=pointer]
+                  - img:
+                    - group "Edge from slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-requestModify to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-responseModify"
+                  - img:
+                    - group "Edge from slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-responseModify to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-autoReply"
+                  - img:
+                    - group "Edge from slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-autoReply to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-concurrency"
+                  - img:
+                    - group "Edge from slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-concurrency to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-autoSwitch"
+                  - img:
+                    - group "Edge from slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-autoSwitch to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-logOutput"
+                  - img:
+                    - group "Edge from pv-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0 to slot-w-0881b323-971d-4e8a-97e5-d5da31ced42b-0-requestModify" [ref=e538] [cursor=pointer]
+                - generic:
+                  - group [ref=e180]:
+                    - generic [ref=e181]: claude-opus-4-8
+                  - group [ref=e187]:
+                    - generic [ref=e188]: deepseek-v4-flash-free
+                  - group [ref=e194]:
+                    - generic [ref=e195]: deepseek-v4-pro
+                  - group [ref=e201]:
+                    - generic [ref=e202]: glm-5.2
+                  - group [ref=e208]:
+                    - generic [ref=e209]: gpt-5.6-luna
+                  - group [ref=e215]:
+                    - generic [ref=e216]: gpt-5.6-sol
+                  - group [ref=e222]:
+                    - generic [ref=e223]: gpt-5.6-terra
+                  - group [ref=e229]:
+                    - generic [ref=e230]: grok-4.5
+                  - group [ref=e236]:
+                    - generic [ref=e237]: hy3-free
+                  - group [ref=e243]:
+                    - generic [ref=e244]: kimi-k3
+                  - group [ref=e250]:
+                    - generic [ref=e251]: mimo-v2.5-free
+                  - group [ref=e257]:
+                    - generic [ref=e258]: MiniMax-M2.7
+                  - group [ref=e264]:
+                    - generic [ref=e265]: MiniMax-M3
+                  - group [ref=e271]:
+                    - generic [ref=e272]: nemotron-3-ultra-free
+                  - group [ref=e278]:
+                    - generic [ref=e279]: north-mini-code-free
+                  - group [ref=e285]:
+                    - generic [ref=e286]: qwen3.7-max
+                  - group [ref=e292]:
+                    - generic [ref=e293]:
+                      - generic [ref=e299]:
+                        - generic [ref=e300]: wooh-anthropic
+                        - switch "wooh-anthropic 工作流已启用，点击关闭" [checked] [ref=e301] [cursor=pointer]
+                      - generic [ref=e303]:
+                        - generic [ref=e304]: 1 URLs
+                        - generic [ref=e305]: 1 Keys
+                        - generic [ref=e306]: 4 Models
+                  - group [ref=e307]:
+                    - generic [ref=e309]:
+                      - generic [ref=e310]: 请求改写
+                      - button "添加" [ref=e311]
+                  - group [ref=e314]:
+                    - generic [ref=e316]:
+                      - generic [ref=e317]: 响应改写
+                      - button "添加" [ref=e318]
+                  - group [ref=e321]:
+                    - generic [ref=e323]:
+                      - generic [ref=e324]: 心跳回复
+                      - button "添加" [ref=e325]
+                  - group [ref=e328]:
+                    - generic [ref=e330]:
+                      - generic [ref=e331]: 并发控制
+                      - button "添加" [ref=e332]
+                  - group [ref=e335]:
+                    - generic [ref=e337]:
+                      - generic [ref=e338]: 故障转移
+                      - button "添加" [ref=e339]
+                  - group [ref=e342]:
+                    - generic [ref=e344]:
+                      - generic [ref=e345]: 日志输出
+                      - button "添加" [ref=e346]
+                  - group [ref=e349]:
+                    - generic [ref=e350]:
+                      - generic [ref=e355]:
+                        - generic [ref=e356]: wooh-openai-r
+                        - switch "wooh-openai-r 工作流已启用，点击关闭" [checked] [ref=e357] [cursor=pointer]
+                      - generic [ref=e359]:
+                        - generic [ref=e360]: 1 URLs
+                        - generic [ref=e361]: 1 Keys
+                        - generic [ref=e362]: 3 Models
+                  - group [ref=e363]:
+                    - generic [ref=e365]:
+                      - generic [ref=e366]: 请求改写
+                      - button "添加" [ref=e367]
+                  - group [ref=e370]:
+                    - generic [ref=e372]:
+                      - generic [ref=e373]: 响应改写
+                      - button "添加" [ref=e374]
+                  - group [ref=e377]:
+                    - generic [ref=e379]:
+                      - generic [ref=e380]: 心跳回复
+                      - button "添加" [ref=e381]
+                  - group [ref=e384]:
+                    - generic [ref=e386]:
+                      - generic [ref=e387]: 并发控制
+                      - button "添加" [ref=e388]
+                  - group [ref=e391]:
+                    - generic [ref=e393]:
+                      - generic [ref=e394]: 故障转移
+                      - button "添加" [ref=e395]
+                  - group [ref=e398]:
+                    - generic [ref=e400]:
+                      - generic [ref=e401]: 日志输出
+                      - button "添加" [ref=e402]
+                  - group [ref=e405]:
+                    - generic [ref=e406]:
+                      - generic [ref=e420]:
+                        - generic [ref=e421]: wooh-openai-c
+                        - switch "wooh-openai-c 工作流已启用，点击关闭" [checked] [ref=e422] [cursor=pointer]
+                      - generic [ref=e424]:
+                        - generic [ref=e425]: 1 URLs
+                        - generic [ref=e426]: 1 Keys
+                        - generic [ref=e427]: 12 Models
+                  - group [ref=e428]:
+                    - generic [ref=e430]:
+                      - generic [ref=e431]: 请求改写
+                      - button "添加" [ref=e432]
+                  - group [ref=e435]:
+                    - generic [ref=e437]:
+                      - generic [ref=e438]: 响应改写
+                      - button "添加" [ref=e439]
+                  - group [ref=e442]:
+                    - generic [ref=e444]:
+                      - generic [ref=e445]: 心跳回复
+                      - button "添加" [ref=e446]
+                  - group [ref=e449]:
+                    - generic [ref=e451]:
+                      - generic [ref=e452]: 并发控制
+                      - button "添加" [ref=e453]
+                  - group [ref=e456]:
+                    - generic [ref=e458]:
+                      - generic [ref=e459]: 故障转移
+                      - button "添加" [ref=e460]
+                  - group [ref=e463]:
+                    - generic [ref=e465]:
+                      - generic [ref=e466]: 日志输出
+                      - button "添加" [ref=e467]
+            - generic [ref=e470]:
+              - button "添加供应商到工作流" [ref=e471]
+              - button "自动布局" [ref=e472]
+              - button "编辑 JSON" [ref=e473]
+          - menu [ref=e542]:
+            - button "wooh-anthropic" [ref=e543]
+            - button "wooh-openai-r" [ref=e546]
+            - button "wooh-openai-c" [ref=e549]
+  - generic:
+    - region "Notifications"

@@ -11,6 +11,7 @@ export interface ProviderNodeData {
   readonly type: 'provider'
   readonly name: string
   readonly provider_id?: string
+  readonly enabled?: boolean
 }
 
 export interface RuleBoundNodeData {

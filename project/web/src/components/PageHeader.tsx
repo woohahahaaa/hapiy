@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 
@@ -5,9 +6,10 @@ interface PageHeaderProps {
   title: string
   subtitle?: string
   status?: string
+  actions?: ReactNode
 }
 
-export function PageHeader({ title, subtitle, status }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, status, actions }: PageHeaderProps) {
   return (
     <div className="bg-card px-6 py-4">
       <div className="flex items-center justify-between">
@@ -17,7 +19,10 @@ export function PageHeader({ title, subtitle, status }: PageHeaderProps) {
             <p className="text-sm text-muted-foreground">{subtitle}</p>
           )}
         </div>
-        {status && <Badge variant="secondary">{status}</Badge>}
+        <div className="flex items-center gap-2">
+          {actions}
+          {status && <Badge variant="secondary">{status}</Badge>}
+        </div>
       </div>
       <Separator className="mt-4 -mb-4" />
     </div>

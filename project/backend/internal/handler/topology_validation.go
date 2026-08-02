@@ -26,6 +26,7 @@ var topologySlotRanks = map[string]int{
 func validateTopologyDocument(db *gorm.DB, document TopologyDocument) (TopologyDocument, []model.TopologySlotAssignment, error) {
 	canonical := make(TopologyDocument, 0, len(document))
 	rows := make([]model.TopologySlotAssignment, 0)
+	enabledByProviderName := make(map[string]int)
 	for wi, workflow := range document {
 		if len(workflow) == 0 {
 			return nil, nil, fmt.Errorf("workflow %d is empty", wi+1)
@@ -38,10 +39,17 @@ func validateTopologyDocument(db *gorm.DB, document TopologyDocument) (TopologyD
 		if err != nil {
 			return nil, nil, fmt.Errorf("workflow %d: %w", wi+1, err)
 		}
+		requestedEnabled := providerNode.Enabled == nil || *providerNode.Enabled
+		enabledByProviderName[provider.Name]++
+		keptEnabled := requestedEnabled
+		if requestedEnabled && enabledByProviderName[provider.Name] > 1 {
+			keptEnabled = false
+		}
 		canonicalWorkflow := []TopologyNode{{
 			Type:       "provider",
 			Name:       provider.Name,
 			ProviderID: &provider.ID,
+			Enabled:    &keptEnabled,
 		}}
 		nextOrder := make(map[string]int)
 		for ni, node := range workflow[1:] {

@@ -23,6 +23,28 @@ import type { Workflow, WorkflowNode } from '@/components/topology/node-types/no
 
 export type { Workflow, WorkflowNode } from '@/components/topology/node-types/node-data'
 
+export interface WorkflowEntry {
+  readonly providerId: string
+  readonly enabled: boolean
+  readonly slots: SlotEntryMap
+}
+
+export function providerIdFromKey(key: string): string {
+  // key format: "w-{providerId}-{instanceIndex}"
+  const lastDash = key.lastIndexOf('-')
+  if (lastDash < 2) return key
+  return key.slice(2, lastDash)
+}
+
+export function makeWorkflowKey(workflows: readonly { providerId: string }[], providerId: string): string {
+  let maxIdx = -1
+  const prefix = `w-${providerId}-`
+  for (const w of workflows) {
+    if (w.providerId === providerId) maxIdx++
+  }
+  return `${prefix}${maxIdx + 1}`
+}
+
 export class TopologyDocumentError extends Error {
   readonly name = 'TopologyDocumentError'
 }
@@ -153,19 +175,20 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
   }
 }
 
-// Convert workflows JSON → SlotEntryMap keyed by provider name (visual layer needs this).
+// Convert workflows JSON → Map<workflowKey, WorkflowEntry>.
+// Each workflow (even duplicate providers) gets a unique key "w-{providerId}-{idx}".
 // Nodes are grouped by slot type (major order = SLOT_ORDER), then by order field (minor).
-export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<string, SlotEntryMap> {
-  const maps = new Map<string, SlotEntryMap>()
+export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<string, WorkflowEntry> {
+  const maps = new Map<string, WorkflowEntry>()
   const ranks = new Map(SLOT_ORDER.map((type, index) => [type, index]))
 
-  for (const workflow of workflows) {
+  workflows.forEach((workflow, idx) => {
     const providerNode = workflow[0]
-    if (providerNode.type !== 'provider') continue
-    const key = providerNode.provider_id ?? providerNode.name
-    if (!maps.has(key)) maps.set(key, emptySlotEntryMap())
+    if (providerNode.type !== 'provider') return
+    const providerId = providerNode.provider_id ?? providerNode.name
+    const key = makeWorkflowKey([...maps.values()], providerId)
+    const slots = emptySlotEntryMap()
 
-    const map = maps.get(key)!
     const nonProviderNodes = workflow.slice(1)
     const sorted = [...nonProviderNodes].sort((a, b) => {
       const ta = a.type
@@ -181,10 +204,12 @@ export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<strin
     for (const node of sorted) {
       if (node.type === 'provider') continue
       const slotType = node.type as SlotType
-      const list = map[slotType] as SlotEntry[]
+      const list = slots[slotType] as SlotEntry[]
       list.push(nodeToEntry(node, list.length + 1))
     }
-  }
+
+    maps.set(key, { providerId, enabled: providerNode.enabled !== false, slots })
+  })
 
   return maps
 }
@@ -220,30 +245,31 @@ function entryToNode(entry: SlotEntry, providerName: string): WorkflowNode | nul
   }
 }
 
-// Convert SlotEntryMap → workflows JSON.
+// Convert Map<workflowKey, WorkflowEntry> → workflows JSON.
 // providerNames maps provider_id → provider name for the provider node.
 // ruleNames maps slotType+ruleId → rule name for rule-bound nodes.
 export function workflowsFromSlotMaps(
-  maps: ReadonlyMap<string, SlotEntryMap>,
+  maps: ReadonlyMap<string, WorkflowEntry>,
   providerNames: ReadonlyMap<string, string>,
   ruleNames: ReadonlyMap<string, string>,
 ): Workflow[] {
   const workflows: Workflow[] = []
-  for (const [providerId, map] of maps) {
+  for (const [, entry] of maps) {
+    const providerId = entry.providerId
     const providerName = providerNames.get(providerId) ?? providerId
     const providerNode: WorkflowNode = {
       type: 'provider',
       name: providerName,
       provider_id: providerId,
+      enabled: entry.enabled,
     }
     const nodes: WorkflowNode[] = [providerNode]
     for (const slotType of SLOT_ORDER) {
-      for (const entry of map[slotType]) {
-        const node = entryToNode(entry, providerName)
+      for (const slotEntry of entry.slots[slotType]) {
+        const node = entryToNode(slotEntry, providerName)
         if (node === null) continue
-        // Fill in name from ruleNames lookup for rule-bound nodes
         if ('rule_id' in node && node.rule_id) {
-          const lookupKey = `${entry.slotType}:${node.rule_id}`
+          const lookupKey = `${slotEntry.slotType}:${node.rule_id}`
           ;(node as { name: string }).name = ruleNames.get(lookupKey) ?? ''
         }
         nodes.push(node)

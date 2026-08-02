@@ -23,6 +23,7 @@ interface SlotNodeData {
   title: string
   entries: SlotEntry[]
   rules: SlotRuleMap
+  enabled?: boolean
   onChangeEntry: (next: SlotEntry) => void
   onDeleteEntry: (index: number) => void
 }
@@ -33,7 +34,7 @@ interface SlotNodeProps {
 }
 
 export function SlotNode({ data }: SlotNodeProps) {
-  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry } = data
+  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, enabled = true } = data
   const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
   const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 

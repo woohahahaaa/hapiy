@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
   Background,
@@ -9,21 +10,23 @@ import {
   type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code, Save, Undo2 } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { ProviderNode } from '@/nodes/ProviderNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { SlotNode } from '@/nodes/SlotNode'
 import { NodeMenu } from '@/components/topology/NodeMenu'
+import { ContextMenu } from '@/components/topology/ContextMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { getLayoutedElements } from '@/lib/topology-auto-layout'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
-import { slotMapsFromWorkflows, workflowsFromSlotMaps, type Workflow } from '@/lib/topology-document'
+import { slotMapsFromWorkflows, workflowsFromSlotMaps, providerIdFromKey, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
 import {
   SLOT_ORDER,
@@ -106,18 +109,19 @@ function buildModelNodes(
 }
 
 function buildSlotNodes(
-  providerId: string,
+  workflowKey: string,
   slots: SlotEntryMap,
   rules: SlotRuleMap,
   layout: LayoutSnapshot,
   verticalOffset: number,
-  onChangeEntry: (providerId: string, slotType: SlotType, next: SlotEntry) => void,
-  onDeleteEntry: (providerId: string, slotType: SlotType, index: number) => void,
+  workflowEnabled: boolean,
+  onChangeEntry: (workflowKey: string, slotType: SlotType, next: SlotEntry) => void,
+  onDeleteEntry: (workflowKey: string, slotType: SlotType, index: number) => void,
 ): Node[] {
   const nodes: Node[] = []
   SLOT_ORDER.forEach((slotType, i) => {
     const entries = slots[slotType] ?? []
-    const slotId = `slot-${providerId}-${slotType}`
+    const slotId = `slot-${workflowKey}-${slotType}`
     nodes.push({
       id: slotId,
       type: 'slot',
@@ -125,58 +129,71 @@ function buildSlotNodes(
         x: topologyConfig.initialPositions.slot.x + i * topologyConfig.initialPositions.slot.horizontalOffset,
         y: topologyConfig.initialPositions.slot.y + verticalOffset * topologyConfig.initialPositions.slot.verticalOffset,
       },
+      className: workflowEnabled ? undefined : 'dim',
       data: {
         slotType,
-        providerId,
+        providerId: workflowKey,
         title: SLOT_LABELS[slotType],
         entries,
         rules,
-        onChangeEntry: (next: SlotEntry) => onChangeEntry(providerId, slotType, next),
-        onDeleteEntry: (index: number) => onDeleteEntry(providerId, slotType, index),
+        enabled: workflowEnabled,
+        onChangeEntry: (next: SlotEntry) => onChangeEntry(workflowKey, slotType, next),
+        onDeleteEntry: (index: number) => onDeleteEntry(workflowKey, slotType, index),
       },
     })
   })
   return nodes
 }
 
-function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string, string>): Edge[] {
+function buildEdges(
+  providers: readonly Provider[],
+  workflows: ReadonlyMap<string, WorkflowEntry>,
+  modelNodeIds: Record<string, string>,
+): Edge[] {
   const edges: Edge[] = []
 
-  for (const provider of providers) {
+  for (const [workflowKey, entry] of workflows) {
+    const provider = providers.find((p) => p.id === entry.providerId)
+    if (!provider) continue
+    const baseStyle = {
+      strokeWidth: topologyConfig.edge.strokeWidth,
+      opacity: entry.enabled ? 1 : 0.35,
+    }
+
     for (const model of provider.models) {
       const modelNodeId = modelNodeIds[model.model]
       if (!modelNodeId) continue
       edges.push({
-        id: `${modelNodeId}→pv-${provider.id}-${model.model}`,
+        id: `${modelNodeId}→pv-${workflowKey}-${model.model}`,
         source: modelNodeId,
         sourceHandle: model.model,
-        target: `pv-${provider.id}`,
+        target: `pv-${workflowKey}`,
         targetHandle: model.model,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth },
+        style: baseStyle,
       })
     }
     for (let i = 0; i < SLOT_ORDER.length - 1; i++) {
       const fromType = SLOT_ORDER[i]
       const toType = SLOT_ORDER[i + 1]
-      const fromId = `slot-${provider.id}-${fromType}`
-      const toId = `slot-${provider.id}-${toType}`
+      const fromId = `slot-${workflowKey}-${fromType}`
+      const toId = `slot-${workflowKey}-${toType}`
       edges.push({
         id: `${fromId}→${toId}`,
         source: fromId,
         target: toId,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth },
+        style: baseStyle,
       })
     }
 
-    const firstSlotId = `slot-${provider.id}-${SLOT_ORDER[0]}`
+    const firstSlotId = `slot-${workflowKey}-${SLOT_ORDER[0]}`
     edges.push({
-      id: `pv-${provider.id}→${firstSlotId}`,
-      source: `pv-${provider.id}`,
+      id: `pv-${workflowKey}→${firstSlotId}`,
+      source: `pv-${workflowKey}`,
       target: firstSlotId,
       animated: topologyConfig.edge.animated,
-      style: { strokeWidth: topologyConfig.edge.strokeWidth },
+      style: baseStyle,
     })
   }
 
@@ -184,27 +201,51 @@ function buildEdges(providers: readonly Provider[], modelNodeIds: Record<string,
 }
 
 export function TopologyPage() {
+  const navigate = useNavigate()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
   const { rules } = useSlotRules()
 
-  const slotsStateRef = useRef<Map<string, SlotEntryMap>>(new Map())
+  const slotsStateRef = useRef<Map<string, WorkflowEntry>>(new Map())
   const workflowsRef = useRef<Workflow[] | null>(null)
+  const baselineRef = useRef<Workflow[] | null>(null)
   const saveQueueRef = useRef<TopologySaveQueue | null>(null)
   const [slotsVersion, setSlotsVersion] = useState(0)
   const bumpSlots = useCallback(() => setSlotsVersion((v) => v + 1), [])
+  const nextWorkflowIdRef = useRef(0)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [undoConfirmOpen, setUndoConfirmOpen] = useState(false)
+  const [navGuardNext, setNavGuardNext] = useState<string | null>(null)
 
-  const handlePaneDoubleClick = useCallback((event: ReactMouseEvent) => {
+  const handlePaneClick = useCallback(() => {
+    setSelectedNodeId(null)
+    setContextMenu(null)
+  }, [])
+
+  const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault()
     if (!(event.target instanceof Element)) return
-    if (!event.target.closest('.react-flow__pane')) return
     if (event.target.closest('.react-flow__node')) return
-    setMenuState({
-      x: event.clientX,
-      y: event.clientY,
-      open: true,
-    })
+    setSelectedNodeId(null)
+    setContextMenu(null)
+    setMenuState({ x: event.clientX, y: event.clientY, open: true })
+  }, [])
+
+  const handleNodeClick = useCallback((_event: ReactMouseEvent, node: Node) => {
+    setSelectedNodeId(node.id)
+    setContextMenu(null)
+  }, [])
+
+  const handleNodeContextMenu = useCallback((event: ReactMouseEvent, node: Node) => {
+    event.preventDefault()
+    if (!node.id.startsWith('pv-')) return
+    setSelectedNodeId(node.id)
+    setMenuState((s) => ({ ...s, open: false }))
+    setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
   }, [])
 
   const loadData = useCallback(async () => {
@@ -217,15 +258,13 @@ export function TopologyPage() {
       ])
       setProviders(providers)
       workflowsRef.current = workflows
-      const maps = slotMapsFromWorkflows(workflows)
-      for (const provider of providers) {
-        if (!maps.has(provider.id)) maps.set(provider.id, emptySlotEntryMap())
-      }
-      slotsStateRef.current = maps
+      slotsStateRef.current = slotMapsFromWorkflows(workflows)
+      baselineRef.current = workflows
       saveQueueRef.current = new TopologySaveQueue(dashboardApi.saveTopology, (conflict) => {
         toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
       })
       bumpSlots()
+      setDirty(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
     } finally {
@@ -249,16 +288,90 @@ export function TopologyPage() {
     }
     const workflows = workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
     try {
-      workflowsRef.current = await queue.enqueue(workflows)
+      const saved = await queue.enqueue(workflows)
+      workflowsRef.current = saved
+      slotsStateRef.current = slotMapsFromWorkflows(saved)
+      baselineRef.current = saved
+      setDirty(false)
     } catch (err) {
       if (err instanceof DashboardApiError && err.status === 409) return
       toast.add({ title: err instanceof Error ? err.message : '拓扑节点保存失败', type: 'error' })
     }
   }, [providers, rules])
 
+  const handleSave = useCallback(() => {
+    void persistTopology()
+  }, [persistTopology])
+
+  const handleUndo = useCallback(() => {
+    const baseline = baselineRef.current
+    if (!baseline) return
+    slotsStateRef.current = slotMapsFromWorkflows(baseline)
+    workflowsRef.current = baseline
+    setDirty(false)
+    bumpSlots()
+  }, [bumpSlots])
+
+  useEffect(() => {
+    if (!dirty) return
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [dirty])
+
+  // The nested <Routes> under <BrowserRouter> in App.tsx never provides a
+  // DataRouterContext, so useBlocker would throw; we fall back to capturing
+  // clicks on rendered <a> elements (which is what <Link> emits) at the
+  // capture phase before React Router handles them. Browser back/forward is
+  // intentionally not intercepted here.
+  useEffect(() => {
+    if (!dirty) return
+    const handleClick = (event: MouseEvent) => {
+      if (event.defaultPrevented) return
+      if (event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const start = event.target
+      if (!(start instanceof Node)) return
+      let node: Element | null = (start as Element)
+      let anchor: HTMLAnchorElement | null = null
+      while (node) {
+        if (node instanceof HTMLAnchorElement) {
+          anchor = node
+          break
+        }
+        node = node.parentElement
+      }
+      if (!anchor) return
+      const href = anchor.getAttribute('href')
+      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return
+      if (anchor.target && anchor.target !== '_self') return
+      if (anchor.hasAttribute('download')) return
+      let url: URL
+      try {
+        url = new URL(href, window.location.href)
+      } catch {
+        return
+      }
+      if (url.origin !== window.location.origin) return
+      const current = window.location
+      if (url.pathname === current.pathname && url.search === current.search && url.hash === current.hash) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      setNavGuardNext(url.pathname + url.search + url.hash)
+    }
+    document.addEventListener('click', handleClick, true)
+    return () => document.removeEventListener('click', handleClick, true)
+  }, [dirty])
+
   const handleChangeEntry = useCallback(
-    (providerId: string, slotType: SlotType, next: SlotEntry) => {
-      const current = slotsStateRef.current.get(providerId) ?? emptySlotEntryMap()
+    (workflowKey: string, slotType: SlotType, next: SlotEntry) => {
+      const entry = slotsStateRef.current.get(workflowKey)
+      if (!entry) return
+      const current = entry.slots
       const list = current[slotType] ?? []
       const idx = list.findIndex((e) => e.index === next.index)
       const nextList =
@@ -266,26 +379,26 @@ export function TopologyPage() {
           ? list.map((e) => (e.index === next.index ? next : e))
           : [...list, next].map((e, i) => reindexSlotItem(e, i + 1, slotType))
       setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
-      slotsStateRef.current.set(providerId, current)
       bumpSlots()
-      void persistTopology()
+      setDirty(true)
     },
-    [bumpSlots, persistTopology],
+    [bumpSlots],
   )
 
   const handleDeleteEntry = useCallback(
-    (providerId: string, slotType: SlotType, index: number) => {
-      const current = slotsStateRef.current.get(providerId) ?? emptySlotEntryMap()
+    (workflowKey: string, slotType: SlotType, index: number) => {
+      const entry = slotsStateRef.current.get(workflowKey)
+      if (!entry) return
+      const current = entry.slots
       const list = current[slotType] ?? []
       const nextList = list
         .filter((e) => e.index !== index)
         .map((e, i) => reindexSlotItem(e, i + 1, slotType))
       setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
-      slotsStateRef.current.set(providerId, current)
       bumpSlots()
-      void persistTopology()
+      setDirty(true)
     },
-    [bumpSlots, persistTopology],
+    [bumpSlots],
   )
 
   const [jsonWorkflows, setJsonWorkflows] = useState<Workflow[] | null>(null)
@@ -308,6 +421,8 @@ export function TopologyPage() {
       const saved = await queue.saveNow(workflows)
       workflowsRef.current = saved
       slotsStateRef.current = slotMapsFromWorkflows(saved)
+      baselineRef.current = saved
+      setDirty(false)
       bumpSlots()
     },
     [bumpSlots],
@@ -319,28 +434,38 @@ export function TopologyPage() {
   const prevSlotSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map())
   const didInitialMeasure = useRef(false)
 
+  const topologyProviders = useMemo(() => {
+    if (!providers) return [] as Provider[]
+    const ids = new Set<string>()
+    for (const entry of slotsStateRef.current.values()) ids.add(entry.providerId)
+    return providers.filter((p) => ids.has(p.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers, slotsVersion])
+
   const modelNodeIds = useMemo(() => {
     const ids: Record<string, string> = {}
-    if (!providers) return ids
-    const unique = new Set<string>()
-    for (const provider of providers) for (const model of provider.models) unique.add(model.model)
-    Array.from(unique).sort((a, b) => a.localeCompare(b)).forEach((name) => {
-      ids[name] = `model-${name}`
-    })
+    for (const provider of topologyProviders) for (const model of provider.models) {
+      if (!(model.model in ids)) ids[model.model] = `model-${model.model}`
+    }
     return ids
-  }, [providers])
+  }, [topologyProviders])
 
   const baseNodes = useMemo(() => {
     if (!providers) return []
-    const modelNodes = buildModelNodes(providers, modelNodeIds, layoutSnapshot)
+    const modelNodes = buildModelNodes(topologyProviders, modelNodeIds, layoutSnapshot)
     const nodes: Node[] = [...modelNodes]
-    providers.forEach((provider) => {
+    for (const [workflowKey, entry] of slotsStateRef.current) {
+      const provider = providers.find((p) => p.id === entry.providerId)
+      if (!provider) continue
       const verticalOffset = nodes.length
-      const slots = slotsStateRef.current.get(provider.id) ?? emptySlotEntryMap()
       nodes.push({
-        id: `pv-${provider.id}`,
+        id: `pv-${workflowKey}`,
         type: 'provider',
-        position: layoutSnapshot[`pv-${provider.id}`] ?? {
+        className: [
+          `pv-${workflowKey}` === selectedNodeId ? 'selected' : undefined,
+          entry.enabled ? undefined : 'dim',
+        ].filter(Boolean).join(' ') || undefined,
+        position: layoutSnapshot[`pv-${workflowKey}`] ?? {
           x: topologyConfig.initialPositions.provider.x,
           y: topologyConfig.initialPositions.provider.y + verticalOffset * topologyConfig.initialPositions.provider.verticalOffset,
         },
@@ -350,53 +475,34 @@ export function TopologyPage() {
           keyCount: provider.keys.length,
           modelCount: provider.models.length,
           models: provider.models.map((m) => m.model),
-          active: provider.workflowEnabled,
-          providerId: provider.id,
+          active: entry.enabled,
+          providerId: workflowKey,
           onToggle: () => {
-            const p = providers.find((x) => x.id === provider.id)
-            if (!p) return Promise.resolve()
-            if (!p.workflowEnabled) {
-              const other = providers.find(
-                (x) => x.id !== p.id && x.name === p.name && x.workflowEnabled,
-              )
-              if (other) {
-                toast.add({ title: '当前已有一个同名供应商的工作流在启用，请先将另一个关闭', type: 'error' })
-                return Promise.reject(new Error('duplicate-active-workflow'))
-              }
-            }
-            return dashboardApi.toggleWorkflow(p.id)
-              .then((updated) => {
-                setProviders((prev) =>
-                  prev?.map((x) => (x.id === updated.id ? updated : x)) ?? prev,
-                )
-              })
-              .catch((err) => {
-                toast.add({ title: err instanceof Error ? err.message : '切换工作流状态失败', type: 'error' })
-                throw err
-              })
+            handleToggleWorkflow(workflowKey)
           },
         },
       })
       nodes.push(
         ...buildSlotNodes(
-          provider.id,
-          slots,
+          workflowKey,
+          entry.slots,
           rules,
           layoutSnapshot,
           nodes.length,
+          entry.enabled,
           handleChangeEntry,
           handleDeleteEntry,
         ),
       )
-    })
+    }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers, modelNodeIds, layoutSnapshot, slotsVersion, rules])
+  }, [providers, modelNodeIds, layoutSnapshot, slotsVersion, rules, selectedNodeId, handleChangeEntry, handleDeleteEntry])
 
   const baseEdges = useMemo(() => {
     if (!providers) return []
-    return buildEdges(providers, modelNodeIds)
-  }, [providers, modelNodeIds])
+    return buildEdges(providers, slotsStateRef.current, modelNodeIds)
+  }, [providers, modelNodeIds, slotsVersion])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
 
@@ -522,9 +628,71 @@ export function TopologyPage() {
     }
   }, [onNodesChange])
 
-  const handleAddProvider = useCallback(() => {
-    window.location.href = '/provider'
+  const handleAddProviderToWorkflow = useCallback((providerId: string) => {
+    const provider = providers?.find((p) => p.id === providerId)
+    let initialEnabled = true
+    if (provider) {
+      for (const other of slotsStateRef.current.values()) {
+        if (other.enabled) {
+          const otherProvider = providers?.find((p) => p.id === other.providerId)
+          if (otherProvider?.name === provider.name) {
+            initialEnabled = false
+            toast.add({ title: '同名供应商已有工作流在启用，新添加的工作流默认禁用', type: 'info' })
+            break
+          }
+        }
+      }
+    }
+    const key = makeWorkflowKey([...slotsStateRef.current.values()], providerId)
+    slotsStateRef.current.set(key, { providerId, enabled: initialEnabled, slots: emptySlotEntryMap() })
+    bumpSlots()
+    setDirty(true)
+    setMenuState((s) => ({ ...s, open: false }))
+  }, [bumpSlots, providers])
+
+  const handleDeleteWorkflow = useCallback((workflowKey: string) => {
+    slotsStateRef.current.delete(workflowKey)
+    setContextMenu(null)
+    setSelectedNodeId(null)
+    bumpSlots()
+    setDirty(true)
+  }, [bumpSlots])
+
+  const handleToggleWorkflow = useCallback((workflowKey: string) => {
+    const entry = slotsStateRef.current.get(workflowKey)
+    if (!entry) return
+    const nextEnabled = !entry.enabled
+    if (nextEnabled) {
+      const sameName = providers?.find((p) => p.id === entry.providerId)?.name
+      if (sameName) {
+        for (const [otherKey, other] of slotsStateRef.current) {
+          if (otherKey !== workflowKey && other.enabled) {
+            const otherProvider = providers?.find((p) => p.id === other.providerId)
+            if (otherProvider?.name === sameName) {
+              slotsStateRef.current.set(otherKey, { ...other, enabled: false })
+              toast.add({ title: '同名供应商已有工作流启用，已自动关闭其他实例', type: 'info' })
+            }
+          }
+        }
+      }
+    }
+    slotsStateRef.current.set(workflowKey, { ...entry, enabled: nextEnabled })
+    bumpSlots()
+    setDirty(true)
+  }, [bumpSlots, providers])
+
+  const handleAddProviderClick = useCallback(() => {
+    setMenuState({
+      x: Math.round(window.innerWidth / 2 - 128),
+      y: Math.round(window.innerHeight / 2 - 120),
+      open: true,
+    })
   }, [])
+
+  const availableProviders = useMemo(() => {
+    if (!providers) return []
+    return providers.map((p) => ({ id: p.id, name: p.name }))
+  }, [providers])
 
   if (loading) {
     return (
@@ -563,9 +731,9 @@ export function TopologyPage() {
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
           <p className="text-sm text-muted-foreground">
-            暂无供应商配置。请先在「供应商管理」中添加至少一个模型供应商。
+            暂无供应商配置。          请先在「供应商管理」中添加至少一个模型供应商。
           </p>
-          <Button onClick={handleAddProvider}>
+          <Button onClick={() => { window.location.href = '/provider' }}>
             <Plus data-icon="inline-start" />
             添加供应商
           </Button>
@@ -581,6 +749,25 @@ export function TopologyPage() {
         title="转发拓扑"
         subtitle="API routing workspace"
         status={`${providers.length} 供应商 · ${nodes.length} 节点`}
+        actions={dirty ? (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setUndoConfirmOpen(true)}
+              disabled={baselineRef.current === null}
+              title="撤销修改"
+              aria-label="撤销修改"
+            >
+              <Undo2 data-icon="inline-start" />
+              撤销修改
+            </Button>
+            <Button size="sm" onClick={handleSave} title="保存">
+              <Save data-icon="inline-start" />
+              保存
+            </Button>
+          </>
+        ) : null}
       />
       <div ref={setContainerEl} className="relative flex-1">
         <ReactFlow
@@ -588,7 +775,10 @@ export function TopologyPage() {
           edges={edges}
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
-          onDoubleClick={handlePaneDoubleClick}
+          onPaneClick={handlePaneClick}
+          onContextMenu={handlePaneContextMenu}
+          onNodeClick={handleNodeClick}
+          onNodeContextMenu={handleNodeContextMenu}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           nodesConnectable={false}
@@ -603,9 +793,9 @@ export function TopologyPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={handleAddProvider}
-              title="添加 Provider"
-              aria-label="添加 Provider"
+              onClick={handleAddProviderClick}
+              title="添加供应商到工作流"
+              aria-label="添加供应商到工作流"
             >
               <Plus />
             </Button>
@@ -632,8 +822,22 @@ export function TopologyPage() {
           <NodeMenu
             x={menuState.x}
             y={menuState.y}
-            onSelect={handleAddProvider}
+            providers={availableProviders}
+            onSelect={handleAddProviderToWorkflow}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
+          />
+        )}
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onDelete={() => {
+              const workflowKey = contextMenu.nodeId.startsWith('pv-')
+                ? contextMenu.nodeId.slice(3)
+                : contextMenu.nodeId
+              handleDeleteWorkflow(workflowKey)
+            }}
+            onClose={() => setContextMenu(null)}
           />
         )}
         {jsonWorkflows && (
@@ -643,6 +847,58 @@ export function TopologyPage() {
             onClose={() => setJsonWorkflows(null)}
           />
         )}
+        <Dialog open={undoConfirmOpen} onOpenChange={setUndoConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>撤销修改</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              确定要放弃所有未保存的修改吗？此操作无法撤销。
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setUndoConfirmOpen(false)}>
+                取消
+              </Button>
+              <Button
+                onClick={() => {
+                  setUndoConfirmOpen(false)
+                  handleUndo()
+                }}
+              >
+                确定撤销
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          open={navGuardNext !== null}
+          onOpenChange={(open) => {
+            if (!open) setNavGuardNext(null)
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>内容未保存</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              你还有内容未保存，是否确认离开？未保存的修改将会丢失。
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setNavGuardNext(null)}>
+                取消
+              </Button>
+              <Button
+                onClick={() => {
+                  const target = navGuardNext
+                  setNavGuardNext(null)
+                  if (target) navigate(target)
+                }}
+              >
+                确认离开
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

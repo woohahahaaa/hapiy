@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -52,6 +53,11 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 				relayReq.Headers[k] = v[0]
 			}
 		}
+		relayReq.RequestID = c.GetString("request_id")
+		relayReq.UserID = getString(userID)
+		if tokenID, ok := tokenIDRaw.(string); ok {
+			relayReq.TokenID = tokenID
+		}
 
 		// Select provider for the model
 		provider, err := engine.SelectProvider(relayReq.Model)
@@ -83,6 +89,18 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
 		if err != nil {
 			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			// Concurrency rejection has its own dedicated HTTP status.
+			// errors.As walks the wrapped chain so the rewrite stage
+			// (which wraps with rule IDs) still surfaces correctly.
+			if errors.Is(err, relay.ErrConcurrencyRejected) {
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error": gin.H{
+						"message": "concurrency limit exceeded",
+						"type":    "rate_limit_exceeded",
+					},
+				})
+				return
+			}
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error": gin.H{
 					"message": "upstream error: " + err.Error(),
@@ -134,6 +152,12 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			handleNonStreamingResponse(c, resp)
 		}
 	}
+}
+
+// isConcurrencyRejectionError is a retained helper for tests that want
+// to assert the 429 path without going through the live engine.
+func isConcurrencyRejectionError(err error) bool {
+	return errors.Is(err, relay.ErrConcurrencyRejected)
 }
 
 func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {

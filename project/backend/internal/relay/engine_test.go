@@ -255,16 +255,19 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 	defer server.Close()
 	plan := &ExecutionPlan{
 		Provider:              &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
-		ResponseRewriteRules: []*model.ResponseRewriteRule{&responseRule},
-		LogOutputs:           []LogOutputAssignment{{ID: "log", Order: 1, Config: `{}`}},
+		BaseURLs:              []string{server.URL},
+		Keys:                  []string{"key"},
+		ResponseRewriteRules:  []*model.ResponseRewriteRule{&responseRule},
+		LogOutputs:            []LogOutputAssignment{{ID: "log", Order: 1, Config: `{}`}},
+		CompiledResponseRewrites: []CompiledRewriteChain{},
 	}
-	events := make([]topologyStageEvent, 0, 5)
+	events := make([]topologyStageEvent, 0, 6)
 	engine.topologyStageHook = func(event topologyStageEvent) {
 		events = append(events, event)
 	}
 
 	// When
-	response, err := engine.RelayRequest(context.Background(), plan, &RelayRequest{})
+	response, err := engine.RelayRequest(context.Background(), plan, &RelayRequest{RequestID: "req-1"})
 
 	// Then
 	if err != nil {
@@ -277,6 +280,7 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 	wantStages := []topologyStage{
 		topologyStageRequestBefore,
 		topologyStageRequestAfter,
+		topologyStageRelay,
 		topologyStageResponseBefore,
 		topologyStageResponseRewrite,
 		topologyStageResponseAfter,
@@ -288,11 +292,18 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 		if events[index].Stage != want {
 			t.Fatalf("stage %d: want %q, got %q", index, want, events[index].Stage)
 		}
-		if index != 3 && len(events[index].LogOutputs) != 1 {
+		expectLogOutputs := index != 2 && index != 4
+		if expectLogOutputs && len(events[index].LogOutputs) != 1 {
 			t.Fatalf("stage %q did not receive selected log output: %+v", want, events[index].LogOutputs)
 		}
+		if events[index].ProviderID != plan.ID {
+			t.Fatalf("stage %q missing ProviderID: %+v", want, events[index])
+		}
+		if events[index].RequestID != "req-1" {
+			t.Fatalf("stage %q missing RequestID: %+v", want, events[index])
+		}
 	}
-	if len(events[3].ResponseRewriteRules) != 1 || events[3].ResponseRewriteRules[0].ID != responseRule.ID {
-		t.Fatalf("response rewrite stage did not receive selected rule: %+v", events[3].ResponseRewriteRules)
+	if len(events[4].ResponseRewriteRules) != 1 || events[4].ResponseRewriteRules[0].ID != responseRule.ID {
+		t.Fatalf("response rewrite stage did not receive selected rule: %+v", events[4].ResponseRewriteRules)
 	}
 }

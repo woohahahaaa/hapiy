@@ -92,28 +92,23 @@ func (e *Engine) compilePlan(p *model.Provider) error {
 	return nil
 }
 
-// SelectProvider selects a provider for the given model using round-robin with weight
+// SelectProvider selects a provider for the given model using round-robin
+// with weight. The model membership check uses the pre-parsed ModelSet
+// populated during plan compilation — no per-request JSON unmarshalling.
 func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
-	e.providersMu.RLock()
-	defer e.providersMu.RUnlock()
+	e.plansMu.RLock()
+	defer e.plansMu.RUnlock()
 
 	var candidates []*model.Provider
-	for _, p := range e.providers {
-		if !p.Status || !p.WorkflowEnabled {
+	for _, plan := range e.plans {
+		if plan.Provider == nil {
 			continue
 		}
-
-		// Check if provider supports the model
-		var models []map[string]interface{}
-		if err := json.Unmarshal([]byte(p.Models), &models); err != nil {
+		if !plan.Provider.Status || !plan.Provider.WorkflowEnabled {
 			continue
 		}
-
-		for _, m := range models {
-			if name, ok := m["model"].(string); ok && name == modelName {
-				candidates = append(candidates, p)
-				break
-			}
+		if _, ok := plan.ModelSet[modelName]; ok {
+			candidates = append(candidates, plan.Provider)
 		}
 	}
 
@@ -125,48 +120,109 @@ func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
 	return candidates[0], nil
 }
 
-// RelayRequest executes the request through the compiled pipeline
-func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
-	// Pipeline order (fixed, not configurable):
-	// 1. Concurrency control
-	// 2. Request logging and rewrite
-	// 3. Relay to upstream (with failover)
-	// 4. Response logging and rewrite
-	// 5. Heartbeat monitoring (response wrapping)
-	// 6. Debug logging
+// RelayRequest represents an incoming request from the handler.
+type RelayRequest struct {
+	// RequestID is the per-request correlation id set by the middleware
+	// (X-Request-ID). It is propagated into topologyStageEvent so the
+	// future SSE stage fan-out can group events by request.
+	RequestID string `json:"-"`
+	// UserID and TokenID are populated by the handler so concurrency
+	// rules with scope=per_user / per_token can key their waitlists.
+	UserID string `json:"-"`
+	TokenID string `json:"-"`
+	// Model is the literal user-supplied model name (e.g. "gpt-4").
+	Model       string                   `json:"model"`
+	Messages    []map[string]interface{} `json:"messages,omitempty"`
+	Stream      bool                     `json:"stream,omitempty"`
+	MaxTokens   int                      `json:"max_tokens,omitempty"`
+	Temperature float64                  `json:"temperature,omitempty"`
+	Body        map[string]interface{}   `json:"-"` // Full request body
+	Headers     map[string]string        `json:"-"`
+}
 
-	// Step 1: Concurrency control
+// RelayResponse represents the upstream response.
+type RelayResponse struct {
+	StatusCode int
+	Headers    map[string]string
+	Body       io.ReadCloser
+	Usage      *UsageInfo
+}
+
+// UsageInfo tracks token usage.
+type UsageInfo struct {
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+}
+
+// RelayRequest executes the request through the compiled pipeline.
+// Pipeline order (fixed, not configurable):
+//  1. Concurrency control
+//  2. Request logging and rewrite
+//  3. Relay to upstream (with failover)
+//  4. Response logging and rewrite
+//  5. Heartbeat monitoring (response wrapping)
+//  6. Debug logging
+func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
+	// Step 1: Concurrency control. The release func MUST be called on
+	// every exit path so we wrap the rest of the pipeline in a closure
+	// that defers release before returning.
+	var releaseConcurrency func()
 	if plan.ConcurrencyRule != nil {
-		if err := e.checkConcurrency(plan.ConcurrencyRule, req); err != nil {
+		rel, err := e.checkConcurrency(ctx, plan.ConcurrencyRule, req)
+		if err != nil {
 			return nil, err
 		}
+		releaseConcurrency = rel
+	}
+	if releaseConcurrency != nil {
+		defer releaseConcurrency()
 	}
 
 	// Step 2: Request logging and rewrite
-	e.runTopologyLogOutputs(topologyStageRequestBefore, plan.LogOutputs, req, nil)
-	if len(plan.RewriteRules) > 0 {
-		if err := e.applyRewriteRules(plan.RewriteRules, req); err != nil {
+	e.runTopologyLogOutputs(topologyStageRequestBefore, plan.LogOutputs, plan, req, nil)
+	if len(plan.CompiledRewrite) > 0 {
+		if err := e.applyCompiledRewriteRules(plan, req); err != nil {
 			return nil, err
 		}
 	}
-	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, req, nil)
+	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, plan, req, nil)
 
-	// Step 3: Relay to upstream (with failover)
+	// Step 3: Relay to upstream (with failover). The "relay" stage fires
+	// here so a future UI can light up the provider node as the request
+	// hits the network.
+	e.recordTopologyStage(topologyStageEvent{
+		Stage:      topologyStageRelay,
+		ProviderID: plan.ID,
+		RequestID:  req.RequestID,
+	})
 	resp, err := e.relayWithFailover(ctx, plan, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 4: Response logging and rewrite
-	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, req, resp)
-	if len(plan.ResponseRewriteRules) > 0 {
-		e.applyResponseRewriteRules(plan.ResponseRewriteRules, resp)
+	// Step 4: Response logging and rewrite. Per the deliberate design
+	// decision, streaming bodies are never buffered for response rewrite:
+	// the stage event is recorded but the body is forwarded as-is.
+	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, resp)
+	if !req.Stream && len(plan.CompiledResponseRewrites) > 0 {
+		if err := e.applyCompiledResponseRewriteRules(plan, resp); err != nil {
+			return nil, err
+		}
 	}
-	e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, req, resp)
+	e.recordTopologyStage(topologyStageEvent{
+		Stage:                topologyStageResponseRewrite,
+		ProviderID:           plan.ID,
+		RequestID:            req.RequestID,
+		ResponseRewriteRules: plan.ResponseRewriteRules,
+	})
+	e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, plan, req, resp)
 
-	// Step 5: Heartbeat monitoring (if streaming)
+	// Step 5: Heartbeat monitoring (if streaming). Always returns resp
+	// (possibly with a wrapped body); on failure to wrap we keep the
+	// original body so the stream is never corrupted.
 	if plan.HeartbeatRule != nil && req.Stream {
-		resp = e.wrapWithHeartbeat(resp, plan.HeartbeatRule)
+		resp = e.wrapWithHeartbeat(resp, plan.HeartbeatRule, req)
 	}
 
 	// Step 6: Debug logging
@@ -177,61 +233,69 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	return resp, nil
 }
 
-// RelayRequest represents an incoming request
-type RelayRequest struct {
-	Model       string                   `json:"model"`
-	Messages    []map[string]interface{} `json:"messages,omitempty"`
-	Stream      bool                     `json:"stream,omitempty"`
-	MaxTokens   int                      `json:"max_tokens,omitempty"`
-	Temperature float64                  `json:"temperature,omitempty"`
-	Body        map[string]interface{}   `json:"-"` // Full request body
-	Headers     map[string]string        `json:"-"`
-}
-
-// RelayResponse represents the upstream response
-type RelayResponse struct {
-	StatusCode int
-	Headers    map[string]string
-	Body       io.ReadCloser
-	Usage      *UsageInfo
-}
-
-// UsageInfo tracks token usage
-type UsageInfo struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
-}
-
-// checkConcurrency implements concurrency control
-func (e *Engine) checkConcurrency(rule *model.ConcurrencyRule, req *RelayRequest) error {
-	// TODO: Implement actual concurrency limiting with queueing
-	// For now, just a placeholder
+// applyCompiledRewriteRules reads req.Body, runs the compiled rewrite
+// chain, and writes the result back into req.Body. We round-trip through
+// JSON because the existing req.Body is map[string]any — that's the
+// contract established by handler/relay.go.
+func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayRequest) error {
+	raw, err := json.Marshal(req.Body)
+	if err != nil {
+		return fmt.Errorf("marshal request body: %w", err)
+	}
+	updated, err := applyRewriteChains(raw, plan.CompiledRewrite)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(raw, updated) {
+		var merged map[string]interface{}
+		if err := json.Unmarshal(updated, &merged); err != nil {
+			return fmt.Errorf("unmarshal rewritten request: %w", err)
+		}
+		req.Body = merged
+	}
 	return nil
 }
 
-// applyRewriteRules modifies the request based on rewrite rules
-func (e *Engine) applyRewriteRules(rules []*model.RewriteRule, req *RelayRequest) error {
-	// TODO: Implement DSL parser and executor
-	// For now, just a placeholder
+// applyCompiledResponseRewriteRules is the non-streaming counterpart.
+// Streaming bodies are deliberately NOT rewritten here; the engine
+// records a stage event but does not touch the body.
+func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *RelayResponse) error {
+	if resp.Body == nil {
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+	_ = resp.Body.Close()
+	updated, err := applyRewriteChains(body, plan.CompiledResponseRewrites)
+	if err != nil {
+		return err
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(updated))
+	if resp.Headers == nil {
+		resp.Headers = map[string]string{}
+	}
+	resp.Headers["Content-Length"] = fmt.Sprintf("%d", len(updated))
 	return nil
 }
 
-// applyResponseRewriteRules is a deterministic no-op until the response DSL exists.
-// It deliberately does not read or replace the response body to preserve streaming.
-func (e *Engine) applyResponseRewriteRules(rules []*model.ResponseRewriteRule, resp *RelayResponse) {
-	_ = resp
-	e.recordTopologyStage(topologyStageEvent{Stage: topologyStageResponseRewrite, ResponseRewriteRules: rules})
-}
-
-// runTopologyLogOutputs is a deterministic no-op until log output backends exist.
-func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, req *RelayRequest, resp *RelayResponse) {
-	_ = req
+// runTopologyLogOutputs is a deterministic no-op until log output
+// backends exist. It records a stage event so consumers can see which
+// log outputs were selected for each stage.
+func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) {
 	_ = resp
 	if len(assignments) == 0 {
 		return
 	}
-	e.recordTopologyStage(topologyStageEvent{Stage: stage, LogOutputs: assignments})
+	event := topologyStageEvent{Stage: stage, LogOutputs: assignments}
+	if plan != nil {
+		event.ProviderID = plan.ID
+	}
+	if req != nil {
+		event.RequestID = req.RequestID
+	}
+	e.recordTopologyStage(event)
 }
 
 func (e *Engine) recordTopologyStage(event topologyStageEvent) {
@@ -240,37 +304,7 @@ func (e *Engine) recordTopologyStage(event topologyStageEvent) {
 	}
 }
 
-// relayWithFailover sends the request to upstream with automatic failover
-func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
-	// Get provider configuration
-	var baseURLs []string
-	if err := json.Unmarshal([]byte(plan.Provider.BaseURLs), &baseURLs); err != nil {
-		return nil, err
-	}
-	if len(baseURLs) == 0 {
-		return nil, errors.New("no base URL configured")
-	}
-
-	var keys []string
-	if err := json.Unmarshal([]byte(plan.Provider.Keys), &keys); err != nil {
-		return nil, err
-	}
-	if len(keys) == 0 {
-		return nil, errors.New("no API key configured")
-	}
-
-	// Build upstream request
-	upstreamURL := baseURLs[0] // TODO: Round-robin multiple URLs
-	if req.Stream {
-		// Handle streaming request
-		return e.relayStreaming(ctx, upstreamURL, keys[0], req)
-	}
-
-	// Handle non-streaming request
-	return e.relayNonStreaming(ctx, upstreamURL, keys[0], req)
-}
-
-// relayNonStreaming handles non-streaming requests
+// relayNonStreaming handles non-streaming requests.
 func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *RelayRequest) (*RelayResponse, error) {
 	bodyBytes, err := e.marshalRequestBody(req)
 	if err != nil {
@@ -288,9 +322,15 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 		return nil, fmt.Errorf("upstream request failed: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
+		// We return the response alongside the error so the failover
+		// layer can read the status code. The caller MUST drain/close
+		// the body when it discards the response.
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
+		return &RelayResponse{
+			StatusCode: resp.StatusCode,
+			Headers:    flattenHeaders(resp.Header),
+			Body:       resp.Body,
+		}, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	return &RelayResponse{
@@ -301,7 +341,7 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 	}, nil
 }
 
-// relayStreaming handles streaming (SSE) requests
+// relayStreaming handles streaming (SSE) requests.
 func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *RelayRequest) (*RelayResponse, error) {
 	bodyBytes, err := e.marshalRequestBody(req)
 	if err != nil {
@@ -320,9 +360,12 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 		return nil, fmt.Errorf("upstream request failed: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		defer resp.Body.Close()
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
+		return &RelayResponse{
+			StatusCode: resp.StatusCode,
+			Headers:    flattenHeaders(resp.Header),
+			Body:       resp.Body,
+		}, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
 	return &RelayResponse{
@@ -362,13 +405,7 @@ func flattenHeaders(h http.Header) map[string]string {
 	return out
 }
 
-// wrapWithHeartbeat wraps the response with heartbeat injection
-func (e *Engine) wrapWithHeartbeat(resp *RelayResponse, rule *model.HeartbeatRule) *RelayResponse {
-	// TODO: Implement heartbeat injection for SSE streams
-	return resp
-}
-
-// logDebug logs debug information
+// logDebug logs debug information.
 func (e *Engine) logDebug(plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) {
 	// TODO: Implement debug logging
 }

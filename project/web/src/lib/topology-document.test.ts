@@ -4,6 +4,7 @@ import {
   parseTopologyDocument,
   slotMapsFromWorkflows,
   workflowsFromSlotMaps,
+  type WorkflowEntry,
 } from './topology-document'
 
 describe('parseTopologyDocument', () => {
@@ -75,11 +76,12 @@ describe('slotMapsFromWorkflows', () => {
 
     const maps = slotMapsFromWorkflows(workflows)
 
-    const providerSlots = maps.get('p-1')
-    expect(providerSlots?.requestModify).toHaveLength(2)
-    expect(providerSlots?.requestModify[0]).toMatchObject({ ruleId: 'r-1' })
-    expect(providerSlots?.requestModify[1]).toMatchObject({ ruleId: 'r-2' })
-    expect(providerSlots?.logOutput[0]).toMatchObject({ enabled: false, logTarget: 'both' })
+    const entry = [...maps.values()][0]
+    expect(entry?.providerId).toBe('p-1')
+    expect(entry?.slots.requestModify).toHaveLength(2)
+    expect(entry?.slots.requestModify[0]).toMatchObject({ ruleId: 'r-1' })
+    expect(entry?.slots.requestModify[1]).toMatchObject({ ruleId: 'r-2' })
+    expect(entry?.slots.logOutput[0]).toMatchObject({ enabled: false, logTarget: 'both' })
   })
 })
 
@@ -90,7 +92,9 @@ describe('workflowsFromSlotMaps', () => {
       { id: 'draft', slotType: 'requestModify', index: 1, enabled: true, ruleId: null, config: {} },
       { id: 'saved', slotType: 'requestModify', index: 2, enabled: false, ruleId: 'rule-a', config: {} },
     )
-    const maps = new Map([['p-1', providerSlots]])
+    const maps = new Map<string, WorkflowEntry>([
+      ['w-p-1-0', { providerId: 'p-1', slots: providerSlots }],
+    ])
     const providerNames = new Map([['p-1', 'P']])
     const ruleNames = new Map([['requestModify:rule-a', 'rule-a']])
 
@@ -111,7 +115,9 @@ describe('workflowsFromSlotMaps', () => {
       recordResponseBefore: false, recordResponseAfter: true,
       config: {},
     })
-    const maps = new Map([['p-1', providerSlots]])
+    const maps = new Map<string, WorkflowEntry>([
+      ['w-p-1-0', { providerId: 'p-1', slots: providerSlots }],
+    ])
     const providerNames = new Map([['p-1', 'P']])
 
     const workflows = workflowsFromSlotMaps(maps, providerNames, new Map())

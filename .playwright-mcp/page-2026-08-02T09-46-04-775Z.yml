@@ -1,0 +1,136 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e22]:
+    - generic [ref=e25]:
+      - generic [ref=e27]:
+        - generic [ref=e28]: hapiy
+        - generic [ref=e29]:
+          - button "切换到深色主题" [ref=e30]:
+            - generic [ref=e31]: 切换主题
+          - button "Toggle Sidebar" [ref=e32]
+      - generic [ref=e35]:
+        - generic [ref=e36]: 导航
+        - list [ref=e38]:
+          - listitem [ref=e39]:
+            - link "转发拓扑" [ref=e40] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e47]:
+            - button "监控" [ref=e48]
+            - list [ref=e54]:
+              - listitem [ref=e55]:
+                - link "活动监视" [ref=e56] [cursor=pointer]:
+                  - /url: /monitor
+              - listitem [ref=e58]:
+                - link "使用日志" [ref=e59] [cursor=pointer]:
+                  - /url: /logs
+          - listitem [ref=e61]:
+            - link "供应商" [ref=e62] [cursor=pointer]:
+              - /url: /provider
+          - listitem [ref=e67]:
+            - link "令牌管理" [ref=e68] [cursor=pointer]:
+              - /url: /token
+          - listitem [ref=e74]:
+            - link "价格配置" [ref=e75] [cursor=pointer]:
+              - /url: /price
+          - listitem [ref=e80]:
+            - button "策略配置" [ref=e81]
+            - list [ref=e88]:
+              - listitem [ref=e89]:
+                - link "请求改写" [ref=e90] [cursor=pointer]:
+                  - /url: /policy/rewrite
+              - listitem [ref=e92]:
+                - link "响应改写" [ref=e93] [cursor=pointer]:
+                  - /url: /policy/rewrite-response
+              - listitem [ref=e95]:
+                - link "心跳回复" [ref=e96] [cursor=pointer]:
+                  - /url: /policy/heartbeat
+              - listitem [ref=e98]:
+                - link "并发控制" [ref=e99] [cursor=pointer]:
+                  - /url: /policy/concurrency
+              - listitem [ref=e101]:
+                - link "故障转移" [ref=e102] [cursor=pointer]:
+                  - /url: /policy/failover
+          - listitem [ref=e104]:
+            - link "系统设置" [ref=e105] [cursor=pointer]:
+              - /url: /settings
+          - listitem [ref=e110]:
+            - link "个人资料" [ref=e111] [cursor=pointer]:
+              - /url: /profile
+      - paragraph [ref=e117]: hapiy v0.1.0
+      - button "Toggle Sidebar" [ref=e118]
+    - main [ref=e119]:
+      - generic [ref=e120]:
+        - generic [ref=e121]:
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - heading "转发拓扑" [level=1] [ref=e124]
+              - paragraph [ref=e125]: API routing workspace
+            - generic [ref=e126]: 3 供应商 · 10 节点
+          - separator [ref=e128]
+        - application [ref=e130]:
+          - generic [ref=e132]:
+            - generic:
+              - generic:
+                - img:
+                  - group "Edge from model-gpt-5.6-luna to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e133] [cursor=pointer]
+                - img:
+                  - group "Edge from model-gpt-5.6-sol to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e136] [cursor=pointer]
+                - img:
+                  - group "Edge from model-gpt-5.6-terra to pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0" [ref=e139] [cursor=pointer]
+                - img:
+                  - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-requestModify to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-responseModify"
+                - img:
+                  - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-responseModify to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoReply"
+                - img:
+                  - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoReply to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-concurrency"
+                - img:
+                  - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-concurrency to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoSwitch"
+                - img:
+                  - group "Edge from slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-autoSwitch to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-logOutput"
+                - img:
+                  - group "Edge from pv-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0 to slot-w-3296b7be-3119-4df3-a04e-9cbf1ac6e7c9-0-requestModify" [ref=e142] [cursor=pointer]
+              - generic:
+                - group [ref=e145]:
+                  - generic [ref=e146]: gpt-5.6-luna
+                - group [ref=e152]:
+                  - generic [ref=e153]: gpt-5.6-sol
+                - group [ref=e159]:
+                  - generic [ref=e160]: gpt-5.6-terra
+                - group [ref=e166]:
+                  - generic [ref=e167]:
+                    - generic [ref=e172]:
+                      - generic [ref=e173]: wooh-openai-r
+                      - switch "wooh-openai-r 工作流已启用，点击关闭" [checked] [ref=e174] [cursor=pointer]
+                    - generic [ref=e176]:
+                      - generic [ref=e177]: 1 URLs
+                      - generic [ref=e178]: 1 Keys
+                      - generic [ref=e179]: 3 Models
+                - group [ref=e180]:
+                  - generic [ref=e182]:
+                    - generic [ref=e183]: 请求改写
+                    - button "添加" [ref=e184]
+                - group [ref=e187]:
+                  - generic [ref=e189]:
+                    - generic [ref=e190]: 响应改写
+                    - button "添加" [ref=e191]
+                - group [ref=e194]:
+                  - generic [ref=e196]:
+                    - generic [ref=e197]: 心跳回复
+                    - button "添加" [ref=e198]
+                - group [ref=e201]:
+                  - generic [ref=e203]:
+                    - generic [ref=e204]: 并发控制
+                    - button "添加" [ref=e205]
+                - group [ref=e208]:
+                  - generic [ref=e210]:
+                    - generic [ref=e211]: 故障转移
+                    - button "添加" [ref=e212]
+                - group [ref=e215]:
+                  - generic [ref=e217]:
+                    - generic [ref=e218]: 日志输出
+                    - button "添加" [ref=e219]
+          - generic [ref=e222]:
+            - button "添加供应商到工作流" [ref=e223]
+            - button "自动布局" [ref=e224]
+            - button "编辑 JSON" [ref=e225]
+  - generic:
+    - region "Notifications"
