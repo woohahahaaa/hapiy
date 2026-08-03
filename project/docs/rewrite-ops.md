@@ -103,6 +103,67 @@
 | `body.hello` | body 对象的 hello 字段 |
 | `choices.-1.message` | choices 数组最后一项的 message（负数索引） |
 
+## Header 改写
+
+使用 `header.` 前缀可以直接操作 HTTP 请求/响应的 header。语法和 body 改写完全一致——同一套 `mode/path/value/conditions` DSL。
+
+```json
+[
+  { "path": "header.X-Request-ID", "mode": "set", "value": "req-123" },
+  { "path": "header.X-Trace", "mode": "append", "value": ":extra" }
+]
+```
+
+### 支持的 mode
+
+13 种 mode 均支持，语义与 body 改写一致：
+
+`set` / `delete` / `append` / `prepend` / `ensure_prefix` / `ensure_suffix` / `trim_prefix` / `trim_suffix` / `trim_space` / `to_lower` / `to_upper` / `replace` / `regex_replace`
+
+`copy` / `move` 在 header 作用域下会返回错误（不支持跨作用域操作）。
+
+### scope 字段
+
+可选的 `scope` 字段控制操作作用域：
+
+| scope | 说明 |
+|---|---|
+| `header` | 仅操作 header，path 必须以 `header.` 开头 |
+| `body` | 仅操作 body，path 不能以 `header.` 开头 |
+| `all`（默认） | 接受任意 path |
+
+```json
+[
+  { "path": "header.X-Route", "mode": "set", "value": "premium", "scope": "header" },
+  { "path": "model", "mode": "set", "value": "gpt-4", "scope": "body" }
+]
+```
+
+不填 `scope` 等同于 `scope: "all"`，向后兼容所有现有规则。
+
+### 条件支持
+
+条件同样支持 `header.` 前缀路径：
+
+```json
+[
+  {
+    "path": "header.X-Route",
+    "mode": "set",
+    "value": "premium",
+    "conditions": [
+      { "path": "header.X-Tenant", "op": "neq", "value": "free" }
+    ]
+  }
+]
+```
+
+### 注意事项
+
+- header 名称区分大小写（`header.X-Foo` ≠ `header.x-foo`）。
+- `copy` / `move` 不支持跨 header ↔ body 操作，会返回运行时错误。
+- **上游请求黑名单**：`Authorization`、`Content-Length`、`Host`、`Connection` 四个 header 在写入上游请求时会被跳过（由引擎内部处理）。改写规则可以修改 `req.Headers` 中的这些值，但修改后的值不会发送到上游——这些 header 由 API key 管理逻辑控制。
+
 ## 完整示例
 
 ```json
@@ -118,6 +179,7 @@
     ]
   },
   { "path": "messages.0.role", "mode": "to_lower" },
-  { "path": "metadata", "mode": "copy", "dst": "original_metadata" }
+  { "path": "metadata", "mode": "copy", "dst": "original_metadata" },
+  { "path": "header.X-Request-ID", "mode": "set", "value": "generated-id" }
 ]
 ```
