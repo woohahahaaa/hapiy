@@ -242,7 +242,7 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
-	updated, err := applyRewriteChains(raw, plan.CompiledRewrite)
+	updated, _, err := applyRewriteChains(raw, nil, plan.CompiledRewrite)
 	if err != nil {
 		return err
 	}
@@ -268,7 +268,7 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 		return fmt.Errorf("read response body: %w", err)
 	}
 	_ = resp.Body.Close()
-	updated, err := applyRewriteChains(body, plan.CompiledResponseRewrites)
+	updated, _, err := applyRewriteChains(body, nil, plan.CompiledResponseRewrites)
 	if err != nil {
 		return err
 	}

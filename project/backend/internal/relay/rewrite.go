@@ -255,127 +255,151 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 // replacements — no full re-parse. The engine passes req.Body in by
 // marshalling it once because that's the contract used by the existing
 // pipeline (Body is a map[string]any).
-func applyRewriteChains(body []byte, chains []CompiledRewriteChain) ([]byte, error) {
+func applyRewriteChains(body []byte, headers map[string]string, chains []CompiledRewriteChain) ([]byte, map[string]string, error) {
 	for ci := range chains {
 		chain := &chains[ci]
+		if headers == nil && chainHasHeaderOp(chain) {
+			headers = make(map[string]string)
+		}
 		for oi := range chain.Ops {
 			op := &chain.Ops[oi]
 			ok, err := evaluateConditions(op.Conditions, body)
 			if err != nil {
-				return nil, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
+				return nil, headers, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
 			}
 			if !ok {
 				continue
 			}
-			updated, err := applyRewriteOp(body, op)
+			updated, updatedHeaders, err := applyRewriteOp(body, headers, op)
 			if err != nil {
-				return nil, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
+				return nil, headers, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
 			}
 			body = updated
+			headers = updatedHeaders
 		}
 	}
-	return body, nil
+	return body, headers, nil
 }
 
 // applyRewriteOp performs a single op. Returns the (possibly new) bytes.
-func applyRewriteOp(body []byte, op *RewriteOp) ([]byte, error) {
+func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+	if strings.HasPrefix(op.Path, "header.") {
+		return applyHeaderOp(headers, op)
+	}
 	switch op.Mode {
 	case "set":
-		return sjson.SetBytes(body, op.Path, op.Value)
+		updated, err := sjson.SetBytes(body, op.Path, op.Value)
+		return updated, headers, err
 	case "delete":
-		return sjson.DeleteBytes(body, op.Path)
+		updated, err := sjson.DeleteBytes(body, op.Path)
+		return updated, headers, err
 	case "append":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return sjson.SetBytes(body, op.Path, op.Value)
+			updated, err := sjson.SetBytes(body, op.Path, op.Value)
+			return updated, headers, err
 		}
-		return sjson.SetBytes(body, op.Path, current.String()+op.Value)
+		updated, err := sjson.SetBytes(body, op.Path, current.String()+op.Value)
+		return updated, headers, err
 	case "prepend":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return sjson.SetBytes(body, op.Path, op.Value)
+			updated, err := sjson.SetBytes(body, op.Path, op.Value)
+			return updated, headers, err
 		}
-		return sjson.SetBytes(body, op.Path, op.Value+current.String())
+		updated, err := sjson.SetBytes(body, op.Path, op.Value+current.String())
+		return updated, headers, err
 	case "trim_prefix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.TrimPrefix(current.String(), op.Value))
+		updated, err := sjson.SetBytes(body, op.Path, strings.TrimPrefix(current.String(), op.Value))
+		return updated, headers, err
 	case "trim_suffix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.TrimSuffix(current.String(), op.Value))
+		updated, err := sjson.SetBytes(body, op.Path, strings.TrimSuffix(current.String(), op.Value))
+		return updated, headers, err
 	case "ensure_prefix":
 		current := gjson.GetBytes(body, op.Path)
 		if current.Exists() && strings.HasPrefix(current.String(), op.Value) {
-			return body, nil
+			return body, headers, nil
 		}
 		merged := op.Value
 		if current.Exists() {
 			merged = op.Value + current.String()
 		}
-		return sjson.SetBytes(body, op.Path, merged)
+		updated, err := sjson.SetBytes(body, op.Path, merged)
+		return updated, headers, err
 	case "ensure_suffix":
 		current := gjson.GetBytes(body, op.Path)
 		if current.Exists() && strings.HasSuffix(current.String(), op.Value) {
-			return body, nil
+			return body, headers, nil
 		}
 		merged := op.Value
 		if current.Exists() {
 			merged = current.String() + op.Value
 		}
-		return sjson.SetBytes(body, op.Path, merged)
+		updated, err := sjson.SetBytes(body, op.Path, merged)
+		return updated, headers, err
 	case "trim_space":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.TrimSpace(current.String()))
+		updated, err := sjson.SetBytes(body, op.Path, strings.TrimSpace(current.String()))
+		return updated, headers, err
 	case "to_lower":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.ToLower(current.String()))
+		updated, err := sjson.SetBytes(body, op.Path, strings.ToLower(current.String()))
+		return updated, headers, err
 	case "to_upper":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.ToUpper(current.String()))
+		updated, err := sjson.SetBytes(body, op.Path, strings.ToUpper(current.String()))
+		return updated, headers, err
 	case "replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, strings.ReplaceAll(current.String(), op.From, op.To))
+		updated, err := sjson.SetBytes(body, op.Path, strings.ReplaceAll(current.String(), op.From, op.To))
+		return updated, headers, err
 	case "regex_replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetBytes(body, op.Path, op.Regex.ReplaceAllString(current.String(), op.To))
+		updated, err := sjson.SetBytes(body, op.Path, op.Regex.ReplaceAllString(current.String(), op.To))
+		return updated, headers, err
 	case "copy":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
-		return sjson.SetRawBytes(body, op.DstPath, []byte(current.Raw))
+		updated, err := sjson.SetRawBytes(body, op.DstPath, []byte(current.Raw))
+		return updated, headers, err
 	case "move":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, nil
+			return body, headers, nil
 		}
 		updated, err := sjson.SetRawBytes(body, op.DstPath, []byte(current.Raw))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return sjson.DeleteBytes(updated, op.Path)
+		deleted, err := sjson.DeleteBytes(updated, op.Path)
+		return deleted, headers, err
 	default:
-		return body, nil
+		return body, headers, nil
 	}
 }
 

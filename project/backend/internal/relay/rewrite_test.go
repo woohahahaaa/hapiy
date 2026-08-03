@@ -56,7 +56,7 @@ func TestApplyRewriteChain_set_append_delete(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	body := []byte(`{"messages":[{"role":"user","content":"hello"},{"role":"user","content":"x"}]}`)
-	updated, err := applyRewriteChains(body, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestApplyRewriteChain_string_transforms(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	body := []byte(`{"u":"abc","v":"ABC","w":"  hi  ","x":"pre-foo","y":"foo-suf","z":"foo","a":"foo","b":"old text","c":"a b c"}`)
-	updated, err := applyRewriteChains(body, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestApplyRewriteChain_conditions_gate_op(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	body1 := []byte(`{"foo":"old"}`)
-	out1, err := applyRewriteChains(body1, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	out1, _, err := applyRewriteChains(body1, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestApplyRewriteChain_conditions_gate_op(t *testing.T) {
 		t.Fatalf("condition matched; op should fire: %s", out1)
 	}
 	body2 := []byte(`{"foo":"other"}`)
-	out2, err := applyRewriteChains(body2, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	out2, _, err := applyRewriteChains(body2, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestApplyRewriteChain_combined_logic(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	mustApply := []byte(`{"a":"apple"}`)
-	out, err := applyRewriteChains(mustApply, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	out, _, err := applyRewriteChains(mustApply, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestApplyRewriteChain_combined_logic(t *testing.T) {
 		t.Fatalf("OR logic should have matched: %s", out)
 	}
 	mustSkip := []byte(`{"a":"banana"}`)
-	out2, err := applyRewriteChains(mustSkip, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	out2, _, err := applyRewriteChains(mustSkip, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestApplyRewriteChain_move_and_copy(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	body := []byte(`{"src":"hello"}`)
-	updated, err := applyRewriteChains(body, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestApplyRewriteChain_missing_path_no_op_for_string_ops(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	body := []byte(`{"x":1}`)
-	updated, err := applyRewriteChains(body, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -266,5 +266,30 @@ func TestRewriteScopeCompile_rejects_unknown_scope(t *testing.T) {
 	_, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x","scope":"invalid_value"}]`)
 	if err == nil || !strings.Contains(err.Error(), "unsupported scope") {
 		t.Fatalf("expected unsupported scope error, got: %v", err)
+	}
+}
+
+func TestRewriteHeaderRoutingStub(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"set","value":"v"}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, _, err = applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
+		t.Fatalf("expected stub error, got: %v", err)
+	}
+}
+
+func TestRewriteChainsNilGuard(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"set","value":"v"}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, headers, err := applyRewriteChains(nil, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
+		t.Fatalf("expected stub error, got: %v", err)
+	}
+	if headers == nil {
+		t.Fatal("expected headers to be initialized, got nil")
 	}
 }
