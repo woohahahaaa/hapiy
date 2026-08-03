@@ -299,3 +299,197 @@ func TestRewriteChainsNilGuard(t *testing.T) {
 		t.Fatalf("expected X-Foo=v, got %q", headers["X-Foo"])
 	}
 }
+
+func TestRewriteHeaderSetDelete(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-Foo","mode":"set","value":"bar"},
+		{"path":"header.X-Foo","mode":"delete"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Other": "keep"}
+	_, out, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Foo"] != "" {
+		t.Fatalf("expected X-Foo deleted, got %q", out["X-Foo"])
+	}
+	if out["X-Other"] != "keep" {
+		t.Fatalf("expected X-Other untouched, got %q", out["X-Other"])
+	}
+}
+
+func TestRewriteHeaderAppendPrepend(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-Foo","mode":"set","value":"world"},
+		{"path":"header.X-Foo","mode":"append","value":"!"},
+		{"path":"header.X-Foo","mode":"prepend","value":"hello "}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Foo"] != "hello world!" {
+		t.Fatalf("expected 'hello world!', got %q", out["X-Foo"])
+	}
+}
+
+func TestRewriteHeaderEnsureTrim(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-A","mode":"set","value":"foo-bar"},
+		{"path":"header.X-A","mode":"ensure_prefix","value":"pre-"},
+		{"path":"header.X-A","mode":"ensure_suffix","value":"-suf"},
+		{"path":"header.X-A","mode":"trim_prefix","value":"pre-"},
+		{"path":"header.X-A","mode":"trim_suffix","value":"-suf"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-A"] != "foo-bar" {
+		t.Fatalf("expected 'foo-bar', got %q", out["X-A"])
+	}
+}
+
+func TestRewriteHeaderStringOps(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-Lo","mode":"set","value":"FOO"},
+		{"path":"header.X-Lo","mode":"to_lower"},
+		{"path":"header.X-Up","mode":"set","value":"bar"},
+		{"path":"header.X-Up","mode":"to_upper"},
+		{"path":"header.X-Trim","mode":"set","value":"  baz  "},
+		{"path":"header.X-Trim","mode":"trim_space"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Lo"] != "foo" {
+		t.Fatalf("expected 'foo', got %q", out["X-Lo"])
+	}
+	if out["X-Up"] != "BAR" {
+		t.Fatalf("expected 'BAR', got %q", out["X-Up"])
+	}
+	if out["X-Trim"] != "baz" {
+		t.Fatalf("expected 'baz', got %q", out["X-Trim"])
+	}
+}
+
+func TestRewriteHeaderReplaceRegex(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-Rep","mode":"set","value":"hello world"},
+		{"path":"header.X-Rep","mode":"replace","from":"world","to":"go"},
+		{"path":"header.X-Reg","mode":"set","value":"aaa bbb ccc"},
+		{"path":"header.X-Reg","mode":"regex_replace","from":"\\s+","to":"-"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Rep"] != "hello go" {
+		t.Fatalf("expected 'hello go', got %q", out["X-Rep"])
+	}
+	if out["X-Reg"] != "aaa-bbb-ccc" {
+		t.Fatalf("expected 'aaa-bbb-ccc', got %q", out["X-Reg"])
+	}
+}
+
+func TestRewriteHeaderConditionPath(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{
+			"path":"header.X-Route",
+			"mode":"set",
+			"value":"premium",
+			"conditions":[{"path":"header.X-Tenant","op":"neq","value":"free"}]
+		},
+		{
+			"path":"header.X-Tag",
+			"mode":"set",
+			"value":"matched",
+			"conditions":[{"path":"header.X-Route","op":"matches","value":"^premium$"}]
+		}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Tenant": "pro", "X-Route": "basic"}
+	_, out, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Route"] != "premium" {
+		t.Fatalf("expected X-Route=premium (neq passed), got %q", out["X-Route"])
+	}
+	if out["X-Tag"] != "matched" {
+		t.Fatalf("expected X-Tag=matched (matches passed), got %q", out["X-Tag"])
+	}
+}
+
+func TestRewriteHeaderConditionPathFailsWhenNoMatch(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{
+			"path":"header.X-Route",
+			"mode":"set",
+			"value":"premium",
+			"conditions":[{"path":"header.X-Tenant","op":"eq","value":"free"}]
+		}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Tenant": "pro"}
+	_, out, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["X-Route"] != "" {
+		t.Fatalf("expected X-Route unset (condition failed), got %q", out["X-Route"])
+	}
+}
+
+func TestRewriteHeaderCopyMoveRejected(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"copy","dst":"header.X-Bar"}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, _, err = applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err == nil || !strings.Contains(err.Error(), "copy/move not supported") {
+		t.Fatalf("expected copy/move error, got: %v", err)
+	}
+}
+
+func TestRewriteEngineHeaderWiring(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"set","value":"bar"}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	e := &Engine{plans: map[string]*ExecutionPlan{}}
+	req := &RelayRequest{
+		Headers: map[string]string{},
+		Body:    map[string]interface{}{"model": "gpt-4"},
+	}
+	plan := &ExecutionPlan{CompiledRewrite: []CompiledRewriteChain{{RuleID: "r", Ops: chain}}}
+	if err := e.applyCompiledRewriteRules(plan, req); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if req.Headers["X-Foo"] != "bar" {
+		t.Fatalf("expected X-Foo=bar, got %q", req.Headers["X-Foo"])
+	}
+	if req.Body["model"] != "gpt-4" {
+		t.Fatalf("expected model unchanged, got %v", req.Body["model"])
+	}
+}

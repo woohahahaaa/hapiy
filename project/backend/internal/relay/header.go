@@ -5,13 +5,13 @@ import (
 	"strings"
 )
 
-func applyHeaderOp(headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+func applyHeaderOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
 	key, err := headerKey(op.Path)
 	if err != nil {
-		return nil, nil, err
+		return body, nil, err
 	}
 	switch op.Mode {
 	case "set":
@@ -47,11 +47,11 @@ func applyHeaderOp(headers map[string]string, op *RewriteOp) ([]byte, map[string
 			headers[key] = op.Regex.ReplaceAllString(headers[key], op.To)
 		}
 	case "copy", "move":
-		return nil, nil, fmt.Errorf("header scope: copy/move not supported (cross-scope rewrite is not allowed)")
+		return body, nil, fmt.Errorf("header scope: copy/move not supported (cross-scope rewrite is not allowed)")
 	default:
-		return nil, nil, fmt.Errorf("header op: unsupported mode %q", op.Mode)
+		return body, nil, fmt.Errorf("header op: unsupported mode %q", op.Mode)
 	}
-	return nil, headers, nil
+	return body, headers, nil
 }
 
 func headerKey(path string) (string, error) {

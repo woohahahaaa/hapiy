@@ -284,7 +284,7 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 // applyRewriteOp performs a single op. Returns the (possibly new) bytes.
 func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
 	if strings.HasPrefix(op.Path, "header.") {
-		return applyHeaderOp(headers, op)
+		return applyHeaderOp(body, headers, op)
 	}
 	switch op.Mode {
 	case "set":
