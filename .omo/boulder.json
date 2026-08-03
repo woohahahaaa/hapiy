@@ -1,13 +1,21 @@
 {
   "schema_version": 2,
-  "active_work_id": "topology-magic-layout",
+  "active_work_id": null,
   "works": {
     "topology-magic-layout": {
       "work_id": "topology-magic-layout",
       "active_plan": ".omo/plans/topology-magic-layout.md",
       "plan_name": "topology-magic-layout",
       "session_ids": ["codex:current"],
-      "status": "active",
+      "status": "paused",
+      "worktree_path": null
+    },
+    "header-rewrite": {
+      "work_id": "header-rewrite",
+      "active_plan": ".omo/plans/header-rewrite.md",
+      "plan_name": "header-rewrite",
+      "session_ids": ["codex:current"],
+      "status": "completed",
       "worktree_path": null
     }
   }

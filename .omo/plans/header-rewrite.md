@@ -73,7 +73,7 @@ Your next move: approve, or ask for high-accuracy review first.
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 
-- [ ] 1. **RewriteOp.Scope field + compile-time validation**
+- [x] 1. **RewriteOp.Scope field + compile-time validation**
   What to do / Must NOT do:
   - Add `Scope string` field to `RewriteOp` struct in `rewrite.go:25-34` with `json:"scope,omitempty"` tag.
   - In `compileRewriteOp` (rewrite.go:74-155): after parsing all op fields, if `entry["scope"]` is present, unmarshal it; lowercase + trim; accept `""`, `"all"`, `"header"`, `"body"`; reject other values.
@@ -100,7 +100,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `feat(relay): add Scope field to RewriteOp with compile-time validation`
 
-- [ ] 2. **applyRewriteOp signature change + applyRewriteChains caller wiring (single coherent change)**
+- [x] 2. **applyRewriteOp signature change + applyRewriteChains caller wiring (single coherent change)**
   What to do / Must NOT do:
   - Change `applyRewriteOp(body []byte, op *RewriteOp) ([]byte, error)` to `applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error)`.
   - At the very top of the function, add `if strings.HasPrefix(op.Path, "header.") { return applyHeaderOp(headers, op) }`.
@@ -138,7 +138,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `refactor(relay): extend applyRewriteOp and applyRewriteChains signatures with headers`
 
-- [ ] 3. **Header mode implementations (13 modes)**
+- [x] 3. **Header mode implementations (13 modes)**
   What to do / Must NOT do:
   - Replace T2's stub `applyHeaderOp` with full implementation. All 13 modes go through a single switch on `op.Mode`.
   - Helper: `headerKey(op.Path) string` — strips `header.` prefix and returns the rest (e.g., `header.X-Foo` → `X-Foo`). If prefix missing, return error.
@@ -174,7 +174,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `feat(relay): implement 13 header modes mirroring body semantics`
 
-- [ ] 4. **evaluateCondition header path support (with all caller updates)**
+- [x] 4. **evaluateCondition header path support (with all caller updates)**
   What to do / Must NOT do:
   - Change `evaluateCondition(c *RewriteCondition, body []byte) (bool, error)` to `evaluateCondition(c *RewriteCondition, body []byte, headers map[string]string) (bool, error)`.
   - At top: `if strings.HasPrefix(c.Path, "header.") { return evaluateHeaderCondition(c, headers) }`.
@@ -210,7 +210,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `feat(relay): evaluate conditions on header path when prefix is header.`
 
-- [ ] 5. **engine.go call sites: pass req.Headers / resp.Headers through applyRewriteChains**
+- [x] 5. **engine.go call sites: pass req.Headers / resp.Headers through applyRewriteChains**
   What to do / Must NOT do:
   - Caller `applyCompiledRewriteRules` (engine.go:240-257): change call from `applyRewriteChains(raw, plan.CompiledRewrite)` to `applyRewriteChains(raw, req.Headers, plan.CompiledRewrite)`; write `req.Headers = updatedHeaders` from the returned map.
   - Caller `applyCompiledResponseRewriteRules` (engine.go:262-281): same change with `resp.Headers`.
@@ -234,7 +234,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `feat(relay): wire header KV through engine.go call sites`
 
-- [ ] 6. **Unit tests in rewrite_test.go covering header routing + scope validation + conditions + engine wiring**
+- [x] 6. **Unit tests in rewrite_test.go covering header routing + scope validation + conditions + engine wiring**
   What to do / Must NOT do:
   - Add new test functions; do NOT modify existing body-only tests.
   - Test functions to add (all in `project/backend/internal/relay/rewrite_test.go`, or new file `rewrite_header_test.go` if file already exceeds 600 lines):
@@ -265,7 +265,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `test(relay): add header routing + scope + condition + engine wiring unit tests`
 
-- [ ] 7. **Backend build + go test verification**
+- [x] 7. **Backend build + go test verification**
   What to do / Must NOT do:
   - Run `cd project/backend && go build ./...`.
   - Run `cd project/backend && go test ./...`.
@@ -285,7 +285,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: N (no source change)
 
-- [ ] 8. **Documentation: rewrite-ops.md header section**
+- [x] 8. **Documentation: rewrite-ops.md header section**
   What to do / Must NOT do:
   - Locate `project/docs/rewrite-ops.md` (or wherever the rule docs live — search for the file linked from `PolicyPage.tsx`'s `REWRITE_OPS_DOC_URL = 'https://github.com/woohahahaaa/hapiy/blob/main/project/docs/rewrite-ops.md'`).
   - Add a new section `## Header 改写` explaining:
@@ -311,7 +311,7 @@ Your next move: approve, or ask for high-accuracy review first.
 
   Commit: Y | `docs(relay): document header path prefix and scope field`
 
-- [ ] 9. **Live integration test via httptest.Server as upstream stand-in**
+- [x] 9. **Live integration test via httptest.Server as upstream stand-in**
   What to do / Must NOT do:
   - **Use Go's `net/http/httptest.Server` as a mock upstream** that records the headers it receives. No "debug log" hack.
   - Write a Go test file `project/backend/internal/relay/integration_header_test.go` (distinct from T6's `rewrite_header_test.go` — T6 covers unit-level, T9 covers engine+upstream round-trip) that:
@@ -344,13 +344,13 @@ Your next move: approve, or ask for high-accuracy review first.
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit
+- [x] F1. Plan compliance audit
   - Every Must-have in this plan is implemented and tested. No Must-NOT violated. Use `git diff --stat` to confirm only the expected files were touched (rewrite.go, engine.go, rewrite_test.go, docs/rewrite-ops.md).
-- [ ] F2. Code quality review
+- [x] F2. Code quality review
   - `go vet ./...` clean; no dead code (no `TODO` markers left in rewrite.go from T2 stub); no unused imports; no shadowed variables.
-- [ ] F3. Real manual QA
+- [x] F3. Real manual QA
   - Live integration test from T9 was run; header was actually modified on the upstream request.
-- [ ] F4. Scope fidelity
+- [x] F4. Scope fidelity
   - No `set_header` mode added; no per-rule scope field; no `RelayRequest.Headers` type change; no `PolicyPage.tsx` edit; no Set-Cookie multi-value code.
 
 ## Commit strategy
