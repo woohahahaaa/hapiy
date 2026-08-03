@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -189,20 +193,57 @@ func UpdatePassword(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// CreateDefaultAdmin creates default admin user if not exists
-func CreateDefaultAdmin(db *gorm.DB) error {
+type DefaultAdminCredentials struct {
+	Username string
+	Password string
+}
+
+func CreateDefaultAdmin(db *gorm.DB) (DefaultAdminCredentials, error) {
 	var count int64
-	db.Model(&model.User{}).Count(&count)
+	if err := db.Model(&model.User{}).Count(&count).Error; err != nil {
+		return DefaultAdminCredentials{}, err
+	}
 	if count > 0 {
-		return nil
+		return DefaultAdminCredentials{}, nil
 	}
 
-	password, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+	username := strings.TrimSpace(os.Getenv("HAPIY_ADMIN_USERNAME"))
+	if username == "" {
+		username = "admin"
+	}
+
+	password := os.Getenv("HAPIY_ADMIN_PASSWORD")
+	generated := false
+	if password == "" {
+		password = randomPassword(16)
+		generated = true
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return DefaultAdminCredentials{}, err
+	}
+
 	admin := model.User{
-		Username: "admin",
-		Password: string(password),
+		Username: username,
+		Password: string(hash),
 		Role:     "admin",
 		Status:   true,
 	}
-	return db.Create(&admin).Error
+	if err := db.Create(&admin).Error; err != nil {
+		return DefaultAdminCredentials{}, err
+	}
+
+	if generated {
+		log.Printf("default admin created with random password (HAPIY_ADMIN_PASSWORD was unset); set HAPIY_ADMIN_PASSWORD to a known value and re-init if you want a fixed one")
+	}
+	return DefaultAdminCredentials{Username: username, Password: password}, nil
+}
+
+func randomPassword(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return strings.Repeat("x", n)
+	}
+	return hex.EncodeToString(b)[:n]
 }

@@ -123,23 +123,16 @@ sqlite3 project/backend/hapiy.db "SELECT id, username, substr(password, 1, 7) FR
 常见情况：
 
 - 表里只有一个用户，名字是 `wooh` 而登录表单填的是 `admin`：改用数据库里的名字。
-- 密码哈希被改过但你记不清明文：直接重置。
+- 密码哈希被改过但你记不清明文：**只有在用户明确报告「我登录失败、确实需要重置」之后**，才可以走下面的人工重置流程。重置前必须先问用户要一个新密码，**不要自行编造一个明文密码**（包括 `admin123`、`password`、`test123` 等任何默认值）。
 
-```bash
-node -e "console.log(require('bcryptjs').hashSync('admin123', 10))"
-sqlite3 project/backend/hapiy.db \
-  "UPDATE users SET username='wooh', password='\$(node -e \"console.log(require('bcryptjs').hashSync('admin123',10))\")' WHERE username='wooh';"
-```
+人工重置流程（仅在用户授权时执行）：
 
-验证：
+1. 询问用户希望的新密码（至少 8 个字符）。
+2. 用 `go run` + `bcrypt.GenerateFromPassword` 生成哈希（与后端同一份 bcrypt 实现，避免 hash 算法不一致）。
+3. 用 `sqlite3` `UPDATE users SET password='<hash>' WHERE username='<username>';` 写入。
+4. 用 `curl` 跑一次登录验证，再把结果告诉用户。
 
-```bash
-curl -sS -i -X POST -H 'Content-Type: application/json' \
-  -d '{"username":"wooh","password":"admin123"}' \
-  http://127.0.0.1:8080/v1/dashboard/users/login
-```
-
-> *Login failures mean either the username no longer matches the DB or the password hash does not match what you type. Reset the hash with bcryptjs and verify with curl.*
+> *The startup script never touches the database or login state. Login recovery only runs when the user explicitly asks for it, with a password they supply.*
 
 ### Cookie 与会话
 
@@ -190,11 +183,6 @@ cd project/backend && ./scripts/backend.sh --stop
 
 # 重建后端
 cd project/backend && FORCE_REBUILD=1 ./scripts/backend.sh
-
-# 重置 admin 账号
-cd project/backend
-NEW_HASH=$(node -e "console.log(require('bcryptjs').hashSync('admin123',10))")
-sqlite3 hapiy.db "UPDATE users SET username='wooh', password='$NEW_HASH';"
 ```
 
 > *Quick command reference for the lifecycle and recovery operations.*
@@ -207,10 +195,9 @@ sqlite3 hapiy.db "UPDATE users SET username='wooh', password='$NEW_HASH';"
 |---|---|
 | 前端 | `pnpm` ≥ 9、Node 22 |
 | 后端 | Go ≥ 1.22 |
-| 数据库 | `sqlite3` CLI |
-| 哈希重置 | `node` + `bcryptjs`（项目已有，或临时 `npm i -g bcryptjs`） |
+| 数据库 | `sqlite3` CLI（仅在用户授权下做人工排查时使用） |
 
-> *Tools required: pnpm + Node 22 for the web app, Go 1.22+ for the backend, sqlite3 CLI for recovery, and bcryptjs (already in the project) for hash generation.*
+> *Tools required: pnpm + Node 22 for the web app, Go 1.22+ for the backend, and sqlite3 CLI only for user-authorised manual inspection.*
 
 ---
 

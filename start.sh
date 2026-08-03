@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# start.sh — One-shot hapiy launcher: frontend + backend + verification.
+# start.sh — One-shot hapiy launcher: frontend + backend.
 #
 # Usage:
-#   ./start.sh          # start both servers, wait, verify health + login
+#   ./start.sh          # start both servers, wait for ports + /health
 #   ./start.sh --status # show pid / port / logs for both servers
 #   ./start.sh --stop   # stop both servers
 #
@@ -16,7 +16,6 @@ cd "$ROOT_DIR"
 
 WEB_DIR="$ROOT_DIR/project/web"
 BACKEND_DIR="$ROOT_DIR/project/backend"
-DB="$BACKEND_DIR/hapiy.db"
 WEB_PORT="${WEB_PORT:-28001}"
 API_PORT="${API_PORT:-8080}"
 API_HOST="http://127.0.0.1:$API_PORT"
@@ -38,47 +37,10 @@ wait_port() {
   return 1
 }
 
-login_code() {
-  curl -sS -o /dev/null -w '%{http_code}' -X POST \
-    -H 'Content-Type: application/json' \
-    -d '{"username":"wooh","password":"admin123"}' \
-    "$API_HOST/v1/dashboard/users/login" 2>/dev/null || echo 000
-}
-
-reset_password() {
-  # Same bcrypt the backend uses for verification; avoids a bcryptjs install.
-  (
-    cd "$BACKEND_DIR"
-    cat > .genhash_tmp.go <<'EOF'
-package main
-
-import (
-	"fmt"
-
-	"golang.org/x/crypto/bcrypt"
-)
-
-func main() {
-	h, err := bcrypt.GenerateFromPassword([]byte("admin123"), 10)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Print(string(h))
-}
-EOF
-    trap 'rm -f .genhash_tmp.go' EXIT
-    NEW_HASH=$(go run .genhash_tmp.go)
-    rm -f .genhash_tmp.go
-    trap - EXIT
-    sqlite3 "$DB" "UPDATE users SET username='wooh', password='$NEW_HASH';"
-  )
-}
-
 do_start() {
   need go
   need node
   need pnpm
-  need sqlite3
   need lsof
   need curl
 
@@ -99,18 +61,6 @@ do_start() {
 
   health=$(curl -sS "$API_HOST/health" 2>/dev/null || echo unreachable)
   echo "[start] backend health: $health"
-
-  code=$(login_code)
-  if [ "$code" != "200" ]; then
-    echo "[start] login as wooh/admin123 failed ($code); resetting password per AGENT_README.md..."
-    reset_password
-    code=$(login_code)
-    [ "$code" = "200" ] || {
-      echo "[start] login still failing after reset; see /tmp/hapiy-backend.log" >&2
-      exit 1
-    }
-  fi
-  echo "[start] login: wooh/admin123 OK"
 
   LAN_IF=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
   LAN=$(ipconfig getifaddr "$LAN_IF" 2>/dev/null || true)

@@ -146,9 +146,9 @@ export function getLayoutedElements(
   const modelGroupRightEdge = modelMaxWidth > 0 ? marginX + modelMaxWidth + groupGap : marginX
   const workflowX = modelGroupRightEdge
   let rowCursorY = workflowStartY
-  for (const row of workflowRows) {
+    for (const row of workflowRows) {
     for (const p of row.nodes) {
-      positions.set(p.node.id, { x: workflowX + p.x, y: rowCursorY })
+      positions.set(p.node.id, { x: workflowX + p.x, y: rowCursorY + p.y })
     }
     rowCursorY += row.height + rowGap
   }

@@ -87,7 +87,7 @@ export function SlotItemCard({
             className={cn(
               'nodrag nopan relative inline-flex h-4 w-7 shrink-0 cursor-pointer touch-manipulation items-center rounded-none transition-colors',
               'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              enabled ? 'bg-primary' : 'bg-input',
+              enabled ? 'bg-primary' : 'bg-secondary',
             )}
           >
             <span

@@ -38,9 +38,14 @@ func main() {
 		log.Fatalf("Failed to migrate legacy topology schema: %v", err)
 	}
 
-	// Create default admin user
-	if err := handler.CreateDefaultAdmin(db); err != nil {
+	creds, err := handler.CreateDefaultAdmin(db)
+	if err != nil {
 		log.Printf("Warning: Failed to create default admin: %v", err)
+	} else if creds.Username != "" {
+		log.Printf("================================================================")
+		log.Printf("Default admin created: username=%q password=%q", creds.Username, creds.Password)
+		log.Printf("Save this password now — it will not be logged again.")
+		log.Printf("================================================================")
 	}
 
 	// Initialize relay engine (loads providers and compiles execution plans)
