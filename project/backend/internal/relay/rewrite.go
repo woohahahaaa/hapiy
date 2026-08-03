@@ -263,7 +263,7 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 		}
 		for oi := range chain.Ops {
 			op := &chain.Ops[oi]
-			ok, err := evaluateConditions(op.Conditions, body)
+			ok, err := evaluateConditions(op.Conditions, body, headers)
 			if err != nil {
 				return nil, headers, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
 			}
@@ -404,12 +404,12 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 }
 
 // evaluateConditions short-circuits when the conditions list is empty.
-func evaluateConditions(conds []RewriteCondition, body []byte) (bool, error) {
+func evaluateConditions(conds []RewriteCondition, body []byte, headers map[string]string) (bool, error) {
 	if len(conds) == 0 {
 		return true, nil
 	}
 	for i := range conds {
-		ok, err := evaluateCondition(&conds[i], body)
+		ok, err := evaluateCondition(&conds[i], body, headers)
 		if err != nil {
 			return false, err
 		}
@@ -420,16 +420,36 @@ func evaluateConditions(conds []RewriteCondition, body []byte) (bool, error) {
 	return true, nil
 }
 
-func evaluateCondition(c *RewriteCondition, body []byte) (bool, error) {
+func evaluateCondition(c *RewriteCondition, body []byte, headers map[string]string) (bool, error) {
 	if c.combined {
-		return evaluateCombined(c, body)
+		return evaluateCombined(c, body, headers)
 	}
 	path := c.Path
 	if path == "" {
-		// If a leaf omits path, the caller is expected to have supplied it
-		// when wiring the op. We fall back to "" which gjson treats as
-		// "the whole document" — useful for top-level scalar comparisons.
 		path = ""
+	}
+	if strings.HasPrefix(path, "header.") {
+		key, err := headerKey(path)
+		if err != nil {
+			return false, err
+		}
+		actual := ""
+		if headers != nil {
+			actual = headers[key]
+		}
+		var ok bool
+		if c.Op == "matches" && c.Regex != nil {
+			ok = c.Regex.MatchString(actual)
+		} else {
+			ok, err = compareValues(c.Op, actual, c.Value)
+			if err != nil {
+				return false, err
+			}
+		}
+		if c.Invert {
+			ok = !ok
+		}
+		return ok, nil
 	}
 	current := gjson.GetBytes(body, path)
 	actual := current.String()
@@ -449,13 +469,13 @@ func evaluateCondition(c *RewriteCondition, body []byte) (bool, error) {
 	return ok, nil
 }
 
-func evaluateCombined(c *RewriteCondition, body []byte) (bool, error) {
+func evaluateCombined(c *RewriteCondition, body []byte, headers map[string]string) (bool, error) {
 	if len(c.Children) == 0 {
 		return true, nil
 	}
 	if c.Logic == "OR" {
 		for i := range c.Children {
-			ok, err := evaluateCondition(&c.Children[i], body)
+			ok, err := evaluateCondition(&c.Children[i], body, headers)
 			if err != nil {
 				return false, err
 			}
@@ -467,7 +487,7 @@ func evaluateCombined(c *RewriteCondition, body []byte) (bool, error) {
 	}
 	// AND
 	for i := range c.Children {
-		ok, err := evaluateCondition(&c.Children[i], body)
+		ok, err := evaluateCondition(&c.Children[i], body, headers)
 		if err != nil {
 			return false, err
 		}
