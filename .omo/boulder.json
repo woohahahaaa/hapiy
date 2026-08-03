@@ -7,7 +7,7 @@
       "active_plan": ".omo/plans/topology-magic-layout.md",
       "plan_name": "topology-magic-layout",
       "session_ids": ["codex:current"],
-      "status": "paused",
+      "status": "completed",
       "worktree_path": null
     },
     "header-rewrite": {
