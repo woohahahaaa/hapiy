@@ -37,12 +37,13 @@ type RewriteOp struct {
 // whether the op should run. Logic is AND/OR across siblings.
 type RewriteCondition struct {
 	Path     string // gjson path to evaluate against (defaults to op.Path)
-	Op       string // contains | prefix | suffix | eq | neq | gt | gte | lt | lte
+	Op       string // contains | prefix | suffix | eq | neq | gt | gte | lt | lte | matches
 	Value    string // literal string to compare against
 	Invert   bool
 	combined bool   // internal: true when this is a logic node, not a leaf
 	Logic    string // "AND" | "OR" — only used when combined
 	Children []RewriteCondition
+	Regex    *regexp.Regexp // compiled regex for matches
 }
 
 // compileRewriteChain parses and validates a rule's Script. A bad Script
@@ -200,7 +201,7 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 	}
 	c.Op = strings.ToLower(strings.TrimSpace(c.Op))
 	switch c.Op {
-	case "contains", "prefix", "suffix", "eq", "neq", "gt", "gte", "lt", "lte":
+	case "contains", "prefix", "suffix", "eq", "neq", "gt", "gte", "lt", "lte", "matches":
 	default:
 		return c, fmt.Errorf("rule %s: op %d condition %d: unsupported comparison op %q", ruleID, opIndex, ci, c.Op)
 	}
@@ -218,6 +219,13 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 		if err := json.Unmarshal(raw, &c.Invert); err != nil {
 			return c, fmt.Errorf("rule %s: op %d condition %d: invert is not a boolean: %w", ruleID, opIndex, ci, err)
 		}
+	}
+	if c.Op == "matches" {
+		re, err := regexp.Compile(c.Value)
+		if err != nil {
+			return c, fmt.Errorf("rule %s: op %d condition %d: invalid matches regex: %w", ruleID, opIndex, ci, err)
+		}
+		c.Regex = re
 	}
 	return c, nil
 }
@@ -381,9 +389,15 @@ func evaluateCondition(c *RewriteCondition, body []byte) (bool, error) {
 	}
 	current := gjson.GetBytes(body, path)
 	actual := current.String()
-	ok, err := compareValues(c.Op, actual, c.Value)
-	if err != nil {
-		return false, err
+	var ok bool
+	if c.Op == "matches" && c.Regex != nil {
+		ok = c.Regex.MatchString(actual)
+	} else {
+		var err error
+		ok, err = compareValues(c.Op, actual, c.Value)
+		if err != nil {
+			return false, err
+		}
 	}
 	if c.Invert {
 		ok = !ok

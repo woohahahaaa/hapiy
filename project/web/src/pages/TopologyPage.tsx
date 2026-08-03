@@ -7,10 +7,9 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
-  type Edge,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code, Save, Undo2 } from 'lucide-react'
+import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code, History } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
@@ -26,11 +25,11 @@ import { topologyConfig } from '@/config/topology-config'
 import { getLayoutedElements } from '@/lib/topology-auto-layout'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
+import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { slotMapsFromWorkflows, workflowsFromSlotMaps, providerIdFromKey, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
+import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges, type LayoutSnapshot } from '@/lib/topology-builders'
 import {
-  SLOT_ORDER,
-  SLOT_LABELS,
   emptySlotEntryMap,
   useSlotRules,
   type SlotEntry,
@@ -49,8 +48,6 @@ const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
 }
-
-type LayoutSnapshot = Record<string, { x: number; y: number }>
 
 function providerIdFromSlotId(slotId: string): string | null {
   if (!slotId.startsWith('slot-')) return null
@@ -79,127 +76,6 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
   }
 }
 
-
-function buildModelNodes(
-  providers: readonly Provider[],
-  modelNodeIds: Record<string, string>,
-  layout: LayoutSnapshot,
-): Node[] {
-  const nodes: Node[] = []
-  const uniqueModels = new Set<string>()
-  for (const provider of providers) {
-    for (const model of provider.models) uniqueModels.add(model.model)
-  }
-  const sortedModels = Array.from(uniqueModels).sort((a, b) => a.localeCompare(b))
-
-  sortedModels.forEach((modelName, idx) => {
-    const nodeId = modelNodeIds[modelName] ?? `model-${modelName}`
-    nodes.push({
-      id: nodeId,
-      type: 'modelHub',
-      position: layout[nodeId] ?? {
-        x: topologyConfig.initialPositions.modelHub.x,
-        y: topologyConfig.initialPositions.modelHub.y + idx * topologyConfig.initialPositions.modelHub.verticalOffset,
-      },
-      data: { models: [{ id: modelName, label: modelName, disabled: false }], simplified: true },
-    })
-  })
-
-  return nodes
-}
-
-function buildSlotNodes(
-  workflowKey: string,
-  slots: SlotEntryMap,
-  rules: SlotRuleMap,
-  layout: LayoutSnapshot,
-  verticalOffset: number,
-  workflowEnabled: boolean,
-  onChangeEntry: (workflowKey: string, slotType: SlotType, next: SlotEntry) => void,
-  onDeleteEntry: (workflowKey: string, slotType: SlotType, index: number) => void,
-): Node[] {
-  const nodes: Node[] = []
-  SLOT_ORDER.forEach((slotType, i) => {
-    const entries = slots[slotType] ?? []
-    const slotId = `slot-${workflowKey}-${slotType}`
-    nodes.push({
-      id: slotId,
-      type: 'slot',
-      position: layout[slotId] ?? {
-        x: topologyConfig.initialPositions.slot.x + i * topologyConfig.initialPositions.slot.horizontalOffset,
-        y: topologyConfig.initialPositions.slot.y + verticalOffset * topologyConfig.initialPositions.slot.verticalOffset,
-      },
-      className: workflowEnabled ? undefined : 'dim',
-      data: {
-        slotType,
-        providerId: workflowKey,
-        title: SLOT_LABELS[slotType],
-        entries,
-        rules,
-        enabled: workflowEnabled,
-        onChangeEntry: (next: SlotEntry) => onChangeEntry(workflowKey, slotType, next),
-        onDeleteEntry: (index: number) => onDeleteEntry(workflowKey, slotType, index),
-      },
-    })
-  })
-  return nodes
-}
-
-function buildEdges(
-  providers: readonly Provider[],
-  workflows: ReadonlyMap<string, WorkflowEntry>,
-  modelNodeIds: Record<string, string>,
-): Edge[] {
-  const edges: Edge[] = []
-
-  for (const [workflowKey, entry] of workflows) {
-    const provider = providers.find((p) => p.id === entry.providerId)
-    if (!provider) continue
-    const baseStyle = {
-      strokeWidth: topologyConfig.edge.strokeWidth,
-      opacity: entry.enabled ? 1 : 0.35,
-    }
-
-    for (const model of provider.models) {
-      const modelNodeId = modelNodeIds[model.model]
-      if (!modelNodeId) continue
-      edges.push({
-        id: `${modelNodeId}→pv-${workflowKey}-${model.model}`,
-        source: modelNodeId,
-        sourceHandle: model.model,
-        target: `pv-${workflowKey}`,
-        targetHandle: model.model,
-        animated: topologyConfig.edge.animated,
-        style: baseStyle,
-      })
-    }
-    for (let i = 0; i < SLOT_ORDER.length - 1; i++) {
-      const fromType = SLOT_ORDER[i]
-      const toType = SLOT_ORDER[i + 1]
-      const fromId = `slot-${workflowKey}-${fromType}`
-      const toId = `slot-${workflowKey}-${toType}`
-      edges.push({
-        id: `${fromId}→${toId}`,
-        source: fromId,
-        target: toId,
-        animated: topologyConfig.edge.animated,
-        style: baseStyle,
-      })
-    }
-
-    const firstSlotId = `slot-${workflowKey}-${SLOT_ORDER[0]}`
-    edges.push({
-      id: `pv-${workflowKey}→${firstSlotId}`,
-      source: `pv-${workflowKey}`,
-      target: firstSlotId,
-      animated: topologyConfig.edge.animated,
-      style: baseStyle,
-    })
-  }
-
-  return edges
-}
-
 export function TopologyPage() {
   const navigate = useNavigate()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
@@ -210,15 +86,17 @@ export function TopologyPage() {
 
   const slotsStateRef = useRef<Map<string, WorkflowEntry>>(new Map())
   const workflowsRef = useRef<Workflow[] | null>(null)
-  const baselineRef = useRef<Workflow[] | null>(null)
   const saveQueueRef = useRef<TopologySaveQueue | null>(null)
   const [slotsVersion, setSlotsVersion] = useState(0)
-  const bumpSlots = useCallback(() => setSlotsVersion((v) => v + 1), [])
+  const slotsVersionRef = useRef(0)
+  const bumpSlots = useCallback(() => {
+    slotsVersionRef.current += 1
+    setSlotsVersion((v) => v + 1)
+  }, [])
   const nextWorkflowIdRef = useRef(0)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
   const [dirty, setDirty] = useState(false)
-  const [undoConfirmOpen, setUndoConfirmOpen] = useState(false)
   const [navGuardNext, setNavGuardNext] = useState<string | null>(null)
 
   const handlePaneClick = useCallback(() => {
@@ -259,7 +137,6 @@ export function TopologyPage() {
       setProviders(providers)
       workflowsRef.current = workflows
       slotsStateRef.current = slotMapsFromWorkflows(workflows)
-      baselineRef.current = workflows
       saveQueueRef.current = new TopologySaveQueue(dashboardApi.saveTopology, (conflict) => {
         toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
       })
@@ -279,6 +156,7 @@ export function TopologyPage() {
   const persistTopology = useCallback(async () => {
     const queue = saveQueueRef.current
     if (!providers || !queue) return
+    const versionAtStart = slotsVersionRef.current
     const providerNames = new Map(providers.map((p) => [p.id, p.name]))
     const ruleNames = new Map<string, string>()
     for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
@@ -289,9 +167,15 @@ export function TopologyPage() {
     const workflows = workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
     try {
       const saved = await queue.enqueue(workflows)
+      if (versionAtStart !== slotsVersionRef.current) {
+        // A new edit landed while this save was in flight. Re-save with the
+        // latest state instead of overwriting the newer edits with the older
+        // snapshot that just returned.
+        void persistTopology()
+        return
+      }
       workflowsRef.current = saved
       slotsStateRef.current = slotMapsFromWorkflows(saved)
-      baselineRef.current = saved
       setDirty(false)
     } catch (err) {
       if (err instanceof DashboardApiError && err.status === 409) return
@@ -299,18 +183,15 @@ export function TopologyPage() {
     }
   }, [providers, rules])
 
-  const handleSave = useCallback(() => {
-    void persistTopology()
-  }, [persistTopology])
-
-  const handleUndo = useCallback(() => {
-    const baseline = baselineRef.current
-    if (!baseline) return
-    slotsStateRef.current = slotMapsFromWorkflows(baseline)
-    workflowsRef.current = baseline
-    setDirty(false)
-    bumpSlots()
-  }, [bumpSlots])
+  // Auto-save: any content edit marks the topology dirty; after a quiet
+  // 800ms window the latest state is persisted without a manual save button.
+  useEffect(() => {
+    if (!dirty) return
+    const timer = setTimeout(() => {
+      void persistTopology()
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [dirty, persistTopology])
 
   useEffect(() => {
     if (!dirty) return
@@ -401,7 +282,28 @@ export function TopologyPage() {
     [bumpSlots],
   )
 
+  const handleReorderEntries = useCallback(
+    (workflowKey: string, slotType: SlotType, fromIndex: number, toIndex: number) => {
+      const entry = slotsStateRef.current.get(workflowKey)
+      if (!entry) return
+      const current = entry.slots
+      const list = current[slotType] ?? []
+      const sorted = [...list].sort((a, b) => a.index - b.index)
+      const from = sorted.findIndex((e) => e.index === fromIndex)
+      const to = sorted.findIndex((e) => e.index === toIndex)
+      if (from < 0 || to < 0 || from === to) return
+      const [moved] = sorted.splice(from, 1)
+      sorted.splice(to, 0, moved)
+      const nextList = sorted.map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
+      bumpSlots()
+      setDirty(true)
+    },
+    [bumpSlots],
+  )
+
   const [jsonWorkflows, setJsonWorkflows] = useState<Workflow[] | null>(null)
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const handleOpenJson = useCallback(() => {
     const queue = saveQueueRef.current
     if (!queue || !providers) return
@@ -421,7 +323,6 @@ export function TopologyPage() {
       const saved = await queue.saveNow(workflows)
       workflowsRef.current = saved
       slotsStateRef.current = slotMapsFromWorkflows(saved)
-      baselineRef.current = saved
       setDirty(false)
       bumpSlots()
     },
@@ -458,30 +359,9 @@ export function TopologyPage() {
       const provider = providers.find((p) => p.id === entry.providerId)
       if (!provider) continue
       const verticalOffset = nodes.length
-      nodes.push({
-        id: `pv-${workflowKey}`,
-        type: 'provider',
-        className: [
-          `pv-${workflowKey}` === selectedNodeId ? 'selected' : undefined,
-          entry.enabled ? undefined : 'dim',
-        ].filter(Boolean).join(' ') || undefined,
-        position: layoutSnapshot[`pv-${workflowKey}`] ?? {
-          x: topologyConfig.initialPositions.provider.x,
-          y: topologyConfig.initialPositions.provider.y + verticalOffset * topologyConfig.initialPositions.provider.verticalOffset,
-        },
-        data: {
-          label: provider.name,
-          baseURLCount: provider.baseUrls.length,
-          keyCount: provider.keys.length,
-          modelCount: provider.models.length,
-          models: provider.models.map((m) => m.model),
-          active: entry.enabled,
-          providerId: workflowKey,
-          onToggle: () => {
-            handleToggleWorkflow(workflowKey)
-          },
-        },
-      })
+      nodes.push(buildProviderNode(workflowKey, entry, provider, layoutSnapshot, verticalOffset, selectedNodeId, () => {
+        handleToggleWorkflow(workflowKey)
+      }))
       nodes.push(
         ...buildSlotNodes(
           workflowKey,
@@ -492,6 +372,7 @@ export function TopologyPage() {
           entry.enabled,
           handleChangeEntry,
           handleDeleteEntry,
+          handleReorderEntries,
         ),
       )
     }
@@ -694,10 +575,33 @@ export function TopologyPage() {
     return providers.map((p) => ({ id: p.id, name: p.name }))
   }, [providers])
 
+  const workflowStats = useMemo(() => {
+    let total = 0
+    let active = 0
+    for (const entry of slotsStateRef.current.values()) {
+      total += 1
+      if (entry.enabled) active += 1
+    }
+    return { active, total }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsVersion])
+
+  const currentWorkflows = useMemo<Workflow[]>(() => {
+    const providerNames = new Map(providers?.map((p) => [p.id, p.name]) ?? [])
+    const ruleNames = new Map<string, string>()
+    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
+      for (const rule of rules[slotType]) {
+        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
+      }
+    }
+    return workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers, rules, slotsVersion])
+
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" subtitle="API routing workspace" />
+        <PageHeader title="转发拓扑" />
         <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
           <Loader2 className="size-5 animate-spin" />
           <span className="text-sm">加载拓扑数据…</span>
@@ -709,7 +613,7 @@ export function TopologyPage() {
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" subtitle="API routing workspace" />
+        <PageHeader title="转发拓扑" />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
             <AlertTriangle className="size-10 text-destructive" />
@@ -727,7 +631,7 @@ export function TopologyPage() {
   if (!providers || providers.length === 0) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" subtitle="API routing workspace" />
+        <PageHeader title="转发拓扑" />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
           <p className="text-sm text-muted-foreground">
@@ -747,27 +651,13 @@ export function TopologyPage() {
     <div className="flex h-screen flex-col">
       <PageHeader
         title="转发拓扑"
-        subtitle="API routing workspace"
-        status={`${providers.length} 供应商 · ${nodes.length} 节点`}
-        actions={dirty ? (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setUndoConfirmOpen(true)}
-              disabled={baselineRef.current === null}
-              title="撤销修改"
-              aria-label="撤销修改"
-            >
-              <Undo2 data-icon="inline-start" />
-              撤销修改
-            </Button>
-            <Button size="sm" onClick={handleSave} title="保存">
-              <Save data-icon="inline-start" />
-              保存
-            </Button>
-          </>
-        ) : null}
+        status={`工作流：${workflowStats.active}/${workflowStats.total} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
+            <History data-icon="inline-start" />
+            历史版本
+          </Button>
+        }
       />
       <div ref={setContainerEl} className="relative flex-1">
         <ReactFlow
@@ -847,29 +737,6 @@ export function TopologyPage() {
             onClose={() => setJsonWorkflows(null)}
           />
         )}
-        <Dialog open={undoConfirmOpen} onOpenChange={setUndoConfirmOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>撤销修改</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              确定要放弃所有未保存的修改吗？此操作无法撤销。
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setUndoConfirmOpen(false)}>
-                取消
-              </Button>
-              <Button
-                onClick={() => {
-                  setUndoConfirmOpen(false)
-                  handleUndo()
-                }}
-              >
-                确定撤销
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
         <Dialog
           open={navGuardNext !== null}
           onOpenChange={(open) => {
@@ -899,6 +766,14 @@ export function TopologyPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        <TopologyVersionsModal
+          open={versionsOpen}
+          onClose={() => setVersionsOpen(false)}
+          providers={providers ?? []}
+          currentWorkflows={currentWorkflows}
+          onBeforeRestore={persistTopology}
+          onRestored={() => { setVersionsOpen(false); void loadData() }}
+        />
       </div>
     </div>
   )

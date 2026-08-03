@@ -34,6 +34,10 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	if err := model.MigrateTopologySchema(db); err != nil {
+		log.Fatalf("Failed to migrate legacy topology schema: %v", err)
+	}
+
 	// Create default admin user
 	if err := handler.CreateDefaultAdmin(db); err != nil {
 		log.Printf("Warning: Failed to create default admin: %v", err)
@@ -54,6 +58,10 @@ func main() {
 	defer service.Logs().Stop()
 
 	service.InitQuotaLedger(db)
+
+	// Topology auto-archive: startup compensation + 5-minute stable-window.
+	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
+	defer stopTopologyArchive()
 
 	// Create Gin router
 	r := gin.Default()
@@ -97,6 +105,7 @@ func main() {
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/toggle", handler.ToggleProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/workflow-toggle", handler.ToggleWorkflow(db, engine))
+			dashboardAuthed.POST("/providers/fetch-models", handler.FetchModels())
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))
@@ -122,14 +131,22 @@ func main() {
 			dashboard.PUT("/rules/:type/:id", handler.UpdateRule(db))
 			dashboard.DELETE("/rules/:type/:id", handler.DeleteRule(db))
 
-			// Prices (per-model pricing)
-			dashboard.GET("/prices", handler.ListPrices(db))
-			dashboard.POST("/prices", handler.CreatePrice(db))
-			dashboard.PUT("/prices/:id", handler.UpdatePrice(db))
-			dashboard.DELETE("/prices/:id", handler.DeletePrice(db))
+			// Models (per-model pricing & info)
+			dashboard.GET("/models", handler.ListPrices(db))
+			dashboard.POST("/models", handler.CreatePrice(db))
+			dashboard.PUT("/models/:id", handler.UpdatePrice(db))
+			dashboard.DELETE("/models/:id", handler.DeletePrice(db))
+
+			// Settings
+			dashboardAuthed.GET("/settings", handler.ListSettings(db))
+			dashboardAuthed.PUT("/settings", handler.UpsertSetting(db))
 
 			dashboardAuthed.GET("/topology", handler.TopologyGet(db))
 			dashboardAuthed.PUT("/topology", handler.TopologyPut(db, engine))
+			dashboardAuthed.GET("/topology/versions", handler.TopologyVersionList(db))
+			dashboardAuthed.POST("/topology/versions/archive", handler.TopologyVersionArchive(db))
+			dashboardAuthed.GET("/topology/versions/:id", handler.TopologyVersionGet(db))
+			dashboardAuthed.POST("/topology/versions/:id/restore", handler.TopologyVersionRestore(db, engine))
 
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))

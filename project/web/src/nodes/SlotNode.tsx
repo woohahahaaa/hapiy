@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
@@ -26,6 +27,7 @@ interface SlotNodeData {
   enabled?: boolean
   onChangeEntry: (next: SlotEntry) => void
   onDeleteEntry: (index: number) => void
+  onReorderEntries: (fromIndex: number, toIndex: number) => void
 }
 
 interface SlotNodeProps {
@@ -34,13 +36,30 @@ interface SlotNodeProps {
 }
 
 export function SlotNode({ data }: SlotNodeProps) {
-  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, enabled = true } = data
+  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries, enabled = true } = data
   const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
   const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
 
   function handleAdd() {
     onChangeEntry(makeEmptyEntry(slotType, entries.length + 1))
   }
+
+  const dragProps = (entryIndex: number) => ({
+    isDragging: dragIndex === entryIndex,
+    isDragOver: overIndex === entryIndex && dragIndex !== null && dragIndex !== entryIndex,
+    onDragStart: () => setDragIndex(entryIndex),
+    onDragOver: () => setOverIndex(entryIndex),
+    onDrop: () => {
+      if (dragIndex !== null && dragIndex !== entryIndex) {
+        onReorderEntries(dragIndex, entryIndex)
+      }
+      setDragIndex(null)
+      setOverIndex(null)
+    },
+  })
 
   return (
     <>
@@ -70,6 +89,7 @@ export function SlotNode({ data }: SlotNodeProps) {
             hasResponseRewrite,
             onChangeEntry,
             onDeleteEntry,
+            dragProps(entry.index),
           ),
         )}
       </SlotContainer>
@@ -88,6 +108,14 @@ export function SlotNode({ data }: SlotNodeProps) {
   )
 }
 
+interface DragProps {
+  isDragging?: boolean
+  isDragOver?: boolean
+  onDragStart?: () => void
+  onDragOver?: () => void
+  onDrop?: () => void
+}
+
 function renderItem(
   entry: SlotEntry,
   rules: SlotRuleMap,
@@ -95,6 +123,7 @@ function renderItem(
   hasResponseRewrite: boolean,
   onChangeEntry: (next: SlotEntry) => void,
   onDeleteEntry: (index: number) => void,
+  drag: DragProps,
 ) {
   const onDelete = () => onDeleteEntry(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -107,6 +136,7 @@ function renderItem(
           rules={rules.requestModify}
           onChange={change}
           onDelete={onDelete}
+          {...drag}
         />
       )
     case 'responseModify':
@@ -117,6 +147,7 @@ function renderItem(
           rules={rules.responseModify}
           onChange={change}
           onDelete={onDelete}
+          {...drag}
         />
       )
     case 'autoReply':
@@ -127,6 +158,7 @@ function renderItem(
           rules={rules.autoReply}
           onChange={change}
           onDelete={onDelete}
+          {...drag}
         />
       )
     case 'concurrency':
@@ -137,6 +169,7 @@ function renderItem(
           rules={rules.concurrency}
           onChange={change}
           onDelete={onDelete}
+          {...drag}
         />
       )
     case 'autoSwitch':
@@ -147,6 +180,7 @@ function renderItem(
           rules={rules.autoSwitch}
           onChange={change}
           onDelete={onDelete}
+          {...drag}
         />
       )
     case 'logOutput':
@@ -158,6 +192,7 @@ function renderItem(
           onDelete={onDelete}
           hasRequestRewrite={hasRequestRewrite}
           hasResponseRewrite={hasResponseRewrite}
+          {...drag}
         />
       )
   }

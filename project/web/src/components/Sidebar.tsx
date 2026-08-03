@@ -75,9 +75,9 @@ const navigation: NavItem[] = [
   },
   {
     id: 'price',
-    label: '价格配置',
+    label: '模型信息',
     icon: <Tag />,
-    href: '/price',
+    href: '/model',
   },
   {
     id: 'policy',
@@ -95,7 +95,10 @@ const navigation: NavItem[] = [
     id: 'settings',
     label: '系统设置',
     icon: <Settings />,
-    href: '/settings',
+    children: [
+      { id: 'status', label: '运行状态', href: '/settings/status' },
+      { id: 'general', label: '通用设置', href: '/settings/general' },
+    ],
   },
   {
     id: 'profile',
@@ -178,7 +181,9 @@ function NavLink({
 
 export function AppSidebar() {
   const { state } = useSidebar()
-  const [openSections, setOpenSections] = useState(() => new Set(['monitor', 'policy']))
+  const [openSections, setOpenSections] = useState(
+    () => new Set(['monitor', 'policy', 'settings']),
+  )
   const collapsed = state === 'collapsed'
   const showLabel = !collapsed
 

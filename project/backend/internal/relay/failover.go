@@ -89,11 +89,13 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if !fallback {
 		return resp, err
 	}
-	// Drain the failed response body so the underlying connection is
-	// released before we retry; this is a best-effort cleanup.
 	if resp != nil && resp.Body != nil {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
+	}
+	if plan.Provider != nil && plan.Provider.ID != "" && e.db != nil {
+		e.db.Model(&model.Provider{}).Where("id = ?", plan.Provider.ID).
+			Update("auto_disabled", true)
 	}
 	return e.performUpstreamCall(ctx, fallbackPlan, req)
 }

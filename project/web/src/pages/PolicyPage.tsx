@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Loader2, Code, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Code, AlertTriangle, ExternalLink } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
@@ -44,6 +44,19 @@ const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite-response',
 ]
 
+const REWRITE_OPS_DOC_URL = 'https://github.com/woohahahaaa/hapiy/blob/main/project/docs/rewrite-ops.md'
+
+function RewriteScriptHint() {
+  return (
+    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+      <span>JSON 数组格式，每项含 path/mode/value 等字段</span>
+      <a href={REWRITE_OPS_DOC_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
+        语法文档 <ExternalLink className="h-3 w-3" />
+      </a>
+    </p>
+  )
+}
+
 export function PolicyPage() {
   const { type } = useParams<{ type: string }>()
   const activeTab = (type || 'rewrite') as RuleType
@@ -51,7 +64,7 @@ export function PolicyPage() {
   if (type !== undefined && !KNOWN_RULE_TYPES.includes(activeTab)) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="未知策略类型" subtitle={`/policy/${type}`} />
+        <PageHeader title="未知策略类型" />
         <div className="flex-1 p-6">
           <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-md border border-border bg-card p-8 text-center">
             <AlertTriangle className="h-8 w-8 text-destructive" />
@@ -285,11 +298,11 @@ function RewritePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="请求改写" subtitle="Rewrite rules" status={`${rules.length} rules`} />
+      <PageHeader title="请求改写" status={`${rules.length} 条规则`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            使用 DSL 语法修改请求体字段
+            使用 JSON 操作数组修改请求体字段
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
@@ -374,18 +387,16 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
         <Input id="rewrite-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="rewrite-script">DSL 脚本</FieldLabel>
+        <FieldLabel htmlFor="rewrite-script">改写脚本</FieldLabel>
         <Textarea
           id="rewrite-script"
           value={form.script}
           onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))}
-          placeholder={`SET model = "gpt-4"\nDELETE temperature\nIF model ~ "gpt-*" THEN { SET max_tokens = 4096 }`}
+          placeholder={`[{"path":"model","mode":"set","value":"gpt-4"}]`}
           rows={8}
           className="font-mono text-sm"
         />
-        <p className="text-xs text-muted-foreground">
-          语法参考：SET field = value | DELETE field | IF cond THEN {'{...}'} | header.X-Name
-        </p>
+        <RewriteScriptHint />
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>
@@ -430,7 +441,7 @@ function HeartbeatPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="心跳回复" subtitle="Heartbeat rules" status={`${rules.length} rules`} />
+      <PageHeader title="心跳回复" status={`${rules.length} 条规则`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
@@ -574,7 +585,7 @@ function ConcurrencyPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="并发控制" subtitle="Concurrency rules" status={`${rules.length} rules`} />
+      <PageHeader title="并发控制" status={`${rules.length} 条规则`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
@@ -737,7 +748,7 @@ function FailoverPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="故障转移" subtitle="Failover rules" status={`${rules.length} rules`} />
+      <PageHeader title="故障转移" status={`${rules.length} 条规则`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
@@ -897,11 +908,11 @@ function RewriteResponsePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="响应改写" subtitle="Response rewrite rules" status={`${rules.length} rules`} />
+      <PageHeader title="响应改写" status={`${rules.length} 条规则`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
-            使用 DSL 语法修改响应体字段
+            使用 JSON 操作数组修改响应体字段
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
@@ -986,8 +997,16 @@ function RewriteResponseForm({ rule, onSave, onCancel }: { rule: ResponseRewrite
         <Input id="rr-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="rr-script">DSL 脚本</FieldLabel>
-        <Textarea id="rr-script" value={form.script} onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))} placeholder="response.body.name = 'updated'" rows={6} />
+        <FieldLabel htmlFor="rr-script">改写脚本</FieldLabel>
+        <Textarea
+          id="rr-script"
+          value={form.script}
+          onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))}
+          placeholder={`[{"path":"body.name","mode":"set","value":"updated"}]`}
+          rows={8}
+          className="font-mono text-sm"
+        />
+        <RewriteScriptHint />
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel}>取消</Button>

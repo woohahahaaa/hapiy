@@ -8,7 +8,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SlotItemCard } from './SlotItemCard'
-import type { LogLevel, LogOutputSlotEntry, LogTarget } from './types'
+import type { LogLevel, LogOutputSlotEntry, LogTarget, SlotItemDragProps } from './types'
 
 const LOG_TARGET_OPTIONS: { value: LogTarget; label: string }[] = [
   { value: 'file', label: '文件' },
@@ -22,7 +22,7 @@ const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string }[] = [
   { value: 'error', label: 'Error' },
 ]
 
-interface LogOutputSlotItemProps {
+interface LogOutputSlotItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
@@ -36,6 +36,7 @@ export function LogOutputSlotItem({
   onDelete,
   hasRequestRewrite,
   hasResponseRewrite,
+  ...drag
 }: LogOutputSlotItemProps) {
   return (
     <SlotItemCard
@@ -43,6 +44,7 @@ export function LogOutputSlotItem({
       enabled={entry.enabled}
       onToggleEnabled={(v) => onChange({ ...entry, enabled: v })}
       onDelete={onDelete}
+      {...drag}
     >
       <div className="grid grid-cols-2 gap-1.5">
         <div className="flex flex-col gap-0.5">

@@ -4,6 +4,27 @@ export { parseTopologyDocument } from './topology-document'
 export type { Workflow } from './topology-document'
 export type TopologyDocument = Workflow[]
 
+export type TopologyVersionSummary = {
+  readonly id: string
+  readonly createdAt: string
+  readonly workflowTotal: number
+  readonly workflowActive: number
+  readonly nodeCount: number
+}
+
+export type TopologyCurrentVersion = {
+  readonly archived: boolean
+  readonly workflowTotal: number
+  readonly workflowActive: number
+  readonly nodeCount: number
+  readonly updatedAt: string
+}
+
+export type TopologyVersionList = {
+  readonly current: TopologyCurrentVersion | null
+  readonly versions: readonly TopologyVersionSummary[]
+}
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 type JsonRecord = Record<string, unknown>
@@ -27,6 +48,7 @@ export type Provider = {
   readonly endpoints: readonly ProviderEndpoint[]
   readonly models: readonly ProviderModel[]
   readonly status: boolean
+  readonly autoDisabled: boolean
   readonly workflowEnabled: boolean
   readonly weight: number
 }
@@ -80,6 +102,21 @@ export type LogListResult = {
   readonly total: number
 }
 
+export type SystemSetting = {
+  readonly key: string
+  readonly value: string
+}
+
+export type PriceRule = {
+  readonly pattern: string
+  readonly multiplier: number
+}
+
+export type FetchedModel = {
+  readonly id: string
+  readonly name: string
+}
+
 export type PriceConfig = {
   readonly id: string
   readonly model: string
@@ -87,15 +124,16 @@ export type PriceConfig = {
   readonly outputPrice: number
   readonly cacheWritePrice: number
   readonly cacheReadPrice: number
+  readonly contextLength: number
+  readonly maxToken: number
+  readonly supportedTypes: readonly string[]
+  readonly aliases: readonly string[]
+  readonly endpoints: readonly string[]
+  readonly thinkingLevels: readonly string[]
+  readonly rules: readonly PriceRule[]
 }
 
-export type PriceConfigInput = {
-  readonly model: string
-  readonly inputPrice: number
-  readonly outputPrice: number
-  readonly cacheWritePrice: number
-  readonly cacheReadPrice: number
-}
+export type PriceConfigInput = Omit<PriceConfig, 'id'>
 
 export type CurrentUser = {
   readonly id: string
@@ -151,7 +189,7 @@ function parseJson(value: string, field: string): unknown {
   }
 }
 
-function parsePrice(value: unknown): PriceConfig {
+export function parsePrice(value: unknown): PriceConfig {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的价格格式无效', null)
   }
@@ -162,16 +200,61 @@ function parsePrice(value: unknown): PriceConfig {
     outputPrice: readNumber(value.output_price, 'price.output_price', 0),
     cacheWritePrice: readNumber(value.cache_write_price, 'price.cache_write_price', 0),
     cacheReadPrice: readNumber(value.cache_read_price, 'price.cache_read_price', 0),
+    contextLength: readNumber(value.context_length, 'price.context_length', 0),
+    maxToken: readNumber(value.max_token, 'price.max_token', 0),
+    supportedTypes: readStringArray(value.supported_types, 'price.supported_types'),
+    aliases: readStringArray(value.aliases, 'price.aliases'),
+    endpoints: readStringArray(value.endpoints, 'price.endpoints'),
+    thinkingLevels: readStringArray(value.thinking_levels, 'price.thinking_levels'),
+    rules: readObjectArray(value.rules, 'price.rules', parsePriceRule),
   }
 }
 
-function serializePrice(input: PriceConfigInput): JsonRecord {
+function parsePriceRule(value: unknown): PriceRule {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 price.rules 格式无效', null)
+  }
+  return {
+    pattern: readString(value.pattern, 'price.rules.pattern'),
+    multiplier: readNumber(value.multiplier, 'price.rules.multiplier'),
+  }
+}
+
+export function serializePrice(input: PriceConfigInput): JsonRecord {
   return {
     model: input.model,
     input_price: input.inputPrice,
     output_price: input.outputPrice,
     cache_write_price: input.cacheWritePrice,
     cache_read_price: input.cacheReadPrice,
+    context_length: input.contextLength,
+    max_token: input.maxToken,
+    supported_types: JSON.stringify(input.supportedTypes),
+    aliases: JSON.stringify(input.aliases),
+    endpoints: JSON.stringify(input.endpoints),
+    thinking_levels: JSON.stringify(input.thinkingLevels),
+    rules: JSON.stringify(input.rules),
+  }
+}
+
+function parseSystemSetting(value: unknown): SystemSetting {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的设置格式无效', null)
+  }
+  return {
+    key: readString(value.key, 'setting.key'),
+    value: readString(value.value, 'setting.value'),
+  }
+}
+
+function parseFetchedModel(value: unknown): FetchedModel {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的模型格式无效', null)
+  }
+  const id = readString(value.id, 'model.id')
+  return {
+    id,
+    name: readString(value.name ?? id, 'model.name'),
   }
 }
 
@@ -231,6 +314,7 @@ function parseProvider(value: unknown): Provider {
     endpoints: readObjectArray(value.endpoints, 'endpoints', parseEndpoint),
     models: readObjectArray(value.models, 'models', parseModel),
     status: readBoolean(value.status, 'provider.status'),
+    autoDisabled: readBoolean(value.auto_disabled, 'provider.auto_disabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
     weight: readNumber(value.weight, 'provider.weight', 1),
   }
@@ -377,6 +461,7 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     endpoints: JSON.stringify(provider.endpoints),
     models: JSON.stringify(provider.models),
     status: provider.status,
+    auto_disabled: provider.autoDisabled,
     workflow_enabled: provider.workflowEnabled,
     weight: provider.weight,
   }
@@ -598,6 +683,46 @@ function parseMetrics(value: unknown): RuntimeMetrics {
   }
 }
 
+function parseTopologyVersionSummary(value: unknown): TopologyVersionSummary {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的版本格式无效', null)
+  }
+  return {
+    id: readString(value.id, 'version.id'),
+    createdAt: readString(value.created_at, 'version.created_at'),
+    workflowTotal: readNumber(value.workflow_total, 'version.workflow_total'),
+    workflowActive: readNumber(value.workflow_active, 'version.workflow_active'),
+    nodeCount: readNumber(value.node_count, 'version.node_count'),
+  }
+}
+
+function parseTopologyCurrentVersion(value: unknown): TopologyCurrentVersion {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的当前版本格式无效', null)
+  }
+  return {
+    archived: readBoolean(value.archived, 'version.archived'),
+    workflowTotal: readNumber(value.workflow_total, 'version.workflow_total'),
+    workflowActive: readNumber(value.workflow_active, 'version.workflow_active'),
+    nodeCount: readNumber(value.node_count, 'version.node_count'),
+    updatedAt: readString(value.updated_at, 'version.updated_at'),
+  }
+}
+
+function parseTopologyVersionList(value: unknown): TopologyVersionList {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的版本列表格式无效', null)
+  }
+  const versions = value.versions
+  if (!Array.isArray(versions)) {
+    throw new DashboardApiError('服务端返回的版本列表格式无效', null)
+  }
+  return {
+    current: value.current === null ? null : parseTopologyCurrentVersion(value.current),
+    versions: versions.map(parseTopologyVersionSummary),
+  }
+}
+
 export const dashboardApi = {
   // ── Providers ──
   async listProviders(): Promise<readonly Provider[]> {
@@ -724,9 +849,9 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
 
   async listPrices(): Promise<readonly PriceConfig[]> {
-    const data = await request('/prices')
+    const data = await request('/models')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的价格列表格式无效', null)
+      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
     }
     return data.map(parsePrice)
   },
@@ -755,16 +880,40 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
   },
   async createPrice(input: PriceConfigInput): Promise<PriceConfig> {
-    return parsePrice(await request('/prices', { method: 'POST', body: JSON.stringify(serializePrice(input)) }))
+    return parsePrice(await request('/models', { method: 'POST', body: JSON.stringify(serializePrice(input)) }))
   },
   async updatePrice(id: string, input: PriceConfigInput): Promise<PriceConfig> {
-    return parsePrice(await request(`/prices/${encodeURIComponent(id)}`, {
+    return parsePrice(await request(`/models/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(serializePrice(input)),
     }))
   },
   async deletePrice(id: string): Promise<void> {
-    await request(`/prices/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    await request(`/models/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  // ── Settings ──
+  async getSettings(): Promise<readonly SystemSetting[]> {
+    const data = await request('/settings')
+    return (Array.isArray(data) ? data : []).map(parseSystemSetting)
+  },
+  async updateSetting(key: string, value: string): Promise<SystemSetting> {
+    return parseSystemSetting(await request('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ key, value }),
+    }))
+  },
+
+  // ── Provider models ──
+  async fetchModelsFromEndpoint(endpoint: string, key?: string): Promise<readonly FetchedModel[]> {
+    const data = await request('/providers/fetch-models', {
+      method: 'POST',
+      body: JSON.stringify({ endpoint, ...(key !== undefined ? { key } : {}) }),
+    })
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
+    }
+    return data.map(parseFetchedModel)
   },
 
   async getTopology(): Promise<TopologyDocument> {
@@ -777,6 +926,26 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(document),
     })
     return parseTopologyDocument(body)
+  },
+
+  async listTopologyVersions(): Promise<TopologyVersionList> {
+    return parseTopologyVersionList(await request('/topology/versions'))
+  },
+  async archiveTopologyVersion(): Promise<TopologyVersionList> {
+    return parseTopologyVersionList(await request('/topology/versions/archive', { method: 'POST' }))
+  },
+  async getTopologyVersion(id: string): Promise<{ version: TopologyVersionSummary; document: Workflow[] }> {
+    const body = await request(`/topology/versions/${encodeURIComponent(id)}`)
+    if (!isRecord(body)) {
+      throw new DashboardApiError('服务端返回的版本详情格式无效', null)
+    }
+    return {
+      version: parseTopologyVersionSummary(body),
+      document: parseTopologyDocument(body.document),
+    }
+  },
+  async restoreTopologyVersion(id: string): Promise<TopologyVersionList> {
+    return parseTopologyVersionList(await request(`/topology/versions/${encodeURIComponent(id)}/restore`, { method: 'POST' }))
   },
 
   async getRuntimeMetrics(): Promise<RuntimeMetrics> {

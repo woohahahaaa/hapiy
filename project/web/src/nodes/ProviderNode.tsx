@@ -11,6 +11,8 @@ interface ProviderNodeData {
   modelCount?: number
   models?: string[]
   active?: boolean
+  autoDisabled?: boolean
+  providerStatus?: boolean
   onToggle?: () => void
 }
 
@@ -24,6 +26,9 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
   const dataActive = data.active ?? true
   const [optimisticActive, setOptimisticActive] = useState<boolean | null>(null)
   const active = optimisticActive ?? dataActive
+  const autoDisabled = data.autoDisabled ?? false
+  const providerStatus = data.providerStatus ?? true
+  const providerState = autoDisabled ? 'auto-disabled' : providerStatus ? 'enabled' : 'disabled'
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -76,7 +81,9 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
       ref={rootRef}
       className={cn(
         'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
-        !active && 'opacity-60'
+        !active && 'opacity-60',
+        providerState === 'disabled' && 'border-destructive/70 bg-destructive/5',
+        providerState === 'auto-disabled' && 'border-warning/70 bg-warning/5'
       )}
       style={{
         width: 'fit-content',
@@ -123,7 +130,20 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
       />
 
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label || 'Provider'}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {providerState !== 'enabled' && (
+            <span
+              className={cn(
+                'shrink-0 rounded px-1 py-px text-[10px] font-semibold leading-none',
+                providerState === 'disabled' && 'bg-destructive/15 text-destructive',
+                providerState === 'auto-disabled' && 'bg-warning/20 text-warning'
+              )}
+            >
+              {providerState === 'disabled' ? '禁用' : '自动禁用'}
+            </span>
+          )}
+          <span className="truncate text-sm font-medium">{label || 'Provider'}</span>
+        </span>
         <button
           type="button"
           role="switch"

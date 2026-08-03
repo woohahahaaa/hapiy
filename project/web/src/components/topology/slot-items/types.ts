@@ -114,6 +114,15 @@ export const SLOT_LABELS: Record<SlotType, string> = {
   logOutput: '日志输出',
 }
 
+// Drag-reorder props passed from the slot node down to each item card.
+export type SlotItemDragProps = {
+  isDragging?: boolean
+  isDragOver?: boolean
+  onDragStart?: () => void
+  onDragOver?: () => void
+  onDrop?: () => void
+}
+
 // Rule sources keyed by slotType (everything except logOutput binds to a rule).
 export type SlotRuleMap = {
   requestModify: readonly RewriteRule[]

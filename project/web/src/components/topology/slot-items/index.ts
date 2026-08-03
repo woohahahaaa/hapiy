@@ -11,6 +11,7 @@ export type {
   SlotRuleMap,
   LogTarget,
   LogLevel,
+  SlotItemDragProps,
 } from './types'
 export {
   SLOT_ORDER,

@@ -99,7 +99,7 @@ export function MonitorPage() {
   if (loading && !metrics) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="活动监视" subtitle="Real-time runtime metrics" />
+        <PageHeader title="活动监视" />
         <div className="flex-1 p-6">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">正在连接...</p>
@@ -123,7 +123,7 @@ export function MonitorPage() {
   if (error && !metrics) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="活动监视" subtitle="Real-time runtime metrics" />
+        <PageHeader title="活动监视" />
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="text-center">
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
@@ -149,7 +149,6 @@ export function MonitorPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="活动监视"
-        subtitle="Real-time runtime metrics"
         status={refreshTime ? `刷新 ${refreshTime}` : undefined}
       />
       <div className="flex-1 overflow-auto p-6">

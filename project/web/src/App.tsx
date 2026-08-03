@@ -29,9 +29,10 @@ function App() {
                   <Route path="/logs" element={<LogsPage />} />
                   <Route path="/provider" element={<ProviderPage />} />
                   <Route path="/token" element={<TokenPage />} />
-                  <Route path="/price" element={<PricePage />} />
+                  <Route path="/model" element={<PricePage />} />
                   <Route path="/policy/:type" element={<PolicyPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/settings" element={<Navigate to="/settings/status" replace />} />
+                  <Route path="/settings/:tab" element={<SettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

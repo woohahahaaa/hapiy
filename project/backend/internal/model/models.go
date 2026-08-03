@@ -34,6 +34,7 @@ type Provider struct {
 	Endpoints string    `gorm:"type:text" json:"endpoints"` // JSON array
 	Models    string    `gorm:"type:text" json:"models"`    // JSON array
 	Status          bool `gorm:"default:true" json:"status"`
+	AutoDisabled    bool `gorm:"default:false" json:"auto_disabled"`
 	WorkflowEnabled bool `gorm:"default:true" json:"workflow_enabled"`
 	Weight          int  `gorm:"default:1" json:"weight"`
 	Priority  int       `gorm:"default:0" json:"priority"`
@@ -188,6 +189,12 @@ type TopologyConfig struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// PriceRule is a JSON sub-struct stored inside PriceConfig.Rules (not a table).
+type PriceRule struct {
+	Pattern    string  `json:"pattern"`
+	Multiplier float64 `json:"multiplier"`
+}
+
 // PriceConfig model — per-model pricing; units are per 1M tokens.
 type PriceConfig struct {
 	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
@@ -196,6 +203,13 @@ type PriceConfig struct {
 	OutputPrice     float64   `gorm:"default:0" json:"output_price"`
 	CacheWritePrice float64   `gorm:"default:0" json:"cache_write_price"`
 	CacheReadPrice  float64   `gorm:"default:0" json:"cache_read_price"`
+	ContextLength   int       `gorm:"default:0" json:"context_length"`
+	MaxToken        int       `gorm:"default:0" json:"max_token"`
+	SupportedTypes  string    `gorm:"type:text" json:"supported_types"` // JSON array
+	Aliases         string    `gorm:"type:text" json:"aliases"`         // JSON array
+	Endpoints       string    `gorm:"type:text" json:"endpoints"`        // JSON array
+	ThinkingLevels  string    `gorm:"type:text" json:"thinking_levels"`  // JSON array
+	Rules           string    `gorm:"type:text" json:"rules"`           // JSON array of PriceRule
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -205,6 +219,12 @@ func (p *PriceConfig) BeforeCreate(tx *gorm.DB) error {
 		p.ID = uuid.New().String()
 	}
 	return nil
+}
+
+// Setting model — key/value system settings
+type Setting struct {
+	Key   string `gorm:"primaryKey" json:"key"`
+	Value string `gorm:"type:text" json:"value"`
 }
 
 func (t *TopologyConfig) BeforeCreate(tx *gorm.DB) error {

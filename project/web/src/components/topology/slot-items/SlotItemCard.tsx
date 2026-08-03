@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { X } from 'lucide-react'
+import { X, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { nodeRenderBounds } from '@/config/topology-config'
 
@@ -10,13 +10,13 @@ interface SlotItemCardProps {
   onDelete: () => void
   children: ReactNode
   className?: string
+  onDragStart?: () => void
+  onDragOver?: () => void
+  onDrop?: () => void
+  isDragging?: boolean
+  isDragOver?: boolean
 }
 
-// Common shell shared by every slot item. Holds:
-//   - index badge
-//   - enable switch (top-right)
-//   - delete button (top-right)
-//   - whatever per-slot form controls the slot type renders as children
 export function SlotItemCard({
   index,
   enabled,
@@ -24,12 +24,37 @@ export function SlotItemCard({
   onDelete,
   children,
   className,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  isDragging,
+  isDragOver,
 }: SlotItemCardProps) {
   return (
     <div
+      draggable={!!onDragStart}
+      onDragStart={(e) => {
+        if (!onDragStart) return
+        e.stopPropagation()
+        onDragStart()
+      }}
+      onDragOver={(e) => {
+        if (!onDragOver) return
+        e.preventDefault()
+        e.stopPropagation()
+        onDragOver()
+      }}
+      onDrop={(e) => {
+        if (!onDrop) return
+        e.preventDefault()
+        e.stopPropagation()
+        onDrop()
+      }}
       className={cn(
         'rounded-md border border-border bg-card text-card-foreground transition-opacity',
         !enabled && 'opacity-60',
+        isDragging && 'opacity-40',
+        isDragOver && 'border-primary border-dashed',
         className,
       )}
       style={{
@@ -38,9 +63,19 @@ export function SlotItemCard({
       }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
-        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
-          {index}
-        </span>
+        <div className="flex items-center gap-1">
+          {onDragStart && (
+            <span
+              className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
+              aria-label="拖动排序"
+            >
+              <GripVertical className="size-3.5" />
+            </span>
+          )}
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
+            {index}
+          </span>
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"

@@ -1,12 +1,15 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Clock, Activity, BarChart3, RefreshCw, Server } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { RuntimeMetrics } from '@/lib/dashboard-api'
+import { GeneralSettings } from './GeneralSettings'
 
 function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -29,10 +32,13 @@ type LoadState =
   | { readonly kind: 'ready'; readonly metrics: RuntimeMetrics }
 
 export function SettingsPage() {
+  const { tab } = useParams<{ tab: string }>()
+  const navigate = useNavigate()
+  const activeTab = tab === 'general' ? 'general' : 'status'
+
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
 
   const fetchMetrics = useCallback(() => {
-    setState({ kind: 'loading' })
     dashboardApi
       .getRuntimeMetrics()
       .then((metrics) => setState({ kind: 'ready', metrics }))
@@ -47,30 +53,51 @@ export function SettingsPage() {
     fetchMetrics()
   }, [fetchMetrics])
 
+  const handleRetryMetrics = () => {
+    setState({ kind: 'loading' })
+    fetchMetrics()
+  }
+
+  const handleTabChange = (value: string) => {
+    navigate(`/settings/${value}`)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="运行状态"
-        subtitle="Runtime metrics and system health"
+        title="系统设置"
       />
       <div className="flex-1 flex flex-col gap-6 p-6">
-        {state.kind === 'loading' && <MetricsSkeleton />}
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
+          <TabsList>
+            <TabsTrigger value="status">运行状态</TabsTrigger>
+            <TabsTrigger value="general">通用设置</TabsTrigger>
+          </TabsList>
 
-        {state.kind === 'error' && (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-4 py-12">
-              <p className="text-sm text-destructive">{state.message}</p>
-              <Button variant="outline" size="sm" onClick={fetchMetrics}>
-                <RefreshCw data-icon="inline-start" />
-                重试
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+          <TabsContent value="status" className="flex flex-col gap-6">
+            {state.kind === 'loading' && <MetricsSkeleton />}
 
-        {state.kind === 'ready' && (
-          <MetricsCards metrics={state.metrics} onRefresh={fetchMetrics} />
-        )}
+            {state.kind === 'error' && (
+              <Card>
+                <CardContent className="flex flex-col items-center gap-4 py-12">
+                  <p className="text-sm text-destructive">{state.message}</p>
+                  <Button variant="outline" size="sm" onClick={handleRetryMetrics}>
+                    <RefreshCw data-icon="inline-start" />
+                    重试
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {state.kind === 'ready' && (
+              <MetricsCards metrics={state.metrics} onRefresh={fetchMetrics} />
+            )}
+          </TabsContent>
+
+          <TabsContent value="general">
+            <GeneralSettings />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   )

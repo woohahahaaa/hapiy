@@ -101,6 +101,7 @@ function parseNode(value: unknown): WorkflowNode {
         type: 'provider',
         name,
         provider_id: optionalString(value.provider_id, 'provider_id'),
+        enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
       }
     case 'logOutput':
       return {
@@ -205,7 +206,8 @@ export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<strin
       if (node.type === 'provider') continue
       const slotType = node.type as SlotType
       const list = slots[slotType] as SlotEntry[]
-      list.push(nodeToEntry(node, list.length + 1))
+      const entry = nodeToEntry(node, list.length + 1)
+      list.push({ ...entry, id: `${key}-${slotType}-${entry.index}` } as SlotEntry)
     }
 
     maps.set(key, { providerId, enabled: providerNode.enabled !== false, slots })

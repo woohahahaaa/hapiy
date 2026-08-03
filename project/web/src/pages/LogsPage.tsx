@@ -93,7 +93,6 @@ export function LogsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="使用日志"
-        subtitle="Request history"
         status={total > 0 ? `${total} 条记录` : undefined}
       />
       <div className="flex-1 p-6">

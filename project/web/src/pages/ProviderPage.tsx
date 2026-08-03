@@ -1,26 +1,29 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, Code } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, Code, RefreshCw, Settings, Loader2 } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel } from '@/lib/dashboard-api'
+import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel, FetchedModel } from '@/lib/dashboard-api'
 
 type ProviderFormProps = {
   readonly provider: Provider | null
   readonly onSave: (provider: ProviderInput) => void
   readonly onCancel: () => void
   readonly isSaving: boolean
+  readonly useKey: boolean
+  readonly onUseKeyChange: (next: boolean) => void
 }
 
 const emptyProvider: ProviderInput = {
-  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, weight: 1,
+  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, weight: 1, autoDisabled: false,
 }
 
 function toErrorMessage(error: unknown): string {
@@ -35,6 +38,7 @@ export function ProviderPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [useKey, setUseKey] = useState(false)
 
   const loadProviders = async () => {
     setIsLoading(true)
@@ -86,10 +90,10 @@ export function ProviderPage() {
 
       for (const item of parsed) {
         const id = idMap.get(item.id)
-        const providerInput: ProviderInput = {
+          const providerInput: ProviderInput = {
           name: item.name, baseUrls: item.baseUrls, keys: item.keys,
           endpoints: item.endpoints, models: item.models,
-          status: item.status, workflowEnabled: item.workflowEnabled, weight: item.weight,
+          status: item.status, workflowEnabled: item.workflowEnabled, weight: item.weight, autoDisabled: item.autoDisabled,
         }
         if (id && currentMap.has(id)) {
           retainedIds.add(id)
@@ -124,7 +128,7 @@ export function ProviderPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="供应商" subtitle="Provider management" status={`${providers.length} 供应商`} />
+      <PageHeader title="供应商" status={`${providers.length} 供应商`} />
       <div className="flex-1 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">管理上游 API 供应商配置</div>
@@ -139,7 +143,7 @@ export function ProviderPage() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent className="max-w-2xl">
               <DialogHeader><DialogTitle>{editing ? '编辑供应商' : '添加供应商'}</DialogTitle></DialogHeader>
-              <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} />
+              <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} />
             </DialogContent>
           </Dialog>
           {jsonOpen && (
@@ -169,8 +173,8 @@ export function ProviderPage() {
                   <TableCell><Badge variant="secondary" className="text-[10px]">{provider.baseUrls.length} URLs</Badge></TableCell>
                   <TableCell><Badge variant="secondary" className="text-[10px]">{provider.keys.length} Keys</Badge></TableCell>
                   <TableCell><Badge variant="secondary" className="text-[10px]">{provider.endpoints.length} Endpoints</Badge></TableCell>
-                  <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <Badge key={model.model} variant="outline" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1 text-primary">{model.discount * 10}折</span>}</Badge>)}</div></TableCell>
-                  <TableCell><span className={provider.status ? '' : 'text-muted-foreground'}>{provider.status ? '启用' : '禁用'}</span></TableCell>
+                  <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <Badge key={model.model} variant="outline" className="text-[10px]">{model.model}</Badge>)}</div></TableCell>
+                  <TableCell><span className={provider.status ? 'text-success' : 'text-destructive'}>{provider.status ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2">
                     <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
                     <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><Pencil /></Button>
@@ -186,10 +190,76 @@ export function ProviderPage() {
   )
 }
 
-function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
   const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ name: '', pathSuffix: '' })
-  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], discount: 1 })
+  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [] })
+  const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
+  const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
+  const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
+  const [endpointDraft, setEndpointDraft] = useState('')
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [isFetching, setIsFetching] = useState(false)
+  const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void dashboardApi.getSettings()
+      .then((settings) => {
+        if (cancelled) return
+        const setting = settings.find((item) => item.key === 'default_model_list_endpoint')
+        setGlobalDefaultEndpoint(setting ? setting.value : null)
+      })
+      .catch(() => {
+        if (!cancelled) setGlobalDefaultEndpoint(null)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint
+
+  const handleFetchModels = async () => {
+    if (!effectiveEndpoint) {
+      setFetchError('请先在系统设置中配置默认模型列表接口，或点击齿轮设置接口地址')
+      return
+    }
+    if (!effectiveEndpoint.startsWith('/')) {
+      setFetchError('路径必须以斜杠开头（/）')
+      return
+    }
+    const baseUrl = form.baseUrls[0]
+    if (!baseUrl) {
+      setFetchError('请先在上方填写 Base URLs')
+      return
+    }
+    const fullUrl = `${baseUrl.replace(/\/+$/, '')}${effectiveEndpoint}`
+    setFetchError(null)
+    setIsFetching(true)
+    try {
+      setFetchedModels(await dashboardApi.fetchModelsFromEndpoint(fullUrl, useKey ? form.keys[0] : undefined))
+    } catch (error) {
+      setFetchError(toErrorMessage(error))
+    } finally {
+      setIsFetching(false)
+    }
+  }
+
+  const handleSaveEndpoint = () => {
+    const trimmed = endpointDraft.trim()
+    setEndpointOverride(trimmed === '' ? null : trimmed)
+    setIsEndpointDialogOpen(false)
+  }
+
+  const handleConfirmAddModels = (ids: readonly string[]) => {
+    const existingIds = new Set(form.models.map((model) => model.model))
+    const additions: ProviderModel[] = ids
+      .filter((id) => !existingIds.has(id))
+      .map((id) => ({ model: id, endpoints: [] }))
+    if (additions.length > 0) {
+      setForm((current) => ({ ...current, models: [...current.models, ...additions] }))
+    }
+    setFetchedModels(null)
+  }
 
   return (
     <FieldGroup>
@@ -221,7 +291,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProp
           </div>
           <div className="flex flex-wrap gap-2">
             {form.endpoints.map((endpoint) => (
-              <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></Badge>
+              <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></Badge>
             ))}
           </div>
         </div>
@@ -229,22 +299,104 @@ function ProviderForm({ provider, onSave, onCancel, isSaving }: ProviderFormProp
       <Field>
         <FieldLabel>模型</FieldLabel>
         <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
+              {isFetching ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <RefreshCw data-icon="inline-start" />}
+              从上游获取模型
+            </Button>
+            <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
+              <Settings />
+            </Button>
+          </div>
           <div className="flex gap-2">
             <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" />
-            <Input type="number" value={newModel.discount ?? 1} onChange={(event) => setNewModel((current) => ({ ...current, discount: Number(event.target.value) || 1 }))} placeholder="折扣" className="w-24" />
-            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [], discount: 1 }) }}><Plus /></Button>
+            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [] }) }}><Plus /></Button>
           </div>
           <div className="flex flex-wrap gap-2">
             {form.models.map((model) => (
-              <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}{model.discount !== undefined && model.discount !== 1 && <span className="ml-1">{model.discount * 10}折</span>}<button className="ml-1 text-muted-foreground hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></Badge>
+              <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></Badge>
             ))}
           </div>
+          {fetchError && (
+            <p role="alert" className="text-xs text-destructive">{fetchError}</p>
+          )}
         </div>
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
         <Button disabled={isSaving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{isSaving ? '保存中...' : '保存'}</Button>
       </div>
+      <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Field>
+              <FieldLabel htmlFor="model-list-endpoint">模型列表接口路径</FieldLabel>
+              <Input id="model-list-endpoint" value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="/v1/models" />
+              <p className="text-xs text-muted-foreground">路径必须以斜杠开头（/），将拼接在 Base URL 之后</p>
+            </Field>
+            <label className="flex cursor-pointer items-center gap-2">
+              <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
+              <span className="text-foreground">是否传入 Key</span>
+            </label>
+            <p className="text-xs text-muted-foreground">将使用当前供应商的第一个 Key 作为 Bearer 凭证</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsEndpointDialogOpen(false)}>取消</Button>
+            <Button onClick={handleSaveEndpoint}>保存</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {fetchedModels && (
+        <FetchModelDialog
+          models={fetchedModels}
+          existingIds={new Set(form.models.map((model) => model.model))}
+          onClose={() => setFetchedModels(null)}
+          onConfirm={handleConfirmAddModels}
+        />
+      )}
     </FieldGroup>
+  )
+}
+
+type FetchModelDialogProps = {
+  readonly models: readonly FetchedModel[]
+  readonly existingIds: ReadonlySet<string>
+  readonly onClose: () => void
+  readonly onConfirm: (ids: readonly string[]) => void
+}
+
+function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchModelDialogProps) {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(
+    () => new Set(models.filter((model) => existingIds.has(model.id)).map((model) => model.id)),
+  )
+
+  const toggle = (id: string, checked: boolean) => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>从上游获取模型</DialogTitle></DialogHeader>
+        <div className="flex max-h-64 flex-col overflow-y-auto">
+          {models.map((model) => (
+            <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
+              <Checkbox checked={selected.has(model.id)} onCheckedChange={(checked) => toggle(model.id, checked === true)} />
+              <span className="text-foreground">{model.id}{model.name !== model.id && <span className="text-muted-foreground">（{model.name}）</span>}</span>
+            </label>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>取消</Button>
+          <Button disabled={selected.size === 0} onClick={() => onConfirm([...selected])}>确认添加</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

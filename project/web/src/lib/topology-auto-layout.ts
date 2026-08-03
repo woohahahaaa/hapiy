@@ -47,7 +47,7 @@ export type NodeSizeMap = ReadonlyMap<string, NodeSize>
  * Two-group edge-to-edge layout:
  *   1. Model group (left): modelHub nodes stacked vertically, right-aligned.
  *   2. Workflow group (right): each workflow is a left-to-right row of
- *      provider + slots, top-aligned. Rows stack vertically.
+ *      provider + slots, vertically centered within the row. Rows stack vertically.
  *   3. Workflow group left edge = model group right edge + groupGap.
  *   4. Both groups are vertically centered relative to each other.
  *
@@ -86,8 +86,8 @@ export function getLayoutedElements(
     list.sort((a, b) => rankOfNode(a) - rankOfNode(b) || a.id.localeCompare(b.id))
   }
 
-  // Lay out each workflow row: left-to-right, top-aligned
-  type PlacedNode = { node: Node; x: number; y: number }
+  // Lay out each workflow row: left-to-right, vertically centered within the row
+  type PlacedNode = { node: Node; x: number; y: number; height: number }
   type WorkflowRow = { providerId: string; width: number; height: number; nodes: PlacedNode[] }
 
   const workflowRows: WorkflowRow[] = []
@@ -98,9 +98,12 @@ export function getLayoutedElements(
     for (let i = 0; i < list.length; i++) {
       const node = list[i]
       const d = sizeOf(node)
-      placed.push({ node, x: cursorX, y: 0 })
+      placed.push({ node, x: cursorX, y: 0, height: d.height })
       cursorX += d.width + (i < list.length - 1 ? nodeGap : 0)
       if (d.height > maxH) maxH = d.height
+    }
+    for (const p of placed) {
+      p.y = (maxH - p.height) / 2
     }
     const rowWidth = cursorX
     workflowRows.push({ providerId, width: rowWidth, height: maxH, nodes: placed })

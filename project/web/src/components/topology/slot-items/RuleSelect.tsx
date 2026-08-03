@@ -41,7 +41,10 @@ export function RuleSelect({
     >
       <SelectTrigger size="sm" className="w-full">
         <SelectValue placeholder={placeholder}>
-          {triggerValue === NONE_VALUE ? (isEmpty ? emptyHint : placeholder) : null}
+          {(value: string | null) => {
+            if (value === NONE_VALUE || value == null) return isEmpty ? emptyHint : placeholder
+            return options.find((o) => o.id === value)?.label ?? value
+          }}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
