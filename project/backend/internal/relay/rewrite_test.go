@@ -274,9 +274,12 @@ func TestRewriteHeaderRoutingStub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	_, _, err = applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
-	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Fatalf("expected stub error, got: %v", err)
+	_, headers, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if headers["X-Foo"] != "v" {
+		t.Fatalf("expected X-Foo=v, got %q", headers["X-Foo"])
 	}
 }
 
@@ -286,10 +289,13 @@ func TestRewriteChainsNilGuard(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	_, headers, err := applyRewriteChains(nil, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
-	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Fatalf("expected stub error, got: %v", err)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 	if headers == nil {
 		t.Fatal("expected headers to be initialized, got nil")
+	}
+	if headers["X-Foo"] != "v" {
+		t.Fatalf("expected X-Foo=v, got %q", headers["X-Foo"])
 	}
 }
