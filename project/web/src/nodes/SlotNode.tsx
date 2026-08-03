@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
-import { topologyConfig, nodeRenderBounds } from '@/config/topology-config'
+import { topologyConfig } from '@/config/topology-config'
 import type {
   SlotEntry,
   SlotEntryMap,
@@ -78,7 +78,11 @@ export function SlotNode({ data }: SlotNodeProps) {
         onAddNode={handleAdd}
         style={{
           width: 'fit-content',
-          minWidth: nodeRenderBounds.minWidth,
+          // Shell minimum is decoupled from `nodeRenderBounds` (the 200/300
+          // range reserved for Provider + slot inner items). This keeps
+          // populated and empty slots equal-width without applying the
+          // 200/300 bound to the SlotContainer outer shell.
+          minWidth: topologyConfig.render.slot.shellMinWidth,
         }}
       >
         {entries.map((entry) =>

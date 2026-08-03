@@ -33,7 +33,15 @@ export function SlotContainer({
 
       {hasNodes ? (
         <>
-          <div className="flex flex-col gap-2">{children}</div>
+          {/*
+            `items-stretch` makes children fill the cross-axis (horizontal for
+            `flex-col`). The outer SlotContainer uses `width: fit-content` from
+            the caller, so the container widens to the widest child and every
+            child — plus the `w-full` add button below — then matches that
+            slot-local maximum width. Equalization happens at render time; the
+            magic-wand layout does not participate.
+          */}
+          <div className="flex flex-col items-stretch gap-2">{children}</div>
           {onAddNode && (
             <button
               type="button"

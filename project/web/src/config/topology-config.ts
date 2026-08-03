@@ -13,6 +13,7 @@ type NodeRenderBounds = {
 type SlotRender = {
   readonly padding: number
   readonly contentGap: number
+  readonly shellMinWidth: number
 }
 
 type ModelHubRender = {

@@ -1,7 +1,7 @@
 {
   "render": {
     "node": { "minWidth": 200, "maxWidth": 300 },
-    "slot": { "padding": 16, "contentGap": 8 },
+    "slot": { "padding": 16, "contentGap": 8, "shellMinWidth": 240 },
     "modelHub": { "paddingX": 12, "paddingY": 6 }
   },
   "layout": {

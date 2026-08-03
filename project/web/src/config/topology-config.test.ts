@@ -29,6 +29,15 @@ describe('topology-config render bounds', () => {
     expect(topologyConfig.render.slot.contentGap).toBeGreaterThanOrEqual(0)
   })
 
+  it('render.slot shell minimum is decoupled from node 200/300 bounds', () => {
+    expect(topologyConfig.render.slot.shellMinWidth).toBeGreaterThan(0)
+    // Shell width must not reuse the 200/300 inner-item range, otherwise the
+    // SlotContainer outer shell silently inherits the bound that the rules
+    // reserve for Provider and slot INNER items.
+    expect(topologyConfig.render.slot.shellMinWidth).not.toBe(topologyConfig.render.node.minWidth)
+    expect(topologyConfig.render.slot.shellMinWidth).not.toBe(topologyConfig.render.node.maxWidth)
+  })
+
   it('config has no provider padding field (padding stays in component)', () => {
     expect(topologyConfig.render).not.toHaveProperty('provider')
     expect(topologyConfig).not.toHaveProperty('providerPadding')
