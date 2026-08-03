@@ -36,7 +36,7 @@ interface SlotNodeProps {
 }
 
 export function SlotNode({ data }: SlotNodeProps) {
-  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries, enabled = true } = data
+  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries } = data
   const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
   const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 

@@ -80,11 +80,6 @@ function requiredInteger(value: unknown, field: string): number {
   return value
 }
 
-function optionalInteger(value: unknown, field: string): number | undefined {
-  if (value === undefined) return undefined
-  return requiredInteger(value, field)
-}
-
 const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput'])
 const VALID_LOG_TARGETS = new Set(['file', 'console', 'both'])
 const VALID_LOG_LEVELS = new Set(['info', 'warn', 'error'])
@@ -185,9 +180,9 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
 // Nodes are grouped by slot type (major order = SLOT_ORDER), then by order field (minor).
 export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<string, WorkflowEntry> {
   const maps = new Map<string, WorkflowEntry>()
-  const ranks = new Map(SLOT_ORDER.map((type, index) => [type, index]))
+  const ranks = new Map<string, number>(SLOT_ORDER.map((type, index) => [type, index]))
 
-  workflows.forEach((workflow, idx) => {
+  workflows.forEach((workflow) => {
     const providerNode = workflow[0]
     if (providerNode.type !== 'provider') return
     const providerId = providerNode.provider_id ?? providerNode.name
@@ -220,7 +215,7 @@ export function slotMapsFromWorkflows(workflows: readonly Workflow[]): Map<strin
   return maps
 }
 
-function entryToNode(entry: SlotEntry, providerName: string): WorkflowNode | null {
+function entryToNode(entry: SlotEntry, _providerName: string): WorkflowNode | null {
   switch (entry.slotType) {
     case 'requestModify':
     case 'responseModify':

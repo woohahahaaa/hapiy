@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
@@ -26,7 +26,7 @@ import { getLayoutedElements } from '@/lib/topology-auto-layout'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { slotMapsFromWorkflows, workflowsFromSlotMaps, preserveNullRuleDrafts, providerIdFromKey, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
+import { slotMapsFromWorkflows, workflowsFromSlotMaps, preserveNullRuleDrafts, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
 import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges, computeWorkflowPlacements, type LayoutSnapshot } from '@/lib/topology-builders'
 import {
@@ -95,7 +95,6 @@ export function TopologyPage() {
     slotsVersionRef.current += 1
     setSlotsVersion((v) => v + 1)
   }, [])
-  const nextWorkflowIdRef = useRef(0)
   const addProviderBtnRef = useRef<HTMLButtonElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
