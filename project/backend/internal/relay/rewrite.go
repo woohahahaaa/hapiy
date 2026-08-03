@@ -31,6 +31,7 @@ type RewriteOp struct {
 	Regex      *regexp.Regexp     // compiled regex for regex_replace
 	DstPath    string             // copy / move destination
 	Conditions []RewriteCondition // optional execution gating
+	Scope      string             // "header" | "body" | "all" (default)
 }
 
 // RewriteCondition evaluates the current value at a path and decides
@@ -150,6 +151,25 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 			return op, err
 		}
 		op.Conditions = conds
+	}
+	if raw, ok := entry["scope"]; ok {
+		var scope string
+		if err := json.Unmarshal(raw, &scope); err != nil {
+			return op, fmt.Errorf("rule %s: op %d: scope is not a string: %w", ruleID, index, err)
+		}
+		scope = strings.ToLower(strings.TrimSpace(scope))
+		switch scope {
+		case "", "all", "header", "body":
+		default:
+			return op, fmt.Errorf("rule %s: op %d: unsupported scope %q (must be \"header\", \"body\", or \"all\")", ruleID, index, scope)
+		}
+		if scope == "header" && !strings.HasPrefix(op.Path, "header.") {
+			return op, fmt.Errorf("rule %s: op %d: scope %q incompatible with path %q (scope header requires header. prefix)", ruleID, index, scope, op.Path)
+		}
+		if scope == "body" && strings.HasPrefix(op.Path, "header.") {
+			return op, fmt.Errorf("rule %s: op %d: scope %q incompatible with path %q (scope body cannot use header. prefix)", ruleID, index, scope, op.Path)
+		}
+		op.Scope = scope
 	}
 	return op, nil
 }

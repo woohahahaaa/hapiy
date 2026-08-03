@@ -206,3 +206,65 @@ func TestApplyRewriteChain_missing_path_no_op_for_string_ops(t *testing.T) {
 		t.Fatalf("expected unchanged body, got %s", updated)
 	}
 }
+
+func TestRewriteScopeCompile_header_path_with_header_scope(t *testing.T) {
+	ops, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"set","value":"v","scope":"header"}]`)
+	if err != nil {
+		t.Fatalf("expected compile success for scope=header+header.X-Foo, got: %v", err)
+	}
+	if len(ops) != 1 || ops[0].Scope != "header" {
+		t.Fatalf("expected Scope=header preserved, got %+v", ops)
+	}
+}
+
+func TestRewriteScopeCompile_header_scope_rejects_body_path(t *testing.T) {
+	_, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x","scope":"header"}]`)
+	if err == nil || !strings.Contains(err.Error(), "scope") || !strings.Contains(err.Error(), "incompatible") {
+		t.Fatalf("expected scope/path incompatibility error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "rule r") {
+		t.Fatalf("expected error to name rule id, got: %v", err)
+	}
+}
+
+func TestRewriteScopeCompile_body_path_with_body_scope(t *testing.T) {
+	ops, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x","scope":"body"}]`)
+	if err != nil {
+		t.Fatalf("expected compile success for scope=body+model, got: %v", err)
+	}
+	if len(ops) != 1 || ops[0].Scope != "body" {
+		t.Fatalf("expected Scope=body preserved, got %+v", ops)
+	}
+}
+
+func TestRewriteScopeCompile_body_scope_rejects_header_path(t *testing.T) {
+	_, err := compileRewriteChain("r", `[{"path":"header.X","mode":"set","value":"v","scope":"body"}]`)
+	if err == nil || !strings.Contains(err.Error(), "scope") || !strings.Contains(err.Error(), "incompatible") {
+		t.Fatalf("expected scope/path incompatibility error, got: %v", err)
+	}
+}
+
+func TestRewriteScopeCompile_all_scope_accepts_both_paths(t *testing.T) {
+	if _, err := compileRewriteChain("r", `[{"path":"header.X-Foo","mode":"set","value":"v","scope":"all"}]`); err != nil {
+		t.Fatalf("scope=all + header.X-Foo should compile, got: %v", err)
+	}
+	if _, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x","scope":"all"}]`); err != nil {
+		t.Fatalf("scope=all + model should compile, got: %v", err)
+	}
+}
+
+func TestRewriteScopeCompile_empty_scope_accepts_both_paths(t *testing.T) {
+	if _, err := compileRewriteChain("r", `[{"path":"header.X","mode":"set","value":"v"}]`); err != nil {
+		t.Fatalf("no scope + header.X should compile (default=all), got: %v", err)
+	}
+	if _, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x"}]`); err != nil {
+		t.Fatalf("no scope + model should compile, got: %v", err)
+	}
+}
+
+func TestRewriteScopeCompile_rejects_unknown_scope(t *testing.T) {
+	_, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":"x","scope":"invalid_value"}]`)
+	if err == nil || !strings.Contains(err.Error(), "unsupported scope") {
+		t.Fatalf("expected unsupported scope error, got: %v", err)
+	}
+}
