@@ -4,6 +4,7 @@ import {
   parseTopologyDocument,
   slotMapsFromWorkflows,
   workflowsFromSlotMaps,
+  preserveNullRuleDrafts,
   type WorkflowEntry,
 } from './topology-document'
 
@@ -12,7 +13,7 @@ describe('parseTopologyDocument', () => {
     const raw = [[
       { type: 'provider', name: 'OpenAI', provider_id: 'p-001' },
       { type: 'requestModify', name: '改写', rule_id: 'r-101', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: true, log_target: 'file', log_level: 'info', log_path: '/tmp/a.log', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true },
+      { type: 'logOutput', name: 'log', enabled: true, config: { log_target: 'file', log_level: 'info', log_path: '/tmp/a.log', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true } },
     ]]
 
     const workflows = parseTopologyDocument(raw)
@@ -58,7 +59,7 @@ describe('parseTopologyDocument', () => {
   it('logOutput has no order field', () => {
     const raw = [[
       { type: 'provider', name: 'P' },
-      { type: 'logOutput', name: 'log', enabled: true, log_target: 'file', log_level: 'info', log_path: '', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true },
+      { type: 'logOutput', name: 'log', enabled: true, config: { log_target: 'file', log_level: 'info', log_path: '', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true } },
     ]]
     const workflows = parseTopologyDocument(raw)
     expect(workflows[0][1]).not.toHaveProperty('order')
@@ -71,7 +72,7 @@ describe('slotMapsFromWorkflows', () => {
       { type: 'provider', name: 'P', provider_id: 'p-1' },
       { type: 'requestModify', name: 'b', rule_id: 'r-2', order: 2, enabled: true },
       { type: 'requestModify', name: 'a', rule_id: 'r-1', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: false, log_target: 'both', log_level: 'warn', log_path: '/tmp/a.log', record_request_before: false, record_request_after: true, record_response_before: false, record_response_after: true },
+      { type: 'logOutput', name: 'log', enabled: false, config: { log_target: 'both', log_level: 'warn', log_path: '/tmp/a.log', record_request_before: false, record_request_after: true, record_response_before: false, record_response_after: true } },
     ]])
 
     const maps = slotMapsFromWorkflows(workflows)
@@ -93,7 +94,7 @@ describe('workflowsFromSlotMaps', () => {
       { id: 'saved', slotType: 'requestModify', index: 2, enabled: false, ruleId: 'rule-a', config: {} },
     )
     const maps = new Map<string, WorkflowEntry>([
-      ['w-p-1-0', { providerId: 'p-1', slots: providerSlots }],
+      ['w-p-1-0', { providerId: 'p-1', enabled: true, slots: providerSlots }],
     ])
     const providerNames = new Map([['p-1', 'P']])
     const ruleNames = new Map([['requestModify:rule-a', 'rule-a']])
@@ -116,7 +117,7 @@ describe('workflowsFromSlotMaps', () => {
       config: {},
     })
     const maps = new Map<string, WorkflowEntry>([
-      ['w-p-1-0', { providerId: 'p-1', slots: providerSlots }],
+      ['w-p-1-0', { providerId: 'p-1', enabled: true, slots: providerSlots }],
     ])
     const providerNames = new Map([['p-1', 'P']])
 
@@ -124,9 +125,50 @@ describe('workflowsFromSlotMaps', () => {
     const logNode = workflows[0][1] as any
 
     expect(logNode.type).toBe('logOutput')
-    expect(logNode.log_target).toBe('console')
-    expect(logNode.log_level).toBe('error')
-    expect(logNode.log_path).toBe('/var/log/hapiy.log')
-    expect(logNode.record_request_after).toBe(true)
+    expect(logNode.name).toBe('log-output-1')
+    expect(logNode.config.log_target).toBe('console')
+    expect(logNode.config.log_level).toBe('error')
+    expect(logNode.config.log_path).toBe('/var/log/hapiy.log')
+    expect(logNode.config.record_request_after).toBe(true)
+  })
+})
+
+describe('preserveNullRuleDrafts', () => {
+  it('re-applies unsaved null-rule drafts onto the saved snapshot', () => {
+    const localSlots = emptySlotEntryMap()
+    localSlots.requestModify.push(
+      { id: 'draft', slotType: 'requestModify', index: 1, enabled: true, ruleId: null, config: {} },
+      { id: 'saved', slotType: 'requestModify', index: 2, enabled: false, ruleId: 'rule-a', config: {} },
+    )
+    const local = new Map<string, WorkflowEntry>([
+      ['w-p-1-0', { providerId: 'p-1', enabled: true, slots: localSlots }],
+    ])
+
+    const savedSlots = emptySlotEntryMap()
+    savedSlots.requestModify.push(
+      { id: 'saved', slotType: 'requestModify', index: 1, enabled: false, ruleId: 'rule-a', config: {} },
+    )
+    const saved = new Map<string, WorkflowEntry>([
+      ['w-p-1-0', { providerId: 'p-1', enabled: true, slots: savedSlots }],
+    ])
+
+    const merged = preserveNullRuleDrafts(saved, local)
+    const entries = merged.get('w-p-1-0')!.slots.requestModify
+    expect(entries).toHaveLength(2)
+    expect(entries.map((e) => e.id).sort()).toEqual(['draft', 'saved'])
+    expect(entries.find((e) => e.id === 'draft')).toMatchObject({ ruleId: null })
+  })
+
+  it('returns the saved entry unchanged when there are no drafts', () => {
+    const slots = emptySlotEntryMap()
+    slots.requestModify.push(
+      { id: 'saved', slotType: 'requestModify', index: 1, enabled: true, ruleId: 'rule-a', config: {} },
+    )
+    const entry = { providerId: 'p-1', enabled: true, slots }
+    const saved = new Map<string, WorkflowEntry>([['w-p-1-0', entry]])
+    const local = new Map<string, WorkflowEntry>([['w-p-1-0', entry]])
+
+    const merged = preserveNullRuleDrafts(saved, local)
+    expect(merged.get('w-p-1-0')).toBe(entry)
   })
 })

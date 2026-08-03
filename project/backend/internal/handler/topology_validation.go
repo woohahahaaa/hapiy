@@ -40,10 +40,12 @@ func validateTopologyDocument(db *gorm.DB, document TopologyDocument) (TopologyD
 			return nil, nil, fmt.Errorf("workflow %d: %w", wi+1, err)
 		}
 		requestedEnabled := providerNode.Enabled == nil || *providerNode.Enabled
-		enabledByProviderName[provider.Name]++
 		keptEnabled := requestedEnabled
-		if requestedEnabled && enabledByProviderName[provider.Name] > 1 {
+		if requestedEnabled && enabledByProviderName[provider.Name] >= 1 {
 			keptEnabled = false
+		}
+		if keptEnabled {
+			enabledByProviderName[provider.Name]++
 		}
 		canonicalWorkflow := []TopologyNode{{
 			Type:       "provider",
@@ -124,6 +126,11 @@ func validateAndConvertNode(db *gorm.DB, node TopologyNode, providerID string, n
 		}
 		row.Config = config
 		row.RuleID = nil
+		// Multiple logOutput entries are allowed per provider; each needs a
+		// unique order because (provider_id, slot_type, order) is unique.
+		key := providerID + "\x00" + node.Type
+		row.Order = nextOrder[key] + 1
+		nextOrder[key] = row.Order
 		return row, nil
 	}
 	ruleID, err := resolveRuleID(db, node)

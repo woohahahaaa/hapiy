@@ -32,12 +32,6 @@ export function SlotItemCard({
 }: SlotItemCardProps) {
   return (
     <div
-      draggable={!!onDragStart}
-      onDragStart={(e) => {
-        if (!onDragStart) return
-        e.stopPropagation()
-        onDragStart()
-      }}
       onDragOver={(e) => {
         if (!onDragOver) return
         e.preventDefault()
@@ -66,7 +60,12 @@ export function SlotItemCard({
         <div className="flex items-center gap-1">
           {onDragStart && (
             <span
-              className="cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
+              draggable
+              onDragStart={(e) => {
+                e.stopPropagation()
+                onDragStart()
+              }}
+              className="nodrag nopan cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
               aria-label="拖动排序"
             >
               <GripVertical className="size-3.5" />
@@ -101,14 +100,14 @@ export function SlotItemCard({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="删除"
           >
             <X className="size-3" />
           </button>
         </div>
       </div>
-      <div className="space-y-1.5 p-2">{children}</div>
+      <div className="nodrag nopan space-y-1.5 p-2">{children}</div>
     </div>
   )
 }

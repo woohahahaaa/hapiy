@@ -26,13 +26,15 @@ export interface LogOutputNodeData {
   readonly type: 'logOutput'
   readonly name: string
   readonly enabled: boolean
-  readonly log_target: 'file' | 'console' | 'both'
-  readonly log_level: 'info' | 'warn' | 'error'
-  readonly log_path: string
-  readonly record_request_before: boolean
-  readonly record_request_after: boolean
-  readonly record_response_before: boolean
-  readonly record_response_after: boolean
+  readonly config: {
+    readonly log_target: 'file' | 'console' | 'both'
+    readonly log_level: 'info' | 'warn' | 'error'
+    readonly log_path: string
+    readonly record_request_before: boolean
+    readonly record_request_after: boolean
+    readonly record_response_before: boolean
+    readonly record_response_after: boolean
+  }
 }
 
 export type WorkflowNode = ProviderNodeData | RuleBoundNodeData | LogOutputNodeData

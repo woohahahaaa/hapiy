@@ -161,15 +161,17 @@ export function TopologyVersionsModal({
       const provider = providers.find((p) => p.id === entry.providerId)
       if (!provider) continue
       const verticalOffset = nodes.length
-      nodes.push(buildProviderNode(workflowKey, entry, provider, {}, verticalOffset, null, () => {}))
+      nodes.push(buildProviderNode(workflowKey, entry, provider, {}, topologyConfig.initialPositions.provider.x, verticalOffset, null, () => {}))
       nodes.push(
         ...buildSlotNodes(
           workflowKey,
           entry.slots,
           rules,
           {},
-          nodes.length,
+          topologyConfig.initialPositions.slot.x,
+          verticalOffset,
           entry.enabled,
+          () => {},
           () => {},
           () => {},
         ),
@@ -199,12 +201,12 @@ export function TopologyVersionsModal({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent className="sm:max-w-4xl lg:max-w-5xl h-[min(70vh,680px)] grid-rows-[auto_minmax(0,1fr)_auto]">
+      <DialogContent className="sm:max-w-4xl lg:max-w-5xl h-[min(70vh,680px)] grid-rows-[auto_minmax(0,1fr)]">
         <DialogHeader>
           <DialogTitle>历史版本</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 gap-4">
-          <div className="w-72 shrink-0 overflow-y-auto border-r border-border pr-2">
+          <div className="w-72 shrink-0 overflow-y-auto pr-2">
             {list === null && !listError && (
               <div className="flex items-center gap-2 p-4 text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
@@ -216,9 +218,18 @@ export function TopologyVersionsModal({
             )}
             {list && list.current && (
               <div
+                role="button"
+                tabIndex={0}
+                onClick={() => handlePreviewCurrent()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    handlePreviewCurrent()
+                  }
+                }}
                 className={cn(
-                  'mb-2 rounded-md border p-3',
-                  preview?.kind === 'current' ? 'border-primary bg-primary/5' : 'border-border',
+                  'mb-1 cursor-pointer rounded-md border p-3 outline-none transition-colors hover:bg-muted/60 focus-visible:ring-1 focus-visible:ring-ring/50',
+                  preview?.kind === 'current' ? 'border-primary bg-primary/5' : 'border-border/50',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -226,49 +237,63 @@ export function TopologyVersionsModal({
                   {list.current.archived ? (
                     <Badge variant="secondary">已存档</Badge>
                   ) : (
-                    <span className="text-xs text-muted-foreground">未存档</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleArchive()
+                      }}
+                      disabled={actionBusy !== null}
+                    >
+                      {actionBusy === 'archive' ? <Loader2 className="size-3 animate-spin" /> : '存档'}
+                    </Button>
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   工作流 {list.current.workflowActive}/{list.current.workflowTotal} · {list.current.nodeCount} 节点
                 </p>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <span className="text-xs text-muted-foreground">
-                    {list.current.archived ? formatTime(list.current.updatedAt) : ''}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {!list.current.archived && (
-                      <Button variant="outline" size="sm" onClick={() => void handleArchive()} disabled={actionBusy !== null}>
-                        {actionBusy === 'archive' ? <Loader2 className="size-3 animate-spin" /> : '存档'}
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={handlePreviewCurrent} disabled={actionBusy !== null}>
-                      预览
-                    </Button>
-                  </div>
-                </div>
+                {list.current.archived && (
+                  <p className="mt-1 text-xs text-muted-foreground">{formatTime(list.current.updatedAt)}</p>
+                )}
               </div>
             )}
             {list?.versions.map((version) => (
               <div
                 key={version.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => void handlePreviewVersion(version.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    void handlePreviewVersion(version.id)
+                  }
+                }}
                 className={cn(
-                  'mb-2 rounded-md border p-3',
-                  preview?.kind === 'version' && preview.id === version.id ? 'border-primary bg-primary/5' : 'border-border',
+                  'mb-1 cursor-pointer rounded-md border p-3 outline-none transition-colors hover:bg-muted/60 focus-visible:ring-1 focus-visible:ring-ring/50',
+                  preview?.kind === 'version' && preview.id === version.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border/50',
                 )}
               >
-                <span className="text-sm font-medium">{formatTime(version.createdAt)}</span>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  工作流 {version.workflowActive}/{version.workflowTotal} · {version.nodeCount} 节点
-                </p>
-                <div className="mt-2 flex items-center justify-end gap-1">
-                  <Button variant="outline" size="sm" onClick={() => void handlePreviewVersion(version.id)} disabled={actionBusy !== null}>
-                    预览
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setConfirmRestoreId(version.id)} disabled={actionBusy !== null}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{formatTime(version.createdAt)}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setConfirmRestoreId(version.id)
+                    }}
+                    disabled={actionBusy !== null}
+                  >
                     恢复
                   </Button>
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  工作流 {version.workflowActive}/{version.workflowTotal} · {version.nodeCount} 节点
+                </p>
               </div>
             ))}
             {list !== null && !hasVersions && (
@@ -303,9 +328,6 @@ export function TopologyVersionsModal({
             )}
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>关闭</Button>
-        </DialogFooter>
       </DialogContent>
       <Dialog open={confirmRestoreId !== null} onOpenChange={(next) => { if (!next) setConfirmRestoreId(null) }}>
         <DialogContent>

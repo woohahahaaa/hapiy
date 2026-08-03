@@ -103,19 +103,23 @@ function parseNode(value: unknown): WorkflowNode {
         provider_id: optionalString(value.provider_id, 'provider_id'),
         enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
       }
-    case 'logOutput':
+    case 'logOutput': {
+      const cfg = isRecord(value.config) ? value.config : {}
       return {
         type: 'logOutput',
         name,
         enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
-        log_target: VALID_LOG_TARGETS.has(value.log_target as string) ? (value.log_target as 'file' | 'console' | 'both') : 'file',
-        log_level: VALID_LOG_LEVELS.has(value.log_level as string) ? (value.log_level as 'info' | 'warn' | 'error') : 'info',
-        log_path: typeof value.log_path === 'string' ? value.log_path : '',
-        record_request_before: typeof value.record_request_before === 'boolean' ? value.record_request_before : true,
-        record_request_after: typeof value.record_request_after === 'boolean' ? value.record_request_after : true,
-        record_response_before: typeof value.record_response_before === 'boolean' ? value.record_response_before : true,
-        record_response_after: typeof value.record_response_after === 'boolean' ? value.record_response_after : true,
+        config: {
+          log_target: VALID_LOG_TARGETS.has(cfg.log_target as string) ? (cfg.log_target as 'file' | 'console' | 'both') : 'file',
+          log_level: VALID_LOG_LEVELS.has(cfg.log_level as string) ? (cfg.log_level as 'info' | 'warn' | 'error') : 'info',
+          log_path: typeof cfg.log_path === 'string' ? cfg.log_path : '',
+          record_request_before: typeof cfg.record_request_before === 'boolean' ? cfg.record_request_before : true,
+          record_request_after: typeof cfg.record_request_after === 'boolean' ? cfg.record_request_after : true,
+          record_response_before: typeof cfg.record_response_before === 'boolean' ? cfg.record_response_before : true,
+          record_response_after: typeof cfg.record_response_after === 'boolean' ? cfg.record_response_after : true,
+        },
       }
+    }
     default: {
       const node: WorkflowNode = {
         type: type as 'requestModify' | 'responseModify' | 'autoReply' | 'concurrency' | 'autoSwitch',
@@ -158,17 +162,17 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
       return { ...base, slotType: node.type, ruleId: rn.rule_id ?? null } as SlotEntry
     }
     case 'logOutput': {
-      const ln = node as Extract<WorkflowNode, { log_target: string }>
+      const ln = node as Extract<WorkflowNode, { config: { log_target: string } }>
       return {
         ...base,
         slotType: 'logOutput',
-        logTarget: ln.log_target as LogTarget,
-        logLevel: ln.log_level as LogLevel,
-        logPath: ln.log_path,
-        recordRequestBefore: ln.record_request_before,
-        recordRequestAfter: ln.record_request_after,
-        recordResponseBefore: ln.record_response_before,
-        recordResponseAfter: ln.record_response_after,
+        logTarget: ln.config.log_target as LogTarget,
+        logLevel: ln.config.log_level as LogLevel,
+        logPath: ln.config.log_path,
+        recordRequestBefore: ln.config.record_request_before,
+        recordRequestAfter: ln.config.record_request_after,
+        recordResponseBefore: ln.config.record_response_before,
+        recordResponseAfter: ln.config.record_response_after,
       } as SlotEntry
     }
     default:
@@ -234,17 +238,63 @@ function entryToNode(entry: SlotEntry, providerName: string): WorkflowNode | nul
     case 'logOutput':
       return {
         type: 'logOutput',
-        name: '',
+        name: `log-output-${entry.index}`,
         enabled: entry.enabled,
-        log_target: entry.logTarget,
-        log_level: entry.logLevel,
-        log_path: entry.logPath,
-        record_request_before: entry.recordRequestBefore,
-        record_request_after: entry.recordRequestAfter,
-        record_response_before: entry.recordResponseBefore,
-        record_response_after: entry.recordResponseAfter,
+        config: {
+          log_target: entry.logTarget,
+          log_level: entry.logLevel,
+          log_path: entry.logPath,
+          record_request_before: entry.recordRequestBefore,
+          record_request_after: entry.recordRequestAfter,
+          record_response_before: entry.recordResponseBefore,
+          record_response_after: entry.recordResponseAfter,
+        },
       }
   }
+}
+
+export function preserveNullRuleDrafts(
+  saved: ReadonlyMap<string, WorkflowEntry>,
+  local: ReadonlyMap<string, WorkflowEntry>,
+): Map<string, WorkflowEntry> {
+  const out = new Map<string, WorkflowEntry>()
+  for (const [key, savedEntry] of saved) {
+    const localEntry = local.get(key)
+    if (!localEntry) {
+      out.set(key, savedEntry)
+      continue
+    }
+    const slots = emptySlotEntryMap()
+    let changed = false
+    for (const slotType of SLOT_ORDER) {
+      const savedList = savedEntry.slots[slotType] as SlotEntry[]
+      if (slotType === 'logOutput') {
+        ;(slots[slotType] as SlotEntry[]) = savedList
+        continue
+      }
+      const localList = localEntry.slots[slotType] as SlotEntry[]
+      const drafts = localList.filter(
+        (e) => 'ruleId' in e && (e as { ruleId: string | null }).ruleId === null,
+      )
+      if (drafts.length === 0) {
+        ;(slots[slotType] as SlotEntry[]) = savedList
+        continue
+      }
+      const savedIds = new Set(savedList.map((e) => e.id))
+      const keptDrafts = drafts.filter((d) => !savedIds.has(d.id))
+      if (keptDrafts.length === 0) {
+        ;(slots[slotType] as SlotEntry[]) = savedList
+        continue
+      }
+      changed = true
+      const combined = [...savedList, ...keptDrafts].sort((a, b) => a.index - b.index)
+      ;(slots[slotType] as SlotEntry[]) = combined.map((e, i) => ({ ...e, index: i + 1 }))
+    }
+    out.set(key, changed
+      ? { providerId: savedEntry.providerId, enabled: savedEntry.enabled, slots }
+      : savedEntry)
+  }
+  return out
 }
 
 // Convert Map<workflowKey, WorkflowEntry> → workflows JSON.

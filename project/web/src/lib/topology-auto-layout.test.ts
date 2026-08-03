@@ -77,13 +77,18 @@ describe('getLayoutedElements — measured sizes', () => {
     const out = getLayoutedElements(nodes, [] as Edge[], opts, sizes)
     const get = (id: string) => out.find((n) => n.id === id)!
 
-    expect(get(`pv-${uuidA}`).position.y).toBe(30)
-    expect(get(`slot-${uuidA}-requestModify`).position.y).toBe(30)
-    expect(get(`pv-${uuidB}`).position.y).toBe(30 + 150 + 20)
-    expect(get(`slot-${uuidB}-requestModify`).position.y).toBe(200)
+    // Row height is the tallest node; provider centers vertically within the row.
+    const slotA = get(`slot-${uuidA}-requestModify`)
+    const slotB = get(`slot-${uuidB}-requestModify`)
+    const pvB = get(`pv-${uuidB}`)
+
+    expect(slotA.position.y).toBe(30)
+    expect(get(`pv-${uuidA}`).position.y).toBe(30 + (150 - 80) / 2)
+    expect(slotB.position.y).toBe(30 + 150 + 20)
+    expect(pvB.position.y).toBe(30 + 150 + 20 + (100 - 60) / 2)
   })
 
-  it('nodes in a workflow row are top-aligned (share y)', () => {
+  it('nodes in a workflow row are vertically centered (share center y)', () => {
     const nodes: Node[] = [
       { id: `pv-${uuidA}`, type: 'provider', position: { x: 0, y: 0 }, data: {} },
       { id: `slot-${uuidA}-requestModify`, type: 'slot', position: { x: 0, y: 0 }, data: {} },
@@ -94,7 +99,10 @@ describe('getLayoutedElements — measured sizes', () => {
     })
     const out = getLayoutedElements(nodes, [] as Edge[], opts, sizes)
     const get = (id: string) => out.find((n) => n.id === id)!
-    expect(get(`pv-${uuidA}`).position.y).toBe(get(`slot-${uuidA}-requestModify`).position.y)
+
+    const pv = get(`pv-${uuidA}`)
+    const slot = get(`slot-${uuidA}-requestModify`)
+    expect(pv.position.y + 80 / 2).toBe(slot.position.y + 150 / 2)
   })
 
   it('modelHub nodes are right-aligned to the model group right edge', () => {

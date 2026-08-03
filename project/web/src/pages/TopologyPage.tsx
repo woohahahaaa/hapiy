@@ -21,14 +21,14 @@ import { NodeMenu } from '@/components/topology/NodeMenu'
 import { ContextMenu } from '@/components/topology/ContextMenu'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
-import { topologyConfig } from '@/config/topology-config'
+import { topologyConfig, fallbackNodeSize } from '@/config/topology-config'
 import { getLayoutedElements } from '@/lib/topology-auto-layout'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { slotMapsFromWorkflows, workflowsFromSlotMaps, providerIdFromKey, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
+import { slotMapsFromWorkflows, workflowsFromSlotMaps, preserveNullRuleDrafts, providerIdFromKey, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
 import { TopologySaveQueue } from '@/lib/topology-save-queue'
-import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges, type LayoutSnapshot } from '@/lib/topology-builders'
+import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges, computeWorkflowPlacements, type LayoutSnapshot } from '@/lib/topology-builders'
 import {
   emptySlotEntryMap,
   useSlotRules,
@@ -48,6 +48,8 @@ const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
 }
+
+const SLOT_BASE_OFFSET = topologyConfig.initialPositions.slot.x - topologyConfig.initialPositions.provider.x
 
 function providerIdFromSlotId(slotId: string): string | null {
   if (!slotId.startsWith('slot-')) return null
@@ -81,7 +83,7 @@ export function TopologyPage() {
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean }>({ x: 0, y: 0, open: false })
+  const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean; mode: 'corner' | 'cursor' }>({ x: 0, y: 0, open: false, mode: 'cursor' })
   const { rules } = useSlotRules()
 
   const slotsStateRef = useRef<Map<string, WorkflowEntry>>(new Map())
@@ -94,6 +96,7 @@ export function TopologyPage() {
     setSlotsVersion((v) => v + 1)
   }, [])
   const nextWorkflowIdRef = useRef(0)
+  const addProviderBtnRef = useRef<HTMLButtonElement>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -110,7 +113,7 @@ export function TopologyPage() {
     if (event.target.closest('.react-flow__node')) return
     setSelectedNodeId(null)
     setContextMenu(null)
-    setMenuState({ x: event.clientX, y: event.clientY, open: true })
+    setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
   }, [])
 
   const handleNodeClick = useCallback((_event: ReactMouseEvent, node: Node) => {
@@ -175,7 +178,10 @@ export function TopologyPage() {
         return
       }
       workflowsRef.current = saved
-      slotsStateRef.current = slotMapsFromWorkflows(saved)
+      slotsStateRef.current = preserveNullRuleDrafts(
+        slotMapsFromWorkflows(saved),
+        slotsStateRef.current,
+      )
       setDirty(false)
     } catch (err) {
       if (err instanceof DashboardApiError && err.status === 409) return
@@ -322,7 +328,10 @@ export function TopologyPage() {
       if (!queue) throw new Error('拓扑尚未加载完成')
       const saved = await queue.saveNow(workflows)
       workflowsRef.current = saved
-      slotsStateRef.current = slotMapsFromWorkflows(saved)
+      slotsStateRef.current = preserveNullRuleDrafts(
+        slotMapsFromWorkflows(saved),
+        slotsStateRef.current,
+      )
       setDirty(false)
       bumpSlots()
     },
@@ -334,6 +343,7 @@ export function TopologyPage() {
   layoutSnapshotRef.current = layoutSnapshot
   const prevSlotSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map())
   const didInitialMeasure = useRef(false)
+  const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
 
   const topologyProviders = useMemo(() => {
     if (!providers) return [] as Provider[]
@@ -355,11 +365,19 @@ export function TopologyPage() {
     if (!providers) return []
     const modelNodes = buildModelNodes(topologyProviders, modelNodeIds, layoutSnapshot)
     const nodes: Node[] = [...modelNodes]
+
+    let rowHeight = fallbackNodeSize.height
+    for (const size of sizesRef.current.values()) {
+      if (size.height > rowHeight) rowHeight = size.height
+    }
+    const placements = computeWorkflowPlacements([...slotsStateRef.current.keys()], layoutSnapshot, rowHeight)
+
     for (const [workflowKey, entry] of slotsStateRef.current) {
       const provider = providers.find((p) => p.id === entry.providerId)
       if (!provider) continue
-      const verticalOffset = nodes.length
-      nodes.push(buildProviderNode(workflowKey, entry, provider, layoutSnapshot, verticalOffset, selectedNodeId, () => {
+      const placement = placements.get(workflowKey)
+      if (!placement) continue
+      nodes.push(buildProviderNode(workflowKey, entry, provider, layoutSnapshot, placement.baseX, placement.baseY, selectedNodeId, () => {
         handleToggleWorkflow(workflowKey)
       }))
       nodes.push(
@@ -368,7 +386,8 @@ export function TopologyPage() {
           entry.slots,
           rules,
           layoutSnapshot,
-          nodes.length,
+          placement.baseX + SLOT_BASE_OFFSET,
+          placement.baseY,
           entry.enabled,
           handleChangeEntry,
           handleDeleteEntry,
@@ -399,8 +418,6 @@ export function TopologyPage() {
 
   const edgesRef = useRef(edges)
   edgesRef.current = edges
-
-  const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
 
   const handleAutoLayout = useCallback(() => {
     const layouted = getLayoutedElements(nodes, edgesRef.current, {
@@ -563,11 +580,21 @@ export function TopologyPage() {
   }, [bumpSlots, providers])
 
   const handleAddProviderClick = useCallback(() => {
-    setMenuState({
-      x: Math.round(window.innerWidth / 2 - 128),
-      y: Math.round(window.innerHeight / 2 - 120),
-      open: true,
-    })
+    const btn = addProviderBtnRef.current
+    if (!btn) {
+      setMenuState({
+        x: Math.round(window.innerWidth / 2 + 128),
+        y: Math.round(window.innerHeight / 2 + 120),
+        open: true,
+        mode: 'corner',
+      })
+      return
+    }
+    const rect = btn.getBoundingClientRect()
+    const gap = 12
+    const right = window.innerWidth - rect.left + gap
+    const bottom = window.innerHeight - rect.bottom
+    setMenuState({ x: right, y: bottom, open: true, mode: 'corner' })
   }, [])
 
   const availableProviders = useMemo(() => {
@@ -686,6 +713,7 @@ export function TopologyPage() {
               onClick={handleAddProviderClick}
               title="添加供应商到工作流"
               aria-label="添加供应商到工作流"
+              ref={addProviderBtnRef}
             >
               <Plus />
             </Button>
@@ -712,6 +740,7 @@ export function TopologyPage() {
           <NodeMenu
             x={menuState.x}
             y={menuState.y}
+            mode={menuState.mode}
             providers={availableProviders}
             onSelect={handleAddProviderToWorkflow}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}

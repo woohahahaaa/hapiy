@@ -105,28 +105,36 @@ Your next move: approve, or ask for high-accuracy review first.
   - Change `applyRewriteOp(body []byte, op *RewriteOp) ([]byte, error)` to `applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error)`.
   - At the very top of the function, add `if strings.HasPrefix(op.Path, "header.") { return applyHeaderOp(headers, op) }`.
   - `applyHeaderOp` is a NEW function with signature `applyHeaderOp(headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error)`. In this todo, ONLY scaffold it as `return body, headers, fmt.Errorf("header op %q not yet implemented (TODO T3)", op.Mode)` — full implementation lands in T3.
-  - The body branch (else clause) keeps the original logic but now also returns `headers` unchanged.
-  - **CRITICAL** — this todo MUST also update `applyRewriteChains` (rewrite.go:238) signature to `applyRewriteChains(body []byte, headers map[string]string, chains []CompiledRewriteChain) ([]byte, map[string]string, error)`, AND update its loop body to pass `headers` through `evaluateConditions` and `applyRewriteOp`. Without this, `go build ./...` will fail after T2.
-  - **CRITICAL** — this todo MUST also add the nil-map guard at the top of `applyRewriteChains`: `if headers == nil && chainHasHeaderOp(chain) { headers = map[string]string{} }`. `chainHasHeaderOp` is a small helper: iterate `chain.Ops`, return true if any `strings.HasPrefix(op.Path, "header.")`.
+  - The body branch (else clause) keeps the original logic but now also returns `headers` unchanged. EVERY existing `return` statement in the body branch gains the `headers` return value (there are ~20 return sites from `sjson.SetBytes`/`gjson` etc. — all become `return X, headers, nil`).
+  - **CRITICAL** — this todo MUST also update `applyRewriteChains` (rewrite.go:238) signature to `applyRewriteChains(body []byte, headers map[string]string, chains []CompiledRewriteChain) ([]byte, map[string]string, error)`, AND update its loop body: `ok, err := evaluateConditions(op.Conditions, body)` stays OLD signature (T4 extends it); `updated, headers, err := applyRewriteOp(body, headers, op)` uses the NEW signature. Without the signature change, `go build ./...` fails after T2.
+  - **CRITICAL — build must stay green across tests**: `applyRewriteChains` has TEN call sites that ALL break on this signature change and MUST be updated in THIS todo:
+    - `project/backend/internal/relay/engine.go:245` → `applyRewriteChains(raw, nil, plan.CompiledRewrite)` and `engine.go:271` → `applyRewriteChains(body, nil, plan.CompiledResponseRewrites)`. Pass `nil` here — wiring real `req.Headers`/`resp.Headers` is T5. This is the ONLY engine.go touch in T2.
+    - `project/backend/internal/relay/rewrite_test.go:59,91,123,131,153,161,179,201` (8 sites) → add `nil` as the second argument: `applyRewriteChains(body, nil, []CompiledRewriteChain{...})`. Do NOT change any assertions — mechanical signature adaptation only. T6 adds NEW test functions and must NOT modify these existing calls.
+  - **CRITICAL** — add the nil-map guard inside the loop of `applyRewriteChains`, per chain: `if headers == nil && chainHasHeaderOp(chain) { headers = map[string]string{} }`. `chainHasHeaderOp` is a small helper: iterate `chain.Ops`, return true if any `strings.HasPrefix(op.Path, "header.")`.
+  - In THIS todo, add the two minimal unit tests (they prove the routing + nil-guard work): `TestRewriteHeaderRoutingStub` (path `header.X-Foo` mode `set` → error contains "not yet implemented") and `TestRewriteChainsNilGuard` (nil body + nil headers + chain with a `header.*` op → headers initialized, no panic, error from stub). Full test matrix lands in T6.
   - Do NOT implement mode logic yet — that's T3.
+  - Do NOT change `evaluateConditions`/`evaluateCondition`/`evaluateCombined` signatures — that's T4.
+  - Do NOT wire `req.Headers`/`resp.Headers` in engine.go — that's T5.
 
   Parallelization: Wave 1 (sequential) | Blocked by: T1 | Blocks: T3, T4
 
   References:
-  - `project/backend/internal/relay/rewrite.go:260-360` — current applyRewriteOp
+  - `project/backend/internal/relay/rewrite.go:260-360` — current applyRewriteOp (every return site gains `headers`)
   - `project/backend/internal/relay/rewrite.go:238-258` — current applyRewriteChains (must update together)
-  - `project/backend/internal/relay/rewrite.go:363-377` — evaluateConditions wrapper (will need headers param in T4; for now pass through as nil-safe)
+  - `project/backend/internal/relay/engine.go:245,271` — the two production call sites (pass nil in T2)
+  - `project/backend/internal/relay/rewrite_test.go:59,91,123,131,153,161,179,201` — the eight test call sites (mechanical `nil` arg)
 
   Acceptance criteria (agent-executable):
-  - `go build ./...` succeeds (compiles cleanly with all caller updates in this todo).
-  - Existing `rewrite_test.go` body-only tests still pass (headers arg nil is fine; map is never touched in body branch).
-  - Unit test: with path `header.X-Foo` and mode `set`, applyRewriteOp returns "not yet implemented" error (proves routing works).
-  - Unit test: nil headers + chain containing `header.*` op → headers becomes initialized map; no panic.
+  - `go build ./...` succeeds.
+  - `go test ./internal/relay/...` succeeds — existing body-only tests still pass after the mechanical call-site updates (headers arg nil; map never touched in body branch).
+  - `TestRewriteHeaderRoutingStub` passes: path `header.X-Foo` mode `set` → error contains "not yet implemented" (proves routing works).
+  - `TestRewriteChainsNilGuard` passes: nil body + nil headers + chain containing `header.*` op → headers becomes initialized map; no panic.
 
   QA scenarios (name the exact tool + invocation): happy + failure, Evidence `.omo/evidence/task-2-header-rewrite/test.log`
   - Happy: `{"path":"messages.0.role","mode":"set","value":"user"}` → body mutated, headers unchanged.
   - Routing check: `{"path":"header.X-Foo","mode":"set","value":"v"}` → returns "not yet implemented" error from T3 stub.
   - Nil-guard: `applyRewriteChains(nil_body, nil_headers, chainWithHeaderOp)` → headers initialized, error from stub.
+  - Regression: `go test ./internal/relay/...` passes with all 8 existing call sites mechanically adapted.
 
   Commit: Y | `refactor(relay): extend applyRewriteOp and applyRewriteChains signatures with headers`
 
@@ -175,9 +183,10 @@ Your next move: approve, or ask for high-accuracy review first.
   - **CRITICAL** — update ALL callers of `evaluateCondition`:
     - `evaluateConditions` (rewrite.go:363): gains `headers` param, passes through in the loop
     - `evaluateCombined` (rewrite.go:408): gains `headers` param, passes through in its recursive `evaluateCondition` call
+    - `applyRewriteChains` loop (rewrite.go:243): the call `ok, err := evaluateConditions(op.Conditions, body)` — T2 deliberately left this at the OLD signature; T4 MUST update it to `evaluateConditions(op.Conditions, body, headers)`. This is the ONE line to touch in applyRewriteChains.
   - Update `applyRewriteOp` and `applyHeaderOp` (already in rewrite.go) to pass their `headers` arg through to `evaluateConditions`.
   - Do NOT change `compareValues` (already generic).
-  - Do NOT touch `applyRewriteChains` — that's already done in T2.
+  - Do NOT touch any other part of `applyRewriteChains` — only the evaluateConditions call line above.
 
   Parallelization: Wave 2 (parallel with T3 — both blocked by T2, different functions) | Blocked by: T2 | Blocks: T5
 
@@ -205,6 +214,8 @@ Your next move: approve, or ask for high-accuracy review first.
   What to do / Must NOT do:
   - Caller `applyCompiledRewriteRules` (engine.go:240-257): change call from `applyRewriteChains(raw, plan.CompiledRewrite)` to `applyRewriteChains(raw, req.Headers, plan.CompiledRewrite)`; write `req.Headers = updatedHeaders` from the returned map.
   - Caller `applyCompiledResponseRewriteRules` (engine.go:262-281): same change with `resp.Headers`.
+  - **Request-side note (verified in handler/relay.go:49-55)**: production always fills `req.Headers` from `c.Request.Header`, so it is non-nil; the returned `updatedHeaders` is the SAME map (header ops mutate in place, body-only chains return it unchanged), so `req.Headers = updatedHeaders` is a safe no-op write-back.
+  - **Response-side ordering (CRITICAL, engine.go:271-279)**: the existing code does `resp.Body = io.NopCloser(...)`, then `if resp.Headers == nil { resp.Headers = map[string]string{} }`, then `resp.Headers["Content-Length"] = ...`. Keep this exact order: capture `updated, updatedHeaders, err := applyRewriteChains(body, resp.Headers, ...)`, then write back `resp.Headers = updatedHeaders` BEFORE the existing nil-check + Content-Length set. `updatedHeaders` is nil only when `resp.Headers` was nil AND no header op ran; the existing `if resp.Headers == nil` guard then handles it exactly as today.
   - Note: defensive nil-map initialization was already added in T2's `applyRewriteChains`, so engine.go does NOT need additional nil checks — but DO verify by reading the file post-T2.
   - Do NOT change `RelayRequest.Headers` type. Stay `map[string]string`.
   - Do NOT write any tests in this todo; tests land in T6.
@@ -237,6 +248,7 @@ Your next move: approve, or ask for high-accuracy review first.
     - `TestRewriteScopeCompileValidation` — 6 cases (3 scopes × 2 path types) for T1's compile validation
     - `TestRewriteEngineHeaderWiring` — call `applyCompiledRewriteRules` and `applyCompiledResponseRewriteRules` directly with a header rule; assert `req.Headers["X-Foo"]` / `resp.Headers["X-Foo"]` is set
   - Each test compiles a script, calls `applyRewriteChains(body, headers, chains)` (or engine function for the wiring test), asserts both return values.
+  - Do NOT modify `TestRewriteHeaderRoutingStub` / `TestRewriteChainsNilGuard` (added in T2) — they stay as-is; the matrix below is additional coverage, not a replacement.
   - Do NOT touch integration tests yet (T9).
 
   Parallelization: Wave 3 | Blocked by: T5 | Blocks: T7
@@ -278,10 +290,11 @@ Your next move: approve, or ask for high-accuracy review first.
   - Locate `project/docs/rewrite-ops.md` (or wherever the rule docs live — search for the file linked from `PolicyPage.tsx`'s `REWRITE_OPS_DOC_URL = 'https://github.com/woohahahaaa/hapiy/blob/main/project/docs/rewrite-ops.md'`).
   - Add a new section `## Header 改写` explaining:
     - Path prefix `header.<Header-Name>` (case-sensitive to match the literal wire format; HTTP normalizes at the protocol layer).
-    - 12 supported modes with the same semantics as body modes.
+    - 13 supported modes with the same semantics as body modes.
     - `scope` field: `header` / `body` / `all` (default).
     - Examples: set X-Request-ID, append X-Trace, condition on Authorization prefix, etc.
     - Limitations: copy/move cross-scope not supported; Set-Cookie multi-value not supported.
+    - **Request-side caveat (verified in `setupUpstreamHeaders` engine.go:385-396)**: headers named `Authorization`, `Content-Length`, `Host`, `Connection` are skipped when writing to the upstream request (`httpReq.Header.Set(k, v)` is guarded by a `continue` for these four). A rewrite rule targeting `header.Authorization` etc. WILL mutate `req.Headers` in the engine, but the value will NOT reach the upstream — the header is set from the API key. Document this so users don't file a bug later.
   - Do NOT remove or rewrite existing body-only sections.
 
   Parallelization: Wave 3 | Blocked by: T5 | Blocks: T9
@@ -301,13 +314,14 @@ Your next move: approve, or ask for high-accuracy review first.
 - [ ] 9. **Live integration test via httptest.Server as upstream stand-in**
   What to do / Must NOT do:
   - **Use Go's `net/http/httptest.Server` as a mock upstream** that records the headers it receives. No "debug log" hack.
-  - Write a Go test file `project/backend/internal/relay/integration_header_test.go` that:
-    1. Starts an `httptest.NewServer(handler)` whose handler captures `r.Header.Get("X-Route")` into a package-level variable.
-    2. Constructs a Provider model row with the mock server's URL.
-    3. Compiles an `ExecutionPlan` with one `CompiledRewriteChain` containing `{"path":"header.X-Route","mode":"set","value":"premium-tier","scope":"header"}`.
-    4. Calls `engine.applyCompiledRewriteRules(plan, req)` where `req.Headers = map[string]string{"X-Other":"untouched"}`.
-    5. Calls `engine.relayWithFailover(...)` (or a smaller shim) — but DO NOT actually hit the network if avoidable. Prefer to invoke `applyCompiledRewriteRules` directly and assert on the returned headers; the upstream-call step is covered by the engine wiring test in T6.
-  - This integration test is a **sanity check that wiring works end-to-end at the engine level**, not a full live HTTP round-trip. A full live test would require spinning the actual backend and dashboard, which is out of scope.
+  - Write a Go test file `project/backend/internal/relay/integration_header_test.go` (distinct from T6's `rewrite_header_test.go` — T6 covers unit-level, T9 covers engine+upstream round-trip) that:
+    1. Starts an `httptest.NewServer(handler)` whose handler captures `r.Header.Get("X-Route")` into a package-level variable (with a `sync.Mutex` or atomic guard if the test could run in parallel).
+    2. Builds the engine instance: `eng := &Engine{}` — `applyCompiledRewriteRules` is a method on `*Engine` and touches no DB in the pure-rewrite path (verify by reading engine.go:240-257). No DB, no services needed.
+    3. Constructs an `ExecutionPlan` with one `CompiledRewriteChain` containing `{"path":"header.X-Route","mode":"set","value":"premium-tier","scope":"header"}`.
+    4. Sets `req.Headers = map[string]string{"X-Other":"untouched"}` and `req.Body = map[string]interface{}{"model":"gpt-4"}`.
+    5. Calls `eng.applyCompiledRewriteRules(plan, req)`; assert `req.Headers["X-Route"] == "premium-tier"` and `req.Headers["X-Other"] == "untouched"` and `req.Body` still has `model: "gpt-4"`.
+    6. Then — to prove the header reaches the wire — build the actual upstream `*http.Request` via the same path the engine uses (`http.NewRequestWithContext` + copy `req.Headers` with `httpReq.Header.Set(k, v)`, mirroring `setupUpstreamHeaders` minus the auth/blacklist logic, OR call `eng.setupUpstreamHeaders(httpReq, "test-key", req)` directly since it's in the same package) and `server.Client().Do(httpReq)`; assert the recorded `X-Route` on the mock equals `"premium-tier"`.
+  - Do NOT call `relayWithFailover` — it needs a full Provider/DB setup and would hit the network with auth. The direct `applyCompiledRewriteRules` + `setupUpstreamHeaders` path is the minimal end-to-end proof and stays hermetic.
   - **Cleanup**: httptest.Server cleans up automatically via `defer server.Close()`. No DB writes.
 
   Parallelization: Wave 3 | Blocked by: T7, T8 | Blocks: Final wave
@@ -315,11 +329,13 @@ Your next move: approve, or ask for high-accuracy review first.
   References:
   - Go stdlib `net/http/httptest` — server pattern
   - `project/backend/internal/relay/engine.go:240-257` — applyCompiledRewriteRules (the function being exercised)
+  - `project/backend/internal/relay/engine.go:385-396` — setupUpstreamHeaders (same-package helper to copy headers onto the real request; reuses the header-write path)
 
   Acceptance criteria (agent-executable):
   - Test asserts `req.Headers["X-Route"] == "premium-tier"` after `applyCompiledRewriteRules` runs.
   - Test asserts `req.Headers["X-Other"] == "untouched"` (untouched header preserved).
   - Test asserts `req.Body` JSON unchanged.
+  - Test asserts the mock upstream recorded `X-Route: premium-tier` after the real `http.Request` round-trip.
   - `go test ./internal/relay/... -run TestIntegration` passes.
 
   QA scenarios: happy + failure. Evidence `.omo/evidence/task-9-header-rewrite/integration-test.log`.

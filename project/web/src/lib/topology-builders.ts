@@ -13,6 +13,56 @@ import { topologyConfig } from '@/config/topology-config'
 
 export type LayoutSnapshot = Record<string, { x: number; y: number }>
 
+export interface WorkflowPlacement {
+  readonly baseX: number
+  readonly baseY: number
+}
+
+/**
+ * Saved layouts are kept as-is; unplaced (newly added) workflows align to the
+ * first laid-out workflow's left edge and stack below the lowest existing node.
+ */
+export function computeWorkflowPlacements(
+  workflowKeys: readonly string[],
+  layout: LayoutSnapshot,
+  rowHeight: number,
+): ReadonlyMap<string, WorkflowPlacement> {
+  const defaultProviderX = topologyConfig.initialPositions.provider.x
+  const rowGap = topologyConfig.layout.rowGap
+
+  let workflowLeftX = defaultProviderX
+  for (const key of workflowKeys) {
+    const pos = layout[`pv-${key}`]
+    if (pos) {
+      workflowLeftX = pos.x
+      break
+    }
+  }
+
+  let maxExistingY = 0
+  let hasLaidOutWorkflow = false
+  for (const key of workflowKeys) {
+    const pos = layout[`pv-${key}`]
+    if (pos) {
+      hasLaidOutWorkflow = true
+      if (pos.y > maxExistingY) maxExistingY = pos.y
+    }
+  }
+  let unplacedY = hasLaidOutWorkflow ? maxExistingY + rowHeight + rowGap : rowGap
+
+  const placements = new Map<string, WorkflowPlacement>()
+  for (const key of workflowKeys) {
+    const pos = layout[`pv-${key}`]
+    if (pos) {
+      placements.set(key, { baseX: pos.x, baseY: pos.y })
+    } else {
+      placements.set(key, { baseX: workflowLeftX, baseY: unplacedY })
+      unplacedY += rowHeight + rowGap
+    }
+  }
+  return placements
+}
+
 export function buildModelNodes(
   providers: readonly Provider[],
   modelNodeIds: Record<string, string>,
@@ -46,7 +96,8 @@ export function buildSlotNodes(
   slots: SlotEntryMap,
   rules: SlotRuleMap,
   layout: LayoutSnapshot,
-  verticalOffset: number,
+  baseX: number,
+  baseY: number,
   workflowEnabled: boolean,
   onChangeEntry: (workflowKey: string, slotType: SlotType, next: SlotEntry) => void,
   onDeleteEntry: (workflowKey: string, slotType: SlotType, index: number) => void,
@@ -60,8 +111,8 @@ export function buildSlotNodes(
       id: slotId,
       type: 'slot',
       position: layout[slotId] ?? {
-        x: topologyConfig.initialPositions.slot.x + i * topologyConfig.initialPositions.slot.horizontalOffset,
-        y: topologyConfig.initialPositions.slot.y + verticalOffset * topologyConfig.initialPositions.slot.verticalOffset,
+        x: baseX + i * topologyConfig.initialPositions.slot.horizontalOffset,
+        y: baseY,
       },
       className: workflowEnabled ? undefined : 'dim',
       data: {
@@ -140,7 +191,8 @@ export function buildProviderNode(
   entry: WorkflowEntry,
   provider: Provider,
   layout: LayoutSnapshot,
-  verticalOffset: number,
+  baseX: number,
+  baseY: number,
   selectedNodeId: string | null,
   onToggle: () => void,
 ): Node {
@@ -152,8 +204,8 @@ export function buildProviderNode(
       entry.enabled ? undefined : 'dim',
     ].filter(Boolean).join(' ') || undefined,
     position: layout[`pv-${workflowKey}`] ?? {
-      x: topologyConfig.initialPositions.provider.x,
-      y: topologyConfig.initialPositions.provider.y + verticalOffset * topologyConfig.initialPositions.provider.verticalOffset,
+      x: baseX,
+      y: baseY,
     },
     data: {
       label: provider.name,
