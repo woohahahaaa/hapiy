@@ -242,10 +242,11 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
-	updated, _, err := applyRewriteChains(raw, nil, plan.CompiledRewrite)
+	updated, updatedHeaders, err := applyRewriteChains(raw, req.Headers, plan.CompiledRewrite)
 	if err != nil {
 		return err
 	}
+	req.Headers = updatedHeaders
 	if !bytes.Equal(raw, updated) {
 		var merged map[string]interface{}
 		if err := json.Unmarshal(updated, &merged); err != nil {
@@ -268,10 +269,11 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 		return fmt.Errorf("read response body: %w", err)
 	}
 	_ = resp.Body.Close()
-	updated, _, err := applyRewriteChains(body, nil, plan.CompiledResponseRewrites)
+	updated, updatedHeaders, err := applyRewriteChains(body, resp.Headers, plan.CompiledResponseRewrites)
 	if err != nil {
 		return err
 	}
+	resp.Headers = updatedHeaders
 	resp.Body = io.NopCloser(bytes.NewReader(updated))
 	if resp.Headers == nil {
 		resp.Headers = map[string]string{}
