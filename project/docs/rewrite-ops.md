@@ -1,6 +1,6 @@
 # 改写规则脚本语法
 
-改写规则（请求改写 / 响应改写）的脚本使用 **JSON 操作数组** 格式。每个规则是一个 JSON 数组，数组中的每个对象描述一个对请求体（或响应体）的操作。
+改写规则（请求改写 / 响应改写）的脚本使用 **JSON 操作数组** 格式。每个规则是一个 JSON 数组，数组中的每个对象描述一个对请求/响应体的 JSON 或 HTTP header 的操作。
 
 底层执行引擎使用 [gjson](https://github.com/tidwall/gjson) / [sjson](https://github.com/tidwall/sjson) 按路径读写 JSON，与 [new-api](https://github.com/QuantumNous/new-api) 的 param override 机制对齐。
 
@@ -13,7 +13,7 @@
 ]
 ```
 
-- `path`：gjson 路径，定位要操作的字段。例如 `model`、`messages.0.content`、`body.hello`
+- `path`：gjson 路径，定位要操作的字段。例如 `model`、`messages.0.content`、`body.hello`；以 `header.` 开头（如 `header.X-Request-ID`）则操作 HTTP header，见 [Header 改写](#header-改写)
 - `mode`：操作类型，见下表
 - `value` / `from` / `to` / `dst`：根据 mode 不同，填不同字段
 

@@ -48,12 +48,9 @@ const REWRITE_OPS_DOC_URL = 'https://github.com/woohahahaaa/hapiy/blob/main/proj
 
 function RewriteScriptHint() {
   return (
-    <p className="flex items-center gap-1 text-xs text-muted-foreground">
-      <span>JSON 数组格式，每项含 path/mode/value 等字段</span>
-      <a href={REWRITE_OPS_DOC_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-primary hover:underline">
-        语法文档 <ExternalLink className="h-3 w-3" />
-      </a>
-    </p>
+    <a href={REWRITE_OPS_DOC_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline">
+      语法文档 <ExternalLink className="h-3 w-3" />
+    </a>
   )
 }
 
