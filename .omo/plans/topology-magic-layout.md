@@ -66,7 +66,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
 ## Todos
 > Implementation + Test = ONE todo. Never separate.
 <!-- APPEND TASK BATCHES BELOW THIS LINE WITH edit/apply_patch - never rewrite the headers above. -->
-- [ ] T0.1. Reshape topology config for shared render and layout rules
+- [x] T0.1. Reshape topology config for shared render and layout rules
   What to do / Must NOT do: Update `project/web/src/config/topology.json` and `topology-config.ts` so node min/max, slot padding/content gap, modelHub padding, and layout edge gaps are typed and sourced from one JSON hierarchy. Keep Provider internal padding out of JSON. Remove modelHub min/max semantics and make any fallback-only dimensions explicit. Do not rename unrelated handle or visual settings.
   Parallelization: Wave 0 | Blocked by: — | Blocks: T0.2,T1.1
   References (executor has NO interview context - be exhaustive): `project/web/src/config/topology.json:2-18`; `project/web/src/config/topology-config.ts:8-64`; `project/web/src/config/topology-config.test.ts`; confirmed rules in `.omo/drafts/topology-magic-layout.md:39-68`.
@@ -74,7 +74,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios (name the exact tool + invocation): Happy — `cd project/web && npm test -- --run src/config/topology-config.test.ts`; failure — typecheck rejects modelHub min/max access or missing required gap fields. Evidence `.omo/evidence/task-0.1-topology-magic-layout.txt`.
   Commit: N | config(web): define topology sizing and edge-gap rules
 
-- [ ] T0.2. Apply configurable size rules in Provider and slot item rendering
+- [x] T0.2. Apply configurable size rules in Provider and slot item rendering
   What to do / Must NOT do: Update `ProviderNode`, `SlotItemCard`/slot item shell, and `SlotNode` so Provider and each slot item use configured 200-300 bounds, while the slot outer shell has no max width. Preserve Provider's existing internal padding in component code. Make slot children and add button stretch to the slot-local maximum during rendering; do not put this logic in the magic-wand layout function.
   Parallelization: Wave 0 | Blocked by: T0.1 | Blocks: T1.1 | Can parallelize with: T0.3
   References: `project/web/src/nodes/ProviderNode.tsx:55-65`; `project/web/src/nodes/SlotNode.tsx:56-75`; `project/web/src/components/topology/SlotContainer.tsx:23-57`; `project/web/src/components/topology/slot-items/SlotItemCard.tsx:29-58`; slot item callers from codegraph; `.omo/drafts/topology-magic-layout.md:43-57`.
@@ -82,7 +82,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — browser inspection shows a long item expands all items in its slot to the same capped width; failure — a slot shell with content over 300 is not clipped by a shell max-width. Evidence `.omo/evidence/task-0.2-topology-magic-layout.png`.
   Commit: N | feat(web): apply shared node and slot-item sizing rules
 
-- [ ] T0.3. Remove modelHub width constraints and use configurable padding
+- [x] T0.3. Remove modelHub width constraints and use configurable padding
   What to do / Must NOT do: Update `ModelHubNode` to remove minWidth/maxWidth styles and apply only content-driven width plus configured modelHub padding. Do not add any modelHub minimum or maximum width fallback to the component.
   Parallelization: Wave 0 | Blocked by: — | Blocks: T1.1 | Can parallelize with: T0.1,T0.2
   References: `project/web/src/nodes/ModelHubNode.tsx:29-50`; `project/web/src/config/topology-config.ts:23-55`; `.omo/drafts/topology-magic-layout.md:58-60`.
@@ -90,7 +90,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — Playwright reads modelHub computed style and sees no min/max constraint; failure — long model text does not force a configured 200px cap. Evidence `.omo/evidence/task-0.3-topology-magic-layout.png`.
   Commit: N | feat(web): make modelHub content-sized
 
-- [ ] T1.1. Make layout consume measured flow-space node sizes
+- [x] T1.1. Make layout consume measured flow-space node sizes
   What to do / Must NOT do: Extend `getLayoutedElements` to accept a per-node measured size map and use it for every node; only use explicit fallback dimensions when a node has no measurement. Wire `useReactFlowNodeSizes` into `TopologyPage` and measure unscaled `offsetWidth/offsetHeight` (or equivalently normalize `getBoundingClientRect` by current zoom). Do not calculate widths from node content or configuration when a measurement exists.
   Parallelization: Wave 1 | Blocked by: T0.1,T0.2,T0.3 | Blocks: T1.2,T1.3
   References: `project/web/src/lib/use-reactflow-node-sizes.ts:3-61`; `project/web/src/lib/topology-auto-layout.ts:34-144`; `project/web/src/pages/TopologyPage.tsx:384-412,478-530`; React Flow node wrapper selector `.react-flow__node[data-id]`.
@@ -98,7 +98,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — with two measured nodes 250x80 and 280x150, the next x equals previous x + previous width + gap; failure — at zoom 0.5/2, layout still produces the same flow coordinates and does not overlap. Evidence `.omo/evidence/task-1.1-topology-magic-layout.txt`.
   Commit: N | feat(web): drive auto layout from live node measurements
 
-- [ ] T1.2. Implement complete grouped edge-gap placement
+- [x] T1.2. Implement complete grouped edge-gap placement
   What to do / Must NOT do: Replace fixed dimension assumptions in the layout algorithm with measured dimensions while preserving deterministic Provider/slot ordering. Lay out each workflow left-to-right with top alignment, stack workflows using previous row bottom + workflowRowGap, stack modelHub using previous bottom + modelHubRowGap, right-align modelHub to the model group right edge, place the workflow group after model group right edge + groupGap, and vertically center the two groups. Keep all gaps literal edge-to-edge. Do not center-align rows or use center-distance gaps.
   Parallelization: Wave 1 | Blocked by: T1.1 | Blocks: T2.1 | Can parallelize with: T1.3
   References: `project/web/src/lib/topology-auto-layout.ts:15-144`; `project/web/src/lib/topology-auto-layout.test.ts:32-105`; `project/web/src/pages/TopologyPage.tsx:399-412`; `.omo/drafts/topology-magic-layout.md:70-91`.
@@ -106,7 +106,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — uneven provider/slot/model heights and widths produce exact edge gaps; failure — zero gap makes adjacent edges touch and no node uses center-distance arithmetic. Evidence `.omo/evidence/task-1.2-topology-magic-layout.txt`.
   Commit: N | feat(web): compute grouped edge-to-edge topology layout
 
-- [ ] T1.3. Persist positions without mutating measured dimensions
+- [x] T1.3. Persist positions without mutating measured dimensions
   What to do / Must NOT do: Keep the existing localStorage position snapshot behavior, update `handleAutoLayout` to save only calculated coordinates, and ensure node `width`/`height` or render data are not rewritten by the layout callback. Preserve drag persistence and unrelated topology state.
   Parallelization: Wave 1 | Blocked by: T1.1 | Blocks: T2.2 | Can parallelize with: T1.2
   References: `project/web/src/pages/TopologyPage.tsx:49-69,399-423`; `project/web/src/lib/topology-auto-layout.ts:139-143`.
@@ -114,7 +114,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — click wand then reload and positions remain; failure — click wand never writes config dimensions into Node objects. Evidence `.omo/evidence/task-1.3-topology-magic-layout.txt`.
   Commit: N | fix(web): persist only calculated topology positions
 
-- [ ] T2.1. Rewrite layout and config regression tests around live sizes
+- [x] T2.1. Rewrite layout and config regression tests around live sizes
   What to do / Must NOT do: Replace stale fixed-size assertions in `topology-auto-layout.test.ts` and config tests with injected measured-size cases, fallback cases, nonuniform dimensions, edge-to-edge gaps, alignment, and missing-node behavior. Add tests for the measurement helper's zoom-safe dimensions using the chosen measurement method. Do not weaken assertions to merely check ordering.
   Parallelization: Wave 2 | Blocked by: T1.2 | Blocks: T2.3 | Can parallelize with: T2.2
   References: `project/web/src/lib/topology-auto-layout.test.ts:1-106`; `project/web/src/lib/use-reactflow-node-sizes.ts:1-61`; `project/web/src/config/topology-config.test.ts`; Metis review findings recorded in task result.
@@ -122,7 +122,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — full Vitest suite passes; failure — intentionally changing a measured width or gap causes the exact position assertion to fail. Evidence `.omo/evidence/task-2.1-topology-magic-layout.txt`.
   Commit: N | test(web): cover measured edge-gap topology layout
 
-- [ ] T2.2. Verify rendering and magic wand in a real browser
+- [x] T2.2. Verify rendering and magic wand in a real browser
   What to do / Must NOT do: Use Playwright against the running web app to verify empty/populated slot sizing, equal-width slot items, content-sized modelHub, live-size magic-wand placement, zoom independence, and persisted positions. Use actual `.react-flow__node[data-id]` bounds and compare edge gaps after normalizing the browser scale. Do not treat a successful button click alone as QA.
   Parallelization: Wave 2 | Blocked by: T1.3 | Blocks: T2.3 | Can parallelize with: T2.1
   References: `project/web/src/pages/TopologyPage.tsx:478-530`; `project/web/src/components/topology/SlotContainer.tsx:23-57`; `project/web/src/nodes/ProviderNode.tsx:55-145`; `project/web/src/nodes/ModelHubNode.tsx:29-75`; `project/web/src/nodes/SlotNode.tsx:44-87`.
@@ -130,7 +130,7 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
   QA scenarios: Happy — click Wand2 and inspect all node pairs; failure — zoom canvas, click Wand2 again, and assert no overlap or scaled-gap drift. Evidence `.omo/evidence/task-2.2-topology-magic-layout.png`.
   Commit: N | test(web): verify magic wand layout in browser
 
-- [ ] T2.3. Run final quality gates and review scope
+- [x] T2.3. Run final quality gates and review scope
   What to do / Must NOT do: Run typecheck, build, unit tests, and the browser QA evidence; inspect the diff for unrelated changes and confirm all confirmed rules are represented. Do not mark complete based only on compiler success.
   Parallelization: Wave 2 | Blocked by: T2.1,T2.2 | Blocks: —
   References: all changed files above; `project/web/package.json` scripts; `.omo/drafts/topology-magic-layout.md`.
@@ -147,10 +147,10 @@ Your next move: worker 按此计划执行；执行后需通过单元测试、类
 
 ## Final verification wave
 > Runs in parallel after ALL todos. ALL must APPROVE. Surface results and wait for the user's explicit okay before declaring complete.
-- [ ] F1. Plan compliance audit
-- [ ] F2. Code quality review
-- [ ] F3. Real manual QA
-- [ ] F4. Scope fidelity
+- [x] F1. Plan compliance audit
+- [x] F2. Code quality review
+- [x] F3. Real manual QA
+- [x] F4. Scope fidelity
 
 ## Commit strategy
 No commit is requested in the current task. Keep changes in the working tree and stage only implementation files if the user later requests a commit.

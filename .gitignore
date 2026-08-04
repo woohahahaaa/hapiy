@@ -25,3 +25,8 @@ logs/
 *.db-wal
 *.sqlite
 *.sqlite-journal
+
+# Tool artifacts
+.playwright-mcp/
+.omo/start-work/
+.omo/evidence/task-*-topology-magic-layout*

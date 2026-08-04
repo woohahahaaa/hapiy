@@ -1,8 +1,0 @@
-- main [ref=f5e5]:
-  - generic [ref=f5e6]:
-    - generic [ref=f5e7]:
-      - generic [ref=f5e9]:
-        - heading "转发拓扑" [level=1] [ref=f5e10]
-        - paragraph [ref=f5e11]: API routing workspace
-      - separator
-    - generic [ref=f5e12]: 加载拓扑数据…
