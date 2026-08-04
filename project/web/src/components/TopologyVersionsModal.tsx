@@ -4,7 +4,7 @@ import '@xyflow/react/dist/style.css'
 import { Loader2 } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { ProviderNode } from '@/nodes/ProviderNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
@@ -235,7 +235,7 @@ export function TopologyVersionsModal({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">当前版本</span>
                   {list.current.archived ? (
-                    <Badge variant="secondary">已存档</Badge>
+                    <span className="text-sm text-muted-foreground">已存档</span>
                   ) : (
                     <Button
                       variant="outline"

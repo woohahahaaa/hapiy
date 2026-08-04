@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge } from '@/components/ui/badge'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -190,9 +190,9 @@ export function LogsPage() {
                     <TableCell className="text-xs">{log.tokenName}</TableCell>
                     <TableCell className="text-xs">{log.providerName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px]">
+                      <span className="text-xs text-muted-foreground">
                         {log.modelName}
-                      </Badge>
+                      </span>
                     </TableCell>
                     <TableCell className="text-xs">
                       {log.promptTokens} / {log.completionTokens}
@@ -207,12 +207,11 @@ export function LogsPage() {
                       {(log.useTime / 1000).toFixed(1)}s
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={log.status === 'success' ? 'secondary' : 'destructive'}
-                        className="text-[10px]"
+                      <span
+                        className={log.status === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}
                       >
                         {log.status === 'success' ? '成功' : '失败'}
-                      </Badge>
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))

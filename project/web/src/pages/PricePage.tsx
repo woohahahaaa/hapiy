@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Code, AlertTriangle, Loader2, HelpCircle } from '
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import {
@@ -239,10 +239,10 @@ export function PricePage() {
                         <div className="flex items-center gap-2">
                           <span>{price.model}</span>
                           {price.rules.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px]">{price.rules.length} 条规则</Badge>
+                            <span className="text-xs text-muted-foreground">{price.rules.length} 条规则</span>
                           )}
                           {price.cacheWritePrice === 0 && price.cacheReadPrice === 0 && (
-                            <Badge variant="secondary" className="text-[10px]">无缓存</Badge>
+                            <span className="text-xs text-muted-foreground">无缓存</span>
                           )}
                         </div>
                       </TableCell>

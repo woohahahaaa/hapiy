@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
-import { Badge } from '@/components/ui/badge'
+
 import { Switch } from '@/components/ui/switch'
 import {
   Table,
@@ -175,7 +175,7 @@ function RuleTableEmpty({ message }: { message: string }) {
 }
 
 function RuleStatusBadge({ active }: { active: boolean }) {
-  return <span className={active ? '' : 'text-muted-foreground'}>{active ? '启用' : '禁用'}</span>
+  return <span className={active ? 'text-success' : 'text-destructive'}>{active ? '启用' : '禁用'}</span>
 }
 
 function RuleToggleButton({ active, disabled, onClick }: { active: boolean; disabled: boolean; onClick: () => void }) {
@@ -698,7 +698,7 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
       <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
         <FieldLabel>允许排队</FieldLabel>
         <div className="flex items-center gap-1.5">
-          <Badge variant={form.queueEnabled ? 'default' : 'secondary'}>{form.queueEnabled ? '已开启' : '已关闭'}</Badge>
+          <span className={form.queueEnabled ? 'text-sm font-medium' : 'text-sm text-muted-foreground'}>{form.queueEnabled ? '已开启' : '已关闭'}</span>
           <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
         </div>
       </Field>

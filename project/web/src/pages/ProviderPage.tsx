@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, X, Code, RefreshCw, Settings, Loader2 } from 'luc
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -170,10 +170,10 @@ export function ProviderPage() {
               {providers.map((provider) => (
                 <TableRow key={provider.id}>
                   <TableCell className="font-medium">{provider.name}</TableCell>
-                  <TableCell><Badge variant="secondary" className="text-[10px]">{provider.baseUrls.length} URLs</Badge></TableCell>
-                  <TableCell><Badge variant="secondary" className="text-[10px]">{provider.keys.length} Keys</Badge></TableCell>
-                  <TableCell><Badge variant="secondary" className="text-[10px]">{provider.endpoints.length} Endpoints</Badge></TableCell>
-                  <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <Badge key={model.model} variant="outline" className="text-[10px]">{model.model}</Badge>)}</div></TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">{provider.baseUrls.length} URLs</span></TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">{provider.keys.length} Keys</span></TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">{provider.endpoints.length} Endpoints</span></TableCell>
+                  <TableCell><div className="flex flex-wrap gap-1">{provider.models.map((model) => <span key={model.model} className="text-xs text-muted-foreground">{model.model}</span>)}</div></TableCell>
                   <TableCell><span className={provider.status ? 'text-success' : 'text-destructive'}>{provider.status ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2">
                     <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
@@ -291,7 +291,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
           <div className="flex flex-wrap gap-2">
             {form.endpoints.map((endpoint) => (
-              <Badge key={`${endpoint.name}:${endpoint.pathSuffix}`} variant="secondary" className="text-[10px]">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></Badge>
+              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></span>
             ))}
           </div>
         </div>
@@ -314,7 +314,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
           <div className="flex flex-wrap gap-2">
             {form.models.map((model) => (
-              <Badge key={model.model} variant="secondary" className="text-[10px]">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></Badge>
+              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></span>
             ))}
           </div>
           {fetchError && (

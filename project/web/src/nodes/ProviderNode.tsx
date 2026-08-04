@@ -1,7 +1,7 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
+
 import { topologyConfig, nodeRenderBounds } from '@/config/topology-config'
 
 interface ProviderNodeData {
@@ -172,15 +172,15 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
 
       <div className="flex flex-col gap-1 p-3">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <Badge variant="secondary" className="text-[10px]">
+          <span className="text-xs text-muted-foreground">
             {baseURLCount} URLs
-          </Badge>
-          <Badge variant="secondary" className="text-[10px]">
+          </span>
+          <span className="text-xs text-muted-foreground">
             {keyCount} Keys
-          </Badge>
-          <Badge variant="secondary" className="text-[10px]">
+          </span>
+          <span className="text-xs text-muted-foreground">
             {modelCount} Models
-          </Badge>
+          </span>
         </div>
       </div>
     </div>

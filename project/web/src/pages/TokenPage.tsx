@@ -3,7 +3,7 @@ import { Plus, Pencil, Trash2, Copy, RefreshCw, Code } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -189,7 +189,7 @@ export function TokenPage() {
                 <TableRow key={token.id}>
                   <TableCell className="font-medium">{token.name}</TableCell>
                   <TableCell><div className="flex items-center gap-2"><code className="rounded bg-muted px-2 py-1 text-xs font-mono">{token.key.slice(0, 12)}...</code><Button variant="ghost" size="icon" onClick={() => void copyToClipboard(token.key)}><Copy /></Button></div></TableCell>
-                  <TableCell>{token.quota === null ? <Badge variant="secondary" className="text-[10px]">无限制</Badge> : <div className="flex items-center gap-2"><span className="text-xs">¥{token.usedQuota} / ¥{token.quota}</span><div className="h-1.5 w-16 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min((token.usedQuota / token.quota) * 100, 100)}%` }} /></div></div>}</TableCell>
+                  <TableCell>{token.quota === null ? <span className="text-xs text-muted-foreground">无限制</span> : <div className="flex items-center gap-2"><span className="text-xs">¥{token.usedQuota} / ¥{token.quota}</span><div className="h-1.5 w-16 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min((token.usedQuota / token.quota) * 100, 100)}%` }} /></div></div>}</TableCell>
                   <TableCell><span className={token.status ? 'text-success' : 'text-destructive'}>{token.status ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleToken(token.id))}>{token.status ? '禁用' : '启用'}</Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setPendingKey(null); setIsDialogOpen(true) }}><Pencil /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><Trash2 /></Button></div></TableCell>
                 </TableRow>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { RefreshCw, AlertCircle, Server, Zap, Clock, Hash, MessageSquare, Layers } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge } from '@/components/ui/badge'
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -156,10 +156,10 @@ export function MonitorPage() {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             {error && (
-              <Badge variant="destructive" className="gap-1">
+              <span className="inline-flex items-center gap-1 text-sm text-destructive">
                 <AlertCircle data-icon="inline-start" />
                 错误
-              </Badge>
+              </span>
             )}
             <span className="text-xs text-muted-foreground">
               最后刷新：{refreshTime}

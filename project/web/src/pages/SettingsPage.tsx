@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { Clock, Activity, BarChart3, RefreshCw, Server } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -200,9 +200,9 @@ function MetricsCards({
               value={String(metrics.active_requests)}
             >
               {metrics.active_requests > 0 && (
-                <Badge variant="secondary" className="ml-2">
+                <span className="ml-2 text-xs text-muted-foreground">
                   运行中
-                </Badge>
+                </span>
               )}
             </MetricItem>
             <MetricItem
@@ -210,9 +210,9 @@ function MetricsCards({
               value={String(metrics.queued_requests)}
             >
               {metrics.queued_requests > 0 && (
-                <Badge variant="secondary" className="ml-2">
+                <span className="ml-2 text-xs text-muted-foreground">
                   等待中
-                </Badge>
+                </span>
               )}
             </MetricItem>
             <MetricItem
@@ -253,12 +253,9 @@ function MetricsCards({
                     key={model}
                     className="flex items-center gap-3 rounded-md border px-4 py-3"
                   >
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 font-mono text-xs"
-                    >
+                    <span className="shrink-0 font-mono text-xs text-muted-foreground">
                       {model}
-                    </Badge>
+                    </span>
                     <div className="flex flex-1 items-center gap-3">
                       <div className="h-2 flex-1 rounded-full bg-muted">
                         <div

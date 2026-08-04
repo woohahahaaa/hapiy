@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Loader2, LogOut, RefreshCw, Shield, User as UserIcon, AlertTriangle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
@@ -141,7 +141,7 @@ export function ProfilePage() {
                 <Row label="用户 ID" value={state.me.id} mono />
                 <Row label="登录状态" value={
                   <div className="flex items-center gap-2">
-                    <Badge>已登录</Badge>
+                    <span className="text-sm font-medium text-success">已登录</span>
                     <Button
                       variant="outline"
                       size="sm"
