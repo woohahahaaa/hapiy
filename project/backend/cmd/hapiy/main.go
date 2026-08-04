@@ -155,6 +155,7 @@ func main() {
 
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))
+			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())
 		}
 
 		// Relay endpoints (token auth)

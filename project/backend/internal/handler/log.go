@@ -53,40 +53,60 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 
 func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get stats for last 24 hours
-		since := time.Now().Add(-24 * time.Hour)
-
-		var stats struct {
-			TotalRequests      int64
-			SuccessCount       int64
-			FailedCount        int64
-			TotalTokens        int64
-			AverageLatency     float64
+		var since *time.Time
+		switch c.Query("range") {
+		case "1d":
+			t := time.Now().Add(-24 * time.Hour)
+			since = &t
+		case "7d":
+			t := time.Now().Add(-7 * 24 * time.Hour)
+			since = &t
+		case "30d":
+			t := time.Now().Add(-30 * 24 * time.Hour)
+			since = &t
 		}
 
-		db.Model(&model.Log{}).
-			Where("created_at >= ?", since).
-			Count(&stats.TotalRequests)
+		applyRange := func(q *gorm.DB) *gorm.DB {
+			if since != nil {
+				return q.Where("created_at >= ?", *since)
+			}
+			return q
+		}
 
-		db.Model(&model.Log{}).
-			Where("created_at >= ? AND status = ?", since, "success").
-			Count(&stats.SuccessCount)
+		var stats struct {
+			TotalRequests  int64   `json:"total_requests"`
+			SuccessCount   int64   `json:"success_count"`
+			FailedCount    int64   `json:"failed_count"`
+			TotalTokens    int64   `json:"total_tokens"`
+			AverageLatency float64 `json:"average_latency"`
+		}
 
-		db.Model(&model.Log{}).
-			Where("created_at >= ? AND status = ?", since, "failed").
-			Count(&stats.FailedCount)
-
-		db.Model(&model.Log{}).
-			Where("created_at >= ? AND status = ?", since, "success").
+		applyRange(db.Model(&model.Log{})).Count(&stats.TotalRequests)
+		applyRange(db.Model(&model.Log{})).Where("status = ?", "success").Count(&stats.SuccessCount)
+		applyRange(db.Model(&model.Log{})).Where("status = ?", "failed").Count(&stats.FailedCount)
+		applyRange(db.Model(&model.Log{})).Where("status = ?", "success").
 			Select("SUM(prompt_tokens + completion_tokens)").
 			Scan(&stats.TotalTokens)
+		applyRange(db.Model(&model.Log{})).Select("AVG(use_time)").Scan(&stats.AverageLatency)
 
-		db.Model(&model.Log{}).
-			Where("created_at >= ?", since).
-			Select("AVG(use_time)").
-			Scan(&stats.AverageLatency)
+		var modelStats []struct {
+			Model  string `json:"model"`
+			Count  int64  `json:"count"`
+			Tokens int64  `json:"tokens"`
+		}
+		applyRange(db.Model(&model.Log{})).
+			Select("model_name as model, COUNT(*) as count, SUM(prompt_tokens + completion_tokens) as tokens").
+			Group("model_name").
+			Scan(&modelStats)
 
-		c.JSON(http.StatusOK, gin.H{"data": stats})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"total_requests":  stats.TotalRequests,
+			"success_count":   stats.SuccessCount,
+			"failed_count":    stats.FailedCount,
+			"total_tokens":    stats.TotalTokens,
+			"average_latency": stats.AverageLatency,
+			"models":          modelStats,
+		}})
 	}
 }
 

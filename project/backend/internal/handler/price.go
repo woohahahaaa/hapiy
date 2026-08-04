@@ -23,14 +23,14 @@ func validatePriceConfig(price *model.PriceConfig) error {
 	if price.MaxToken < 0 {
 		return errors.New("max_token 不能为负数")
 	}
-	if price.Rules == "" {
+	if price.Rate == "" {
 		return nil
 	}
-	var rules []model.PriceRule
-	if err := json.Unmarshal([]byte(price.Rules), &rules); err != nil {
-		return errors.New("rules 不是有效的 JSON 数组")
+	var rate []model.PriceRule
+	if err := json.Unmarshal([]byte(price.Rate), &rate); err != nil {
+		return errors.New("rate 不是有效的 JSON 数组")
 	}
-	for _, rule := range rules {
+	for _, rule := range rate {
 		if rule.Multiplier < 0 {
 			return errors.New("倍率规则 multiplier 不能为负数")
 		}
@@ -101,7 +101,7 @@ func UpdatePrice(db *gorm.DB) gin.HandlerFunc {
 	price.Aliases = patch.Aliases
 	price.Endpoints = patch.Endpoints
 	price.ThinkingLevels = patch.ThinkingLevels
-	price.Rules = patch.Rules
+	price.Rate = patch.Rate
 		// Validate the merged record: a partial update without a model keeps the
 		// existing non-empty model, while the new fields are taken verbatim.
 		if err := validatePriceConfig(&price); err != nil {

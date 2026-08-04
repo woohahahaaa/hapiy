@@ -13,3 +13,9 @@ func RuntimeMetrics(db *gorm.DB) gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"data": common.Global().Snapshot()})
 	}
 }
+
+func ActiveRequests() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"data": common.Global().ActiveRequests()})
+	}
+}

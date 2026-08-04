@@ -97,6 +97,33 @@ export type LogListParams = {
   readonly offset: number
 }
 
+export type StatsRange = 'all' | '30d' | '7d' | '1d'
+
+export type ModelStat = {
+  readonly model: string
+  readonly count: number
+  readonly tokens: number
+}
+
+export type LogStats = {
+  readonly totalRequests: number
+  readonly successCount: number
+  readonly failedCount: number
+  readonly totalTokens: number
+  readonly averageLatency: number
+  readonly models: readonly ModelStat[]
+}
+
+export type ActiveRequest = {
+  readonly requestId: string
+  readonly model: string
+  readonly tokenName: string
+  readonly userId: string
+  readonly startTime: string
+  readonly stream: boolean
+  readonly elapsedMs: number
+}
+
 export type LogListResult = {
   readonly logs: readonly UsageLog[]
   readonly total: number
@@ -130,7 +157,7 @@ export type PriceConfig = {
   readonly aliases: readonly string[]
   readonly endpoints: readonly string[]
   readonly thinkingLevels: readonly string[]
-  readonly rules: readonly PriceRule[]
+  readonly rate: readonly PriceRule[]
 }
 
 export type PriceConfigInput = Omit<PriceConfig, 'id'>
@@ -206,17 +233,17 @@ export function parsePrice(value: unknown): PriceConfig {
     aliases: readStringArray(value.aliases, 'price.aliases'),
     endpoints: readStringArray(value.endpoints, 'price.endpoints'),
     thinkingLevels: readStringArray(value.thinking_levels, 'price.thinking_levels'),
-    rules: readObjectArray(value.rules, 'price.rules', parsePriceRule),
+    rate: readObjectArray(value.rate, 'price.rate', parsePriceRule),
   }
 }
 
 function parsePriceRule(value: unknown): PriceRule {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 price.rules 格式无效', null)
+    throw new DashboardApiError('服务端返回的 price.rate 格式无效', null)
   }
   return {
-    pattern: readString(value.pattern, 'price.rules.pattern'),
-    multiplier: readNumber(value.multiplier, 'price.rules.multiplier'),
+    pattern: readString(value.pattern, 'price.rate.pattern'),
+    multiplier: readNumber(value.multiplier, 'price.rate.multiplier'),
   }
 }
 
@@ -233,7 +260,7 @@ export function serializePrice(input: PriceConfigInput): JsonRecord {
     aliases: JSON.stringify(input.aliases),
     endpoints: JSON.stringify(input.endpoints),
     thinking_levels: JSON.stringify(input.thinkingLevels),
-    rules: JSON.stringify(input.rules),
+    rate: JSON.stringify(input.rate),
   }
 }
 
@@ -357,6 +384,46 @@ function parseLog(value: unknown): UsageLog {
     quota: readNumber(value.quota, 'log.quota'),
     useTime: readNumber(value.use_time, 'log.use_time'),
     status,
+  }
+}
+
+function parseModelStat(value: unknown): ModelStat {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的模型统计格式无效', null)
+  }
+  return {
+    model: readString(value.model, 'stat.model'),
+    count: readNumber(value.count, 'stat.count'),
+    tokens: readNumber(value.tokens, 'stat.tokens'),
+  }
+}
+
+function parseLogStats(value: unknown): LogStats {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的统计格式无效', null)
+  }
+  return {
+    totalRequests: readNumber(value.total_requests, 'stat.total_requests'),
+    successCount: readNumber(value.success_count, 'stat.success_count'),
+    failedCount: readNumber(value.failed_count, 'stat.failed_count'),
+    totalTokens: readNumber(value.total_tokens, 'stat.total_tokens'),
+    averageLatency: readNumber(value.average_latency, 'stat.average_latency'),
+    models: readObjectArray(value.models, 'stat.models', parseModelStat),
+  }
+}
+
+function parseActiveRequest(value: unknown): ActiveRequest {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的活跃请求格式无效', null)
+  }
+  return {
+    requestId: readString(value.request_id, 'active.request_id'),
+    model: readString(value.model, 'active.model'),
+    tokenName: readString(value.token_name, 'active.token_name'),
+    userId: readString(value.user_id, 'active.user_id'),
+    startTime: readString(value.start_time, 'active.start_time'),
+    stream: readBoolean(value.stream, 'active.stream'),
+    elapsedMs: readNumber(value.elapsed_ms, 'active.elapsed_ms'),
   }
 }
 
@@ -790,6 +857,19 @@ export const dashboardApi = {
       logs: data.map(parseLog),
       total: readNumber(body.total, 'total', 0),
     }
+  },
+
+  async getLogStats(range: StatsRange): Promise<LogStats> {
+    const data = await request(`/logs/stats?range=${encodeURIComponent(range)}`)
+    return parseLogStats(data)
+  },
+
+  async getActiveRequests(): Promise<readonly ActiveRequest[]> {
+    const data = await request('/active-requests')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的活跃请求列表格式无效', null)
+    }
+    return data.map(parseActiveRequest)
   },
 
   // ── Rules ──

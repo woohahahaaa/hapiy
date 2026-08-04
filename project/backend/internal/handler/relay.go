@@ -30,14 +30,14 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Parse request body
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			common.Global().EndRequest("", false, int64(time.Since(startTime).Milliseconds()), 0)
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(time.Since(startTime).Milliseconds()), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 			return
 		}
 
 		var relayReq relay.RelayRequest
 		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
-			common.Global().EndRequest("", false, int64(time.Since(startTime).Milliseconds()), 0)
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(time.Since(startTime).Milliseconds()), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
 			return
 		}
@@ -58,6 +58,15 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		if tokenID, ok := tokenIDRaw.(string); ok {
 			relayReq.TokenID = tokenID
 		}
+
+		common.Global().TrackActiveRequest(common.ActiveRequest{
+			RequestID: relayReq.RequestID,
+			Model:     relayReq.Model,
+			TokenName: getString(tokenName),
+			UserID:    getString(userID),
+			Stream:    relayReq.Stream,
+			StartTime: startTime,
+		})
 
 		// Select provider for the model
 		provider, err := engine.SelectProvider(relayReq.Model)
@@ -137,7 +146,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			}
 		}
 
-		common.Global().EndRequest(relayReq.Model, true, int64(useTime),
+		common.Global().EndRequest(relayReq.RequestID, relayReq.Model, true, int64(useTime),
 			int64(logEntry.PromptTokens+logEntry.CompletionTokens))
 
 		// Set response headers
@@ -212,7 +221,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		ErrorMessage: err.Error(),
 		UseTime:      useTime,
 	})
-	common.Global().EndRequest(modelName, false, int64(useTime), 0)
+	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0)
 }
 
 func getString(v interface{}) string {

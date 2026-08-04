@@ -28,7 +28,7 @@ function priceConfig(): PriceConfig {
     aliases: ['gpt-4o-alias'],
     endpoints: ['openai', 'azure'],
     thinkingLevels: ['low', 'high'],
-    rules: [{ pattern: 'gpt-*', multiplier: 1.5 }],
+    rate: [{ pattern: 'gpt-*', multiplier: 1.5 }],
   }
 }
 
@@ -47,7 +47,7 @@ describe('parsePrice', () => {
       aliases: '["gpt-4o-alias"]',
       endpoints: '["openai","azure"]',
       thinking_levels: '["low","high"]',
-      rules: '[{"pattern":"gpt-*","multiplier":1.5}]',
+      rate: '[{"pattern":"gpt-*","multiplier":1.5}]',
     })
 
     expect(parsed).toEqual(priceConfig())
@@ -69,7 +69,7 @@ describe('parsePrice', () => {
     expect(parsed.aliases).toEqual([])
     expect(parsed.endpoints).toEqual([])
     expect(parsed.thinkingLevels).toEqual([])
-    expect(parsed.rules).toEqual([])
+    expect(parsed.rate).toEqual([])
   })
 
   it('parses list fields and rules when they arrive as arrays', () => {
@@ -85,7 +85,7 @@ describe('parsePrice', () => {
       aliases: ['ds-chat'],
       endpoints: ['deepseek'],
       thinking_levels: ['off'],
-      rules: [{ pattern: 'deepseek-*', multiplier: 2 }],
+      rate: [{ pattern: 'deepseek-*', multiplier: 2 }],
     })
 
     expect(parsed.maxToken).toBe(8192)
@@ -93,7 +93,7 @@ describe('parsePrice', () => {
     expect(parsed.aliases).toEqual(['ds-chat'])
     expect(parsed.endpoints).toEqual(['deepseek'])
     expect(parsed.thinkingLevels).toEqual(['off'])
-    expect(parsed.rules).toEqual([{ pattern: 'deepseek-*', multiplier: 2 }])
+    expect(parsed.rate).toEqual([{ pattern: 'deepseek-*', multiplier: 2 }])
   })
 })
 
@@ -113,7 +113,7 @@ describe('serializePrice', () => {
       aliases: JSON.stringify(['gpt-4o-alias']),
       endpoints: JSON.stringify(['openai', 'azure']),
       thinking_levels: JSON.stringify(['low', 'high']),
-      rules: JSON.stringify([{ pattern: 'gpt-*', multiplier: 1.5 }]),
+      rate: JSON.stringify([{ pattern: 'gpt-*', multiplier: 1.5 }]),
     })
   })
 

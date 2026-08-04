@@ -37,7 +37,7 @@ const emptyPrice: PriceConfigInput = {
   aliases: [],
   endpoints: [],
   thinkingLevels: [],
-  rules: [],
+  rate: [],
 }
 
 function toErrorMessage(err: unknown): string {
@@ -75,7 +75,7 @@ async function diffAndSave(
           JSON.stringify(item.aliases) !== JSON.stringify(current.aliases) ||
           JSON.stringify(item.endpoints) !== JSON.stringify(current.endpoints) ||
           JSON.stringify(item.thinkingLevels) !== JSON.stringify(current.thinkingLevels) ||
-          JSON.stringify(item.rules) !== JSON.stringify(current.rules)
+          JSON.stringify(item.rate) !== JSON.stringify(current.rate)
         ) {
           ops.push(dashboardApi.updatePrice(id, item))
         }
@@ -238,8 +238,8 @@ export function PricePage() {
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <span>{price.model}</span>
-                          {price.rules.length > 0 && (
-                            <span className="text-xs text-muted-foreground">{price.rules.length} 条规则</span>
+                          {price.rate.length > 0 && (
+                            <span className="text-xs text-muted-foreground">{price.rate.length} 条规则</span>
                           )}
                           {price.cacheWritePrice === 0 && price.cacheReadPrice === 0 && (
                             <span className="text-xs text-muted-foreground">无缓存</span>
@@ -455,8 +455,8 @@ function PriceForm({
       <Field>
         <FieldLabel>倍率规则</FieldLabel>
         <RateRulesEditor
-          rules={form.rules}
-          onChange={(rules) => setForm((p) => ({ ...p, rules: [...rules] }))}
+          rate={form.rate}
+          onChange={(rate) => setForm((p) => ({ ...p, rate: [...rate] }))}
           providerNames={providerNames}
         />
       </Field>
@@ -483,6 +483,6 @@ function toInput(price: PriceConfig): PriceConfigInput {
     aliases: price.aliases,
     endpoints: price.endpoints,
     thinkingLevels: price.thinkingLevels,
-    rules: price.rules,
+    rate: price.rate,
   }
 }

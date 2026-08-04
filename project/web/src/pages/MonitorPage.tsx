@@ -1,23 +1,31 @@
-import { useState, useEffect, useCallback } from 'react'
-import { RefreshCw, AlertCircle, Server, Zap, Clock, Hash, MessageSquare, Layers } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { RefreshCw, AlertCircle, Server, Zap, Clock, Hash, MessageSquare, Layers, CheckCircle2, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import { dashboardApi, type RuntimeMetrics } from '@/lib/dashboard-api'
+import { dashboardApi, type LogStats, type ActiveRequest, type StatsRange } from '@/lib/dashboard-api'
 
-const POLL_INTERVAL_MS = 5000
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h ${m}m`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
+const POLL_INTERVAL_MS = 2000
+const ELAPSED_TICK_MS = 1000
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -28,6 +36,28 @@ function formatTokens(n: number): string {
 function formatLatency(ms: number): string {
   if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
   return `${ms}ms`
+}
+
+function formatElapsed(ms: number): string {
+  if (ms >= 60000) {
+    const m = Math.floor(ms / 60000)
+    const s = Math.floor((ms % 60000) / 1000)
+    return `${m}m ${s}s`
+  }
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.floor(ms)}ms`
+}
+
+function formatStartTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function computeElapsedMs(startTime: string): number {
+  const start = new Date(startTime).getTime()
+  if (Number.isNaN(start)) return 0
+  return Math.max(0, Date.now() - start)
 }
 
 type MetricCardProps = {
@@ -68,172 +98,299 @@ function MetricSkeleton() {
   )
 }
 
-export function MonitorPage() {
-  const [metrics, setMetrics] = useState<RuntimeMetrics | null>(null)
+// ── 统计模块 ──
+
+const RANGE_OPTIONS: readonly { value: StatsRange; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: '30d', label: '30天' },
+  { value: '7d', label: '7天' },
+  { value: '1d', label: '24小时' },
+]
+
+function StatsSection() {
+  const [range, setRange] = useState<StatsRange>('all')
+  const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
+  const mountedRef = useRef(true)
 
-  const fetchMetrics = useCallback(async () => {
+  const fetchStats = useCallback(async (r: StatsRange) => {
+    setLoading(true)
+    setError(null)
     try {
-      const data = await dashboardApi.getRuntimeMetrics()
-      setMetrics(data)
-      setLastRefresh(new Date())
-      setError(null)
+      const data = await dashboardApi.getLogStats(r)
+      if (!mountedRef.current) return
+      setStats(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取指标失败')
+      if (!mountedRef.current) return
+      setError(err instanceof Error ? err.message : '获取统计失败')
     } finally {
-      setLoading(false)
+      if (mountedRef.current) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchMetrics()
-    const timer = setInterval(fetchMetrics, POLL_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [fetchMetrics])
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
-  const refreshTime = lastRefresh?.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '--'
+  useEffect(() => {
+    void fetchStats(range)
+  }, [range, fetchStats])
 
-  // Loading state: first load only
-  if (loading && !metrics) {
-    return (
-      <div className="flex h-full flex-col">
-        <PageHeader title="活动监视" />
-        <div className="flex-1 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">正在连接...</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-            <MetricSkeleton />
-          </div>
-        </div>
+  const handleRetry = useCallback(() => {
+    void fetchStats(range)
+  }, [range, fetchStats])
+
+  const successRate = stats && stats.totalRequests > 0
+    ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
+    : '--'
+
+  const modelEntries = stats
+    ? [...stats.models].sort((a, b) => b.count - a.count)
+    : []
+  const maxModelCount = modelEntries.length > 0 ? modelEntries[0].count : 0
+
+  return (
+    <section className="mb-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="text-sm font-medium">统计</h3>
+        <Select value={range} onValueChange={(value) => setRange((value ?? 'all') as StatsRange)}>
+          <SelectTrigger className="w-32">
+            <SelectValue placeholder="时间范围" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
-    )
-  }
 
-  // Error state with retry
-  if (error && !metrics) {
-    return (
-      <div className="flex h-full flex-col">
-        <PageHeader title="活动监视" />
-        <div className="flex flex-1 items-center justify-center p-6">
+      {/* Loading state: first load only */}
+      {loading && !stats ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => <MetricSkeleton key={i} />)}
+        </div>
+      ) : error && !stats ? (
+        <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={fetchMetrics}>
+            <Button variant="outline" size="sm" className="mt-3" onClick={handleRetry}>
               <RefreshCw data-icon="inline-start" />
               重试
             </Button>
           </div>
         </div>
-      </div>
-    )
-  }
+      ) : stats ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            <MetricCard
+              icon={<Hash />}
+              label="总请求"
+              value={String(stats.totalRequests)}
+            />
+            <MetricCard
+              icon={<CheckCircle2 />}
+              label="成功请求"
+              value={String(stats.successCount)}
+            />
+            <MetricCard
+              icon={<XCircle />}
+              label="失败请求"
+              value={String(stats.failedCount)}
+            />
+            <MetricCard
+              icon={<MessageSquare />}
+              label="总 Token"
+              value={formatTokens(stats.totalTokens)}
+            />
+            <MetricCard
+              icon={<Clock />}
+              label="平均延迟"
+              value={formatLatency(stats.averageLatency)}
+            />
+            <MetricCard
+              icon={<Server />}
+              label="成功率"
+              value={successRate}
+            />
+          </div>
 
-  const m = metrics!
-  const successRate = m.requests_total > 0
-    ? `${((m.requests_success / m.requests_total) * 100).toFixed(1)}%`
-    : '--'
+          {/* Per-model breakdown */}
+          {modelEntries.length > 0 && (
+            <div className="mt-6">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
+                <Layers className="text-muted-foreground" />
+                按模型
+              </h4>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {modelEntries.map((m) => {
+                  const barPercent = maxModelCount > 0 ? (m.count / maxModelCount) * 100 : 0
+                  const sharePct = stats.totalRequests > 0 ? (m.count / stats.totalRequests) * 100 : 0
+                  return (
+                    <Card key={m.model} size="sm">
+                      <CardContent>
+                        <p className="truncate text-sm font-medium">{m.model}</p>
+                        <div className="mt-1 flex items-center justify-between">
+                          <span className="text-2xl font-bold tabular-nums">{m.count}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {sharePct.toFixed(1)}% · {formatTokens(m.tokens)} tok
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary transition-all"
+                            style={{ width: `${barPercent}%` }}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
-  const modelEntries = Object.entries(m.models).sort(([, a], [, b]) => b - a)
+          {/* Empty model state */}
+          {modelEntries.length === 0 && stats.totalRequests === 0 && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">暂无请求数据</p>
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {/* Error banner (with existing data) */}
+      {error && stats && (
+        <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <span className="text-xs text-destructive">{error}</span>
+        </div>
+      )}
+    </section>
+  )
+}
+
+// ── 活跃请求模块 ──
+
+function ActiveRequestsSection() {
+  const [requests, setRequests] = useState<readonly ActiveRequest[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [, setTick] = useState(0)
+  const mountedRef = useRef(true)
+
+  const fetchActive = useCallback(async () => {
+    try {
+      const data = await dashboardApi.getActiveRequests()
+      if (!mountedRef.current) return
+      setRequests(data)
+      setError(null)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(err instanceof Error ? err.message : '获取活跃请求失败')
+    } finally {
+      if (mountedRef.current) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    void fetchActive()
+    const pollTimer = setInterval(fetchActive, POLL_INTERVAL_MS)
+    const tickTimer = setInterval(() => setTick((t) => t + 1), ELAPSED_TICK_MS)
+    return () => {
+      mountedRef.current = false
+      clearInterval(pollTimer)
+      clearInterval(tickTimer)
+    }
+  }, [fetchActive])
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="活动监视"
-        status={refreshTime ? `刷新 ${refreshTime}` : undefined}
-      />
-      <div className="flex-1 overflow-auto p-6">
-        {/* Refresh bar */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {error && (
-              <span className="inline-flex items-center gap-1 text-sm text-destructive">
-                <AlertCircle data-icon="inline-start" />
-                错误
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground">
-              最后刷新：{refreshTime}
+    <section>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-medium">
+          <Zap className="text-muted-foreground" />
+          活跃请求
+          {requests.length > 0 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              {requests.length}
             </span>
-          </div>
-            <Button variant="outline" size="sm" onClick={fetchMetrics} disabled={loading}>
-            <RefreshCw data-icon="inline-start" className={cn(loading && 'animate-spin')} />
-            刷新
-          </Button>
-        </div>
-
-        {/* Core metrics grid */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MetricCard
-            icon={<Server />}
-            label="运行时长"
-            value={formatUptime(m.uptime_seconds)}
-          />
-          <MetricCard
-            icon={<Zap />}
-            label="活跃请求"
-            value={String(m.active_requests)}
-            sub={`排队 ${m.queued_requests}`}
-          />
-          <MetricCard
-            icon={<Hash />}
-            label="总请求"
-            value={String(m.requests_total)}
-            sub={`成功 ${m.requests_success} · 失败 ${m.requests_failed}`}
-          />
-          <MetricCard
-            icon={<Clock />}
-            label="平均延迟"
-            value={formatLatency(m.avg_latency_ms)}
-            sub={`成功率 ${successRate}`}
-          />
-          <MetricCard
-            icon={<MessageSquare />}
-            label="总 Token"
-            value={formatTokens(m.total_tokens)}
-            sub={`均 ${m.requests_total > 0 ? formatTokens(Math.round(m.total_tokens / m.requests_total)) : '--'} / 请求`}
-          />
-        </div>
-
-        {/* Per-model breakdown */}
-        {modelEntries.length > 0 && (
-          <div className="mt-6">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
-              <Layers className="text-muted-foreground" />
-              按模型
-            </h3>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-              {modelEntries.map(([model, count]) => (
-                <Card key={model} size="sm">
-                  <CardContent>
-                    <p className="truncate text-sm font-medium">{model}</p>
-                    <div className="mt-1 flex items-center justify-between">
-                      <span className="text-2xl font-bold tabular-nums">{count}</span>
-                      <span className="text-xs text-muted-foreground">请求</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+          )}
+        </h3>
+        {error && (
+          <span className="inline-flex items-center gap-1 text-xs text-destructive">
+            <AlertCircle data-icon="inline-start" />
+            {error}
+          </span>
         )}
+      </div>
 
-        {/* Empty model state */}
-        {modelEntries.length === 0 && m.requests_total === 0 && (
-          <div className="mt-8 text-center">
-            <p className="text-sm text-muted-foreground">暂无请求数据</p>
-            <p className="mt-1 text-xs text-muted-foreground">等待 API 请求到达后将自动更新</p>
-          </div>
-        )}
+      <div className="rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>模型</TableHead>
+              <TableHead>令牌</TableHead>
+              <TableHead>用户</TableHead>
+              <TableHead>类型</TableHead>
+              <TableHead>已运行</TableHead>
+              <TableHead>开始时间</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                  加载中...
+                </TableCell>
+              </TableRow>
+            ) : requests.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
+                  暂无活跃请求
+                </TableCell>
+              </TableRow>
+            ) : (
+              requests.map((req) => {
+                const elapsed = computeElapsedMs(req.startTime)
+                return (
+                  <TableRow key={req.requestId}>
+                    <TableCell>
+                      <span className="text-xs text-muted-foreground">{req.model}</span>
+                    </TableCell>
+                    <TableCell className="text-xs">{req.tokenName}</TableCell>
+                    <TableCell className="text-xs">{req.userId}</TableCell>
+                    <TableCell className="text-xs">
+                      {req.stream ? 'SSE' : '-'}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs tabular-nums">
+                      {formatElapsed(elapsed)}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {formatStartTime(req.startTime)}
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  )
+}
+
+export function MonitorPage() {
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader title="活动监视" />
+      <div className="flex-1 overflow-auto p-6">
+        <StatsSection />
+        <ActiveRequestsSection />
       </div>
     </div>
   )

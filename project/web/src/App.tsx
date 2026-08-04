@@ -8,7 +8,7 @@ import { ProviderPage } from '@/pages/ProviderPage'
 import { TokenPage } from '@/pages/TokenPage'
 import { PricePage } from '@/pages/PricePage'
 import { PolicyPage } from '@/pages/PolicyPage'
-import { SettingsPage } from '@/pages/SettingsPage'
+import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AuthGate } from '@/components/AuthGate'
 import { Toaster } from '@/components/ui/toast'
@@ -31,8 +31,8 @@ function App() {
                   <Route path="/token" element={<TokenPage />} />
                   <Route path="/model" element={<PricePage />} />
                   <Route path="/policy/:type" element={<PolicyPage />} />
-                  <Route path="/settings" element={<Navigate to="/settings/status" replace />} />
-                  <Route path="/settings/:tab" element={<SettingsPage />} />
+                  <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                  <Route path="/settings/general" element={<GeneralSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

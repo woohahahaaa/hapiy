@@ -62,7 +62,7 @@ func TestPriceCreate_roundtrips_new_fields(t *testing.T) {
 		`"aliases":"[\"gpt-4o-alias\"]",` +
 		`"endpoints":"[\"https://api.example.com/v1\"]",` +
 		`"thinking_levels":"[\"low\",\"high\"]",` +
-		`"rules":"[{\"pattern\":\"^gpt-4o\",\"multiplier\":1.5}]"}`
+		`"rate":"[{\"pattern\":\"^gpt-4o\",\"multiplier\":1.5}]"}`
 
 	rec := priceRequest(t, http.MethodPost, "/models", body, CreatePrice(db))
 	if rec.Code != http.StatusCreated {
@@ -99,14 +99,14 @@ func TestPriceCreate_roundtrips_new_fields(t *testing.T) {
 	if got.ThinkingLevels != `["low","high"]` {
 		t.Fatalf("thinking_levels: got %q", got.ThinkingLevels)
 	}
-	if got.Rules != `[{"pattern":"^gpt-4o","multiplier":1.5}]` {
-		t.Fatalf("rules: got %q", got.Rules)
+	if got.Rate != `[{"pattern":"^gpt-4o","multiplier":1.5}]` {
+		t.Fatalf("rate: got %q", got.Rate)
 	}
 }
 
 func TestPriceCreate_rejects_invalid_regex_rule(t *testing.T) {
 	db := newPriceTestDB(t)
-	body := `{"model":"gpt-4o","rules":"[{\"pattern\":\"(\",\"multiplier\":1}]"}`
+	body := `{"model":"gpt-4o","rate":"[{\"pattern\":\"(\",\"multiplier\":1}]"}`
 
 	rec := priceRequest(t, http.MethodPost, "/models", body, CreatePrice(db))
 	if rec.Code != http.StatusBadRequest {
@@ -119,7 +119,7 @@ func TestPriceCreate_rejects_invalid_regex_rule(t *testing.T) {
 
 func TestPriceCreate_rejects_negative_multiplier(t *testing.T) {
 	db := newPriceTestDB(t)
-	body := `{"model":"gpt-4o","rules":"[{\"pattern\":\"^gpt\",\"multiplier\":-1}]"}`
+	body := `{"model":"gpt-4o","rate":"[{\"pattern\":\"^gpt\",\"multiplier\":-1}]"}`
 
 	rec := priceRequest(t, http.MethodPost, "/models", body, CreatePrice(db))
 	if rec.Code != http.StatusBadRequest {
@@ -160,7 +160,7 @@ func TestPriceUpdate_preserves_and_updates_new_fields(t *testing.T) {
 	db := newPriceTestDB(t)
 	createBody := `{"model":"gpt-4o","input_price":5,"output_price":15,"context_length":128000,` +
 		`"endpoints":"[\"https://api.example.com/v1\"]",` +
-		`"rules":"[{\"pattern\":\"^gpt\",\"multiplier\":1}]"}`
+		`"rate":"[{\"pattern\":\"^gpt\",\"multiplier\":1}]"}`
 
 	rec := priceRequest(t, http.MethodPost, "/prices", createBody, CreatePrice(db))
 	if rec.Code != http.StatusCreated {
@@ -180,7 +180,7 @@ func TestPriceUpdate_preserves_and_updates_new_fields(t *testing.T) {
 		`"supported_types":"[\"text\",\"video\"]",` +
 		`"aliases":"[\"gpt-4o-x-v2\"]",` +
 		`"endpoints":"[\"https://api2.example.com/v1\"]",` +
-		`"rules":"[{\"pattern\":\"x\",\"multiplier\":2}]"}`
+		`"rate":"[{\"pattern\":\"x\",\"multiplier\":2}]"}`
 	rec = priceRequestRoute(t, http.MethodPut, "/models/:id", "/models/"+id, updateBody, UpdatePrice(db))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status: want 200, got %d: %s", rec.Code, rec.Body.String())
@@ -207,8 +207,8 @@ func TestPriceUpdate_preserves_and_updates_new_fields(t *testing.T) {
 	if got.Endpoints != `["https://api2.example.com/v1"]` {
 		t.Fatalf("endpoints: got %q", got.Endpoints)
 	}
-	if got.Rules != `[{"pattern":"x","multiplier":2}]` {
-		t.Fatalf("rules: got %q", got.Rules)
+	if got.Rate != `[{"pattern":"x","multiplier":2}]` {
+		t.Fatalf("rate: got %q", got.Rate)
 	}
 	if got.MaxToken != 8192 {
 		t.Fatalf("max_token: want 8192, got %d", got.MaxToken)
@@ -274,7 +274,7 @@ func TestPriceUpdate_rejects_invalid_regex_rule(t *testing.T) {
 	}
 	id := created.Data.ID
 
-	rec = priceRequestRoute(t, http.MethodPut, "/models/:id", "/models/"+id, `{"rules":"[{\"pattern\":\"[\",\"multiplier\":1}]"}`, UpdatePrice(db))
+	rec = priceRequestRoute(t, http.MethodPut, "/models/:id", "/models/"+id, `{"rate":"[{\"pattern\":\"[\",\"multiplier\":1}]"}`, UpdatePrice(db))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status: want 400, got %d: %s", rec.Code, rec.Body.String())
 	}

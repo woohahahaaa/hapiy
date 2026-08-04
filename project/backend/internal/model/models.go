@@ -209,7 +209,7 @@ type PriceConfig struct {
 	Aliases         string    `gorm:"type:text" json:"aliases"`         // JSON array
 	Endpoints       string    `gorm:"type:text" json:"endpoints"`        // JSON array
 	ThinkingLevels  string    `gorm:"type:text" json:"thinking_levels"`  // JSON array
-	Rules           string    `gorm:"type:text" json:"rules"`           // JSON array of PriceRule
+	Rate            string    `gorm:"type:text" json:"rate"`            // JSON array of PriceRule
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

@@ -20,6 +20,9 @@ type Metrics struct {
 	// Per-model counters via sync.Map (no lock on hot path)
 	modelCounters sync.Map // map[string]*modelCounter
 
+	// Active request entries keyed by requestID (string) -> *ActiveRequest
+	activeEntries sync.Map
+
 	startTime time.Time
 }
 
@@ -27,6 +30,17 @@ type modelCounter struct {
 	requests atomic.Int64
 	tokens   atomic.Int64
 	latency  atomic.Int64
+}
+
+// ActiveRequest describes an in-flight request for the monitoring API.
+type ActiveRequest struct {
+	RequestID  string    `json:"request_id"`
+	Model      string    `json:"model"`
+	TokenName  string    `json:"token_name"`
+	UserID     string    `json:"user_id"`
+	Stream     bool      `json:"stream"`
+	StartTime  time.Time `json:"start_time"`
+	ElapsedMs  int64     `json:"elapsed_ms"`
 }
 
 var globalMetrics = NewMetrics()
@@ -45,11 +59,21 @@ func (m *Metrics) BeginRequest() {
 	m.activeRequests.Add(1)
 }
 
-// EndRequest records completion of a request.
-func (m *Metrics) EndRequest(model string, success bool, latencyMs int64, tokens int64) {
+// TrackActiveRequest records an in-flight request entry keyed by its requestID.
+// Call EndRequest (with the same requestID) to remove it when the request finishes.
+func (m *Metrics) TrackActiveRequest(req ActiveRequest) {
+	m.activeEntries.Store(req.RequestID, &req)
+}
+
+// EndRequest records completion of a request and removes its active entry (if any).
+func (m *Metrics) EndRequest(requestID, model string, success bool, latencyMs int64, tokens int64) {
 	m.activeRequests.Add(-1)
 	m.totalLatencyMs.Add(latencyMs)
 	m.totalTokens.Add(tokens)
+
+	if requestID != "" {
+		m.activeEntries.Delete(requestID)
+	}
 
 	if success {
 		m.requestsSuccess.Add(1)
@@ -64,6 +88,20 @@ func (m *Metrics) EndRequest(model string, success bool, latencyMs int64, tokens
 		mc.tokens.Add(tokens)
 		mc.latency.Add(latencyMs)
 	}
+}
+
+// ActiveRequests returns a snapshot of all currently in-flight requests,
+// each annotated with elapsed_ms computed from its StartTime.
+func (m *Metrics) ActiveRequests() []ActiveRequest {
+	now := time.Now()
+	out := make([]ActiveRequest, 0)
+	m.activeEntries.Range(func(k, v interface{}) bool {
+		req := v.(*ActiveRequest)
+		req.ElapsedMs = now.Sub(req.StartTime).Milliseconds()
+		out = append(out, *req)
+		return true
+	})
+	return out
 }
 
 // IncQueued / DecQueued track queued requests for concurrency control.

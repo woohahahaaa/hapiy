@@ -96,7 +96,6 @@ const navigation: NavItem[] = [
     label: '系统设置',
     icon: <Settings />,
     children: [
-      { id: 'status', label: '运行状态', href: '/settings/status' },
       { id: 'general', label: '通用设置', href: '/settings/general' },
     ],
   },
