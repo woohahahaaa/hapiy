@@ -153,6 +153,15 @@ func main() {
 			dashboardAuthed.GET("/topology/versions/:id", handler.TopologyVersionGet(db))
 			dashboardAuthed.POST("/topology/versions/:id/restore", handler.TopologyVersionRestore(db, engine))
 
+			// Flat topology (canvas-style node/wire model)
+			dashboardAuthed.GET("/flat-topology", handler.GetFlatTopology(db))
+			dashboardAuthed.PUT("/flat-topology", handler.SaveFlatTopology(db, engine))
+			dashboardAuthed.GET("/flat-topology/validate", handler.ValidateFlatTopology(db))
+
+			// Channel affinity
+			dashboardAuthed.GET("/channel-affinity", handler.GetChannelAffinity(db))
+			dashboardAuthed.PUT("/channel-affinity", handler.SaveChannelAffinity(db, engine))
+
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))
 			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())

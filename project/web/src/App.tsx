@@ -8,6 +8,8 @@ import { ProviderPage } from '@/pages/ProviderPage'
 import { TokenPage } from '@/pages/TokenPage'
 import { PricePage } from '@/pages/PricePage'
 import { PolicyPage } from '@/pages/PolicyPage'
+import { BaseUrlSettingsPage } from '@/pages/BaseUrlSettingsPage'
+import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
 import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AuthGate } from '@/components/AuthGate'
@@ -29,9 +31,11 @@ function App() {
                   <Route path="/logs" element={<LogsPage />} />
                   <Route path="/provider" element={<ProviderPage />} />
                   <Route path="/token" element={<TokenPage />} />
+                  <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
                   <Route path="/model" element={<PricePage />} />
                   <Route path="/policy/:type" element={<PolicyPage />} />
                   <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                  <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
                   <Route path="/settings/general" element={<GeneralSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 
 interface ContextMenuProps {
@@ -29,7 +29,7 @@ export function ContextMenu({ x, y, onDelete, onClose }: ContextMenuProps) {
           onClick={() => { onDelete(); onClose() }}
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive transition-colors hover:bg-muted"
         >
-          <Trash2 className="size-4" />
+          <AppIcon name="delete" size={16} />
           <span>删除工作流</span>
         </button>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Copy, RefreshCw, Code } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
@@ -161,9 +161,9 @@ export function TokenPage() {
           <div className="text-sm text-muted-foreground">管理下游 API Token 和额度</div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
-            <Button onClick={() => { setEditing(null); setPendingKey(null); setIsDialogOpen(true) }} disabled={isSaving}><Plus data-icon="inline-start" />添加令牌</Button>
+            <Button onClick={() => { setEditing(null); setPendingKey(null); setIsDialogOpen(true) }} disabled={isSaving}><AppIcon name="add" data-icon="inline-start" />添加令牌</Button>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogContent><DialogHeader><DialogTitle>{editing ? '编辑令牌' : '添加令牌'}</DialogTitle></DialogHeader><TokenForm token={editing} onSave={handleSave} onCancel={() => { setEditing(null); setPendingKey(null); setIsDialogOpen(false) }} onRefresh={handleRefresh} pendingKey={pendingKey} isSaving={isSaving} /></DialogContent>
@@ -188,10 +188,10 @@ export function TokenPage() {
               {tokens.map((token) => (
                 <TableRow key={token.id}>
                   <TableCell className="font-medium">{token.name}</TableCell>
-                  <TableCell><div className="flex items-center gap-2"><code className="rounded bg-muted px-2 py-1 text-xs font-mono">{token.key.slice(0, 12)}...</code><Button variant="ghost" size="icon" onClick={() => void copyToClipboard(token.key)}><Copy /></Button></div></TableCell>
+                  <TableCell><div className="flex items-center gap-2"><code className="rounded bg-muted px-2 py-1 text-xs font-mono">{token.key.slice(0, 12)}...</code><Button variant="ghost" size="icon" onClick={() => void copyToClipboard(token.key)}><AppIcon name="content_copy" /></Button></div></TableCell>
                   <TableCell>{token.quota === null ? <span className="text-xs text-muted-foreground">无限制</span> : <div className="flex items-center gap-2"><span className="text-xs">¥{token.usedQuota} / ¥{token.quota}</span><div className="h-1.5 w-16 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min((token.usedQuota / token.quota) * 100, 100)}%` }} /></div></div>}</TableCell>
                   <TableCell><span className={token.status ? 'text-success' : 'text-destructive'}>{token.status ? '启用' : '禁用'}</span></TableCell>
-                  <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleToken(token.id))}>{token.status ? '禁用' : '启用'}</Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setPendingKey(null); setIsDialogOpen(true) }}><Pencil /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><Trash2 /></Button></div></TableCell>
+                  <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleToken(token.id))}>{token.status ? '禁用' : '启用'}</Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setPendingKey(null); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><AppIcon name="delete" /></Button></div></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -216,7 +216,7 @@ function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }:
         <Field>
           <FieldLabel>Token</FieldLabel>
           <code className="block rounded bg-muted px-2 py-2 text-xs font-mono">{pendingKey ?? token.key}</code>
-          <Button variant="outline" size="sm" className="mt-2" disabled={isSaving} onClick={onRefresh}><RefreshCw data-icon="inline-start" />{pendingKey ? '已刷新（保存后生效）' : '刷新'}</Button>
+          <Button variant="outline" size="sm" className="mt-2" disabled={isSaving} onClick={onRefresh}><AppIcon name="refresh" data-icon="inline-start" />{pendingKey ? '已刷新（保存后生效）' : '刷新'}</Button>
         </Field>
       ) : (
         <p className="text-sm text-muted-foreground">服务端会在保存后生成 Token Key。</p>

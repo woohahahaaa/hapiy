@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { X, GripVertical } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 import { nodeRenderBounds } from '@/config/topology-config'
 
@@ -68,7 +68,7 @@ export function SlotItemCard({
               className="nodrag nopan cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
               aria-label="拖动排序"
             >
-              <GripVertical className="size-3.5" />
+              <AppIcon name="drag_handle" size={14} />
             </span>
           )}
           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
@@ -103,7 +103,7 @@ export function SlotItemCard({
             className="nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
             aria-label="删除"
           >
-            <X className="size-3" />
+            <AppIcon name="close" size={12} />
           </button>
         </div>
       </div>

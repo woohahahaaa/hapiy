@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { dashboardApi } from '@/lib/dashboard-api'
 
 interface AuthGateProps {
@@ -32,7 +32,7 @@ export function AuthGate({ children }: AuthGateProps) {
   if (state === 'checking') {
     return (
       <div className="flex min-h-svh items-center justify-center text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
+        <AppIcon name="progress_activity" size={20} className="animate-spin" />
         <span className="ml-2 text-sm">验证登录态…</span>
       </div>
     )

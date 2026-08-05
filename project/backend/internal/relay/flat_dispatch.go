@@ -1,0 +1,213 @@
+package relay
+
+import (
+	"fmt"
+	"math/rand"
+
+	"github.com/hapiy/hapiy/internal/affinity"
+	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/topology"
+	"gorm.io/gorm"
+)
+
+// buildFlatProviderRefs builds ProviderRef values for every enabled provider
+// known to the engine, keyed by provider name. It reflects the provider's
+// Status and its supported model set.
+func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
+	e.plansMu.RLock()
+	defer e.plansMu.RUnlock()
+	refs := make(map[string]topology.ProviderRef, len(e.plans))
+	for _, plan := range e.plans {
+		if plan == nil || plan.Provider == nil {
+			continue
+		}
+		refs[plan.Provider.Name] = topology.ProviderRef{
+			Name:     plan.Provider.Name,
+			Status:   plan.Provider.Status,
+			Enabled:  true, // provider node mini-switch is checked in the flat walk
+			Workflow: true,
+			Models:   plan.ModelSet,
+		}
+	}
+	return refs
+}
+
+// SelectByFlatTopology chooses a provider for a request using the flat topology
+// wiring: it walks the active request entries, gathers eligible providers that
+// support the model (and path, when a provider declares paths), then applies
+// the entry weights. If no provider is eligible it returns an error.
+func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string) (*topology.EligibleProvider, error) {
+	if tp == nil || len(tp.Nodes) == 0 {
+		return nil, fmt.Errorf("flat topology is empty")
+	}
+	refs := e.buildFlatProviderRefs()
+	eligible, err := topology.FindEligibleProviders(tp, refs, model, path)
+	if err != nil {
+		return nil, err
+	}
+	if len(eligible) == 0 {
+		return nil, fmt.Errorf("no provider available for model %s", model)
+	}
+	// Weighted selection: each eligible provider carries its request-entry
+	// weight in [0,1]. Higher weight => higher chance.
+	pick := weightedPick(eligible)
+	return &pick, nil
+}
+
+// weightedPick returns one eligible provider by weight. All providers with a
+// zero weight are eligible but only via the equal fallback; providers with
+// positive weight are preferred by their relative weight.
+func weightedPick(eligible []topology.EligibleProvider) topology.EligibleProvider {
+	total := 0.0
+	for _, p := range eligible {
+		total += p.Weight
+	}
+	if total <= 0 {
+		return eligible[0]
+	}
+	roll := rand.Float64()
+	cum := 0.0
+	for _, p := range eligible {
+		cum += p.Weight
+		if roll <= cum {
+			return p
+		}
+	}
+	return eligible[len(eligible)-1]
+}
+
+// DispatchResult is the outcome of selecting a provider for a request.
+type DispatchResult struct {
+	Plan         *ExecutionPlan
+	Provider     *model.Provider
+	KeyIndex     int
+	BaseURLIndex int
+	// AffinityMatch, when non-nil, means the provider was chosen via channel
+	// affinity; the handler records the successful recall on request success.
+	AffinityMatch *affinity.MatchResult
+}
+
+// Dispatch selects a provider for a request and builds its execution plan. It
+// consults channel affinity first (when enabled and a rule matches), then falls
+// back to flat-topology weighted selection. The returned plan is restricted to
+// the provider's reachable slot types in the wiring.
+func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*DispatchResult, error) {
+	if affinityReq != nil && e.Affinity() != nil {
+		match := e.Affinity().Lookup(affinityReq)
+		if match.Matched {
+			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, nil)
+			if err == nil {
+				return &DispatchResult{
+					Plan:         plan,
+					Provider:     provider,
+					KeyIndex:     match.Triple.KeyIndex,
+					BaseURLIndex: match.Triple.BaseURLIndex,
+					AffinityMatch: &match,
+				}, nil
+			}
+			e.Affinity().Delete(match.CacheKey)
+		}
+	}
+
+	tp, err := topology.NewStore(e.db).Load()
+	if err != nil {
+		return nil, err
+	}
+	if tp != nil && len(tp.Nodes) > 0 {
+		eligible, err := e.SelectByFlatTopology(tp, model, path)
+		if err == nil && eligible != nil {
+			provider, plan, err := e.buildPlanForProvider(eligible.Name, eligible.Chain)
+			if err != nil {
+				return nil, err
+			}
+			return &DispatchResult{
+				Plan:         plan,
+				Provider:     provider,
+				KeyIndex:     -1,
+				BaseURLIndex: -1,
+			}, nil
+		}
+	}
+
+	provider, err := e.SelectProvider(model)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := e.GetPlan(provider.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &DispatchResult{Plan: plan, Provider: provider, KeyIndex: -1, BaseURLIndex: -1}, nil
+}
+
+// buildPlanForProvider builds (or reuses) an execution plan for a provider.
+// When chain is non-nil the plan is restricted to those slot types.
+func (e *Engine) buildPlanForProvider(name string, chain []string) (*model.Provider, *ExecutionPlan, error) {
+	provider, err := e.getProviderByName(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan := &ExecutionPlan{ID: provider.ID, Provider: provider}
+	if chain != nil {
+		if err := e.populatePlanWithSlots(e.db, plan, chain); err != nil {
+			return nil, nil, err
+		}
+	} else if err := e.populatePlan(e.db, plan); err != nil {
+		return nil, nil, err
+	}
+	return provider, plan, nil
+}
+
+// getProviderByName looks up a provider by its configured Name.
+func (e *Engine) getProviderByName(name string) (*model.Provider, error) {
+	e.providersMu.RLock()
+	defer e.providersMu.RUnlock()
+	for _, p := range e.providers {
+		if p.Name == name {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("provider %q not found", name)
+}
+
+// populatePlanWithSlots compiles a plan restricted to the slot types reachable
+// in the flat wiring chain. It mirrors populatePlan but only loads enabled
+// assignments whose slot_type is listed in chain, preserving the canonical
+// stage order.
+func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain []string) error {
+	if err := decodeStringList(plan.Provider.ID, plan.Provider.BaseURLs, &plan.BaseURLs, "base_urls"); err != nil {
+		return err
+	}
+	if err := decodeStringList(plan.Provider.ID, plan.Provider.Keys, &plan.Keys, "keys"); err != nil {
+		return err
+	}
+	if err := decodeModelSet(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet); err != nil {
+		return err
+	}
+
+	wanted := make(map[string]bool, len(chain))
+	for _, st := range chain {
+		wanted[st] = true
+	}
+
+	var assignments []model.TopologySlotAssignment
+	orderClause := `CASE slot_type
+		WHEN 'requestModify' THEN 0 WHEN 'responseModify' THEN 1
+		WHEN 'autoReply' THEN 2 WHEN 'concurrency' THEN 3
+		WHEN 'autoSwitch' THEN 4 WHEN 'logOutput' THEN 5 ELSE 6 END,
+		"order" ASC, id ASC`
+	if err := db.Where("provider_id = ? AND enabled = ?", plan.Provider.ID, true).
+		Order(orderClause).Find(&assignments).Error; err != nil {
+		return fmt.Errorf("load topology assignments: %w", err)
+	}
+	for _, assignment := range assignments {
+		if !wanted[assignment.SlotType] {
+			continue
+		}
+		if err := e.populateAssignment(db, plan, assignment); err != nil {
+			return err
+		}
+	}
+	plan.DebugEnabled = false
+	return nil
+}

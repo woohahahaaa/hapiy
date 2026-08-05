@@ -2,7 +2,7 @@ import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
 import { cn } from "@/lib/utils"
-import { RiArrowDownSLine, RiCheckLine, RiArrowUpSLine } from "@remixicon/react"
+import { AppIcon } from "@/components/AppIcon"
 
 const Select = SelectPrimitive.Root
 
@@ -47,7 +47,7 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <RiArrowDownSLine className="pointer-events-none size-4 text-muted-foreground" />
+          <AppIcon name="expand_more" className="pointer-events-none text-muted-foreground" size={16} />
         }
       />
     </SelectPrimitive.Trigger>
@@ -128,7 +128,7 @@ function SelectItem({
           <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
         }
       >
-        <RiCheckLine className="pointer-events-none" />
+        <AppIcon name="check" className="pointer-events-none" size={16} />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
@@ -160,8 +160,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <RiArrowUpSLine
-      />
+      <AppIcon name="expand_less" size={16} />
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -179,8 +178,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <RiArrowDownSLine
-      />
+      <AppIcon name="expand_more" size={16} />
     </SelectPrimitive.ScrollDownArrow>
   )
 }

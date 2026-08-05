@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, AlertCircle, Server, Zap, Clock, Hash, MessageSquare, Layers, CheckCircle2, XCircle } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 
 import { Button } from '@/components/ui/button'
@@ -177,10 +177,10 @@ function StatsSection() {
       ) : error && !stats ? (
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
-            <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
+            <AppIcon name="error" size={40} className="mx-auto mb-3 text-destructive" />
             <p className="text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={handleRetry}>
-              <RefreshCw data-icon="inline-start" />
+              <AppIcon name="refresh" data-icon="inline-start" />
               重试
             </Button>
           </div>
@@ -189,32 +189,32 @@ function StatsSection() {
         <>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             <MetricCard
-              icon={<Hash />}
+              icon={<AppIcon name="hashtag" />}
               label="总请求"
               value={String(stats.totalRequests)}
             />
             <MetricCard
-              icon={<CheckCircle2 />}
+              icon={<AppIcon name="check_circle" />}
               label="成功请求"
               value={String(stats.successCount)}
             />
             <MetricCard
-              icon={<XCircle />}
+              icon={<AppIcon name="cancel" />}
               label="失败请求"
               value={String(stats.failedCount)}
             />
             <MetricCard
-              icon={<MessageSquare />}
+              icon={<AppIcon name="chat" />}
               label="总 Token"
               value={formatTokens(stats.totalTokens)}
             />
             <MetricCard
-              icon={<Clock />}
+              icon={<AppIcon name="schedule" />}
               label="平均延迟"
               value={formatLatency(stats.averageLatency)}
             />
             <MetricCard
-              icon={<Server />}
+              icon={<AppIcon name="dns" />}
               label="成功率"
               value={successRate}
             />
@@ -224,7 +224,7 @@ function StatsSection() {
           {modelEntries.length > 0 && (
             <div className="mt-6">
               <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <Layers className="text-muted-foreground" />
+                <AppIcon name="layers" className="text-muted-foreground" />
                 按模型
               </h4>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -313,7 +313,7 @@ function ActiveRequestsSection() {
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-medium">
-          <Zap className="text-muted-foreground" />
+          <AppIcon name="bolt" className="text-muted-foreground" />
           活跃请求
           {requests.length > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -323,7 +323,7 @@ function ActiveRequestsSection() {
         </h3>
         {error && (
           <span className="inline-flex items-center gap-1 text-xs text-destructive">
-            <AlertCircle data-icon="inline-start" />
+            <AppIcon name="error" data-icon="inline-start" />
             {error}
           </span>
         )}

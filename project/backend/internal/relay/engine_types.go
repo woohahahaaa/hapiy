@@ -1,8 +1,10 @@
 package relay
 
 import (
+	"log"
 	"sync"
 
+	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
 )
@@ -82,13 +84,43 @@ type Engine struct {
 	concurrencyLimiters sync.Map // map[string]*concurrencyLimiter
 
 	topologyStageHook func(topologyStageEvent)
+
+	affinityMu sync.RWMutex
+	affinity   *affinity.RuleCompiledSet
 }
 
 func NewEngine(db *gorm.DB) *Engine {
-	return &Engine{
+	e := &Engine{
 		db:        db,
 		providers: make(map[string]*model.Provider),
 		plans:     make(map[string]*ExecutionPlan),
 		stopCh:    make(chan struct{}),
 	}
+	e.ReloadAffinity()
+	return e
+}
+
+// Affinity returns the current compiled rule set; never nil (an empty set
+// matches nothing), so callers can rely on non-nil checks.
+func (e *Engine) Affinity() *affinity.RuleCompiledSet {
+	e.affinityMu.RLock()
+	defer e.affinityMu.RUnlock()
+	return e.affinity
+}
+
+// ReloadAffinity reloads and compiles the rule set, then swaps it in.
+func (e *Engine) ReloadAffinity() {
+	var setting *affinity.AffinitySetting
+	if e.db != nil {
+		var err error
+		setting, err = affinity.NewStore(e.db).Load()
+		if err != nil {
+			log.Printf("relay: failed to load affinity rules: %v", err)
+			setting = &affinity.AffinitySetting{}
+		}
+	}
+	compiled := affinity.CompileRules(setting)
+	e.affinityMu.Lock()
+	e.affinity = compiled
+	e.affinityMu.Unlock()
 }

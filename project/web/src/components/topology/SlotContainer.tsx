@@ -1,9 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Plus } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 
 interface SlotContainerProps {
-  title: string
+  title: ReactNode
   onAddNode?: () => void
   children?: ReactNode
   className?: string
@@ -48,7 +48,7 @@ export function SlotContainer({
               onClick={onAddNode}
               className="mt-2 flex w-full items-center justify-center rounded-md border border-dashed border-border py-1 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
             >
-              <Plus className="size-3 mr-1" />
+              <AppIcon name="add" size={12} className="mr-1" />
               添加
             </button>
           )}
@@ -60,7 +60,7 @@ export function SlotContainer({
             onClick={onAddNode}
             className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 transition-colors cursor-pointer mx-auto"
           >
-            <Plus className="size-6" />
+            <AppIcon name="add" size={24} />
           </button>
         )
       )}

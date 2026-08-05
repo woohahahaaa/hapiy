@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Loader2, Lock } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,7 +41,7 @@ export function LoginPage() {
       >
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Lock className="size-5" />
+            <AppIcon name="lock" size={20} />
           </div>
           <div>
             <h1 className="text-xl font-semibold">hapiy 控制台</h1>
@@ -82,7 +82,7 @@ export function LoginPage() {
         <Button type="submit" className="w-full" disabled={submitting || !username.trim() || !password}>
           {submitting ? (
             <>
-              <Loader2 className="size-4 animate-spin" /> 登录中…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 登录中…
             </>
           ) : (
             '登录'

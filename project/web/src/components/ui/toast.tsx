@@ -3,7 +3,7 @@ import { Toast as ToastPrimitive } from "@base-ui/react/toast"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { RiCloseLine, RiCheckboxCircleLine, RiInformationLine, RiErrorWarningLine, RiCloseCircleLine, RiLoaderLine } from "@remixicon/react"
+import { AppIcon } from "@/components/AppIcon"
 
 const toast = ToastPrimitive.createToastManager()
 
@@ -124,7 +124,7 @@ function ToastClose({
       {...props}
     >
       {children ?? (
-        <RiCloseLine aria-hidden="true" />
+        <AppIcon name="close" aria-hidden="true" size={16} />
       )}
     </ToastPrimitive.Close>
   )
@@ -135,31 +135,31 @@ function ToastIcon({ type }: { type: string | undefined }) {
 
   if (type === "success") {
     icon = (
-      <RiCheckboxCircleLine aria-hidden="true" />
+      <AppIcon name="check_circle" aria-hidden="true" size={16} />
     )
   }
 
   if (type === "info") {
     icon = (
-      <RiInformationLine aria-hidden="true" />
+      <AppIcon name="info" aria-hidden="true" size={16} />
     )
   }
 
   if (type === "warning") {
     icon = (
-      <RiErrorWarningLine aria-hidden="true" />
+      <AppIcon name="warning" aria-hidden="true" size={16} />
     )
   }
 
   if (type === "error") {
     icon = (
-      <RiCloseCircleLine className="text-destructive" aria-hidden="true" />
+      <AppIcon name="cancel" className="text-destructive" aria-hidden="true" size={16} />
     )
   }
 
   if (type === "loading") {
     icon = (
-      <RiLoaderLine className="animate-spin" aria-hidden="true" />
+      <AppIcon name="progress_activity" className="animate-spin" aria-hidden="true" size={16} />
     )
   }
 

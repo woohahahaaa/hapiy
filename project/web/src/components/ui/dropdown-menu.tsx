@@ -4,7 +4,7 @@ import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
 import { cn } from "@/lib/utils"
-import { RiArrowRightSLine, RiCheckLine } from "@remixicon/react"
+import { AppIcon } from "@/components/AppIcon"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -119,7 +119,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <RiArrowRightSLine className="ml-auto" />
+      <AppIcon name="chevron_right" className="ml-auto" size={16} />
     </MenuPrimitive.SubmenuTrigger>
   )
 }
@@ -170,8 +170,7 @@ function DropdownMenuCheckboxItem({
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <MenuPrimitive.CheckboxItemIndicator>
-          <RiCheckLine
-          />
+          <AppIcon name="check" size={16} />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -211,8 +210,7 @@ function DropdownMenuRadioItem({
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
-          <RiCheckLine
-          />
+          <AppIcon name="check" size={16} />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}

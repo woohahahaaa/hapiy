@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X, ChevronDown, ChevronRight } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 
 interface SlotErrorBoxProps {
   error: string | null
@@ -20,9 +20,9 @@ export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
           className="flex items-center gap-1 hover:underline"
         >
           {expanded ? (
-            <ChevronDown className="size-3" />
+            <AppIcon name="expand_more" size={12} />
           ) : (
-            <ChevronRight className="size-3" />
+            <AppIcon name="chevron_right" size={12} />
           )}
           规则执行失败
         </button>
@@ -32,7 +32,7 @@ export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
             onClick={onDismiss}
             className="text-destructive/70 hover:text-destructive"
           >
-            <X className="size-3" />
+            <AppIcon name="close" size={12} />
           </button>
         )}
       </div>

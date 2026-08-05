@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
@@ -68,8 +69,14 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			StartTime: startTime,
 		})
 
-		// Select provider for the model
-		provider, err := engine.SelectProvider(relayReq.Model)
+		// Select provider for the model (channel affinity -> flat topology ->
+		// provider fallback).
+		dispatchResult, err := engine.Dispatch(relayReq.Model, c.Request.URL.Path, &affinity.Request{
+			Model:   relayReq.Model,
+			Path:    c.Request.URL.Path,
+			Headers: relayReq.Headers,
+			Body:    bodyBytes,
+		})
 		if err != nil {
 			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
@@ -80,19 +87,10 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			})
 			return
 		}
+		provider := dispatchResult.Provider
 
 		// Get execution plan
-		plan, err := engine.GetPlan(provider.ID)
-		if err != nil {
-			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": gin.H{
-					"message": "failed to get execution plan",
-					"type":    "internal_error",
-				},
-			})
-			return
-		}
+		plan := dispatchResult.Plan
 
 		// Execute relay request
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)

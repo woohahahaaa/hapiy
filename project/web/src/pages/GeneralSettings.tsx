@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { AlertTriangle, Loader2, RefreshCw, Settings2 } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,23 +61,23 @@ export function GeneralSettings() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Settings2 className="size-4" /> 通用设置
+          <AppIcon name="tune" size={16} /> 通用设置
         </CardTitle>
         <CardDescription>系统级默认配置</CardDescription>
       </CardHeader>
       <CardContent>
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> 正在加载设置…
+            <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
           </div>
         )}
 
         {state.kind === 'error' && (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <AlertTriangle className="size-8 text-destructive" />
+            <AppIcon name="warning" size={32} className="text-destructive" />
             <p className="text-sm text-muted-foreground">{state.message}</p>
             <Button variant="outline" size="sm" onClick={handleRetry}>
-              <RefreshCw data-icon="inline-start" /> 重试
+              <AppIcon name="refresh" data-icon="inline-start" /> 重试
             </Button>
           </div>
         )}
@@ -102,7 +102,7 @@ export function GeneralSettings() {
             </p>
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={saving}>
-                {saving && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                 保存
               </Button>
             </div>

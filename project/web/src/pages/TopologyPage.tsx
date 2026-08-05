@@ -9,7 +9,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, Loader2, RefreshCw, Wand2, Plus, Code, History } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
@@ -629,7 +629,7 @@ export function TopologyPage() {
       <div className="flex h-screen flex-col">
         <PageHeader title="转发拓扑" />
         <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
-          <Loader2 className="size-5 animate-spin" />
+          <AppIcon name="progress_activity" size={20} className="animate-spin" />
           <span className="text-sm">加载拓扑数据…</span>
         </div>
       </div>
@@ -642,10 +642,10 @@ export function TopologyPage() {
         <PageHeader title="转发拓扑" />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
-            <AlertTriangle className="size-10 text-destructive" />
+            <AppIcon name="warning" size={40} className="text-destructive" />
             <p className="max-w-md text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" onClick={loadData}>
-              <RefreshCw data-icon="inline-start" />
+              <AppIcon name="refresh" data-icon="inline-start" />
               重试
             </Button>
           </div>
@@ -664,7 +664,7 @@ export function TopologyPage() {
             暂无供应商配置。          请先在「供应商管理」中添加至少一个模型供应商。
           </p>
           <Button onClick={() => { window.location.href = '/provider' }}>
-            <Plus data-icon="inline-start" />
+            <AppIcon name="add" data-icon="inline-start" />
             添加供应商
           </Button>
           </div>
@@ -680,7 +680,7 @@ export function TopologyPage() {
         status={`工作流：${workflowStats.active}/${workflowStats.total} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
         actions={
           <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
-            <History data-icon="inline-start" />
+            <AppIcon name="history" data-icon="inline-start" />
             历史版本
           </Button>
         }
@@ -714,7 +714,7 @@ export function TopologyPage() {
               aria-label="添加供应商到工作流"
               ref={addProviderBtnRef}
             >
-              <Plus />
+              <AppIcon name="add" />
             </Button>
             <Button
               variant="outline"
@@ -722,7 +722,7 @@ export function TopologyPage() {
               onClick={handleAutoLayout}
               title="自动布局"
             >
-              <Wand2 />
+              <AppIcon name="auto_fix_high" />
             </Button>
             <Button
               variant="outline"
@@ -731,7 +731,7 @@ export function TopologyPage() {
               title="编辑 JSON"
               aria-label="编辑 JSON"
             >
-              <Code />
+              <AppIcon name="code" />
             </Button>
           </Panel>
         </ReactFlow>

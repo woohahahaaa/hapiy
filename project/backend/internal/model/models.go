@@ -185,6 +185,7 @@ type TopologyConfig struct {
 	Version   int       `gorm:"default:1" json:"version"`
 	Nodes     string    `gorm:"type:text" json:"nodes"` // JSON array of nodes
 	Edges     string    `gorm:"type:text" json:"edges"` // JSON array of edges
+	Flat      string    `gorm:"type:text" json:"flat"`  // JSON flat topology (nodes + wires)
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, X, Code, RefreshCw, Settings, Loader2 } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
@@ -134,10 +134,10 @@ export function ProviderPage() {
           <div className="text-sm text-muted-foreground">管理上游 API 供应商配置</div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
-              <Plus data-icon="inline-start" />添加供应商
+              <AppIcon name="add" data-icon="inline-start" />添加供应商
             </Button>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -177,8 +177,8 @@ export function ProviderPage() {
                   <TableCell><span className={provider.status ? 'text-success' : 'text-destructive'}>{provider.status ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right"><div className="flex items-center justify-end gap-2">
                     <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
-                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><Pencil /></Button>
-                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><Trash2 /></Button>
+                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+                    <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><AppIcon name="delete" /></Button>
                   </div></TableCell>
                 </TableRow>
               ))}
@@ -287,11 +287,11 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           <div className="flex gap-2">
             <Input value={newEndpoint.name} onChange={(event) => setNewEndpoint((current) => ({ ...current, name: event.target.value }))} placeholder="名称" />
             <Input value={newEndpoint.pathSuffix} onChange={(event) => setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value }))} placeholder="路径后缀" />
-            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><Plus /></Button>
+            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><AppIcon name="add" /></Button>
           </div>
           <div className="flex flex-wrap gap-2">
             {form.endpoints.map((endpoint) => (
-              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><X className="inline size-3" /></button></span>
+              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><AppIcon name="close" size={12} className="inline" /></button></span>
             ))}
           </div>
         </div>
@@ -301,20 +301,20 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
-              {isFetching ? <Loader2 data-icon="inline-start" className="animate-spin" /> : <RefreshCw data-icon="inline-start" />}
+              {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
               从上游获取模型
             </Button>
             <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
-              <Settings />
+              <AppIcon name="settings" />
             </Button>
           </div>
           <div className="flex gap-2">
             <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" />
-            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [] }) }}><Plus /></Button>
+            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [] }) }}><AppIcon name="add" /></Button>
           </div>
           <div className="flex flex-wrap gap-2">
             {form.models.map((model) => (
-              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><X className="inline size-3" /></button></span>
+              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><AppIcon name="close" size={12} className="inline" /></button></span>
             ))}
           </div>
           {fetchError && (

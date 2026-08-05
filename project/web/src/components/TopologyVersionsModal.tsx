@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ReactFlow, Background, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Loader2 } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 
@@ -209,7 +209,7 @@ export function TopologyVersionsModal({
           <div className="w-72 shrink-0 overflow-y-auto pr-2">
             {list === null && !listError && (
               <div className="flex items-center gap-2 p-4 text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
+                <AppIcon name="progress_activity" size={16} className="animate-spin" />
                 <span className="text-sm">加载中…</span>
               </div>
             )}
@@ -246,7 +246,7 @@ export function TopologyVersionsModal({
                       }}
                       disabled={actionBusy !== null}
                     >
-                      {actionBusy === 'archive' ? <Loader2 className="size-3 animate-spin" /> : '存档'}
+                      {actionBusy === 'archive' ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '存档'}
                     </Button>
                   )}
                 </div>
@@ -303,7 +303,7 @@ export function TopologyVersionsModal({
           <div className="relative min-w-0 flex-1" onContextMenu={(e) => e.preventDefault()}>
             {previewLoading ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
-                <Loader2 className="size-5 animate-spin" />
+                <AppIcon name="progress_activity" size={20} className="animate-spin" />
               </div>
             ) : layoutedPreviewNodes.length > 0 ? (
               <ReactFlow
@@ -340,7 +340,7 @@ export function TopologyVersionsModal({
               取消
             </Button>
             <Button onClick={() => void handleRestore()} disabled={actionBusy !== null}>
-              {actionBusy === 'restore' && <Loader2 className="size-4 animate-spin" data-icon="inline-start" />}
+              {actionBusy === 'restore' && <AppIcon name="progress_activity" size={16} className="animate-spin" data-icon="inline-start" />}
               确认恢复
             </Button>
           </DialogFooter>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, Code, AlertTriangle, Loader2, HelpCircle } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
@@ -170,7 +170,7 @@ export function PricePage() {
       <div className="flex-1 p-6">
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
+            <AppIcon name="progress_activity" size={16} className="animate-spin" />
             正在加载模型…
           </div>
         )}
@@ -178,7 +178,7 @@ export function PricePage() {
         {state.kind === 'error' && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-6 text-sm">
             <div className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="size-4" />
+              <AppIcon name="warning" size={16} />
               {state.message}
             </div>
             <Button className="mt-3" size="sm" variant="outline" onClick={fetch}>重试</Button>
@@ -193,10 +193,10 @@ export function PricePage() {
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                  <Code data-icon="inline-start" />编辑 JSON
+                  <AppIcon name="code" data-icon="inline-start" />编辑 JSON
                 </Button>
                   <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                  <Plus data-icon="inline-start" />
+                  <AppIcon name="add" data-icon="inline-start" />
                   添加模型
                 </Button>
               </div>
@@ -213,7 +213,7 @@ export function PricePage() {
                         价格
                         <TooltipProvider>
                           <Tooltip>
-                            <TooltipTrigger render={<HelpCircle className="size-3.5 text-muted-foreground" />} />
+                            <TooltipTrigger render={<AppIcon name="help" size={14} className="text-muted-foreground" />} />
                             <TooltipContent>
                               <p>1. 输入 / 2. 输出 / 3. 缓存写 / 4. 缓存读</p>
                               <p className="text-muted-foreground">单位：$/1M tokens</p>
@@ -255,10 +255,10 @@ export function PricePage() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(price); setIsOpen(true); }}>
-                            <Pencil />
+                            <AppIcon name="edit" />
                           </Button>
                           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(price.id)}>
-                            <Trash2 />
+                            <AppIcon name="delete" />
                           </Button>
                         </div>
                       </TableCell>

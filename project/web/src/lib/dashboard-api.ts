@@ -168,6 +168,46 @@ export type CurrentUser = {
   readonly role: string
 }
 
+// ── Flat topology (canvas node/wire model) ──
+export type FlatNodeKind = 'requestEntry' | 'provider' | 'slot'
+
+export type FlatNode = {
+  readonly id: string
+  readonly kind: FlatNodeKind
+  readonly name?: string
+  readonly slotType?: string
+  readonly enabled: boolean
+  readonly weight?: number
+}
+
+export type FlatWire = {
+  readonly source: string
+  readonly target: string
+}
+
+// ── Channel affinity ──
+export type ChannelAffinityKeySource =
+  | { readonly type: 'request_header'; readonly key: string }
+  | { readonly type: 'gjson'; readonly path: string }
+
+export type ChannelAffinityRule = {
+  readonly name: string
+  readonly enabled: boolean
+  readonly modelRegex: readonly string[]
+  readonly pathRegex: readonly string[]
+  readonly keySources: readonly ChannelAffinityKeySource[]
+  readonly includeModelName: boolean
+  readonly ttlSeconds?: number
+}
+
+export type ChannelAffinitySetting = {
+  readonly enabled: boolean
+  readonly defaultTtlSeconds: number
+  readonly rules: readonly ChannelAffinityRule[]
+}
+
+export type ChannelAffinitySettingInput = ChannelAffinitySetting
+
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
@@ -327,6 +367,62 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
     throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
   }
   return parsed.map(parseItem)
+}
+
+function parseKeySource(value: unknown): ChannelAffinityKeySource {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 key source 格式无效', null)
+  }
+  const type = readString(value.type, 'key_source.type')
+  if (type === 'request_header') {
+    return { type: 'request_header', key: readString(value.key, 'key_source.key') }
+  }
+  if (type === 'gjson') {
+    return { type: 'gjson', path: readString(value.path, 'key_source.path') }
+  }
+  throw new DashboardApiError(`服务端返回的 key source 类型无效: ${type}`, null)
+}
+
+function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的亲和规则格式无效', null)
+  }
+  return {
+    name: readString(value.name, 'affinity_rule.name'),
+    enabled: readBoolean(value.enabled, 'affinity_rule.enabled'),
+    modelRegex: readStringArray(value.model_regex, 'affinity_rule.model_regex'),
+    pathRegex: readStringArray(value.path_regex, 'affinity_rule.path_regex'),
+    keySources: readObjectArray(value.key_sources, 'affinity_rule.key_sources', parseKeySource),
+    includeModelName: readBoolean(value.include_model_name, 'affinity_rule.include_model_name'),
+    ...(typeof value.ttl_seconds === 'number' && Number.isFinite(value.ttl_seconds) ? { ttlSeconds: value.ttl_seconds } : {}),
+  }
+}
+
+function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的渠道亲和配置格式无效', null)
+  }
+  return {
+    enabled: readBoolean(value.enabled, 'affinity.enabled'),
+    defaultTtlSeconds: readNumber(value.default_ttl_seconds, 'affinity.default_ttl_seconds', 1800),
+    rules: readObjectArray(value.rules, 'affinity.rules', parseChannelAffinityRule),
+  }
+}
+
+function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecord {
+  return {
+    enabled: input.enabled,
+    default_ttl_seconds: input.defaultTtlSeconds,
+    rules: input.rules.map((rule) => ({
+      name: rule.name,
+      enabled: rule.enabled,
+      model_regex: rule.modelRegex,
+      path_regex: rule.pathRegex,
+      key_sources: rule.keySources,
+      include_model_name: rule.includeModelName,
+      ...(rule.ttlSeconds !== undefined ? { ttl_seconds: rule.ttlSeconds } : {}),
+    })),
+  }
 }
 
 function parseProvider(value: unknown): Provider {
@@ -1006,6 +1102,18 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(document),
     })
     return parseTopologyDocument(body)
+  },
+
+  async getChannelAffinity(): Promise<ChannelAffinitySetting> {
+    const body = await request('/channel-affinity')
+    return parseChannelAffinity(body)
+  },
+  async saveChannelAffinity(input: ChannelAffinitySettingInput): Promise<ChannelAffinitySetting> {
+    const body = await request('/channel-affinity', {
+      method: 'PUT',
+      body: JSON.stringify(serializeChannelAffinity(input)),
+    })
+    return parseChannelAffinity(body)
   },
 
   async listTopologyVersions(): Promise<TopologyVersionList> {

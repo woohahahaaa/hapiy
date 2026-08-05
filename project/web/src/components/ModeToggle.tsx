@@ -1,6 +1,6 @@
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
-import { RiMoonLine, RiSunLine } from "@remixicon/react"
+import { AppIcon } from "@/components/AppIcon"
 import * as React from "react"
 
 interface ModeToggleProps {
@@ -41,7 +41,7 @@ export function ModeToggle({ className, size = "icon-sm" }: ModeToggleProps) {
       aria-label={isDark ? "切换到浅色主题" : "切换到深色主题"}
       title={isDark ? "切换到浅色" : "切换到深色"}
     >
-      {isDark ? <RiSunLine /> : <RiMoonLine />}
+      {isDark ? <AppIcon name="light_mode" size={16} /> : <AppIcon name="dark_mode" size={16} />}
       <span className="sr-only">切换主题</span>
     </Button>
   )

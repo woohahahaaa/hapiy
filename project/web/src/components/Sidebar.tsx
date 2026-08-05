@@ -1,17 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
-import {
-  LayoutGrid,
-  Activity,
-  FileText,
-  Server,
-  Key,
-  Tag,
-  Settings,
-  User,
-  ChevronRight,
-} from 'lucide-react'
+import { Popover } from '@base-ui/react/popover'
+import { cn } from '@/lib/utils'
 import { ModeToggle } from '@/components/ModeToggle'
+import { AppIcon } from '@/components/AppIcon'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -31,6 +23,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 
+
 interface NavItem {
   id: string
   label: string
@@ -49,13 +42,13 @@ const navigation: NavItem[] = [
   {
     id: 'topology',
     label: '转发拓扑',
-    icon: <LayoutGrid />,
+    icon: <AppIcon name="grid_view" />,
     href: '/',
   },
   {
     id: 'monitor',
     label: '监控',
-    icon: <Activity />,
+    icon: <AppIcon name="monitoring" />,
     children: [
       { id: 'activity', label: '活动监视', href: '/monitor' },
       { id: 'logs', label: '使用日志', href: '/logs' },
@@ -64,25 +57,31 @@ const navigation: NavItem[] = [
   {
     id: 'provider',
     label: '供应商',
-    icon: <Server />,
+    icon: <AppIcon name="dns" />,
     href: '/provider',
   },
   {
     id: 'token',
     label: '令牌管理',
-    icon: <Key />,
+    icon: <AppIcon name="key" />,
     href: '/token',
+  },
+  {
+    id: 'channel-affinity',
+    label: '渠道亲和性',
+    icon: <AppIcon name="call_split" />,
+    href: '/channel-affinity',
   },
   {
     id: 'price',
     label: '模型信息',
-    icon: <Tag />,
+    icon: <AppIcon name="sell" />,
     href: '/model',
   },
   {
     id: 'policy',
     label: '策略配置',
-    icon: <FileText />,
+    icon: <AppIcon name="description" />,
     children: [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
       { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
@@ -94,15 +93,16 @@ const navigation: NavItem[] = [
   {
     id: 'settings',
     label: '系统设置',
-    icon: <Settings />,
+    icon: <AppIcon name="settings" />,
     children: [
+      { id: 'base-url', label: 'BaseURL 配置', href: '/settings/base-url' },
       { id: 'general', label: '通用设置', href: '/settings/general' },
     ],
   },
   {
     id: 'profile',
     label: '个人资料',
-    icon: <User />,
+    icon: <AppIcon name="person" />,
     href: '/profile',
   },
 ]
@@ -124,67 +124,173 @@ function NavLink({
   const { state } = useSidebar()
   const location = useLocation()
   const isActive = item.href ? isPathActive(location.pathname, item.href) : false
-  const hasActiveChild = item.children?.some((child) =>
-    isPathActive(location.pathname, child.href),
-  )
+  const hasActiveChild =
+    item.children?.some((child) => isPathActive(location.pathname, child.href)) ?? false
   const showLabel = state === 'expanded'
+  const collapsed = state === 'collapsed'
+  const hasChildren = item.children && item.children.length > 0
 
-  if (item.children && item.children.length > 0) {
+  // Light up the icon in collapsed mode when this section contains the active
+  // path; in expanded mode the parent is intentionally never lit so the active
+  // indicator stays on the leaf only.
+  const triggerIsActive = collapsed && hasActiveChild
+
+  if (hasChildren) {
+    const trigger = (
+      <SidebarMenuButton
+        isActive={triggerIsActive}
+        onClick={collapsed ? undefined : onToggle}
+      >
+        {item.icon}
+        <span>{showLabel ? item.label : ''}</span>
+        {showLabel && (
+          <AppIcon
+            name="chevron_right"
+            className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          />
+        )}
+      </SidebarMenuButton>
+    )
+
+    const popoverContent = (
+      <Popover.Portal>
+        <Popover.Positioner side="right" align="start" sideOffset={20}>
+          <Popover.Popup
+            className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+            onMouseEnter={(event) => event.stopPropagation()}
+            onMouseLeave={(event) => event.stopPropagation()}
+          >
+            <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
+              {item.label}
+            </div>
+            {item.children!.map((child) => {
+              const childActive = isPathActive(location.pathname, child.href)
+              return (
+                <Popover.Close
+                  key={child.id}
+                  render={
+                    <Link
+                      to={child.href}
+                      className={cn(
+                        'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none transition-colors',
+                        childActive
+                          ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
+                          : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                      )}
+                    >
+                      <span>{child.label}</span>
+                    </Link>
+                  }
+                />
+              )
+            })}
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    )
+
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton
-          isActive={hasActiveChild ?? false}
-          tooltip={item.label}
-          onClick={onToggle}
-        >
-          {item.icon}
-          <span>{showLabel ? item.label : ''}</span>
-          {showLabel && (
-            <ChevronRight
-              data-icon="inline-end"
-              className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
-            />
-          )}
-        </SidebarMenuButton>
-        {showLabel && isOpen && (
-          <SidebarMenuSub>
-            {item.children.map((child) => (
-              <SidebarMenuSubItem key={child.id}>
-                <SidebarMenuSubButton
-                  isActive={isPathActive(location.pathname, child.href)}
-                  render={<Link to={child.href} />}
-                >
-                  <span>{child.label}</span>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ))}
-          </SidebarMenuSub>
+        {collapsed ? (
+          <CollapsedNavItem trigger={trigger} content={popoverContent} />
+        ) : (
+          <>
+            {trigger}
+            {showLabel && isOpen && (
+              <SidebarMenuSub>
+                {item.children!.map((child) => (
+                  <SidebarMenuSubItem key={child.id}>
+                    <SidebarMenuSubButton
+                      isActive={isPathActive(location.pathname, child.href)}
+                      render={<Link to={child.href} />}
+                    >
+                      <span>{child.label}</span>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                ))}
+              </SidebarMenuSub>
+            )}
+          </>
         )}
+      </SidebarMenuItem>
+    )
+  }
+
+  const trigger = (
+    <SidebarMenuButton
+      isActive={isActive}
+      tooltip={collapsed ? item.label : undefined}
+      render={<Link to={item.href ?? '/'} />}
+    >
+      {item.icon}
+      <span>{showLabel ? item.label : ''}</span>
+    </SidebarMenuButton>
+  )
+
+  if (!collapsed) {
+    return (
+      <SidebarMenuItem>
+        {trigger}
       </SidebarMenuItem>
     )
   }
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton
-        isActive={isActive}
-        tooltip={item.label}
-        render={<Link to={item.href ?? '/'} />}
-      >
-        {item.icon}
-        <span>{showLabel ? item.label : ''}</span>
-      </SidebarMenuButton>
+      {trigger}
     </SidebarMenuItem>
   )
 }
 
+function CollapsedNavItem({
+  trigger,
+  content,
+}: {
+  trigger: React.ReactNode
+  content: React.ReactNode
+}) {
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        nativeButton={false}
+        openOnHover
+        delay={60}
+        closeDelay={180}
+        render={<span className="block w-full" />}
+      >
+        {trigger}
+      </Popover.Trigger>
+      {content}
+    </Popover.Root>
+  )
+}
+
+const OPEN_SECTIONS_KEY = 'sidebar_open_sections'
+
+const DEFAULT_OPEN_SECTIONS = ['monitor', 'policy', 'settings']
+
+function readOpenSections(): Set<string> {
+  const fallback = () => new Set(DEFAULT_OPEN_SECTIONS)
+  try {
+    const raw = localStorage.getItem(OPEN_SECTIONS_KEY)
+    if (!raw) return fallback()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return fallback()
+    return new Set(parsed.filter((v): v is string => typeof v === 'string'))
+  } catch {
+    return fallback()
+  }
+}
+
 export function AppSidebar() {
   const { state } = useSidebar()
-  const [openSections, setOpenSections] = useState(
-    () => new Set(['monitor', 'policy', 'settings']),
-  )
+  const [openSections, setOpenSections] = useState(readOpenSections)
   const collapsed = state === 'collapsed'
   const showLabel = !collapsed
+
+  useEffect(() => {
+    localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify([...openSections]))
+  }, [openSections])
 
   return (
     <SidebarRoot collapsible="icon">

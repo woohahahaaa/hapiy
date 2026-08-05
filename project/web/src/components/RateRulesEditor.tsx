@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { GripVertical, Plus, X } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -85,7 +85,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
                 onDragEnd={clearDrag}
                 className="cursor-grab text-muted-foreground active:cursor-grabbing"
               >
-                <GripVertical />
+                <AppIcon name="drag_handle" />
               </Button>
               <Input
                 value={rule.pattern}
@@ -118,7 +118,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
                 onClick={() => onChange(rate.filter((_, i) => i !== index))}
                 className="text-muted-foreground"
               >
-                <X />
+                <AppIcon name="close" />
               </Button>
             </div>
 
@@ -145,7 +145,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
           size="sm"
           onClick={() => onChange([...rate, { pattern: '', multiplier: 1 }])}
         >
-          <Plus data-icon="inline-start" />
+          <AppIcon name="add" data-icon="inline-start" />
           添加倍率
         </Button>
       </div>

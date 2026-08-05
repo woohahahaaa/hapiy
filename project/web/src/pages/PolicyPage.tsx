@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Loader2, Code, AlertTriangle, ExternalLink } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
@@ -49,7 +49,7 @@ const REWRITE_OPS_DOC_URL = 'https://github.com/woohahahaaa/hapiy/blob/main/proj
 function RewriteScriptHint() {
   return (
     <a href={REWRITE_OPS_DOC_URL} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-xs text-primary hover:underline">
-      语法文档 <ExternalLink className="h-3 w-3" />
+      语法文档 <AppIcon name="open_in_new" size={12} />
     </a>
   )
 }
@@ -64,7 +64,7 @@ export function PolicyPage() {
         <PageHeader title="未知策略类型" />
         <div className="flex-1 p-6">
           <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-md border border-border bg-card p-8 text-center">
-            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <AppIcon name="warning" size={32} className="text-destructive" />
             <div className="space-y-1">
               <p className="text-sm font-medium">该策略类型不存在</p>
               <p className="text-xs text-muted-foreground">
@@ -203,7 +203,7 @@ function RuleTableLoading() {
   return (
     <TableRow>
       <TableCell colSpan={99} className="py-10 text-center">
-        <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+        <AppIcon name="progress_activity" size={20} className="mx-auto animate-spin text-muted-foreground" />
       </TableCell>
     </TableRow>
   )
@@ -303,10 +303,10 @@ function RewritePage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus data-icon="inline-start" />
+              <AppIcon name="add" data-icon="inline-start" />
               添加规则
             </Button>
           </div>
@@ -338,10 +338,10 @@ function RewritePage() {
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil />
+                        <AppIcon name="edit" />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 />
+                        <AppIcon name="delete" />
                       </Button>
                     </div>
                   </TableCell>
@@ -446,10 +446,10 @@ function HeartbeatPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus data-icon="inline-start" />
+              <AppIcon name="add" data-icon="inline-start" />
               添加规则
             </Button>
           </div>
@@ -482,10 +482,10 @@ function HeartbeatPage() {
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil />
+                        <AppIcon name="edit" />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 />
+                        <AppIcon name="delete" />
                       </Button>
                     </div>
                   </TableCell>
@@ -590,10 +590,10 @@ function ConcurrencyPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus data-icon="inline-start" />
+              <AppIcon name="add" data-icon="inline-start" />
               添加规则
             </Button>
           </div>
@@ -628,10 +628,10 @@ function ConcurrencyPage() {
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil />
+                        <AppIcon name="edit" />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 />
+                        <AppIcon name="delete" />
                       </Button>
                     </div>
                   </TableCell>
@@ -753,10 +753,10 @@ function FailoverPage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus data-icon="inline-start" />
+              <AppIcon name="add" data-icon="inline-start" />
               添加规则
             </Button>
           </div>
@@ -791,10 +791,10 @@ function FailoverPage() {
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil />
+                        <AppIcon name="edit" />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 />
+                        <AppIcon name="delete" />
                       </Button>
                     </div>
                   </TableCell>
@@ -913,10 +913,10 @@ function RewriteResponsePage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <Code data-icon="inline-start" />编辑 JSON
+              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
             <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <Plus data-icon="inline-start" />
+              <AppIcon name="add" data-icon="inline-start" />
               添加规则
             </Button>
           </div>
@@ -948,10 +948,10 @@ function RewriteResponsePage() {
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <Pencil />
+                        <AppIcon name="edit" />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <Trash2 />
+                        <AppIcon name="delete" />
                       </Button>
                     </div>
                   </TableCell>

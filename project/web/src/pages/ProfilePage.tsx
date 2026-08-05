@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, LogOut, RefreshCw, Shield, User as UserIcon, AlertTriangle } from 'lucide-react'
+import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
@@ -111,17 +111,17 @@ export function ProfilePage() {
       <div className="flex-1 space-y-6 p-6">
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> 正在加载账户信息…
+            <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载账户信息…
           </div>
         )}
 
         {state.kind === 'error' && (
           <Card>
             <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
-              <AlertTriangle className="size-8 text-destructive" />
+              <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={load}>
-                <RefreshCw data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> 重试
               </Button>
             </CardContent>
           </Card>
@@ -132,7 +132,7 @@ export function ProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <UserIcon className="size-4" /> 账户信息
+                  <AppIcon name="person" size={16} /> 账户信息
                 </CardTitle>
                 <CardDescription>当前登录的账户信息</CardDescription>
               </CardHeader>
@@ -149,9 +149,9 @@ export function ProfilePage() {
                       disabled={loggingOut}
                     >
                       {loggingOut ? (
-                        <Loader2 data-icon="inline-start" className="animate-spin" />
+                        <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
                       ) : (
-                        <LogOut data-icon="inline-start" />
+                        <AppIcon name="logout" data-icon="inline-start" />
                       )}
                       退出登录
                     </Button>
@@ -163,7 +163,7 @@ export function ProfilePage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Shield className="size-4" /> 安全设置
+                  <AppIcon name="shield" size={16} /> 安全设置
                 </CardTitle>
                 <CardDescription>更新登录用户名和密码</CardDescription>
               </CardHeader>
@@ -179,7 +179,7 @@ export function ProfilePage() {
                     />
                   </label>
                   <Button type="submit" disabled={savingUsername}>
-                    {savingUsername && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                    {savingUsername && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                     保存用户名
                   </Button>
                 </form>
@@ -215,7 +215,7 @@ export function ProfilePage() {
                     />
                   </label>
                   <Button type="submit" disabled={savingPassword}>
-                    {savingPassword && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                    {savingPassword && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                     保存密码
                   </Button>
                 </form>
