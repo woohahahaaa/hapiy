@@ -84,7 +84,6 @@ export function FlatCanvasMenu({
         >
           <span>添加 provider 插槽</span>
         </button>
-        <div className="mt-1 border-t border-border" />
         {REQUEST_REWRITE_SLOT_TYPES.map((slotType) => (
           <button
             key={slotType}

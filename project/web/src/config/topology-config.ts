@@ -28,6 +28,7 @@ type LayoutGaps = {
   readonly groupGap: number
   readonly marginX: number
   readonly marginY: number
+  readonly freeSlotRowWidthFactor: number
 }
 
 type HandleMetric = Dimension & {

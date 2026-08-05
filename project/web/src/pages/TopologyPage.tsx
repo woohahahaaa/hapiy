@@ -20,9 +20,11 @@ import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { ContextMenu } from '@/components/topology/ContextMenu'
 import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type Provider } from '@/lib/dashboard-api'
-import { topologyConfig, fallbackNodeSize } from '@/config/topology-config'
+import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
-import { SLOT_LABELS, type SlotType } from '@/components/topology/slot-items'
+import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
+import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/topology/slot-items'
+import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
 import {
   canvasFromFlat,
   flatWiresFromCanvas,
@@ -47,7 +49,6 @@ const defaultEdgeOptions = {
 }
 
 type LayoutSnapshot = Record<string, { x: number; y: number }>
-type NodeSize = { width: number; height: number }
 
 function loadLayoutFromStorage(): LayoutSnapshot {
   if (typeof window === 'undefined') return {}
@@ -113,78 +114,8 @@ function reaches(wires: readonly FlatWire[], from: string, to: string): boolean 
   return cur === to
 }
 
-/**
- * Column layout for the flat canvas. Request entries sit in column 0; every
- * slot's column is its longest-path distance from a request entry. Nodes stack
- * vertically within their column. Provider slots render their provider children
- * inside the slot node, so they need no extra column.
- */
-function layeredLayout(canvas: FlatCanvas, sizes: ReadonlyMap<string, NodeSize>): LayoutSnapshot {
-  const sizeOf = (id: string): NodeSize => {
-    const s = sizes.get(id)
-    if (s && s.width > 0 && s.height > 0) return s
-    return { width: fallbackNodeSize.width, height: fallbackNodeSize.height }
-  }
-
-  const { topLevel, canvasWires } = canvas
-  const outMap = new Map<string, string>()
-  for (const w of canvasWires) outMap.set(w.source, w.target)
-
-  const col = new Map<string, number>()
-  for (const n of topLevel) {
-    if (isRequestEntry(n)) col.set(n.id, 0)
-  }
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const w of canvasWires) {
-      const c = col.get(w.source)
-      if (c !== undefined && (col.get(w.target) === undefined || col.get(w.target)! < c + 1)) {
-        col.set(w.target, c + 1)
-        changed = true
-      }
-    }
-  }
-  for (const n of topLevel) {
-    if (col.get(n.id) === undefined) col.set(n.id, 0)
-  }
-
-  const byCol = new Map<number, { id: string; size: NodeSize }[]>()
-  for (const n of topLevel) {
-    const c = col.get(n.id) ?? 0
-    const list = byCol.get(c) ?? []
-    list.push({ id: n.id, size: sizeOf(n.id) })
-    byCol.set(c, list)
-  }
-  const maxCol = Math.max(0, ...byCol.keys())
-  for (let c = 0; c <= maxCol; c++) {
-    if (!byCol.has(c)) byCol.set(c, [])
-  }
-
-  const positions: LayoutSnapshot = {}
-  const rowGap = topologyConfig.layout.rowGap
-  const nodeGap = topologyConfig.layout.nodeGap
-  const marginX = topologyConfig.layout.marginX
-  const marginY = topologyConfig.layout.marginY
-
-  let cursorX = marginX
-  for (let c = 0; c <= maxCol; c++) {
-    const list = byCol.get(c) ?? []
-    list.sort((a, b) => a.id.localeCompare(b.id))
-    let y = marginY
-    let colWidth = 0
-    for (const item of list) {
-      positions[item.id] = { x: cursorX, y }
-      y += item.size.height + rowGap
-      colWidth = Math.max(colWidth, item.size.width)
-    }
-    cursorX += colWidth + nodeGap
-  }
-
-  return positions
-}
-
 export function TopologyPage() {
+  const { rules: slotRules } = useSlotRules()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -256,6 +187,60 @@ export function TopologyPage() {
       markDirty()
     },
     [setTopology, markDirty],
+  )
+
+  const handleChangeSlotEntry = useCallback(
+    (slotId: string, slotType: SlotType, next: SlotEntry) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const node = cur.nodes.find((n) => n.id === slotId && n.kind === 'slot')
+      if (!node) return
+      const current = node.entries ?? []
+      const idx = current.findIndex((e) => e.index === next.index)
+      const raw = idx >= 0 ? current.map((e) => (e.index === next.index ? next : e)) : [...current, next]
+      const entries = raw.map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      updateTopologyNodes((list) =>
+        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, entries } : n)),
+      )
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleDeleteSlotEntry = useCallback(
+    (slotId: string, slotType: SlotType, index: number) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const node = cur.nodes.find((n) => n.id === slotId && n.kind === 'slot')
+      if (!node) return
+      const current = node.entries ?? []
+      const surviving = current.filter((e) => e.index !== index)
+      if (surviving.length === current.length) return
+      const entries = surviving.map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      updateTopologyNodes((list) =>
+        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, entries } : n)),
+      )
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleReorderSlotEntries = useCallback(
+    (slotId: string, slotType: SlotType, fromIndex: number, toIndex: number) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const node = cur.nodes.find((n) => n.id === slotId && n.kind === 'slot')
+      if (!node) return
+      const sorted = [...(node.entries ?? [])].sort((a, b) => a.index - b.index)
+      const from = sorted.findIndex((e) => e.index === fromIndex)
+      const to = sorted.findIndex((e) => e.index === toIndex)
+      if (from < 0 || to < 0 || from === to) return
+      const [moved] = sorted.splice(from, 1)
+      sorted.splice(to, 0, moved)
+      const entries = sorted.map((e, i) => reindexSlotItem(e, i + 1, slotType))
+      updateTopologyNodes((list) =>
+        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, entries } : n)),
+      )
+    },
+    [updateTopologyNodes],
   )
 
   const reachableProvidersForEntry = useCallback(
@@ -392,14 +377,18 @@ export function TopologyPage() {
             title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
             slotType: node.slotType ?? '',
             isProviderSlot: false,
-            children: [],
+            entries: [...(node.entries ?? [])],
+            rules: slotRules,
+            onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
+            onDeleteEntry: (index: number) => handleDeleteSlotEntry(node.id, slotType, index),
+            onReorderEntries: (from: number, to: number) => handleReorderSlotEntries(node.id, slotType, from, to),
           },
         })
       }
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName])
+  }, [canvas, layoutSnapshot, providerByName, slotRules])
 
   const baseNodes = useMemo(() => [...modelHubNodes, ...topLevelNodes], [modelHubNodes, topLevelNodes])
 
@@ -644,7 +633,16 @@ export function TopologyPage() {
 
   const handleAutoLayout = useCallback(() => {
     if (!canvas) return
-    const positions = layeredLayout(canvas, sizesRef.current)
+    const positions = layoutFlatCanvas(canvas, baseNodes, {
+      nodeGap: topologyConfig.layout.nodeGap,
+      rowGap: topologyConfig.layout.rowGap,
+      modelHubGap: topologyConfig.layout.modelHubGap,
+      groupGap: topologyConfig.layout.groupGap,
+      marginX: topologyConfig.layout.marginX,
+      marginY: topologyConfig.layout.marginY,
+      freeSlotRowWidthFactor: topologyConfig.layout.freeSlotRowWidthFactor,
+      slotBaseWidth: topologyConfig.render.slot.shellMinWidth,
+    }, sizesRef.current)
     const next: LayoutSnapshot = {}
     for (const [id, pos] of Object.entries(positions)) {
       const node = baseNodes.find((n) => n.id === id)
@@ -885,4 +883,11 @@ export function TopologyPage() {
       </div>
     </div>
   )
+}
+
+// When the order of items changes (insert/delete), every surviving entry
+// must be renumbered to keep the slot's badges contiguous.
+function reindexSlotItem(entry: SlotEntry, newIndex: number, slotType: SlotType): SlotEntry {
+  if (entry.slotType !== slotType) return entry
+  return { ...entry, index: newIndex } as SlotEntry
 }

@@ -10,7 +10,8 @@
     "modelHubGap": 20,
     "groupGap": 80,
     "marginX": 80,
-    "marginY": 80
+    "marginY": 80,
+    "freeSlotRowWidthFactor": 1.5
   },
   "fallbackNodeSize": { "width": 224, "height": 80 },
   "initialPositions": {

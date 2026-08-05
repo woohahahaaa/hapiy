@@ -228,6 +228,21 @@ type Setting struct {
 	Value string `gorm:"type:text" json:"value"`
 }
 
+// BaseUrlPath model — display-only path names for the BaseURL settings page;
+// never consulted by the relay, which reads the "__name" path convention directly.
+type BaseUrlPath struct {
+	ID        string `gorm:"primaryKey;type:uuid" json:"id"`
+	Path      string `gorm:"not null;uniqueIndex" json:"path"`
+	SortOrder int    `gorm:"not null" json:"sort_order"`
+}
+
+func (b *BaseUrlPath) BeforeCreate(tx *gorm.DB) error {
+	if b.ID == "" {
+		b.ID = uuid.New().String()
+	}
+	return nil
+}
+
 func (t *TopologyConfig) BeforeCreate(tx *gorm.DB) error {
 	if t.ID == "" {
 		t.ID = uuid.New().String()

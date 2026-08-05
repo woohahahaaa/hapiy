@@ -3,7 +3,18 @@ import { useState } from 'react'
 import { CheckSmall } from '@icon-park/react'
 import { cn } from '@/lib/utils'
 import { SlotContainer } from '@/components/topology/SlotContainer'
+import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
 import { topologyConfig } from '@/config/topology-config'
+import type { SlotEntry, SlotRuleMap, SlotType } from '@/components/topology/slot-items'
+import {
+  RequestModifySlotItem,
+  ResponseModifySlotItem,
+  AutoReplySlotItem,
+  ConcurrencySlotItem,
+  AutoSwitchSlotItem,
+  LogOutputSlotItem,
+  makeEmptyEntry,
+} from '@/components/topology/slot-items'
 
 export interface FlatProviderChild {
   readonly id: string
@@ -21,17 +32,49 @@ interface FlatSlotNodeData {
   onAddProvider?: () => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
   onReorderProvider?: (fromIndex: number, toIndex: number) => void
+  entries?: SlotEntry[]
+  rules?: SlotRuleMap
+  onChangeEntry?: (next: SlotEntry) => void
+  onDeleteEntry?: (index: number) => void
+  onReorderEntries?: (fromIndex: number, toIndex: number) => void
 }
 
 interface FlatSlotNodeProps {
   data: FlatSlotNodeData
 }
 
+const EMPTY_RULES: SlotRuleMap = {
+  requestModify: [],
+  responseModify: [],
+  autoReply: [],
+  concurrency: [],
+  autoSwitch: [],
+}
+
 export function FlatSlotNode({ data }: FlatSlotNodeProps) {
-  const { title, isProviderSlot, children = [], onAddProvider, onToggleProvider, onReorderProvider } = data
+  const {
+    title,
+    slotType,
+    isProviderSlot,
+    children = [],
+    onAddProvider,
+    onToggleProvider,
+    onReorderProvider,
+    entries: entriesProp,
+    rules,
+    onChangeEntry,
+    onDeleteEntry,
+    onReorderEntries,
+  } = data
+  const entries = entriesProp ?? []
+  const slotRules = rules ?? EMPTY_RULES
+  const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
+  const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [entryDragIndex, setEntryDragIndex] = useState<number | null>(null)
+  const [entryOverIndex, setEntryOverIndex] = useState<number | null>(null)
 
   const handleDrop = (entryIndex: number) => {
     if (dragIndex !== null && dragIndex !== entryIndex) {
@@ -45,6 +88,33 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     if (isProviderSlot) onAddProvider?.()
   }
 
+  const handleAddEntry = () => {
+    onChangeEntry?.(makeEmptyEntry(slotType as SlotType, entries.length + 1))
+  }
+
+  const entryDragProps = (entryIndex: number): DragProps => ({
+    isDragging: entryDragIndex === entryIndex,
+    isDragOver: entryOverIndex === entryIndex && entryDragIndex !== null && entryDragIndex !== entryIndex,
+    onDragStart: () => setEntryDragIndex(entryIndex),
+    onDragOver: () => setEntryOverIndex(entryIndex),
+    onDrop: () => {
+      if (entryDragIndex !== null && entryDragIndex !== entryIndex) {
+        onReorderEntries?.(entryDragIndex, entryIndex)
+      }
+      setEntryDragIndex(null)
+      setEntryOverIndex(null)
+    },
+  })
+
+  const titleBadge = (
+    <span className="flex items-baseline gap-1">
+      <span>{title}</span>
+      <span className="text-[10px] text-muted-foreground/50">
+        · {isProviderSlot ? '择一执行' : '全部执行'}
+      </span>
+    </span>
+  )
+
   return (
     <>
       <Handle
@@ -57,31 +127,45 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           borderWidth: topologyConfig.handles.slot.target.borderWidth,
         }}
       />
-      <SlotContainer
-        title={
-          <span className="flex items-baseline gap-1">
-            <span>{title}</span>
-            <span className="text-[10px] text-muted-foreground/50">
-              · {isProviderSlot ? '择一执行' : '全部执行'}
-            </span>
-          </span>
-        }
-        onAddNode={isProviderSlot ? handleAdd : undefined}
-        style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
-      >
-        {children.map((child, i) => (
-          <ProviderCard
-            key={child.id}
-            child={child}
-            isDragging={dragIndex === i}
-            isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
-            onDragStart={() => setDragIndex(i)}
-            onDragOver={() => setOverIndex(i)}
-            onDrop={() => handleDrop(i)}
-            onToggle={(enabled) => onToggleProvider?.(child.id, enabled)}
-          />
-        ))}
-      </SlotContainer>
+      {isProviderSlot ? (
+        <SlotContainer
+          title={titleBadge}
+          onAddNode={handleAdd}
+          style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
+        >
+          {children.map((child, i) => (
+            <ProviderCard
+              key={child.id}
+              child={child}
+              isDragging={dragIndex === i}
+              isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
+              onDragStart={() => setDragIndex(i)}
+              onDragOver={() => setOverIndex(i)}
+              onDrop={() => handleDrop(i)}
+              onToggle={(enabled) => onToggleProvider?.(child.id, enabled)}
+            />
+          ))}
+        </SlotContainer>
+      ) : (
+        <SlotContainer
+          title={titleBadge}
+          onAddNode={handleAddEntry}
+          style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
+        >
+          {entries.map((entry) =>
+            renderItem(
+              entry,
+              slotRules,
+              hasRequestRewrite,
+              hasResponseRewrite,
+              onChangeEntry,
+              onDeleteEntry,
+              entryDragProps(entry.index),
+            ),
+          )}
+        </SlotContainer>
+      )}
+      {!isProviderSlot && <SlotErrorBox error={null} />}
       <Handle
         type="source"
         position={Position.Right}
@@ -163,4 +247,94 @@ function ProviderCard({ child, isDragging, isDragOver, onDragStart, onDragOver, 
       <span className="shrink-0 text-[10px] text-muted-foreground">{child.modelCount} 模型</span>
     </div>
   )
+}
+
+interface DragProps {
+  isDragging?: boolean
+  isDragOver?: boolean
+  onDragStart?: () => void
+  onDragOver?: () => void
+  onDrop?: () => void
+}
+
+function renderItem(
+  entry: SlotEntry,
+  rules: SlotRuleMap,
+  hasRequestRewrite: boolean,
+  hasResponseRewrite: boolean,
+  onChangeEntry: ((next: SlotEntry) => void) | undefined,
+  onDeleteEntry: ((index: number) => void) | undefined,
+  drag: DragProps,
+) {
+  const onDelete = () => onDeleteEntry?.(entry.index)
+  const change = onChangeEntry as (e: SlotEntry) => void
+  switch (entry.slotType) {
+    case 'requestModify':
+      return (
+        <RequestModifySlotItem
+          key={entry.id}
+          entry={entry}
+          rules={rules.requestModify}
+          onChange={change}
+          onDelete={onDelete}
+          {...drag}
+        />
+      )
+    case 'responseModify':
+      return (
+        <ResponseModifySlotItem
+          key={entry.id}
+          entry={entry}
+          rules={rules.responseModify}
+          onChange={change}
+          onDelete={onDelete}
+          {...drag}
+        />
+      )
+    case 'autoReply':
+      return (
+        <AutoReplySlotItem
+          key={entry.id}
+          entry={entry}
+          rules={rules.autoReply}
+          onChange={change}
+          onDelete={onDelete}
+          {...drag}
+        />
+      )
+    case 'concurrency':
+      return (
+        <ConcurrencySlotItem
+          key={entry.id}
+          entry={entry}
+          rules={rules.concurrency}
+          onChange={change}
+          onDelete={onDelete}
+          {...drag}
+        />
+      )
+    case 'autoSwitch':
+      return (
+        <AutoSwitchSlotItem
+          key={entry.id}
+          entry={entry}
+          rules={rules.autoSwitch}
+          onChange={change}
+          onDelete={onDelete}
+          {...drag}
+        />
+      )
+    case 'logOutput':
+      return (
+        <LogOutputSlotItem
+          key={entry.id}
+          entry={entry}
+          onChange={change}
+          onDelete={onDelete}
+          hasRequestRewrite={hasRequestRewrite}
+          hasResponseRewrite={hasResponseRewrite}
+          {...drag}
+        />
+      )
+  }
 }

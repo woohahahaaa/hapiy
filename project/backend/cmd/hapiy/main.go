@@ -145,6 +145,8 @@ func main() {
 			// Settings
 			dashboardAuthed.GET("/settings", handler.ListSettings(db))
 			dashboardAuthed.PUT("/settings", handler.UpsertSetting(db))
+			dashboardAuthed.GET("/settings/base-url-paths", handler.ListBaseUrlPaths(db))
+			dashboardAuthed.PUT("/settings/base-url-paths", handler.ReplaceBaseUrlPaths(db))
 
 			dashboardAuthed.GET("/topology", handler.TopologyGet(db))
 			dashboardAuthed.PUT("/topology", handler.TopologyPut(db, engine))

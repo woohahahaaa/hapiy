@@ -66,16 +66,16 @@ export function RequestEntryNode({ data }: RequestEntryNodeProps) {
           }}
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
-            'nodrag nopan relative h-10 w-10 shrink-0 rounded-full cursor-pointer touch-manipulation transition-colors',
-            'border-2 outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            enabled ? 'border-primary bg-primary/15' : 'border-border bg-muted',
+            'nodrag nopan relative inline-flex h-5 w-9 shrink-0 cursor-pointer touch-manipulation items-center rounded-full transition-colors',
+            'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            enabled ? 'bg-primary' : 'bg-secondary',
           )}
         >
           <span
             aria-hidden="true"
             className={cn(
-              'absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors',
-              enabled ? 'bg-primary' : 'bg-muted-foreground/40',
+              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform',
+              enabled ? 'translate-x-4' : 'translate-x-0.5',
             )}
           />
         </button>

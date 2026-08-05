@@ -1,5 +1,6 @@
 import { parseTopologyDocument } from './topology-document'
 import type { Workflow } from './topology-document'
+import type { SlotEntry } from '@/components/topology/slot-items'
 export { parseTopologyDocument } from './topology-document'
 export type { Workflow } from './topology-document'
 export type TopologyDocument = Workflow[]
@@ -182,6 +183,7 @@ export type FlatNode = {
   readonly slotType?: string
   readonly enabled: boolean
   readonly weight?: number
+  readonly entries?: readonly SlotEntry[]
 }
 
 export type FlatWire = {
@@ -212,6 +214,7 @@ function parseFlatNode(value: unknown): FlatNode {
     slotType: typeof value.slot_type === 'string' ? value.slot_type : undefined,
     enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
     weight: typeof value.weight === 'number' ? value.weight : undefined,
+    entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
   }
 }
 
@@ -236,6 +239,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     ...(node.slotType !== undefined ? { slot_type: node.slotType } : {}),
     enabled: node.enabled,
     ...(node.weight !== undefined ? { weight: node.weight } : {}),
+    ...(node.entries !== undefined ? { entries: node.entries } : {}),
   }
 }
 
@@ -1145,6 +1149,19 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ key, value }),
     }))
+  },
+  async getBaseUrlPaths(): Promise<readonly string[]> {
+    const data = await request('/settings/base-url-paths')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的路径列表格式无效', null)
+    }
+    return data.filter(isRecord).map((v) => readString(v.path, 'base-url-path.path'))
+  },
+  async replaceBaseUrlPaths(paths: readonly string[]): Promise<void> {
+    await request('/settings/base-url-paths', {
+      method: 'PUT',
+      body: JSON.stringify({ paths }),
+    })
   },
 
   // ── Provider models ──
