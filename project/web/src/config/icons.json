@@ -47,10 +47,10 @@
     "shield": "Shield",
     "tune": "Filter",
     "view_sidebar": "LayoutOne",
-    "grid_view": "ViewGridCard",
+    "grid_view": "ChartGraph",
     "monitoring": "Monitor",
     "key": "Key",
-    "call_split": "SplitBranch",
+    "call_split": "ConnectionPoint",
     "sell": "Tag",
     "description": "FileText",
     "warning": "Attention"

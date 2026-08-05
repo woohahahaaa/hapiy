@@ -23,7 +23,7 @@ type ProviderFormProps = {
 }
 
 const emptyProvider: ProviderInput = {
-  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, weight: 1, autoDisabled: false,
+  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
 }
 
 function toErrorMessage(error: unknown): string {
@@ -93,7 +93,7 @@ export function ProviderPage() {
           const providerInput: ProviderInput = {
           name: item.name, baseUrls: item.baseUrls, keys: item.keys,
           endpoints: item.endpoints, models: item.models,
-          status: item.status, workflowEnabled: item.workflowEnabled, weight: item.weight, autoDisabled: item.autoDisabled,
+          status: item.status, workflowEnabled: item.workflowEnabled, autoDisabled: item.autoDisabled,
         }
         if (id && currentMap.has(id)) {
           retainedIds.add(id)
@@ -267,10 +267,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         <Field>
           <FieldLabel htmlFor="provider-name">名称</FieldLabel>
           <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="provider-weight">权重</FieldLabel>
-          <Input id="provider-weight" type="number" value={form.weight} onChange={(event) => setForm((current) => ({ ...current, weight: Number(event.target.value) || 1 }))} placeholder="1" />
         </Field>
       </div>
       <Field>
