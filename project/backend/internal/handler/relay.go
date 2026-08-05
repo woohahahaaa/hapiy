@@ -78,7 +78,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			Body:    bodyBytes,
 		})
 		if err != nil {
-			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
 					"message": fmt.Sprintf("no provider available for model: %s", relayReq.Model),
@@ -88,6 +88,8 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 		provider := dispatchResult.Provider
+		relayReq.KeyIndex = dispatchResult.KeyIndex
+		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 
 		// Get execution plan
 		plan := dispatchResult.Plan
@@ -95,7 +97,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Execute relay request
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
 		if err != nil {
-			logRelayError(c, userID, tokenName, relayReq.Model, err, startTime)
+			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime)
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -150,6 +152,15 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Set response headers
 		for k, v := range resp.Headers {
 			c.Header(k, v)
+		}
+
+		if dispatchResult.AffinityMatch != nil {
+			match := dispatchResult.AffinityMatch
+			engine.Affinity().Record(match.RuleName, match.RuleIncludeModel, relayReq.Model, match.AffinityValue, affinity.Triple{
+				ProviderName: provider.Name,
+				KeyIndex:     relayReq.KeyIndex,
+				BaseURLIndex: relayReq.BaseURLIndex,
+			}, 0)
 		}
 
 		// Handle streaming vs non-streaming response
@@ -207,11 +218,12 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 	}
 }
 
-func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, err error, startTime time.Time) {
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time) {
 	useTime := int(time.Since(startTime).Milliseconds())
 	service.Logs().Write(&model.Log{
 		UserID:       getString(userID),
 		TokenName:    getString(tokenName),
+		ProviderName: providerName,
 		ModelName:    modelName,
 		Status:       "failed",
 		IP:           c.ClientIP(),

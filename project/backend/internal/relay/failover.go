@@ -85,6 +85,9 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if err == nil {
 		return resp, nil
 	}
+	if rotated := e.rotateKeyOrBaseURL(ctx, plan, req); rotated != nil {
+		return rotated, nil
+	}
 	fallbackPlan, fallback := e.maybeFailover(plan, classifyOutcome(resp, err))
 	if !fallback {
 		return resp, err
@@ -100,6 +103,35 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	return e.performUpstreamCall(ctx, fallbackPlan, req)
 }
 
+// rotateKeyOrBaseURL retries the request against another key or base URL of the
+// same provider. It returns the response, or nil when nothing is left to try.
+func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) *RelayResponse {
+	baseCount := len(plan.BaseURLs)
+	keyCount := len(plan.Keys)
+	if baseCount <= 0 || keyCount <= 0 {
+		return nil
+	}
+	for bi := 0; bi < baseCount; bi++ {
+		for ki := 0; ki < keyCount; ki++ {
+			if bi == req.BaseURLIndex && ki == req.KeyIndex {
+				continue
+			}
+			candidate := RelayRequest(*req)
+			candidate.BaseURLIndex = bi
+			candidate.KeyIndex = ki
+			resp, err := e.performUpstreamCall(ctx, plan, &candidate)
+			if err == nil {
+				return resp
+			}
+			if resp != nil && resp.Body != nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
+		}
+	}
+	return nil
+}
+
 // performUpstreamCall runs the request against the given plan and
 // classifies the outcome (status vs transport error) for the caller.
 func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
@@ -109,12 +141,20 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 	if len(plan.Keys) == 0 {
 		return nil, errors.New("no API key configured")
 	}
-	upstreamURL := plan.BaseURLs[0]
-	key := plan.Keys[0]
+	upstreamURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
+	key := pickIndex(plan.Keys, req.KeyIndex)
 	if req.Stream {
 		return e.relayStreaming(ctx, upstreamURL, key, req)
 	}
 	return e.relayNonStreaming(ctx, upstreamURL, key, req)
+}
+
+// pickIndex returns items[idx], falling back to the first when idx is invalid.
+func pickIndex(items []string, idx int) string {
+	if idx >= 0 && idx < len(items) {
+		return items[idx]
+	}
+	return items[0]
 }
 
 // classifyOutcome collapses (resp, err) into a single upstreamOutcome

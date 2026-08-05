@@ -50,7 +50,6 @@ export type Provider = {
   readonly status: boolean
   readonly autoDisabled: boolean
   readonly workflowEnabled: boolean
-  readonly weight: number
 }
 
 export type ProviderInput = Omit<Provider, 'id'>
@@ -129,6 +128,11 @@ export type LogListResult = {
   readonly total: number
 }
 
+export type DateRange = {
+  readonly from?: string
+  readonly to?: string
+}
+
 export type SystemSetting = {
   readonly key: string
   readonly value: string
@@ -183,6 +187,71 @@ export type FlatNode = {
 export type FlatWire = {
   readonly source: string
   readonly target: string
+}
+
+export type FlatTopology = {
+  readonly nodes: readonly FlatNode[]
+  readonly wires: readonly FlatWire[]
+}
+
+export type DuplicateActivation = {
+  readonly providerName: string
+  readonly entryIds: readonly string[]
+}
+
+function parseFlatNode(value: unknown): FlatNode {
+  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑节点格式无效', null)
+  const kind = value.kind
+  if (kind !== 'requestEntry' && kind !== 'provider' && kind !== 'slot') {
+    throw new DashboardApiError('扁平拓扑节点类型无效', null)
+  }
+  return {
+    id: readString(value.id, 'node.id'),
+    kind,
+    name: typeof value.name === 'string' ? value.name : undefined,
+    slotType: typeof value.slot_type === 'string' ? value.slot_type : undefined,
+    enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
+    weight: typeof value.weight === 'number' ? value.weight : undefined,
+  }
+}
+
+function parseFlatWire(value: unknown): FlatWire {
+  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑连线格式无效', null)
+  return { source: readString(value.source, 'wire.source'), target: readString(value.target, 'wire.target') }
+}
+
+function parseFlatTopology(value: unknown): FlatTopology {
+  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑格式无效', null)
+  return {
+    nodes: readObjectArray(value.nodes, 'flat.nodes', parseFlatNode),
+    wires: readObjectArray(value.wires, 'flat.wires', parseFlatWire),
+  }
+}
+
+function serializeFlatNode(node: FlatNode): JsonRecord {
+  return {
+    id: node.id,
+    kind: node.kind,
+    ...(node.name !== undefined ? { name: node.name } : {}),
+    ...(node.slotType !== undefined ? { slot_type: node.slotType } : {}),
+    enabled: node.enabled,
+    ...(node.weight !== undefined ? { weight: node.weight } : {}),
+  }
+}
+
+function serializeFlatTopology(tp: FlatTopology): JsonRecord {
+  return {
+    nodes: tp.nodes.map(serializeFlatNode),
+    wires: tp.wires.map((wire) => ({ source: wire.source, target: wire.target })),
+  }
+}
+
+function parseDuplicateActivation(value: unknown): DuplicateActivation {
+  if (!isRecord(value)) throw new DashboardApiError('重复激活冲突格式无效', null)
+  return {
+    providerName: readString(value.provider_name, 'dup.provider_name'),
+    entryIds: readStringArray(value.entry_ids, 'dup.entry_ids'),
+  }
 }
 
 // ── Channel affinity ──
@@ -439,7 +508,6 @@ function parseProvider(value: unknown): Provider {
     status: readBoolean(value.status, 'provider.status'),
     autoDisabled: readBoolean(value.auto_disabled, 'provider.auto_disabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
-    weight: readNumber(value.weight, 'provider.weight', 1),
   }
 }
 
@@ -626,7 +694,6 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     status: provider.status,
     auto_disabled: provider.autoDisabled,
     workflow_enabled: provider.workflowEnabled,
-    weight: provider.weight,
   }
 }
 
@@ -1114,6 +1181,23 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(serializeChannelAffinity(input)),
     })
     return parseChannelAffinity(body)
+  },
+
+  async getFlatTopology(): Promise<FlatTopology> {
+    const body = await request('/flat-topology')
+    return parseFlatTopology(body)
+  },
+  async saveFlatTopology(tp: FlatTopology): Promise<FlatTopology> {
+    const body = await request('/flat-topology', {
+      method: 'PUT',
+      body: JSON.stringify(serializeFlatTopology(tp)),
+    })
+    return parseFlatTopology(body)
+  },
+  async validateFlatTopology(): Promise<readonly DuplicateActivation[]> {
+    const body = await request('/flat-topology/validate')
+    if (!Array.isArray(body)) throw new DashboardApiError('服务端返回的重复激活冲突格式无效', null)
+    return body.map(parseDuplicateActivation)
   },
 
   async listTopologyVersions(): Promise<TopologyVersionList> {

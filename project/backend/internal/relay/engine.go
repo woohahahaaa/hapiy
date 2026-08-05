@@ -138,6 +138,10 @@ type RelayRequest struct {
 	Temperature float64                  `json:"temperature,omitempty"`
 	Body        map[string]interface{}   `json:"-"` // Full request body
 	Headers     map[string]string        `json:"-"`
+	// KeyIndex and BaseURLIndex select which key/baseURL to use (-1 = rotate
+	// from the first available).
+	KeyIndex     int `json:"-"`
+	BaseURLIndex int `json:"-"`
 }
 
 // RelayResponse represents the upstream response.

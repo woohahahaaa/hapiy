@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   ReactFlow,
   Background,
@@ -7,41 +6,39 @@ import {
   useNodesState,
   useEdgesState,
   type Node,
+  type Edge,
+  type Connection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { ProviderNode } from '@/nodes/ProviderNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
-import { SlotNode } from '@/nodes/SlotNode'
-import { NodeMenu } from '@/components/topology/NodeMenu'
+import { FlatSlotNode } from '@/nodes/FlatSlotNode'
+import { RequestEntryNode } from '@/nodes/RequestEntryNode'
+import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { ContextMenu } from '@/components/topology/ContextMenu'
-import { dashboardApi } from '@/lib/dashboard-api'
-import { DashboardApiError, type Provider } from '@/lib/dashboard-api'
+import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type Provider } from '@/lib/dashboard-api'
 import { topologyConfig, fallbackNodeSize } from '@/config/topology-config'
-import { getLayoutedElements } from '@/lib/topology-auto-layout'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
-import { TopologyJsonEditModal } from '@/components/TopologyJsonEditModal'
-import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { slotMapsFromWorkflows, workflowsFromSlotMaps, preserveNullRuleDrafts, makeWorkflowKey, type Workflow, type WorkflowEntry } from '@/lib/topology-document'
-import { TopologySaveQueue } from '@/lib/topology-save-queue'
-import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges, computeWorkflowPlacements, type LayoutSnapshot } from '@/lib/topology-builders'
+import { SLOT_LABELS, type SlotType } from '@/components/topology/slot-items'
 import {
-  emptySlotEntryMap,
-  useSlotRules,
-  type SlotEntry,
-  type SlotEntryMap,
-  type SlotRuleMap,
-  type SlotType,
-} from '@/components/topology/slot-items'
+  canvasFromFlat,
+  flatWiresFromCanvas,
+  findDuplicateActivations,
+  isProviderSlot,
+  isRequestEntry,
+  isProvider,
+  PROVIDER_SLOT_TYPE,
+  type RewriteSlotType,
+  type FlatCanvas,
+} from '@/lib/flat-topology'
 
 const nodeTypes = {
   modelHub: ModelHubNode,
-  provider: ProviderNode,
-  slot: SlotNode,
+  slot: FlatSlotNode,
+  requestEntry: RequestEntryNode,
 }
 
 const defaultEdgeOptions = {
@@ -49,14 +46,8 @@ const defaultEdgeOptions = {
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
 }
 
-const SLOT_BASE_OFFSET = topologyConfig.initialPositions.slot.x - topologyConfig.initialPositions.provider.x
-
-function providerIdFromSlotId(slotId: string): string | null {
-  if (!slotId.startsWith('slot-')) return null
-  const rest = slotId.slice(5)
-  const lastDash = rest.lastIndexOf('-')
-  return lastDash >= 0 ? rest.slice(0, lastDash) : rest
-}
+type LayoutSnapshot = Record<string, { x: number; y: number }>
+type NodeSize = { width: number; height: number }
 
 function loadLayoutFromStorage(): LayoutSnapshot {
   if (typeof window === 'undefined') return {}
@@ -78,118 +69,420 @@ function saveLayoutToStorage(layout: LayoutSnapshot): void {
   }
 }
 
+function canvasWiresFromEdges(edges: readonly Edge[]): FlatWire[] {
+  return edges
+    .filter((e) => !e.source.startsWith('model-'))
+    .map((e) => ({ source: e.source, target: e.target }))
+}
+
+function wiringEdgeId(source: string, target: string): string {
+  return `${source}→${target}`
+}
+
+function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: string): boolean {
+  if (source === target) return true
+  const out = new Map<string, string>()
+  for (const w of wires) out.set(w.source, w.target)
+  let current = target
+  const seen = new Set<string>()
+  while (out.has(current)) {
+    if (seen.has(current)) return true
+    seen.add(current)
+    current = out.get(current)!
+    if (current === source) return true
+  }
+  return false
+}
+
+function invalidConnectionReason(wires: readonly FlatWire[], source: string, target: string): string | null {
+  if (wires.some((w) => w.source === source)) return '每个节点最多一条出边'
+  if (wouldCreateCycle(wires, source, target)) return '不能形成环路'
+  return null
+}
+
+function reaches(wires: readonly FlatWire[], from: string, to: string): boolean {
+  const out = new Map<string, string>()
+  for (const w of wires) out.set(w.source, w.target)
+  let cur: string | undefined = from
+  const seen = new Set<string>()
+  while (cur !== undefined && !seen.has(cur)) {
+    if (cur === to) return true
+    seen.add(cur)
+    cur = out.get(cur)
+  }
+  return cur === to
+}
+
+/**
+ * Column layout for the flat canvas. Request entries sit in column 0; every
+ * slot's column is its longest-path distance from a request entry. Nodes stack
+ * vertically within their column. Provider slots render their provider children
+ * inside the slot node, so they need no extra column.
+ */
+function layeredLayout(canvas: FlatCanvas, sizes: ReadonlyMap<string, NodeSize>): LayoutSnapshot {
+  const sizeOf = (id: string): NodeSize => {
+    const s = sizes.get(id)
+    if (s && s.width > 0 && s.height > 0) return s
+    return { width: fallbackNodeSize.width, height: fallbackNodeSize.height }
+  }
+
+  const { topLevel, canvasWires } = canvas
+  const outMap = new Map<string, string>()
+  for (const w of canvasWires) outMap.set(w.source, w.target)
+
+  const col = new Map<string, number>()
+  for (const n of topLevel) {
+    if (isRequestEntry(n)) col.set(n.id, 0)
+  }
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const w of canvasWires) {
+      const c = col.get(w.source)
+      if (c !== undefined && (col.get(w.target) === undefined || col.get(w.target)! < c + 1)) {
+        col.set(w.target, c + 1)
+        changed = true
+      }
+    }
+  }
+  for (const n of topLevel) {
+    if (col.get(n.id) === undefined) col.set(n.id, 0)
+  }
+
+  const byCol = new Map<number, { id: string; size: NodeSize }[]>()
+  for (const n of topLevel) {
+    const c = col.get(n.id) ?? 0
+    const list = byCol.get(c) ?? []
+    list.push({ id: n.id, size: sizeOf(n.id) })
+    byCol.set(c, list)
+  }
+  const maxCol = Math.max(0, ...byCol.keys())
+  for (let c = 0; c <= maxCol; c++) {
+    if (!byCol.has(c)) byCol.set(c, [])
+  }
+
+  const positions: LayoutSnapshot = {}
+  const rowGap = topologyConfig.layout.rowGap
+  const nodeGap = topologyConfig.layout.nodeGap
+  const marginX = topologyConfig.layout.marginX
+  const marginY = topologyConfig.layout.marginY
+
+  let cursorX = marginX
+  for (let c = 0; c <= maxCol; c++) {
+    const list = byCol.get(c) ?? []
+    list.sort((a, b) => a.id.localeCompare(b.id))
+    let y = marginY
+    let colWidth = 0
+    for (const item of list) {
+      positions[item.id] = { x: cursorX, y }
+      y += item.size.height + rowGap
+      colWidth = Math.max(colWidth, item.size.width)
+    }
+    cursorX += colWidth + nodeGap
+  }
+
+  return positions
+}
+
 export function TopologyPage() {
-  const navigate = useNavigate()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean; mode: 'corner' | 'cursor' }>({ x: 0, y: 0, open: false, mode: 'cursor' })
-  const { rules } = useSlotRules()
-
-  const slotsStateRef = useRef<Map<string, WorkflowEntry>>(new Map())
-  const workflowsRef = useRef<Workflow[] | null>(null)
-  const saveQueueRef = useRef<TopologySaveQueue | null>(null)
-  const [slotsVersion, setSlotsVersion] = useState(0)
-  const slotsVersionRef = useRef(0)
-  const bumpSlots = useCallback(() => {
-    slotsVersionRef.current += 1
-    setSlotsVersion((v) => v + 1)
+  const [tp, setTp] = useState<FlatTopology | null>(null)
+  const tpRef = useRef<FlatTopology | null>(null)
+  const setTopology = useCallback((next: FlatTopology) => {
+    tpRef.current = next
+    setTp(next)
   }, [])
-  const addProviderBtnRef = useRef<HTMLButtonElement>(null)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
   const [dirty, setDirty] = useState(false)
-  const [navGuardNext, setNavGuardNext] = useState<string | null>(null)
-
-  const handlePaneClick = useCallback(() => {
-    setSelectedNodeId(null)
-    setContextMenu(null)
+  const dirtyRef = useRef(false)
+  const markDirty = useCallback(() => {
+    dirtyRef.current = true
+    setDirty(true)
   }, [])
 
-  const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
-    event.preventDefault()
-    if (!(event.target instanceof Element)) return
-    if (event.target.closest('.react-flow__node')) return
-    setSelectedNodeId(null)
-    setContextMenu(null)
-    setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
-  }, [])
+  const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean; mode: 'corner' | 'cursor' }>({
+    x: 0,
+    y: 0,
+    open: false,
+    mode: 'cursor',
+  })
+  const addButtonRef = useRef<HTMLButtonElement>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
+  const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
+  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
+  const layoutSnapshotRef = useRef(layoutSnapshot)
+  layoutSnapshotRef.current = layoutSnapshot
+  const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
 
-  const handleNodeClick = useCallback((_event: ReactMouseEvent, node: Node) => {
-    setSelectedNodeId(node.id)
-    setContextMenu(null)
-  }, [])
+  const canvas: FlatCanvas | null = useMemo(() => (tp ? canvasFromFlat(tp.nodes, tp.wires) : null), [tp])
 
-  const handleNodeContextMenu = useCallback((event: ReactMouseEvent, node: Node) => {
-    event.preventDefault()
-    if (!node.id.startsWith('pv-')) return
-    setSelectedNodeId(node.id)
-    setMenuState((s) => ({ ...s, open: false }))
-    setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
-  }, [])
+  const providerByName = useMemo(() => {
+    const map = new Map<string, Provider>()
+    for (const p of providers ?? []) map.set(p.name, p)
+    return map
+  }, [providers])
+
+  const updateTopologyNodes = useCallback(
+    (updater: (nodes: readonly FlatNode[]) => readonly FlatNode[]) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const nodes = updater(cur.nodes)
+      const collapsed = canvasFromFlat(nodes, cur.wires)
+      const wires = flatWiresFromCanvas({
+        topLevel: collapsed.topLevel,
+        providers: collapsed.providers,
+        providerSlotOf: collapsed.providerSlotOf,
+        canvasWires: canvasWiresFromEdges(edgesRef.current),
+      })
+      setTopology({ nodes, wires })
+      markDirty()
+    },
+    [setTopology, markDirty],
+  )
+
+  const commitCanvasWires = useCallback(
+    (nextWires: readonly FlatWire[]) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+      const wires = flatWiresFromCanvas({
+        topLevel: collapsed.topLevel,
+        providers: collapsed.providers,
+        providerSlotOf: collapsed.providerSlotOf,
+        canvasWires: nextWires,
+      })
+      setTopology({ nodes: cur.nodes, wires })
+      markDirty()
+    },
+    [setTopology, markDirty],
+  )
+
+  const reachableProvidersForEntry = useCallback(
+    (entryId: string): Array<{ provider: Provider; active: boolean }> => {
+      if (!canvas) return []
+      const out = new Map<string, string>()
+      for (const w of canvas.canvasWires) out.set(w.source, w.target)
+      const result: Array<{ provider: Provider; active: boolean }> = []
+      const seen = new Set<string>([entryId])
+      let cur = out.get(entryId)
+      while (cur && !seen.has(cur)) {
+        seen.add(cur)
+        const node = canvas.topLevel.find((n) => n.id === cur)
+        if (node && isProviderSlot(node)) {
+          for (const p of canvas.providers) {
+            if (canvas.providerSlotOf.get(p.id) !== cur || !p.name) continue
+            const provider = providerByName.get(p.name)
+            if (provider && !result.some((r) => r.provider.name === provider.name)) {
+              result.push({ provider, active: p.enabled && provider.status })
+            }
+          }
+        }
+        cur = out.get(cur)
+      }
+      return result
+    },
+    [canvas, providerByName],
+  )
+
+  const modelHubNodes = useMemo(() => {
+    if (!canvas) return [] as Node[]
+    const nodes: Node[] = []
+    for (const entry of canvas.topLevel) {
+      if (!isRequestEntry(entry)) continue
+      const reachable = reachableProvidersForEntry(entry.id)
+      const modelSet = new Map<string, boolean>()
+      for (const { provider, active } of reachable) {
+        for (const m of provider.models) {
+          const prev = modelSet.get(m.model)
+          if (prev === undefined) modelSet.set(m.model, active)
+          else if (active) modelSet.set(m.model, true)
+        }
+      }
+      const hubId = `hub-${entry.id}`
+      const models = Array.from(modelSet.keys())
+        .sort((a, b) => a.localeCompare(b))
+        .map((model) => ({ id: model, label: model, disabled: !modelSet.get(model) }))
+      nodes.push({
+        id: hubId,
+        type: 'modelHub',
+        position: layoutSnapshot[hubId] ?? { x: 20, y: 20 },
+        data: { models, simplified: true },
+      })
+    }
+    return nodes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas, reachableProvidersForEntry])
+
+  const topLevelNodes = useMemo(() => {
+    if (!canvas) return [] as Node[]
+    const nodes: Node[] = []
+    for (const node of canvas.topLevel) {
+      if (isRequestEntry(node)) {
+        nodes.push({
+          id: node.id,
+          type: 'requestEntry',
+          position: layoutSnapshot[node.id] ?? { x: 300, y: 20 },
+          data: {
+            label: node.name ?? '请求入口',
+            enabled: node.enabled,
+            weight: node.weight ?? 1,
+            onChangeEnabled: (enabled: boolean) => {
+              updateTopologyNodes((list) => {
+                const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
+                if (!enabled) return next
+                const nextCollapsed = canvasFromFlat(next, tpRef.current?.wires ?? [])
+                const entryReaches = new Set<string>()
+                let cur = nextCollapsed.canvasWires.find((w) => w.source === node.id)?.target
+                const guard = new Set<string>([node.id])
+                while (cur && !guard.has(cur)) {
+                  guard.add(cur)
+                  entryReaches.add(cur)
+                  cur = nextCollapsed.canvasWires.find((w) => w.source === cur)?.target
+                }
+                const dup = new Set(findDuplicateActivations(next, tpRef.current?.wires ?? []))
+                return next.map((n) => {
+                  if (n.kind === 'provider' && entryReaches.has(n.id) && dup.has(n.name ?? '')) {
+                    return { ...n, enabled: false }
+                  }
+                  return n
+                })
+              })
+            },
+            onChangeWeight: (weight: number) => {
+              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, weight } : n)))
+            },
+          },
+        })
+      } else if (isProviderSlot(node)) {
+        const children = canvas.providers
+          .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
+          .map((p) => {
+            const provider = p.name ? providerByName.get(p.name) : undefined
+            return {
+              id: p.id,
+              label: p.name,
+              modelCount: provider?.models.length ?? 0,
+              enabled: p.enabled,
+              providerStatus: provider?.status ?? false,
+            }
+          })
+        nodes.push({
+          id: node.id,
+          type: 'slot',
+          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
+          data: {
+            title: 'provider',
+            slotType: PROVIDER_SLOT_TYPE,
+            isProviderSlot: true,
+            children,
+            onAddProvider: () => handleAddProvider(node.id),
+            onToggleProvider: (providerId: string, enabled: boolean) =>
+              updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n))),
+            onReorderProvider: (from: number, to: number) => handleReorderProvider(node.id, from, to),
+          },
+        })
+      } else {
+        const slotType = node.slotType as SlotType
+        nodes.push({
+          id: node.id,
+          type: 'slot',
+          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
+          data: {
+            title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
+            slotType: node.slotType ?? '',
+            isProviderSlot: false,
+            children: [],
+          },
+        })
+      }
+    }
+    return nodes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas, layoutSnapshot, providerByName])
+
+  const baseNodes = useMemo(() => [...modelHubNodes, ...topLevelNodes], [modelHubNodes, topLevelNodes])
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
+
+  useEffect(() => {
+    setNodes(baseNodes)
+  }, [baseNodes, setNodes])
+
+  const baseEdges = useMemo<Edge[]>(() => {
+    if (!canvas) return []
+    const edges: Edge[] = []
+    for (const w of canvas.canvasWires) {
+      edges.push({
+        id: wiringEdgeId(w.source, w.target),
+        source: w.source,
+        target: w.target,
+        animated: topologyConfig.edge.animated,
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+      })
+    }
+    const entryIds = new Set(canvas.topLevel.filter(isRequestEntry).map((n) => n.id))
+    for (const e of entryIds) {
+      const hubId = `hub-${e}`
+      const hub = modelHubNodes.find((n) => n.id === hubId)
+      const hubData = hub?.data as { models?: Array<{ id: string }> } | undefined
+      const modelCount = hubData?.models?.length ?? 0
+      if (modelCount === 0) continue
+      edges.push({
+        id: wiringEdgeId(hubId, e),
+        source: hubId,
+        target: e,
+        animated: topologyConfig.edge.animated,
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+      })
+    }
+    return edges
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvas, modelHubNodes])
+
+  const [edges, setEdges, onEdgesChange] = useEdgesState(baseEdges)
+  const edgesRef = useRef(edges)
+  edgesRef.current = edges
+
+  useEffect(() => {
+    setEdges(baseEdges)
+  }, [baseEdges, setEdges])
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [providers, workflows] = await Promise.all([
+      const [providers, flat] = await Promise.all([
         dashboardApi.listProviders(),
-        dashboardApi.getTopology(),
+        dashboardApi.getFlatTopology(),
       ])
       setProviders(providers)
-      workflowsRef.current = workflows
-      slotsStateRef.current = slotMapsFromWorkflows(workflows)
-      saveQueueRef.current = new TopologySaveQueue(dashboardApi.saveTopology, (conflict) => {
-        toast.add({ title: `拓扑版本冲突（当前版本 ${conflict.currentRevision ?? '未知'}），请刷新后重试`, type: 'error' })
-      })
-      bumpSlots()
+      setTopology(flat)
+      dirtyRef.current = false
       setDirty(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
     } finally {
       setLoading(false)
     }
-  }, [bumpSlots])
+  }, [setTopology])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
   const persistTopology = useCallback(async () => {
-    const queue = saveQueueRef.current
-    if (!providers || !queue) return
-    const versionAtStart = slotsVersionRef.current
-    const providerNames = new Map(providers.map((p) => [p.id, p.name]))
-    const ruleNames = new Map<string, string>()
-    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
-      for (const rule of rules[slotType]) {
-        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
-      }
-    }
-    const workflows = workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
+    const cur = tpRef.current
+    if (!cur) return
     try {
-      const saved = await queue.enqueue(workflows)
-      if (versionAtStart !== slotsVersionRef.current) {
-        // A new edit landed while this save was in flight. Re-save with the
-        // latest state instead of overwriting the newer edits with the older
-        // snapshot that just returned.
-        void persistTopology()
-        return
-      }
-      workflowsRef.current = saved
-      slotsStateRef.current = preserveNullRuleDrafts(
-        slotMapsFromWorkflows(saved),
-        slotsStateRef.current,
-      )
+      await dashboardApi.saveFlatTopology(cur)
+      dirtyRef.current = false
       setDirty(false)
     } catch (err) {
-      if (err instanceof DashboardApiError && err.status === 409) return
-      toast.add({ title: err instanceof Error ? err.message : '拓扑节点保存失败', type: 'error' })
+      toast.add({ title: err instanceof Error ? err.message : '拓扑保存失败', type: 'error' })
     }
-  }, [providers, rules])
+  }, [])
 
-  // Auto-save: any content edit marks the topology dirty; after a quiet
-  // 800ms window the latest state is persisted without a manual save button.
   useEffect(() => {
     if (!dirty) return
     const timer = setTimeout(() => {
@@ -208,378 +501,270 @@ export function TopologyPage() {
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty])
 
-  // The nested <Routes> under <BrowserRouter> in App.tsx never provides a
-  // DataRouterContext, so useBlocker would throw; we fall back to capturing
-  // clicks on rendered <a> elements (which is what <Link> emits) at the
-  // capture phase before React Router handles them. Browser back/forward is
-  // intentionally not intercepted here.
-  useEffect(() => {
-    if (!dirty) return
-    const handleClick = (event: MouseEvent) => {
-      if (event.defaultPrevented) return
-      if (event.button !== 0) return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const start = event.target
-      if (!(start instanceof Node)) return
-      let node: Element | null = (start as Element)
-      let anchor: HTMLAnchorElement | null = null
-      while (node) {
-        if (node instanceof HTMLAnchorElement) {
-          anchor = node
-          break
-        }
-        node = node.parentElement
-      }
-      if (!anchor) return
-      const href = anchor.getAttribute('href')
-      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return
-      if (anchor.target && anchor.target !== '_self') return
-      if (anchor.hasAttribute('download')) return
-      let url: URL
-      try {
-        url = new URL(href, window.location.href)
-      } catch {
+  const handlePaneClick = useCallback(() => {
+    setContextMenu(null)
+  }, [])
+
+  const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
+    event.preventDefault()
+    if (!(event.target instanceof Element)) return
+    if (event.target.closest('.react-flow__node')) return
+    setContextMenu(null)
+    setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
+  }, [])
+
+  const handleNodeClick = useCallback((_event: ReactMouseEvent) => {
+    setContextMenu(null)
+  }, [])
+
+  const handleNodeContextMenu = useCallback((event: ReactMouseEvent, node: Node) => {
+    event.preventDefault()
+    if (node.type === 'modelHub') return
+    setMenuState((s) => ({ ...s, open: false }))
+    setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
+  }, [])
+
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      const { source, target } = connection
+      if (!source || !target) return
+      const wiring = canvasWiresFromEdges(edgesRef.current)
+      const reason = invalidConnectionReason(wiring, source, target)
+      if (reason) {
+        toast.add({ title: reason, type: 'error' })
         return
       }
-      if (url.origin !== window.location.origin) return
-      const current = window.location
-      if (url.pathname === current.pathname && url.search === current.search && url.hash === current.hash) return
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-      setNavGuardNext(url.pathname + url.search + url.hash)
-    }
-    document.addEventListener('click', handleClick, true)
-    return () => document.removeEventListener('click', handleClick, true)
-  }, [dirty])
-
-  const handleChangeEntry = useCallback(
-    (workflowKey: string, slotType: SlotType, next: SlotEntry) => {
-      const entry = slotsStateRef.current.get(workflowKey)
-      if (!entry) return
-      const current = entry.slots
-      const list = current[slotType] ?? []
-      const idx = list.findIndex((e) => e.index === next.index)
-      const nextList =
-        idx >= 0
-          ? list.map((e) => (e.index === next.index ? next : e))
-          : [...list, next].map((e, i) => reindexSlotItem(e, i + 1, slotType))
-      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
-      bumpSlots()
-      setDirty(true)
+      const newEdge: Edge = {
+        id: wiringEdgeId(source, target),
+        source,
+        target,
+        animated: topologyConfig.edge.animated,
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+      }
+      const next = [...edgesRef.current.filter((e) => e.source !== source), newEdge]
+      setEdges(next)
+      commitCanvasWires(canvasWiresFromEdges(next))
     },
-    [bumpSlots],
+    [setEdges, commitCanvasWires],
   )
 
-  const handleDeleteEntry = useCallback(
-    (workflowKey: string, slotType: SlotType, index: number) => {
-      const entry = slotsStateRef.current.get(workflowKey)
-      if (!entry) return
-      const current = entry.slots
-      const list = current[slotType] ?? []
-      const nextList = list
-        .filter((e) => e.index !== index)
-        .map((e, i) => reindexSlotItem(e, i + 1, slotType))
-      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
-      bumpSlots()
-      setDirty(true)
+  const handleReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      const { source, target } = newConnection
+      if (!source || !target) return
+      const rest = edgesRef.current.filter((e) => e.id !== oldEdge.id)
+      const reason = invalidConnectionReason(canvasWiresFromEdges(rest), source, target)
+      if (reason) {
+        toast.add({ title: reason, type: 'error' })
+        return
+      }
+      const reconnected: Edge = { ...oldEdge, id: wiringEdgeId(source, target), source, target }
+      const next = [...rest, reconnected]
+      setEdges(next)
+      commitCanvasWires(canvasWiresFromEdges(next))
     },
-    [bumpSlots],
+    [setEdges, commitCanvasWires],
   )
 
-  const handleReorderEntries = useCallback(
-    (workflowKey: string, slotType: SlotType, fromIndex: number, toIndex: number) => {
-      const entry = slotsStateRef.current.get(workflowKey)
-      if (!entry) return
-      const current = entry.slots
-      const list = current[slotType] ?? []
-      const sorted = [...list].sort((a, b) => a.index - b.index)
-      const from = sorted.findIndex((e) => e.index === fromIndex)
-      const to = sorted.findIndex((e) => e.index === toIndex)
-      if (from < 0 || to < 0 || from === to) return
-      const [moved] = sorted.splice(from, 1)
-      sorted.splice(to, 0, moved)
-      const nextList = sorted.map((e, i) => reindexSlotItem(e, i + 1, slotType))
-      setSlotList(current, slotType, nextList as SlotEntryMap[typeof slotType])
-      bumpSlots()
-      setDirty(true)
+  const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
+    selectionRef.current = { nodes: params.nodes, edges: params.edges }
+  }, [])
+
+  const handleDeleteSelectedEdges = useCallback(() => {
+    const wiringIds = new Set(selectionRef.current.edges.filter((e) => !e.source.startsWith('model-')).map((e) => e.id))
+    if (wiringIds.size === 0) return
+    const next = edgesRef.current.filter((e) => !wiringIds.has(e.id))
+    setEdges(next)
+    commitCanvasWires(canvasWiresFromEdges(next))
+  }, [setEdges, commitCanvasWires])
+
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const isSlot = cur.nodes.some((n) => n.id === nodeId && n.kind === 'slot')
+      const nodes = cur.nodes.filter((n) => {
+        if (n.id === nodeId) return false
+        if (isSlot) {
+          const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+          if (collapsed.providerSlotOf.get(n.id) === nodeId) return false
+        }
+        return true
+      })
+      const nextEdges = edgesRef.current.filter((e) => e.source !== nodeId && e.target !== nodeId)
+      const collapsed = canvasFromFlat(nodes, cur.wires)
+      const wires = flatWiresFromCanvas({
+        topLevel: collapsed.topLevel,
+        providers: collapsed.providers,
+        providerSlotOf: collapsed.providerSlotOf,
+        canvasWires: canvasWiresFromEdges(nextEdges),
+      })
+      setTopology({ nodes, wires })
+      setEdges(nextEdges)
+      setContextMenu(null)
+      markDirty()
     },
-    [bumpSlots],
+    [setTopology, setEdges, markDirty],
   )
 
-  const [jsonWorkflows, setJsonWorkflows] = useState<Workflow[] | null>(null)
-  const [versionsOpen, setVersionsOpen] = useState(false)
-  const handleOpenJson = useCallback(() => {
-    const queue = saveQueueRef.current
-    if (!queue || !providers) return
-    const providerNames = new Map(providers.map((p) => [p.id, p.name]))
-    const ruleNames = new Map<string, string>()
-    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
-      for (const rule of rules[slotType]) {
-        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      const el = event.target as HTMLElement | null
+      if (el && el.closest('input, textarea, select, [contenteditable="true"]')) return
+      const topLevelIds = selectionRef.current.nodes
+        .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
+        .map((n) => n.id)
+      if (topLevelIds.length > 0) {
+        event.preventDefault()
+        for (const id of topLevelIds) handleDeleteNode(id)
+      } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
+        event.preventDefault()
+        handleDeleteSelectedEdges()
       }
     }
-    setJsonWorkflows(workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames))
-  }, [providers, rules])
-  const handleJsonSave = useCallback(
-    async (workflows: Workflow[]) => {
-      const queue = saveQueueRef.current
-      if (!queue) throw new Error('拓扑尚未加载完成')
-      const saved = await queue.saveNow(workflows)
-      workflowsRef.current = saved
-      slotsStateRef.current = preserveNullRuleDrafts(
-        slotMapsFromWorkflows(saved),
-        slotsStateRef.current,
-      )
-      setDirty(false)
-      bumpSlots()
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleDeleteNode, handleDeleteSelectedEdges])
+
+  const handleNodesChange = useCallback(
+    (changes: Parameters<typeof onNodesChange>[0]) => {
+      onNodesChange(changes)
+      for (const change of changes) {
+        if (change.type === 'position' && change.position && !change.dragging) {
+          const snapshot = loadLayoutFromStorage()
+          snapshot[change.id] = change.position
+          saveLayoutToStorage(snapshot)
+          setLayoutSnapshot(snapshot)
+        }
+      }
     },
-    [bumpSlots],
+    [onNodesChange],
   )
-
-  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
-  const layoutSnapshotRef = useRef(layoutSnapshot)
-  layoutSnapshotRef.current = layoutSnapshot
-  const prevSlotSizesRef = useRef<Map<string, { width: number; height: number }>>(new Map())
-  const didInitialMeasure = useRef(false)
-  const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
-
-  const topologyProviders = useMemo(() => {
-    if (!providers) return [] as Provider[]
-    const ids = new Set<string>()
-    for (const entry of slotsStateRef.current.values()) ids.add(entry.providerId)
-    return providers.filter((p) => ids.has(p.id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers, slotsVersion])
-
-  const modelNodeIds = useMemo(() => {
-    const ids: Record<string, string> = {}
-    for (const provider of topologyProviders) for (const model of provider.models) {
-      if (!(model.model in ids)) ids[model.model] = `model-${model.model}`
-    }
-    return ids
-  }, [topologyProviders])
-
-  const baseNodes = useMemo(() => {
-    if (!providers) return []
-    const modelNodes = buildModelNodes(topologyProviders, modelNodeIds, layoutSnapshot)
-    const nodes: Node[] = [...modelNodes]
-
-    let rowHeight = fallbackNodeSize.height
-    for (const size of sizesRef.current.values()) {
-      if (size.height > rowHeight) rowHeight = size.height
-    }
-    const placements = computeWorkflowPlacements([...slotsStateRef.current.keys()], layoutSnapshot, rowHeight)
-
-    for (const [workflowKey, entry] of slotsStateRef.current) {
-      const provider = providers.find((p) => p.id === entry.providerId)
-      if (!provider) continue
-      const placement = placements.get(workflowKey)
-      if (!placement) continue
-      nodes.push(buildProviderNode(workflowKey, entry, provider, layoutSnapshot, placement.baseX, placement.baseY, selectedNodeId, () => {
-        handleToggleWorkflow(workflowKey)
-      }))
-      nodes.push(
-        ...buildSlotNodes(
-          workflowKey,
-          entry.slots,
-          rules,
-          layoutSnapshot,
-          placement.baseX + SLOT_BASE_OFFSET,
-          placement.baseY,
-          entry.enabled,
-          handleChangeEntry,
-          handleDeleteEntry,
-          handleReorderEntries,
-        ),
-      )
-    }
-    return nodes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers, modelNodeIds, layoutSnapshot, slotsVersion, rules, selectedNodeId, handleChangeEntry, handleDeleteEntry])
-
-  const baseEdges = useMemo(() => {
-    if (!providers) return []
-    return buildEdges(providers, slotsStateRef.current, modelNodeIds)
-  }, [providers, modelNodeIds, slotsVersion])
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
-
-  useEffect(() => {
-    setNodes(baseNodes)
-  }, [baseNodes, setNodes])
-
-  const [edges, _setEdges, onEdgesChange] = useEdgesState(baseEdges)
-
-  useEffect(() => {
-    _setEdges(baseEdges)
-  }, [baseEdges, _setEdges])
-
-  const edgesRef = useRef(edges)
-  edgesRef.current = edges
 
   const handleAutoLayout = useCallback(() => {
-    const layouted = getLayoutedElements(nodes, edgesRef.current, {
-      nodeGap: topologyConfig.layout.nodeGap,
-      rowGap: topologyConfig.layout.rowGap,
-      modelHubGap: topologyConfig.layout.modelHubGap,
-      groupGap: topologyConfig.layout.groupGap,
-      marginX: topologyConfig.layout.marginX,
-      marginY: topologyConfig.layout.marginY,
-    }, sizesRef.current)
+    if (!canvas) return
+    const positions = layeredLayout(canvas, sizesRef.current)
     const next: LayoutSnapshot = {}
-    for (const node of layouted) next[node.id] = node.position
+    for (const [id, pos] of Object.entries(positions)) {
+      const node = baseNodes.find((n) => n.id === id)
+      if (node) next[id] = pos
+    }
     saveLayoutToStorage(next)
     setLayoutSnapshot(next)
-    setNodes(layouted)
-  }, [nodes, setNodes, sizesRef])
+    setNodes(baseNodes.map((n) => (next[n.id] ? { ...n, position: next[n.id] } : n)))
+  }, [canvas, sizesRef, baseNodes, setNodes])
 
-  // Incremental position adjustment: when a slot's size changes (add/delete
-  // entry), push surrounding nodes instead of re-running auto-layout.
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      const slotEls = document.querySelectorAll('.react-flow__node[data-id^="slot-"]')
-      const currentSizes = new Map<string, { width: number; height: number }>()
-      for (const el of Array.from(slotEls)) {
-        const sid = el.getAttribute('data-id')
-        if (!sid) continue
-        currentSizes.set(sid, {
-          width: (el as HTMLElement).offsetWidth,
-          height: (el as HTMLElement).offsetHeight,
-        })
-      }
+  const handleAddEntry = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const id = `entry-${crypto.randomUUID().slice(0, 8)}`
+    const node: FlatNode = { id, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 }
+    updateTopologyNodes(() => [...cur.nodes, node])
+  }, [updateTopologyNodes])
 
-      if (!didInitialMeasure.current) {
-        prevSlotSizesRef.current = currentSizes
-        didInitialMeasure.current = true
+  const handleAddProviderSlot = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const id = `pslot-${crypto.randomUUID().slice(0, 8)}`
+    const node: FlatNode = { id, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true }
+    updateTopologyNodes(() => [...cur.nodes, node])
+  }, [updateTopologyNodes])
+
+  const handleAddSlot = useCallback(
+    (slotType: RewriteSlotType) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const id = `${slotType}-${crypto.randomUUID().slice(0, 8)}`
+      const node: FlatNode = { id, kind: 'slot', slotType, enabled: true }
+      updateTopologyNodes(() => [...cur.nodes, node])
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleAddProvider = useCallback(
+    (slotId: string) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+      const available = (providers ?? []).filter((p) => !collapsed.providers.some((n) => n.name === p.name))
+      const provider = available[0]
+      if (!provider) {
+        toast.add({ title: '没有可添加到该插槽的供应商', type: 'info' })
         return
       }
-
-      const snapshot: LayoutSnapshot = {}
-      Object.assign(snapshot, layoutSnapshotRef.current)
-      let changed = false
-
-      for (const [id, size] of currentSizes) {
-        const prev = prevSlotSizesRef.current.get(id)
-        if (!prev) continue
-
-        const deltaH = size.height - prev.height
-        const deltaW = size.width - prev.width
-        if (deltaH === 0 && deltaW === 0) continue
-
-        const providerId = providerIdFromSlotId(id)
-        if (!providerId) continue
-        const pvId = `pv-${providerId}`
-        const pvPos = snapshot[pvId]
-        const slotPos = snapshot[id]
-        if (!pvPos || !slotPos) continue
-
-        if (deltaH !== 0) {
-          for (const [nodeId, pos] of Object.entries(snapshot)) {
-            if (nodeId.startsWith('model-')) continue
-            if (nodeId === id || nodeId === pvId) continue
-            const nodePvId = nodeId.startsWith('pv-')
-              ? nodeId
-              : (() => { const pid = providerIdFromSlotId(nodeId); return pid ? `pv-${pid}` : null })()
-            if (!nodePvId || nodePvId === pvId) continue
-            const nodePvPos = snapshot[nodePvId]
-            if (!nodePvPos) continue
-            if (nodePvPos.y > pvPos.y) {
-              snapshot[nodeId] = { ...pos, y: pos.y + deltaH }
-              changed = true
-            }
-          }
-        }
-
-        if (deltaW !== 0) {
-          for (const [nodeId, pos] of Object.entries(snapshot)) {
-            if (!nodeId.startsWith('slot-') || nodeId === id) continue
-            const nodePid = providerIdFromSlotId(nodeId)
-            if (nodePid !== providerId) continue
-            if (pos.x > slotPos.x) {
-              snapshot[nodeId] = { ...pos, x: pos.x + deltaW }
-              changed = true
-            }
-          }
-        }
+      const id = `prov-${crypto.randomUUID().slice(0, 8)}`
+      const slotInEnabledEntry = cur.nodes.some(
+        (n) => n.kind === 'requestEntry' && n.enabled && reaches(cur.wires, n.id, slotId),
+      )
+      const alreadyActive = findDuplicateActivations(cur.nodes, cur.wires).includes(provider.name)
+      const defaultEnabled = !(slotInEnabledEntry && alreadyActive)
+      if (!defaultEnabled) {
+        toast.add({ title: `同一个 Provider（${provider.name}）不能在多个激活工作流中被启用`, type: 'error' })
       }
+      const providerNode: FlatNode = { id, kind: 'provider', name: provider.name, enabled: defaultEnabled }
+      const slotIndex = cur.nodes.findIndex((n) => n.id === slotId)
+      const insertAt = slotIndex >= 0 ? slotIndex + 1 : cur.nodes.length
+      const nextNodes = [...cur.nodes.slice(0, insertAt), providerNode, ...cur.nodes.slice(insertAt)]
+      updateTopologyNodes(() => nextNodes)
+    },
+    [providers, updateTopologyNodes],
+  )
 
-      if (changed) {
-        saveLayoutToStorage(snapshot)
-        setLayoutSnapshot(snapshot)
-      }
-      prevSlotSizesRef.current = currentSizes
+  const handleReorderProvider = useCallback(
+    (slotId: string, fromIndex: number, toIndex: number) => {
+      if (fromIndex === toIndex) return
+      updateTopologyNodes((list) => {
+        const groupStart = list.findIndex((n) => n.id === slotId)
+        if (groupStart < 0) return list
+        let groupEnd = groupStart
+        while (groupEnd + 1 < list.length && isProvider(list[groupEnd + 1])) groupEnd++
+        const children = [...list.slice(groupStart + 1, groupEnd + 1)]
+        if (fromIndex < 0 || fromIndex >= children.length || toIndex < 0 || toIndex >= children.length) return list
+        const [moved] = children.splice(fromIndex, 1)
+        children.splice(toIndex, 0, moved)
+        return [...list.slice(0, groupStart + 1), ...children, ...list.slice(groupEnd + 1)]
+      })
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleAddFullWorkflow = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const suffix = crypto.randomUUID().slice(0, 8)
+    const entryId = `entry-${suffix}`
+    const pslotId = `pslot-${suffix}`
+    const slotIds: RewriteSlotType[] = ['requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput']
+    const nodeIds = new Map<RewriteSlotType, string>()
+    for (const st of slotIds) nodeIds.set(st, `${st}-${suffix}`)
+
+    const newNodes: FlatNode[] = [
+      ...cur.nodes,
+      { id: entryId, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 },
+      { id: pslotId, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true },
+      ...slotIds.map((st) => ({ id: nodeIds.get(st)!, kind: 'slot' as const, slotType: st, enabled: true })),
+    ]
+    const chain: FlatWire[] = [
+      { source: entryId, target: pslotId },
+      { source: pslotId, target: nodeIds.get('requestModify')! },
+    ]
+    for (let i = 0; i < slotIds.length - 1; i++) {
+      chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
+    }
+    const collapsed = canvasFromFlat(newNodes, [])
+    const wires = flatWiresFromCanvas({
+      topLevel: collapsed.topLevel,
+      providers: collapsed.providers,
+      providerSlotOf: collapsed.providerSlotOf,
+      canvasWires: chain,
     })
-    return () => cancelAnimationFrame(raf)
-  }, [slotsVersion])
+    setTopology({ nodes: newNodes, wires })
+    markDirty()
+  }, [setTopology, markDirty])
 
-  const handleNodesChange = useCallback((changes: Parameters<typeof onNodesChange>[0]) => {
-    onNodesChange(changes)
-    for (const change of changes) {
-      if (change.type === 'position' && change.position && !change.dragging) {
-        const snapshot = loadLayoutFromStorage()
-        snapshot[change.id] = change.position
-        saveLayoutToStorage(snapshot)
-        setLayoutSnapshot(snapshot)
-      }
-    }
-  }, [onNodesChange])
-
-  const handleAddProviderToWorkflow = useCallback((providerId: string) => {
-    const provider = providers?.find((p) => p.id === providerId)
-    let initialEnabled = true
-    if (provider) {
-      for (const other of slotsStateRef.current.values()) {
-        if (other.enabled) {
-          const otherProvider = providers?.find((p) => p.id === other.providerId)
-          if (otherProvider?.name === provider.name) {
-            initialEnabled = false
-            toast.add({ title: '同名供应商已有工作流在启用，新添加的工作流默认禁用', type: 'info' })
-            break
-          }
-        }
-      }
-    }
-    const key = makeWorkflowKey([...slotsStateRef.current.values()], providerId)
-    slotsStateRef.current.set(key, { providerId, enabled: initialEnabled, slots: emptySlotEntryMap() })
-    bumpSlots()
-    setDirty(true)
-    setMenuState((s) => ({ ...s, open: false }))
-  }, [bumpSlots, providers])
-
-  const handleDeleteWorkflow = useCallback((workflowKey: string) => {
-    slotsStateRef.current.delete(workflowKey)
-    setContextMenu(null)
-    setSelectedNodeId(null)
-    bumpSlots()
-    setDirty(true)
-  }, [bumpSlots])
-
-  const handleToggleWorkflow = useCallback((workflowKey: string) => {
-    const entry = slotsStateRef.current.get(workflowKey)
-    if (!entry) return
-    const nextEnabled = !entry.enabled
-    if (nextEnabled) {
-      const sameName = providers?.find((p) => p.id === entry.providerId)?.name
-      if (sameName) {
-        for (const [otherKey, other] of slotsStateRef.current) {
-          if (otherKey !== workflowKey && other.enabled) {
-            const otherProvider = providers?.find((p) => p.id === other.providerId)
-            if (otherProvider?.name === sameName) {
-              slotsStateRef.current.set(otherKey, { ...other, enabled: false })
-              toast.add({ title: '同名供应商已有工作流启用，已自动关闭其他实例', type: 'info' })
-            }
-          }
-        }
-      }
-    }
-    slotsStateRef.current.set(workflowKey, { ...entry, enabled: nextEnabled })
-    bumpSlots()
-    setDirty(true)
-  }, [bumpSlots, providers])
-
-  const handleAddProviderClick = useCallback(() => {
-    const btn = addProviderBtnRef.current
+  const handleAddButtonClick = useCallback(() => {
+    const btn = addButtonRef.current
     if (!btn) {
       setMenuState({
         x: Math.round(window.innerWidth / 2 + 128),
@@ -596,33 +781,11 @@ export function TopologyPage() {
     setMenuState({ x: right, y: bottom, open: true, mode: 'corner' })
   }, [])
 
-  const availableProviders = useMemo(() => {
-    if (!providers) return []
-    return providers.map((p) => ({ id: p.id, name: p.name }))
-  }, [providers])
-
-  const workflowStats = useMemo(() => {
-    let total = 0
-    let active = 0
-    for (const entry of slotsStateRef.current.values()) {
-      total += 1
-      if (entry.enabled) active += 1
-    }
-    return { active, total }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slotsVersion])
-
-  const currentWorkflows = useMemo<Workflow[]>(() => {
-    const providerNames = new Map(providers?.map((p) => [p.id, p.name]) ?? [])
-    const ruleNames = new Map<string, string>()
-    for (const slotType of Object.keys(rules) as (keyof SlotRuleMap)[]) {
-      for (const rule of rules[slotType]) {
-        ruleNames.set(`${slotType}:${rule.id}`, rule.name)
-      }
-    }
-    return workflowsFromSlotMaps(slotsStateRef.current, providerNames, ruleNames)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providers, rules, slotsVersion])
+  const activeEntries = useMemo(() => {
+    if (!tp) return 0
+    return tp.nodes.filter((n) => isRequestEntry(n) && n.enabled && (n.weight ?? 1) > 0).length
+  }, [tp])
+  const totalEntries = useMemo(() => (tp ? tp.nodes.filter((n) => isRequestEntry(n)).length : 0), [tp])
 
   if (loading) {
     return (
@@ -654,36 +817,11 @@ export function TopologyPage() {
     )
   }
 
-  if (!providers || providers.length === 0) {
-    return (
-      <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            暂无供应商配置。          请先在「供应商管理」中添加至少一个模型供应商。
-          </p>
-          <Button onClick={() => { window.location.href = '/provider' }}>
-            <AppIcon name="add" data-icon="inline-start" />
-            添加供应商
-          </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-screen flex-col">
       <PageHeader
         title="转发拓扑"
-        status={`工作流：${workflowStats.active}/${workflowStats.total} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
-        actions={
-          <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
-            <AppIcon name="history" data-icon="inline-start" />
-            历史版本
-          </Button>
-        }
+        status={`请求入口：${activeEntries}/${totalEntries} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
       />
       <div ref={setContainerEl} className="relative flex-1">
         <ReactFlow
@@ -695,10 +833,13 @@ export function TopologyPage() {
           onContextMenu={handlePaneContextMenu}
           onNodeClick={handleNodeClick}
           onNodeContextMenu={handleNodeContextMenu}
+          onConnect={handleConnect}
+          onReconnect={handleReconnect}
+          onSelectionChange={handleSelectionChange}
           nodeTypes={nodeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
-          nodesConnectable={false}
-          edgesReconnectable={false}
+          nodesConnectable
+          edgesReconnectable
           deleteKeyCode={null}
           proOptions={{ hideAttribution: true }}
           fitView
@@ -709,39 +850,27 @@ export function TopologyPage() {
             <Button
               variant="outline"
               size="icon"
-              onClick={handleAddProviderClick}
-              title="添加供应商到工作流"
-              aria-label="添加供应商到工作流"
-              ref={addProviderBtnRef}
+              onClick={handleAddButtonClick}
+              title="添加节点"
+              aria-label="添加节点"
+              ref={addButtonRef}
             >
               <AppIcon name="add" />
             </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleAutoLayout}
-              title="自动布局"
-            >
+            <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
               <AppIcon name="auto_fix_high" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleOpenJson}
-              title="编辑 JSON"
-              aria-label="编辑 JSON"
-            >
-              <AppIcon name="code" />
             </Button>
           </Panel>
         </ReactFlow>
         {menuState.open && (
-          <NodeMenu
+          <FlatCanvasMenu
             x={menuState.x}
             y={menuState.y}
             mode={menuState.mode}
-            providers={availableProviders}
-            onSelect={handleAddProviderToWorkflow}
+            onAddFullWorkflow={handleAddFullWorkflow}
+            onAddEntry={handleAddEntry}
+            onAddProviderSlot={handleAddProviderSlot}
+            onAddSlot={handleAddSlot}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}
@@ -749,77 +878,11 @@ export function TopologyPage() {
           <ContextMenu
             x={contextMenu.x}
             y={contextMenu.y}
-            onDelete={() => {
-              const workflowKey = contextMenu.nodeId.startsWith('pv-')
-                ? contextMenu.nodeId.slice(3)
-                : contextMenu.nodeId
-              handleDeleteWorkflow(workflowKey)
-            }}
+            onDelete={() => handleDeleteNode(contextMenu.nodeId)}
             onClose={() => setContextMenu(null)}
           />
         )}
-        {jsonWorkflows && (
-          <TopologyJsonEditModal
-            workflows={jsonWorkflows}
-            onSave={handleJsonSave}
-            onClose={() => setJsonWorkflows(null)}
-          />
-        )}
-        <Dialog
-          open={navGuardNext !== null}
-          onOpenChange={(open) => {
-            if (!open) setNavGuardNext(null)
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>内容未保存</DialogTitle>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              你还有内容未保存，是否确认离开？未保存的修改将会丢失。
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setNavGuardNext(null)}>
-                取消
-              </Button>
-              <Button
-                onClick={() => {
-                  const target = navGuardNext
-                  setNavGuardNext(null)
-                  if (target) navigate(target)
-                }}
-              >
-                确认离开
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <TopologyVersionsModal
-          open={versionsOpen}
-          onClose={() => setVersionsOpen(false)}
-          providers={providers ?? []}
-          currentWorkflows={currentWorkflows}
-          onBeforeRestore={persistTopology}
-          onRestored={() => { setVersionsOpen(false); void loadData() }}
-        />
       </div>
     </div>
   )
-}
-
-// When the order of items changes (insert/delete), every surviving entry
-// must be renumbered to keep the slot's badges contiguous.
-function reindexSlotItem(entry: SlotEntry, newIndex: number, slotType: SlotType): SlotEntry {
-  if (entry.slotType !== slotType) return entry
-  return { ...entry, index: newIndex } as SlotEntry
-}
-
-// Typed writer — works around TS's inability to narrow `Map[K] = V` when V is
-// a union that varies per key.
-function setSlotList<K extends SlotType>(
-  map: SlotEntryMap,
-  key: K,
-  list: SlotEntryMap[K],
-): void {
-  map[key] = list
 }

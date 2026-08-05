@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { Popover } from '@base-ui/react/popover'
+import { Tooltip } from '@base-ui/react/tooltip'
 import { cn } from '@/lib/utils'
 import { ModeToggle } from '@/components/ModeToggle'
 import { AppIcon } from '@/components/AppIcon'
@@ -219,7 +220,6 @@ function NavLink({
   const trigger = (
     <SidebarMenuButton
       isActive={isActive}
-      tooltip={collapsed ? item.label : undefined}
       render={<Link to={item.href ?? '/'} />}
     >
       {item.icon}
@@ -235,9 +235,33 @@ function NavLink({
     )
   }
 
+  // Collapsed: show a tooltip that mirrors the style of the submenu
+  // popover (same panel, border, title row), but clicking the icon
+  // navigates directly instead of expanding a menu.
+  const tooltipContent = (
+    <Tooltip.Portal>
+      <Tooltip.Positioner side="right" align="start" sideOffset={20}>
+        <Tooltip.Popup className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none">
+          <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
+            {item.label}
+          </div>
+        </Tooltip.Popup>
+      </Tooltip.Positioner>
+    </Tooltip.Portal>
+  )
+
   return (
     <SidebarMenuItem>
-      {trigger}
+      <Tooltip.Root disableHoverablePopup>
+        <Tooltip.Trigger
+          delay={60}
+          closeDelay={180}
+          render={<span className="block w-full" />}
+        >
+          {trigger}
+        </Tooltip.Trigger>
+        {tooltipContent}
+      </Tooltip.Root>
     </SidebarMenuItem>
   )
 }
