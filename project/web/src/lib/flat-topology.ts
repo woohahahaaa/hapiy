@@ -29,6 +29,9 @@ export const REQUEST_REWRITE_SLOT_TYPES = [
   'logOutput',
 ] as const
 
+/** Every slot type the system supports: the provider slot plus all rewrite slots. */
+export const ALL_SLOT_TYPES = [PROVIDER_SLOT_TYPE, ...REQUEST_REWRITE_SLOT_TYPES] as const
+
 export type RewriteSlotType = (typeof REQUEST_REWRITE_SLOT_TYPES)[number]
 
 export function isProviderSlot(node: FlatNode): boolean {

@@ -283,15 +283,10 @@ export function ChannelAffinityPage() {
                   <TableCell><span className="text-xs text-muted-foreground">{rule.pathRegex.join(', ') || '不区分'}</span></TableCell>
                   <TableCell><span className="text-xs text-muted-foreground">{rule.keySources.map((source) => source.type === 'request_header' ? source.key : source.path).join(', ') || '-'}</span></TableCell>
                   <TableCell><span className="text-xs text-muted-foreground">{rule.ttlSeconds ?? current.defaultTtlSeconds}</span></TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={rule.enabled}
-                      onCheckedChange={(enabled) => void handleSaveRule({ ...rule, enabled })}
-                      disabled={isSaving}
-                    />
-                  </TableCell>
+                  <TableCell><span className={rule.enabled ? 'text-success' : 'text-destructive'}>{rule.enabled ? '启用' : '禁用'}</span></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...rule, enabled: !rule.enabled })}>{rule.enabled ? '禁用' : '启用'}</Button>
                       <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(rule); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
                       <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void handleDeleteRule(rule.name)}><AppIcon name="delete" /></Button>
                     </div>

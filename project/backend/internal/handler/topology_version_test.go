@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
 )
 
@@ -23,14 +24,14 @@ func newTopologyVersionTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// seedTopologyConfig replaces the live config with the given document, so the
-// UpdatedAt is always fresh and the previous config is gone.
-func seedTopologyConfig(t *testing.T, db *gorm.DB, document string) {
+// seedTopologyConfig replaces the live config with the given flat topology, so
+// the UpdatedAt is always fresh and the previous config is gone.
+func seedTopologyConfig(t *testing.T, db *gorm.DB, flat string) {
 	t.Helper()
 	if err := db.Where("id = ?", topologyConfigRowID).Delete(&model.TopologyConfig{}).Error; err != nil {
 		t.Fatalf("clear config: %v", err)
 	}
-	config := model.TopologyConfig{ID: topologyConfigRowID, Version: topologySchemaVersion, Nodes: document, Edges: "[]"}
+	config := model.TopologyConfig{ID: topologyConfigRowID, Version: topologySchemaVersion, Flat: flat}
 	if err := db.Create(&config).Error; err != nil {
 		t.Fatalf("create topology config: %v", err)
 	}
@@ -96,7 +97,7 @@ func decodeVersionsData(t *testing.T, rec *httptest.ResponseRecorder) map[string
 
 func TestTopologyVersionArchive_idempotent(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
 	rec := versionsRequest(t, http.MethodPost, "/api/archive", TopologyVersionArchive(db))
 	decodeVersionsData(t, rec)
@@ -113,7 +114,7 @@ func TestTopologyVersionArchive_idempotent(t *testing.T) {
 
 func TestTopologyVersionArchive_respects_quiet_window(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
 	// Fresh save: auto-archive (force=false) must not archive inside 5 min.
 	if _, err := archiveCurrentTopology(db, false); err != nil {
@@ -133,7 +134,7 @@ func TestTopologyVersionArchive_respects_quiet_window(t *testing.T) {
 	}
 
 	// Manual archive (force=true) always captures, even when fresh.
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 	if _, err := archiveCurrentTopology(db, true); err != nil {
 		t.Fatalf("force archive: %v", err)
 	}
@@ -144,7 +145,7 @@ func TestTopologyVersionArchive_respects_quiet_window(t *testing.T) {
 
 func TestTopologyVersionArchive_caps_at_twenty(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
 	for i := 0; i < maxTopologyVersions+5; i++ {
 		// Each iteration looks like a distinct save (fresh UpdatedAt) followed
@@ -161,7 +162,7 @@ func TestTopologyVersionArchive_caps_at_twenty(t *testing.T) {
 
 func TestTopologyVersionList_shape(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
 	rec := versionsRequest(t, http.MethodGet, "/api/versions", TopologyVersionList(db))
 	data := decodeVersionsData(t, rec)
@@ -188,44 +189,47 @@ func TestTopologyVersionList_shape(t *testing.T) {
 func TestTopologyVersionRestore_applies_snapshot(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
 	provider := model.Provider{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
-	rule := model.RewriteRule{ID: "r-1", Name: "rewrite", Script: "", Status: true}
 	if err := db.Create(&provider).Error; err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
-	if err := db.Create(&rule).Error; err != nil {
-		t.Fatalf("create rule: %v", err)
-	}
 	refresher := &topologyRefreshFake{}
 
-	v1 := `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true},
-		{"type":"requestModify","name":"rewrite","rule_id":"r-1","order":1,"enabled":true}]]`
+	v1 := `{"nodes":[
+		{"id":"e1","kind":"requestEntry","name":"A","enabled":true},
+		{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"p1","kind":"provider","name":"A","enabled":true},
+		{"id":"rm1","kind":"slot","slot_type":"requestModify","enabled":true}
+	],"wires":[
+		{"source":"e1","target":"ps1"},
+		{"source":"ps1","target":"p1"},
+		{"source":"p1","target":"rm1"}
+	]}`
 	seedTopologyConfig(t, db, v1)
 	rec := versionsRequest(t, http.MethodPost, "/api/archive", TopologyVersionArchive(db))
-	data := decodeVersionsData(t, rec)
-	versions := data["versions"].([]any)
-	if len(versions) == 0 {
-		// After archiving, current duplicates v1 so versions is empty; fetch the
-		// version id straight from the table instead.
-	}
+	decodeVersionsData(t, rec)
 	var stored model.TopologyVersion
 	if err := db.First(&stored).Error; err != nil {
 		t.Fatalf("load stored version: %v", err)
 	}
 
 	// Change the live state to something else, then restore the snapshot.
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[
+		{"id":"e1","kind":"requestEntry","name":"A","enabled":true},
+		{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"p1","kind":"provider","name":"A","enabled":true}
+	],"wires":[
+		{"source":"e1","target":"ps1"},
+		{"source":"ps1","target":"p1"}
+	]}`)
 	rec = versionsRestoreRequest(t, stored.ID, TopologyVersionRestore(db, refresher))
 	decodeVersionsData(t, rec)
 
-	document, err := loadTopologyDocument(db)
+	restored, err := topology.NewStore(db).Load()
 	if err != nil {
 		t.Fatalf("load after restore: %v", err)
 	}
-	if len(document) != 1 || len(document[0]) != 2 {
-		t.Fatalf("restored document mismatch: %v", document)
-	}
-	if document[0][1].Name != "rewrite" {
-		t.Fatalf("restored slot node wrong: %v", document[0][1])
+	if len(restored.Nodes) != 4 || len(restored.Wires) != 3 {
+		t.Fatalf("restored flat mismatch: %d nodes, %d wires", len(restored.Nodes), len(restored.Wires))
 	}
 	if refresher.calls != 1 {
 		t.Fatalf("refresh calls: want 1, got %d", refresher.calls)
@@ -241,14 +245,14 @@ func TestTopologyVersionRestore_archives_current_first(t *testing.T) {
 	refresher := &topologyRefreshFake{}
 
 	// Save v1, archive it, then move live to v2 (fresh config, not archived).
-	v1 := `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":true}]]`
+	v1 := `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`
 	seedTopologyConfig(t, db, v1)
 	versionsRequest(t, http.MethodPost, "/api/archive", TopologyVersionArchive(db))
 	var stored model.TopologyVersion
 	if err := db.First(&stored).Error; err != nil {
 		t.Fatalf("load stored version: %v", err)
 	}
-	seedTopologyConfig(t, db, `[[{"type":"provider","name":"A","provider_id":"p-a","enabled":false}]]`)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
 	// Restore v1: the current (v2) must be archived first.
 	rec := versionsRestoreRequest(t, stored.ID, TopologyVersionRestore(db, refresher))

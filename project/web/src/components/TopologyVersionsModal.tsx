@@ -6,21 +6,21 @@ import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { ProviderNode } from '@/nodes/ProviderNode'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
-import { SlotNode } from '@/nodes/SlotNode'
-import { dashboardApi, type Provider } from '@/lib/dashboard-api'
+import { FlatSlotNode } from '@/nodes/FlatSlotNode'
+import { RequestEntryNode } from '@/nodes/RequestEntryNode'
+import { dashboardApi, type Provider, type FlatTopology } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
-import { getLayoutedElements } from '@/lib/topology-auto-layout'
-import { slotMapsFromWorkflows, type Workflow } from '@/lib/topology-document'
-import { buildModelNodes, buildProviderNode, buildSlotNodes, buildEdges } from '@/lib/topology-builders'
-import { useSlotRules } from '@/components/topology/slot-items'
+import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
+import { canvasFromFlat, isProviderSlot, isRequestEntry, PROVIDER_SLOT_TYPE, ALL_SLOT_TYPES } from '@/lib/flat-topology'
+import { SLOT_LABELS } from '@/components/topology/slot-items'
+import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
 import { cn } from '@/lib/utils'
 
 const nodeTypes = {
   modelHub: ModelHubNode,
-  provider: ProviderNode,
-  slot: SlotNode,
+  slot: FlatSlotNode,
+  requestEntry: RequestEntryNode,
 }
 
 type PreviewTarget = { kind: 'current' } | { kind: 'version'; id: string }
@@ -29,7 +29,7 @@ interface TopologyVersionsModalProps {
   readonly open: boolean
   readonly onClose: () => void
   readonly providers: readonly Provider[]
-  readonly currentWorkflows: readonly Workflow[]
+  readonly currentTopology: FlatTopology | null
   readonly onBeforeRestore: () => Promise<void>
   readonly onRestored: () => void
 }
@@ -49,7 +49,7 @@ export function TopologyVersionsModal({
   open,
   onClose,
   providers,
-  currentWorkflows,
+  currentTopology,
   onBeforeRestore,
   onRestored,
 }: TopologyVersionsModalProps) {
@@ -57,7 +57,7 @@ export function TopologyVersionsModal({
   const [list, setList] = useState<Awaited<ReturnType<typeof dashboardApi.listTopologyVersions>> | null>(null)
   const [listError, setListError] = useState<string | null>(null)
   const [preview, setPreview] = useState<PreviewTarget | null>(null)
-  const [previewDocument, setPreviewDocument] = useState<readonly Workflow[] | null>(null)
+  const [previewDocument, setPreviewDocument] = useState<FlatTopology | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [actionBusy, setActionBusy] = useState<'archive' | 'restore' | null>(null)
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null)
@@ -105,7 +105,7 @@ export function TopologyVersionsModal({
 
   const handlePreviewCurrent = (): void => {
     setPreview({ kind: 'current' })
-    setPreviewDocument(currentWorkflows)
+    setPreviewDocument(currentTopology)
   }
 
   const handlePreviewVersion = async (id: string): Promise<void> => {
@@ -139,63 +139,113 @@ export function TopologyVersionsModal({
     }
   }
 
-  const previewData = useMemo(() => {
-    if (!previewDocument) return null
-    const maps = slotMapsFromWorkflows(previewDocument)
-    const ids = new Set<string>()
-    for (const entry of maps.values()) ids.add(entry.providerId)
-    const filteredProviders = providers.filter((p) => ids.has(p.id))
-    const modelNodeIds: Record<string, string> = {}
-    for (const provider of filteredProviders) for (const model of provider.models) {
-      if (!(model.model in modelNodeIds)) modelNodeIds[model.model] = `model-${model.model}`
-    }
-    return { maps, filteredProviders, modelNodeIds }
-  }, [previewDocument, providers])
+  const previewTopology = useMemo<FlatTopology | null>(() => {
+    if (preview?.kind === 'current') return currentTopology
+    if (preview?.kind === 'version') return previewDocument
+    return null
+  }, [preview, currentTopology, previewDocument])
 
-  const previewNodes = useMemo(() => {
-    if (!previewData) return []
-    const { maps, filteredProviders, modelNodeIds } = previewData
-    const modelNodes = buildModelNodes(filteredProviders, modelNodeIds, {})
-    const nodes: Node[] = [...modelNodes]
-    for (const [workflowKey, entry] of maps) {
-      const provider = providers.find((p) => p.id === entry.providerId)
-      if (!provider) continue
-      const verticalOffset = nodes.length
-      nodes.push(buildProviderNode(workflowKey, entry, provider, {}, topologyConfig.initialPositions.provider.x, verticalOffset, null, () => {}))
-      nodes.push(
-        ...buildSlotNodes(
-          workflowKey,
-          entry.slots,
-          rules,
-          {},
-          topologyConfig.initialPositions.slot.x,
-          verticalOffset,
-          entry.enabled,
-          () => {},
-          () => {},
-          () => {},
-        ),
-      )
+  const previewFlat = useMemo(() => {
+    if (!previewTopology) return null
+    return canvasFromFlat(previewTopology.nodes, previewTopology.wires)
+  }, [previewTopology])
+
+  const previewNodes = useMemo<Node[]>(() => {
+    if (!previewFlat) return []
+    const canvas = previewFlat
+    const nodes: Node[] = []
+    for (const node of canvas.topLevel) {
+      if (isRequestEntry(node)) {
+        nodes.push({
+          id: node.id,
+          type: 'requestEntry',
+          position: { x: 300, y: 20 },
+          data: {
+            label: node.name ?? '请求入口',
+            enabled: node.enabled,
+            weight: node.weight ?? 1,
+            models: [],
+            onChangeEnabled: () => {},
+            onChangeWeight: () => {},
+          },
+        })
+      } else if (isProviderSlot(node)) {
+        const children = canvas.providers
+          .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
+          .map((p) => {
+            const provider = providers.find((x) => x.name === p.name)
+            return {
+              id: p.id,
+              label: p.name,
+              modelCount: provider?.models.length ?? 0,
+              enabled: p.enabled,
+              providerStatus: provider?.status ?? false,
+            }
+          })
+        nodes.push({
+          id: node.id,
+          type: 'slot',
+          position: { x: 560, y: 20 },
+          data: {
+            title: 'provider',
+            slotType: PROVIDER_SLOT_TYPE,
+            isProviderSlot: true,
+            children,
+            onAddProvider: () => {},
+            onToggleProvider: () => {},
+            onReorderProvider: () => {},
+          },
+        })
+      } else {
+        const slotType = node.slotType ?? ''
+        nodes.push({
+          id: node.id,
+          type: 'slot',
+          position: { x: 560, y: 20 },
+          data: {
+            title: SLOT_LABELS[slotType as keyof typeof SLOT_LABELS] ?? slotType ?? '插槽',
+            slotType,
+            isProviderSlot: false,
+            entries: [...(node.entries ?? [])],
+            rules,
+            onChangeEntry: () => {},
+            onDeleteEntry: () => {},
+            onReorderEntries: () => {},
+          },
+        })
+      }
     }
     return nodes
-  }, [previewData, providers, rules])
+  }, [previewFlat, providers, rules])
 
   const previewEdges = useMemo(() => {
-    if (!previewData) return []
-    return buildEdges(previewData.filteredProviders, previewData.maps, previewData.modelNodeIds)
-  }, [previewData])
+    if (!previewFlat) return []
+    return previewFlat.canvasWires.map((w) => ({
+      id: `${w.source}→${w.target}`,
+      source: w.source,
+      target: w.target,
+      animated: topologyConfig.edge.animated,
+      style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+    }))
+  }, [previewFlat])
 
   const layoutedPreviewNodes = useMemo(() => {
-    if (previewNodes.length === 0) return []
-    return getLayoutedElements(previewNodes, previewEdges, {
+    if (!previewFlat || previewNodes.length === 0) return []
+    const positions = layoutFlatCanvas(previewFlat, previewNodes, {
       nodeGap: topologyConfig.layout.nodeGap,
       rowGap: topologyConfig.layout.rowGap,
       modelHubGap: topologyConfig.layout.modelHubGap,
       groupGap: topologyConfig.layout.groupGap,
       marginX: topologyConfig.layout.marginX,
       marginY: topologyConfig.layout.marginY,
+      freeSlotRowWidthFactor: ALL_SLOT_TYPES.length + 2,
+      slotBaseWidth: topologyConfig.render.slot.shellMinWidth,
     }, undefined)
-  }, [previewNodes, previewEdges])
+    return previewNodes.map((n) => {
+      const pos = positions[n.id]
+      return pos ? { ...n, position: { x: pos.x, y: pos.y } } : n
+    })
+  }, [previewFlat, previewNodes])
 
   const hasVersions = list !== null && (list.current !== null || list.versions.length > 0)
 

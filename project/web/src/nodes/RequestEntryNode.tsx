@@ -1,4 +1,5 @@
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 
@@ -6,16 +7,53 @@ interface RequestEntryNodeData {
   label: string
   enabled: boolean
   weight: number
+  models?: Array<{ id: string; label: string; active: boolean }>
   onChangeEnabled: (enabled: boolean) => void
   onChangeWeight: (weight: number) => void
 }
 
 interface RequestEntryNodeProps {
   data: RequestEntryNodeData
+  id: string
 }
 
-export function RequestEntryNode({ data }: RequestEntryNodeProps) {
-  const { label, enabled, weight, onChangeEnabled, onChangeWeight } = data
+export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
+  const { label, enabled, weight, onChangeEnabled, onChangeWeight, models = [] } = data
+  const updateNodeInternals = useUpdateNodeInternals()
+  const lenRef = useRef(models.length)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [nodeHeight, setNodeHeight] = useState(0)
+
+  useEffect(() => {
+    if (models.length !== lenRef.current) {
+      lenRef.current = models.length
+      updateNodeInternals(id)
+    }
+  }, [id, models.length, updateNodeInternals])
+
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      setNodeHeight(el.offsetHeight)
+      updateNodeInternals(id)
+    })
+    ro.observe(el)
+    setNodeHeight(el.offsetHeight)
+    return () => ro.disconnect()
+  }, [id, updateNodeInternals])
+
+  const targetHandle = topologyConfig.handles.provider.target
+  const sourceHandle = topologyConfig.handles.slot.source
+  const baseSegH = targetHandle.height
+  const baseGap = topologyConfig.handles.provider.segmentGap
+  const baseTotal = models.length * baseSegH + Math.max(0, models.length - 1) * baseGap
+  const maxTotal = nodeHeight > 0 ? nodeHeight - 8 : 0
+  const scale = maxTotal > 0 && baseTotal > maxTotal ? maxTotal / baseTotal : 1
+  const segH = baseSegH * scale
+  const gap = baseGap * scale
+  const total = baseTotal * scale
+  const start = -(total / 2)
 
   const handleWeight = (raw: string) => {
     const parsed = Number(raw)
@@ -26,30 +64,48 @@ export function RequestEntryNode({ data }: RequestEntryNodeProps) {
 
   return (
     <div
+      ref={rootRef}
       className={cn(
         'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         !enabled && 'opacity-60',
       )}
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!rounded-full !border-border !bg-background"
-        style={{
-          width: topologyConfig.handles.slot.target.width,
-          height: topologyConfig.handles.slot.target.height,
-          borderWidth: topologyConfig.handles.slot.target.borderWidth,
-        }}
-      />
+      {models.map((m, i) => (
+        <Handle
+          key={m.id}
+          type="target"
+          position={Position.Left}
+          id={m.id}
+          style={{
+            top: `calc(50% + ${start + i * (segH + gap)}px)`,
+            width: targetHandle.width,
+            height: segH,
+            transform: 'translate(-50%, 0)',
+            background: 'transparent',
+            border: 'none',
+            opacity: 0,
+          }}
+        />
+      ))}
+      {models.length > 0 && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-border bg-background"
+          style={{
+            width: targetHandle.width,
+            height: total,
+          }}
+        />
+      )}
       <Handle
         type="source"
         position={Position.Right}
         className="!rounded-full !border-border !bg-background"
         style={{
-          width: topologyConfig.handles.slot.source.width,
-          height: topologyConfig.handles.slot.source.height,
-          borderWidth: topologyConfig.handles.slot.source.borderWidth,
+          width: sourceHandle.width,
+          height: sourceHandle.height,
+          borderWidth: sourceHandle.borderWidth,
         }}
       />
 

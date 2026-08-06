@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
 )
 
@@ -78,7 +79,7 @@ func topologyVersionList(db *gorm.DB) (gin.H, error) {
 		})
 	}
 
-	total, active, count := topologyStats([]byte(config.Nodes))
+	total, active, count := topologyStats([]byte(config.Flat))
 	return gin.H{
 		"current": topologyCurrentDTO{
 			Archived:       archived,
@@ -105,20 +106,25 @@ func topologyCurrentArchived(db *gorm.DB, configUpdatedAt time.Time) (bool, erro
 	return latest.ConfigUpdatedAt.Equal(configUpdatedAt), nil
 }
 
-// topologyStats derives the summary counters from the stored document. Model
-// nodes are never persisted in the document (the frontend derives them from
-// the provider config), so every stored node is a workflow node and node_count
-// therefore already excludes model nodes.
-func topologyStats(nodesJSON []byte) (workflowTotal, workflowActive, nodeCount int) {
-	var document TopologyDocument
-	if err := json.Unmarshal(nodesJSON, &document); err != nil {
+// topologyStats derives the summary counters from the stored flat topology.
+// Model nodes are never persisted in the flat document (the frontend derives
+// them from the provider config), so every stored node is a workflow node and
+// node_count therefore already excludes model nodes. Each request-entry node is
+// one workflow; an entry counts as active when its master switch is enabled.
+func topologyStats(flatJSON []byte) (workflowTotal, workflowActive, nodeCount int) {
+	var tp topology.Topology
+	if err := json.Unmarshal(flatJSON, &tp); err != nil {
 		return 0, 0, 0
 	}
-	for _, workflow := range document {
-		workflowTotal++
-		nodeCount += len(workflow)
-		if len(workflow) > 0 && workflow[0].Enabled != nil && *workflow[0].Enabled {
-			workflowActive++
+	workflowTotal = 0
+	workflowActive = 0
+	nodeCount = len(tp.Nodes)
+	for _, node := range tp.Nodes {
+		if node.Kind == topology.KindRequestEntry {
+			workflowTotal++
+			if node.Enabled {
+				workflowActive++
+			}
 		}
 	}
 	return workflowTotal, workflowActive, nodeCount
@@ -148,9 +154,9 @@ func archiveCurrentTopology(db *gorm.DB, force bool) (*model.TopologyVersion, er
 		return nil, nil
 	}
 
-	total, active, count := topologyStats([]byte(config.Nodes))
+	total, active, count := topologyStats([]byte(config.Flat))
 	version := model.TopologyVersion{
-		Nodes:           config.Nodes,
+		Nodes:           config.Flat,
 		ConfigUpdatedAt: config.UpdatedAt,
 		WorkflowTotal:   total,
 		WorkflowActive:  active,
@@ -244,17 +250,20 @@ func TopologyVersionRestore(db *gorm.DB, refresher TopologyRefresher) gin.Handle
 			return
 		}
 
-		var document TopologyDocument
-		if err := json.Unmarshal([]byte(version.Nodes), &document); err != nil {
+		var tp topology.Topology
+		if err := json.Unmarshal([]byte(version.Nodes), &tp); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("decode stored topology version: %v", err)})
 			return
 		}
-		canonical, rows, err := validateTopologyDocument(db, document)
-		if err != nil {
+		if err := topology.ValidateTopology(&tp); err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-		publish, err := replaceTopology(db, canonical, rows, refresher)
+		if err := topology.NewStore(db).Save(&tp); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		publish, err := refresher.PrepareTopologyRefresh(db)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

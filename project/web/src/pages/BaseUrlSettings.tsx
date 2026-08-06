@@ -157,6 +157,12 @@ export function BaseUrlSettings() {
                 下面登记的路径仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
               </p>
               <div className="flex items-center gap-2">
+                <Input
+                  value="无路径"
+                  readOnly
+                  disabled
+                  className="w-36 shrink-0"
+                />
                 <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                   {baseUrl}
                 </code>
@@ -213,7 +219,7 @@ export function BaseUrlSettings() {
                 onClick={addPath}
                 disabled={saving}
               >
-                <AppIcon name="add" size={14} /> 添加一行
+                <AppIcon name="add" size={14} /> 添加路径
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">

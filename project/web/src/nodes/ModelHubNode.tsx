@@ -50,7 +50,7 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
             key={m.id}
             className={cn(
               'flex items-center gap-2 text-xs text-card-foreground',
-              m.disabled && 'opacity-40'
+              m.disabled && 'opacity-60'
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >

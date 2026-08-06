@@ -19,6 +19,7 @@ import { FlatSlotNode } from '@/nodes/FlatSlotNode'
 import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { ContextMenu } from '@/components/topology/ContextMenu'
+import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type Provider } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
@@ -33,6 +34,7 @@ import {
   isRequestEntry,
   isProvider,
   PROVIDER_SLOT_TYPE,
+  ALL_SLOT_TYPES,
   type RewriteSlotType,
   type FlatCanvas,
 } from '@/lib/flat-topology'
@@ -95,10 +97,68 @@ function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: st
   return false
 }
 
-function invalidConnectionReason(wires: readonly FlatWire[], source: string, target: string): string | null {
+function slotLabel(slotType: string): string {
+  return SLOT_LABELS[slotType as SlotType] ?? slotType ?? '插槽'
+}
+
+/**
+ * Walk the chain that the prospective new wire (source→target) would join,
+ * merging the new edge into the graph first so `target` is included. Starting at
+ * the chain head (a node with no incoming wire) and following the single-output
+ * wires, collect every slot node in the chain. Reject the connection when any
+ * slot type appears more than once — a workflow cannot contain two nodes of the
+ * same stage.
+ */
+function slotDuplicateReason(
+  nodes: readonly FlatNode[],
+  wires: readonly FlatWire[],
+  source: string,
+  target: string,
+): string | null {
+  const withNew = [...wires, { source, target }]
+  const out = new Map<string, string>()
+  for (const w of withNew) out.set(w.source, w.target)
+  const hasIncoming = new Set(withNew.map((w) => w.target))
+
+  let head = source
+  const seenUp = new Set<string>()
+  while (hasIncoming.has(head) && !seenUp.has(head)) {
+    seenUp.add(head)
+    const prev = withNew.find((w) => w.target === head)?.source
+    if (prev === undefined) break
+    head = prev
+  }
+
+  const slotTypeOf = new Map<string, string>()
+  for (const n of nodes) if (n.kind === 'slot') slotTypeOf.set(n.id, n.slotType ?? '')
+
+  const seenSlotTypes = new Map<string, string>()
+  const visited = new Set<string>()
+  let cur: string | undefined = head
+  while (cur !== undefined && !visited.has(cur)) {
+    visited.add(cur)
+    const st = slotTypeOf.get(cur)
+    if (st) {
+      const prior = seenSlotTypes.get(st)
+      if (prior !== undefined && prior !== cur) {
+        return `一个工作流里面不能有多个${slotLabel(st)}`
+      }
+      seenSlotTypes.set(st, cur)
+    }
+    cur = out.get(cur)
+  }
+  return null
+}
+
+function invalidConnectionReason(
+  nodes: readonly FlatNode[],
+  wires: readonly FlatWire[],
+  source: string,
+  target: string,
+): string | null {
   if (wires.some((w) => w.source === source)) return '每个节点最多一条出边'
   if (wouldCreateCycle(wires, source, target)) return '不能形成环路'
-  return null
+  return slotDuplicateReason(nodes, wires, source, target)
 }
 
 function reaches(wires: readonly FlatWire[], from: string, to: string): boolean {
@@ -131,6 +191,7 @@ export function TopologyPage() {
     dirtyRef.current = true
     setDirty(true)
   }, [])
+  const [versionsOpen, setVersionsOpen] = useState(false)
 
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean; mode: 'corner' | 'cursor' }>({
     x: 0,
@@ -243,9 +304,15 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
+  const duplicateProviderNames = useMemo(() => {
+    if (!tp) return new Set<string>()
+    return new Set(findDuplicateActivations(tp.nodes, tp.wires))
+  }, [tp])
+
   const reachableProvidersForEntry = useCallback(
     (entryId: string): Array<{ provider: Provider; active: boolean }> => {
       if (!canvas) return []
+      const entryEnabled = canvas.topLevel.find((n) => n.id === entryId && isRequestEntry(n))?.enabled ?? false
       const out = new Map<string, string>()
       for (const w of canvas.canvasWires) out.set(w.source, w.target)
       const result: Array<{ provider: Provider; active: boolean }> = []
@@ -259,7 +326,16 @@ export function TopologyPage() {
             if (canvas.providerSlotOf.get(p.id) !== cur || !p.name) continue
             const provider = providerByName.get(p.name)
             if (provider && !result.some((r) => r.provider.name === provider.name)) {
-              result.push({ provider, active: p.enabled && provider.status })
+              result.push({
+                provider,
+                active:
+                  entryEnabled &&
+                  p.enabled &&
+                  provider.status &&
+                  !provider.autoDisabled &&
+                  provider.workflowEnabled &&
+                  !duplicateProviderNames.has(provider.name),
+              })
             }
           }
         }
@@ -267,37 +343,50 @@ export function TopologyPage() {
       }
       return result
     },
-    [canvas, providerByName],
+    [canvas, providerByName, duplicateProviderNames],
   )
 
-  const modelHubNodes = useMemo(() => {
-    if (!canvas) return [] as Node[]
+  const modelNodes = useMemo(() => {
+    const empty = {
+      nodes: [] as Node[],
+      entryModels: new Map<string, Array<{ id: string; label: string; active: boolean }>>(),
+      modelLinks: [] as Array<{ nodeId: string; entryId: string; modelName: string; active: boolean }>,
+    }
+    if (!canvas) return empty
     const nodes: Node[] = []
+    const entryModels = new Map<string, Array<{ id: string; label: string; active: boolean }>>()
+    const modelLinks: Array<{ nodeId: string; entryId: string; modelName: string; active: boolean }> = []
     for (const entry of canvas.topLevel) {
       if (!isRequestEntry(entry)) continue
       const reachable = reachableProvidersForEntry(entry.id)
-      const modelSet = new Map<string, boolean>()
+      const modelActive = new Map<string, boolean>()
       for (const { provider, active } of reachable) {
         for (const m of provider.models) {
-          const prev = modelSet.get(m.model)
-          if (prev === undefined) modelSet.set(m.model, active)
-          else if (active) modelSet.set(m.model, true)
+          const prev = modelActive.get(m.model)
+          if (prev === undefined) modelActive.set(m.model, active)
+          else if (active) modelActive.set(m.model, true)
         }
       }
-      const hubId = `hub-${entry.id}`
-      const models = Array.from(modelSet.keys())
-        .sort((a, b) => a.localeCompare(b))
-        .map((model) => ({ id: model, label: model, disabled: !modelSet.get(model) }))
-      nodes.push({
-        id: hubId,
-        type: 'modelHub',
-        position: layoutSnapshot[hubId] ?? { x: 20, y: 20 },
-        data: { models, simplified: true },
-      })
+      const modelNames = Array.from(modelActive.keys()).sort((a, b) => a.localeCompare(b))
+      entryModels.set(
+        entry.id,
+        modelNames.map((m) => ({ id: m, label: m, active: modelActive.get(m) ?? false })),
+      )
+      for (const m of modelNames) {
+        const nodeId = `model-${entry.id}-${m}`
+        const active = modelActive.get(m) ?? false
+        nodes.push({
+          id: nodeId,
+          type: 'modelHub',
+          position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
+          data: { models: [{ id: m, label: m, disabled: !active }], simplified: true },
+        })
+        modelLinks.push({ nodeId, entryId: entry.id, modelName: m, active })
+      }
     }
-    return nodes
+    return { nodes, entryModels, modelLinks }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, reachableProvidersForEntry])
+  }, [canvas, reachableProvidersForEntry, layoutSnapshot])
 
   const topLevelNodes = useMemo(() => {
     if (!canvas) return [] as Node[]
@@ -312,6 +401,7 @@ export function TopologyPage() {
             label: node.name ?? '请求入口',
             enabled: node.enabled,
             weight: node.weight ?? 1,
+            models: modelNodes.entryModels.get(node.id) ?? [],
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
                 const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
@@ -388,9 +478,9 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes])
 
-  const baseNodes = useMemo(() => [...modelHubNodes, ...topLevelNodes], [modelHubNodes, topLevelNodes])
+  const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
 
@@ -410,24 +500,20 @@ export function TopologyPage() {
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
       })
     }
-    const entryIds = new Set(canvas.topLevel.filter(isRequestEntry).map((n) => n.id))
-    for (const e of entryIds) {
-      const hubId = `hub-${e}`
-      const hub = modelHubNodes.find((n) => n.id === hubId)
-      const hubData = hub?.data as { models?: Array<{ id: string }> } | undefined
-      const modelCount = hubData?.models?.length ?? 0
-      if (modelCount === 0) continue
+    for (const link of modelNodes.modelLinks) {
       edges.push({
-        id: wiringEdgeId(hubId, e),
-        source: hubId,
-        target: e,
+        id: wiringEdgeId(link.nodeId, link.entryId),
+        source: link.nodeId,
+        target: link.entryId,
+        sourceHandle: link.modelName,
+        targetHandle: link.modelName,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: link.active ? 1 : 0.6 },
       })
     }
     return edges
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, modelHubNodes])
+  }, [canvas, modelNodes])
 
   const [edges, setEdges, onEdgesChange] = useEdgesState(baseEdges)
   const edgesRef = useRef(edges)
@@ -518,7 +604,7 @@ export function TopologyPage() {
       const { source, target } = connection
       if (!source || !target) return
       const wiring = canvasWiresFromEdges(edgesRef.current)
-      const reason = invalidConnectionReason(wiring, source, target)
+      const reason = invalidConnectionReason(tpRef.current?.nodes ?? [], wiring, source, target)
       if (reason) {
         toast.add({ title: reason, type: 'error' })
         return
@@ -527,6 +613,8 @@ export function TopologyPage() {
         id: wiringEdgeId(source, target),
         source,
         target,
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
       }
@@ -542,12 +630,19 @@ export function TopologyPage() {
       const { source, target } = newConnection
       if (!source || !target) return
       const rest = edgesRef.current.filter((e) => e.id !== oldEdge.id)
-      const reason = invalidConnectionReason(canvasWiresFromEdges(rest), source, target)
+      const reason = invalidConnectionReason(tpRef.current?.nodes ?? [], canvasWiresFromEdges(rest), source, target)
       if (reason) {
         toast.add({ title: reason, type: 'error' })
         return
       }
-      const reconnected: Edge = { ...oldEdge, id: wiringEdgeId(source, target), source, target }
+      const reconnected: Edge = {
+        ...oldEdge,
+        id: wiringEdgeId(source, target),
+        source,
+        target,
+        sourceHandle: newConnection.sourceHandle,
+        targetHandle: newConnection.targetHandle,
+      }
       const next = [...rest, reconnected]
       setEdges(next)
       commitCanvasWires(canvasWiresFromEdges(next))
@@ -640,7 +735,7 @@ export function TopologyPage() {
       groupGap: topologyConfig.layout.groupGap,
       marginX: topologyConfig.layout.marginX,
       marginY: topologyConfig.layout.marginY,
-      freeSlotRowWidthFactor: topologyConfig.layout.freeSlotRowWidthFactor,
+      freeSlotRowWidthFactor: ALL_SLOT_TYPES.length + 2,
       slotBaseWidth: topologyConfig.render.slot.shellMinWidth,
     }, sizesRef.current)
     const next: LayoutSnapshot = {}
@@ -750,14 +845,7 @@ export function TopologyPage() {
     for (let i = 0; i < slotIds.length - 1; i++) {
       chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
     }
-    const collapsed = canvasFromFlat(newNodes, [])
-    const wires = flatWiresFromCanvas({
-      topLevel: collapsed.topLevel,
-      providers: collapsed.providers,
-      providerSlotOf: collapsed.providerSlotOf,
-      canvasWires: chain,
-    })
-    setTopology({ nodes: newNodes, wires })
+    setTopology({ nodes: newNodes, wires: [...cur.wires, ...chain] })
     markDirty()
   }, [setTopology, markDirty])
 
@@ -820,6 +908,12 @@ export function TopologyPage() {
       <PageHeader
         title="转发拓扑"
         status={`请求入口：${activeEntries}/${totalEntries} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
+            <AppIcon name="history" data-icon="inline-start" />
+            历史版本
+          </Button>
+        }
       />
       <div ref={setContainerEl} className="relative flex-1">
         <ReactFlow
@@ -880,6 +974,20 @@ export function TopologyPage() {
             onClose={() => setContextMenu(null)}
           />
         )}
+        <TopologyVersionsModal
+          open={versionsOpen}
+          onClose={() => setVersionsOpen(false)}
+          providers={providers ?? []}
+          currentTopology={tp}
+          onBeforeRestore={async () => {
+            const cur = tpRef.current
+            if (cur) await dashboardApi.saveFlatTopology(cur)
+          }}
+          onRestored={() => {
+            setVersionsOpen(false)
+            void loadData()
+          }}
+        />
       </div>
     </div>
   )

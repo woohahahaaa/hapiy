@@ -38,6 +38,13 @@ func main() {
 		log.Fatalf("Failed to migrate legacy topology schema: %v", err)
 	}
 
+	// Drop archived topology versions stored in the legacy nested-document
+	// format: the version archive was rebuilt around the flat topology, so old
+	// snapshots are unreadable and are intentionally discarded (no migration).
+	if err := db.Where("1 = 1").Delete(&model.TopologyVersion{}).Error; err != nil {
+		log.Printf("Warning: Failed to clear legacy topology versions: %v", err)
+	}
+
 	creds, err := handler.CreateDefaultAdmin(db)
 	if err != nil {
 		log.Printf("Warning: Failed to create default admin: %v", err)

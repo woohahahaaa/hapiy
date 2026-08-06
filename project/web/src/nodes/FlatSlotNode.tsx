@@ -115,16 +115,32 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     </span>
   )
 
+  const targetHandle = topologyConfig.handles.provider.target
+  const segH = targetHandle.height
+  const total = segH
+  const start = -(total / 2)
+
   return (
     <>
       <Handle
         type="target"
         position={Position.Left}
-        className="!rounded-full !border-border !bg-background"
         style={{
-          width: topologyConfig.handles.slot.target.width,
-          height: topologyConfig.handles.slot.target.height,
-          borderWidth: topologyConfig.handles.slot.target.borderWidth,
+          top: `calc(50% + ${start}px)`,
+          width: targetHandle.width,
+          height: segH,
+          transform: 'translate(-50%, 0)',
+          background: 'transparent',
+          border: 'none',
+          opacity: 0,
+        }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-border bg-background"
+        style={{
+          width: targetHandle.width,
+          height: total,
         }}
       />
       {isProviderSlot ? (

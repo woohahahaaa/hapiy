@@ -1223,14 +1223,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async archiveTopologyVersion(): Promise<TopologyVersionList> {
     return parseTopologyVersionList(await request('/topology/versions/archive', { method: 'POST' }))
   },
-  async getTopologyVersion(id: string): Promise<{ version: TopologyVersionSummary; document: Workflow[] }> {
+  async getTopologyVersion(id: string): Promise<{ version: TopologyVersionSummary; document: FlatTopology }> {
     const body = await request(`/topology/versions/${encodeURIComponent(id)}`)
     if (!isRecord(body)) {
       throw new DashboardApiError('服务端返回的版本详情格式无效', null)
     }
     return {
       version: parseTopologyVersionSummary(body),
-      document: parseTopologyDocument(body.document),
+      document: parseFlatTopology(body.document),
     }
   },
   async restoreTopologyVersion(id: string): Promise<TopologyVersionList> {
