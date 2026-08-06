@@ -1,41 +1,18 @@
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SlotItemCard } from './SlotItemCard'
-import type { LogLevel, LogOutputSlotEntry, LogTarget, SlotItemDragProps } from './types'
-
-const LOG_TARGET_OPTIONS: { value: LogTarget; label: string }[] = [
-  { value: 'file', label: '文件' },
-  { value: 'console', label: '控制台' },
-  { value: 'both', label: '两者' },
-]
-
-const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string }[] = [
-  { value: 'info', label: 'Info' },
-  { value: 'warn', label: 'Warn' },
-  { value: 'error', label: 'Error' },
-]
+import type { LogOutputSlotEntry, SlotItemDragProps } from './types'
 
 interface LogOutputSlotItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
-  hasRequestRewrite: boolean
-  hasResponseRewrite: boolean
 }
 
 export function LogOutputSlotItem({
   entry,
   onChange,
   onDelete,
-  hasRequestRewrite,
-  hasResponseRewrite,
   ...drag
 }: LogOutputSlotItemProps) {
   return (
@@ -46,111 +23,84 @@ export function LogOutputSlotItem({
       onDelete={onDelete}
       {...drag}
     >
-      <div className="grid grid-cols-2 gap-1.5">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">输出目标</span>
-          <Select
-            value={entry.logTarget}
-            onValueChange={(v) => onChange({ ...entry, logTarget: v as LogTarget })}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LOG_TARGET_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">日志级别</span>
-          <Select
-            value={entry.logLevel}
-            onValueChange={(v) => onChange({ ...entry, logLevel: v as LogLevel })}
-          >
-            <SelectTrigger size="sm" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LOG_LEVEL_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
       <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">存储路径</span>
+        <span className="text-[10px] text-muted-foreground">日志前缀</span>
         <Input
           size="sm"
-          className="font-mono text-[10px]"
-          value={entry.logPath}
-          onChange={(e) => onChange({ ...entry, logPath: e.target.value })}
-          placeholder="/var/log/hapiy/"
+          className="text-[10px]"
+          value={entry.prefix}
+          onChange={(e) => onChange({ ...entry, prefix: e.target.value })}
+          placeholder="请输入日志前缀"
         />
       </div>
       <div className="flex flex-col gap-0.5">
         <span className="text-[10px] text-muted-foreground">记录内容</span>
-        <div className="grid grid-cols-2 gap-x-1 gap-y-0.5 text-[10px]">
-          <RecordRow
-            label="请求修改前"
-            checked={entry.recordRequestBefore}
-            onChange={(v) => onChange({ ...entry, recordRequestBefore: v })}
+        <div className="grid grid-cols-2 gap-x-1 gap-y-1">
+          <CheckField
+            label="记录原始请求"
+            checked={entry.recordRequest}
+            onChange={(v) => onChange({ ...entry, recordRequest: v })}
           />
-          <RecordRow
-            label="请求修改后"
-            checked={entry.recordRequestAfter}
-            disabled={!hasRequestRewrite}
-            disabledHint="当前未添加请求改写节点"
-            onChange={(v) => onChange({ ...entry, recordRequestAfter: v })}
+          <CheckField
+            label="记录改写后请求"
+            checked={entry.recordModifiedRequest}
+            onChange={(v) => onChange({ ...entry, recordModifiedRequest: v })}
           />
-          <RecordRow
-            label="响应修改前"
-            checked={entry.recordResponseBefore}
-            onChange={(v) => onChange({ ...entry, recordResponseBefore: v })}
+          <CheckField
+            label="记录原始响应"
+            checked={entry.recordResponse}
+            onChange={(v) => onChange({ ...entry, recordResponse: v })}
           />
-          <RecordRow
-            label="响应修改后"
-            checked={entry.recordResponseAfter}
-            disabled={!hasResponseRewrite}
-            disabledHint="当前未添加响应改写节点"
-            onChange={(v) => onChange({ ...entry, recordResponseAfter: v })}
+          <CheckField
+            label="记录改写后响应"
+            checked={entry.recordModifiedResponse}
+            onChange={(v) => onChange({ ...entry, recordModifiedResponse: v })}
+          />
+          <CheckField
+            label="记录系统日志"
+            checked={entry.recordSystem}
+            onChange={(v) => onChange({ ...entry, recordSystem: v })}
           />
         </div>
+      </div>
+      <CheckField
+        label="合并流式响应"
+        checked={entry.mergeStream}
+        onChange={(v) => onChange({ ...entry, mergeStream: v })}
+      />
+      <div className="flex flex-col gap-0.5">
+        <span className="text-[10px] text-muted-foreground">自动关闭(分钟)</span>
+        <Input
+          type="number"
+          min={1}
+          max={60}
+          size="sm"
+          className="text-[10px]"
+          value={entry.autoCloseMinutes}
+          onChange={(e) => {
+            const v = e.target.valueAsNumber
+            onChange({ ...entry, autoCloseMinutes: Number.isNaN(v) ? entry.autoCloseMinutes : v })
+          }}
+          placeholder="输入1-60"
+        />
       </div>
     </SlotItemCard>
   )
 }
 
-function RecordRow({
+function CheckField({
   label,
   checked,
-  disabled,
-  disabledHint,
   onChange,
 }: {
   label: string
   checked: boolean
-  disabled?: boolean
-  disabledHint?: string
   onChange: (v: boolean) => void
 }) {
   return (
-    <label
-      className={`flex items-center gap-1 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-      title={disabled ? disabledHint : undefined}
-    >
-      <Checkbox
-        checked={checked}
-        disabled={disabled}
-        onCheckedChange={(v) => onChange(v === true)}
-      />
-      <span className="leading-none text-foreground">{label}</span>
-    </label>
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(v === true)} />
+    </div>
   )
 }

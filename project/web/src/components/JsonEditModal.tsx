@@ -91,7 +91,7 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
           <DialogHeader>
             <DialogTitle>保存 JSON</DialogTitle>
             <DialogDescription>
-              你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用日志、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。
+              你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

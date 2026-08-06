@@ -4,6 +4,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { TopologyPage } from '@/pages/TopologyPage'
 import { MonitorPage } from '@/pages/MonitorPage'
 import { LogsPage } from '@/pages/LogsPage'
+import { LogCapturePage } from '@/pages/LogCapturePage'
 import { ProviderPage } from '@/pages/ProviderPage'
 import { TokenPage } from '@/pages/TokenPage'
 import { PricePage } from '@/pages/PricePage'
@@ -29,6 +30,7 @@ function App() {
                   <Route path="/" element={<TopologyPage />} />
                   <Route path="/monitor" element={<MonitorPage />} />
                   <Route path="/logs" element={<LogsPage />} />
+                  <Route path="/logs/capture" element={<LogCapturePage />} />
                   <Route path="/provider" element={<ProviderPage />} />
                   <Route path="/token" element={<TokenPage />} />
                   <Route path="/channel-affinity" element={<ChannelAffinityPage />} />

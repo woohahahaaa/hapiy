@@ -169,7 +169,8 @@ type RuleCompiledSet struct {
 
 // CompileRules builds a precompiled set from a setting.
 func CompileRules(s *AffinitySetting) *RuleCompiledSet {
-	cs := &RuleCompiledSet{Enabled: s != nil && s.Enabled, DefaultTTL: DefaultTTLSeconds, cache: newCache()}
+	enabled := false
+	cs := &RuleCompiledSet{DefaultTTL: DefaultTTLSeconds, cache: newCache()}
 	if s != nil {
 		if s.DefaultTTLSeconds > 0 {
 			cs.DefaultTTL = s.DefaultTTLSeconds
@@ -178,9 +179,11 @@ func CompileRules(s *AffinitySetting) *RuleCompiledSet {
 			if !r.Enabled {
 				continue
 			}
+			enabled = true
 			cs.rules = append(cs.rules, compileRule(r))
 		}
 	}
+	cs.Enabled = enabled
 	return cs
 }
 

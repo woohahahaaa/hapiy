@@ -9,8 +9,6 @@ export type {
   AutoSwitchSlotEntry,
   LogOutputSlotEntry,
   SlotRuleMap,
-  LogTarget,
-  LogLevel,
   SlotItemDragProps,
 } from './types'
 export {

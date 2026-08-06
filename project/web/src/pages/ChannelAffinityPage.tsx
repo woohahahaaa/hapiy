@@ -219,7 +219,7 @@ export function ChannelAffinityPage() {
     const rules = exists
       ? setting.rules.map((item) => (item.name === rule.name ? rule : item))
       : [...setting.rules, rule]
-    const ok = await save({ enabled: setting.enabled, defaultTtlSeconds: setting.defaultTtlSeconds, rules })
+    const ok = await save({ enabled: true, defaultTtlSeconds: setting.defaultTtlSeconds, rules })
     if (ok) {
       setEditing(null)
       setIsDialogOpen(false)
@@ -229,7 +229,7 @@ export function ChannelAffinityPage() {
   const handleDeleteRule = async (name: string) => {
     if (!setting) return
     await save({
-      enabled: setting.enabled,
+      enabled: true,
       defaultTtlSeconds: setting.defaultTtlSeconds,
       rules: setting.rules.filter((item) => item.name !== name),
     })
@@ -246,14 +246,6 @@ export function ChannelAffinityPage() {
             请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道。
           </div>
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <Switch
-                checked={current.enabled}
-                onCheckedChange={(enabled) => void save({ enabled, defaultTtlSeconds: current.defaultTtlSeconds, rules: current.rules })}
-                disabled={isSaving}
-              />
-              启用渠道亲和
-            </label>
             <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving || isLoading}>
               <AppIcon name="add" data-icon="inline-start" />添加规则
             </Button>

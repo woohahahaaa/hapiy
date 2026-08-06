@@ -10,6 +10,7 @@ type Config struct {
 	Port         string
 	DatabasePath string
 	JWTSecret    string
+	LogDir       string
 }
 
 func Load() *Config {
@@ -19,6 +20,7 @@ func Load() *Config {
 		Port:         getEnv("HAPIY_PORT", "8080"),
 		DatabasePath: getEnv("HAPIY_DB_PATH", "./hapiy.db"),
 		JWTSecret:    getEnv("HAPIY_JWT_SECRET", "change-me-in-production"),
+		LogDir:       getEnv("HAPIY_LOG_DIR", "./logs"),
 	}
 }
 

@@ -1,11 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect x="51" y="51" width="410" height="410" rx="88" fill="#000000"/>
-  <g transform="translate(145,145) scale(6.16)" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M37 22.0001L34 25.0001L23 14.0001L26 11.0001C27.5 9.50002 33 7.00005 37 11.0001C41 15.0001 38.5 20.5 37 22.0001Z" fill="#FFFFFF" stroke="#FFFFFF"/>
-    <path d="M42 6L37 11"/>
-    <path d="M11 25.9999L14 22.9999L25 33.9999L22 36.9999C20.5 38.5 15 41 11 36.9999C7 32.9999 9.5 27.5 11 25.9999Z" fill="#FFFFFF" stroke="#FFFFFF"/>
-    <path d="M23 32L27 28"/>
-    <path d="M6 42L11 37"/>
-    <path d="M16 25L20 21"/>
+  <g transform="translate(108.16,108.16) scale(6.16)" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 8C14.5 8.00004 17.05 7.99905 18.0143 13.0614C18.989 18.1786 19.3286 22.8477 21 24"/>
+    <path d="M35 40C33.5 40 30.95 40.001 29.9857 34.9386C29.011 29.8214 28.6714 25.1523 27 24.0001"/>
+    <path d="M13 40C14.5 40 17.05 40.001 18.0143 34.9386C18.989 29.8214 19.3286 25.1523 21 24.0001"/>
+    <path d="M35 8C33.5 8.00004 30.95 7.99905 29.9857 13.0614C29.011 18.1786 28.6714 22.8477 27 24"/>
+    <circle r="4" transform="matrix(-1 0 0 1 21 24)" fill="#FFFFFF"/>
+    <circle r="4" transform="matrix(-1 0 0 1 27 24)" fill="#FFFFFF"/>
+    <path d="M21 24H13"/>
+    <path d="M27 24L35 24"/>
+    <path d="M7 24H5"/>
+    <path d="M43 24H41"/>
+    <path d="M7 8H5"/>
+    <path d="M43 8H41"/>
+    <path d="M7 40H5"/>
+    <path d="M43 40H41"/>
   </g>
 </svg>

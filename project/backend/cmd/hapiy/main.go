@@ -69,6 +69,9 @@ func main() {
 	service.InitLogWriter(db)
 	defer service.Logs().Stop()
 
+	// Initialize per-request log file capture (writes JSON files to disk)
+	service.InitLogFileWriter(cfg.LogDir, db)
+
 	service.InitQuotaLedger(db)
 
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
@@ -131,6 +134,8 @@ func main() {
 			// Logs
 			dashboardAuthed.GET("/logs", handler.ListLogs(db))
 			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
+			dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db, cfg.LogDir))
+			dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db, cfg.LogDir))
 
 			// Users
 			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))

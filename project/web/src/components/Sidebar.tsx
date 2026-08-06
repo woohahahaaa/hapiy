@@ -52,7 +52,8 @@ const navigation: NavItem[] = [
     icon: <AppIcon name="monitoring" />,
     children: [
       { id: 'activity', label: '活动监视', href: '/monitor' },
-      { id: 'logs', label: '使用日志', href: '/logs' },
+      { id: 'logs', label: '使用记录', href: '/logs' },
+      { id: 'capture', label: '日志抓取', href: '/logs/capture' },
     ],
   },
   {
@@ -110,7 +111,7 @@ const navigation: NavItem[] = [
 
 function isPathActive(currentPath: string, href: string) {
   if (href === '/') return currentPath === '/'
-  return currentPath === href || currentPath.startsWith(href + '/')
+  return currentPath === href || (href !== '/logs' && currentPath.startsWith(href + '/'))
 }
 
 function NavLink({

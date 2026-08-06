@@ -127,7 +127,7 @@ func TestTopologyPut_saves_workflow_and_returns_canonical_order(t *testing.T) {
 	body := `[[` +
 		`{"type":"provider","name":"A","provider_id":"provider-a"},` +
 		`{"type":"requestModify","name":"rewrite","rule_id":"rewrite-a","order":1,"enabled":true},` +
-		`{"type":"logOutput","name":"log","enabled":true,"config":{"log_target":"file","log_level":"info","log_path":"","record_request_before":true,"record_request_after":true,"record_response_before":true,"record_response_after":true}}` +
+		`{"type":"logOutput","name":"log","enabled":true,"config":{"prefix":"my-logs","record_request":true,"record_modified_request":true,"record_response":true,"record_modified_response":true,"record_system":true,"merge_stream":true,"auto_close_minutes":5}}` +
 		`]]`
 
 	rec := topologyRequest(t, http.MethodPut, body, TopologyPut(db, refresher))

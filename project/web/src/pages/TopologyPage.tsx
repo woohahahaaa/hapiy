@@ -469,6 +469,8 @@ export function TopologyPage() {
             return {
               id: p.id,
               label: p.name,
+              baseURLCount: provider?.baseUrls.length ?? 0,
+              keyCount: provider?.keys.length ?? 0,
               modelCount: provider?.models.length ?? 0,
               enabled: p.enabled,
               providerStatus: provider?.status ?? false,
@@ -483,9 +485,12 @@ export function TopologyPage() {
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
             children,
+            providers: (providers ?? []).map((p) => p.name),
             onAddProvider: () => handleAddProvider(node.id),
+            onSelectProvider: (providerId: string, name: string) => handleSelectProvider(providerId, name),
             onToggleProvider: (providerId: string, enabled: boolean) =>
               updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n))),
+            onDeleteProvider: (providerId: string) => handleDeleteNode(providerId),
             onReorderProvider: (from: number, to: number) => handleReorderProvider(node.id, from, to),
           },
         })
@@ -980,29 +985,39 @@ export function TopologyPage() {
     (slotId: string) => {
       const cur = tpRef.current
       if (!cur) return
-      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
-      const available = (providers ?? []).filter((p) => !collapsed.providers.some((n) => n.name === p.name))
-      const provider = available[0]
-      if (!provider) {
-        toast.add({ title: '没有可添加到该插槽的供应商', type: 'info' })
-        return
-      }
       const id = `prov-${crypto.randomUUID().slice(0, 8)}`
-      const slotInEnabledEntry = cur.nodes.some(
-        (n) => n.kind === 'requestEntry' && n.enabled && reaches(cur.wires, n.id, slotId),
-      )
-      const alreadyActive = findDuplicateActivations(cur.nodes, cur.wires).includes(provider.name)
-      const defaultEnabled = !(slotInEnabledEntry && alreadyActive)
-      if (!defaultEnabled) {
-        toast.add({ title: `同一个 Provider（${provider.name}）不能在多个激活工作流中被启用`, type: 'error' })
-      }
-      const providerNode: FlatNode = { id, kind: 'provider', name: provider.name, enabled: defaultEnabled }
+      // 添加一个"空" provider 卡片，name 留空；由用户在下拉框中自行选择具体供应商。
+      const providerNode: FlatNode = { id, kind: 'provider', name: undefined, enabled: true }
       const slotIndex = cur.nodes.findIndex((n) => n.id === slotId)
       const insertAt = slotIndex >= 0 ? slotIndex + 1 : cur.nodes.length
       const nextNodes = [...cur.nodes.slice(0, insertAt), providerNode, ...cur.nodes.slice(insertAt)]
       updateTopologyNodes(() => nextNodes)
     },
-    [providers, updateTopologyNodes],
+    [updateTopologyNodes],
+  )
+
+  const handleSelectProvider = useCallback(
+    (providerId: string, name: string) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+      const slotId = collapsed.providerSlotOf.get(providerId)
+      let defaultEnabled = true
+      if (slotId) {
+        const slotInEnabledEntry = cur.nodes.some(
+          (n) => n.kind === 'requestEntry' && n.enabled && reaches(cur.wires, n.id, slotId),
+        )
+        const alreadyActive = findDuplicateActivations(cur.nodes, cur.wires).includes(name)
+        defaultEnabled = !(slotInEnabledEntry && alreadyActive)
+        if (!defaultEnabled) {
+          toast.add({ title: `同一个 Provider（${name}）不能在多个激活工作流中被启用`, type: 'error' })
+        }
+      }
+      updateTopologyNodes((list) =>
+        list.map((n) => (n.id === providerId ? { ...n, name, enabled: n.enabled && defaultEnabled } : n)),
+      )
+    },
+    [updateTopologyNodes],
   )
 
   const handleReorderProvider = useCallback(

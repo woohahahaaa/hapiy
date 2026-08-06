@@ -13,7 +13,7 @@ describe('parseTopologyDocument', () => {
     const raw = [[
       { type: 'provider', name: 'OpenAI', provider_id: 'p-001' },
       { type: 'requestModify', name: '改写', rule_id: 'r-101', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: true, config: { log_target: 'file', log_level: 'info', log_path: '/tmp/a.log', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true } },
+      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '/logs/a', record_request: true, record_modified_request: true, record_response: true, record_modified_response: true, record_system: true, merge_stream: true, auto_close_minutes: 5 } },
     ]]
 
     const workflows = parseTopologyDocument(raw)
@@ -59,7 +59,7 @@ describe('parseTopologyDocument', () => {
   it('logOutput has no order field', () => {
     const raw = [[
       { type: 'provider', name: 'P' },
-      { type: 'logOutput', name: 'log', enabled: true, config: { log_target: 'file', log_level: 'info', log_path: '', record_request_before: true, record_request_after: true, record_response_before: true, record_response_after: true } },
+      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '', record_request: true, record_modified_request: true, record_response: true, record_modified_response: true, record_system: true, merge_stream: true, auto_close_minutes: 5 } },
     ]]
     const workflows = parseTopologyDocument(raw)
     expect(workflows[0][1]).not.toHaveProperty('order')
@@ -72,7 +72,7 @@ describe('slotMapsFromWorkflows', () => {
       { type: 'provider', name: 'P', provider_id: 'p-1' },
       { type: 'requestModify', name: 'b', rule_id: 'r-2', order: 2, enabled: true },
       { type: 'requestModify', name: 'a', rule_id: 'r-1', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: false, config: { log_target: 'both', log_level: 'warn', log_path: '/tmp/a.log', record_request_before: false, record_request_after: true, record_response_before: false, record_response_after: true } },
+      { type: 'logOutput', name: 'log', enabled: false, config: { prefix: '/logs/b', record_request: false, record_modified_request: true, record_response: false, record_modified_response: true, record_system: true, merge_stream: true, auto_close_minutes: 10 } },
     ]])
 
     const maps = slotMapsFromWorkflows(workflows)
@@ -82,7 +82,7 @@ describe('slotMapsFromWorkflows', () => {
     expect(entry?.slots.requestModify).toHaveLength(2)
     expect(entry?.slots.requestModify[0]).toMatchObject({ ruleId: 'r-1' })
     expect(entry?.slots.requestModify[1]).toMatchObject({ ruleId: 'r-2' })
-    expect(entry?.slots.logOutput[0]).toMatchObject({ enabled: false, logTarget: 'both' })
+    expect(entry?.slots.logOutput[0]).toMatchObject({ enabled: false, prefix: '/logs/b' })
   })
 })
 
@@ -111,9 +111,10 @@ describe('workflowsFromSlotMaps', () => {
     const providerSlots = emptySlotEntryMap()
     providerSlots.logOutput.push({
       id: 'log-1', slotType: 'logOutput', index: 1, enabled: false,
-      logTarget: 'console', logLevel: 'error', logPath: '/var/log/hapiy.log',
-      recordRequestBefore: false, recordRequestAfter: true,
-      recordResponseBefore: false, recordResponseAfter: true,
+      prefix: '/logs/hapiy',
+      recordRequest: false, recordModifiedRequest: true,
+      recordResponse: false, recordModifiedResponse: true,
+      recordSystem: true, mergeStream: true, autoCloseMinutes: 5,
       config: {},
     })
     const maps = new Map<string, WorkflowEntry>([
@@ -126,10 +127,12 @@ describe('workflowsFromSlotMaps', () => {
 
     expect(logNode.type).toBe('logOutput')
     expect(logNode.name).toBe('log-output-1')
-    expect(logNode.config.log_target).toBe('console')
-    expect(logNode.config.log_level).toBe('error')
-    expect(logNode.config.log_path).toBe('/var/log/hapiy.log')
-    expect(logNode.config.record_request_after).toBe(true)
+    expect(logNode.config.prefix).toBe('/logs/hapiy')
+    expect(logNode.config.record_modified_request).toBe(true)
+    expect(logNode.config.record_modified_response).toBe(true)
+    expect(logNode.config.record_system).toBe(true)
+    expect(logNode.config.merge_stream).toBe(true)
+    expect(logNode.config.auto_close_minutes).toBe(5)
   })
 })
 

@@ -41,20 +41,20 @@ export interface OrderSlotDef {
 export interface LogConfigSlotDef {
   readonly enabled: true
   readonly defaults: {
-    readonly logTarget: 'file' | 'console' | 'both'
-    readonly logLevel: 'info' | 'warn' | 'error'
-    readonly logPath: string
+    readonly prefix: string
+    readonly mergeStream: boolean
+    readonly autoCloseMinutes: number
   }
 }
 
 export interface RecordConfigSlotDef {
   readonly enabled: true
-  readonly linkToModifyNodes: boolean
   readonly defaults: {
-    readonly recordRequestBefore: boolean
-    readonly recordRequestAfter: boolean
-    readonly recordResponseBefore: boolean
-    readonly recordResponseAfter: boolean
+    readonly recordRequest: boolean
+    readonly recordModifiedRequest: boolean
+    readonly recordResponse: boolean
+    readonly recordModifiedResponse: boolean
+    readonly recordSystem: boolean
   }
 }
 
@@ -167,16 +167,16 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
     orderSlot: { enabled: false },
     logConfigSlot: {
       enabled: true,
-      defaults: { logTarget: 'file', logLevel: 'info', logPath: '' },
+      defaults: { prefix: '', mergeStream: true, autoCloseMinutes: 5 },
     },
     recordConfigSlot: {
       enabled: true,
-      linkToModifyNodes: true,
       defaults: {
-        recordRequestBefore: true,
-        recordRequestAfter: true,
-        recordResponseBefore: true,
-        recordResponseAfter: true,
+        recordRequest: true,
+        recordModifiedRequest: true,
+        recordResponse: true,
+        recordModifiedResponse: true,
+        recordSystem: true,
       },
     },
     previewSlot: { enabled: false },

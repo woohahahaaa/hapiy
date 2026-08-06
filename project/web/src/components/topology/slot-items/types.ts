@@ -14,9 +14,6 @@ export type SlotType =
   | 'autoSwitch'
   | 'logOutput'
 
-export type LogTarget = 'file' | 'console' | 'both'
-export type LogLevel = 'info' | 'warn' | 'error'
-
 // Each slot type carries its own per-item config (selected rule, overrides, etc).
 // LogOutput has no upstream rule — its config is self-contained.
 export type RequestModifySlotEntry = {
@@ -69,13 +66,14 @@ export type LogOutputSlotEntry = {
   readonly slotType: 'logOutput'
   readonly index: number
   readonly enabled: boolean
-  readonly logTarget: LogTarget
-  readonly logLevel: LogLevel
-  readonly logPath: string
-  readonly recordRequestBefore: boolean
-  readonly recordRequestAfter: boolean
-  readonly recordResponseBefore: boolean
-  readonly recordResponseAfter: boolean
+  readonly prefix: string
+  readonly recordRequest: boolean
+  readonly recordModifiedRequest: boolean
+  readonly recordResponse: boolean
+  readonly recordModifiedResponse: boolean
+  readonly recordSystem: boolean
+  readonly mergeStream: boolean
+  readonly autoCloseMinutes: number
   readonly config: Readonly<Record<string, unknown>>
 }
 
@@ -162,13 +160,14 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
         slotType,
         index,
         enabled: true,
-        logTarget: 'file',
-        logLevel: 'info',
-        logPath: '',
-        recordRequestBefore: true,
-        recordRequestAfter: true,
-        recordResponseBefore: true,
-        recordResponseAfter: true,
+        prefix: '',
+        recordRequest: true,
+        recordModifiedRequest: true,
+        recordResponse: true,
+        recordModifiedResponse: true,
+        recordSystem: true,
+        mergeStream: true,
+        autoCloseMinutes: 5,
         config: {},
       }
   }

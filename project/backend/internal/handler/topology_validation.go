@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
@@ -239,14 +240,14 @@ func validateLogOutputNode(node TopologyNode) (string, error) {
 }
 
 func validateLogOutputConfig(config map[string]any) error {
-	stringEnums := map[string][]string{
-		"log_target": {"file", "console", "both"},
-		"log_level":  {"info", "warn", "error"},
-	}
-	stringFields := map[string]struct{}{"log_path": {}}
+	stringFields := map[string]struct{}{"prefix": {}}
 	boolFields := map[string]struct{}{
-		"record_request_before": {}, "record_request_after": {},
-		"record_response_before": {}, "record_response_after": {},
+		"record_request":           {},
+		"record_modified_request":  {},
+		"record_response":          {},
+		"record_modified_response": {},
+		"record_system":            {},
+		"merge_stream":             {},
 	}
 	keys := make([]string, 0, len(config))
 	for key := range config {
@@ -255,16 +256,13 @@ func validateLogOutputConfig(config map[string]any) error {
 	sort.Strings(keys)
 	for _, key := range keys {
 		value := config[key]
-		if allowed, exists := stringEnums[key]; exists {
-			text, ok := value.(string)
-			if !ok || !containsString(allowed, text) {
-				return fmt.Errorf("logOutput config %s is invalid", key)
-			}
-			continue
-		}
 		if _, exists := stringFields[key]; exists {
-			if _, ok := value.(string); !ok {
+			text, ok := value.(string)
+			if !ok {
 				return fmt.Errorf("logOutput config %s must be a string", key)
+			}
+			if key == "prefix" && strings.TrimSpace(text) == "" {
+				return fmt.Errorf("logOutput config prefix must not be empty")
 			}
 			continue
 		}
@@ -274,16 +272,18 @@ func validateLogOutputConfig(config map[string]any) error {
 			}
 			continue
 		}
+		if key == "auto_close_minutes" {
+			num, ok := value.(json.Number)
+			if !ok {
+				return fmt.Errorf("logOutput config auto_close_minutes must be an integer")
+			}
+			n, err := num.Int64()
+			if err != nil || n < 1 || n > 60 {
+				return fmt.Errorf("logOutput config auto_close_minutes must be between 1 and 60")
+			}
+			continue
+		}
 		return fmt.Errorf("logOutput config contains unknown field %s", key)
 	}
 	return nil
-}
-
-func containsString(values []string, candidate string) bool {
-	for _, value := range values {
-		if value == candidate {
-			return true
-		}
-	}
-	return false
 }

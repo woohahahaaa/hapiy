@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,7 +79,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			Body:    bodyBytes,
 		})
 		if err != nil {
-			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime)
+			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
 					"message": fmt.Sprintf("no provider available for model: %s", relayReq.Model),
@@ -97,7 +98,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Execute relay request
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
 		if err != nil {
-			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime)
+			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -138,6 +139,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		service.Logs().Write(&logEntry)
+		writeRelayLogFile(c, &relayReq, resp, provider, useTime)
 
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
 			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
@@ -218,7 +220,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 	}
 }
 
-func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time) {
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest) {
 	useTime := int(time.Since(startTime).Milliseconds())
 	service.Logs().Write(&model.Log{
 		UserID:       getString(userID),
@@ -231,7 +233,62 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		ErrorMessage: err.Error(),
 		UseTime:      useTime,
 	})
+	if writer := service.LogFile(); writer != nil {
+		data := &service.LogCaptureData{
+			RequestID:  c.GetString("request_id"),
+			Timestamp:  time.Now().UTC(),
+			Type:       "system",
+			Prefix:     "_relay",
+			ProviderID: providerName,
+			Error:      err.Error(),
+			Timings:    &service.Timings{TotalMs: int64(useTime)},
+		}
+		if req != nil {
+			data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
+		}
+		writer.WriteLog(data)
+	}
 	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0)
+}
+
+// writeRelayLogFile captures the full request/response round-trip to a JSON
+// file under the _relay prefix so every request has inspectable artifacts
+// regardless of topology log-output configuration. For non-streaming responses
+// the body is buffered and restored so the downstream handler still sees it.
+func writeRelayLogFile(c *gin.Context, req *relay.RelayRequest, resp *relay.RelayResponse, provider *model.Provider, useTime int) {
+	writer := service.LogFile()
+	if writer == nil {
+		return
+	}
+	data := &service.LogCaptureData{
+		RequestID:  req.RequestID,
+		Timestamp:  time.Now().UTC(),
+		Type:       "response",
+		ProviderID: provider.ID,
+		Prefix:     "_relay",
+		Timings:    &service.Timings{TotalMs: int64(useTime)},
+		Request:    &service.HTTPCapture{Headers: req.Headers, Body: req.Body},
+	}
+	if req.Stream {
+		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "streaming"}
+		writer.WriteLog(data)
+		return
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "error: " + err.Error()}
+		writer.WriteLog(data)
+		return
+	}
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	var parsed interface{}
+	if json.Unmarshal(body, &parsed) == nil {
+		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: parsed}
+	} else {
+		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: string(body)}
+	}
+	writer.WriteLog(data)
 }
 
 func getString(v interface{}) string {

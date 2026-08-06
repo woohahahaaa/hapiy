@@ -146,8 +146,8 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
       </div>
 
       <div className="flex flex-col gap-1 p-3">
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span>权重</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] text-muted-foreground">权重</span>
           <Input
             type="number"
             size="sm"
@@ -157,9 +157,9 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
             value={Number.isFinite(weight) ? weight : 1}
             onChange={(e) => handleWeight(e.target.value)}
             onKeyDown={(e) => e.stopPropagation()}
-            className="nodrag nopan w-16 px-1 py-0 text-right"
+            className="nodrag nopan w-full px-1 py-0 text-left"
           />
-        </label>
+        </div>
       </div>
     </div>
   )

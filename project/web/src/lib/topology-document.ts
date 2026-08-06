@@ -1,8 +1,6 @@
 import {
   SLOT_ORDER,
   emptySlotEntryMap,
-  type LogLevel,
-  type LogTarget,
   type SlotEntry,
   type SlotEntryMap,
   type SlotType,
@@ -81,8 +79,6 @@ function requiredInteger(value: unknown, field: string): number {
 }
 
 const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput'])
-const VALID_LOG_TARGETS = new Set(['file', 'console', 'both'])
-const VALID_LOG_LEVELS = new Set(['info', 'warn', 'error'])
 
 function parseNode(value: unknown): WorkflowNode {
   if (!isRecord(value)) throw new TopologyDocumentError('节点必须是对象')
@@ -105,13 +101,14 @@ function parseNode(value: unknown): WorkflowNode {
         name,
         enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
         config: {
-          log_target: VALID_LOG_TARGETS.has(cfg.log_target as string) ? (cfg.log_target as 'file' | 'console' | 'both') : 'file',
-          log_level: VALID_LOG_LEVELS.has(cfg.log_level as string) ? (cfg.log_level as 'info' | 'warn' | 'error') : 'info',
-          log_path: typeof cfg.log_path === 'string' ? cfg.log_path : '',
-          record_request_before: typeof cfg.record_request_before === 'boolean' ? cfg.record_request_before : true,
-          record_request_after: typeof cfg.record_request_after === 'boolean' ? cfg.record_request_after : true,
-          record_response_before: typeof cfg.record_response_before === 'boolean' ? cfg.record_response_before : true,
-          record_response_after: typeof cfg.record_response_after === 'boolean' ? cfg.record_response_after : true,
+          prefix: typeof cfg.prefix === 'string' ? cfg.prefix : '',
+          record_request: typeof cfg.record_request === 'boolean' ? cfg.record_request : true,
+          record_modified_request: typeof cfg.record_modified_request === 'boolean' ? cfg.record_modified_request : true,
+          record_response: typeof cfg.record_response === 'boolean' ? cfg.record_response : true,
+          record_modified_response: typeof cfg.record_modified_response === 'boolean' ? cfg.record_modified_response : true,
+          record_system: typeof cfg.record_system === 'boolean' ? cfg.record_system : true,
+          merge_stream: typeof cfg.merge_stream === 'boolean' ? cfg.merge_stream : true,
+          auto_close_minutes: typeof cfg.auto_close_minutes === 'number' ? cfg.auto_close_minutes : 5,
         },
       }
     }
@@ -157,17 +154,18 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
       return { ...base, slotType: node.type, ruleId: rn.rule_id ?? null } as SlotEntry
     }
     case 'logOutput': {
-      const ln = node as Extract<WorkflowNode, { config: { log_target: string } }>
+      const ln = node as Extract<WorkflowNode, { config: { prefix: string } }>
       return {
         ...base,
         slotType: 'logOutput',
-        logTarget: ln.config.log_target as LogTarget,
-        logLevel: ln.config.log_level as LogLevel,
-        logPath: ln.config.log_path,
-        recordRequestBefore: ln.config.record_request_before,
-        recordRequestAfter: ln.config.record_request_after,
-        recordResponseBefore: ln.config.record_response_before,
-        recordResponseAfter: ln.config.record_response_after,
+        prefix: ln.config.prefix,
+        recordRequest: ln.config.record_request,
+        recordModifiedRequest: ln.config.record_modified_request,
+        recordResponse: ln.config.record_response,
+        recordModifiedResponse: ln.config.record_modified_response,
+        recordSystem: ln.config.record_system,
+        mergeStream: ln.config.merge_stream,
+        autoCloseMinutes: ln.config.auto_close_minutes,
       } as SlotEntry
     }
     default:
@@ -236,13 +234,14 @@ function entryToNode(entry: SlotEntry, _providerName: string): WorkflowNode | nu
         name: `log-output-${entry.index}`,
         enabled: entry.enabled,
         config: {
-          log_target: entry.logTarget,
-          log_level: entry.logLevel,
-          log_path: entry.logPath,
-          record_request_before: entry.recordRequestBefore,
-          record_request_after: entry.recordRequestAfter,
-          record_response_before: entry.recordResponseBefore,
-          record_response_after: entry.recordResponseAfter,
+          prefix: entry.prefix,
+          record_request: entry.recordRequest,
+          record_modified_request: entry.recordModifiedRequest,
+          record_response: entry.recordResponse,
+          record_modified_response: entry.recordModifiedResponse,
+          record_system: entry.recordSystem,
+          merge_stream: entry.mergeStream,
+          auto_close_minutes: entry.autoCloseMinutes,
         },
       }
   }

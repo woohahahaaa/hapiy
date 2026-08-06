@@ -1,9 +1,10 @@
 import { Handle, Position } from '@xyflow/react'
-import { useState } from 'react'
-import { cn } from '@/lib/utils'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useCallback, useState } from 'react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
+import { SlotItemCard } from '@/components/topology/slot-items/SlotItemCard'
+import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import type { SlotEntry, SlotRuleMap, SlotType } from '@/components/topology/slot-items'
 import {
@@ -19,6 +20,8 @@ import {
 export interface FlatProviderChild {
   readonly id: string
   readonly label: string
+  readonly baseURLCount: number
+  readonly keyCount: number
   readonly modelCount: number
   readonly enabled: boolean
   readonly providerStatus: boolean
@@ -29,8 +32,11 @@ interface FlatSlotNodeData {
   slotType: string
   isProviderSlot?: boolean
   children?: readonly FlatProviderChild[]
+  providers?: readonly string[]
   onAddProvider?: () => void
+  onSelectProvider?: (providerId: string, name: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
+  onDeleteProvider?: (providerId: string) => void
   onReorderProvider?: (fromIndex: number, toIndex: number) => void
   entries?: SlotEntry[]
   rules?: SlotRuleMap
@@ -57,8 +63,11 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     slotType,
     isProviderSlot,
     children = [],
+    providers = [],
     onAddProvider,
+    onSelectProvider,
     onToggleProvider,
+    onDeleteProvider,
     onReorderProvider,
     entries: entriesProp,
     rules,
@@ -68,8 +77,6 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
-  const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
-  const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -106,12 +113,37 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     },
   })
 
-  const titleBadge = (
+  const [providerStrategy, setProviderStrategy] = useState<'sequential' | 'random' | 'roundRobin'>('sequential')
+  const strategyCycle = useCallback(() => {
+    setProviderStrategy((s) => {
+      if (s === 'sequential') return 'random'
+      if (s === 'random') return 'roundRobin'
+      return 'sequential'
+    })
+  }, [])
+
+  const strategyLabel = {
+    sequential: '按顺序',
+    random: '随机',
+    roundRobin: '轮询',
+  } as const
+
+  const titleBadge = isProviderSlot ? (
+    <div className="flex items-center justify-between">
+      <span>{title}</span>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); strategyCycle() }}
+        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+      >
+        {strategyLabel[providerStrategy]}
+        <AppIcon name="refresh" size={10} />
+      </button>
+    </div>
+  ) : (
     <span className="flex items-baseline gap-1">
       <span>{title}</span>
-      <span className="text-[10px] text-muted-foreground/50">
-        · {isProviderSlot ? '择一执行' : '全部执行'}
-      </span>
+      <span className="text-[10px] text-muted-foreground/50">· 全部执行</span>
     </span>
   )
 
@@ -152,13 +184,17 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           {children.map((child, i) => (
             <ProviderCard
               key={child.id}
+              index={i + 1}
               child={child}
+              providers={providers}
               isDragging={dragIndex === i}
               isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
               onDragStart={() => setDragIndex(i)}
               onDragOver={() => setOverIndex(i)}
               onDrop={() => handleDrop(i)}
               onToggle={(enabled) => onToggleProvider?.(child.id, enabled)}
+              onSelect={(name) => onSelectProvider?.(child.id, name)}
+              onDelete={() => onDeleteProvider?.(child.id)}
             />
           ))}
         </SlotContainer>
@@ -172,8 +208,6 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
             renderItem(
               entry,
               slotRules,
-              hasRequestRewrite,
-              hasResponseRewrite,
               onChangeEntry,
               onDeleteEntry,
               entryDragProps(entry.index),
@@ -197,53 +231,54 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
 }
 
 interface ProviderCardProps {
+  index: number
   child: FlatProviderChild
+  providers: readonly string[]
   isDragging: boolean
   isDragOver: boolean
   onDragStart: () => void
   onDragOver: () => void
   onDrop: () => void
   onToggle: (enabled: boolean) => void
+  onSelect: (name: string) => void
+  onDelete: () => void
 }
 
-function ProviderCard({ child, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle }: ProviderCardProps) {
-  const dim = !child.enabled || !child.providerStatus
+function ProviderCard({ index, child, providers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
   return (
-    <div
-      draggable
-      onDragStart={(e) => {
-        e.stopPropagation()
-        onDragStart()
-      }}
-      onDragOver={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onDragOver()
-      }}
-      onDrop={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onDrop()
-      }}
-      className={cn(
-        'flex items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5 transition-opacity',
-        isDragging && 'opacity-40',
-        isDragOver && 'ring-2 ring-primary',
-        dim && 'opacity-50',
-      )}
+    <SlotItemCard
+      index={index}
+      enabled={child.enabled}
+      onToggleEnabled={onToggle}
+      onDelete={onDelete}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      isDragging={isDragging}
+      isDragOver={isDragOver}
     >
-      <Checkbox
-        checked={child.enabled}
-        onCheckedChange={(v) => onToggle(v === true)}
-        onPointerDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        aria-label={child.enabled ? `${child.label} 已启用，点击关闭` : `${child.label} 已停用，点击启用`}
-        className="shrink-0"
-      />
-      <span className="min-w-0 flex-1 truncate text-sm">{child.label}</span>
-      <span className="shrink-0 text-[10px] text-muted-foreground">{child.modelCount} 模型</span>
-    </div>
+      <div className="space-y-1.5">
+        <Select value={child.label ?? ''} onValueChange={(value) => value && onSelect(value)}>
+          <SelectTrigger size="sm" className="w-full">
+            <SelectValue placeholder="选择供应商" />
+          </SelectTrigger>
+          <SelectContent>
+            {providers.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {child.label && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span>{child.baseURLCount} URL{child.baseURLCount !== 1 ? 's' : ''}</span>
+            <span>{child.keyCount} Key{child.keyCount !== 1 ? 's' : ''}</span>
+            <span>{child.modelCount} 模型</span>
+          </div>
+        )}
+      </div>
+    </SlotItemCard>
   )
 }
 
@@ -258,8 +293,6 @@ interface DragProps {
 function renderItem(
   entry: SlotEntry,
   rules: SlotRuleMap,
-  hasRequestRewrite: boolean,
-  hasResponseRewrite: boolean,
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
@@ -329,8 +362,6 @@ function renderItem(
           entry={entry}
           onChange={change}
           onDelete={onDelete}
-          hasRequestRewrite={hasRequestRewrite}
-          hasResponseRewrite={hasResponseRewrite}
           {...drag}
         />
       )

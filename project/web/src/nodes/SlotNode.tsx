@@ -37,8 +37,6 @@ interface SlotNodeProps {
 
 export function SlotNode({ data }: SlotNodeProps) {
   const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries } = data
-  const hasRequestRewrite = slotType === 'requestModify' && entries.length > 0
-  const hasResponseRewrite = slotType === 'responseModify' && entries.length > 0
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -89,8 +87,6 @@ export function SlotNode({ data }: SlotNodeProps) {
           renderItem(
             entry,
             rules,
-            hasRequestRewrite,
-            hasResponseRewrite,
             onChangeEntry,
             onDeleteEntry,
             dragProps(entry.index),
@@ -123,8 +119,6 @@ interface DragProps {
 function renderItem(
   entry: SlotEntry,
   rules: SlotRuleMap,
-  hasRequestRewrite: boolean,
-  hasResponseRewrite: boolean,
   onChangeEntry: (next: SlotEntry) => void,
   onDeleteEntry: (index: number) => void,
   drag: DragProps,
@@ -194,8 +188,6 @@ function renderItem(
           entry={entry}
           onChange={change}
           onDelete={onDelete}
-          hasRequestRewrite={hasRequestRewrite}
-          hasResponseRewrite={hasResponseRewrite}
           {...drag}
         />
       )

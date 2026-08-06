@@ -286,11 +286,9 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 	return nil
 }
 
-// runTopologyLogOutputs is a deterministic no-op until log output
-// backends exist. It records a stage event so consumers can see which
-// log outputs were selected for each stage.
+// runTopologyLogOutputs records the stage event for the selected log outputs
+// and writes the per-stage capture file for every configured log node.
 func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) {
-	_ = resp
 	if len(assignments) == 0 {
 		return
 	}
@@ -302,6 +300,110 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 		event.RequestID = req.RequestID
 	}
 	e.recordTopologyStage(event)
+
+	writer := service.LogFile()
+	if writer == nil || plan == nil || req == nil {
+		return
+	}
+
+	responseBody := captureResponseBody(resp, req.Stream)
+
+	for _, assignment := range assignments {
+		cfg, err := parseLogOutputConfig(assignment.Config)
+		if err != nil {
+			continue
+		}
+		if autoClosed(assignment, cfg) {
+			continue
+		}
+		data := &service.LogCaptureData{
+			RequestID:  req.RequestID,
+			Timestamp:  time.Now().UTC(),
+			Type:       logOutputStageType(stage),
+			ProviderID: plan.ID,
+			Prefix:     cfg.Prefix,
+		}
+		switch stage {
+		case topologyStageRequestBefore:
+			if cfg.RecordRequest {
+				data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
+			}
+		case topologyStageRequestAfter:
+			if cfg.RecordModifiedRequest {
+				data.ModifiedRequest = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
+				if len(plan.CompiledRewrite) == 0 {
+					data.ModifiedRequest.Body = "unmodified"
+				}
+			}
+		case topologyStageResponseBefore:
+			if cfg.RecordResponse && resp != nil {
+				data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: responseBody}
+			}
+		case topologyStageResponseAfter:
+			if cfg.RecordModifiedResponse && resp != nil {
+				data.ModifiedResponse = &service.HTTPCapture{Headers: resp.Headers, Body: responseBody}
+				if len(plan.CompiledResponseRewrites) == 0 {
+					data.ModifiedResponse.Body = "unmodified"
+				}
+			}
+		}
+		writer.WriteLog(data)
+	}
+}
+
+// captureResponseBody buffers the response body so a log stage can write it
+// without consuming the stream the handler forwards downstream. Streaming
+// bodies are never buffered; they are recorded as a placeholder. A successful
+// read restores resp.Body from the buffered bytes.
+func captureResponseBody(resp *RelayResponse, stream bool) interface{} {
+	if resp == nil || resp.Body == nil {
+		return nil
+	}
+	if stream {
+		return "streaming"
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "error: " + err.Error()
+	}
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	var parsed interface{}
+	if json.Unmarshal(body, &parsed) == nil {
+		return parsed
+	}
+	return string(body)
+}
+
+// parseLogOutputConfig decodes a logOutput assignment's raw JSON with the
+// documented defaults: merge_stream defaults to true and auto_close_minutes to 5.
+func parseLogOutputConfig(raw string) (LogOutputNodeConfig, error) {
+	cfg := LogOutputNodeConfig{MergeStream: true, AutoCloseMinutes: 5}
+	if raw == "" {
+		return cfg, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return LogOutputNodeConfig{}, err
+	}
+	return cfg, nil
+}
+
+// autoClosed reports whether a log node has exceeded its auto-close window,
+// measured from the topology assignment's creation time.
+func autoClosed(assignment LogOutputAssignment, cfg LogOutputNodeConfig) bool {
+	if cfg.AutoCloseMinutes <= 0 || assignment.CreatedAt.IsZero() {
+		return false
+	}
+	return time.Since(assignment.CreatedAt) > time.Duration(cfg.AutoCloseMinutes)*time.Minute
+}
+
+func logOutputStageType(stage topologyStage) string {
+	switch stage {
+	case topologyStageResponseBefore, topologyStageResponseAfter:
+		return "response"
+	default:
+		return "request"
+	}
 }
 
 func (e *Engine) recordTopologyStage(event topologyStageEvent) {

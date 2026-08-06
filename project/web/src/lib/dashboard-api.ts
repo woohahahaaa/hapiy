@@ -129,6 +129,31 @@ export type LogListResult = {
   readonly total: number
 }
 
+export type LogCaptureType = 'request' | 'response' | 'system'
+
+export type LogCaptureFile = {
+  readonly id: string
+  readonly name: string
+  readonly prefix: string
+  readonly type: LogCaptureType
+  readonly size: number
+  readonly created_at: string
+}
+
+export type LogCaptureListParams = {
+  readonly prefix?: string
+  readonly type?: string // 逗号分隔
+  readonly from?: string // ISO 日期
+  readonly to?: string // ISO 日期
+  readonly limit: number
+  readonly offset: number
+}
+
+export type LogCaptureListResult = {
+  readonly files: readonly LogCaptureFile[]
+  readonly total: number
+}
+
 export type DateRange = {
   readonly from?: string
   readonly to?: string
@@ -556,6 +581,24 @@ function parseLog(value: unknown): UsageLog {
     quota: readNumber(value.quota, 'log.quota'),
     useTime: readNumber(value.use_time, 'log.use_time'),
     status,
+  }
+}
+
+function parseLogCaptureFile(value: unknown): LogCaptureFile {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取日志格式无效', null)
+  }
+  const type = readString(value.type, 'capture.type')
+  if (type !== 'request' && type !== 'response' && type !== 'system') {
+    throw new DashboardApiError(`无效的抓取日志类型: ${type}`, null)
+  }
+  return {
+    id: readString(value.id, 'capture.id'),
+    name: readString(value.name, 'capture.name'),
+    prefix: readString(value.prefix, 'capture.prefix'),
+    type,
+    size: readNumber(value.size, 'capture.size'),
+    created_at: readString(value.created_at, 'capture.created_at'),
   }
 }
 
@@ -1028,6 +1071,30 @@ export const dashboardApi = {
       logs: data.map(parseLog),
       total: readNumber(body.total, 'total', 0),
     }
+  },
+
+  async listLogCaptureFiles(params: LogCaptureListParams): Promise<LogCaptureListResult> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    if (params.prefix) qp.set('prefix', params.prefix)
+    if (params.type) qp.set('type', params.type)
+    if (params.from) qp.set('from', params.from)
+    if (params.to) qp.set('to', params.to)
+
+    const body = await requestFull(`/logs/capture?${qp.toString()}`)
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的抓取日志列表格式无效', null)
+    }
+    return {
+      files: data.map(parseLogCaptureFile),
+      total: readNumber(body.total, 'total', 0),
+    }
+  },
+
+  async readLogCaptureFile(id: string): Promise<unknown> {
+    return requestRaw(`/logs/capture/${encodeURIComponent(id)}`)
   },
 
   async getLogStats(range: StatsRange): Promise<LogStats> {
