@@ -241,3 +241,59 @@ export function findDuplicateActivations(
   }
   return Array.from(duplicated)
 }
+
+/**
+ * Recompute the wire list after removing a set of nodes, rerouting around the
+ * gaps: when a removed node had a surviving predecessor S and, following the
+ * single-output chain through removed nodes, a first surviving successor T, the
+ * result connects S → T. Wires touching any removed node are dropped; unrelated
+ * wires keep their relative order. Self-loops and duplicates are suppressed.
+ */
+export function rerouteWiresAroundRemoved(
+  wires: readonly FlatWire[],
+  removedIds: readonly string[],
+): FlatWire[] {
+  const removed = new Set(removedIds)
+  if (removed.size === 0) return [...wires]
+
+  const out = new Map<string, string>()
+  for (const w of wires) out.set(w.source, w.target)
+
+  const result: FlatWire[] = []
+  const seen = new Set<string>()
+  const add = (source: string, target: string) => {
+    if (source === target) return
+    const key = `${source}\u2192${target}`
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push({ source, target })
+  }
+
+  for (const w of wires) {
+    const { source, target } = w
+    if (removed.has(source)) continue
+
+    // A wire into a removed node starts a reroute: walk the outgoing chain from
+    // the removed target until the first surviving node.
+    if (!removed.has(target)) {
+      add(source, target)
+      continue
+    }
+    let cur = target
+    const guard = new Set<string>()
+    let survivor: string | undefined
+    while (cur !== undefined && !guard.has(cur)) {
+      guard.add(cur)
+      const next = out.get(cur)
+      if (next === undefined) break
+      if (!removed.has(next)) {
+        survivor = next
+        break
+      }
+      cur = next
+    }
+    if (survivor !== undefined) add(source, survivor)
+  }
+
+  return result
+}

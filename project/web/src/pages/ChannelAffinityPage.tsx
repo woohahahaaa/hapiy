@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
@@ -42,10 +42,11 @@ function emptyRule(): ChannelAffinityRule {
   }
 }
 
-function RuleForm({ rule, onSave, onCancel }: {
+function RuleForm({ rule, onSave, onCancel, saving }: {
   readonly rule: ChannelAffinityRule | null
-  readonly onSave: (rule: ChannelAffinityRule) => void
+  readonly onSave: (rule: ChannelAffinityRule) => void | Promise<void>
   readonly onCancel: () => void
+  readonly saving: boolean
 }) {
   const [form, setForm] = useState<ChannelAffinityRule>(rule ?? emptyRule())
   const [modelInput, setModelInput] = useState('')
@@ -162,10 +163,15 @@ function RuleForm({ rule, onSave, onCancel }: {
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={!form.name.trim() || form.keySources.length === 0} onClick={() => onSave(form)}>保存</Button>
-      </div>
+        <Button
+          disabled={saving || !form.name.trim() || form.keySources.length === 0}
+          onClick={async () => { await onSave(form) }}
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }
@@ -301,7 +307,7 @@ export function ChannelAffinityPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
-          <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} />
+          <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} saving={isSaving} />
         </DialogContent>
       </Dialog>
     </div>

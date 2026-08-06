@@ -19,6 +19,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -357,7 +358,7 @@ function RewritePage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <RewriteForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+          <RewriteForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -372,7 +373,7 @@ function RewritePage() {
   )
 }
 
-function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; onCancel: () => void }) {
+function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<RewriteRule>(
     rule || { id: '', name: '', script: '', status: true }
   )
@@ -395,10 +396,10 @@ function RewriteForm({ rule, onSave, onCancel }: { rule: RewriteRule | null; onS
         />
         <RewriteScriptHint />
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button onClick={() => onSave(form)}>保存</Button>
-      </div>
+        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }
@@ -497,11 +498,11 @@ function HeartbeatPage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <HeartbeatForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+          <HeartbeatForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -516,7 +517,7 @@ function HeartbeatPage() {
   )
 }
 
-function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null; onSave: (r: HeartbeatRule) => void; onCancel: () => void }) {
+function HeartbeatForm({ rule, onSave, onCancel, saving }: { rule: HeartbeatRule | null; onSave: (r: HeartbeatRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<HeartbeatRule>(
     rule || { id: '', name: '', matchCondition: '*', replyContent: '', timeout: 30, status: true }
   )
@@ -539,10 +540,10 @@ function HeartbeatForm({ rule, onSave, onCancel }: { rule: HeartbeatRule | null;
         <FieldLabel htmlFor="heartbeat-timeout">超时时间 (秒)</FieldLabel>
         <Input id="heartbeat-timeout" type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button onClick={() => onSave(form)}>保存</Button>
-      </div>
+        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }
@@ -643,11 +644,11 @@ function ConcurrencyPage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <ConcurrencyForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+          <ConcurrencyForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -662,7 +663,7 @@ function ConcurrencyPage() {
   )
 }
 
-function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | null; onSave: (r: ConcurrencyRule) => void; onCancel: () => void }) {
+function ConcurrencyForm({ rule, onSave, onCancel, saving }: { rule: ConcurrencyRule | null; onSave: (r: ConcurrencyRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<ConcurrencyRule>(
     rule || { id: '', name: '', scope: 'global', maxConcurrent: 10, queueEnabled: true, status: true }
   )
@@ -702,10 +703,10 @@ function ConcurrencyForm({ rule, onSave, onCancel }: { rule: ConcurrencyRule | n
           <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
         </div>
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button onClick={() => onSave(form)}>保存</Button>
-      </div>
+        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }
@@ -806,11 +807,11 @@ function FailoverPage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+          <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -825,7 +826,7 @@ function FailoverPage() {
   )
 }
 
-function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void }) {
+function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<FailoverRule>(
     rule || { id: '', name: '', primaryProvider: '', fallbackProvider: '', condition: 'timeout', status: true }
   )
@@ -862,10 +863,10 @@ function FailoverForm({ rule, onSave, onCancel }: { rule: FailoverRule | null; o
           </SelectContent>
         </Select>
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button onClick={() => onSave(form)}>保存</Button>
-      </div>
+        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }
@@ -967,7 +968,7 @@ function RewriteResponsePage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} />
+          <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -982,7 +983,7 @@ function RewriteResponsePage() {
   )
 }
 
-function RewriteResponseForm({ rule, onSave, onCancel }: { rule: ResponseRewriteRule | null; onSave: (r: ResponseRewriteRule) => void; onCancel: () => void }) {
+function RewriteResponseForm({ rule, onSave, onCancel, saving }: { rule: ResponseRewriteRule | null; onSave: (r: ResponseRewriteRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<ResponseRewriteRule>(
     rule || { id: '', name: '', script: '', status: true }
   )
@@ -1005,10 +1006,10 @@ function RewriteResponseForm({ rule, onSave, onCancel }: { rule: ResponseRewrite
         />
         <RewriteScriptHint />
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={!form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>保存</Button>
-      </div>
+        <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
+      </DialogFooter>
     </FieldGroup>
   )
 }

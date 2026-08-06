@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
+import { Switch } from '@/components/ui/switch'
 import { nodeRenderBounds } from '@/config/topology-config'
 
 interface SlotItemCardProps {
@@ -76,27 +77,12 @@ export function SlotItemCard({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
+          <Switch
+            checked={enabled}
+            onCheckedChange={(v) => onToggleEnabled(v === true)}
             aria-label={enabled ? '禁用' : '启用'}
-            data-no-drag="true"
-            onClick={() => onToggleEnabled(!enabled)}
-            className={cn(
-              'nodrag nopan relative inline-flex h-4 w-7 shrink-0 cursor-pointer touch-manipulation items-center rounded-none transition-colors',
-              'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              enabled ? 'bg-primary' : 'bg-secondary',
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                'pointer-events-none block h-3 w-3 bg-background shadow transition-transform',
-                enabled ? 'translate-x-3.5' : 'translate-x-0.5',
-              )}
-            />
-          </button>
+            className="nodrag nopan shrink-0"
+          />
           <button
             type="button"
             onClick={onDelete}

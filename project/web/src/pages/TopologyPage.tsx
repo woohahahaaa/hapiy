@@ -27,6 +27,12 @@ import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
 import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/topology/slot-items'
 import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
 import {
+  buildCopySnapshot,
+  pasteTopologySnapshot,
+  sameFlatTopology,
+  type TopologyClipboardSnapshot,
+} from '@/lib/topology-clipboard'
+import {
   canvasFromFlat,
   flatWiresFromCanvas,
   findDuplicateActivations,
@@ -35,6 +41,7 @@ import {
   isProvider,
   PROVIDER_SLOT_TYPE,
   ALL_SLOT_TYPES,
+  rerouteWiresAroundRemoved,
   type RewriteSlotType,
   type FlatCanvas,
 } from '@/lib/flat-topology'
@@ -192,6 +199,25 @@ export function TopologyPage() {
     setDirty(true)
   }, [])
   const [versionsOpen, setVersionsOpen] = useState(false)
+  const lastKnownVersionRef = useRef<number | null>(null)
+
+  const MAX_HISTORY = 100
+  const historyRef = useRef<FlatTopology[]>([])
+  const redoRef = useRef<FlatTopology[]>([])
+  const clipboardRef = useRef<TopologyClipboardSnapshot | null>(null)
+  const [historyState, setHistoryState] = useState({ undo: 0, redo: 0 })
+  const syncHistory = useCallback(() => {
+    setHistoryState({ undo: historyRef.current.length, redo: redoRef.current.length })
+  }, [])
+  const commitHistory = useCallback(
+    (before: FlatTopology) => {
+      historyRef.current.push(before)
+      if (historyRef.current.length > MAX_HISTORY) historyRef.current.shift()
+      redoRef.current = []
+      syncHistory()
+    },
+    [syncHistory],
+  )
 
   const [menuState, setMenuState] = useState<{ x: number; y: number; open: boolean; mode: 'corner' | 'cursor' }>({
     x: 0,
@@ -227,10 +253,13 @@ export function TopologyPage() {
         providerSlotOf: collapsed.providerSlotOf,
         canvasWires: canvasWiresFromEdges(edgesRef.current),
       })
-      setTopology({ nodes, wires })
+      const next: FlatTopology = { nodes, wires }
+      if (sameFlatTopology(cur, next)) return
+      commitHistory(cur)
+      setTopology(next)
       markDirty()
     },
-    [setTopology, markDirty],
+    [setTopology, markDirty, commitHistory],
   )
 
   const commitCanvasWires = useCallback(
@@ -244,10 +273,13 @@ export function TopologyPage() {
         providerSlotOf: collapsed.providerSlotOf,
         canvasWires: nextWires,
       })
-      setTopology({ nodes: cur.nodes, wires })
+      const next: FlatTopology = { nodes: cur.nodes, wires }
+      if (sameFlatTopology(cur, next)) return
+      commitHistory(cur)
+      setTopology(next)
       markDirty()
     },
-    [setTopology, markDirty],
+    [setTopology, markDirty, commitHistory],
   )
 
   const handleChangeSlotEntry = useCallback(
@@ -532,7 +564,11 @@ export function TopologyPage() {
         dashboardApi.getFlatTopology(),
       ])
       setProviders(providers)
+      historyRef.current = []
+      redoRef.current = []
+      syncHistory()
       setTopology(flat)
+      lastKnownVersionRef.current = flat.version ?? null
       dirtyRef.current = false
       setDirty(false)
     } catch (err) {
@@ -540,7 +576,7 @@ export function TopologyPage() {
     } finally {
       setLoading(false)
     }
-  }, [setTopology])
+  }, [setTopology, syncHistory])
 
   useEffect(() => {
     loadData()
@@ -550,7 +586,8 @@ export function TopologyPage() {
     const cur = tpRef.current
     if (!cur) return
     try {
-      await dashboardApi.saveFlatTopology(cur)
+      const saved = await dashboardApi.saveFlatTopology(cur)
+      lastKnownVersionRef.current = saved.version ?? null
       dirtyRef.current = false
       setDirty(false)
     } catch (err) {
@@ -575,6 +612,33 @@ export function TopologyPage() {
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty])
+
+  // Poll the backend topology version every 5s. If another tab saved, the
+  // backend version diverges from the version we loaded/saved last — surface a
+  // refresh prompt. Polling never overwrites the local topology.
+  useEffect(() => {
+    const check = async () => {
+      const cur = tpRef.current
+      if (!cur) return
+      try {
+        const flat = await dashboardApi.getFlatTopology()
+        const known = lastKnownVersionRef.current
+        if (known === null || flat.version === undefined) return
+        if (flat.version === known) return
+        toast.add({
+          title: '拓扑已在其他页面被修改，请刷新以加载最新数据',
+          type: 'error',
+        })
+        lastKnownVersionRef.current = flat.version
+      } catch {
+        // transient network error — the next tick retries silently
+      }
+    }
+    const timer = window.setInterval(() => {
+      void check()
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const handlePaneClick = useCallback(() => {
     setContextMenu(null)
@@ -666,42 +730,142 @@ export function TopologyPage() {
     (nodeId: string) => {
       const cur = tpRef.current
       if (!cur) return
-      const isSlot = cur.nodes.some((n) => n.id === nodeId && n.kind === 'slot')
-      const nodes = cur.nodes.filter((n) => {
-        if (n.id === nodeId) return false
-        if (isSlot) {
-          const collapsed = canvasFromFlat(cur.nodes, cur.wires)
-          if (collapsed.providerSlotOf.get(n.id) === nodeId) return false
-        }
-        return true
-      })
-      const nextEdges = edgesRef.current.filter((e) => e.source !== nodeId && e.target !== nodeId)
-      const collapsed = canvasFromFlat(nodes, cur.wires)
-      const wires = flatWiresFromCanvas({
-        topLevel: collapsed.topLevel,
-        providers: collapsed.providers,
-        providerSlotOf: collapsed.providerSlotOf,
-        canvasWires: canvasWiresFromEdges(nextEdges),
-      })
+      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+      const removedIds = [nodeId]
+      for (const p of collapsed.providers) {
+        if (collapsed.providerSlotOf.get(p.id) === nodeId) removedIds.push(p.id)
+      }
+      const removed = new Set(removedIds)
+      const nodes = cur.nodes.filter((n) => !removed.has(n.id))
+      const nextEdges = edgesRef.current.filter((e) => !removed.has(e.source) && !removed.has(e.target))
+      const wires = rerouteWiresAroundRemoved(cur.wires, removedIds)
+      commitHistory(cur)
       setTopology({ nodes, wires })
       setEdges(nextEdges)
       setContextMenu(null)
       markDirty()
     },
-    [setTopology, setEdges, markDirty],
+    [setTopology, setEdges, markDirty, commitHistory],
   )
+
+  const handleDeleteNodes = useCallback(
+    (nodeIds: readonly string[]) => {
+      const cur = tpRef.current
+      if (!cur) return
+      const collapsed = canvasFromFlat(cur.nodes, cur.wires)
+      const idSet = new Set(nodeIds)
+      const removedIds = [...nodeIds]
+      for (const p of collapsed.providers) {
+        const parent = collapsed.providerSlotOf.get(p.id)
+        if (parent && idSet.has(parent)) removedIds.push(p.id)
+      }
+      const removed = new Set(removedIds)
+      const nodes = cur.nodes.filter((n) => !removed.has(n.id))
+      const nextEdges = edgesRef.current.filter((e) => !removed.has(e.source) && !removed.has(e.target))
+      const wires = rerouteWiresAroundRemoved(cur.wires, removedIds)
+      commitHistory(cur)
+      setTopology({ nodes, wires })
+      setEdges(nextEdges)
+      setContextMenu(null)
+      markDirty()
+    },
+    [setTopology, setEdges, markDirty, commitHistory],
+  )
+
+  const handleUndo = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const before = historyRef.current.pop()
+    if (!before) return
+    redoRef.current.push(cur)
+    setTopology(before)
+    syncHistory()
+  }, [setTopology, syncHistory])
+
+  const handleRedo = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const next = redoRef.current.pop()
+    if (!next) return
+    historyRef.current.push(cur)
+    setTopology(next)
+    syncHistory()
+  }, [setTopology, syncHistory])
+
+  const handleCopy = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const selectedIds = new Set(selectionRef.current.nodes.map((n) => n.id))
+    const snapshot = buildCopySnapshot(cur.nodes, cur.wires, selectedIds)
+    if (!snapshot) {
+      toast.add({ title: '没有可复制的选中节点', type: 'info' })
+      return
+    }
+    clipboardRef.current = snapshot
+  }, [])
+
+  const handlePaste = useCallback(() => {
+    const snapshot = clipboardRef.current
+    const cur = tpRef.current
+    if (!snapshot || !cur) return
+    const result = pasteTopologySnapshot(snapshot, new Set(cur.nodes.map((n) => n.id)))
+    if (!result) return
+    commitHistory(cur)
+    const layout = loadLayoutFromStorage()
+    const fallbackPos = { x: topologyConfig.initialPositions.slot.x, y: topologyConfig.initialPositions.slot.y }
+    for (const original of snapshot.nodes) {
+      const fresh = result.idMap.get(original.id)
+      if (!fresh) continue
+      const pos = layout[original.id] ?? fallbackPos
+      layout[fresh] = { x: pos.x + 40, y: pos.y + 40 }
+    }
+    saveLayoutToStorage(layout)
+    setLayoutSnapshot(layout)
+    setTopology({ nodes: [...cur.nodes, ...result.nodes], wires: [...cur.wires, ...result.wires] })
+    markDirty()
+  }, [commitHistory, setTopology, setLayoutSnapshot, markDirty])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.key !== 'Delete' && event.key !== 'Backspace') return
       const el = event.target as HTMLElement | null
-      if (el && el.closest('input, textarea, select, [contenteditable="true"]')) return
+      const inEditable = !!el && !!el.closest('input, textarea, select, [contenteditable="true"]')
+      const mod = event.ctrlKey || event.metaKey
+      const key = event.key.toLowerCase()
+
+      if (mod && key === 'z') {
+        if (inEditable) return
+        event.preventDefault()
+        if (event.shiftKey) handleRedo()
+        else handleUndo()
+        return
+      }
+      if (mod && key === 'y') {
+        if (inEditable) return
+        event.preventDefault()
+        handleRedo()
+        return
+      }
+      if (mod && key === 'c') {
+        if (inEditable) return
+        event.preventDefault()
+        handleCopy()
+        return
+      }
+      if (mod && key === 'v') {
+        if (inEditable) return
+        event.preventDefault()
+        handlePaste()
+        return
+      }
+
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return
+      if (inEditable) return
       const topLevelIds = selectionRef.current.nodes
         .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
         .map((n) => n.id)
       if (topLevelIds.length > 0) {
         event.preventDefault()
-        for (const id of topLevelIds) handleDeleteNode(id)
+        handleDeleteNodes(topLevelIds)
       } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
         event.preventDefault()
         handleDeleteSelectedEdges()
@@ -709,7 +873,7 @@ export function TopologyPage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleDeleteNode, handleDeleteSelectedEdges])
+  }, [handleDeleteNodes, handleDeleteSelectedEdges, handleUndo, handleRedo, handleCopy, handlePaste])
 
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
@@ -748,13 +912,48 @@ export function TopologyPage() {
     setNodes(baseNodes.map((n) => (next[n.id] ? { ...n, position: next[n.id] } : n)))
   }, [canvas, sizesRef, baseNodes, setNodes])
 
+  // New nodes have no layout-snapshot record, so without an explicit position
+  // they all fall back to the same hardcoded default and stack on top of each
+  // other. Place each fresh node in a new row below every existing node,
+  // left-aligned to the workflow area, so the addition is immediately visible.
+  const placeNewNodes = useCallback(
+    (placements: ReadonlyArray<{ id: string; width: number }>) => {
+      const layout = loadLayoutFromStorage()
+      let maxBottom = 0
+      let hasLayout = false
+      for (const pos of Object.values(layout)) {
+        hasLayout = true
+        const bottom = pos.y + topologyConfig.fallbackNodeSize.height
+        if (bottom > maxBottom) maxBottom = bottom
+      }
+      const baseY = hasLayout ? maxBottom + topologyConfig.layout.rowGap : topologyConfig.initialPositions.slot.y
+
+      let startX = topologyConfig.initialPositions.provider.x
+      for (const [id, pos] of Object.entries(layout)) {
+        if (!id.startsWith('model-') && pos.x < startX) startX = pos.x
+      }
+
+      const next = { ...layout }
+      let cursorX = startX
+      for (const p of placements) {
+        if (next[p.id]) continue
+        next[p.id] = { x: cursorX, y: baseY }
+        cursorX += p.width + topologyConfig.layout.nodeGap
+      }
+      saveLayoutToStorage(next)
+      setLayoutSnapshot(next)
+    },
+    [setLayoutSnapshot],
+  )
+
   const handleAddEntry = useCallback(() => {
     const cur = tpRef.current
     if (!cur) return
     const id = `entry-${crypto.randomUUID().slice(0, 8)}`
     const node: FlatNode = { id, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 }
     updateTopologyNodes(() => [...cur.nodes, node])
-  }, [updateTopologyNodes])
+    placeNewNodes([{ id, width: topologyConfig.fallbackNodeSize.width }])
+  }, [updateTopologyNodes, placeNewNodes])
 
   const handleAddProviderSlot = useCallback(() => {
     const cur = tpRef.current
@@ -762,7 +961,8 @@ export function TopologyPage() {
     const id = `pslot-${crypto.randomUUID().slice(0, 8)}`
     const node: FlatNode = { id, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true }
     updateTopologyNodes(() => [...cur.nodes, node])
-  }, [updateTopologyNodes])
+    placeNewNodes([{ id, width: topologyConfig.render.slot.shellMinWidth }])
+  }, [updateTopologyNodes, placeNewNodes])
 
   const handleAddSlot = useCallback(
     (slotType: RewriteSlotType) => {
@@ -771,8 +971,9 @@ export function TopologyPage() {
       const id = `${slotType}-${crypto.randomUUID().slice(0, 8)}`
       const node: FlatNode = { id, kind: 'slot', slotType, enabled: true }
       updateTopologyNodes(() => [...cur.nodes, node])
+      placeNewNodes([{ id, width: topologyConfig.render.slot.shellMinWidth }])
     },
-    [updateTopologyNodes],
+    [updateTopologyNodes, placeNewNodes],
   )
 
   const handleAddProvider = useCallback(
@@ -845,9 +1046,15 @@ export function TopologyPage() {
     for (let i = 0; i < slotIds.length - 1; i++) {
       chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
     }
+    commitHistory(cur)
     setTopology({ nodes: newNodes, wires: [...cur.wires, ...chain] })
     markDirty()
-  }, [setTopology, markDirty])
+    placeNewNodes([
+      { id: entryId, width: topologyConfig.fallbackNodeSize.width },
+      { id: pslotId, width: topologyConfig.render.slot.shellMinWidth },
+      ...slotIds.map((st) => ({ id: nodeIds.get(st)!, width: topologyConfig.render.slot.shellMinWidth })),
+    ])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes])
 
   const handleAddButtonClick = useCallback(() => {
     const btn = addButtonRef.current
@@ -872,6 +1079,8 @@ export function TopologyPage() {
     return tp.nodes.filter((n) => isRequestEntry(n) && n.enabled && (n.weight ?? 1) > 0).length
   }, [tp])
   const totalEntries = useMemo(() => (tp ? tp.nodes.filter((n) => isRequestEntry(n)).length : 0), [tp])
+  const canUndo = historyState.undo > 0
+  const canRedo = historyState.redo > 0
 
   if (loading) {
     return (
@@ -939,6 +1148,26 @@ export function TopologyPage() {
         >
           <Background color={topologyConfig.grid.color} gap={topologyConfig.grid.gap} size={topologyConfig.grid.size} />
           <Panel className="topology-actions" position="bottom-right">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="撤销 (Ctrl/Cmd+Z)"
+              aria-label="撤销"
+            >
+              <AppIcon name="undo" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title="重做 (Ctrl/Cmd+Shift+Z)"
+              aria-label="重做"
+            >
+              <AppIcon name="redo" />
+            </Button>
             <Button
               variant="outline"
               size="icon"

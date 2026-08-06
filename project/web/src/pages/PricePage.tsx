@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/comp
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -460,12 +461,12 @@ function PriceForm({
           providerNames={providerNames}
         />
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button disabled={!valid || saving} onClick={() => onSave({ ...form, model: form.model.trim() })}>
-          {saving ? '保存中…' : '保存'}
+          {saving ? '保存中...' : '保存'}
         </Button>
-      </div>
+      </DialogFooter>
     </FieldGroup>
   )
 }

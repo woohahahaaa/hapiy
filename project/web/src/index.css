@@ -228,8 +228,9 @@
   }
 }
 
-.react-flow__node.selected .react-flow__node-default {
-  box-shadow: 0 0 0 2px var(--color-ring);
+.react-flow__node.selected,
+.react-flow__node.selected > div {
+  box-shadow: 0 0 0 2px var(--color-primary);
   border-radius: var(--radius-md);
 }
 

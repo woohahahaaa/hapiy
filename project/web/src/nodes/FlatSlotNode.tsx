@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 import { useState } from 'react'
-import { CheckSmall } from '@icon-park/react'
 import { cn } from '@/lib/utils'
+import { Checkbox } from '@/components/ui/checkbox'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
 import { topologyConfig } from '@/config/topology-config'
@@ -232,33 +232,15 @@ function ProviderCard({ child, isDragging, isDragOver, onDragStart, onDragOver, 
         dim && 'opacity-50',
       )}
     >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={child.enabled}
-        aria-label={child.enabled ? `${child.label} 已启用，点击关闭` : `${child.label} 已停用，点击启用`}
-        data-no-drag="true"
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggle(!child.enabled)
-        }}
+      <Checkbox
+        checked={child.enabled}
+        onCheckedChange={(v) => onToggle(v === true)}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
-        className={cn(
-          'nodrag nopan relative h-4 w-4 shrink-0 cursor-pointer touch-manipulation rounded-[3px] border-2 transition-colors',
-          'outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          child.enabled ? 'border-primary bg-primary' : 'border-border bg-muted',
-        )}
-      >
-        {child.enabled && (
-          <CheckSmall
-            theme="filled"
-            size={10}
-            strokeWidth={4}
-            className="absolute inset-0 h-full w-full text-background"
-          />
-        )}
-      </button>
+        onTouchStart={(e) => e.stopPropagation()}
+        aria-label={child.enabled ? `${child.label} 已启用，点击关闭` : `${child.label} 已停用，点击启用`}
+        className="shrink-0"
+      />
       <span className="min-w-0 flex-1 truncate text-sm">{child.label}</span>
       <span className="shrink-0 text-[10px] text-muted-foreground">{child.modelCount} 模型</span>
     </div>

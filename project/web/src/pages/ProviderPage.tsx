@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
@@ -198,6 +198,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
   const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
   const [endpointDraft, setEndpointDraft] = useState('')
+  const [isEndpointSaving, setIsEndpointSaving] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isFetching, setIsFetching] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
@@ -244,10 +245,15 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
-  const handleSaveEndpoint = () => {
-    const trimmed = endpointDraft.trim()
-    setEndpointOverride(trimmed === '' ? null : trimmed)
-    setIsEndpointDialogOpen(false)
+  const handleSaveEndpoint = async () => {
+    setIsEndpointSaving(true)
+    try {
+      const trimmed = endpointDraft.trim()
+      setEndpointOverride(trimmed === '' ? null : trimmed)
+      setIsEndpointDialogOpen(false)
+    } finally {
+      setIsEndpointSaving(false)
+    }
   }
 
   const handleConfirmAddModels = (ids: readonly string[]) => {
@@ -337,10 +343,10 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
             </label>
             <p className="text-xs text-muted-foreground">将使用当前供应商的第一个 Key 作为 Bearer 凭证</p>
           </div>
-          <div className="flex justify-end gap-2">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsEndpointDialogOpen(false)}>取消</Button>
-            <Button onClick={handleSaveEndpoint}>保存</Button>
-          </div>
+            <Button onClick={() => void handleSaveEndpoint()} disabled={isEndpointSaving}>{isEndpointSaving ? '保存中...' : '保存'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       {fetchedModels && (
@@ -388,10 +394,10 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
             </label>
           ))}
         </div>
-        <div className="flex justify-end gap-2">
+        <DialogFooter>
           <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button disabled={selected.size === 0} onClick={() => onConfirm([...selected])}>确认添加</Button>
-        </div>
+          <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '确认添加'}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

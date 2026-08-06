@@ -4,7 +4,7 @@ import {
   Thunderbolt,
   CloseOne,
   Comment,
-  CheckOne,
+  Check,
   Success,
   Right,
   Close,
@@ -46,6 +46,8 @@ import {
   ChartGraph,
   FactoryBuilding,
   ConnectionPoint,
+  Undo,
+  Redo,
 } from '@icon-park/react'
 import type { CSSProperties, ReactElement } from 'react'
 import iconConfig from './icons.json'
@@ -87,7 +89,7 @@ const COMPONENTS: Readonly<Record<string, IconComponent>> = {
   Thunderbolt,
   CloseOne,
   Comment,
-  CheckOne,
+  Check,
   Success,
   Right,
   Close,
@@ -129,6 +131,8 @@ const COMPONENTS: Readonly<Record<string, IconComponent>> = {
   ChartGraph,
   FactoryBuilding,
   ConnectionPoint,
+  Undo,
+  Redo,
 }
 
 // 语义化图标名 -> IconPark 组件名（可通过 `icons.json` 编辑）。

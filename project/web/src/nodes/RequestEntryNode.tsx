@@ -2,6 +2,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
+import { Input } from '@/components/ui/input'
 
 interface RequestEntryNodeData {
   label: string
@@ -109,7 +110,14 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
         }}
       />
 
-      <div className="flex items-center gap-3 px-3 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-primary' : 'bg-muted-foreground/50')}
+          />
+          <span className="truncate text-sm font-medium">{label || '请求入口'}</span>
+        </span>
         <button
           type="button"
           role="switch"
@@ -135,22 +143,23 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
             )}
           />
         </button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">{label || '请求入口'}</div>
-          <label className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>权重</span>
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.01}
-              value={Number.isFinite(weight) ? weight : 1}
-              onChange={(e) => handleWeight(e.target.value)}
-              onKeyDown={(e) => e.stopPropagation()}
-              className="nodrag nopan w-16 rounded border border-border bg-background px-1 py-0.5 text-right text-xs"
-            />
-          </label>
-        </div>
+      </div>
+
+      <div className="flex flex-col gap-1 p-3">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>权重</span>
+          <Input
+            type="number"
+            size="sm"
+            min={0}
+            max={1}
+            step={0.01}
+            value={Number.isFinite(weight) ? weight : 1}
+            onChange={(e) => handleWeight(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="nodrag nopan w-16 px-1 py-0 text-right"
+          />
+        </label>
       </div>
     </div>
   )

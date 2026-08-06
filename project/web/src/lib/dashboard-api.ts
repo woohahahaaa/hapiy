@@ -194,6 +194,8 @@ export type FlatWire = {
 export type FlatTopology = {
   readonly nodes: readonly FlatNode[]
   readonly wires: readonly FlatWire[]
+  readonly version?: number
+  readonly updatedAt?: string
 }
 
 export type DuplicateActivation = {
@@ -228,6 +230,8 @@ function parseFlatTopology(value: unknown): FlatTopology {
   return {
     nodes: readObjectArray(value.nodes, 'flat.nodes', parseFlatNode),
     wires: readObjectArray(value.wires, 'flat.wires', parseFlatWire),
+    ...(typeof value.version === 'number' ? { version: value.version } : {}),
+    ...(typeof value.updated_at === 'string' ? { updatedAt: value.updated_at } : {}),
   }
 }
 

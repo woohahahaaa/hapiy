@@ -1,14 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-
-export function confirmJsonSave(): boolean {
-  if (typeof window === 'undefined') return true
-  return window.confirm(
-    '你修改了 JSON 内容，确认保存到后端吗？\n\n注意：JSON 里的 ID 字段与使用日志、历史记录等按 ID 关联的数据强绑定，修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。',
-  )
-}
 
 export type JsonEditorIdMap = ReadonlyMap<number, string>
 
@@ -53,41 +46,60 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
   }, [data])
   const [text, setText] = useState(() => JSON.stringify(editorData, null, 2))
   const [error, setError] = useState<string | null>(null)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const handleSave = async () => {
-    if (!confirmJsonSave()) return
+    setSaving(true)
     try {
       const parsed = JSON.parse(text)
       await onSave(parsed, idMap)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>编辑 JSON</DialogTitle>
-        </DialogHeader>
-        {error && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
-            {error}
-          </div>
-        )}
-        <Textarea
-          value={text}
-          onChange={(e) => { setText(e.target.value); setError(null) }}
-          className="font-mono text-xs"
-          style={{ minHeight: 340 }}
-          spellCheck={false}
-        />
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button onClick={handleSave}>保存</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>编辑 JSON</DialogTitle>
+          </DialogHeader>
+          {error && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+              {error}
+            </div>
+          )}
+          <Textarea
+            value={text}
+            onChange={(e) => { setText(e.target.value); setError(null) }}
+            className="min-h-0 flex-1 overflow-auto font-mono text-xs"
+            spellCheck={false}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
+            <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showConfirm} onOpenChange={(open) => { if (!open) setShowConfirm(false) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>保存 JSON</DialogTitle>
+            <DialogDescription>
+              你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用日志、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={saving}>我再想想</Button>
+            <Button onClick={() => { setShowConfirm(false); void handleSave() }} disabled={saving}>确认保存</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

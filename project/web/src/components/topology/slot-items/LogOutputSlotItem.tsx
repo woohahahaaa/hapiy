@@ -87,7 +87,8 @@ export function LogOutputSlotItem({
       <div className="flex flex-col gap-0.5">
         <span className="text-[10px] text-muted-foreground">存储路径</span>
         <Input
-          className="h-7 font-mono text-[10px]"
+          size="sm"
+          className="font-mono text-[10px]"
           value={entry.logPath}
           onChange={(e) => onChange({ ...entry, logPath: e.target.value })}
           placeholder="/var/log/hapiy/"
@@ -148,7 +149,6 @@ function RecordRow({
         checked={checked}
         disabled={disabled}
         onCheckedChange={(v) => onChange(v === true)}
-        className="size-3.5"
       />
       <span className="leading-none text-foreground">{label}</span>
     </label>
