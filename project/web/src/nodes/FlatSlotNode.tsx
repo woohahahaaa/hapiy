@@ -77,6 +77,8 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
+  const takenLabels = new Set(children.map((c) => c.label).filter(Boolean))
+  const availableProviders = providers.filter((n) => !takenLabels.has(n))
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -141,10 +143,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       </button>
     </div>
   ) : (
-    <span className="flex items-baseline gap-1">
-      <span>{title}</span>
-      <span className="text-[10px] text-muted-foreground/50">· 全部执行</span>
-    </span>
+    <span>{title}</span>
   )
 
   const targetHandle = topologyConfig.handles.provider.target
@@ -186,7 +185,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               key={child.id}
               index={i + 1}
               child={child}
-              providers={providers}
+              providers={availableProviders}
               isDragging={dragIndex === i}
               isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
               onDragStart={() => setDragIndex(i)}

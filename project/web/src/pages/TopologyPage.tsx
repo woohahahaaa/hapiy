@@ -18,7 +18,6 @@ import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { FlatSlotNode } from '@/nodes/FlatSlotNode'
 import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
-import { ContextMenu } from '@/components/topology/ContextMenu'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type Provider } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
@@ -226,7 +225,7 @@ export function TopologyPage() {
     mode: 'cursor',
   })
   const addButtonRef = useRef<HTMLButtonElement>(null)
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null)
+  
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
   const layoutSnapshotRef = useRef(layoutSnapshot)
@@ -385,37 +384,59 @@ export function TopologyPage() {
       modelLinks: [] as Array<{ nodeId: string; entryId: string; modelName: string; active: boolean }>,
     }
     if (!canvas) return empty
-    const nodes: Node[] = []
-    const entryModels = new Map<string, Array<{ id: string; label: string; active: boolean }>>()
-    const modelLinks: Array<{ nodeId: string; entryId: string; modelName: string; active: boolean }> = []
+
+    // 全局去重：每个模型名只生成一个节点，所有入口共享。
+    // 同时记录每个入口的可达模型列表（用于 handlebar 和连线）。
+    const globalModelActive = new Map<string, boolean>()
+    const entryModelInfo = new Map<string, Map<string, boolean>>()
     for (const entry of canvas.topLevel) {
       if (!isRequestEntry(entry)) continue
       const reachable = reachableProvidersForEntry(entry.id)
-      const modelActive = new Map<string, boolean>()
+      const perEntry = new Map<string, boolean>()
       for (const { provider, active } of reachable) {
         for (const m of provider.models) {
-          const prev = modelActive.get(m.model)
-          if (prev === undefined) modelActive.set(m.model, active)
-          else if (active) modelActive.set(m.model, true)
+          const prev = perEntry.get(m.model)
+          if (prev === undefined) perEntry.set(m.model, active)
+          else if (active) perEntry.set(m.model, true)
+          const gPrev = globalModelActive.get(m.model)
+          if (gPrev === undefined) globalModelActive.set(m.model, active)
+          else if (active) globalModelActive.set(m.model, true)
         }
       }
-      const modelNames = Array.from(modelActive.keys()).sort((a, b) => a.localeCompare(b))
+      entryModelInfo.set(entry.id, perEntry)
+    }
+
+    const nodes: Node[] = []
+    const modelLinks: Array<{ nodeId: string; entryId: string; modelName: string; active: boolean }> = []
+    const entryModels = new Map<string, Array<{ id: string; label: string; active: boolean }>>()
+
+    const sortedModelNames = Array.from(globalModelActive.keys()).sort((a, b) => a.localeCompare(b))
+    for (const m of sortedModelNames) {
+      const nodeId = `model-${m}`
+      const active = globalModelActive.get(m) ?? false
+      nodes.push({
+        id: nodeId,
+        type: 'modelHub',
+        position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
+        data: { models: [{ id: m, label: m, disabled: !active }], simplified: true },
+      })
+    }
+
+    for (const entry of canvas.topLevel) {
+      if (!isRequestEntry(entry)) continue
+      const perEntry = entryModelInfo.get(entry.id) ?? new Map()
+      const modelNames = Array.from(perEntry.keys()).sort((a, b) => a.localeCompare(b))
       entryModels.set(
         entry.id,
-        modelNames.map((m) => ({ id: m, label: m, active: modelActive.get(m) ?? false })),
+        modelNames.map((m) => ({ id: m, label: m, active: perEntry.get(m) ?? false })),
       )
       for (const m of modelNames) {
-        const nodeId = `model-${entry.id}-${m}`
-        const active = modelActive.get(m) ?? false
-        nodes.push({
-          id: nodeId,
-          type: 'modelHub',
-          position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-          data: { models: [{ id: m, label: m, disabled: !active }], simplified: true },
-        })
+        const nodeId = `model-${m}`
+        const active = perEntry.get(m) ?? false
         modelLinks.push({ nodeId, entryId: entry.id, modelName: m, active })
       }
     }
+
     return { nodes, entryModels, modelLinks }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas, reachableProvidersForEntry, layoutSnapshot])
@@ -646,26 +667,20 @@ export function TopologyPage() {
   }, [])
 
   const handlePaneClick = useCallback(() => {
-    setContextMenu(null)
   }, [])
 
   const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
     event.preventDefault()
     if (!(event.target instanceof Element)) return
     if (event.target.closest('.react-flow__node')) return
-    setContextMenu(null)
     setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
   }, [])
 
   const handleNodeClick = useCallback((_event: ReactMouseEvent) => {
-    setContextMenu(null)
   }, [])
 
-  const handleNodeContextMenu = useCallback((event: ReactMouseEvent, node: Node) => {
+  const handleNodeContextMenu = useCallback((event: ReactMouseEvent, _node: Node) => {
     event.preventDefault()
-    if (node.type === 'modelHub') return
-    setMenuState((s) => ({ ...s, open: false }))
-    setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id })
   }, [])
 
   const handleConnect = useCallback(
@@ -747,7 +762,6 @@ export function TopologyPage() {
       commitHistory(cur)
       setTopology({ nodes, wires })
       setEdges(nextEdges)
-      setContextMenu(null)
       markDirty()
     },
     [setTopology, setEdges, markDirty, commitHistory],
@@ -771,11 +785,21 @@ export function TopologyPage() {
       commitHistory(cur)
       setTopology({ nodes, wires })
       setEdges(nextEdges)
-      setContextMenu(null)
       markDirty()
     },
     [setTopology, setEdges, markDirty, commitHistory],
   )
+
+  const handleDeleteSelected = useCallback(() => {
+    const topLevelIds = selectionRef.current.nodes
+      .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
+      .map((n) => n.id)
+    if (topLevelIds.length > 0) {
+      handleDeleteNodes(topLevelIds)
+    } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
+      handleDeleteSelectedEdges()
+    }
+  }, [handleDeleteNodes, handleDeleteSelectedEdges])
 
   const handleUndo = useCallback(() => {
     const cur = tpRef.current
@@ -989,7 +1013,13 @@ export function TopologyPage() {
       // 添加一个"空" provider 卡片，name 留空；由用户在下拉框中自行选择具体供应商。
       const providerNode: FlatNode = { id, kind: 'provider', name: undefined, enabled: true }
       const slotIndex = cur.nodes.findIndex((n) => n.id === slotId)
-      const insertAt = slotIndex >= 0 ? slotIndex + 1 : cur.nodes.length
+      if (slotIndex < 0) {
+        updateTopologyNodes(() => [...cur.nodes, providerNode])
+        return
+      }
+      // 找到该 slot 的最后一个 provider 子节点，插入其后
+      let insertAt = slotIndex + 1
+      while (insertAt < cur.nodes.length && cur.nodes[insertAt].kind === 'provider') insertAt++
       const nextNodes = [...cur.nodes.slice(0, insertAt), providerNode, ...cur.nodes.slice(insertAt)]
       updateTopologyNodes(() => nextNodes)
     },
@@ -1193,6 +1223,15 @@ export function TopologyPage() {
             >
               <AppIcon name="add" />
             </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleDeleteSelected}
+              title="删除选中节点 (Delete)"
+              aria-label="删除选中节点"
+            >
+              <AppIcon name="delete" />
+            </Button>
             <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
               <AppIcon name="auto_fix_high" />
             </Button>
@@ -1208,14 +1247,6 @@ export function TopologyPage() {
             onAddProviderSlot={handleAddProviderSlot}
             onAddSlot={handleAddSlot}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
-          />
-        )}
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            onDelete={() => handleDeleteNode(contextMenu.nodeId)}
-            onClose={() => setContextMenu(null)}
           />
         )}
         <TopologyVersionsModal
