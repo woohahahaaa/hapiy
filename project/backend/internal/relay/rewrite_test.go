@@ -493,3 +493,66 @@ func TestRewriteEngineHeaderWiring(t *testing.T) {
 		t.Fatalf("expected model unchanged, got %v", req.Body["model"])
 	}
 }
+
+func TestApplyRewriteChain_negative_index_resolves_to_last_message(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"messages.-1.content","mode":"set","value":"今天天气如何"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"messages":[{"role":"system","content":"sys"},{"role":"user","content":"你好"}]}`)
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	got := string(updated)
+	if !strings.Contains(got, `"content":"今天天气如何"`) {
+		t.Fatalf("negative index set did not rewrite last message: %s", got)
+	}
+	if !strings.Contains(got, `"content":"sys"`) {
+		t.Fatalf("first message was wrongly touched: %s", got)
+	}
+}
+
+func TestApplyRewriteChain_negative_index_into_content_array(t *testing.T) {
+	// opencode's newer chat format uses content as an array of {type,text}.
+	chain, err := compileRewriteChain("r", `[
+		{"path":"messages.-1.content.0.text","mode":"set","value":"今天天气如何"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"messages":[{"role":"system","content":"sys"},{"role":"user","content":[{"text":"你好","type":"text"},{"text":"<system-reminder>x</system-reminder>","type":"text"}]}]}`)
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	got := string(updated)
+	if !strings.Contains(got, `"text":"今天天气如何"`) {
+		t.Fatalf("content array element was not rewritten: %s", got)
+	}
+	if strings.Contains(got, `"text":"你好"`) {
+		t.Fatalf("original 你好 still present: %s", got)
+	}
+	if !strings.Contains(got, `"text":"<system-reminder>x</system-reminder>"`) {
+		t.Fatalf("second content element was lost: %s", got)
+	}
+}
+
+func TestResolveSjsonPath_negative_indexes(t *testing.T) {
+	body := []byte(`{"messages":[{"a":1},{"a":2},{"a":3}]}`)
+	cases := map[string]string{
+		"messages.-1.content":   "messages.2.content",
+		"messages.-2.x":         "messages.1.x",
+		"messages.0":            "messages.0",
+		"messages.-1":           "messages.2",
+		"messages":              "messages",
+		"messages.-9.content":   "messages.-9.content", // out of range: unchanged
+	}
+	for in, want := range cases {
+		if got := resolveSjsonPath(body, in); got != want {
+			t.Errorf("resolveSjsonPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -143,13 +143,81 @@ func TestReadFile_returns_content_and_rejects_traversal(t *testing.T) {
 	}
 }
 
+func TestExtractSourceFromPath(t *testing.T) {
+	// Given/When/Then: conventional relay path carries the source mark.
+	if got := ExtractSourceFromPath("/proxy/__opencodetest/chat/completions"); got != "__opencodetest" {
+		t.Fatalf("marked path: want __opencodetest, got %q", got)
+	}
+	// When: path has no mark, Then: empty source.
+	if got := ExtractSourceFromPath("/v1/chat/completions"); got != "" {
+		t.Fatalf("unmarked path: want empty, got %q", got)
+	}
+	// When: mark is the last segment, Then: mark still extracted.
+	if got := ExtractSourceFromPath("/proxy/__lab"); got != "__lab" {
+		t.Fatalf("trailing mark: want __lab, got %q", got)
+	}
+}
+
+func TestDeleteFiles_filtered_removes_matching_only(t *testing.T) {
+	// Given: files across prefixes and types.
+	writer := newTestLogFileWriter(t)
+	ts := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	writer.WriteLog(&LogCaptureData{RequestID: "r1", Timestamp: ts, Type: "request", Prefix: "_relay"})
+	writer.WriteLog(&LogCaptureData{RequestID: "r2", Timestamp: ts, Type: "response", Prefix: "_relay"})
+	writer.WriteLog(&LogCaptureData{RequestID: "r3", Timestamp: ts, Type: "request", Prefix: "cap"})
+
+	// When: delete only _relay request files.
+	deleted, err := writer.DeleteFiles(LogDeleteParams{Prefix: "_relay", Types: []string{"request"}})
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Then: exactly one file gone, two remain.
+	if deleted != 1 {
+		t.Fatalf("deleted: want 1, got %d", deleted)
+	}
+	remaining, _, err := writer.ListFiles(LogListParams{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(remaining) != 2 {
+		t.Fatalf("remaining: want 2, got %d", len(remaining))
+	}
+}
+
+func TestDeleteFiles_all_empties_log_directory(t *testing.T) {
+	// Given: files in the base dir and a prefix subdirectory.
+	writer := newTestLogFileWriter(t)
+	ts := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
+	writer.WriteLog(&LogCaptureData{RequestID: "r1", Timestamp: ts, Type: "request"})
+	writer.WriteLog(&LogCaptureData{RequestID: "r2", Timestamp: ts, Type: "response", Prefix: "_relay"})
+
+	// When: delete everything.
+	deleted, err := writer.DeleteFiles(LogDeleteParams{All: true})
+	if err != nil {
+		t.Fatalf("delete all: %v", err)
+	}
+
+	// Then: both files removed.
+	if deleted != 2 {
+		t.Fatalf("deleted: want 2, got %d", deleted)
+	}
+	remaining, _, err := writer.ListFiles(LogListParams{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(remaining) != 0 {
+		t.Fatalf("remaining: want 0, got %d", len(remaining))
+	}
+}
+
 func TestParseLogFileName_round_trips_dashed_request_id(t *testing.T) {
 	// Given
 	ts := time.Date(2026, 8, 6, 12, 0, 0, 0, time.UTC)
 	name := fileTimestamp(ts) + "-abcd-1234-efgh-response.json"
 
 	// When
-	parsed, id, typ, ok := parseLogFileName(name)
+	parsed, source, typ, ok := parseLogFileName(name)
 
 	// Then
 	if !ok {
@@ -158,8 +226,8 @@ func TestParseLogFileName_round_trips_dashed_request_id(t *testing.T) {
 	if !parsed.Equal(ts) {
 		t.Fatalf("timestamp: want %v, got %v", ts, parsed)
 	}
-	if id != "abcd-1234-efgh" {
-		t.Fatalf("id: want abcd-1234-efgh, got %q", id)
+	if source != "" {
+		t.Fatalf("source: want empty, got %q", source)
 	}
 	if typ != "response" {
 		t.Fatalf("type: want response, got %q", typ)

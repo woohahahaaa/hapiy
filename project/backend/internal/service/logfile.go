@@ -49,6 +49,7 @@ type LogCaptureData struct {
 	Type             string       `json:"type"` // request | response | system
 	ProviderID       string       `json:"provider_id,omitempty"`
 	Prefix           string       `json:"prefix,omitempty"`
+	Source           string       `json:"source,omitempty"`
 	Request          *HTTPCapture `json:"request,omitempty"`
 	Response         *HTTPCapture `json:"response,omitempty"`
 	Timings          *Timings     `json:"timings,omitempty"`
@@ -71,6 +72,31 @@ type Timings struct {
 	RewriteMs  int64 `json:"rewrite_ms"`
 }
 
+// ExtractSourceFromPath returns the source mark from a relay request path.
+// Paths carry the convention "/proxy/__<source>/<endpoint>" (e.g.
+// "/proxy/__opencodetest/chat/completions"); the source segment is the part
+// starting at "__" up to the next slash. Returns "" when no mark is present.
+func ExtractSourceFromPath(path string) string {
+	idx := strings.Index(path, "/__")
+	if idx < 0 {
+		return ""
+	}
+	seg := path[idx+1:]
+	if end := strings.IndexByte(seg, '/'); end >= 0 {
+		seg = seg[:end]
+	}
+	return seg
+}
+
+// ResolveSourceMark returns the header-carried source mark, falling back to
+// path extraction when the header is absent (direct hits to the backend).
+func ResolveSourceMark(header, path string) string {
+	if header != "" {
+		return header
+	}
+	return ExtractSourceFromPath(path)
+}
+
 // WriteLog serializes data and writes it to {dir}/{prefix}/{filename}.json.
 // File I/O is synchronous: per-request capture volume is low enough that a
 // batch layer (as used by LogWriter for the DB) would only add latency.
@@ -86,6 +112,11 @@ func (w *LogFileWriter) WriteLog(data *LogCaptureData) {
 	}
 	filename := fmt.Sprintf("%s-%s-%s.json",
 		fileTimestamp(data.Timestamp), sanitizeFileComponent(data.RequestID), data.Type)
+	if data.Source != "" {
+		filename = fmt.Sprintf("%s-%s-%s-%s.json",
+			fileTimestamp(data.Timestamp), sanitizeFileComponent(data.Source),
+			sanitizeFileComponent(data.RequestID), data.Type)
+	}
 	targetDir := w.dir
 	if data.Prefix != "" {
 		prefix := sanitizeFileComponent(data.Prefix)
@@ -122,6 +153,7 @@ type LogFileEntry struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	Prefix    string    `json:"prefix"`
+	Source    string    `json:"source"`
 	Type      string    `json:"type"`
 	Size      int64     `json:"size"`
 	CreatedAt time.Time `json:"created_at"`
@@ -197,6 +229,71 @@ func (w *LogFileWriter) ReadFile(id string) ([]byte, error) {
 	return nil, fmt.Errorf("log file %q not found", id)
 }
 
+// LogDeleteParams controls which captured files DeleteFiles removes.
+type LogDeleteParams struct {
+	Prefix string
+	Types  []string
+	From   time.Time // zero value = no lower bound
+	To     time.Time // zero value = no upper bound
+	All    bool      // delete every file under the log directory
+}
+
+// DeleteFiles removes captured files matching the params and returns the
+// number of files deleted. In All mode every file under the log directory is
+// removed; otherwise the same filters as ListFiles apply.
+func (w *LogFileWriter) DeleteFiles(params LogDeleteParams) (int, error) {
+	if w == nil {
+		return 0, errors.New("log file writer not initialized")
+	}
+	if params.All {
+		return deleteAllLogFiles(w.dir)
+	}
+	entries, _, err := w.ListFiles(LogListParams{
+		Prefix: params.Prefix,
+		Types:  params.Types,
+		From:   params.From,
+		To:     params.To,
+	})
+	if err != nil {
+		return 0, err
+	}
+	deleted := 0
+	for _, entry := range entries {
+		if err := os.Remove(filepath.Join(w.dir, entry.Prefix, entry.Name)); err == nil {
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
+func deleteAllLogFiles(dir string) (int, error) {
+	deleted := 0
+	baseEntries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0, err
+	}
+	for _, entry := range baseEntries {
+		full := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			files, err := os.ReadDir(full)
+			if err != nil {
+				continue
+			}
+			for _, file := range files {
+				if !file.IsDir() && os.Remove(filepath.Join(full, file.Name())) == nil {
+					deleted++
+				}
+			}
+			_ = os.Remove(full)
+			continue
+		}
+		if os.Remove(full) == nil {
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
 func (e LogFileEntry) matches(params LogListParams) bool {
 	if params.Prefix != "" && e.Prefix != params.Prefix {
 		return false
@@ -214,13 +311,15 @@ func (e LogFileEntry) matches(params LogListParams) bool {
 }
 
 // parseLogFileEntry extracts the entry fields from a directory entry using
-// the {timestamp}-{request_id}-{type}.json filename convention.
+// the {timestamp}[-{source}]-{request_id}-{type}.json filename convention.
+// When the request_id segment starts with "__" it is split into source and
+// the actual request id.
 func parseLogFileEntry(prefix string, entry os.DirEntry) (LogFileEntry, bool) {
 	info, err := entry.Info()
 	if err != nil {
 		return LogFileEntry{}, false
 	}
-	timestamp, _, typ, ok := parseLogFileName(entry.Name())
+	timestamp, source, typ, ok := parseLogFileName(entry.Name())
 	if !ok {
 		return LogFileEntry{}, false
 	}
@@ -228,16 +327,16 @@ func parseLogFileEntry(prefix string, entry os.DirEntry) (LogFileEntry, bool) {
 		ID:        entry.Name(),
 		Name:      entry.Name(),
 		Prefix:    prefix,
+		Source:    source,
 		Type:      typ,
 		Size:      info.Size(),
 		CreatedAt: timestamp,
 	}, true
 }
 
-// parseLogFileName splits {timestamp}-{request_id}-{type}.json back into its
-// parts. The timestamp is a fixed-width RFC3339 (colons -> dots) prefix, so it
-// is located by its width rather than by splitting on "-" (which would be
-// ambiguous with the dashes inside the date and the request id).
+// parseLogFileName splits {timestamp}[-{source}]-{request_id}-{type}.json
+// back into its parts. When the first segment after the timestamp starts with
+// "__" it is treated as the source mark; the remainder is the request id.
 func parseLogFileName(name string) (time.Time, string, string, bool) {
 	if !strings.HasSuffix(name, ".json") {
 		return time.Time{}, "", "", false
@@ -268,7 +367,15 @@ func parseLogFileName(name string) (time.Time, string, string, bool) {
 	if err != nil {
 		return time.Time{}, "", "", false
 	}
-	return timestamp, strings.TrimPrefix(head[tsEnd:], "-"), typ, true
+	rest := strings.TrimPrefix(head[tsEnd:], "-")
+	source := ""
+	if strings.HasPrefix(rest, "__") {
+		if segEnd := strings.IndexByte(rest, '-'); segEnd >= 0 {
+			source = rest[:segEnd]
+			rest = rest[segEnd+1:]
+		}
+	}
+	return timestamp, source, typ, true
 }
 
 // fileTimestamp renders a time as RFC3339 with colons replaced by dots so the

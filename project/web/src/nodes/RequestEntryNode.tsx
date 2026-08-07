@@ -67,10 +67,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
   return (
     <div
       ref={rootRef}
-      className={cn(
-        'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
-        !enabled && 'opacity-60',
-      )}
+      className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >
       {models.map((m, i) => (
@@ -112,7 +109,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
       />
 
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="flex min-w-0 items-center gap-1.5">
+        <span className={cn('flex min-w-0 items-center gap-1.5', !enabled && 'opacity-50')}>
           <span
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-primary' : 'bg-muted-foreground/50')}
@@ -129,7 +126,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
         />
       </div>
 
-      <div className="flex flex-col gap-1 p-3">
+      <div className={cn('flex flex-col gap-1 p-3', !enabled && 'opacity-50')}>
         <div className="flex flex-col gap-0.5">
           <span className="text-[10px] text-muted-foreground">权重</span>
           <Input

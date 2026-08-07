@@ -77,7 +77,7 @@ export function BaseUrlSettings() {
     event.preventDefault()
     const invalid = paths.find((p) => p.trim() !== '' && !isValidPathName(p.trim()))
     if (invalid) {
-      toast.error(`路径名 "${invalid.trim()}" 无效：不能包含 / 或 __，且长度不超过 ${MAX_PATH_LEN}`)
+      toast.error(`来源名 "${invalid.trim()}" 无效：不能包含 / 或 __，且长度不超过 ${MAX_PATH_LEN}`)
       return
     }
     setSaving(true)
@@ -148,14 +148,14 @@ export function BaseUrlSettings() {
               </code>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <span>请求路径</span>
+              <span>标记来源</span>
               <p className="text-xs text-muted-foreground">
-                在 BaseURL 后追加 <code>__路径名</code> 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。
-                下面登记的路径仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
+                在 BaseURL 后追加 <code>__来源名</code> 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。
+                下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
               </p>
               <div className="flex items-center gap-2">
                 <Input
-                  value="无路径"
+                  value="无来源"
                   readOnly
                   disabled
                   className="w-36 shrink-0"
@@ -181,7 +181,7 @@ export function BaseUrlSettings() {
                       value={p}
                       onChange={(event) => updatePath(index, event.target.value)}
                       disabled={saving}
-                      placeholder="路径名，如 ABC"
+                      placeholder="来源名，如 ABC"
                       className="w-36 shrink-0"
                     />
                     <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
@@ -216,7 +216,7 @@ export function BaseUrlSettings() {
                 onClick={addPath}
                 disabled={saving}
               >
-                <AppIcon name="add" size={14} /> 添加路径
+                      <AppIcon name="add" size={14} /> 添加来源
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/url"
+	"strings"
 
 	"github.com/hapiy/hapiy/internal/model"
 )
@@ -142,6 +144,17 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 		return nil, errors.New("no API key configured")
 	}
 	upstreamURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
+	// Append the request path (e.g. "/v1/chat/completions") to the base URL.
+	// When the base URL already contains a path segment (e.g. "/v1"), only
+	// the suffix beyond that segment is appended so there is no duplication.
+	if req.Path != "" {
+		parsed, parseErr := url.Parse(upstreamURL)
+		if parseErr == nil {
+			suffix := strings.TrimPrefix(req.Path, parsed.Path)
+			parsed = parsed.JoinPath(suffix)
+			upstreamURL = parsed.String()
+		}
+	}
 	key := pickIndex(plan.Keys, req.KeyIndex)
 	if req.Stream {
 		return e.relayStreaming(ctx, upstreamURL, key, req)

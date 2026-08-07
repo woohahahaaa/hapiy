@@ -180,6 +180,17 @@ function reaches(wires: readonly FlatWire[], from: string, to: string): boolean 
   return cur === to
 }
 
+function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
+  const disabled = new Set<string>()
+  const enabledEntries = topology.nodes.filter((n) => isRequestEntry(n) && n.enabled === true)
+  for (const node of topology.nodes) {
+    if (node.kind !== 'slot') continue
+    const reachable = enabledEntries.some((entry) => reaches(topology.wires, entry.id, node.id))
+    if (!reachable) disabled.add(node.id)
+  }
+  return disabled
+}
+
 export function TopologyPage() {
   const { rules: slotRules } = useSlotRules()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
@@ -233,6 +244,8 @@ export function TopologyPage() {
   const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
 
   const canvas: FlatCanvas | null = useMemo(() => (tp ? canvasFromFlat(tp.nodes, tp.wires) : null), [tp])
+
+  const externallyDisabledSet = useMemo(() => (tp ? externallyDisabledSlotIds(tp) : new Set<string>()), [tp])
 
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()
@@ -505,6 +518,7 @@ export function TopologyPage() {
             title: 'provider',
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
+            externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => p.name),
             onAddProvider: () => handleAddProvider(node.id),
@@ -525,6 +539,7 @@ export function TopologyPage() {
             title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
             slotType: node.slotType ?? '',
             isProviderSlot: false,
+            externallyDisabled: externallyDisabledSet.has(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
@@ -536,7 +551,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 

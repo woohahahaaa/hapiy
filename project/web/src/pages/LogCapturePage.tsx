@@ -6,15 +6,15 @@ import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import {
   dashboardApi,
   type DateRange,
@@ -59,6 +59,8 @@ export function LogCapturePage() {
   const [selectedTypes, setSelectedTypes] = useState<readonly LogCaptureType[]>([])
   const [prefix, setPrefix] = useState('')
   const [preview, setPreview] = useState<LogCaptureFile | null>(null)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const mountedRef = useRef(true)
 
   const typeQuery = selectedTypes.join(',')
@@ -106,150 +108,111 @@ export function LogCapturePage() {
     setOffset(0)
   }, [])
 
-  const hasPrev = offset > 0
-  const hasNext = offset + LIMIT < total
-  const pageText = total > 0 ? `第 ${Math.floor(offset / LIMIT) + 1} 页，共 ${total} 条` : ''
+  const handleClear = useCallback(
+    async (scope: 'filtered' | 'all') => {
+      setClearing(true)
+      try {
+        await dashboardApi.clearLogCapture({
+          scope,
+          ...(scope === 'filtered'
+            ? {
+                prefix: prefix || undefined,
+                type: typeQuery || undefined,
+                from: dateRange.from,
+                to: dateRange.to,
+              }
+            : {}),
+        })
+        setClearOpen(false)
+        void fetchFiles()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '清空失败')
+        setClearOpen(false)
+      } finally {
+        setClearing(false)
+      }
+    },
+    [prefix, typeQuery, dateRange.from, dateRange.to, fetchFiles],
+  )
+
+  const columns: ColumnDef<LogCaptureFile>[] = [
+    { key: 'created_at', label: '时间', isTime: true },
+    { key: 'prefix', label: '文件夹路径' },
+    { key: 'source', label: '标记' },
+    { key: 'type', label: '类型', render: (v) => <Badge variant={TYPE_VARIANTS[v as LogCaptureType]}>{TYPE_LABELS[v as LogCaptureType]}</Badge> },
+    { key: 'name', label: '文件名' },
+    { key: 'size', label: '大小', render: (v) => formatSize(v as number) },
+    { key: 'id', label: '操作', showEmptyPlaceholder: false, render: (_, row) => <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setPreview(row as LogCaptureFile) }}>查看</Button> },
+  ]
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="日志抓取"
         status={total > 0 ? `${total} 条记录` : undefined}
+        actions={undefined}
       />
       <div className="flex-1 p-6">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <DateRangeFilter
-            value={dateRange}
-            onChange={(range) => {
-              setDateRange(range)
-              setOffset(0)
-            }}
-          />
-          <div className="flex items-center gap-3">
-            {TYPE_OPTIONS.map((opt) => (
-              <label key={opt.value} className="flex cursor-pointer items-center gap-1.5">
-                <Checkbox
-                  checked={selectedTypes.includes(opt.value)}
-                  onCheckedChange={() => toggleType(opt.value)}
-                />
-                <span className="text-xs text-muted-foreground">{opt.label}</span>
-              </label>
-            ))}
-          </div>
-          <Input
-            placeholder="文件夹前缀..."
-            value={prefix}
-            onChange={(e) => {
-              setPrefix(e.target.value)
-              setOffset(0)
-            }}
-            className="w-48"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void fetchFiles()}
-          >
-            刷新
-          </Button>
-        </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>文件名</TableHead>
-                <TableHead>文件夹</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>大小</TableHead>
-                <TableHead>时间</TableHead>
-                <TableHead>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
-                    加载中...
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-xs text-destructive">{error}</span>
-                      <Button variant="outline" size="sm" onClick={() => void fetchFiles()}>
-                        重试
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : files.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
-                    暂无抓取日志
-                  </TableCell>
-                </TableRow>
-              ) : (
-                files.map((file) => (
-                  <TableRow
-                    key={file.id}
-                    className="cursor-pointer"
-                    onClick={() => setPreview(file)}
-                  >
-                    <TableCell className="font-mono text-xs">{file.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {file.prefix}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={TYPE_VARIANTS[file.type]}>
-                        {TYPE_LABELS[file.type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs">{formatSize(file.size)}</TableCell>
-                    <TableCell className="font-mono text-xs">{file.created_at}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setPreview(file)
-                        }}
-                      >
-                        查看
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            {pageText}
-          </div>
-          <div className="flex items-center gap-2">
+        <DataTable
+          id="capture"
+          columns={columns}
+          data={files}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={LIMIT}
+          onOffsetChange={setOffset}
+          emptyText="暂无抓取日志"
+          onRetry={() => void fetchFiles()}
+          filters={
+            <>
+              <DateRangeFilter
+                value={dateRange}
+                onChange={(range) => {
+                  setDateRange(range)
+                  setOffset(0)
+                }}
+              />
+              <div className="flex items-center gap-3">
+                {TYPE_OPTIONS.map((opt) => (
+                  <label key={opt.value} className="flex cursor-pointer items-center gap-1.5">
+                    <Checkbox
+                      checked={selectedTypes.includes(opt.value)}
+                      onCheckedChange={() => toggleType(opt.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+              <Input
+                placeholder="文件夹前缀..."
+                value={prefix}
+                onChange={(e) => {
+                  setPrefix(e.target.value)
+                  setOffset(0)
+                }}
+                className="w-48"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void fetchFiles()}
+              >
+                刷新
+              </Button>
+            </>
+          }
+          actions={
             <Button
-              variant="outline"
+              variant="destructive"
               size="sm"
-              disabled={!hasPrev}
-              onClick={() => setOffset(Math.max(0, offset - LIMIT))}
+              onClick={() => setClearOpen(true)}
             >
-              上一页
+              清空
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!hasNext}
-              onClick={() => setOffset(offset + LIMIT)}
-            >
-              下一页
-            </Button>
-          </div>
-        </div>
+          }
+        />
       </div>
 
       <LogCapturePreviewDialog
@@ -258,6 +221,33 @@ export function LogCapturePage() {
         open={preview !== null}
         onClose={() => setPreview(null)}
       />
+
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={clearing}
+              onClick={() => void handleClear('filtered')}
+            >
+              清空当前页面的
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={clearing}
+              onClick={() => void handleClear('all')}
+            >
+              清空所有页面的
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

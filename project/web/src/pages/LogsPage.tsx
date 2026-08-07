@@ -11,14 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from '@/components/ui/toast'
 import { dashboardApi, type UsageLog } from '@/lib/dashboard-api'
 
 const LIMIT = 20
@@ -33,6 +35,7 @@ export function LogsPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
   const mountedRef = useRef(true)
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -77,6 +80,38 @@ export function LogsPage() {
     [],
   )
 
+  const handleClearFiltered = useCallback(async () => {
+    try {
+      const filters: Record<string, unknown> = {}
+      if (modelFilter !== 'all') filters.model = modelFilter
+      if (statusFilter !== 'all') filters.status = statusFilter
+      if (searchText) filters.token = searchText
+      const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
+      setClearDialogOpen(false)
+      toast(`已清空 ${deleted} 条记录`)
+      if (offset > 0) {
+        setOffset(0)
+      } else {
+        void fetchLogs()
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '清空失败')
+    }
+  }, [modelFilter, statusFilter, searchText, offset, fetchLogs])
+
+  const handleClearAll = useCallback(async () => {
+    try {
+      const deleted = await dashboardApi.clearLogs({ scope: 'all' })
+      setClearDialogOpen(false)
+      setLogs([])
+      setTotal(0)
+      setOffset(0)
+      toast(`已清空全部 ${deleted} 条记录`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '清空失败')
+    }
+  }, [])
+
   const models = useMemo(() => {
     const fromLogs = [...new Set(logs.map((l) => l.modelName))]
     if (modelFilter !== 'all' && !fromLogs.includes(modelFilter)) {
@@ -85,9 +120,48 @@ export function LogsPage() {
     return fromLogs
   }, [logs, modelFilter])
 
-  const hasPrev = offset > 0
-  const hasNext = offset + LIMIT < total
-  const pageText = total > 0 ? `第 ${Math.floor(offset / LIMIT) + 1} 页，共 ${total} 条` : ''
+  const columns: ColumnDef<UsageLog>[] = [
+    { key: 'createdAt', label: '时间', isTime: true },
+    { key: 'userId', label: '用户' },
+    { key: 'tokenName', label: '令牌' },
+    { key: 'providerName', label: '供应商' },
+    { key: 'modelName', label: '模型' },
+    {
+      key: 'promptTokens',
+      label: 'Tokens',
+      render: (v, row) => `${v} / ${row.completionTokens}`,
+    },
+    {
+      key: 'isStream',
+      label: '流式',
+      render: (v) => (v ? 'SSE' : '-'),
+    },
+    {
+      key: 'quota',
+      label: '消耗',
+      render: (v) => {
+        const q = v as number
+        return q > 0 ? `¥${q.toFixed(2)}` : '-'
+      },
+    },
+    {
+      key: 'useTime',
+      label: '耗时',
+      render: (v) => `${(v as number / 1000).toFixed(1)}s`,
+    },
+    {
+      key: 'status',
+      label: '状态',
+      render: (v) => {
+        const s = v as string
+        return (
+          <span className={s === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+            {s === 'success' ? '成功' : '失败'}
+          </span>
+        )
+      },
+    },
+  ]
 
   return (
     <div className="flex h-full flex-col">
@@ -96,154 +170,99 @@ export function LogsPage() {
         status={total > 0 ? `${total} 条记录` : undefined}
       />
       <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center gap-3">
-          <Input
-            placeholder="搜索令牌..."
-            value={searchText}
-            onChange={(e) => {
-              setSearchText(e.target.value)
-              setOffset(0)
-            }}
-            className="w-56"
-          />
-          <Select
-            value={modelFilter}
-            onValueChange={(value) => handleFilterChange(setModelFilter, value)}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="模型" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">全部模型</SelectItem>
-                {models.map((m) => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => handleFilterChange(setStatusFilter, value)}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="状态" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="success">成功</SelectItem>
-                <SelectItem value="failed">失败</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="ml-auto">
-            导出
-          </Button>
+        <DataTable
+          id="logs"
+          columns={columns}
+          data={logs}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={LIMIT}
+          onOffsetChange={setOffset}
+          onRetry={fetchLogs}
+          filters={
+            <>
+              <Input
+                placeholder="搜索令牌..."
+                value={searchText}
+                onChange={(e) => {
+                  setSearchText(e.target.value)
+                  setOffset(0)
+                }}
+                className="w-56"
+              />
+              <Select
+                value={modelFilter}
+                onValueChange={(value) => handleFilterChange(setModelFilter, value)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="模型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部模型</SelectItem>
+                    {models.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => handleFilterChange(setStatusFilter, value)}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="状态" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部状态</SelectItem>
+                    <SelectItem value="success">成功</SelectItem>
+                    <SelectItem value="failed">失败</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </>
+          }
+          actions={
+            <>
+              <Button variant="outline" size="sm">
+                导出
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setClearDialogOpen(true)}
+              >
+                清空
+              </Button>
+            </>
+          }
+        />
         </div>
 
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>时间</TableHead>
-                <TableHead>用户</TableHead>
-                <TableHead>令牌</TableHead>
-                <TableHead>供应商</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>Tokens</TableHead>
-                <TableHead>流式</TableHead>
-                <TableHead>消耗</TableHead>
-                <TableHead>耗时</TableHead>
-                <TableHead>状态</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">
-                    加载中...
-                  </TableCell>
-                </TableRow>
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-xs text-destructive">{error}</span>
-                      <Button variant="outline" size="sm" onClick={() => void fetchLogs()}>
-                        重试
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : logs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center text-xs text-muted-foreground py-8">
-                    暂无日志记录
-                  </TableCell>
-                </TableRow>
-              ) : (
-                logs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="font-mono text-xs">{log.createdAt}</TableCell>
-                    <TableCell className="text-xs">{log.userId}</TableCell>
-                    <TableCell className="text-xs">{log.tokenName}</TableCell>
-                    <TableCell className="text-xs">{log.providerName}</TableCell>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">
-                        {log.modelName}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {log.promptTokens} / {log.completionTokens}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {log.isStream ? 'SSE' : '-'}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {log.quota > 0 ? `¥${log.quota.toFixed(2)}` : '-'}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {(log.useTime / 1000).toFixed(1)}s
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={log.status === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}
-                      >
-                        {log.status === 'success' ? '成功' : '失败'}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            {pageText}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!hasPrev}
-              onClick={() => setOffset(Math.max(0, offset - LIMIT))}
-            >
-              上一页
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
+            <DialogDescription>
+              此操作不可恢复，清空后无法找回相关记录。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
+              取消
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!hasNext}
-              onClick={() => setOffset(offset + LIMIT)}
-            >
-              下一页
+            <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
+              清空当前页面的
             </Button>
-          </div>
-        </div>
-      </div>
+            <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
+              清空所有页面的
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -138,6 +138,12 @@ type RelayRequest struct {
 	Temperature float64                  `json:"temperature,omitempty"`
 	Body        map[string]interface{}   `json:"-"` // Full request body
 	Headers     map[string]string        `json:"-"`
+	// Path is the request URL path (e.g. "/v1/chat/completions"). It is
+	// appended to the provider's base URL when building the upstream URL.
+	Path string `json:"-"`
+	// SourceMark is the optional "__来源" segment carried by the ingress
+	// proxy (X-Hapiy-Source). Empty when the request bypasses the proxy.
+	SourceMark string `json:"-"`
 	// KeyIndex and BaseURLIndex select which key/baseURL to use (-1 = rotate
 	// from the first available).
 	KeyIndex     int `json:"-"`
@@ -309,6 +315,9 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 	responseBody := captureResponseBody(resp, req.Stream)
 
 	for _, assignment := range assignments {
+		if !assignment.Enabled {
+			continue
+		}
 		cfg, err := parseLogOutputConfig(assignment.Config)
 		if err != nil {
 			continue
@@ -322,6 +331,7 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 			Type:       logOutputStageType(stage),
 			ProviderID: plan.ID,
 			Prefix:     cfg.Prefix,
+			Source:     service.ResolveSourceMark(req.SourceMark, req.Path),
 		}
 		switch stage {
 		case topologyStageRequestBefore:

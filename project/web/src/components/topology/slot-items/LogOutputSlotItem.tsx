@@ -1,5 +1,15 @@
+import { useEffect, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { SlotItemCard } from './SlotItemCard'
 import type { LogOutputSlotEntry, SlotItemDragProps } from './types'
 
@@ -15,76 +25,186 @@ export function LogOutputSlotItem({
   onDelete,
   ...drag
 }: LogOutputSlotItemProps) {
-  return (
-    <SlotItemCard
-      index={entry.index}
-      enabled={entry.enabled}
-      onToggleEnabled={(v) => onChange({ ...entry, enabled: v })}
-      onDelete={onDelete}
-      {...drag}
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [hours, setHours] = useState('0')
+  const [minutes, setMinutes] = useState('5')
+  const [seconds, setSeconds] = useState('0')
+  const [deadline, setDeadline] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+
+  // 倒计时进行中时每秒刷新 now，驱动倒计时文本渲染
+  useEffect(() => {
+    if (deadline === null || !entry.enabled) return
+    const timer = setInterval(() => setNow(Date.now()), 250)
+    return () => clearInterval(timer)
+  }, [deadline, entry.enabled])
+
+// 倒计时结束自动关闭
+useEffect(() => {
+  if (deadline === null || !entry.enabled || now < deadline) return
+  setDeadline(null)
+  onChange({ ...entry, enabled: false })
+}, [deadline, entry.enabled, now, entry, onChange])
+
+  const totalSeconds =
+    (Number.isNaN(Number(hours)) ? 0 : Number(hours)) * 3600 +
+    (Number.isNaN(Number(minutes)) ? 0 : Number(minutes)) * 60 +
+    (Number.isNaN(Number(seconds)) ? 0 : Number(seconds))
+
+  const handleConfirm = () => {
+    if (totalSeconds <= 0) return
+    setDialogOpen(false)
+    onChange({ ...entry, enabled: true })
+    setDeadline(Date.now() + totalSeconds * 1000)
+  }
+
+  const handleClose = () => {
+    onChange({ ...entry, enabled: false })
+    setDeadline(null)
+    setDialogOpen(false)
+  }
+
+  const remaining = deadline !== null && entry.enabled ? Math.max(0, deadline - now) : 0
+  const remainingHours = Math.floor(remaining / 3600000)
+  const remainingMinutes = Math.floor((remaining % 3600000) / 60000)
+  const remainingSeconds = Math.floor((remaining % 60000) / 1000)
+
+  const hasDeadline = deadline !== null && entry.enabled
+
+  const enableControl = !entry.enabled ? (
+    <Button
+      variant="outline"
+      size="xs"
+      className="nodrag nopan"
+      onClick={() => setDialogOpen(true)}
     >
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">日志前缀</span>
-        <Input
-          size="sm"
-          className="text-[10px]"
-          value={entry.prefix}
-          onChange={(e) => onChange({ ...entry, prefix: e.target.value })}
-          placeholder="请输入日志前缀"
-        />
-      </div>
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">记录内容</span>
-        <div className="grid grid-cols-2 gap-x-1 gap-y-1">
-          <CheckField
-            label="记录原始请求"
-            checked={entry.recordRequest}
-            onChange={(v) => onChange({ ...entry, recordRequest: v })}
-          />
-          <CheckField
-            label="记录改写后请求"
-            checked={entry.recordModifiedRequest}
-            onChange={(v) => onChange({ ...entry, recordModifiedRequest: v })}
-          />
-          <CheckField
-            label="记录原始响应"
-            checked={entry.recordResponse}
-            onChange={(v) => onChange({ ...entry, recordResponse: v })}
-          />
-          <CheckField
-            label="记录改写后响应"
-            checked={entry.recordModifiedResponse}
-            onChange={(v) => onChange({ ...entry, recordModifiedResponse: v })}
-          />
-          <CheckField
-            label="记录系统日志"
-            checked={entry.recordSystem}
-            onChange={(v) => onChange({ ...entry, recordSystem: v })}
+      开启
+    </Button>
+  ) : (
+    <div className="nodrag nopan flex items-center gap-1">
+      {hasDeadline ? (
+        <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+          {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒后关闭
+        </span>
+      ) : (
+        <span className="text-[10px] text-muted-foreground">已开启</span>
+      )}
+      <Button
+        variant="ghost"
+        size="xs"
+        className={cn(
+          'nodrag nopan h-5 px-1.5 text-[10px] text-muted-foreground hover:text-destructive',
+        )}
+        onClick={handleClose}
+      >
+        关闭
+      </Button>
+    </div>
+  )
+
+  return (
+    <>
+      <SlotItemCard
+        index={entry.index}
+        enabled={entry.enabled}
+        onToggleEnabled={() => {}}
+        enableControl={enableControl}
+        dimContentWhenDisabled
+        onDelete={onDelete}
+        {...drag}
+      >
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] text-muted-foreground">日志前缀</span>
+          <Input
+            size="sm"
+            className="text-[10px]"
+            value={entry.prefix}
+            onChange={(e) => onChange({ ...entry, prefix: e.target.value })}
+            placeholder="请输入日志前缀"
           />
         </div>
-      </div>
-      <CheckField
-        label="合并流式响应"
-        checked={entry.mergeStream}
-        onChange={(v) => onChange({ ...entry, mergeStream: v })}
-      />
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">自动关闭(分钟)</span>
-        <Input
-          type="number"
-          min={1}
-          max={60}
-          size="sm"
-          className="text-[10px]"
-          value={entry.autoCloseMinutes}
-          onChange={(e) => {
-            const v = e.target.valueAsNumber
-            onChange({ ...entry, autoCloseMinutes: Number.isNaN(v) ? entry.autoCloseMinutes : v })
-          }}
-          placeholder="输入1-60"
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] text-muted-foreground">记录内容</span>
+          <div className="flex flex-col gap-1">
+            <CheckField
+              label="原始请求"
+              checked={entry.recordRequest}
+              onChange={(v) => onChange({ ...entry, recordRequest: v })}
+            />
+            <CheckField
+              label="改写后请求"
+              checked={entry.recordModifiedRequest}
+              onChange={(v) => onChange({ ...entry, recordModifiedRequest: v })}
+            />
+            <CheckField
+              label="原始响应"
+              checked={entry.recordResponse}
+              onChange={(v) => onChange({ ...entry, recordResponse: v })}
+            />
+            <CheckField
+              label="改写后响应"
+              checked={entry.recordModifiedResponse}
+              onChange={(v) => onChange({ ...entry, recordModifiedResponse: v })}
+            />
+            <CheckField
+              label="系统日志"
+              checked={entry.recordSystem}
+              onChange={(v) => onChange({ ...entry, recordSystem: v })}
+            />
+          </div>
+        </div>
+        <CheckField
+          label="合并流式响应"
+          checked={entry.mergeStream}
+          onChange={(v) => onChange({ ...entry, mergeStream: v })}
         />
-      </div>
-    </SlotItemCard>
+      </SlotItemCard>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>设置开启时长</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-end justify-center gap-2">
+            <TimeField label="时" value={hours} onChange={setHours} />
+            <TimeField label="分" value={minutes} onChange={setMinutes} />
+            <TimeField label="秒" value={seconds} onChange={setSeconds} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
+              取消
+            </Button>
+            <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
+              确认
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function TimeField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <Input
+        type="number"
+        min={0}
+        max={999}
+        step={1}
+        className="w-16 text-center"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
   )
 }
 
@@ -98,9 +218,12 @@ function CheckField({
   onChange: (v: boolean) => void
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
+    <label className="flex cursor-pointer items-center gap-1.5">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(v) => onChange(v === true)}
+      />
       <span className="text-[10px] text-muted-foreground">{label}</span>
-      <Checkbox checked={checked} onCheckedChange={(v) => onChange(v === true)} />
-    </div>
+    </label>
   )
 }

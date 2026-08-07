@@ -55,8 +55,10 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 				relayReq.Headers[k] = v[0]
 			}
 		}
-		relayReq.RequestID = c.GetString("request_id")
-		relayReq.UserID = getString(userID)
+	relayReq.RequestID = c.GetString("request_id")
+	relayReq.Path = c.Request.URL.Path
+	relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
+	relayReq.UserID = getString(userID)
 		if tokenID, ok := tokenIDRaw.(string); ok {
 			relayReq.TokenID = tokenID
 		}
@@ -244,6 +246,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 			Timings:    &service.Timings{TotalMs: int64(useTime)},
 		}
 		if req != nil {
+			data.Source = service.ResolveSourceMark(c.GetHeader("X-Hapiy-Source"), req.Path)
 			data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
 		}
 		writer.WriteLog(data)
@@ -251,44 +254,60 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0)
 }
 
-// writeRelayLogFile captures the full request/response round-trip to a JSON
-// file under the _relay prefix so every request has inspectable artifacts
-// regardless of topology log-output configuration. For non-streaming responses
-// the body is buffered and restored so the downstream handler still sees it.
+// writeRelayLogFile captures the full request/response round-trip to JSON
+// files under the _relay prefix so every request has inspectable artifacts
+// regardless of topology log-output configuration. Each request produces two
+// files sharing the RequestID: a "request" file (request data only) and a
+// "response" file (request + response data). For non-streaming responses the
+// body is buffered and restored so the downstream handler still sees it.
 func writeRelayLogFile(c *gin.Context, req *relay.RelayRequest, resp *relay.RelayResponse, provider *model.Provider, useTime int) {
 	writer := service.LogFile()
 	if writer == nil {
 		return
 	}
-	data := &service.LogCaptureData{
+	source := service.ResolveSourceMark(c.GetHeader("X-Hapiy-Source"), req.Path)
+	timings := &service.Timings{TotalMs: int64(useTime)}
+	request := &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
+	writer.WriteLog(&service.LogCaptureData{
+		RequestID:  req.RequestID,
+		Timestamp:  time.Now().UTC(),
+		Type:       "request",
+		ProviderID: provider.ID,
+		Prefix:     "_relay",
+		Source:     source,
+		Timings:    timings,
+		Request:    request,
+	})
+	response := &service.LogCaptureData{
 		RequestID:  req.RequestID,
 		Timestamp:  time.Now().UTC(),
 		Type:       "response",
 		ProviderID: provider.ID,
 		Prefix:     "_relay",
-		Timings:    &service.Timings{TotalMs: int64(useTime)},
-		Request:    &service.HTTPCapture{Headers: req.Headers, Body: req.Body},
+		Source:     source,
+		Timings:    timings,
+		Request:    request,
 	}
 	if req.Stream {
-		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "streaming"}
-		writer.WriteLog(data)
+		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "streaming"}
+		writer.WriteLog(response)
 		return
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "error: " + err.Error()}
-		writer.WriteLog(data)
+		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "error: " + err.Error()}
+		writer.WriteLog(response)
 		return
 	}
 	_ = resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 	var parsed interface{}
 	if json.Unmarshal(body, &parsed) == nil {
-		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: parsed}
+		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: parsed}
 	} else {
-		data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: string(body)}
+		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: string(body)}
 	}
-	writer.WriteLog(data)
+	writer.WriteLog(response)
 }
 
 func getString(v interface{}) string {

@@ -82,7 +82,7 @@ func ReplaceBaseUrlPaths(db *gorm.DB) gin.HandlerFunc {
 			}
 			if strings.ContainsAny(p, "/") || strings.Contains(p, "__") || len(p) > 32 {
 				c.JSON(http.StatusBadRequest, gin.H{
-					"error": fmt.Sprintf("路径名 %q 无效：不能包含 / 或 __，且长度不超过 32", p),
+					"error": fmt.Sprintf("来源名 %q 无效：不能包含 / 或 __，且长度不超过 32", p),
 				})
 				return
 			}

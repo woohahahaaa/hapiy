@@ -8,6 +8,7 @@ interface SlotContainerProps {
   children?: ReactNode
   className?: string
   style?: CSSProperties
+  externallyDisabled?: boolean
 }
 
 export function SlotContainer({
@@ -16,6 +17,7 @@ export function SlotContainer({
   children,
   className,
   style,
+  externallyDisabled = false,
 }: SlotContainerProps) {
   const hasNodes = Boolean(children)
 
@@ -23,6 +25,7 @@ export function SlotContainer({
     <div
       className={cn(
         'border-2 border-dashed border-border rounded-lg p-4 relative',
+        externallyDisabled && 'opacity-50 pointer-events-none',
         className,
       )}
       style={style}

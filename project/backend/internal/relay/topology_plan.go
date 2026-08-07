@@ -103,6 +103,7 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		plan.LogOutputs = append(plan.LogOutputs, LogOutputAssignment{
 			ID:        assignment.ID,
 			Order:     assignment.Order,
+			Enabled:   assignment.Enabled,
 			Config:    assignment.Config,
 			CreatedAt: assignment.CreatedAt,
 		})

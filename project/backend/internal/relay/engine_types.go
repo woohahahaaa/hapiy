@@ -43,6 +43,7 @@ type ExecutionPlan struct {
 type LogOutputAssignment struct {
 	ID        string
 	Order     int
+	Enabled   bool
 	Config    string
 	CreatedAt time.Time
 }

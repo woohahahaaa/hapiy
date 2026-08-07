@@ -31,6 +31,7 @@ interface FlatSlotNodeData {
   title: string
   slotType: string
   isProviderSlot?: boolean
+  externallyDisabled?: boolean
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
   onAddProvider?: () => void
@@ -62,6 +63,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     title,
     slotType,
     isProviderSlot,
+    externallyDisabled = false,
     children = [],
     providers = [],
     onAddProvider,
@@ -78,7 +80,6 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
   const takenLabels = new Set(children.map((c) => c.label).filter(Boolean))
-  const availableProviders = providers.filter((n) => !takenLabels.has(n))
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -106,7 +107,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     isDragOver: entryOverIndex === entryIndex && entryDragIndex !== null && entryDragIndex !== entryIndex,
     onDragStart: () => setEntryDragIndex(entryIndex),
     onDragOver: () => setEntryOverIndex(entryIndex),
-    onDrop: () => {
+      onDrop: () => {
       if (entryDragIndex !== null && entryDragIndex !== entryIndex) {
         onReorderEntries?.(entryDragIndex, entryIndex)
       }
@@ -179,13 +180,15 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           title={titleBadge}
           onAddNode={handleAdd}
           style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
+          externallyDisabled={externallyDisabled}
         >
           {children.map((child, i) => (
             <ProviderCard
               key={child.id}
               index={i + 1}
               child={child}
-              providers={availableProviders}
+              providers={providers}
+              takenLabels={takenLabels}
               isDragging={dragIndex === i}
               isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
               onDragStart={() => setDragIndex(i)}
@@ -202,6 +205,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           title={titleBadge}
           onAddNode={handleAddEntry}
           style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
+          externallyDisabled={externallyDisabled}
         >
           {entries.map((entry) =>
             renderItem(
@@ -233,6 +237,7 @@ interface ProviderCardProps {
   index: number
   child: FlatProviderChild
   providers: readonly string[]
+  takenLabels: Set<string>
   isDragging: boolean
   isDragOver: boolean
   onDragStart: () => void
@@ -243,7 +248,8 @@ interface ProviderCardProps {
   onDelete: () => void
 }
 
-function ProviderCard({ index, child, providers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
+function ProviderCard({ index, child, providers, takenLabels, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
+  const filteredProviders = providers.filter((n) => n === child.label || !takenLabels.has(n))
   return (
     <SlotItemCard
       index={index}
@@ -262,8 +268,8 @@ function ProviderCard({ index, child, providers, isDragging, isDragOver, onDragS
             <SelectValue placeholder="选择供应商" />
           </SelectTrigger>
           <SelectContent>
-            {providers.map((name) => (
-              <SelectItem key={name} value={name}>
+            {filteredProviders.map((name) => (
+              <SelectItem key={name} value={name} disabled={name !== child.label && takenLabels.has(name)}>
                 {name}
               </SelectItem>
             ))}

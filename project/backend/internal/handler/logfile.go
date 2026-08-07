@@ -76,6 +76,44 @@ func ReadLogFile(db *gorm.DB, logDir string) gin.HandlerFunc {
 	}
 }
 
+// ClearLogFiles deletes captured log files on disk. Body (optional):
+// {scope: "filtered"|"all", prefix?, type?, from?, to?}. filtered mode removes
+// files matching the filters; all mode removes every file. Responds {deleted}.
+func ClearLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			Scope  string `json:"scope"`
+			Prefix string `json:"prefix"`
+			Type   string `json:"type"`
+			From   string `json:"from"`
+			To     string `json:"to"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		writer := ensureLogFileWriter(db, logDir)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+		params := service.LogDeleteParams{All: body.Scope != "filtered"}
+		if !params.All {
+			params.Prefix = body.Prefix
+			params.Types = splitComma(body.Type)
+			if t, err := time.Parse(time.RFC3339, body.From); err == nil {
+				params.From = t
+			}
+			if t, err := time.Parse(time.RFC3339, body.To); err == nil {
+				params.To = t
+			}
+		}
+		deleted, err := writer.DeleteFiles(params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"deleted": deleted})
+	}
+}
+
 // splitComma splits a comma-separated query value, trimming and dropping empties.
 func splitComma(s string) []string {
 	parts := strings.Split(s, ",")

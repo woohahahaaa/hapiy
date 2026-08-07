@@ -133,9 +133,11 @@ func main() {
 
 			// Logs
 			dashboardAuthed.GET("/logs", handler.ListLogs(db))
+			dashboardAuthed.POST("/logs/clear", handler.ClearLogs(db))
 			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
 			dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db, cfg.LogDir))
 			dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db, cfg.LogDir))
+			dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db, cfg.LogDir))
 
 			// Users
 			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))

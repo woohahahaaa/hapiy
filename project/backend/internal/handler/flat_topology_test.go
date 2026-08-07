@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/topology"
 )
 
 func flatTopologyRequest(t *testing.T, method, body string, handler gin.HandlerFunc) *httptest.ResponseRecorder {
@@ -85,5 +87,121 @@ func TestSaveFlatTopology_creates_row_when_missing(t *testing.T) {
 	data := decodeFlatTopologyData(t, flatTopologyRequest(t, http.MethodPut, body, SaveFlatTopology(db, engine)))
 	if v := int(data["version"].(float64)); v != 1 {
 		t.Fatalf("version on first create: want 1, got %d", v)
+	}
+}
+
+func TestDeriveFlatAssignments_assigns_provider_rule_with_correct_fields(t *testing.T) {
+	db := newTopologyTestDB(t)
+	provider := model.Provider{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true}
+	rule := model.RewriteRule{ID: "rewrite-a", Name: "rewrite", Script: "", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+
+	// Provider has one outgoing wire to a requestModify slot with one entry.
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "e1", Kind: topology.KindRequestEntry, Enabled: true},
+			{ID: "p1", Kind: topology.KindProvider, Name: "A", Enabled: true},
+			{
+				ID: "rm1", Kind: topology.KindSlot, SlotType: "requestModify", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"r1","slotType":"requestModify","index":3,"ruleId":"rewrite-a","enabled":true,"config":{}}]`),
+			},
+		},
+		Wires: []topology.Wire{{Source: "p1", Target: "rm1"}},
+	}
+
+	rows, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows: want 1, got %d (%v)", len(rows), rows)
+	}
+	row := rows[0]
+	if row.ProviderID != provider.ID {
+		t.Errorf("provider_id: want %s, got %s", provider.ID, row.ProviderID)
+	}
+	if row.SlotType != "requestModify" {
+		t.Errorf("slot_type: want requestModify, got %s", row.SlotType)
+	}
+	if row.Order != 3 {
+		t.Errorf("order: want 3, got %d", row.Order)
+	}
+	if !row.Enabled {
+		t.Errorf("enabled: want true, got false")
+	}
+	if row.RuleID == nil || *row.RuleID != rule.ID {
+		t.Errorf("rule_id: want %s, got %v", rule.ID, row.RuleID)
+	}
+}
+
+func TestDeriveFlatAssignments_skips_missing_rule_without_error(t *testing.T) {
+	db := newTopologyTestDB(t)
+	provider := model.Provider{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+
+	// One entry points at a rule id that does not exist; a second entry
+	// has an empty ruleId. Both should be skipped without erroring.
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "p1", Kind: topology.KindProvider, Name: "A", Enabled: true},
+			{
+				ID: "rm1", Kind: topology.KindSlot, SlotType: "requestModify", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"r1","slotType":"requestModify","index":1,"ruleId":"missing","enabled":true,"config":{}},` +
+					`{"id":"r2","slotType":"requestModify","index":2,"ruleId":"","enabled":true,"config":{}}]`),
+			},
+		},
+		Wires: []topology.Wire{{Source: "p1", Target: "rm1"}},
+	}
+
+	rows, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows: want 0 (both skipped), got %d (%v)", len(rows), rows)
+	}
+}
+
+func TestDeriveFlatAssignments_emits_log_output_with_nil_rule(t *testing.T) {
+	db := newTopologyTestDB(t)
+	provider := model.Provider{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+
+	logCfg := `{"prefix":"x","record_request":true,"auto_close_minutes":5}`
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "p1", Kind: topology.KindProvider, Name: "A", Enabled: true},
+			{
+				ID: "lo1", Kind: topology.KindSlot, SlotType: "logOutput", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"l1","slotType":"logOutput","index":1,"enabled":true,"config":` + logCfg + `}]`),
+			},
+		},
+		Wires: []topology.Wire{{Source: "p1", Target: "lo1"}},
+	}
+
+	rows, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows: want 1, got %d", len(rows))
+	}
+	if rows[0].RuleID != nil {
+		t.Errorf("rule_id: want nil for logOutput, got %v", rows[0].RuleID)
+	}
+	if rows[0].SlotType != "logOutput" {
+		t.Errorf("slot_type: want logOutput, got %s", rows[0].SlotType)
+	}
+	if rows[0].Config != logCfg {
+		t.Errorf("config: want %s, got %s", logCfg, rows[0].Config)
 	}
 }

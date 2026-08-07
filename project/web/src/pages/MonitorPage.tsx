@@ -13,14 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { cn } from '@/lib/utils'
 import { dashboardApi, type LogStats, type ActiveRequest, type StatsRange } from '@/lib/dashboard-api'
 
@@ -59,6 +52,19 @@ function computeElapsedMs(startTime: string): number {
   if (Number.isNaN(start)) return 0
   return Math.max(0, Date.now() - start)
 }
+
+const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
+  { key: 'model', label: '模型' },
+  { key: 'tokenName', label: '令牌' },
+  { key: 'userId', label: '用户' },
+  { key: 'stream', label: '类型', render: (v) => (v ? 'SSE' : '--') },
+  {
+    key: 'elapsedMs',
+    label: '已运行',
+    render: (v) => formatElapsed(v as number),
+  },
+  { key: 'startTime', label: '开始时间', isTime: true },
+]
 
 type MetricCardProps = {
   icon: React.ReactNode
@@ -276,8 +282,16 @@ function StatsSection() {
 
 // ── 活跃请求模块 ──
 
+const RETENTION_OPTIONS: readonly { value: string; label: string; minutes: number | null }[] = [
+  { value: 'all', label: '全部', minutes: null },
+  { value: '5', label: '保留最近 5 分钟', minutes: 5 },
+  { value: '10', label: '保留最近 10 分钟', minutes: 10 },
+  { value: '30', label: '保留最近 30 分钟', minutes: 30 },
+]
+
 function ActiveRequestsSection() {
   const [requests, setRequests] = useState<readonly ActiveRequest[]>([])
+  const [retention, setRetention] = useState('all')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [, setTick] = useState(0)
@@ -309,77 +323,62 @@ function ActiveRequestsSection() {
     }
   }, [fetchActive])
 
+  const retentionMinutes = RETENTION_OPTIONS.find((opt) => opt.value === retention)?.minutes ?? null
+  const visibleRequests = retentionMinutes === null
+    ? requests
+    : requests.filter((req) => {
+        const start = new Date(req.startTime).getTime()
+        return Number.isNaN(start) || start >= Date.now() - retentionMinutes * 60_000
+      })
+
   return (
     <section>
       <div className="mb-4 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-medium">
           <AppIcon name="bolt" className="text-muted-foreground" />
           活跃请求
-          {requests.length > 0 && (
+          {visibleRequests.length > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {requests.length}
+              {visibleRequests.length}
             </span>
           )}
         </h3>
-        {error && (
-          <span className="inline-flex items-center gap-1 text-xs text-destructive">
-            <AppIcon name="error" data-icon="inline-start" />
-            {error}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {error && (
+            <span className="inline-flex items-center gap-1 text-xs text-destructive">
+              <AppIcon name="error" data-icon="inline-start" />
+              {error}
+            </span>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-md border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>模型</TableHead>
-              <TableHead>令牌</TableHead>
-              <TableHead>用户</TableHead>
-              <TableHead>类型</TableHead>
-              <TableHead>已运行</TableHead>
-              <TableHead>开始时间</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
-                  加载中...
-                </TableCell>
-              </TableRow>
-            ) : requests.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-xs text-muted-foreground">
-                  暂无活跃请求
-                </TableCell>
-              </TableRow>
-            ) : (
-              requests.map((req) => {
-                const elapsed = computeElapsedMs(req.startTime)
-                return (
-                  <TableRow key={req.requestId}>
-                    <TableCell>
-                      <span className="text-xs text-muted-foreground">{req.model}</span>
-                    </TableCell>
-                    <TableCell className="text-xs">{req.tokenName}</TableCell>
-                    <TableCell className="text-xs">{req.userId}</TableCell>
-                    <TableCell className="text-xs">
-                      {req.stream ? 'SSE' : '-'}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums">
-                      {formatElapsed(elapsed)}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {formatStartTime(req.startTime)}
-                    </TableCell>
-                  </TableRow>
-                )
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <DataTable
+        id="monitor-requests"
+        columns={ACTIVE_REQUEST_COLUMNS}
+        data={visibleRequests}
+        total={visibleRequests.length}
+        loading={loading}
+        error={error}
+        offset={0}
+        limit={visibleRequests.length}
+        onOffsetChange={() => {}}
+        filters={
+          <Select value={retention} onValueChange={(value) => setRetention(value ?? 'all')}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="保留时间" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {RETENTION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        }
+        onRetry={fetchActive}
+      />
     </section>
   )
 }

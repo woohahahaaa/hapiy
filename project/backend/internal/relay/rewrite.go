@@ -286,42 +286,50 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 	if strings.HasPrefix(op.Path, "header.") {
 		return applyHeaderOp(body, headers, op)
 	}
+	// sjson cannot address array elements by negative index ("-1"), while
+	// gjson (used for condition evaluation above) can. Resolve negative
+	// indexes to their concrete positive position before writing so a rule
+	// like "messages.-1.content" behaves identically in both phases.
+	writePath := op.Path
+	if resolved := resolveSjsonPath(body, op.Path); resolved != op.Path {
+		writePath = resolved
+	}
 	switch op.Mode {
 	case "set":
-		updated, err := sjson.SetBytes(body, op.Path, op.Value)
+		updated, err := sjson.SetBytes(body, writePath, op.Value)
 		return updated, headers, err
 	case "delete":
-		updated, err := sjson.DeleteBytes(body, op.Path)
+		updated, err := sjson.DeleteBytes(body, writePath)
 		return updated, headers, err
 	case "append":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			updated, err := sjson.SetBytes(body, op.Path, op.Value)
+			updated, err := sjson.SetBytes(body, writePath, op.Value)
 			return updated, headers, err
 		}
-		updated, err := sjson.SetBytes(body, op.Path, current.String()+op.Value)
+		updated, err := sjson.SetBytes(body, writePath, current.String()+op.Value)
 		return updated, headers, err
 	case "prepend":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			updated, err := sjson.SetBytes(body, op.Path, op.Value)
+			updated, err := sjson.SetBytes(body, writePath, op.Value)
 			return updated, headers, err
 		}
-		updated, err := sjson.SetBytes(body, op.Path, op.Value+current.String())
+		updated, err := sjson.SetBytes(body, writePath, op.Value+current.String())
 		return updated, headers, err
 	case "trim_prefix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.TrimPrefix(current.String(), op.Value))
+		updated, err := sjson.SetBytes(body, writePath, strings.TrimPrefix(current.String(), op.Value))
 		return updated, headers, err
 	case "trim_suffix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.TrimSuffix(current.String(), op.Value))
+		updated, err := sjson.SetBytes(body, writePath, strings.TrimSuffix(current.String(), op.Value))
 		return updated, headers, err
 	case "ensure_prefix":
 		current := gjson.GetBytes(body, op.Path)
@@ -332,7 +340,7 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 		if current.Exists() {
 			merged = op.Value + current.String()
 		}
-		updated, err := sjson.SetBytes(body, op.Path, merged)
+		updated, err := sjson.SetBytes(body, writePath, merged)
 		return updated, headers, err
 	case "ensure_suffix":
 		current := gjson.GetBytes(body, op.Path)
@@ -343,64 +351,93 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 		if current.Exists() {
 			merged = current.String() + op.Value
 		}
-		updated, err := sjson.SetBytes(body, op.Path, merged)
+		updated, err := sjson.SetBytes(body, writePath, merged)
 		return updated, headers, err
 	case "trim_space":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.TrimSpace(current.String()))
+		updated, err := sjson.SetBytes(body, writePath, strings.TrimSpace(current.String()))
 		return updated, headers, err
 	case "to_lower":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.ToLower(current.String()))
+		updated, err := sjson.SetBytes(body, writePath, strings.ToLower(current.String()))
 		return updated, headers, err
 	case "to_upper":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.ToUpper(current.String()))
+		updated, err := sjson.SetBytes(body, writePath, strings.ToUpper(current.String()))
 		return updated, headers, err
 	case "replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, strings.ReplaceAll(current.String(), op.From, op.To))
+		updated, err := sjson.SetBytes(body, writePath, strings.ReplaceAll(current.String(), op.From, op.To))
 		return updated, headers, err
 	case "regex_replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetBytes(body, op.Path, op.Regex.ReplaceAllString(current.String(), op.To))
+		updated, err := sjson.SetBytes(body, writePath, op.Regex.ReplaceAllString(current.String(), op.To))
 		return updated, headers, err
 	case "copy":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetRawBytes(body, op.DstPath, []byte(current.Raw))
+		updated, err := sjson.SetRawBytes(body, resolveSjsonPath(body, op.DstPath), []byte(current.Raw))
 		return updated, headers, err
 	case "move":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			return body, headers, nil
 		}
-		updated, err := sjson.SetRawBytes(body, op.DstPath, []byte(current.Raw))
+		updated, err := sjson.SetRawBytes(body, resolveSjsonPath(body, op.DstPath), []byte(current.Raw))
 		if err != nil {
 			return nil, nil, err
 		}
-		deleted, err := sjson.DeleteBytes(updated, op.Path)
+		deleted, err := sjson.DeleteBytes(updated, writePath)
 		return deleted, headers, err
 	default:
 		return body, headers, nil
 	}
+}
+
+// resolveSjsonPath rewrites negative array indexes (e.g. "-1") in a gjson
+// path to their concrete positive position (e.g. "2") by walking the path
+// against the actual body with gjson. sjson rejects "-1" as an address and
+// would append a bogus object; gjson accepts it for reads, so conditions
+// and writes must agree on the same position. Any unresolvable segment
+// leaves the original path untouched.
+func resolveSjsonPath(body []byte, path string) string {
+	if !strings.Contains(path, "-") {
+		return path
+	}
+	parts := strings.Split(path, ".")
+	resolved := make([]string, 0, len(parts))
+	cur := gjson.ParseBytes(body)
+	for _, p := range parts {
+		idx, err := strconv.Atoi(p)
+		if err == nil && idx < 0 && cur.IsArray() {
+			arr := cur.Array()
+			pos := len(arr) + idx
+			if pos < 0 {
+				return path
+			}
+			p = strconv.Itoa(pos)
+		}
+		resolved = append(resolved, p)
+		cur = cur.Get(p)
+	}
+	return strings.Join(resolved, ".")
 }
 
 // evaluateConditions short-circuits when the conditions list is empty.

@@ -258,7 +258,7 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 		BaseURLs:              []string{server.URL},
 		Keys:                  []string{"key"},
 		ResponseRewriteRules:  []*model.ResponseRewriteRule{&responseRule},
-		LogOutputs:            []LogOutputAssignment{{ID: "log", Order: 1, Config: `{}`}},
+		LogOutputs:            []LogOutputAssignment{{ID: "log", Order: 1, Enabled: true, Config: `{}`}},
 		CompiledResponseRewrites: []CompiledRewriteChain{},
 	}
 	events := make([]topologyStageEvent, 0, 6)

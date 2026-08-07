@@ -12,6 +12,24 @@ export default defineConfig({
     strictPort: true,
     allowedHosts: ["macs1.hihy.me"],
     proxy: {
+      // Agent 接入走 /proxy/__来源 前缀（来源标记），转发到后端 API。
+      // 例：/proxy/__opencodetest/chat/completions -> /v1/chat/completions
+      "/proxy": {
+        target: "http://localhost:8080",
+        rewrite: (path: string) => {
+          const match = path.match(/^\/proxy\/__[^/]+(\/.*)?$/)
+          return match ? `/v1${match[1] ?? ""}` : path
+        },
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq, req) => {
+            const original = (req as any).originalUrl ?? req.url ?? ""
+            const match = original.match(/^\/proxy\/(__[^/]+)/)
+            if (match) {
+              proxyReq.setHeader("X-Hapiy-Source", match[1])
+            }
+          })
+        },
+      },
       "/v1": "http://localhost:8080",
       "/metrics": "http://localhost:8080",
     },

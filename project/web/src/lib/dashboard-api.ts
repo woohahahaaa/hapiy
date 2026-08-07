@@ -135,6 +135,7 @@ export type LogCaptureFile = {
   readonly id: string
   readonly name: string
   readonly prefix: string
+  readonly source: string
   readonly type: LogCaptureType
   readonly size: number
   readonly created_at: string
@@ -596,6 +597,7 @@ function parseLogCaptureFile(value: unknown): LogCaptureFile {
     id: readString(value.id, 'capture.id'),
     name: readString(value.name, 'capture.name'),
     prefix: readString(value.prefix, 'capture.prefix'),
+    source: readString(value.source, 'capture.source'),
     type,
     size: readNumber(value.size, 'capture.size'),
     created_at: readString(value.created_at, 'capture.created_at'),
@@ -1073,6 +1075,14 @@ export const dashboardApi = {
     }
   },
 
+  async clearLogs(input: { scope: 'filtered' | 'all'; filters?: Record<string, unknown> }): Promise<number> {
+    const body = await requestFull('/logs/clear', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    return readNumber(body.deleted, 'deleted', 0)
+  },
+
   async listLogCaptureFiles(params: LogCaptureListParams): Promise<LogCaptureListResult> {
     const qp = new URLSearchParams()
     qp.set('limit', String(params.limit))
@@ -1091,6 +1101,26 @@ export const dashboardApi = {
       files: data.map(parseLogCaptureFile),
       total: readNumber(body.total, 'total', 0),
     }
+  },
+
+  async clearLogCapture(input: {
+    scope: 'filtered' | 'all'
+    prefix?: string
+    type?: string
+    from?: string
+    to?: string
+  }): Promise<number> {
+    const body = await requestFull('/log-capture/clear', {
+      method: 'POST',
+      body: JSON.stringify({
+        scope: input.scope,
+        ...(input.prefix !== undefined ? { prefix: input.prefix } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.from !== undefined ? { from: input.from } : {}),
+        ...(input.to !== undefined ? { to: input.to } : {}),
+      }),
+    })
+    return readNumber(body.deleted, 'deleted', 0)
   },
 
   async readLogCaptureFile(id: string): Promise<unknown> {

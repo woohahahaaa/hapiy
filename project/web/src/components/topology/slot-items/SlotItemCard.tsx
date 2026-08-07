@@ -16,6 +16,8 @@ interface SlotItemCardProps {
   onDrop?: () => void
   isDragging?: boolean
   isDragOver?: boolean
+  enableControl?: ReactNode
+  dimContentWhenDisabled?: boolean
 }
 
 export function SlotItemCard({
@@ -30,6 +32,8 @@ export function SlotItemCard({
   onDrop,
   isDragging,
   isDragOver,
+  enableControl,
+  dimContentWhenDisabled = false,
 }: SlotItemCardProps) {
   return (
     <div
@@ -47,7 +51,7 @@ export function SlotItemCard({
       }}
       className={cn(
         'rounded-md border border-border bg-card text-card-foreground transition-opacity',
-        !enabled && 'opacity-60',
+        !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
         isDragOver && 'border-primary border-dashed',
         className,
@@ -58,7 +62,7 @@ export function SlotItemCard({
       }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
-        <div className="flex items-center gap-1">
+        <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (
             <span
               draggable
@@ -77,23 +81,30 @@ export function SlotItemCard({
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Switch
-            checked={enabled}
-            onCheckedChange={(v) => onToggleEnabled(v === true)}
-            aria-label={enabled ? '禁用' : '启用'}
-            className="nodrag nopan shrink-0"
-          />
+          {enableControl ?? (
+            <Switch
+              checked={enabled}
+              onCheckedChange={(v) => onToggleEnabled(v === true)}
+              aria-label={enabled ? '禁用' : '启用'}
+              className="nodrag nopan shrink-0"
+            />
+          )}
           <button
             type="button"
             onClick={onDelete}
-            className="nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className={cn(
+              'nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive',
+              dimContentWhenDisabled && !enabled && 'opacity-50',
+            )}
             aria-label="删除"
           >
             <AppIcon name="close" size={12} />
           </button>
         </div>
       </div>
-      <div className="nodrag nopan space-y-1.5 p-2">{children}</div>
+      <div className={cn('nodrag nopan space-y-1.5 p-2', dimContentWhenDisabled && !enabled && 'opacity-50')}>
+        {children}
+      </div>
     </div>
   )
 }
