@@ -52,7 +52,7 @@ export function ProfilePage() {
     event.preventDefault()
     const nextUsername = username.trim()
     if (!nextUsername) {
-      toast.add({ title: '用户名不能为空', type: 'error' })
+      toast.error('用户名不能为空')
       return
     }
     setSavingUsername(true)
@@ -60,9 +60,9 @@ export function ProfilePage() {
       const user = await dashboardApi.updateUsername(nextUsername)
       setUsername(user.username)
       updateReadyUser(user)
-      toast.add({ title: '用户名已更新' })
+      toast('用户名已更新')
     } catch (error) {
-      toast.add({ title: error instanceof Error ? error.message : '更新用户名失败', type: 'error' })
+      toast.error(error instanceof Error ? error.message : '更新用户名失败')
     } finally {
       setSavingUsername(false)
     }
@@ -71,15 +71,15 @@ export function ProfilePage() {
   const handlePasswordSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentPassword || !newPassword || !passwordConfirmation) {
-      toast.add({ title: '请填写所有密码字段', type: 'error' })
+      toast.error('请填写所有密码字段')
       return
     }
     if (newPassword.length < 8) {
-      toast.add({ title: '新密码至少需要 8 个字符', type: 'error' })
+      toast.error('新密码至少需要 8 个字符')
       return
     }
     if (newPassword !== passwordConfirmation) {
-      toast.add({ title: '两次输入的新密码不一致', type: 'error' })
+      toast.error('两次输入的新密码不一致')
       return
     }
     setSavingPassword(true)
@@ -88,9 +88,9 @@ export function ProfilePage() {
       setCurrentPassword('')
       setNewPassword('')
       setPasswordConfirmation('')
-      toast.add({ title: '密码已更新' })
+      toast('密码已更新')
     } catch (error) {
-      toast.add({ title: error instanceof Error ? error.message : '更新密码失败', type: 'error' })
+      toast.error(error instanceof Error ? error.message : '更新密码失败')
     } finally {
       setSavingPassword(false)
     }
@@ -99,7 +99,7 @@ export function ProfilePage() {
   const handleLogout = async () => {
     setLoggingOut(true)
     await dashboardApi.logout()
-    toast.add({ title: '已退出登录' })
+    toast('已退出登录')
     navigate('/login', { replace: true })
   }
 

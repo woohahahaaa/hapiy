@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 interface RequestEntryNodeData {
   label: string
@@ -118,31 +119,14 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
           />
           <span className="truncate text-sm font-medium">{label || '请求入口'}</span>
         </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
+        <Switch
+          checked={enabled}
+          onCheckedChange={() => onChangeEnabled(!enabled)}
           aria-label={enabled ? `${label} 已启用，点击关闭` : `${label} 已停用，点击启用`}
-          data-no-drag="true"
-          onClick={(e) => {
-            e.stopPropagation()
-            onChangeEnabled(!enabled)
-          }}
+          className="nodrag nopan"
           onPointerDown={(e) => e.stopPropagation()}
-          className={cn(
-            'nodrag nopan relative inline-flex h-5 w-9 shrink-0 cursor-pointer touch-manipulation items-center rounded-full transition-colors',
-            'border border-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            enabled ? 'bg-primary' : 'bg-secondary',
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              'pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform',
-              enabled ? 'translate-x-4' : 'translate-x-0.5',
-            )}
-          />
-        </button>
+          onMouseDown={(e) => e.stopPropagation()}
+        />
       </div>
 
       <div className="flex flex-col gap-1 p-3">

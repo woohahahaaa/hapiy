@@ -125,71 +125,80 @@ function renderItem(
 ) {
   const onDelete = () => onDeleteEntry(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
-  switch (entry.slotType) {
-    case 'requestModify':
-      return (
-        <RequestModifySlotItem
-          key={entry.id}
-          entry={entry}
-          rules={rules.requestModify}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
-    case 'responseModify':
-      return (
-        <ResponseModifySlotItem
-          key={entry.id}
-          entry={entry}
-          rules={rules.responseModify}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
-    case 'autoReply':
-      return (
-        <AutoReplySlotItem
-          key={entry.id}
-          entry={entry}
-          rules={rules.autoReply}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
-    case 'concurrency':
-      return (
-        <ConcurrencySlotItem
-          key={entry.id}
-          entry={entry}
-          rules={rules.concurrency}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
-    case 'autoSwitch':
-      return (
-        <AutoSwitchSlotItem
-          key={entry.id}
-          entry={entry}
-          rules={rules.autoSwitch}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
-    case 'logOutput':
-      return (
-        <LogOutputSlotItem
-          key={entry.id}
-          entry={entry}
-          onChange={change}
-          onDelete={onDelete}
-          {...drag}
-        />
-      )
+  const content = (() => {
+    switch (entry.slotType) {
+      case 'requestModify':
+        return (
+          <RequestModifySlotItem
+            key={entry.id}
+            entry={entry}
+            rules={rules.requestModify}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+      case 'responseModify':
+        return (
+          <ResponseModifySlotItem
+            key={entry.id}
+            entry={entry}
+            rules={rules.responseModify}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+      case 'autoReply':
+        return (
+          <AutoReplySlotItem
+            key={entry.id}
+            entry={entry}
+            rules={rules.autoReply}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+      case 'concurrency':
+        return (
+          <ConcurrencySlotItem
+            key={entry.id}
+            entry={entry}
+            rules={rules.concurrency}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+      case 'autoSwitch':
+        return (
+          <AutoSwitchSlotItem
+            key={entry.id}
+            entry={entry}
+            rules={rules.autoSwitch}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+      case 'logOutput':
+        return (
+          <LogOutputSlotItem
+            key={entry.id}
+            entry={entry}
+            onChange={change}
+            onDelete={onDelete}
+            {...drag}
+          />
+        )
+    }
+  })()
+  if (entry.slotType !== 'logOutput' && entry.ruleId === null) {
+    const ruleList = rules[entry.slotType as keyof SlotRuleMap]
+    if (ruleList && ruleList.length > 0) {
+      return <div key={entry.id} className="opacity-50">{content}</div>
+    }
   }
+  return content
 }

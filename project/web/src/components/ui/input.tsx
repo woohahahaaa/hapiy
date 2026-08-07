@@ -1,5 +1,4 @@
-import * as React from "react"
-import { Input as InputPrimitive } from "@base-ui/react/input"
+import type { ComponentProps } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -8,11 +7,11 @@ function Input({
   type,
   size = "default",
   ...props
-}: Omit<React.ComponentProps<"input">, "size"> & {
+}: Omit<ComponentProps<"input">, "size"> & {
   size?: "sm" | "default"
 }) {
   return (
-    <InputPrimitive
+    <input
       type={type}
       data-slot="input"
       data-size={size}

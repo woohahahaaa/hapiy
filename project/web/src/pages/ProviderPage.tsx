@@ -372,6 +372,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
   const [selected, setSelected] = useState<ReadonlySet<string>>(
     () => new Set(models.filter((model) => existingIds.has(model.id)).map((model) => model.id)),
   )
+  const [saving, setSaving] = useState(false)
 
   const toggle = (id: string, checked: boolean) => {
     setSelected((current) => {
@@ -380,6 +381,11 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
       else next.delete(id)
       return next
     })
+  }
+
+  const handleConfirm = () => {
+    setSaving(true)
+    onConfirm([...selected])
   }
 
   return (

@@ -214,7 +214,9 @@ export function PricePage() {
                         价格
                         <TooltipProvider>
                           <Tooltip>
-                            <TooltipTrigger render={<AppIcon name="help" size={14} className="text-muted-foreground" />} />
+                            <TooltipTrigger asChild>
+                              <AppIcon name="help" size={14} className="text-muted-foreground" />
+                            </TooltipTrigger>
                             <TooltipContent>
                               <p>1. 输入 / 2. 输出 / 3. 缓存写 / 4. 缓存读</p>
                               <p className="text-muted-foreground">单位：$/1M tokens</p>

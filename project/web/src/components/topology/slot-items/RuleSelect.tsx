@@ -34,18 +34,19 @@ export function RuleSelect({
 }: RuleSelectProps) {
   const isEmpty = options.length === 0
   const triggerValue = value ?? NONE_VALUE
+  const displayValue =
+    triggerValue === NONE_VALUE
+      ? isEmpty
+        ? emptyHint
+        : placeholder
+      : (options.find((o) => o.id === triggerValue)?.label ?? triggerValue)
   return (
     <Select
       value={triggerValue}
       onValueChange={(v) => onChange(v === NONE_VALUE ? null : v)}
     >
       <SelectTrigger size="sm" className="w-full">
-        <SelectValue placeholder={placeholder}>
-          {(value: string | null) => {
-            if (value === NONE_VALUE || value == null) return isEmpty ? emptyHint : placeholder
-            return options.find((o) => o.id === value)?.label ?? value
-          }}
-        </SelectValue>
+        <SelectValue placeholder={placeholder}>{displayValue}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE_VALUE}>{isEmpty ? emptyHint : placeholder}</SelectItem>

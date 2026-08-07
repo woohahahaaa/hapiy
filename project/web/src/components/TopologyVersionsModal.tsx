@@ -81,7 +81,7 @@ export function TopologyVersionsModal({
         if (cancelled) return
         const message = err instanceof Error ? err.message : '加载历史版本失败'
         setListError(message)
-        toast.add({ title: message, type: 'error' })
+        toast.error(message)
       }
     }
     void load()
@@ -95,9 +95,9 @@ export function TopologyVersionsModal({
     try {
       const data = await dashboardApi.archiveTopologyVersion()
       setList(data)
-      toast.add({ title: '已存档', type: 'success' })
+      toast.success('已存档')
     } catch (err) {
-      toast.add({ title: err instanceof Error ? err.message : '存档失败', type: 'error' })
+      toast.error(err instanceof Error ? err.message : '存档失败')
     } finally {
       setActionBusy(null)
     }
@@ -116,7 +116,7 @@ export function TopologyVersionsModal({
       const { document } = await dashboardApi.getTopologyVersion(id)
       setPreviewDocument(document)
     } catch (err) {
-      toast.add({ title: err instanceof Error ? err.message : '加载版本失败', type: 'error' })
+      toast.error(err instanceof Error ? err.message : '加载版本失败')
     } finally {
       setPreviewLoading(false)
     }
@@ -130,10 +130,10 @@ export function TopologyVersionsModal({
       const data = await dashboardApi.restoreTopologyVersion(confirmRestoreId)
       setList(data)
       setConfirmRestoreId(null)
-      toast.add({ title: '已恢复到该版本', type: 'success' })
+      toast.success('已恢复到该版本')
       onRestored()
     } catch (err) {
-      toast.add({ title: err instanceof Error ? err.message : '恢复失败', type: 'error' })
+      toast.error(err instanceof Error ? err.message : '恢复失败')
     } finally {
       setActionBusy(null)
     }
@@ -350,7 +350,7 @@ export function TopologyVersionsModal({
               <div className="p-4 text-sm text-muted-foreground">暂无历史版本</div>
             )}
           </div>
-          <div className="relative min-w-0 flex-1" onContextMenu={(e) => e.preventDefault()}>
+          <div className="relative min-w-0 flex-1 overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
             {previewLoading ? (
               <div className="flex h-full items-center justify-center text-muted-foreground">
                 <AppIcon name="progress_activity" size={20} className="animate-spin" />

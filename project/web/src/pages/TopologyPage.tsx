@@ -617,7 +617,7 @@ export function TopologyPage() {
       dirtyRef.current = false
       setDirty(false)
     } catch (err) {
-      toast.add({ title: err instanceof Error ? err.message : '拓扑保存失败', type: 'error' })
+      toast.error(err instanceof Error ? err.message : '拓扑保存失败')
     }
   }, [])
 
@@ -651,10 +651,7 @@ export function TopologyPage() {
         const known = lastKnownVersionRef.current
         if (known === null || flat.version === undefined) return
         if (flat.version === known) return
-        toast.add({
-          title: '拓扑已在其他页面被修改，请刷新以加载最新数据',
-          type: 'error',
-        })
+        toast.error('拓扑已在其他页面被修改，请刷新以加载最新数据')
         lastKnownVersionRef.current = flat.version
       } catch {
         // transient network error — the next tick retries silently
@@ -690,7 +687,7 @@ export function TopologyPage() {
       const wiring = canvasWiresFromEdges(edgesRef.current)
       const reason = invalidConnectionReason(tpRef.current?.nodes ?? [], wiring, source, target)
       if (reason) {
-        toast.add({ title: reason, type: 'error' })
+        toast.error(reason)
         return
       }
       const newEdge: Edge = {
@@ -716,7 +713,7 @@ export function TopologyPage() {
       const rest = edgesRef.current.filter((e) => e.id !== oldEdge.id)
       const reason = invalidConnectionReason(tpRef.current?.nodes ?? [], canvasWiresFromEdges(rest), source, target)
       if (reason) {
-        toast.add({ title: reason, type: 'error' })
+        toast.error(reason)
         return
       }
       const reconnected: Edge = {
@@ -827,7 +824,7 @@ export function TopologyPage() {
     const selectedIds = new Set(selectionRef.current.nodes.map((n) => n.id))
     const snapshot = buildCopySnapshot(cur.nodes, cur.wires, selectedIds)
     if (!snapshot) {
-      toast.add({ title: '没有可复制的选中节点', type: 'info' })
+      toast.info('没有可复制的选中节点')
       return
     }
     clipboardRef.current = snapshot
@@ -1040,7 +1037,7 @@ export function TopologyPage() {
         const alreadyActive = findDuplicateActivations(cur.nodes, cur.wires).includes(name)
         defaultEnabled = !(slotInEnabledEntry && alreadyActive)
         if (!defaultEnabled) {
-          toast.add({ title: `同一个 Provider（${name}）不能在多个激活工作流中被启用`, type: 'error' })
+          toast.error(`同一个 Provider（${name}）不能在多个激活工作流中被启用`)
         }
       }
       updateTopologyNodes((list) =>
@@ -1169,7 +1166,7 @@ export function TopologyPage() {
           </Button>
         }
       />
-      <div ref={setContainerEl} className="relative flex-1">
+      <div ref={setContainerEl} className="relative flex-1 overflow-hidden">
         <ReactFlow
           nodes={nodes}
           edges={edges}

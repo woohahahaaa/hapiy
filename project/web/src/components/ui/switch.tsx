@@ -3,26 +3,62 @@ import type { ComponentProps } from "react"
 
 import { cn } from "@/lib/utils"
 
+type SwitchSize = number | "sm" | "default"
+
+function resolveSize(s: SwitchSize): number {
+  if (s === "sm") return 14
+  if (s === "default") return 18.4
+  if (typeof s === "number") return s
+  return 18.4
+}
+
+interface SwitchProps extends ComponentProps<typeof SwitchPrimitive.Root> {
+  size?: SwitchSize
+  color?: string
+  rounded?: "full" | "square" | "theme"
+}
+
 function Switch({
   className,
   size = "default",
+  color,
+  rounded = "full",
+  style,
   ...props
-}: ComponentProps<typeof SwitchPrimitive.Root> & {
-  size?: "sm" | "default"
-}) {
+}: SwitchProps) {
+  const basePx = resolveSize(size)
+  const h = basePx
+  const w = basePx * 1.75
+  const thumbSize = basePx - 4
+  const translateVal = w - thumbSize - 2
+  const rootRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "var(--radius)"
+  const thumbRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "calc(var(--radius) - 2px)"
+  const checked = props.checked ?? props.defaultChecked ?? false
+
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
-      data-size={size}
       className={cn(
-        "peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-all outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-[state=checked]:bg-primary data-[state=unchecked]:bg-secondary data-disabled:cursor-not-allowed data-disabled:opacity-50",
-        className
+        "peer group/switch relative inline-flex shrink-0 items-center border border-transparent transition-all outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:bg-transparent data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        className,
       )}
+      style={{
+        height: h,
+        width: w,
+        borderRadius: rootRadius,
+        backgroundColor: checked ? (color ?? "var(--color-primary)") : "var(--color-secondary)",
+        ...style,
+      }}
       {...props}
     >
       <SwitchPrimitive.Thumb
-        data-slot="switch-thumb"
-        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-[state=checked]:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-[state=checked]:translate-x-[calc(100%-2px)] group-data-[size=default]/switch:data-[state=unchecked]:translate-x-0 group-data-[size=sm]/switch:data-[state=unchecked]:translate-x-0"
+        className="pointer-events-none block bg-background ring-0 transition-transform"
+        style={{
+          width: thumbSize,
+          height: thumbSize,
+          borderRadius: thumbRadius,
+          transform: checked ? `translateX(${translateVal}px)` : "translateX(2px)",
+        }}
       />
     </SwitchPrimitive.Root>
   )

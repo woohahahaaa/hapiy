@@ -217,7 +217,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground overflow-x-hidden;
     letter-spacing: var(--tracking-normal);
   }
   * {

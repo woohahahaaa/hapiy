@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
-import { Popover } from '@base-ui/react/popover'
-import { Tooltip } from '@base-ui/react/tooltip'
+import * as HoverCard from '@radix-ui/react-hover-card'
+import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 import { ModeToggle } from '@/components/ModeToggle'
 import { AppIcon } from '@/components/AppIcon'
@@ -154,41 +154,39 @@ function NavLink({
       </SidebarMenuButton>
     )
 
-    const popoverContent = (
-      <Popover.Portal>
-        <Popover.Positioner side="right" align="start" sideOffset={20}>
-          <Popover.Popup
-            className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
-            onMouseEnter={(event) => event.stopPropagation()}
-            onMouseLeave={(event) => event.stopPropagation()}
-          >
-            <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-              {item.label}
-            </div>
-            {item.children!.map((child) => {
-              const childActive = isPathActive(location.pathname, child.href)
-              return (
-                <Popover.Close
-                  key={child.id}
-                  render={
-                    <Link
-                      to={child.href}
-                      className={cn(
-                        'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none transition-colors',
-                        childActive
-                          ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
-                          : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
-                      )}
-                    >
-                      <span>{child.label}</span>
-                    </Link>
-                  }
-                />
-              )
-            })}
-          </Popover.Popup>
-        </Popover.Positioner>
-      </Popover.Portal>
+    const popoverContent = (closeFlyout: () => void) => (
+      <HoverCard.Portal>
+        <HoverCard.Content
+          side="right"
+          align="start"
+          sideOffset={20}
+          className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+          onMouseEnter={(event) => event.stopPropagation()}
+          onMouseLeave={(event) => event.stopPropagation()}
+        >
+          <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
+            {item.label}
+          </div>
+          {item.children!.map((child) => {
+            const childActive = isPathActive(location.pathname, child.href)
+            return (
+              <Link
+                key={child.id}
+                to={child.href}
+                onClick={closeFlyout}
+                className={cn(
+                  'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none transition-colors',
+                  childActive
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
+                    : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                )}
+              >
+                <span>{child.label}</span>
+              </Link>
+            )
+          })}
+        </HoverCard.Content>
+      </HoverCard.Portal>
     )
 
     return (
@@ -203,10 +201,12 @@ function NavLink({
                 {item.children!.map((child) => (
                   <SidebarMenuSubItem key={child.id}>
                     <SidebarMenuSubButton
+                      asChild
                       isActive={isPathActive(location.pathname, child.href)}
-                      render={<Link to={child.href} />}
                     >
-                      <span>{child.label}</span>
+                      <Link to={child.href}>
+                        <span>{child.label}</span>
+                      </Link>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                 ))}
@@ -219,12 +219,11 @@ function NavLink({
   }
 
   const trigger = (
-    <SidebarMenuButton
-      isActive={isActive}
-      render={<Link to={item.href ?? '/'} />}
-    >
-      {item.icon}
-      <span>{showLabel ? item.label : ''}</span>
+    <SidebarMenuButton asChild isActive={isActive}>
+      <Link to={item.href ?? '/'}>
+        {item.icon}
+        <span>{showLabel ? item.label : ''}</span>
+      </Link>
     </SidebarMenuButton>
   )
 
@@ -241,25 +240,24 @@ function NavLink({
   // navigates directly instead of expanding a menu.
   const tooltipContent = (
     <Tooltip.Portal>
-      <Tooltip.Positioner side="right" align="start" sideOffset={20}>
-        <Tooltip.Popup className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none">
-          <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-            {item.label}
-          </div>
-        </Tooltip.Popup>
-      </Tooltip.Positioner>
+      <Tooltip.Content
+        side="right"
+        align="start"
+        sideOffset={20}
+        className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+      >
+        <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
+          {item.label}
+        </div>
+      </Tooltip.Content>
     </Tooltip.Portal>
   )
 
   return (
     <SidebarMenuItem>
-      <Tooltip.Root disableHoverablePopup>
-        <Tooltip.Trigger
-          delay={60}
-          closeDelay={180}
-          render={<span className="block w-full" />}
-        >
-          {trigger}
+      <Tooltip.Root delayDuration={60} disableHoverableContent>
+        <Tooltip.Trigger asChild>
+          <span className="block w-full">{trigger}</span>
         </Tooltip.Trigger>
         {tooltipContent}
       </Tooltip.Root>
@@ -272,21 +270,16 @@ function CollapsedNavItem({
   content,
 }: {
   trigger: React.ReactNode
-  content: React.ReactNode
+  content: (closeFlyout: () => void) => React.ReactNode
 }) {
+  const [open, setOpen] = useState(false)
   return (
-    <Popover.Root>
-      <Popover.Trigger
-        nativeButton={false}
-        openOnHover
-        delay={60}
-        closeDelay={180}
-        render={<span className="block w-full" />}
-      >
-        {trigger}
-      </Popover.Trigger>
-      {content}
-    </Popover.Root>
+    <HoverCard.Root open={open} onOpenChange={setOpen} openDelay={60} closeDelay={180}>
+      <HoverCard.Trigger asChild>
+        <span className="block w-full">{trigger}</span>
+      </HoverCard.Trigger>
+      {content(() => setOpen(false))}
+    </HoverCard.Root>
   )
 }
 

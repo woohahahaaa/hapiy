@@ -47,11 +47,11 @@ export function GeneralSettings() {
     setSaving(true)
     try {
       await dashboardApi.updateSetting(SETTING_KEY, value)
-      toast.add({ title: '已保存' })
+      toast('已保存')
     } catch (err) {
       const message =
         err instanceof DashboardApiError ? err.message : '保存设置失败'
-      toast.add({ title: message, type: 'error' })
+      toast.error(message)
     } finally {
       setSaving(false)
     }

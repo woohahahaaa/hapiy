@@ -55,9 +55,9 @@ export function BaseUrlSettings() {
   const copyUrl = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url)
-      toast.add({ title: '已复制' })
+      toast('已复制')
     } catch {
-      toast.add({ title: '复制失败', type: 'error' })
+      toast.error('复制失败')
     }
   }
 
@@ -77,10 +77,7 @@ export function BaseUrlSettings() {
     event.preventDefault()
     const invalid = paths.find((p) => p.trim() !== '' && !isValidPathName(p.trim()))
     if (invalid) {
-      toast.add({
-        title: `路径名 "${invalid.trim()}" 无效：不能包含 / 或 __，且长度不超过 ${MAX_PATH_LEN}`,
-        type: 'error',
-      })
+      toast.error(`路径名 "${invalid.trim()}" 无效：不能包含 / 或 __，且长度不超过 ${MAX_PATH_LEN}`)
       return
     }
     setSaving(true)
@@ -91,10 +88,10 @@ export function BaseUrlSettings() {
         dashboardApi.replaceBaseUrlPaths(cleaned),
       ])
       setPaths(cleaned)
-      toast.add({ title: '已保存' })
+      toast('已保存')
     } catch (err) {
       const message = err instanceof DashboardApiError ? err.message : '保存设置失败'
-      toast.add({ title: message, type: 'error' })
+      toast.error(message)
     } finally {
       setSaving(false)
     }
