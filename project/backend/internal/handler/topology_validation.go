@@ -283,6 +283,16 @@ func validateLogOutputConfig(config map[string]any) error {
 			}
 			continue
 		}
+		if key == "deadline_at" {
+			num, ok := value.(json.Number)
+			if !ok {
+				return fmt.Errorf("logOutput config deadline_at must be an integer")
+			}
+			if _, err := num.Int64(); err != nil {
+				return fmt.Errorf("logOutput config deadline_at must be a valid epoch")
+			}
+			continue
+		}
 		return fmt.Errorf("logOutput config contains unknown field %s", key)
 	}
 	return nil

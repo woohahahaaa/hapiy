@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -141,7 +140,6 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		service.Logs().Write(&logEntry)
-		writeRelayLogFile(c, &relayReq, resp, provider, useTime)
 
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
 			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
@@ -235,79 +233,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		ErrorMessage: err.Error(),
 		UseTime:      useTime,
 	})
-	if writer := service.LogFile(); writer != nil {
-		data := &service.LogCaptureData{
-			RequestID:  c.GetString("request_id"),
-			Timestamp:  time.Now().UTC(),
-			Type:       "system",
-			Prefix:     "_relay",
-			ProviderID: providerName,
-			Error:      err.Error(),
-			Timings:    &service.Timings{TotalMs: int64(useTime)},
-		}
-		if req != nil {
-			data.Source = service.ResolveSourceMark(c.GetHeader("X-Hapiy-Source"), req.Path)
-			data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
-		}
-		writer.WriteLog(data)
-	}
 	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0)
-}
-
-// writeRelayLogFile captures the full request/response round-trip to JSON
-// files under the _relay prefix so every request has inspectable artifacts
-// regardless of topology log-output configuration. Each request produces two
-// files sharing the RequestID: a "request" file (request data only) and a
-// "response" file (request + response data). For non-streaming responses the
-// body is buffered and restored so the downstream handler still sees it.
-func writeRelayLogFile(c *gin.Context, req *relay.RelayRequest, resp *relay.RelayResponse, provider *model.Provider, useTime int) {
-	writer := service.LogFile()
-	if writer == nil {
-		return
-	}
-	source := service.ResolveSourceMark(c.GetHeader("X-Hapiy-Source"), req.Path)
-	timings := &service.Timings{TotalMs: int64(useTime)}
-	request := &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
-	writer.WriteLog(&service.LogCaptureData{
-		RequestID:  req.RequestID,
-		Timestamp:  time.Now().UTC(),
-		Type:       "request",
-		ProviderID: provider.ID,
-		Prefix:     "_relay",
-		Source:     source,
-		Timings:    timings,
-		Request:    request,
-	})
-	response := &service.LogCaptureData{
-		RequestID:  req.RequestID,
-		Timestamp:  time.Now().UTC(),
-		Type:       "response",
-		ProviderID: provider.ID,
-		Prefix:     "_relay",
-		Source:     source,
-		Timings:    timings,
-		Request:    request,
-	}
-	if req.Stream {
-		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "streaming"}
-		writer.WriteLog(response)
-		return
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: "error: " + err.Error()}
-		writer.WriteLog(response)
-		return
-	}
-	_ = resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	var parsed interface{}
-	if json.Unmarshal(body, &parsed) == nil {
-		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: parsed}
-	} else {
-		response.Response = &service.HTTPCapture{Headers: resp.Headers, Body: string(body)}
-	}
-	writer.WriteLog(response)
 }
 
 func getString(v interface{}) string {

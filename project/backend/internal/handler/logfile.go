@@ -10,26 +10,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// ensureLogFileWriter returns the initialized log file writer, falling back to
-// (re)initializing with logDir when it has not been set up (e.g. a handler
-// test that mounts the route without running main).
-func ensureLogFileWriter(db *gorm.DB, logDir string) *service.LogFileWriter {
-	writer := service.LogFile()
+// ensureLogCaptureWriter returns the initialized log capture writer.
+func ensureLogCaptureWriter(db *gorm.DB) *service.LogCaptureWriter {
+	writer := service.LogCapture()
 	if writer != nil {
 		return writer
 	}
-	service.InitLogFileWriter(logDir, db)
-	return service.LogFile()
+	service.InitLogCaptureWriter(db)
+	return service.LogCapture()
 }
 
-// ListLogFiles lists captured request log files on disk, newest first.
-// Query params: prefix, type (comma-separated), from, to (RFC3339), limit, offset.
-func ListLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
+// ListLogFiles lists captured log entries, newest first.
+// Query params: prefix, type (comma-separated), from, to (RFC3339),
+// headerKey, headerValue, limit, offset.
+func ListLogFiles(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		params := service.LogListParams{
-			Prefix: c.Query("prefix"),
-			Limit:  parseInt(c.Query("limit"), 50),
-			Offset: parseInt(c.Query("offset"), 0),
+			Prefix:      c.Query("prefix"),
+			HeaderKey:   c.Query("headerKey"),
+			HeaderValue: c.Query("headerValue"),
+			Limit:       parseInt(c.Query("limit"), 50),
+			Offset:      parseInt(c.Query("offset"), 0),
 		}
 		if types := c.Query("type"); types != "" {
 			params.Types = splitComma(types)
@@ -45,7 +46,7 @@ func ListLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
 			}
 		}
 
-		writer := ensureLogFileWriter(db, logDir)
+		writer := ensureLogCaptureWriter(db)
 		if writer == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
 			return
@@ -59,27 +60,91 @@ func ListLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
 	}
 }
 
-// ReadLogFile returns the JSON content of a single captured log file.
-func ReadLogFile(db *gorm.DB, logDir string) gin.HandlerFunc {
+// ListLogCapturePairs lists pair summaries, newest-first by MIN(created_at).
+// Query params: prefix, type (comma-separated — "包含" semantics, system is
+// ignored by the service), from, to (RFC3339), headerKey, headerValue, limit, offset.
+// Returns {data: []LogCapturePairSummary, total: int}.
+func ListLogCapturePairs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		writer := ensureLogFileWriter(db, logDir)
+		params := service.LogListParams{
+			Prefix:        c.Query("prefix"),
+			HeaderKey:     c.Query("headerKey"),
+			HeaderValue:   c.Query("headerValue"),
+			Limit:         parseInt(c.Query("limit"), 50),
+			Offset:        parseInt(c.Query("offset"), 0),
+		}
+		if types := c.Query("type"); types != "" {
+			params.Types = splitComma(types)
+		}
+		if from := c.Query("from"); from != "" {
+			if t, err := time.Parse(time.RFC3339, from); err == nil {
+				params.From = t
+			}
+		}
+		if to := c.Query("to"); to != "" {
+			if t, err := time.Parse(time.RFC3339, to); err == nil {
+				params.To = t
+			}
+		}
+
+		writer := ensureLogCaptureWriter(db)
 		if writer == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
 			return
 		}
-		content, err := writer.ReadFile(c.Param("id"))
+		pairs, total, err := writer.ListPairs(params)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": pairs, "total": total})
+	}
+}
+
+// ReadLogCapturePair returns the full pair (with bodies) for :request_id.
+// 404 if no rows exist for the request_id.
+func ReadLogCapturePair(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rid := c.Param("request_id")
+		if rid == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing request_id"})
+			return
+		}
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+		pair, err := writer.ReadPair(rid)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
-		c.Data(http.StatusOK, "application/json", content)
+		c.JSON(http.StatusOK, gin.H{"data": pair})
 	}
 }
 
-// ClearLogFiles deletes captured log files on disk. Body (optional):
+// ReadLogFile returns the JSON content of a single captured log entry.
+func ReadLogFile(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+		row, err := writer.ReadFile(c.Param("id"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": row})
+	}
+}
+
+// ClearLogFiles deletes captured log entries. Body (optional):
 // {scope: "filtered"|"all", prefix?, type?, from?, to?}. filtered mode removes
-// files matching the filters; all mode removes every file. Responds {deleted}.
-func ClearLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
+// entries matching the filters; all mode removes every entry. Responds {deleted}.
+func ClearLogFiles(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
 			Scope  string `json:"scope"`
@@ -89,7 +154,7 @@ func ClearLogFiles(db *gorm.DB, logDir string) gin.HandlerFunc {
 			To     string `json:"to"`
 		}
 		_ = c.ShouldBindJSON(&body)
-		writer := ensureLogFileWriter(db, logDir)
+		writer := ensureLogCaptureWriter(db)
 		if writer == nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
 			return

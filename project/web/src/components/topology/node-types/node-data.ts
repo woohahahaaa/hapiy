@@ -29,12 +29,10 @@ export interface LogOutputNodeData {
   readonly config: {
     readonly prefix: string
     readonly record_request: boolean
-    readonly record_modified_request: boolean
     readonly record_response: boolean
-    readonly record_modified_response: boolean
     readonly record_system: boolean
-    readonly merge_stream: boolean
     readonly auto_close_minutes: number
+    readonly deadline_at?: number
   }
 }
 

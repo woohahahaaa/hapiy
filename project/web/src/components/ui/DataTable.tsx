@@ -40,13 +40,18 @@ const TOOLBAR_GAP = 12
 
 // ── Helpers ──
 
-function formatDateTime(iso: string): string {
+function formatDateTime(iso: string): ReactNode {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   const pad = (n: number) => String(n).padStart(2, "0")
   const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  return `${date} ${time}`
+  return (
+    <span className="block leading-tight">
+      <span className="block whitespace-nowrap">{date}</span>
+      <span className="block whitespace-nowrap text-muted-foreground">{time}</span>
+    </span>
+  )
 }
 
 function renderValue(value: unknown): ReactNode {
@@ -301,10 +306,11 @@ export function DataTable<T extends Record<string, unknown>>({
                     {columns.map((col) => {
                       const raw = row[col.key]
                       const showEmpty = col.showEmptyPlaceholder !== false
+                      const rendered = col.render ? col.render(raw, row) : undefined
                       const content = col.isTime
-                        ? formatDateTime(raw as string)
+                        ? formatDateTime((rendered ?? raw) as string)
                         : col.render
-                          ? col.render(raw, row)
+                          ? rendered
                           : showEmpty
                             ? renderValue(raw)
                             : String(raw ?? "")

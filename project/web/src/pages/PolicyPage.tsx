@@ -27,8 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  dashboardApi,
+import { DashboardApiError, dashboardApi,
   type RewriteRule,
   type HeartbeatRule,
   type ConcurrencyRule,
@@ -36,6 +35,7 @@ import {
   type ResponseRewriteRule,
   type RuleType,
 } from '@/lib/dashboard-api'
+import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 
 const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite',
@@ -268,6 +268,8 @@ function RewritePage() {
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
+  const [testOpen, setTestOpen] = useState(false)
+  const [testRule, setTestRule] = useState<RewriteRule | null>(null)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -303,6 +305,9 @@ function RewritePage() {
             使用 JSON 操作数组修改请求体字段
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+              <AppIcon name="play" data-icon="inline-start" />测试
+            </Button>
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
               <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
@@ -338,6 +343,9 @@ function RewritePage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(rule); setTestOpen(true); }}>
+                        <AppIcon name="play" />
+                      </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <AppIcon name="edit" />
                       </Button>
@@ -368,6 +376,19 @@ function RewritePage() {
           onSave={handleJsonSave}
           onClose={() => setJsonOpen(false)}
         />
+      )}
+
+{testOpen && (
+<RewriteTestDialog
+        open={testOpen}
+        onClose={() => { setTestOpen(false); }}
+        rules={rules}
+        type="rewrite"
+        preselectedRuleId={null}
+        showSelector={true}
+        width="full"
+        height="full"
+      />
       )}
     </div>
   )
@@ -878,6 +899,8 @@ function RewriteResponsePage() {
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
+  const [testOpen, setTestOpen] = useState(false)
+  const [testRule, setTestRule] = useState<ResponseRewriteRule | null>(null)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -913,6 +936,9 @@ function RewriteResponsePage() {
             使用 JSON 操作数组修改响应体字段
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+              <AppIcon name="play" data-icon="inline-start" />测试
+            </Button>
             <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
               <AppIcon name="code" data-icon="inline-start" />编辑 JSON
             </Button>
@@ -948,6 +974,9 @@ function RewriteResponsePage() {
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
+                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(rule); setTestOpen(true); }}>
+                        <AppIcon name="play" />
+                      </Button>
                       <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
                         <AppIcon name="edit" />
                       </Button>
@@ -977,6 +1006,19 @@ function RewriteResponsePage() {
           data={rules}
           onSave={handleJsonSave}
           onClose={() => setJsonOpen(false)}
+        />
+      )}
+
+      {testOpen && (
+        <RewriteTestDialog
+          open={testOpen}
+          onClose={() => { setTestOpen(false); }}
+          rules={rules}
+          type="rewrite-response"
+          preselectedRuleId={null}
+          showSelector={true}
+          width="full"
+          height="full"
         />
       )}
     </div>

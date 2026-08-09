@@ -6,6 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -14,8 +22,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
-import { dashboardApi, type LogStats, type ActiveRequest, type StatsRange } from '@/lib/dashboard-api'
+import {
+  dashboardApi,
+  type LogStats,
+  type ActiveRequest,
+  type ActiveRequestConfig,
+  type StatsRange,
+} from '@/lib/dashboard-api'
 
 const POLL_INTERVAL_MS = 2000
 const ELAPSED_TICK_MS = 1000
@@ -41,26 +56,19 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(ms)}ms`
 }
 
-function formatStartTime(iso: string): string {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
-
-function computeElapsedMs(startTime: string): number {
-  const start = new Date(startTime).getTime()
-  if (Number.isNaN(start)) return 0
-  return Math.max(0, Date.now() - start)
-}
-
 const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
+  {
+    key: 'status',
+    label: '状态',
+    render: (_, row) => (row.endTime ? '已结束' : '活跃中'),
+  },
   { key: 'model', label: '模型' },
   { key: 'tokenName', label: '令牌' },
   { key: 'userId', label: '用户' },
   { key: 'stream', label: '类型', render: (v) => (v ? 'SSE' : '--') },
   {
     key: 'elapsedMs',
-    label: '已运行',
+    label: '耗时',
     render: (v) => formatElapsed(v as number),
   },
   { key: 'startTime', label: '开始时间', isTime: true },
@@ -282,16 +290,25 @@ function StatsSection() {
 
 // ── 活跃请求模块 ──
 
-const RETENTION_OPTIONS: readonly { value: string; label: string; minutes: number | null }[] = [
-  { value: 'all', label: '全部', minutes: null },
-  { value: '5', label: '保留最近 5 分钟', minutes: 5 },
-  { value: '10', label: '保留最近 10 分钟', minutes: 10 },
-  { value: '30', label: '保留最近 30 分钟', minutes: 30 },
+const RETENTION_CHOICES: readonly { value: number; label: string }[] = [
+  { value: 0, label: '立即移除' },
+  { value: 5, label: '5 分钟' },
+  { value: 10, label: '10 分钟' },
+  { value: 30, label: '30 分钟' },
 ]
+
+function retentionLabel(minutes: number): string {
+  if (minutes <= 0) return '立即移除'
+  return `保留 ${minutes} 分钟`
+}
 
 function ActiveRequestsSection() {
   const [requests, setRequests] = useState<readonly ActiveRequest[]>([])
-  const [retention, setRetention] = useState('all')
+  const [config, setConfig] = useState<ActiveRequestConfig | null>(null)
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [draft, setDraft] = useState(5)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [, setTick] = useState(0)
@@ -323,13 +340,36 @@ function ActiveRequestsSection() {
     }
   }, [fetchActive])
 
-  const retentionMinutes = RETENTION_OPTIONS.find((opt) => opt.value === retention)?.minutes ?? null
-  const visibleRequests = retentionMinutes === null
-    ? requests
-    : requests.filter((req) => {
-        const start = new Date(req.startTime).getTime()
-        return Number.isNaN(start) || start >= Date.now() - retentionMinutes * 60_000
+  useEffect(() => {
+    let active = true
+    dashboardApi.getActiveRequestConfig()
+      .then((c) => { if (active) setConfig(c) })
+      .catch((err) => {
+        if (active) setConfigError(err instanceof Error ? err.message : '获取保留时间失败')
       })
+    return () => { active = false }
+  }, [])
+
+  const handleOpenDialog = () => {
+    setDraft(config?.retentionMinutes ?? 5)
+    setDialogOpen(true)
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const updated = await dashboardApi.updateActiveRequestConfig(draft)
+      setConfig(updated)
+      setConfigError(null)
+      setDialogOpen(false)
+      toast('已保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <section>
@@ -337,9 +377,9 @@ function ActiveRequestsSection() {
         <h3 className="flex items-center gap-2 text-sm font-medium">
           <AppIcon name="bolt" className="text-muted-foreground" />
           活跃请求
-          {visibleRequests.length > 0 && (
+          {requests.length > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {visibleRequests.length}
+              {requests.length}
             </span>
           )}
         </h3>
@@ -350,35 +390,63 @@ function ActiveRequestsSection() {
               {error}
             </span>
           )}
+          {configError ? (
+            <span className="text-xs text-destructive" title={configError}>保留时间未知</span>
+          ) : config ? (
+            <span className="text-xs text-muted-foreground">{retentionLabel(config.retentionMinutes)}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">--</span>
+          )}
+          <Button variant="outline" size="sm" onClick={handleOpenDialog}>
+            <AppIcon name="settings" data-icon="inline-start" />
+            设置
+          </Button>
         </div>
       </div>
 
       <DataTable
         id="monitor-requests"
         columns={ACTIVE_REQUEST_COLUMNS}
-        data={visibleRequests}
-        total={visibleRequests.length}
+        data={requests}
+        total={requests.length}
         loading={loading}
         error={error}
         offset={0}
-        limit={visibleRequests.length}
+        limit={requests.length}
         onOffsetChange={() => {}}
-        filters={
-          <Select value={retention} onValueChange={(value) => setRetention(value ?? 'all')}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="保留时间" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {RETENTION_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        }
         onRetry={fetchActive}
       />
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>保留时间设置</DialogTitle>
+            <DialogDescription>
+              请求结束后，在列表中保留多久
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {RETENTION_CHOICES.map((choice) => (
+              <Button
+                key={choice.value}
+                variant={draft === choice.value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setDraft(choice.value)}
+              >
+                {choice.label}
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={saving}>
+              {saving ? '保存中…' : '保存'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

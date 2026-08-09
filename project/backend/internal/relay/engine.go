@@ -293,7 +293,7 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 }
 
 // runTopologyLogOutputs records the stage event for the selected log outputs
-// and writes the per-stage capture file for every configured log node.
+// and writes the per-stage capture row for every configured log node.
 func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) {
 	if len(assignments) == 0 {
 		return
@@ -307,7 +307,7 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 	}
 	e.recordTopologyStage(event)
 
-	writer := service.LogFile()
+	writer := service.LogCapture()
 	if writer == nil || plan == nil || req == nil {
 		return
 	}
@@ -327,7 +327,7 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 		}
 		data := &service.LogCaptureData{
 			RequestID:  req.RequestID,
-			Timestamp:  time.Now().UTC(),
+			Stage:      string(stage),
 			Type:       logOutputStageType(stage),
 			ProviderID: plan.ID,
 			Prefix:     cfg.Prefix,
@@ -339,22 +339,16 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 				data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
 			}
 		case topologyStageRequestAfter:
-			if cfg.RecordModifiedRequest {
-				data.ModifiedRequest = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
-				if len(plan.CompiledRewrite) == 0 {
-					data.ModifiedRequest.Body = "unmodified"
-				}
+			if cfg.RecordRequest {
+				data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
 			}
 		case topologyStageResponseBefore:
 			if cfg.RecordResponse && resp != nil {
 				data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: responseBody}
 			}
 		case topologyStageResponseAfter:
-			if cfg.RecordModifiedResponse && resp != nil {
-				data.ModifiedResponse = &service.HTTPCapture{Headers: resp.Headers, Body: responseBody}
-				if len(plan.CompiledResponseRewrites) == 0 {
-					data.ModifiedResponse.Body = "unmodified"
-				}
+			if cfg.RecordResponse && resp != nil {
+				data.Response = &service.HTTPCapture{Headers: resp.Headers, Body: responseBody}
 			}
 		}
 		writer.WriteLog(data)
@@ -386,9 +380,9 @@ func captureResponseBody(resp *RelayResponse, stream bool) interface{} {
 }
 
 // parseLogOutputConfig decodes a logOutput assignment's raw JSON with the
-// documented defaults: merge_stream defaults to true and auto_close_minutes to 5.
+// documented defaults: auto_close_minutes defaults to 5.
 func parseLogOutputConfig(raw string) (LogOutputNodeConfig, error) {
-	cfg := LogOutputNodeConfig{MergeStream: true, AutoCloseMinutes: 5}
+	cfg := LogOutputNodeConfig{AutoCloseMinutes: 5}
 	if raw == "" {
 		return cfg, nil
 	}
@@ -398,9 +392,14 @@ func parseLogOutputConfig(raw string) (LogOutputNodeConfig, error) {
 	return cfg, nil
 }
 
-// autoClosed reports whether a log node has exceeded its auto-close window,
-// measured from the topology assignment's creation time.
+// autoClosed reports whether a log node has exceeded its auto-close window.
+// The user-set DeadlineAt (absolute wall-clock cutoff) wins when present;
+// otherwise we fall back to the legacy heuristic of measuring from the
+// topology assignment's creation time.
 func autoClosed(assignment LogOutputAssignment, cfg LogOutputNodeConfig) bool {
+	if cfg.DeadlineAt > 0 {
+		return time.Now().UnixMilli() >= cfg.DeadlineAt
+	}
 	if cfg.AutoCloseMinutes <= 0 || assignment.CreatedAt.IsZero() {
 		return false
 	}

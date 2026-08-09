@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
@@ -17,6 +17,7 @@ import {
   LogOutputSlotItem,
 } from '@/components/topology/slot-items'
 import { makeEmptyEntry } from '@/components/topology/slot-items'
+import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 
 interface SlotNodeData {
   slotType: keyof SlotEntryMap
@@ -40,6 +41,7 @@ export function SlotNode({ data }: SlotNodeProps) {
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  const [testOpen, setTestOpen] = useState(false)
 
   function handleAdd() {
     onChangeEntry(makeEmptyEntry(slotType, entries.length + 1))
@@ -59,6 +61,33 @@ export function SlotNode({ data }: SlotNodeProps) {
     },
   })
 
+  // Collect all slot entries that have a ruleId bound, in index order.
+  const boundEntries = entries
+    .filter((e) => e.ruleId && (slotType === 'requestModify' || slotType === 'responseModify'))
+    .sort((a, b) => a.index - b.index)
+
+  // Resolve rule objects from bound entry ruleIds.
+  const slotRules = slotType === 'requestModify'
+    ? (rules.requestModify as readonly { id: string; name: string; script: string; status: boolean }[])
+    : (rules.responseModify as readonly { id: string; name: string; script: string; status: boolean }[])
+
+  const testRules = boundEntries
+    .map((e) => slotRules.find((r) => r.id === e.ruleId))
+    .filter((r): r is { id: string; name: string; script: string; status: boolean } => r != null && r.status)
+
+  const slotTitle = testRules.length > 0 ? (
+    <span className="flex items-center gap-2">
+      <span>{title}</span>
+      <button
+        type="button"
+        className="nodrag nopan inline-flex items-center justify-center rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+        onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
+      >
+        测试
+      </button>
+    </span>
+  ) : title
+
   return (
     <>
       <Handle
@@ -72,14 +101,10 @@ export function SlotNode({ data }: SlotNodeProps) {
         }}
       />
       <SlotContainer
-        title={title}
+        title={slotTitle}
         onAddNode={handleAdd}
         style={{
           width: 'fit-content',
-          // Shell minimum is decoupled from `nodeRenderBounds` (the 200/300
-          // range reserved for Provider + slot inner items). This keeps
-          // populated and empty slots equal-width without applying the
-          // 200/300 bound to the SlotContainer outer shell.
           minWidth: topologyConfig.render.slot.shellMinWidth,
         }}
       >
@@ -104,6 +129,17 @@ export function SlotNode({ data }: SlotNodeProps) {
           borderWidth: topologyConfig.handles.slot.source.borderWidth,
         }}
       />
+      {testOpen && (
+        <RewriteTestDialog
+          open={testOpen}
+          onClose={() => setTestOpen(false)}
+          rules={testRules}
+          type={slotType === 'requestModify' ? 'rewrite' : 'rewrite-response'}
+          preselectedRuleId={null}
+          readonlyRule={true}
+          showSelector={false}
+        />
+      )}
     </>
   )
 }

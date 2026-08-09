@@ -272,7 +272,7 @@ export function PricePage() {
             </div>
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-              <DialogContent>
+              <DialogContent width="sm">
                 <DialogHeader>
                   <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
                 </DialogHeader>

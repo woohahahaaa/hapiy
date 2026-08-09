@@ -117,20 +117,18 @@ func ValidateFlatTopology(db *gorm.DB) gin.HandlerFunc {
 // fields (id, slotType, index, ruleId, enabled, config); logOutput
 // additionally carries its configuration as flattened entry fields.
 type flatSlotEntry struct {
-	ID                     string          `json:"id"`
-	SlotType               string          `json:"slotType"`
-	Index                  int             `json:"index"`
-	RuleID                 *string         `json:"ruleId,omitempty"`
-	Enabled                bool            `json:"enabled"`
-	Prefix                 string          `json:"prefix,omitempty"`
-	RecordRequest          bool            `json:"recordRequest,omitempty"`
-	RecordModifiedRequest  bool            `json:"recordModifiedRequest,omitempty"`
-	RecordResponse         bool            `json:"recordResponse,omitempty"`
-	RecordModifiedResponse bool            `json:"recordModifiedResponse,omitempty"`
-	RecordSystem           bool            `json:"recordSystem,omitempty"`
-	MergeStream            bool            `json:"mergeStream,omitempty"`
-	AutoCloseMinutes       int             `json:"autoCloseMinutes,omitempty"`
-	Config                 json.RawMessage `json:"config,omitempty"`
+	ID               string          `json:"id"`
+	SlotType         string          `json:"slotType"`
+	Index            int             `json:"index"`
+	RuleID           *string         `json:"ruleId,omitempty"`
+	Enabled          bool            `json:"enabled"`
+	Prefix           string          `json:"prefix,omitempty"`
+	RecordRequest    bool            `json:"recordRequest,omitempty"`
+	RecordResponse   bool            `json:"recordResponse,omitempty"`
+	RecordSystem     bool            `json:"recordSystem,omitempty"`
+	AutoCloseMinutes int             `json:"autoCloseMinutes,omitempty"`
+	DeadlineAt       int64           `json:"deadlineAt,omitempty"`
+	Config           json.RawMessage `json:"config,omitempty"`
 }
 
 // deriveFlatAssignments walks the Flat Topology and produces a normalized
@@ -247,14 +245,14 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			trimmed := bytes.TrimSpace(config)
 			if len(trimmed) == 0 || string(trimmed) == "null" || string(trimmed) == "{}" {
 				cfg := map[string]any{
-					"prefix":                   e.Prefix,
-					"record_request":           e.RecordRequest,
-					"record_modified_request":  e.RecordModifiedRequest,
-					"record_response":          e.RecordResponse,
-					"record_modified_response": e.RecordModifiedResponse,
-					"record_system":            e.RecordSystem,
-					"merge_stream":             e.MergeStream,
-					"auto_close_minutes":       e.AutoCloseMinutes,
+					"prefix":             e.Prefix,
+					"record_request":     e.RecordRequest,
+					"record_response":    e.RecordResponse,
+					"record_system":      e.RecordSystem,
+					"auto_close_minutes": e.AutoCloseMinutes,
+				}
+				if e.DeadlineAt > 0 {
+					cfg["deadline_at"] = e.DeadlineAt
 				}
 				if packed, err := json.Marshal(cfg); err == nil {
 					config = packed

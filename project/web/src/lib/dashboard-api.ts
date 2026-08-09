@@ -122,6 +122,11 @@ export type ActiveRequest = {
   readonly startTime: string
   readonly stream: boolean
   readonly elapsedMs: number
+  readonly endTime: string | null
+}
+
+export type ActiveRequestConfig = {
+  readonly retentionMinutes: number
 }
 
 export type LogListResult = {
@@ -146,12 +151,64 @@ export type LogCaptureListParams = {
   readonly type?: string // 逗号分隔
   readonly from?: string // ISO 日期
   readonly to?: string // ISO 日期
+  readonly headerKey?: string
+  readonly headerValue?: string
   readonly limit: number
   readonly offset: number
 }
 
 export type LogCaptureListResult = {
   readonly files: readonly LogCaptureFile[]
+  readonly total: number
+}
+
+export type LogCaptureStageRow = {
+  readonly headers: Record<string, string> | null
+  readonly body: unknown
+  readonly status: number
+  readonly error: string
+  readonly created_at: string
+}
+
+export type LogCaptureRequestNode = {
+  readonly before?: LogCaptureStageRow
+  readonly after?: LogCaptureStageRow
+  readonly modified: boolean
+}
+
+export type LogCaptureResponseNode = {
+  readonly before?: LogCaptureStageRow
+  readonly after?: LogCaptureStageRow
+  readonly status: number
+  readonly modified: boolean
+}
+
+export type LogCapturePairSummary = {
+  readonly request_id: string
+  readonly type_label: string // 后端计算: "请求" | "响应" | "请求+响应" | "请求+响应×N" — 不校验枚举
+  readonly prefix: string
+  readonly source: string
+  readonly provider_id: string
+  readonly created_at: string
+  readonly has_request: boolean
+  readonly has_response: boolean
+  readonly response_count: number
+  readonly has_rewrite: boolean
+}
+
+export type LogCapturePairFull = {
+  readonly request_id: string
+  readonly prefix: string
+  readonly source: string
+  readonly provider_id: string
+  readonly created_at: string
+  readonly request?: LogCaptureRequestNode
+  readonly responses: readonly LogCaptureResponseNode[]
+  readonly error: string
+}
+
+export type LogCapturePairListResult = {
+  readonly pairs: readonly LogCapturePairSummary[]
   readonly total: number
 }
 
@@ -604,6 +661,92 @@ function parseLogCaptureFile(value: unknown): LogCaptureFile {
   }
 }
 
+function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取阶段格式无效', null)
+  }
+  const headers = value.headers
+  let parsedHeaders: Record<string, string> | null
+  if (headers === null) {
+    parsedHeaders = null
+  } else if (isRecord(headers)) {
+    parsedHeaders = headers as Record<string, string>
+  } else {
+    throw new DashboardApiError('capture stage headers 格式无效', null)
+  }
+  return {
+    headers: parsedHeaders,
+    body: value.body,
+    status: readNumber(value.status, 'stage.status', 0),
+    error: value.error == null ? '' : readString(value.error, 'stage.error'),
+    created_at: readString(value.created_at, 'stage.created_at'),
+  }
+}
+
+function parseLogCaptureRequestNode(value: unknown): LogCaptureRequestNode {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取请求节点格式无效', null)
+  }
+  return {
+    before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
+    after: value.after == null ? undefined : parseLogCaptureStageRow(value.after),
+    modified: readBoolean(value.modified, 'request.modified'),
+  }
+}
+
+function parseLogCaptureResponseNode(value: unknown): LogCaptureResponseNode {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取响应节点格式无效', null)
+  }
+  return {
+    before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
+    after: value.after == null ? undefined : parseLogCaptureStageRow(value.after),
+    status: readNumber(value.status, 'response.status', 0),
+    modified: readBoolean(value.modified, 'response.modified'),
+  }
+}
+
+function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取日志对格式无效', null)
+  }
+  const responseCount = readNumber(value.response_count, 'pair.response_count')
+  if (responseCount < 0) {
+    throw new DashboardApiError('response_count 不能为负', null)
+  }
+  return {
+    request_id: readString(value.request_id, 'pair.request_id'),
+    type_label: readString(value.type_label, 'pair.type_label'),
+    prefix: readString(value.prefix, 'pair.prefix'),
+    source: readString(value.source, 'pair.source'),
+    provider_id: readString(value.provider_id, 'pair.provider_id'),
+    created_at: readString(value.created_at, 'pair.created_at'),
+    has_request: readBoolean(value.has_request, 'pair.has_request'),
+    has_response: readBoolean(value.has_response, 'pair.has_response'),
+    response_count: responseCount,
+    has_rewrite: readBoolean(value.has_rewrite, 'pair.has_rewrite'),
+  }
+}
+
+function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取日志对详情格式无效', null)
+  }
+  if (!Array.isArray(value.responses)) {
+    throw new DashboardApiError('responses 必须是数组', null)
+  }
+  return {
+    request_id: readString(value.request_id, 'pair.request_id'),
+    prefix: readString(value.prefix, 'pair.prefix'),
+    source: readString(value.source, 'pair.source'),
+    provider_id: readString(value.provider_id, 'pair.provider_id'),
+    created_at: readString(value.created_at, 'pair.created_at'),
+    request: value.request == null ? undefined : parseLogCaptureRequestNode(value.request),
+    responses: value.responses.map(parseLogCaptureResponseNode),
+    error: value.error == null ? '' : readString(value.error, 'pair.error'),
+  }
+}
+
 function parseModelStat(value: unknown): ModelStat {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的模型统计格式无效', null)
@@ -641,7 +784,19 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     startTime: readString(value.start_time, 'active.start_time'),
     stream: readBoolean(value.stream, 'active.stream'),
     elapsedMs: readNumber(value.elapsed_ms, 'active.elapsed_ms'),
+    endTime: value.end_time == null || value.end_time === '' ? null : readString(value.end_time, 'active.end_time'),
   }
+}
+
+function parseActiveRequestConfig(value: unknown): ActiveRequestConfig {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的活跃请求配置格式无效', null)
+  }
+  const minutes = readNumber(value.retention_minutes, 'config.retention_minutes')
+  if (minutes < 0 || minutes > 1440) {
+    throw new DashboardApiError('服务端返回的保留时间无效', null)
+  }
+  return { retentionMinutes: minutes }
 }
 
 function parseEnvelope(value: unknown): unknown {
@@ -1091,6 +1246,8 @@ export const dashboardApi = {
     if (params.type) qp.set('type', params.type)
     if (params.from) qp.set('from', params.from)
     if (params.to) qp.set('to', params.to)
+    if (params.headerKey) qp.set('headerKey', params.headerKey)
+    if (params.headerValue) qp.set('headerValue', params.headerValue)
 
     const body = await requestFull(`/logs/capture?${qp.toString()}`)
     const data = body.data
@@ -1124,7 +1281,34 @@ export const dashboardApi = {
   },
 
   async readLogCaptureFile(id: string): Promise<unknown> {
-    return requestRaw(`/logs/capture/${encodeURIComponent(id)}`)
+    const body = await requestFull(`/logs/capture/${encodeURIComponent(id)}`)
+    return body.data
+  },
+
+  async listLogCapturePairs(params: LogCaptureListParams): Promise<LogCapturePairListResult> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    if (params.prefix) qp.set('prefix', params.prefix)
+    if (params.type) qp.set('type', params.type)
+    if (params.from) qp.set('from', params.from)
+    if (params.to) qp.set('to', params.to)
+    if (params.headerKey) qp.set('headerKey', params.headerKey)
+    if (params.headerValue) qp.set('headerValue', params.headerValue)
+    const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的抓取日志对列表格式无效', null)
+    }
+    return {
+      pairs: data.map(parseLogCapturePairSummary),
+      total: readNumber(body.total, 'total', 0),
+    }
+  },
+
+  async readLogCapturePair(requestId: string): Promise<LogCapturePairFull> {
+    const body = await requestFull(`/logs/capture/pairs/${encodeURIComponent(requestId)}`)
+    return parseLogCapturePairFull(body.data)
   },
 
   async getLogStats(range: StatsRange): Promise<LogStats> {
@@ -1138,6 +1322,19 @@ export const dashboardApi = {
       throw new DashboardApiError('服务端返回的活跃请求列表格式无效', null)
     }
     return data.map(parseActiveRequest)
+  },
+
+  async getActiveRequestConfig(): Promise<ActiveRequestConfig> {
+    const data = await request('/active-requests/config')
+    return parseActiveRequestConfig(data)
+  },
+
+  async updateActiveRequestConfig(retentionMinutes: number): Promise<ActiveRequestConfig> {
+    const data = await request('/active-requests/config', {
+      method: 'PUT',
+      body: JSON.stringify({ retention_minutes: retentionMinutes }),
+    })
+    return parseActiveRequestConfig(data)
   },
 
   // ── Rules ──
@@ -1162,6 +1359,15 @@ export const dashboardApi = {
   },
 async deleteRule(type: RuleType, id: string): Promise<void> {
     await request(`/rules/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+
+  async testRewriteRule(type: 'rewrite' | 'rewrite-response', id: string, body: unknown): Promise<{original: unknown; modified: unknown}> {
+    const data = await request(`/rules/${type}/${id}/test`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    })
+    if (!isRecord(data)) throw new DashboardApiError('服务端返回格式无效', null)
+    return { original: data.original, modified: data.modified }
   },
 
   async currentUser(): Promise<CurrentUser> {

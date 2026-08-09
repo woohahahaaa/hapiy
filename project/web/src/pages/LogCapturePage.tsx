@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
@@ -19,28 +19,22 @@ import {
   dashboardApi,
   type DateRange,
   type LogCaptureFile,
-  type LogCaptureType,
+  type LogCapturePairSummary,
 } from '@/lib/dashboard-api'
 
 const LIMIT = 20
 
-const TYPE_OPTIONS: readonly { value: LogCaptureType; label: string }[] = [
-  { value: 'request', label: '请求' },
-  { value: 'response', label: '响应' },
-  { value: 'system', label: '系统' },
+type CaptureRow =
+  | { kind: 'pair'; pair: LogCapturePairSummary }
+  | { kind: 'system'; file: LogCaptureFile }
+
+type CaptureCategory = '请求' | '响应' | '系统'
+
+const TYPE_OPTIONS: readonly { value: CaptureCategory; label: string }[] = [
+  { value: '请求', label: '请求' },
+  { value: '响应', label: '响应' },
+  { value: '系统', label: '系统' },
 ]
-
-const TYPE_LABELS: Record<LogCaptureType, string> = {
-  request: '请求',
-  response: '响应',
-  system: '系统',
-}
-
-const TYPE_VARIANTS: Record<LogCaptureType, 'default' | 'secondary' | 'outline'> = {
-  request: 'default',
-  response: 'secondary',
-  system: 'outline',
-}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -49,46 +43,102 @@ function formatSize(bytes: number): string {
 }
 
 export function LogCapturePage() {
-  const [files, setFiles] = useState<readonly LogCaptureFile[]>([])
-  const [total, setTotal] = useState(0)
+  const [pairs, setPairs] = useState<readonly LogCapturePairSummary[]>([])
+  const [pairTotal, setPairTotal] = useState(0)
+  const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
+  const [systemTotal, setSystemTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange>({})
-  const [selectedTypes, setSelectedTypes] = useState<readonly LogCaptureType[]>([])
+  const [selectedTypes, setSelectedTypes] = useState<readonly CaptureCategory[]>([])
   const [prefix, setPrefix] = useState('')
-  const [preview, setPreview] = useState<LogCaptureFile | null>(null)
+  const [headerKey, setHeaderKey] = useState('')
+  const [headerValue, setHeaderValue] = useState('')
+  const [preview, setPreview] = useState<CaptureRow | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
   const mountedRef = useRef(true)
 
-  const typeQuery = selectedTypes.join(',')
+  const total = pairTotal + systemTotal
 
-  const fetchFiles = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
-    try {
-      const result = await dashboardApi.listLogCaptureFiles({
-        prefix: prefix || undefined,
-        type: typeQuery || undefined,
-        from: dateRange.from,
-        to: dateRange.to,
-        limit: LIMIT,
-        offset,
-      })
-      if (!mountedRef.current) return
-      setFiles(result.files)
-      setTotal(result.total)
-    } catch (err) {
-      if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false)
+
+    const shouldFetchPairs =
+      selectedTypes.length === 0 ||
+      selectedTypes.includes('请求') ||
+      selectedTypes.includes('响应')
+    const shouldFetchSystem =
+      selectedTypes.length === 0 || selectedTypes.includes('系统')
+    const pairTypeQuery =
+      (['请求', '响应'] as const)
+        .filter((t) => selectedTypes.includes(t))
+        .map((t) => (t === '请求' ? 'request' : 'response'))
+        .join(',') || undefined
+
+    const pairTask: Promise<void> = shouldFetchPairs
+      ? dashboardApi
+          .listLogCapturePairs({
+            prefix: prefix || undefined,
+            type: pairTypeQuery,
+            from: dateRange.from,
+            to: dateRange.to,
+            headerKey: headerKey || undefined,
+            headerValue: headerValue || undefined,
+            limit: LIMIT,
+            offset,
+          })
+          .then((result) => {
+            if (!mountedRef.current) return
+            setPairs(result.pairs)
+            setPairTotal(result.total)
+          })
+      : Promise.resolve().then(() => {
+          if (!mountedRef.current) return
+          setPairs([])
+          setPairTotal(0)
+        })
+
+    const systemTask: Promise<void> = shouldFetchSystem
+      ? dashboardApi
+          .listLogCaptureFiles({
+            prefix: prefix || undefined,
+            type: 'system',
+            from: dateRange.from,
+            to: dateRange.to,
+            headerKey: headerKey || undefined,
+            headerValue: headerValue || undefined,
+            limit: LIMIT,
+            offset,
+          })
+          .then((result) => {
+            if (!mountedRef.current) return
+            setSystemFiles(result.files)
+            setSystemTotal(result.total)
+          })
+      : Promise.resolve().then(() => {
+          if (!mountedRef.current) return
+          setSystemFiles([])
+          setSystemTotal(0)
+        })
+
+    const settled = await Promise.allSettled([pairTask, systemTask])
+    for (const r of settled) {
+      if (r.status === 'rejected') {
+        const reason = r.reason
+        if (mountedRef.current) {
+          setError(reason instanceof Error ? reason.message : '加载失败')
+        }
+        break
       }
     }
-  }, [prefix, typeQuery, dateRange.from, dateRange.to, offset])
+    if (mountedRef.current) {
+      setLoading(false)
+    }
+  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, offset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -98,10 +148,11 @@ export function LogCapturePage() {
   }, [])
 
   useEffect(() => {
-    void fetchFiles()
-  }, [fetchFiles])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchData()
+  }, [fetchData])
 
-  const toggleType = useCallback((value: LogCaptureType) => {
+  const toggleType = useCallback((value: CaptureCategory) => {
     setSelectedTypes((prev) =>
       prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value],
     )
@@ -111,38 +162,113 @@ export function LogCapturePage() {
   const handleClear = useCallback(
     async (scope: 'filtered' | 'all') => {
       setClearing(true)
+      const clearTypeQuery =
+        (['请求', '响应', '系统'] as const)
+          .filter((t) => selectedTypes.includes(t))
+          .map((t) => (t === '请求' ? 'request' : t === '响应' ? 'response' : 'system'))
+          .join(',') || undefined
       try {
         await dashboardApi.clearLogCapture({
           scope,
           ...(scope === 'filtered'
             ? {
                 prefix: prefix || undefined,
-                type: typeQuery || undefined,
+                type: clearTypeQuery,
                 from: dateRange.from,
                 to: dateRange.to,
               }
             : {}),
         })
         setClearOpen(false)
-        void fetchFiles()
+        void fetchData()
       } catch (err) {
-        setError(err instanceof Error ? err.message : '清空失败')
+        if (mountedRef.current) {
+          setError(err instanceof Error ? err.message : '清空失败')
+        }
         setClearOpen(false)
       } finally {
         setClearing(false)
       }
     },
-    [prefix, typeQuery, dateRange.from, dateRange.to, fetchFiles],
+    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchData],
   )
 
-  const columns: ColumnDef<LogCaptureFile>[] = [
-    { key: 'created_at', label: '时间', isTime: true },
-    { key: 'prefix', label: '文件夹路径' },
-    { key: 'source', label: '标记' },
-    { key: 'type', label: '类型', render: (v) => <Badge variant={TYPE_VARIANTS[v as LogCaptureType]}>{TYPE_LABELS[v as LogCaptureType]}</Badge> },
-    { key: 'name', label: '文件名' },
-    { key: 'size', label: '大小', render: (v) => formatSize(v as number) },
-    { key: 'id', label: '操作', showEmptyPlaceholder: false, render: (_, row) => <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setPreview(row as LogCaptureFile) }}>查看</Button> },
+  const rows: readonly CaptureRow[] = useMemo(() => {
+    const merged: CaptureRow[] = []
+    pairs.forEach((p) => merged.push({ kind: 'pair', pair: p }))
+    systemFiles.forEach((f) => merged.push({ kind: 'system', file: f }))
+    merged.sort((a, b) => {
+      const aT = new Date(a.kind === 'pair' ? a.pair.created_at : a.file.created_at).getTime()
+      const bT = new Date(b.kind === 'pair' ? b.pair.created_at : b.file.created_at).getTime()
+      return bT - aT
+    })
+    return merged
+  }, [pairs, systemFiles])
+
+  const columns: ColumnDef<CaptureRow>[] = [
+    {
+      key: 'created_at',
+      label: '时间',
+      isTime: true,
+      render: (_, row) => (row.kind === 'pair' ? row.pair.created_at : row.file.created_at),
+    },
+    {
+      key: 'prefix',
+      label: '文件夹路径',
+      render: (_, row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
+    },
+    {
+      key: 'source',
+      label: '标记',
+      render: (_, row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
+    },
+    {
+      key: 'type',
+      label: '类型',
+      render: (_, row) =>
+        row.kind === 'pair' ? (
+          <Badge variant="default">
+            {row.pair.type_label}
+            {row.pair.has_rewrite ? (
+              <span className="text-amber-600 dark:text-amber-400"> ·修改过</span>
+            ) : null}
+          </Badge>
+        ) : (
+          <Badge variant="outline">系统</Badge>
+        ),
+    },
+    {
+      key: 'name',
+      label: '文件名/请求ID',
+      render: (_, row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),
+    },
+    {
+      key: 'size',
+      label: '大小',
+      render: (_, row) =>
+        row.kind === 'system' ? (
+          formatSize(row.file.size)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation()
+            setPreview(row)
+          }}
+        >
+          查看
+        </Button>
+      ),
+    },
   ]
 
   return (
@@ -156,7 +282,7 @@ export function LogCapturePage() {
         <DataTable
           id="capture"
           columns={columns}
-          data={files}
+          data={rows}
           total={total}
           loading={loading}
           error={error}
@@ -164,7 +290,7 @@ export function LogCapturePage() {
           limit={LIMIT}
           onOffsetChange={setOffset}
           emptyText="暂无抓取日志"
-          onRetry={() => void fetchFiles()}
+          onRetry={() => void fetchData()}
           filters={
             <>
               <DateRangeFilter
@@ -194,12 +320,30 @@ export function LogCapturePage() {
                 }}
                 className="w-48"
               />
+              <Input
+                placeholder="请求头名 (如 x-session-id)"
+                value={headerKey}
+                onChange={(e) => {
+                  setHeaderKey(e.target.value)
+                  setOffset(0)
+                }}
+                className="w-48"
+              />
+              <Input
+                placeholder="请求头值"
+                value={headerValue}
+                onChange={(e) => {
+                  setHeaderValue(e.target.value)
+                  setOffset(0)
+                }}
+                className="w-48"
+              />
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void fetchFiles()}
+                onClick={() => void fetchData()}
               >
-                刷新
+                筛选
               </Button>
             </>
           }
@@ -215,12 +359,23 @@ export function LogCapturePage() {
         />
       </div>
 
-      <LogCapturePreviewDialog
-        fileId={preview?.id ?? ''}
-        fileName={preview?.name ?? ''}
-        open={preview !== null}
-        onClose={() => setPreview(null)}
-      />
+      {preview?.kind === 'pair' && (
+        <LogCapturePreviewDialog
+          kind="pair"
+          requestId={preview.pair.request_id}
+          open
+          onClose={() => setPreview(null)}
+        />
+      )}
+      {preview?.kind === 'system' && (
+        <LogCapturePreviewDialog
+          kind="system"
+          fileId={preview.file.id}
+          fileName={preview.file.name}
+          open
+          onClose={() => setPreview(null)}
+        />
+      )}
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent>

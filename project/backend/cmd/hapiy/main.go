@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/common"
@@ -70,13 +71,19 @@ func main() {
 	defer service.Logs().Stop()
 
 	// Initialize per-request log file capture (writes JSON files to disk)
-	service.InitLogFileWriter(cfg.LogDir, db)
+	service.InitLogCaptureWriter(db)
 
 	service.InitQuotaLedger(db)
 
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
 	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
 	defer stopTopologyArchive()
+
+	// Active-request retention: load persisted setting and periodically
+	// evict finished entries past their retention window.
+	handler.InitActiveRequestRetention(db)
+	stopRetentionEviction := common.Global().StartEvictionLoop(30 * time.Second)
+	defer stopRetentionEviction()
 
 	// Create Gin router
 	r := gin.Default()
@@ -135,9 +142,11 @@ func main() {
 			dashboardAuthed.GET("/logs", handler.ListLogs(db))
 			dashboardAuthed.POST("/logs/clear", handler.ClearLogs(db))
 			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
-			dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db, cfg.LogDir))
-			dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db, cfg.LogDir))
-			dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db, cfg.LogDir))
+		dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db))
+		dashboardAuthed.GET("/logs/capture/pairs", handler.ListLogCapturePairs(db))
+		dashboardAuthed.GET("/logs/capture/pairs/:request_id", handler.ReadLogCapturePair(db))
+		dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db))
+		dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db))
 
 			// Users
 			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))
@@ -149,6 +158,7 @@ func main() {
 			dashboard.POST("/rules/:type", handler.CreateRule(db))
 			dashboard.PUT("/rules/:type/:id", handler.UpdateRule(db))
 			dashboard.DELETE("/rules/:type/:id", handler.DeleteRule(db))
+			dashboard.POST("/rules/:type/:id/test", handler.TestRewriteRule(db))
 
 			// Models (per-model pricing & info)
 			dashboard.GET("/models", handler.ListPrices(db))
@@ -180,6 +190,8 @@ func main() {
 
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))
+			dashboardAuthed.GET("/active-requests/config", handler.GetActiveRequestConfig(db))
+			dashboardAuthed.PUT("/active-requests/config", handler.PutActiveRequestConfig(db))
 			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())
 		}
 

@@ -16,6 +16,7 @@ import {
   LogOutputSlotItem,
   makeEmptyEntry,
 } from '@/components/topology/slot-items'
+import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 
 export interface FlatProviderChild {
   readonly id: string
@@ -85,6 +86,20 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   const [overIndex, setOverIndex] = useState<number | null>(null)
   const [entryDragIndex, setEntryDragIndex] = useState<number | null>(null)
   const [entryOverIndex, setEntryOverIndex] = useState<number | null>(null)
+  const [testOpen, setTestOpen] = useState(false)
+
+  // Collect all bound rewrite entries in index order for sequential testing.
+  const boundEntries = entries
+    .filter((e) => e.ruleId && (slotType === 'requestModify' || slotType === 'responseModify'))
+    .sort((a, b) => a.index - b.index)
+
+  const rewriteRules = slotType === 'requestModify'
+    ? (slotRules.requestModify as readonly { id: string; name: string; script: string; status: boolean }[])
+    : (slotRules.responseModify as readonly { id: string; name: string; script: string; status: boolean }[])
+
+  const testRules = boundEntries
+    .map((e) => rewriteRules.find((r) => r.id === e.ruleId))
+    .filter((r): r is { id: string; name: string; script: string; status: boolean } => r != null && r.status)
 
   const handleDrop = (entryIndex: number) => {
     if (dragIndex !== null && dragIndex !== entryIndex) {
@@ -141,6 +156,17 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       >
         {strategyLabel[providerStrategy]}
         <AppIcon name="refresh" size={10} />
+      </button>
+    </div>
+  ) : testRules.length > 0 ? (
+    <div className="flex items-center justify-between">
+      <span>{title}</span>
+      <button
+        type="button"
+        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
+      >
+        测试
       </button>
     </div>
   ) : (
@@ -229,6 +255,17 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           borderWidth: topologyConfig.handles.slot.source.borderWidth,
         }}
       />
+      {testOpen && (
+        <RewriteTestDialog
+          open={testOpen}
+          onClose={() => setTestOpen(false)}
+          rules={testRules}
+          type={slotType === 'requestModify' ? 'rewrite' : 'rewrite-response'}
+          preselectedRuleId={null}
+          readonlyRule={true}
+          showSelector={false}
+        />
+      )}
     </>
   )
 }

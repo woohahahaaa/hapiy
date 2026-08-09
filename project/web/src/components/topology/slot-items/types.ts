@@ -68,12 +68,12 @@ export type LogOutputSlotEntry = {
   readonly enabled: boolean
   readonly prefix: string
   readonly recordRequest: boolean
-  readonly recordModifiedRequest: boolean
   readonly recordResponse: boolean
-  readonly recordModifiedResponse: boolean
   readonly recordSystem: boolean
-  readonly mergeStream: boolean
   readonly autoCloseMinutes: number
+  // Unix epoch in milliseconds; null when the node is closed.
+  // When set and enabled=true, the node auto-closes at this wall-clock time.
+  readonly deadlineAt: number | null
   readonly config: Readonly<Record<string, unknown>>
 }
 
@@ -162,12 +162,10 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
         enabled: true,
         prefix: '',
         recordRequest: true,
-        recordModifiedRequest: true,
         recordResponse: true,
-        recordModifiedResponse: true,
         recordSystem: true,
-        mergeStream: true,
         autoCloseMinutes: 5,
+        deadlineAt: null,
         config: {},
       }
   }

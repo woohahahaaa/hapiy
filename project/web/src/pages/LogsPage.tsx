@@ -243,7 +243,7 @@ export function LogsPage() {
         </div>
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-        <DialogContent>
+        <DialogContent width="sm">
           <DialogHeader>
             <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
             <DialogDescription>

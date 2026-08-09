@@ -297,7 +297,7 @@ export function ChannelAffinityPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent width="md">
           <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
           <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} saving={isSaving} />
         </DialogContent>

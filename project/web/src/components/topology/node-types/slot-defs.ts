@@ -42,7 +42,6 @@ export interface LogConfigSlotDef {
   readonly enabled: true
   readonly defaults: {
     readonly prefix: string
-    readonly mergeStream: boolean
     readonly autoCloseMinutes: number
   }
 }
@@ -51,9 +50,7 @@ export interface RecordConfigSlotDef {
   readonly enabled: true
   readonly defaults: {
     readonly recordRequest: boolean
-    readonly recordModifiedRequest: boolean
     readonly recordResponse: boolean
-    readonly recordModifiedResponse: boolean
     readonly recordSystem: boolean
   }
 }
@@ -167,15 +164,13 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
     orderSlot: { enabled: false },
     logConfigSlot: {
       enabled: true,
-      defaults: { prefix: '', mergeStream: true, autoCloseMinutes: 5 },
+      defaults: { prefix: '', autoCloseMinutes: 5 },
     },
     recordConfigSlot: {
       enabled: true,
       defaults: {
         recordRequest: true,
-        recordModifiedRequest: true,
         recordResponse: true,
-        recordModifiedResponse: true,
         recordSystem: true,
       },
     },

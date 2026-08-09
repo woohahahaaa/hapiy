@@ -96,6 +96,9 @@ function parseNode(value: unknown): WorkflowNode {
       }
     case 'logOutput': {
       const cfg = isRecord(value.config) ? value.config : {}
+      const deadlineAt = typeof cfg.deadline_at === 'number' && Number.isFinite(cfg.deadline_at) && cfg.deadline_at > 0
+        ? cfg.deadline_at
+        : null
       return {
         type: 'logOutput',
         name,
@@ -103,12 +106,10 @@ function parseNode(value: unknown): WorkflowNode {
         config: {
           prefix: typeof cfg.prefix === 'string' ? cfg.prefix : '',
           record_request: typeof cfg.record_request === 'boolean' ? cfg.record_request : true,
-          record_modified_request: typeof cfg.record_modified_request === 'boolean' ? cfg.record_modified_request : true,
           record_response: typeof cfg.record_response === 'boolean' ? cfg.record_response : true,
-          record_modified_response: typeof cfg.record_modified_response === 'boolean' ? cfg.record_modified_response : true,
           record_system: typeof cfg.record_system === 'boolean' ? cfg.record_system : true,
-          merge_stream: typeof cfg.merge_stream === 'boolean' ? cfg.merge_stream : true,
           auto_close_minutes: typeof cfg.auto_close_minutes === 'number' ? cfg.auto_close_minutes : 5,
+          ...(deadlineAt !== null ? { deadline_at: deadlineAt } : {}),
         },
       }
     }
@@ -160,12 +161,10 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
         slotType: 'logOutput',
         prefix: ln.config.prefix,
         recordRequest: ln.config.record_request,
-        recordModifiedRequest: ln.config.record_modified_request,
         recordResponse: ln.config.record_response,
-        recordModifiedResponse: ln.config.record_modified_response,
         recordSystem: ln.config.record_system,
-        mergeStream: ln.config.merge_stream,
         autoCloseMinutes: ln.config.auto_close_minutes,
+        deadlineAt: typeof ln.config.deadline_at === 'number' && ln.config.deadline_at > 0 ? ln.config.deadline_at : null,
       } as SlotEntry
     }
     default:
@@ -236,12 +235,10 @@ function entryToNode(entry: SlotEntry, _providerName: string): WorkflowNode | nu
         config: {
           prefix: entry.prefix,
           record_request: entry.recordRequest,
-          record_modified_request: entry.recordModifiedRequest,
           record_response: entry.recordResponse,
-          record_modified_response: entry.recordModifiedResponse,
           record_system: entry.recordSystem,
-          merge_stream: entry.mergeStream,
           auto_close_minutes: entry.autoCloseMinutes,
+          ...(entry.deadlineAt !== null && entry.deadlineAt > 0 ? { deadline_at: entry.deadlineAt } : {}),
         },
       }
   }

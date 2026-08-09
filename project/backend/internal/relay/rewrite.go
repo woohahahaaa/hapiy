@@ -440,6 +440,18 @@ func resolveSjsonPath(body []byte, path string) string {
 	return strings.Join(resolved, ".")
 }
 
+// ApplyScript compiles and runs a rewrite script against the given body,
+// returning the modified body. This is the public entry point for the
+// rewrite test API in the handler layer.
+func ApplyScript(body []byte, script string) ([]byte, error) {
+	ops, err := compileRewriteChain("test", script)
+	if err != nil {
+		return nil, err
+	}
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "test", RuleName: "test", Ops: ops}})
+	return updated, err
+}
+
 // evaluateConditions short-circuits when the conditions list is empty.
 func evaluateConditions(conds []RewriteCondition, body []byte, headers map[string]string) (bool, error) {
 	if len(conds) == 0 {

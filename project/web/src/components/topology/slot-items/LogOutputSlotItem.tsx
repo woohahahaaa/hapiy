@@ -29,22 +29,20 @@ export function LogOutputSlotItem({
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('5')
   const [seconds, setSeconds] = useState('0')
-  const [deadline, setDeadline] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
   // 倒计时进行中时每秒刷新 now，驱动倒计时文本渲染
   useEffect(() => {
-    if (deadline === null || !entry.enabled) return
+    if (entry.deadlineAt === null || !entry.enabled) return
     const timer = setInterval(() => setNow(Date.now()), 250)
     return () => clearInterval(timer)
-  }, [deadline, entry.enabled])
+  }, [entry.deadlineAt, entry.enabled])
 
-// 倒计时结束自动关闭
-useEffect(() => {
-  if (deadline === null || !entry.enabled || now < deadline) return
-  setDeadline(null)
-  onChange({ ...entry, enabled: false })
-}, [deadline, entry.enabled, now, entry, onChange])
+  // 倒计时结束自动关闭
+  useEffect(() => {
+    if (entry.deadlineAt === null || !entry.enabled || now < entry.deadlineAt) return
+    onChange({ ...entry, enabled: false, deadlineAt: null })
+  }, [entry.deadlineAt, entry.enabled, now, entry, onChange])
 
   const totalSeconds =
     (Number.isNaN(Number(hours)) ? 0 : Number(hours)) * 3600 +
@@ -54,22 +52,20 @@ useEffect(() => {
   const handleConfirm = () => {
     if (totalSeconds <= 0) return
     setDialogOpen(false)
-    onChange({ ...entry, enabled: true })
-    setDeadline(Date.now() + totalSeconds * 1000)
+    onChange({ ...entry, enabled: true, deadlineAt: Date.now() + totalSeconds * 1000 })
   }
 
   const handleClose = () => {
-    onChange({ ...entry, enabled: false })
-    setDeadline(null)
+    onChange({ ...entry, enabled: false, deadlineAt: null })
     setDialogOpen(false)
   }
 
-  const remaining = deadline !== null && entry.enabled ? Math.max(0, deadline - now) : 0
+  const remaining = entry.deadlineAt !== null && entry.enabled ? Math.max(0, entry.deadlineAt - now) : 0
   const remainingHours = Math.floor(remaining / 3600000)
   const remainingMinutes = Math.floor((remaining % 3600000) / 60000)
   const remainingSeconds = Math.floor((remaining % 60000) / 1000)
 
-  const hasDeadline = deadline !== null && entry.enabled
+  const hasDeadline = entry.deadlineAt !== null && entry.enabled
 
   const enableControl = !entry.enabled ? (
     <Button
@@ -127,40 +123,25 @@ useEffect(() => {
           <span className="text-[10px] text-muted-foreground">记录内容</span>
           <div className="flex flex-col gap-1">
             <CheckField
-              label="原始请求"
+              label="记录请求"
               checked={entry.recordRequest}
               onChange={(v) => onChange({ ...entry, recordRequest: v })}
             />
             <CheckField
-              label="改写后请求"
-              checked={entry.recordModifiedRequest}
-              onChange={(v) => onChange({ ...entry, recordModifiedRequest: v })}
-            />
-            <CheckField
-              label="原始响应"
+              label="记录响应"
               checked={entry.recordResponse}
               onChange={(v) => onChange({ ...entry, recordResponse: v })}
             />
             <CheckField
-              label="改写后响应"
-              checked={entry.recordModifiedResponse}
-              onChange={(v) => onChange({ ...entry, recordModifiedResponse: v })}
-            />
-            <CheckField
-              label="系统日志"
+              label="记录系统"
               checked={entry.recordSystem}
               onChange={(v) => onChange({ ...entry, recordSystem: v })}
             />
           </div>
         </div>
-        <CheckField
-          label="合并流式响应"
-          checked={entry.mergeStream}
-          onChange={(v) => onChange({ ...entry, mergeStream: v })}
-        />
       </SlotItemCard>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-xs">
+        <DialogContent width="sm">
           <DialogHeader>
             <DialogTitle>设置开启时长</DialogTitle>
           </DialogHeader>

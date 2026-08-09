@@ -13,6 +13,14 @@ import '@xyflow/react/dist/style.css'
 import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { FlatSlotNode } from '@/nodes/FlatSlotNode'
@@ -802,7 +810,9 @@ export function TopologyPage() {
     [setTopology, setEdges, markDirty, commitHistory],
   )
 
-  const handleDeleteSelected = useCallback(() => {
+  const [confirmDelete, setConfirmDelete] = useState<{ nodeCount: number; edgeCount: number } | null>(null)
+
+  const executeDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes
       .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
       .map((n) => n.id)
@@ -812,6 +822,15 @@ export function TopologyPage() {
       handleDeleteSelectedEdges()
     }
   }, [handleDeleteNodes, handleDeleteSelectedEdges])
+
+  const requestDeleteSelected = useCallback(() => {
+    const topLevelIds = selectionRef.current.nodes.filter(
+      (n) => n.type === 'requestEntry' || n.type === 'slot',
+    )
+    const edgeCount = selectionRef.current.edges.filter((e) => !e.source.startsWith('model-')).length
+    if (topLevelIds.length === 0 && edgeCount === 0) return
+    setConfirmDelete({ nodeCount: topLevelIds.length, edgeCount })
+  }, [])
 
   const handleUndo = useCallback(() => {
     const cur = tpRef.current
@@ -901,20 +920,17 @@ export function TopologyPage() {
 
       if (event.key !== 'Delete' && event.key !== 'Backspace') return
       if (inEditable) return
-      const topLevelIds = selectionRef.current.nodes
-        .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
-        .map((n) => n.id)
-      if (topLevelIds.length > 0) {
-        event.preventDefault()
-        handleDeleteNodes(topLevelIds)
-      } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
-        event.preventDefault()
-        handleDeleteSelectedEdges()
-      }
+      const topLevelIds = selectionRef.current.nodes.filter(
+        (n) => n.type === 'requestEntry' || n.type === 'slot',
+      )
+      const hasEdges = selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))
+      if (topLevelIds.length === 0 && !hasEdges) return
+      event.preventDefault()
+      requestDeleteSelected()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleDeleteNodes, handleDeleteSelectedEdges, handleUndo, handleRedo, handleCopy, handlePaste])
+  }, [requestDeleteSelected, handleUndo, handleRedo, handleCopy, handlePaste])
 
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
@@ -1204,6 +1220,17 @@ export function TopologyPage() {
           zoomOnDoubleClick={false}
         >
           <Background color={topologyConfig.grid.color} gap={topologyConfig.grid.gap} size={topologyConfig.grid.size} />
+          <Panel className="topology-actions-left" position="bottom-left">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={requestDeleteSelected}
+              title="删除选中节点 (Delete)"
+              aria-label="删除选中节点"
+            >
+              <AppIcon name="delete" />
+            </Button>
+          </Panel>
           <Panel className="topology-actions" position="bottom-right">
             <Button
               variant="outline"
@@ -1234,15 +1261,6 @@ export function TopologyPage() {
               ref={addButtonRef}
             >
               <AppIcon name="add" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleDeleteSelected}
-              title="删除选中节点 (Delete)"
-              aria-label="删除选中节点"
-            >
-              <AppIcon name="delete" />
             </Button>
             <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
               <AppIcon name="auto_fix_high" />
@@ -1275,6 +1293,37 @@ export function TopologyPage() {
             void loadData()
           }}
         />
+        <Dialog
+          open={confirmDelete !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmDelete(null)
+          }}
+        >
+          <DialogContent width="sm">
+            <DialogHeader>
+              <DialogTitle>确认删除</DialogTitle>
+              <DialogDescription>
+                {confirmDelete?.nodeCount && confirmDelete.nodeCount > 0
+                  ? `将删除 ${confirmDelete.nodeCount} 个节点${confirmDelete.edgeCount > 0 ? `和 ${confirmDelete.edgeCount} 条连线` : ''},删除后可通过撤销恢复。`
+                  : `将删除 ${confirmDelete?.edgeCount ?? 0} 条连线,删除后可通过撤销恢复。`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  executeDeleteSelected()
+                  setConfirmDelete(null)
+                }}
+              >
+                确认删除
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

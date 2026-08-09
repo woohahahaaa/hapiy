@@ -36,6 +36,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&TopologySlotAssignment{},
 		&TopologyVersion{},
 		&PriceConfig{},
+		&LogCapture{},
 		&Setting{},
 		&BaseUrlPath{},
 	)

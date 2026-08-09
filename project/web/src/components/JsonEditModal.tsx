@@ -65,7 +65,7 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
   return (
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
+        <DialogContent width="md" height="auto" className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>编辑 JSON</DialogTitle>
           </DialogHeader>

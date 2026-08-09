@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -228,5 +230,69 @@ func DeleteRule(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{"message": "rule deleted"})
+	}
+}
+
+// TestRewriteRule applies a rule's script against the provided body and
+// returns the original and modified bodies so the frontend can display a
+// diff. Only rewrite and rewrite-response types are supported.
+func TestRewriteRule(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		ruleType := c.Param("type")
+		id := c.Param("id")
+
+		var script string
+		switch ruleType {
+		case RuleTypeRewrite:
+			var r model.RewriteRule
+			if err := db.First(&r, "id = ?", id).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+				return
+			}
+			if !r.Status {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "rule is disabled"})
+				return
+			}
+			script = r.Script
+		case RuleTypeRewriteResponse:
+			var r model.ResponseRewriteRule
+			if err := db.First(&r, "id = ?", id).Error; err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
+				return
+			}
+			if !r.Status {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "rule is disabled"})
+				return
+			}
+			script = r.Script
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "only rewrite and rewrite-response types support test"})
+			return
+		}
+
+		var input struct {
+			Body json.RawMessage `json:"body"`
+		}
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		modified, err := relay.ApplyScript(input.Body, script)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+
+		var modifiedRaw interface{}
+		if err := json.Unmarshal(modified, &modifiedRaw); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "改写结果解析失败"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"original": input.Body,
+			"modified": modifiedRaw,
+		}})
 	}
 }
