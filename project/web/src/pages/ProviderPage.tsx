@@ -217,7 +217,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     return () => { cancelled = true }
   }, [])
 
-  const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint ?? '/v1/models'
+  const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint
 
   const handleFetchModels = async () => {
     if (!effectiveEndpoint) {
@@ -256,13 +256,16 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
-  const handleConfirmAddModels = (ids: readonly string[]) => {
-    const existingIds = new Set(form.models.map((model) => model.model))
-    const additions: ProviderModel[] = ids
-      .filter((id) => !existingIds.has(id))
-      .map((id) => ({ model: id, endpoints: [] }))
-    if (additions.length > 0) {
-      setForm((current) => ({ ...current, models: [...current.models, ...additions] }))
+  const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
+    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [] }))
+    if (replace) {
+      setForm((current) => ({ ...current, models: additions }))
+    } else {
+      const existingIds = new Set(form.models.map((model) => model.model))
+      const filtered = additions.filter((a) => !existingIds.has(a.model))
+      if (filtered.length > 0) {
+        setForm((current) => ({ ...current, models: [...current.models, ...filtered] }))
+      }
     }
     setFetchedModels(null)
   }
@@ -316,7 +319,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
           <div className="flex flex-wrap gap-2">
             {form.models.map((model) => (
-              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{model.model}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><AppIcon name="close" size={12} className="inline" /></button></span>
+              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><AppIcon name="close" size={12} className="inline" /></button>{model.model}</span>
             ))}
           </div>
           {fetchError && (
@@ -365,7 +368,7 @@ type FetchModelDialogProps = {
   readonly models: readonly FetchedModel[]
   readonly existingIds: ReadonlySet<string>
   readonly onClose: () => void
-  readonly onConfirm: (ids: readonly string[]) => void
+  readonly onConfirm: (ids: readonly string[], replace?: boolean) => void
 }
 
 function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchModelDialogProps) {
@@ -388,6 +391,11 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
     onConfirm([...selected])
   }
 
+  const handleReplaceAndAdd = () => {
+    setSaving(true)
+    onConfirm([...selected], true)
+  }
+
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent className="max-w-sm">
@@ -402,6 +410,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>取消</Button>
+          <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
           <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '确认添加'}</Button>
         </DialogFooter>
       </DialogContent>
