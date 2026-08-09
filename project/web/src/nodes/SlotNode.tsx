@@ -29,6 +29,7 @@ interface SlotNodeData {
   onChangeEntry: (next: SlotEntry) => void
   onDeleteEntry: (index: number) => void
   onReorderEntries: (fromIndex: number, toIndex: number) => void
+  onAutoCloseEntry?: () => void
 }
 
 interface SlotNodeProps {
@@ -37,7 +38,7 @@ interface SlotNodeProps {
 }
 
 export function SlotNode({ data }: SlotNodeProps) {
-  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries } = data
+  const { title, entries, slotType, rules, onChangeEntry, onDeleteEntry, onReorderEntries, onAutoCloseEntry } = data
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -75,12 +76,12 @@ export function SlotNode({ data }: SlotNodeProps) {
     .map((e) => slotRules.find((r) => r.id === e.ruleId))
     .filter((r): r is { id: string; name: string; script: string; status: boolean } => r != null && r.status)
 
-  const slotTitle = testRules.length > 0 ? (
+  const slotTitle = slotType === 'requestModify' || slotType === 'responseModify' ? (
     <span className="flex items-center gap-2">
       <span>{title}</span>
       <button
         type="button"
-        className="nodrag nopan inline-flex items-center justify-center rounded-md border border-border bg-background px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+        className="nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
         onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
       >
         测试
@@ -115,6 +116,7 @@ export function SlotNode({ data }: SlotNodeProps) {
             onChangeEntry,
             onDeleteEntry,
             dragProps(entry.index),
+            onAutoCloseEntry,
           ),
         )}
       </SlotContainer>
@@ -158,6 +160,7 @@ function renderItem(
   onChangeEntry: (next: SlotEntry) => void,
   onDeleteEntry: (index: number) => void,
   drag: DragProps,
+  onAutoCloseEntry?: () => void,
 ) {
   const onDelete = () => onDeleteEntry(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -225,6 +228,7 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
+            onAutoClose={onAutoCloseEntry}
             {...drag}
           />
         )

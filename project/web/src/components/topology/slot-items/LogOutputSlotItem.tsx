@@ -17,12 +17,14 @@ interface LogOutputSlotItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
+  onAutoClose?: () => void
 }
 
 export function LogOutputSlotItem({
   entry,
   onChange,
   onDelete,
+  onAutoClose,
   ...drag
 }: LogOutputSlotItemProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -42,7 +44,8 @@ export function LogOutputSlotItem({
   useEffect(() => {
     if (entry.deadlineAt === null || !entry.enabled || now < entry.deadlineAt) return
     onChange({ ...entry, enabled: false, deadlineAt: null })
-  }, [entry.deadlineAt, entry.enabled, now, entry, onChange])
+    onAutoClose?.()
+  }, [entry.deadlineAt, entry.enabled, now, entry, onChange, onAutoClose])
 
   const totalSeconds =
     (Number.isNaN(Number(hours)) ? 0 : Number(hours)) * 3600 +

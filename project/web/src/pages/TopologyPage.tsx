@@ -266,12 +266,18 @@ export function TopologyPage() {
       const cur = tpRef.current
       if (!cur) return
       const nodes = updater(cur.nodes)
+      // Rebuild wires from the persisted topology instead of the live ReactFlow
+      // edges: edgesRef can lag behind state updates (or miss model edges),
+      // which made every node-only change (adding an entry, adding a slot item,
+      // reordering) drop wires. canvasFromFlat collapses the current wires, and
+      // flatWiresFromCanvas re-expands them, so the round-trip is stable while
+      // still picking up provider primary changes.
       const collapsed = canvasFromFlat(nodes, cur.wires)
       const wires = flatWiresFromCanvas({
         topLevel: collapsed.topLevel,
         providers: collapsed.providers,
         providerSlotOf: collapsed.providerSlotOf,
-        canvasWires: canvasWiresFromEdges(edgesRef.current),
+        canvasWires: collapsed.canvasWires,
       })
       const next: FlatTopology = { nodes, wires }
       if (sameFlatTopology(cur, next)) return
@@ -553,6 +559,9 @@ export function TopologyPage() {
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
             onDeleteEntry: (index: number) => handleDeleteSlotEntry(node.id, slotType, index),
             onReorderEntries: (from: number, to: number) => handleReorderSlotEntries(node.id, slotType, from, to),
+            onAutoCloseEntry: () => {
+              void persistTopology()
+            },
           },
         })
       }
@@ -1008,9 +1017,13 @@ export function TopologyPage() {
     if (!cur) return
     const id = `entry-${crypto.randomUUID().slice(0, 8)}`
     const node: FlatNode = { id, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 }
-    updateTopologyNodes(() => [...cur.nodes, node])
+    const next: FlatTopology = { nodes: [...cur.nodes, node], wires: cur.wires }
+    if (sameFlatTopology(cur, next)) return
+    commitHistory(cur)
+    setTopology(next)
+    markDirty()
     placeNewNodes([{ id, width: topologyConfig.fallbackNodeSize.width }])
-  }, [updateTopologyNodes, placeNewNodes])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes])
 
   const handleAddProviderSlot = useCallback(() => {
     const cur = tpRef.current

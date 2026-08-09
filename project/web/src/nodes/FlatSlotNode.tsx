@@ -45,6 +45,7 @@ interface FlatSlotNodeData {
   onChangeEntry?: (next: SlotEntry) => void
   onDeleteEntry?: (index: number) => void
   onReorderEntries?: (fromIndex: number, toIndex: number) => void
+  onAutoCloseEntry?: () => void
 }
 
 interface FlatSlotNodeProps {
@@ -77,6 +78,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     onChangeEntry,
     onDeleteEntry,
     onReorderEntries,
+    onAutoCloseEntry,
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
@@ -146,6 +148,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     roundRobin: '轮询',
   } as const
 
+  const isRequestResponseModify = !isProviderSlot && (slotType === 'requestModify' || slotType === 'responseModify')
   const titleBadge = isProviderSlot ? (
     <div className="flex items-center justify-between">
       <span>{title}</span>
@@ -158,7 +161,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
         <AppIcon name="refresh" size={10} />
       </button>
     </div>
-  ) : testRules.length > 0 ? (
+  ) : isRequestResponseModify ? (
     <div className="flex items-center justify-between">
       <span>{title}</span>
       <button
@@ -240,6 +243,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               onChangeEntry,
               onDeleteEntry,
               entryDragProps(entry.index),
+              onAutoCloseEntry,
             ),
           )}
         </SlotContainer>
@@ -338,6 +342,7 @@ function renderItem(
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
+  onAutoCloseEntry?: () => void,
 ) {
   const onDelete = () => onDeleteEntry?.(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -405,6 +410,7 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
+            onAutoClose={onAutoCloseEntry}
             {...drag}
           />
         )

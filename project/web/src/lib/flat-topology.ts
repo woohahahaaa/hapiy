@@ -177,9 +177,14 @@ export function flatWiresFromCanvas(input: FlatSaveInput): FlatWire[] {
     // other child pointing to the same downstream as a dormant backup.
     if (providerSlotIds.has(w.source)) {
       const children = bySlot.get(w.source) ?? []
+      // Empty provider slot: pass through the canvas wire directly so the
+      // downstream chain stays intact (no provider to expand into).
+      if (children.length === 0) {
+        add(w.source, w.target)
+        continue
+      }
       const enabled = children.filter((p) => p.enabled)
       const primary = enabled.length > 0 ? enabled[0] : children[0]
-      if (!primary) continue
       add(w.source, primary.id)
       if (slotIds.has(w.target)) {
         add(primary.id, w.target)
