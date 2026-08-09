@@ -282,17 +282,16 @@ export function TopologyPage() {
       nds.map((n) => ({ ...n, selected: selected.some((s) => s.id === n.id) })),
     )
     setSelBox(null)
-    setSelMode(false) // auto-exit after one selection
+    setSelMode(false)
   }, [selBox, rfInstance])
 
-  const handlePaneMouseDown = useCallback((e: ReactMouseEvent) => {
-    if (e.button !== 0) return
+  const selPointerDown = useCallback((e: React.PointerEvent) => {
     handleSelStart(e.clientX, e.clientY)
   }, [handleSelStart])
-  const handlePaneMouseMove = useCallback((e: ReactMouseEvent) => {
+  const selPointerMove = useCallback((e: React.PointerEvent) => {
     handleSelMove(e.clientX, e.clientY)
   }, [handleSelMove])
-  const handlePaneMouseUp = useCallback(() => {
+  const selPointerUp = useCallback(() => {
     handleSelEnd()
   }, [handleSelEnd])
 
@@ -1277,9 +1276,6 @@ export function TopologyPage() {
         ref={setContainerEl}
         className="relative flex-1 overflow-hidden"
         onContextMenu={(e) => {
-          // Suppress the native context menu on touch devices so long-press
-          // does not compete with the selection mode. The ReactFlow
-          // onContextMenu handler still fires; we gate it with touchSelect.
           if ('ontouchstart' in window) e.preventDefault()
         }}
       >
@@ -1305,9 +1301,6 @@ export function TopologyPage() {
           zoomOnDoubleClick={false}
           panOnDrag={!selMode}
           selectionOnDrag={false}
-          onMouseDown={handlePaneMouseDown}
-          onMouseMove={handlePaneMouseMove}
-          onMouseUp={handlePaneMouseUp}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1369,6 +1362,14 @@ export function TopologyPage() {
             </Button>
           </Panel>
         </ReactFlow>
+        {selMode && (
+          <div
+            className="absolute inset-0 z-40 cursor-crosshair"
+            onPointerDown={selPointerDown}
+            onPointerMove={selPointerMove}
+            onPointerUp={selPointerUp}
+          />
+        )}
         {selBox && (
           <div
             className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
