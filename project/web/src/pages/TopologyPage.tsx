@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react'
 import {
   ReactFlow,
   Background,
@@ -244,7 +244,44 @@ export function TopologyPage() {
     mode: 'cursor',
   })
   const addButtonRef = useRef<HTMLButtonElement>(null)
-  
+
+  // ── Touch long-press → selection mode ──
+  // On mobile, single-finger drag pans the canvas. A 300ms hold without moving
+  // switches to selection mode so the user can box-select by dragging. Releasing
+  // reverts to pan mode.
+  const [touchSelect, setTouchSelect] = useState(false)
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+
+  const handleTouchStart = useCallback((e: ReactTouchEvent) => {
+    if (e.touches.length !== 1) return
+    const pos = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    touchStartPosRef.current = pos
+    touchTimerRef.current = setTimeout(() => {
+      // Only activate selection if finger hasn't moved much (still holding)
+      touchStartPosRef.current = null // consumed
+      setTouchSelect(true)
+    }, 300)
+  }, [])
+
+  const handleTouchMove = useCallback((e: ReactTouchEvent) => {
+    if (!touchStartPosRef.current) return
+    const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x)
+    const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y)
+    if (dx > 10 || dy > 10) {
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+      touchTimerRef.current = null
+      touchStartPosRef.current = null
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+    touchTimerRef.current = null
+    touchStartPosRef.current = null
+    setTouchSelect(false)
+  }, [])
+
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
   const layoutSnapshotRef = useRef(layoutSnapshot)
@@ -1231,6 +1268,12 @@ export function TopologyPage() {
           proOptions={{ hideAttribution: true }}
           fitView
           zoomOnDoubleClick={false}
+          panOnDrag={!touchSelect}
+          selectionOnDrag={touchSelect}
+          selectionKeyCode={null}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         >
           <Background color={topologyConfig.grid.color} gap={topologyConfig.grid.gap} size={topologyConfig.grid.size} />
           <Panel className="topology-actions-left" position="bottom-left">
