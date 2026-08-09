@@ -5,6 +5,7 @@ import {
   Panel,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
   type Connection,
@@ -245,42 +246,53 @@ export function TopologyPage() {
   })
   const addButtonRef = useRef<HTMLButtonElement>(null)
 
-  // ── Touch long-press → selection mode ──
-  // On mobile, single-finger drag pans the canvas. A 300ms hold without moving
-  // switches to selection mode so the user can box-select by dragging. Releasing
-  // reverts to pan mode.
-  const [touchSelect, setTouchSelect] = useState(false)
-  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
-
+  // ── Touch two-finger selection ──
+  // Single finger pans the canvas. When a second finger touches down, a
+  // selection box is drawn from the second finger's start position to its
+  // current position. Releasing the second finger selects all nodes inside
+  // the box and clears the overlay.
+  const [touchBox, setTouchBox] = useState<{
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+  const rfInstance = useReactFlow()
   const handleTouchStart = useCallback((e: ReactTouchEvent) => {
-    if (e.touches.length !== 1) return
-    const pos = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    touchStartPosRef.current = pos
-    touchTimerRef.current = setTimeout(() => {
-      // Only activate selection if finger hasn't moved much (still holding)
-      touchStartPosRef.current = null // consumed
-      setTouchSelect(true)
-    }, 300)
-  }, [])
-
-  const handleTouchMove = useCallback((e: ReactTouchEvent) => {
-    if (!touchStartPosRef.current) return
-    const dx = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x)
-    const dy = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y)
-    if (dx > 10 || dy > 10) {
-      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
-      touchTimerRef.current = null
-      touchStartPosRef.current = null
+    if (e.touches.length === 2) {
+      const t = e.touches[1]
+      setTouchBox({ startX: t.clientX, startY: t.clientY, currentX: t.clientX, currentY: t.clientY })
     }
   }, [])
-
+  const handleTouchMove = useCallback(
+    (e: ReactTouchEvent) => {
+      if (e.touches.length < 2 || !touchBox) return
+      const t = e.touches[1]
+      setTouchBox((prev) => (prev ? { ...prev, currentX: t.clientX, currentY: t.clientY } : prev))
+    },
+    [touchBox],
+  )
   const handleTouchEnd = useCallback(() => {
-    if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
-    touchTimerRef.current = null
-    touchStartPosRef.current = null
-    setTouchSelect(false)
-  }, [])
+    if (!touchBox) return
+    // Convert screen coords to flow coords and find which nodes intersect.
+    const x1 = Math.min(touchBox.startX, touchBox.currentX)
+    const y1 = Math.min(touchBox.startY, touchBox.currentY)
+    const x2 = Math.max(touchBox.startX, touchBox.currentX)
+    const y2 = Math.max(touchBox.startY, touchBox.currentY)
+    const topLeft = rfInstance.screenToFlowPosition({ x: x1, y: y1 })
+    const bottomRight = rfInstance.screenToFlowPosition({ x: x2, y: y2 })
+    const selected = rfInstance.getNodes().filter((node) => {
+      const nx = node.position.x
+      const ny = node.position.y
+      const nw = (node.measured?.width ?? 0)
+      const nh = (node.measured?.height ?? 0)
+      return nx < bottomRight.x && nx + nw > topLeft.x && ny < bottomRight.y && ny + nh > topLeft.y
+    })
+    rfInstance.setNodes((nds) =>
+      nds.map((n) => ({ ...n, selected: selected.some((s) => s.id === n.id) })),
+    )
+    setTouchBox(null)
+  }, [touchBox, rfInstance])
 
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
@@ -737,12 +749,10 @@ export function TopologyPage() {
 
   const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
     event.preventDefault()
-    // In touch selection mode, long-press should box-select, not open the menu.
-    if (touchSelect) return
     if (!(event.target instanceof Element)) return
     if (event.target.closest('.react-flow__node')) return
     setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
-  }, [touchSelect])
+  }, [])
 
   const handleNodeClick = useCallback((_event: ReactMouseEvent) => {
   }, [])
@@ -1279,9 +1289,6 @@ export function TopologyPage() {
           proOptions={{ hideAttribution: true }}
           fitView
           zoomOnDoubleClick={false}
-          panOnDrag={!touchSelect}
-          selectionOnDrag={touchSelect}
-          selectionKeyCode={null}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1334,6 +1341,17 @@ export function TopologyPage() {
             </Button>
           </Panel>
         </ReactFlow>
+        {touchBox && (
+          <div
+            className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
+            style={{
+              left: Math.min(touchBox.startX, touchBox.currentX),
+              top: Math.min(touchBox.startY, touchBox.currentY),
+              width: Math.abs(touchBox.currentX - touchBox.startX),
+              height: Math.abs(touchBox.currentY - touchBox.startY),
+            }}
+          />
+        )}
         {menuState.open && (
           <FlatCanvasMenu
             x={menuState.x}
