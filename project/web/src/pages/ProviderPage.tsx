@@ -38,7 +38,7 @@ export function ProviderPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [useKey, setUseKey] = useState(false)
+  const [useKey, setUseKey] = useState(true)
 
   const loadProviders = async () => {
     setIsLoading(true)
@@ -217,7 +217,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     return () => { cancelled = true }
   }, [])
 
-  const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint
+  const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint ?? '/v1/models'
 
   const handleFetchModels = async () => {
     if (!effectiveEndpoint) {
