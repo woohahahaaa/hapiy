@@ -411,7 +411,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>取消</Button>
           <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
-          <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '确认添加'}</Button>
+          <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -7,15 +7,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// GetSetting returns the value for a system setting key, or "" when unset.
+// defaultSettings contains the built-in default values for system settings.
+// These are returned when the database has no value for a key.
+var defaultSettings = map[string]string{
+	"default_model_list_endpoint": "/v1/models",
+}
+
+// GetSetting returns the value for a system setting key.
+// Priority: database value > hardcoded default > "".
 func GetSetting(db *gorm.DB, key string) (string, error) {
 	var setting model.Setting
 	err := db.Where("key = ?", key).First(&setting).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if def, ok := defaultSettings[key]; ok {
+			return def, nil
+		}
 		return "", nil
 	}
 	if err != nil {
 		return "", err
+	}
+	if setting.Value == "" {
+		if def, ok := defaultSettings[key]; ok {
+			return def, nil
+		}
 	}
 	return setting.Value, nil
 }
