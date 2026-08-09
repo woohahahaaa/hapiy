@@ -246,53 +246,67 @@ export function TopologyPage() {
   })
   const addButtonRef = useRef<HTMLButtonElement>(null)
 
-  // ── Touch two-finger selection ──
-  // Single finger pans the canvas. When a second finger touches down, a
-  // selection box is drawn from the second finger's start position to its
-  // current position. Releasing the second finger selects all nodes inside
-  // the box and clears the overlay.
-  const [touchBox, setTouchBox] = useState<{
-    startX: number
-    startY: number
-    currentX: number
-    currentY: number
+  // ── Selection mode toggle ──
+  // Click the button in the bottom-right panel to enter selection mode. In this
+  // mode every drag (mouse or touch) draws a selection box. After one selection
+  // completes the mode auto-exits so normal panning resumes.
+  const [selMode, setSelMode] = useState(false)
+  const [selBox, setSelBox] = useState<{
+    startX: number; startY: number; currentX: number; currentY: number
   } | null>(null)
   const rfInstance = useReactFlow()
-  const handleTouchStart = useCallback((e: ReactTouchEvent) => {
-    if (e.touches.length === 2) {
-      const t = e.touches[1]
-      setTouchBox({ startX: t.clientX, startY: t.clientY, currentX: t.clientX, currentY: t.clientY })
-    }
+  const selModeRef = useRef(false)
+  selModeRef.current = selMode
+
+  const handleSelStart = useCallback((clientX: number, clientY: number) => {
+    if (!selModeRef.current) return
+    setSelBox({ startX: clientX, startY: clientY, currentX: clientX, currentY: clientY })
   }, [])
-  const handleTouchMove = useCallback(
-    (e: ReactTouchEvent) => {
-      if (e.touches.length < 2 || !touchBox) return
-      const t = e.touches[1]
-      setTouchBox((prev) => (prev ? { ...prev, currentX: t.clientX, currentY: t.clientY } : prev))
-    },
-    [touchBox],
-  )
-  const handleTouchEnd = useCallback(() => {
-    if (!touchBox) return
-    // Convert screen coords to flow coords and find which nodes intersect.
-    const x1 = Math.min(touchBox.startX, touchBox.currentX)
-    const y1 = Math.min(touchBox.startY, touchBox.currentY)
-    const x2 = Math.max(touchBox.startX, touchBox.currentX)
-    const y2 = Math.max(touchBox.startY, touchBox.currentY)
+  const handleSelMove = useCallback((clientX: number, clientY: number) => {
+    setSelBox((prev) => (prev ? { ...prev, currentX: clientX, currentY: clientY } : prev))
+  }, [])
+  const handleSelEnd = useCallback(() => {
+    if (!selBox) return
+    const x1 = Math.min(selBox.startX, selBox.currentX)
+    const y1 = Math.min(selBox.startY, selBox.currentY)
+    const x2 = Math.max(selBox.startX, selBox.currentX)
+    const y2 = Math.max(selBox.startY, selBox.currentY)
     const topLeft = rfInstance.screenToFlowPosition({ x: x1, y: y1 })
     const bottomRight = rfInstance.screenToFlowPosition({ x: x2, y: y2 })
     const selected = rfInstance.getNodes().filter((node) => {
-      const nx = node.position.x
-      const ny = node.position.y
-      const nw = (node.measured?.width ?? 0)
-      const nh = (node.measured?.height ?? 0)
+      const nx = node.position.x; const ny = node.position.y
+      const nw = (node.measured?.width ?? 0); const nh = (node.measured?.height ?? 0)
       return nx < bottomRight.x && nx + nw > topLeft.x && ny < bottomRight.y && ny + nh > topLeft.y
     })
     rfInstance.setNodes((nds) =>
       nds.map((n) => ({ ...n, selected: selected.some((s) => s.id === n.id) })),
     )
-    setTouchBox(null)
-  }, [touchBox, rfInstance])
+    setSelBox(null)
+    setSelMode(false) // auto-exit after one selection
+  }, [selBox, rfInstance])
+
+  const handlePaneMouseDown = useCallback((e: ReactMouseEvent) => {
+    if (e.button !== 0) return
+    handleSelStart(e.clientX, e.clientY)
+  }, [handleSelStart])
+  const handlePaneMouseMove = useCallback((e: ReactMouseEvent) => {
+    handleSelMove(e.clientX, e.clientY)
+  }, [handleSelMove])
+  const handlePaneMouseUp = useCallback(() => {
+    handleSelEnd()
+  }, [handleSelEnd])
+
+  const handleTouchStart = useCallback((e: ReactTouchEvent) => {
+    const t = e.touches[0]
+    handleSelStart(t.clientX, t.clientY)
+  }, [handleSelStart])
+  const handleTouchMove = useCallback((e: ReactTouchEvent) => {
+    const t = e.touches[0]
+    handleSelMove(t.clientX, t.clientY)
+  }, [handleSelMove])
+  const handleTouchEnd = useCallback(() => {
+    handleSelEnd()
+  }, [handleSelEnd])
 
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
@@ -1289,6 +1303,11 @@ export function TopologyPage() {
           proOptions={{ hideAttribution: true }}
           fitView
           zoomOnDoubleClick={false}
+          panOnDrag={!selMode}
+          selectionOnDrag={false}
+          onMouseDown={handlePaneMouseDown}
+          onMouseMove={handlePaneMouseMove}
+          onMouseUp={handlePaneMouseUp}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -1306,6 +1325,15 @@ export function TopologyPage() {
             </Button>
           </Panel>
           <Panel className="topology-actions" position="bottom-right">
+            <Button
+              variant={selMode ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setSelMode((v) => !v)}
+              title={selMode ? '框选模式已开启，点击拖拽框选节点' : '框选模式'}
+              aria-label="框选模式"
+            >
+              <AppIcon name="crop_square" />
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -1341,14 +1369,14 @@ export function TopologyPage() {
             </Button>
           </Panel>
         </ReactFlow>
-        {touchBox && (
+        {selBox && (
           <div
             className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
             style={{
-              left: Math.min(touchBox.startX, touchBox.currentX),
-              top: Math.min(touchBox.startY, touchBox.currentY),
-              width: Math.abs(touchBox.currentX - touchBox.startX),
-              height: Math.abs(touchBox.currentY - touchBox.startY),
+              left: Math.min(selBox.startX, selBox.currentX),
+              top: Math.min(selBox.startY, selBox.currentY),
+              width: Math.abs(selBox.currentX - selBox.startX),
+              height: Math.abs(selBox.currentY - selBox.startY),
             }}
           />
         )}
