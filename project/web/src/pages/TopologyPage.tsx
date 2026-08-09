@@ -737,10 +737,12 @@ export function TopologyPage() {
 
   const handlePaneContextMenu = useCallback((event: ReactMouseEvent) => {
     event.preventDefault()
+    // In touch selection mode, long-press should box-select, not open the menu.
+    if (touchSelect) return
     if (!(event.target instanceof Element)) return
     if (event.target.closest('.react-flow__node')) return
     setMenuState({ x: event.clientX, y: event.clientY, open: true, mode: 'cursor' })
-  }, [])
+  }, [touchSelect])
 
   const handleNodeClick = useCallback((_event: ReactMouseEvent) => {
   }, [])
@@ -1247,7 +1249,16 @@ export function TopologyPage() {
           </Button>
         }
       />
-      <div ref={setContainerEl} className="relative flex-1 overflow-hidden">
+      <div
+        ref={setContainerEl}
+        className="relative flex-1 overflow-hidden"
+        onContextMenu={(e) => {
+          // Suppress the native context menu on touch devices so long-press
+          // does not compete with the selection mode. The ReactFlow
+          // onContextMenu handler still fires; we gate it with touchSelect.
+          if ('ontouchstart' in window) e.preventDefault()
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
