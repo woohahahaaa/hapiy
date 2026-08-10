@@ -106,7 +106,7 @@ export function LogOutputSlotItem({
         onToggleEnabled={() => {}}
         enableControl={enableControl}
         dimContentWhenDisabled
-        onDelete={onDelete}
+        onDelete={entry.enabled ? undefined : onDelete}
         {...drag}
       >
         <div className="flex flex-col gap-0.5">

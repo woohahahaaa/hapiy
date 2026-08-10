@@ -8,7 +8,7 @@ interface SlotItemCardProps {
   index: number
   enabled: boolean
   onToggleEnabled: (next: boolean) => void
-  onDelete: () => void
+  onDelete?: () => void
   children: ReactNode
   className?: string
   onDragStart?: () => void
@@ -89,17 +89,19 @@ export function SlotItemCard({
               className="nodrag nopan shrink-0"
             />
           )}
-          <button
-            type="button"
-            onClick={onDelete}
-            className={cn(
-              'nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive',
-              dimContentWhenDisabled && !enabled && 'opacity-50',
-            )}
-            aria-label="删除"
-          >
-            <AppIcon name="close" size={12} />
-          </button>
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              className={cn(
+                'nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive',
+                dimContentWhenDisabled && !enabled && 'opacity-50',
+              )}
+              aria-label="删除"
+            >
+              <AppIcon name="close" size={12} />
+            </button>
+          )}
         </div>
       </div>
       <div className={cn('nodrag nopan space-y-1.5 p-2', dimContentWhenDisabled && !enabled && 'opacity-50')}>
