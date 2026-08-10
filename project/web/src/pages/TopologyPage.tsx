@@ -1357,7 +1357,7 @@ export function TopologyPage() {
         )}
         {selBox && (
           <div
-            className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
+            className="pointer-events-none fixed z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
             style={{
               left: Math.min(selBox.startX, selBox.currentX),
               top: Math.min(selBox.startY, selBox.currentY),
