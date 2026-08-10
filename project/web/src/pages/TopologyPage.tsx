@@ -1262,9 +1262,6 @@ export function TopologyPage() {
         onContextMenu={(e) => {
           if ('ontouchstart' in window) e.preventDefault()
         }}
-        onPointerDown={selPointerDown}
-        onPointerMove={selPointerMove}
-        onPointerUp={selPointerUp}
       >
         <ReactFlow
           nodes={nodes}
@@ -1349,6 +1346,15 @@ export function TopologyPage() {
             </Button>
           </Panel>
         </ReactFlow>
+        {selMode && (
+          <div
+            className="absolute inset-0 z-20"
+            style={{ background: 'transparent', pointerEvents: 'auto' }}
+            onPointerDown={(e) => { e.stopPropagation(); selPointerDown(e) }}
+            onPointerMove={(e) => { e.stopPropagation(); selPointerMove(e) }}
+            onPointerUp={(e) => { e.stopPropagation(); selPointerUp() }}
+          />
+        )}
         {selBox && (
           <div
             className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
