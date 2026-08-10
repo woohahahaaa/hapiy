@@ -9,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { cn } from '@/lib/utils'
 import { SlotItemCard } from './SlotItemCard'
 import type { LogOutputSlotEntry, SlotItemDragProps } from './types'
 
@@ -58,11 +57,6 @@ export function LogOutputSlotItem({
     onChange({ ...entry, enabled: true, deadlineAt: Date.now() + totalSeconds * 1000 })
   }
 
-  const handleClose = () => {
-    onChange({ ...entry, enabled: false, deadlineAt: null })
-    setDialogOpen(false)
-  }
-
   const remaining = entry.deadlineAt !== null && entry.enabled ? Math.max(0, entry.deadlineAt - now) : 0
   const remainingHours = Math.floor(remaining / 3600000)
   const remainingMinutes = Math.floor((remaining % 3600000) / 60000)
@@ -70,49 +64,30 @@ export function LogOutputSlotItem({
 
   const hasDeadline = entry.deadlineAt !== null && entry.enabled
 
-  const enableControl = !entry.enabled ? (
-    <Button
-      variant="outline"
-      size="xs"
-      className="nodrag nopan"
-      onClick={() => setDialogOpen(true)}
-    >
-      开启
-    </Button>
-  ) : (
-    <div className="nodrag nopan flex items-center gap-1">
-      {hasDeadline ? (
-        <span className="whitespace-nowrap text-[10px] text-muted-foreground">
-          {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒后关闭
-        </span>
-      ) : (
-        <span className="text-[10px] text-muted-foreground">已开启</span>
-      )}
-      <Button
-        variant="ghost"
-        size="xs"
-        className={cn(
-          'nodrag nopan h-5 px-1.5 text-[10px] text-muted-foreground hover:text-destructive',
-        )}
-        onClick={handleClose}
-      >
-        关闭
-      </Button>
-    </div>
-  )
+  const handleSwitchToggle = () => {
+    if (entry.enabled) {
+      onChange({ ...entry, enabled: false, deadlineAt: null })
+    } else {
+      setDialogOpen(true)
+    }
+  }
 
   return (
     <>
       <SlotItemCard
         index={entry.index}
         enabled={entry.enabled}
-        onToggleEnabled={() => {}}
-        enableControl={enableControl}
+        onToggleEnabled={handleSwitchToggle}
         dimContentWhenDisabled
         onDelete={onDelete}
         {...drag}
       >
         <div className="flex flex-col gap-0.5">
+          {hasDeadline && (
+            <span className="text-[10px] text-muted-foreground">
+              {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒后关闭
+            </span>
+          )}
           <span className="text-[10px] text-muted-foreground">日志前缀</span>
           <Input
             size="sm"
