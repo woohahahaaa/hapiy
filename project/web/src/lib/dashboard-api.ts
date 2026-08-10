@@ -86,6 +86,10 @@ export type UsageLog = {
   readonly isStream: boolean
   readonly quota: number
   readonly useTime: number
+  readonly connectMs: number
+  readonly firstByteMs: number
+  readonly requestRewriteMs: number
+  readonly responseRewriteMs: number
   readonly status: 'success' | 'failed'
   readonly errorMessage: string
 }
@@ -619,6 +623,14 @@ function parseToken(value: unknown): Token {
   }
 }
 
+function parseStageMs(value: unknown): number {
+  if (value === null || value === undefined || value === '') {
+    return -1
+  }
+  const n = Number(value)
+  return Number.isFinite(n) ? n : -1
+}
+
 function parseLog(value: unknown): UsageLog {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的日志格式无效', null)
@@ -639,6 +651,10 @@ function parseLog(value: unknown): UsageLog {
     isStream: readBoolean(value.is_stream, 'log.is_stream'),
     quota: readNumber(value.quota, 'log.quota'),
     useTime: readNumber(value.use_time, 'log.use_time'),
+    connectMs: parseStageMs(value.connect_ms),
+    firstByteMs: parseStageMs(value.first_byte_ms),
+    requestRewriteMs: parseStageMs(value.request_rewrite_ms),
+    responseRewriteMs: parseStageMs(value.response_rewrite_ms),
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
   }

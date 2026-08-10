@@ -88,6 +88,16 @@ type Log struct {
 	IP               string    `json:"ip"`
 	RequestID        string    `json:"request_id"`
 	ErrorMessage     string    `json:"error_message"`
+	// Stage timings in milliseconds; nil means the stage does not apply.
+	// ConnectMs: time from issuing the upstream request until its response
+	// headers arrive. FirstByteMs: time from response headers until the first
+	// body byte is read (streaming only). RequestRewriteMs / ResponseRewriteMs:
+	// elapsed time of each rewrite pass (response rewrite only runs for
+	// non-streaming responses).
+	ConnectMs        *int      `json:"connect_ms,omitempty"`
+	FirstByteMs      *int      `json:"first_byte_ms,omitempty"`
+	RequestRewriteMs *int      `json:"request_rewrite_ms,omitempty"`
+	ResponseRewriteMs *int     `json:"response_rewrite_ms,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

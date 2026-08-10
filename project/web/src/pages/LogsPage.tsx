@@ -147,7 +147,22 @@ export function LogsPage() {
     {
       key: 'useTime',
       label: '耗时',
-      render: (v) => `${(v as number / 1000).toFixed(1)}s`,
+      render: (v, row) => {
+        const main = `${(v as number / 1000).toFixed(1)}s`
+        const log = row as UsageLog
+        const stages: string[] = []
+        if (log.connectMs >= 0) stages.push(`连接 ${log.connectMs}ms`)
+        if (log.firstByteMs >= 0) stages.push(`首字 ${log.firstByteMs}ms`)
+        if (log.requestRewriteMs >= 0) stages.push(`请求改写 ${log.requestRewriteMs}ms`)
+        if (log.responseRewriteMs >= 0) stages.push(`响应改写 ${log.responseRewriteMs}ms`)
+        if (stages.length === 0) return main
+        return (
+          <div className="leading-tight">
+            <div>{main}</div>
+            <div className="text-[10px] text-muted-foreground">{stages.join(' · ')}</div>
+          </div>
+        )
+      },
     },
     {
       key: 'status',

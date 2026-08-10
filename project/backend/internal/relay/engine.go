@@ -156,6 +156,14 @@ type RelayResponse struct {
 	Headers    map[string]string
 	Body       io.ReadCloser
 	Usage      *UsageInfo
+	// FirstByteAt is the moment the upstream response headers arrived; the
+	// handler uses it to measure time-to-first-byte for streaming responses.
+	FirstByteAt time.Time
+	// Stage timings in milliseconds; -1 means the stage did not apply.
+	ConnectMs         int
+	FirstByteMs       int
+	RequestRewriteMs  int
+	ResponseRewriteMs int
 }
 
 // UsageInfo tracks token usage.
@@ -191,10 +199,13 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 
 	// Step 2: Request logging and rewrite
 	e.runTopologyLogOutputs(topologyStageRequestBefore, plan.LogOutputs, plan, req, nil)
+	reqRewriteMs := -1
 	if len(plan.CompiledRewrite) > 0 {
+		rewriteStart := time.Now()
 		if err := e.applyCompiledRewriteRules(plan, req); err != nil {
 			return nil, err
 		}
+		reqRewriteMs = int(time.Since(rewriteStart).Milliseconds())
 	}
 	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, plan, req, nil)
 
@@ -242,15 +253,19 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		}
 		return nil, err
 	}
+	resp.RequestRewriteMs = reqRewriteMs
+	resp.ResponseRewriteMs = -1
 
 	// Step 4: Response logging and rewrite. Per the deliberate design
 	// decision, streaming bodies are never buffered for response rewrite:
 	// the stage event is recorded but the body is forwarded as-is.
 	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, resp)
 	if !req.Stream && len(plan.CompiledResponseRewrites) > 0 {
+		respRewriteStart := time.Now()
 		if err := e.applyCompiledResponseRewriteRules(plan, resp); err != nil {
 			return nil, err
 		}
+		resp.ResponseRewriteMs = int(time.Since(respRewriteStart).Milliseconds())
 	}
 	e.recordTopologyStage(topologyStageEvent{
 		Stage:                topologyStageResponseRewrite,
@@ -466,7 +481,9 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 	}
 	e.setupUpstreamHeaders(httpReq, key, req)
 
+	connectStart := time.Now()
 	resp, err := service.DefaultClient().Do(httpReq)
+	connectMs := int(time.Since(connectStart).Milliseconds())
 	if err != nil {
 		return nil, fmt.Errorf("upstream request failed: %w", err)
 	}
@@ -479,6 +496,7 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 			StatusCode: resp.StatusCode,
 			Headers:    flattenHeaders(resp.Header),
 			Body:       resp.Body,
+			ConnectMs:  connectMs,
 		}, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
@@ -487,6 +505,8 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 		Headers:    flattenHeaders(resp.Header),
 		Body:       resp.Body,
 		Usage:      nil,
+		ConnectMs:  connectMs,
+		FirstByteAt: time.Now(),
 	}, nil
 }
 
@@ -504,7 +524,9 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 	e.setupUpstreamHeaders(httpReq, key, req)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
+	connectStart := time.Now()
 	resp, err := service.StreamingClient().Do(httpReq)
+	connectMs := int(time.Since(connectStart).Milliseconds())
 	if err != nil {
 		return nil, fmt.Errorf("upstream request failed: %w", err)
 	}
@@ -514,6 +536,7 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 			StatusCode: resp.StatusCode,
 			Headers:    flattenHeaders(resp.Header),
 			Body:       resp.Body,
+			ConnectMs:  connectMs,
 		}, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, string(errBody))
 	}
 
@@ -521,6 +544,8 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 		StatusCode: resp.StatusCode,
 		Headers:    flattenHeaders(resp.Header),
 		Body:       resp.Body,
+		ConnectMs:  connectMs,
+		FirstByteAt: time.Now(),
 	}, nil
 }
 

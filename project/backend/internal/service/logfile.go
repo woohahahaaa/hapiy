@@ -216,7 +216,9 @@ func (w *LogCaptureWriter) DeleteFiles(params LogDeleteParams) (int, error) {
 	}
 
 	query := w.db.Model(&model.LogCapture{})
-	if !params.All {
+	if params.All {
+		query = query.Where("1 = 1")
+	} else {
 		if params.Prefix != "" {
 			query = query.Where("prefix = ?", params.Prefix)
 		}

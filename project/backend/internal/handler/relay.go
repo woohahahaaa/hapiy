@@ -121,18 +121,45 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
+		// Set response headers
+		for k, v := range resp.Headers {
+			c.Header(k, v)
+		}
+
+		if dispatchResult.AffinityMatch != nil {
+			match := dispatchResult.AffinityMatch
+			engine.Affinity().Record(match.RuleName, match.RuleIncludeModel, relayReq.Model, match.AffinityValue, affinity.Triple{
+				ProviderName: provider.Name,
+				KeyIndex:     relayReq.KeyIndex,
+				BaseURLIndex: relayReq.BaseURLIndex,
+			}, 0)
+		}
+
+		// Forward the response first so use_time spans the full transfer for
+		// streaming requests; the log row is written after the stream ends.
+		firstByteMs := -1
+		if relayReq.Stream {
+			firstByteMs = handleStreamingResponse(c, resp)
+		} else {
+			handleNonStreamingResponse(c, resp)
+		}
+
 		// Log successful request
 		useTime := int(time.Since(startTime).Milliseconds())
 		logEntry := model.Log{
-			UserID:           getString(userID),
-			TokenName:        getString(tokenName),
-			ProviderName:     provider.Name,
-			ModelName:        relayReq.Model,
-			IsStream:         relayReq.Stream,
-			Status:           "success",
-			IP:               c.ClientIP(),
-			RequestID:        c.GetString("request_id"),
-			UseTime:          useTime,
+			UserID:            getString(userID),
+			TokenName:         getString(tokenName),
+			ProviderName:      provider.Name,
+			ModelName:         relayReq.Model,
+			IsStream:          relayReq.Stream,
+			Status:            "success",
+			IP:                c.ClientIP(),
+			RequestID:         c.GetString("request_id"),
+			UseTime:           useTime,
+			ConnectMs:         intPtr(resp.ConnectMs),
+			FirstByteMs:       intPtr(firstByteMs),
+			RequestRewriteMs:  intPtr(resp.RequestRewriteMs),
+			ResponseRewriteMs: intPtr(resp.ResponseRewriteMs),
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
@@ -150,27 +177,6 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 
 		common.Global().EndRequest(relayReq.RequestID, relayReq.Model, true, int64(useTime),
 			int64(logEntry.PromptTokens+logEntry.CompletionTokens))
-
-		// Set response headers
-		for k, v := range resp.Headers {
-			c.Header(k, v)
-		}
-
-		if dispatchResult.AffinityMatch != nil {
-			match := dispatchResult.AffinityMatch
-			engine.Affinity().Record(match.RuleName, match.RuleIncludeModel, relayReq.Model, match.AffinityValue, affinity.Triple{
-				ProviderName: provider.Name,
-				KeyIndex:     relayReq.KeyIndex,
-				BaseURLIndex: relayReq.BaseURLIndex,
-			}, 0)
-		}
-
-		// Handle streaming vs non-streaming response
-		if relayReq.Stream {
-			handleStreamingResponse(c, resp)
-		} else {
-			handleNonStreamingResponse(c, resp)
-		}
 	}
 }
 
@@ -178,6 +184,15 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 // to assert the 429 path without going through the live engine.
 func isConcurrencyRejectionError(err error) bool {
 	return errors.Is(err, relay.ErrConcurrencyRejected)
+}
+
+// intPtr converts an int to a *int, mapping -1 (stage not applicable) to nil
+// so the JSON row omits the field.
+func intPtr(v int) *int {
+	if v < 0 {
+		return nil
+	}
+	return &v
 }
 
 func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
@@ -190,7 +205,10 @@ func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 	c.Data(resp.StatusCode, "application/json", bodyBytes)
 }
 
-func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
+// handleStreamingResponse forwards the SSE body and returns the elapsed
+// milliseconds from upstream headers until the first body byte (-1 when the
+// stream produced no bytes, e.g. it errored immediately).
+func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 	defer resp.Body.Close()
 
 	c.Header("Content-Type", "text/event-stream")
@@ -200,14 +218,17 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
-		return
+		return -1
 	}
 
-	// Stream the response
+	firstByteMs := -1
 	buf := make([]byte, 4096)
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
+			if firstByteMs < 0 {
+				firstByteMs = int(time.Since(resp.FirstByteAt).Milliseconds())
+			}
 			c.Writer.Write(buf[:n])
 			flusher.Flush()
 		}
@@ -218,6 +239,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 			break
 		}
 	}
+	return firstByteMs
 }
 
 func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest) {
