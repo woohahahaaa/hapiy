@@ -208,6 +208,38 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	})
 	resp, err := e.relayWithFailover(ctx, plan, req)
 	if err != nil {
+		// Record the failure in log capture with the upstream error detail.
+		// When resp is non-nil the upstream returned an HTTP error (4xx/5xx);
+		// its body was already consumed by relayNonStreaming/relayStreaming
+		// so we only record the error text.
+		if len(plan.LogOutputs) > 0 {
+			e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, nil)
+			e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, plan, req, nil)
+			writer := service.LogCapture()
+			if writer != nil && req != nil {
+				for _, assignment := range plan.LogOutputs {
+					if !assignment.Enabled {
+						continue
+					}
+					cfg, err2 := parseLogOutputConfig(assignment.Config)
+					if err2 != nil {
+						continue
+					}
+					if autoClosed(assignment, cfg) {
+						continue
+					}
+					writer.WriteLog(&service.LogCaptureData{
+						RequestID: req.RequestID,
+						Stage:     string(topologyStageResponseAfter),
+						Type:      "response",
+						ProviderID: plan.ID,
+						Prefix:    cfg.Prefix,
+						Source:    service.ResolveSourceMark(req.SourceMark, req.Path),
+						Error:     err.Error(),
+					})
+				}
+			}
+		}
 		return nil, err
 	}
 

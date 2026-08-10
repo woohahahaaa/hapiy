@@ -152,12 +152,20 @@ export function LogsPage() {
     {
       key: 'status',
       label: '状态',
-      render: (v) => {
+      render: (v, row) => {
         const s = v as string
+        const err = (row as UsageLog).errorMessage
         return (
-          <span className={s === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
-            {s === 'success' ? '成功' : '失败'}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={s === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+              {s === 'success' ? '成功' : '失败'}
+            </span>
+            {err && (
+              <span className="max-w-40 truncate text-[10px] text-muted-foreground" title={err}>
+                {err}
+              </span>
+            )}
+          </div>
         )
       },
     },

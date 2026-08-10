@@ -87,6 +87,7 @@ export type UsageLog = {
   readonly quota: number
   readonly useTime: number
   readonly status: 'success' | 'failed'
+  readonly errorMessage: string
 }
 
 export type LogListParams = {
@@ -639,6 +640,7 @@ function parseLog(value: unknown): UsageLog {
     quota: readNumber(value.quota, 'log.quota'),
     useTime: readNumber(value.use_time, 'log.use_time'),
     status,
+    errorMessage: readString(value.error_message, 'log.error_message'),
   }
 }
 
