@@ -64,30 +64,52 @@ export function LogOutputSlotItem({
 
   const hasDeadline = entry.deadlineAt !== null && entry.enabled
 
-  const handleSwitchToggle = () => {
-    if (entry.enabled) {
-      onChange({ ...entry, enabled: false, deadlineAt: null })
-    } else {
-      setDialogOpen(true)
-    }
-  }
+  const toggleButtonClass =
+    'nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground'
+
+  const enableControl = !entry.enabled ? (
+    <button
+      type="button"
+      className={toggleButtonClass}
+      onClick={(e) => {
+        e.stopPropagation()
+        setDialogOpen(true)
+      }}
+    >
+      开始
+    </button>
+  ) : (
+    <div className="nodrag nopan flex items-center gap-1">
+      {hasDeadline && (
+        <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+          {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒
+        </span>
+      )}
+      <button
+        type="button"
+        className={toggleButtonClass}
+        onClick={(e) => {
+          e.stopPropagation()
+          onChange({ ...entry, enabled: false, deadlineAt: null })
+        }}
+      >
+        关闭
+      </button>
+    </div>
+  )
 
   return (
     <>
       <SlotItemCard
         index={entry.index}
         enabled={entry.enabled}
-        onToggleEnabled={handleSwitchToggle}
+        onToggleEnabled={() => {}}
+        enableControl={enableControl}
         dimContentWhenDisabled
         onDelete={onDelete}
         {...drag}
       >
         <div className="flex flex-col gap-0.5">
-          {hasDeadline && (
-            <span className="text-[10px] text-muted-foreground">
-              {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒后关闭
-            </span>
-          )}
           <span className="text-[10px] text-muted-foreground">日志前缀</span>
           <Input
             size="sm"
