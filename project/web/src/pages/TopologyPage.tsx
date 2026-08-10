@@ -1278,6 +1278,9 @@ export function TopologyPage() {
         onContextMenu={(e) => {
           if ('ontouchstart' in window) e.preventDefault()
         }}
+        onPointerDown={selPointerDown}
+        onPointerMove={selPointerMove}
+        onPointerUp={selPointerUp}
       >
         <ReactFlow
           nodes={nodes}
@@ -1299,7 +1302,7 @@ export function TopologyPage() {
           proOptions={{ hideAttribution: true }}
           fitView
           zoomOnDoubleClick={false}
-          panOnDrag={!selMode}
+          panOnDrag={true}
           selectionOnDrag={false}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
@@ -1362,14 +1365,6 @@ export function TopologyPage() {
             </Button>
           </Panel>
         </ReactFlow>
-        {selMode && (
-          <div
-            className="absolute inset-0 z-40 cursor-crosshair"
-            onPointerDown={selPointerDown}
-            onPointerMove={selPointerMove}
-            onPointerUp={selPointerUp}
-          />
-        )}
         {selBox && (
           <div
             className="pointer-events-none absolute z-50 rounded-sm border-2 border-primary/60 bg-primary/10"
