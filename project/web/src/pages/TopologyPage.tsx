@@ -265,6 +265,19 @@ export function TopologyPage() {
   }, [])
   const handleSelEnd = useCallback(() => {
     if (!selBox) return
+    const x1 = Math.min(selBox.startX, selBox.currentX)
+    const y1 = Math.min(selBox.startY, selBox.currentY)
+    const x2 = Math.max(selBox.startX, selBox.currentX)
+    const y2 = Math.max(selBox.startY, selBox.currentY)
+    const nodeEls = document.querySelectorAll('.react-flow__node')
+    const selectedIds = new Set<string>()
+    nodeEls.forEach((el) => {
+      const rect = el.getBoundingClientRect()
+      const intersects = rect.left < x2 && rect.right > x1 && rect.top < y2 && rect.bottom > y1
+      const nodeId = el.getAttribute('data-id')
+      if (nodeId && intersects) selectedIds.add(nodeId)
+    })
+    setNodesRef.current((nds) => nds.map((n) => ({ ...n, selected: selectedIds.has(n.id) })))
     setSelBox(null)
     setSelMode(false)
   }, [selBox])
@@ -619,6 +632,8 @@ export function TopologyPage() {
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(baseNodes)
+  const setNodesRef = useRef(setNodes)
+  setNodesRef.current = setNodes
 
   useEffect(() => {
     setNodes(baseNodes)
