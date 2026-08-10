@@ -129,36 +129,17 @@ export function ProfilePage() {
 
         {state.kind === 'ready' && (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AppIcon name="person" size={16} /> 账户信息
-                </CardTitle>
-                <CardDescription>当前登录的账户信息</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2">
-                <Row label="用户名" value={state.me.username} />
-                <Row label="用户 ID" value={state.me.id} mono />
-                <Row label="登录状态" value={
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-success">已登录</span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleLogout}
-                      disabled={loggingOut}
-                    >
-                      {loggingOut ? (
-                        <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
-                      ) : (
-                        <AppIcon name="logout" data-icon="inline-start" />
-                      )}
-                      退出登录
-                    </Button>
-                  </div>
-                } />
-              </CardContent>
-            </Card>
+            <Button
+              onClick={handleLogout}
+              disabled={loggingOut}
+            >
+              {loggingOut ? (
+                <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <AppIcon name="logout" data-icon="inline-start" />
+              )}
+              退出登录
+            </Button>
 
             <Card>
               <CardHeader>
@@ -224,15 +205,6 @@ export function ProfilePage() {
           </>
         )}
       </div>
-    </div>
-  )
-}
-
-function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={mono ? 'font-mono text-sm' : 'text-sm'}>{value}</span>
     </div>
   )
 }

@@ -155,12 +155,12 @@ export function LogsPage() {
       render: (v, row) => {
         const main = `${(v as number / 1000).toFixed(1)}s`
         const log = row as UsageLog
+        const fmt = (val: number, label: string) => `${label}: ${val >= 0 ? `${val}ms` : '--'}`
         const stages: string[] = []
-        if (log.connectMs >= 0) stages.push(`连接 ${log.connectMs}ms`)
-        if (log.firstByteMs >= 0) stages.push(`首字 ${log.firstByteMs}ms`)
-        if (log.requestRewriteMs >= 0) stages.push(`请求改写 ${log.requestRewriteMs}ms`)
-        if (log.responseRewriteMs >= 0) stages.push(`响应改写 ${log.responseRewriteMs}ms`)
-        if (stages.length === 0) return main
+        stages.push(fmt(log.connectMs, '连接'))
+        stages.push(fmt(log.firstByteMs, '首字'))
+        stages.push(fmt(log.requestRewriteMs, '请求改写'))
+        stages.push(fmt(log.responseRewriteMs, '响应改写'))
         return (
           <div className="leading-tight">
             <div>{main}</div>

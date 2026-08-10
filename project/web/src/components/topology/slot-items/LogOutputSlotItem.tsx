@@ -31,6 +31,7 @@ export function LogOutputSlotItem({
   const [minutes, setMinutes] = useState('5')
   const [seconds, setSeconds] = useState('0')
   const [now, setNow] = useState(() => Date.now())
+  const [localPrefix, setLocalPrefix] = useState(entry.prefix)
 
   // 倒计时进行中时每秒刷新 now，驱动倒计时文本渲染
   useEffect(() => {
@@ -114,8 +115,13 @@ export function LogOutputSlotItem({
           <Input
             size="sm"
             className="text-[10px]"
-            value={entry.prefix}
-            onChange={(e) => onChange({ ...entry, prefix: e.target.value })}
+            value={localPrefix}
+            onChange={(e) => setLocalPrefix(e.target.value)}
+            onBlur={() => {
+              if (localPrefix !== entry.prefix) {
+                onChange({ ...entry, prefix: localPrefix })
+              }
+            }}
             placeholder="请输入日志前缀"
           />
         </div>
