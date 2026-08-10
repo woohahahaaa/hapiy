@@ -1364,10 +1364,20 @@ export function TopologyPage() {
         {selMode && (
           <div
             className="absolute inset-0 z-20"
-            style={{ background: 'transparent', pointerEvents: 'auto' }}
-            onPointerDown={(e) => { e.stopPropagation(); selPointerDown(e) }}
-            onPointerMove={(e) => { e.stopPropagation(); selPointerMove(e) }}
-            onPointerUp={(e) => { e.stopPropagation(); selPointerUp() }}
+            style={{ background: 'transparent', pointerEvents: 'auto', touchAction: 'none' }}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+              selPointerDown(e)
+            }}
+            onPointerMove={(e) => {
+              e.stopPropagation()
+              selPointerMove(e)
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation()
+              selPointerUp()
+            }}
           />
         )}
         {selBox && (
