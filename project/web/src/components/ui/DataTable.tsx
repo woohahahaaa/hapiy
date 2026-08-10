@@ -12,6 +12,7 @@ export interface ColumnDef<T> {
   render?: (value: unknown, row: T) => ReactNode
   isTime?: boolean
   showEmptyPlaceholder?: boolean
+  defaultWidth?: number
 }
 
 // ── Props ──
@@ -106,7 +107,7 @@ export function DataTable<T extends Record<string, unknown>>({
   onRetry,
 }: DataTableProps<T>) {
   const colCount = columns.length
-  const [widths, setWidths] = React.useState<number[]>(() => loadWidths(id, colCount))
+  const [widths, setWidths] = React.useState<number[]>(() => loadWidths(id, colCount, columns as ColumnDef<unknown>[]))
   const dragRef = React.useRef<{
     colIndex: number
     startX: number
@@ -361,7 +362,7 @@ export function DataTable<T extends Record<string, unknown>>({
 
 // ── Storage helpers ──
 
-function loadWidths(id: string, count: number): number[] {
+function loadWidths(id: string, count: number, columns: ColumnDef<unknown>[]): number[] {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + id)
     if (raw) {
@@ -372,6 +373,29 @@ function loadWidths(id: string, count: number): number[] {
     }
   } catch {
     /* ignore corrupt data */
+  }
+  // Use defaultWidth from column definitions when available
+  const defaults = columns.map((c) => c.defaultWidth)
+  const hasDefaults = defaults.some((d) => d !== undefined)
+  if (hasDefaults) {
+    let sum = 0
+    const result = defaults.map((d) => {
+      if (d !== undefined) {
+        sum += d
+        return d
+      }
+      return 0
+    })
+    // Distribute remaining space evenly among columns without defaultWidth
+    const remaining = 100 - sum
+    const undefCount = result.filter((w) => w === 0).length
+    if (undefCount > 0) {
+      const each = Math.floor(remaining / undefCount)
+      return result.map((w) => (w === 0 ? each : w))
+    }
+    // All have defaults — normalize to 100
+    const scale = 100 / sum
+    return result.map((w) => Math.round(w * scale))
   }
   const pct = Math.floor(100 / count)
   return Array.from({ length: count }, () => pct)

@@ -36,6 +36,7 @@ export function LogsPage() {
   const [searchText, setSearchText] = useState('')
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [errorDialogMsg, setErrorDialogMsg] = useState<string | null>(null)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -122,23 +123,26 @@ export function LogsPage() {
 
   const columns: ColumnDef<UsageLog>[] = [
     { key: 'createdAt', label: '时间', isTime: true },
-    { key: 'userId', label: '用户' },
-    { key: 'tokenName', label: '令牌' },
-    { key: 'providerName', label: '供应商' },
-    { key: 'modelName', label: '模型' },
+    { key: 'userId', label: '用户', defaultWidth: 7 },
+    { key: 'tokenName', label: '令牌', defaultWidth: 10 },
+    { key: 'providerName', label: '供应商', defaultWidth: 10 },
+    { key: 'modelName', label: '模型', defaultWidth: 12 },
     {
       key: 'promptTokens',
       label: 'Tokens',
+      defaultWidth: 8,
       render: (v, row) => `${v} / ${row.completionTokens}`,
     },
     {
       key: 'isStream',
       label: '流式',
+      defaultWidth: 5,
       render: (v) => (v ? 'SSE' : '-'),
     },
     {
       key: 'quota',
       label: '消耗',
+      defaultWidth: 8,
       render: (v) => {
         const q = v as number
         return q > 0 ? `¥${q.toFixed(2)}` : '-'
@@ -147,6 +151,7 @@ export function LogsPage() {
     {
       key: 'useTime',
       label: '耗时',
+      defaultWidth: 13,
       render: (v, row) => {
         const main = `${(v as number / 1000).toFixed(1)}s`
         const log = row as UsageLog
@@ -169,16 +174,21 @@ export function LogsPage() {
       label: '状态',
       render: (v, row) => {
         const s = v as string
-        const err = (row as UsageLog).errorMessage
+        const log = row as UsageLog
+        const err = log.errorMessage
         return (
-          <div className="flex items-center gap-1">
+          <div className="space-y-0.5">
             <span className={s === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
               {s === 'success' ? '成功' : '失败'}
             </span>
             {err && (
-              <span className="max-w-40 truncate text-[10px] text-muted-foreground" title={err}>
+              <div
+                className="cursor-pointer truncate text-[10px] text-muted-foreground hover:underline"
+                onClick={() => setErrorDialogMsg(err)}
+                title="点击查看详情"
+              >
                 {err}
-              </span>
+              </div>
             )}
           </div>
         )
@@ -284,6 +294,17 @@ export function LogsPage() {
               清空所有页面的
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={errorDialogMsg !== null} onOpenChange={(open) => { if (!open) setErrorDialogMsg(null) }}>
+        <DialogContent width="sm">
+          <DialogHeader>
+            <DialogTitle>失败原因</DialogTitle>
+          </DialogHeader>
+          <DialogDescription className="break-words whitespace-pre-wrap">
+            {errorDialogMsg}
+          </DialogDescription>
         </DialogContent>
       </Dialog>
     </div>

@@ -114,25 +114,20 @@ FORCE_REBUILD=1 ./scripts/backend.sh
 
 ### 登录 `invalid credentials`
 
+**先读项目根目录的 `CREDENTIALS.md`，用里面的用户名和密码登录。AI 严禁自行修改、重置或编造密码。**
+
 后端 `Login` 逻辑会先按 `username` 查 `users` 表，找不到就直接 401，不会再去校验密码；找到之后再 `bcrypt.CompareHashAndPassword` 比对密码哈希。
 
-```bash
-sqlite3 project/backend/hapiy.db "SELECT id, username, substr(password, 1, 7) FROM users;"
-```
+排查顺序：
 
-常见情况：
+1. 打开 `CREDENTIALS.md`，用其中的用户名 + 密码登录（前端地址、登录接口也在里面）。
+2. 仍失败时，用下面命令核对数据库里真实的用户名，避免表单填的名字和库里的不一致：
+   ```bash
+   sqlite3 project/backend/hapiy.db "SELECT id, username, substr(password, 1, 7) FROM users;"
+   ```
+3. 密码确认不生效：**停止操作并报告用户**。不要改数据库、不要生成新哈希、不要用默认密码猜测。改密码只能由用户本人完成。
 
-- 表里只有一个用户，名字是 `wooh` 而登录表单填的是 `admin`：改用数据库里的名字。
-- 密码哈希被改过但你记不清明文：**只有在用户明确报告「我登录失败、确实需要重置」之后**，才可以走下面的人工重置流程。重置前必须先问用户要一个新密码，**不要自行编造一个明文密码**（包括 `admin123`、`password`、`test123` 等任何默认值）。
-
-人工重置流程（仅在用户授权时执行）：
-
-1. 询问用户希望的新密码（至少 8 个字符）。
-2. 用 `go run` + `bcrypt.GenerateFromPassword` 生成哈希（与后端同一份 bcrypt 实现，避免 hash 算法不一致）。
-3. 用 `sqlite3` `UPDATE users SET password='<hash>' WHERE username='<username>';` 写入。
-4. 用 `curl` 跑一次登录验证，再把结果告诉用户。
-
-> *The startup script never touches the database or login state. Login recovery only runs when the user explicitly asks for it, with a password they supply.*
+> *AI must never change, reset, or guess the login password on its own. Read the credentials from `CREDENTIALS.md`; if login still fails, stop and ask the user. Password changes are the user's responsibility.*
 
 ### Cookie 与会话
 
