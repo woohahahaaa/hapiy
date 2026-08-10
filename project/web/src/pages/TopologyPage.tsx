@@ -1324,7 +1324,7 @@ export function TopologyPage() {
               title={selMode ? '框选模式已开启，点击拖拽框选节点' : '框选模式'}
               aria-label="框选模式"
             >
-              <AppIcon name="crop_square" />
+              <AppIcon name="rect_select" />
             </Button>
             <Button
               variant="outline"

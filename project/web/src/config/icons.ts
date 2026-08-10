@@ -48,6 +48,7 @@ import {
   ConnectionPoint,
   Undo,
   Redo,
+  FullSelection,
 } from '@icon-park/react'
 import type { CSSProperties, ReactElement } from 'react'
 import iconConfig from './icons.json'
@@ -133,6 +134,7 @@ const COMPONENTS: Readonly<Record<string, IconComponent>> = {
   ConnectionPoint,
   Undo,
   Redo,
+  FullSelection,
 }
 
 // 语义化图标名 -> IconPark 组件名（可通过 `icons.json` 编辑）。

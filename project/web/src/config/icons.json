@@ -55,6 +55,7 @@
     "call_split": "ConnectionPoint",
     "sell": "Tag",
     "description": "FileText",
-    "warning": "Attention"
+    "warning": "Attention",
+    "rect_select": "FullSelection"
   }
 }
