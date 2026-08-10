@@ -5,7 +5,6 @@ import {
   Panel,
   useNodesState,
   useEdgesState,
-  useReactFlow,
   type Node,
   type Edge,
   type Connection,
@@ -254,7 +253,6 @@ export function TopologyPage() {
   const [selBox, setSelBox] = useState<{
     startX: number; startY: number; currentX: number; currentY: number
   } | null>(null)
-  const rfInstance = useReactFlow()
   const selModeRef = useRef(false)
   selModeRef.current = selMode
 
@@ -267,23 +265,9 @@ export function TopologyPage() {
   }, [])
   const handleSelEnd = useCallback(() => {
     if (!selBox) return
-    const x1 = Math.min(selBox.startX, selBox.currentX)
-    const y1 = Math.min(selBox.startY, selBox.currentY)
-    const x2 = Math.max(selBox.startX, selBox.currentX)
-    const y2 = Math.max(selBox.startY, selBox.currentY)
-    const topLeft = rfInstance.screenToFlowPosition({ x: x1, y: y1 })
-    const bottomRight = rfInstance.screenToFlowPosition({ x: x2, y: y2 })
-    const selected = rfInstance.getNodes().filter((node) => {
-      const nx = node.position.x; const ny = node.position.y
-      const nw = (node.measured?.width ?? 0); const nh = (node.measured?.height ?? 0)
-      return nx < bottomRight.x && nx + nw > topLeft.x && ny < bottomRight.y && ny + nh > topLeft.y
-    })
-    rfInstance.setNodes((nds) =>
-      nds.map((n) => ({ ...n, selected: selected.some((s) => s.id === n.id) })),
-    )
     setSelBox(null)
     setSelMode(false)
-  }, [selBox, rfInstance])
+  }, [selBox])
 
   const selPointerDown = useCallback((e: React.PointerEvent) => {
     handleSelStart(e.clientX, e.clientY)
