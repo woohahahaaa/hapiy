@@ -92,7 +92,8 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 		return op, fmt.Errorf("rule %s: op %d (%s): path is required", ruleID, index, op.Mode)
 	}
 	switch op.Mode {
-	case "set", "append", "prepend", "ensure_prefix", "ensure_suffix", "trim_prefix", "trim_suffix":
+	case "set", "append", "prepend", "ensure_prefix", "ensure_suffix", "trim_prefix", "trim_suffix",
+		"first_prepend", "last_append":
 		if raw, ok := entry["value"]; ok {
 			if err := json.Unmarshal(raw, &op.Value); err != nil {
 				return op, fmt.Errorf("rule %s: op %d (%s): value is not a string: %w", ruleID, index, op.Mode, err)
@@ -301,7 +302,7 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 	case "delete":
 		updated, err := sjson.DeleteBytes(body, writePath)
 		return updated, headers, err
-	case "append":
+	case "append", "last_append":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			updated, err := sjson.SetBytes(body, writePath, op.Value)
@@ -309,7 +310,7 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 		}
 		updated, err := sjson.SetBytes(body, writePath, current.String()+op.Value)
 		return updated, headers, err
-	case "prepend":
+	case "prepend", "first_prepend":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			updated, err := sjson.SetBytes(body, writePath, op.Value)

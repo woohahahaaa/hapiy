@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { DashboardApiError, dashboardApi,
@@ -1025,10 +1025,153 @@ function RewriteResponsePage() {
   )
 }
 
+type ResponseOpRow = {
+  mode: string
+  path: string
+  value: string
+  dst: string
+}
+
+// 简化 UI 直接支持的模式；其余模式（set/delete/copy/replace 等）走「编辑 JSON」。
+const RESPONSE_MODE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'move', label: '重命名 (move)' },
+  { value: 'prepend', label: '加前缀 (prepend)' },
+  { value: 'append', label: '加后缀 (append)' },
+  { value: 'first_prepend', label: '流式首段加前缀 (first_prepend)' },
+  { value: 'last_append', label: '流式末段加后缀 (last_append)' },
+]
+
+const RESPONSE_DST_MODES: ReadonlySet<string> = new Set(['move', 'copy'])
+
+const emptyResponseOp = (): ResponseOpRow => ({ mode: '', path: '', value: '', dst: '' })
+
+// 把 rule.script 反解析回操作行；空串或非 JSON 数组时回退为空操作列表。
+function parseResponseOps(script: string): ResponseOpRow[] {
+  const fallback = [emptyResponseOp()]
+  const trimmed = (script || '').trim()
+  if (!trimmed) return fallback
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return fallback
+  }
+  if (!Array.isArray(parsed)) return fallback
+  const rows = parsed
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({
+      mode: typeof item.mode === 'string' ? item.mode : '',
+      path: typeof item.path === 'string' ? item.path : '',
+      value: typeof item.value === 'string' ? item.value : '',
+      dst: typeof item.dst === 'string' ? item.dst : '',
+    }))
+  return rows.length > 0 ? rows : fallback
+}
+
+// 把操作行序列化为后端 compileRewriteChain 可解析的 JSON 数组字符串。
+// 未填完整（缺 mode/path，或 move/copy 缺 dst）的行会被跳过，保证产物合法。
+function serializeResponseOps(rows: readonly ResponseOpRow[]): string {
+  const ops = rows
+    .map((r) => ({ mode: r.mode.trim(), path: r.path.trim(), value: r.value, dst: r.dst.trim() }))
+    .filter((r) => {
+      if (!r.mode || !r.path) return false
+      if (RESPONSE_DST_MODES.has(r.mode)) return r.dst !== ''
+      return true
+    })
+    .map((r) => {
+      const op: Record<string, string> = { path: r.path, mode: r.mode }
+      if (RESPONSE_DST_MODES.has(r.mode)) {
+        op.dst = r.dst
+      } else if (r.value !== '') {
+        op.value = r.value
+      }
+      return op
+    })
+  return JSON.stringify(ops)
+}
+
+function ResponseOpRowEditor({
+  op,
+  index,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  op: ResponseOpRow
+  index: number
+  canRemove: boolean
+  onChange: (patch: Partial<ResponseOpRow>) => void
+  onRemove: () => void
+}) {
+  // 高级模式从 JSON 反解析回来时不在选择器选项里，动态补一个条目以便显示与往返。
+  const showFallbackMode = op.mode !== '' && !RESPONSE_MODE_OPTIONS.some((m) => m.value === op.mode)
+
+  return (
+    <div className="rounded-md border border-border p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">操作 {index + 1}</span>
+        <Button variant="ghost" size="icon" type="button" disabled={!canRemove} onClick={onRemove} aria-label={`删除操作 ${index + 1}`}>
+          <AppIcon name="delete" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-[minmax(0,7.5rem)_1fr] gap-2">
+          <Select value={op.mode} onValueChange={(v) => onChange({ mode: v })}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择模式" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {RESPONSE_MODE_OPTIONS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+                {showFallbackMode && <SelectItem value={op.mode}>{op.mode}</SelectItem>}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Input
+            value={op.path}
+            onChange={(e) => onChange({ path: e.target.value })}
+            placeholder="JSON 路径，如 data.name / choices.0.delta.reasoning_content"
+          />
+        </div>
+        {RESPONSE_DST_MODES.has(op.mode) ? (
+          <Input
+            value={op.dst}
+            onChange={(e) => onChange({ dst: e.target.value })}
+            placeholder="目标路径 dst，如 data.new_name"
+          />
+        ) : (
+          <Input
+            value={op.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder="value：要插入的文本"
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
 function RewriteResponseForm({ rule, onSave, onCancel, saving }: { rule: ResponseRewriteRule | null; onSave: (r: ResponseRewriteRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<ResponseRewriteRule>(
     rule || { id: '', name: '', script: '', status: true }
   )
+  const [ops, setOps] = useState<ResponseOpRow[]>(() => parseResponseOps(rule?.script ?? ''))
+
+  const updateOp = (index: number, patch: Partial<ResponseOpRow>) => {
+    setOps((prev) => prev.map((op, i) => (i === index ? { ...op, ...patch } : op)))
+  }
+  const removeOp = (index: number) => {
+    setOps((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
+  }
+  const addOp = () => {
+    setOps((prev) => [...prev, emptyResponseOp()])
+  }
+
+  const handleSave = () => {
+    onSave({ ...form, name: form.name.trim(), script: serializeResponseOps(ops) })
+  }
 
   return (
     <FieldGroup>
@@ -1037,20 +1180,31 @@ function RewriteResponseForm({ rule, onSave, onCancel, saving }: { rule: Respons
         <Input id="rr-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="rr-script">改写脚本</FieldLabel>
-        <Textarea
-          id="rr-script"
-          value={form.script}
-          onChange={(e) => setForm((p) => ({ ...p, script: e.target.value }))}
-          placeholder={`[{"path":"body.name","mode":"set","value":"updated"}]`}
-          rows={8}
-          className="font-mono text-sm"
-        />
-        <RewriteScriptHint />
+        <div className="flex w-full items-center justify-between">
+          <FieldLabel>操作</FieldLabel>
+          <Button type="button" variant="outline" size="sm" onClick={addOp}>
+            <AppIcon name="add" data-icon="inline-start" />添加操作
+          </Button>
+        </div>
+        <div className="flex w-full flex-col gap-2">
+          {ops.map((op, i) => (
+            <ResponseOpRowEditor
+              key={i}
+              op={op}
+              index={i}
+              canRemove={ops.length > 1}
+              onChange={(patch) => updateOp(i, patch)}
+              onRemove={() => removeOp(i)}
+            />
+          ))}
+        </div>
+        <FieldDescription>
+          高级模式（set / delete / copy / replace 等）可通过右上角「编辑 JSON」配置。
+        </FieldDescription>
       </Field>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
+        <Button disabled={saving || !form.name.trim()} onClick={handleSave}>{saving ? '保存中...' : '保存'}</Button>
       </DialogFooter>
     </FieldGroup>
   )

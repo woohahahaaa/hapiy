@@ -98,6 +98,12 @@ type Log struct {
 	FirstByteMs      *int      `json:"first_byte_ms,omitempty"`
 	RequestRewriteMs *int      `json:"request_rewrite_ms,omitempty"`
 	ResponseRewriteMs *int     `json:"response_rewrite_ms,omitempty"`
+	// StreamRewriteMs is the cumulative time spent rewriting individual
+	// SSE events for streaming responses; nil when no streaming rewrite.
+	StreamRewriteMs *int      `json:"stream_rewrite_ms,omitempty"`
+	// QueueWaitMs is the time spent waiting for a concurrency slot before
+	// the upstream request was issued; nil when no concurrency rule applies.
+	QueueWaitMs      *int      `json:"queue_wait_ms,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

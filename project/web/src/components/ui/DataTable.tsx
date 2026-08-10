@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 // ── Column definition ──
 
@@ -31,6 +32,7 @@ interface DataTableProps<T> {
   actions?: ReactNode
   emptyText?: string
   onRetry?: () => void
+  onRowClick?: (row: T) => void
 }
 
 // ── Constants ──
@@ -105,6 +107,7 @@ export function DataTable<T extends Record<string, unknown>>({
   actions,
   emptyText = "暂无数据",
   onRetry,
+  onRowClick,
 }: DataTableProps<T>) {
   const colCount = columns.length
   const [widths, setWidths] = React.useState<number[]>(() => loadWidths(id, colCount, columns as ColumnDef<unknown>[]))
@@ -302,7 +305,11 @@ export function DataTable<T extends Record<string, unknown>>({
                   <tr
                     key={rowIdx}
                     data-slot="table-row"
-                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={cn(
+                      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+                      onRowClick && "cursor-pointer",
+                    )}
                   >
                     {columns.map((col) => {
                       const raw = row[col.key]

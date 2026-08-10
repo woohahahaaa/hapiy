@@ -40,6 +40,8 @@ describe('dashboardApi.listLogs stage timings', () => {
           first_byte_ms: 890,
           request_rewrite_ms: 15,
           response_rewrite_ms: 30,
+          stream_rewrite_ms: 45,
+          queue_wait_ms: 500,
         }),
       ],
       total: 1,
@@ -52,6 +54,8 @@ describe('dashboardApi.listLogs stage timings', () => {
     expect(log.firstByteMs).toBe(890)
     expect(log.requestRewriteMs).toBe(15)
     expect(log.responseRewriteMs).toBe(30)
+    expect(log.streamRewriteMs).toBe(45)
+    expect(log.queueWaitMs).toBe(500)
   })
 
   it('normalizes missing stage timing fields to -1', async () => {
@@ -67,6 +71,8 @@ describe('dashboardApi.listLogs stage timings', () => {
     expect(log.firstByteMs).toBe(-1)
     expect(log.requestRewriteMs).toBe(-1)
     expect(log.responseRewriteMs).toBe(-1)
+    expect(log.streamRewriteMs).toBe(-1)
+    expect(log.queueWaitMs).toBe(-1)
   })
 
   it('normalizes null, string, and explicit -1 stage timing values', async () => {
@@ -77,6 +83,8 @@ describe('dashboardApi.listLogs stage timings', () => {
           first_byte_ms: null,
           request_rewrite_ms: '42',
           response_rewrite_ms: 'not-a-number',
+          stream_rewrite_ms: null,
+          queue_wait_ms: null,
         }),
       ],
       total: 1,
@@ -89,5 +97,7 @@ describe('dashboardApi.listLogs stage timings', () => {
     expect(log.firstByteMs).toBe(-1)
     expect(log.requestRewriteMs).toBe(42)
     expect(log.responseRewriteMs).toBe(-1)
+    expect(log.streamRewriteMs).toBe(-1)
+    expect(log.queueWaitMs).toBe(-1)
   })
 })

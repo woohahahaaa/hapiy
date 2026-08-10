@@ -307,3 +307,52 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 		t.Fatalf("response rewrite stage did not receive selected rule: %+v", events[4].ResponseRewriteRules)
 	}
 }
+
+func TestRelayRequest_recordsQueueWaitMs(t *testing.T) {
+	// Given: a fast upstream and a plan with a concurrency rule (no queueing
+	// pressure in this test, so QueueWaitMs is 0 rather than -1).
+	engine, _ := newTestEngine(t)
+	concurrencyRule := &model.ConcurrencyRule{ID: "cq-test", Name: "cq-test", MaxConcurrent: 4, QueueEnabled: true, Scope: "global", Status: true}
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	withRule := &ExecutionPlan{
+		Provider:        &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
+		BaseURLs:        []string{server.URL},
+		Keys:            []string{"key"},
+		ConcurrencyRule: concurrencyRule,
+	}
+	withoutRule := &ExecutionPlan{
+		Provider: &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
+		BaseURLs: []string{server.URL},
+		Keys:     []string{"key"},
+	}
+	engine.topologyStageHook = func(topologyStageEvent) {}
+
+	// When: run one request with the concurrency rule and one without.
+	withResp, err := engine.RelayRequest(context.Background(), withRule, &RelayRequest{RequestID: "with-rule"})
+	if err != nil {
+		t.Fatalf("relay with rule: %v", err)
+	}
+	_, _ = io.ReadAll(withResp.Body)
+	withResp.Body.Close()
+
+	withoutResp, err := engine.RelayRequest(context.Background(), withoutRule, &RelayRequest{RequestID: "without-rule"})
+	if err != nil {
+		t.Fatalf("relay without rule: %v", err)
+	}
+	_, _ = io.ReadAll(withoutResp.Body)
+	withoutResp.Body.Close()
+
+	// Then: the rule-carrying request reports a real queue wait (0ms when
+	// no contention), the rule-less one stays at -1 (not applicable).
+	if withResp.QueueWaitMs < 0 {
+		t.Fatalf("QueueWaitMs should be >= 0 with a concurrency rule, got %d", withResp.QueueWaitMs)
+	}
+	if withoutResp.QueueWaitMs != -1 {
+		t.Fatalf("QueueWaitMs should be -1 without a concurrency rule, got %d", withoutResp.QueueWaitMs)
+	}
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,7 @@ export function LogsPage() {
   const [searchText, setSearchText] = useState('')
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
-  const [errorDialogMsg, setErrorDialogMsg] = useState<string | null>(null)
+  const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -157,10 +157,12 @@ export function LogsPage() {
         const log = row as UsageLog
         const fmt = (val: number, label: string) => `${label}: ${val >= 0 ? `${val}ms` : '--'}`
         const stages: string[] = []
+        stages.push(fmt(log.queueWaitMs, '排队'))
+        stages.push(fmt(log.requestRewriteMs, '请求改写'))
         stages.push(fmt(log.connectMs, '连接'))
         stages.push(fmt(log.firstByteMs, '首字'))
-        stages.push(fmt(log.requestRewriteMs, '请求改写'))
         stages.push(fmt(log.responseRewriteMs, '响应改写'))
+        stages.push(fmt(log.streamRewriteMs, '流式改写'))
         return (
           <div className="leading-tight">
             <div>{main}</div>
@@ -182,11 +184,7 @@ export function LogsPage() {
               {s === 'success' ? '成功' : '失败'}
             </span>
             {err && (
-              <div
-                className="cursor-pointer truncate text-[10px] text-muted-foreground hover:underline"
-                onClick={() => setErrorDialogMsg(err)}
-                title="点击查看详情"
-              >
+              <div className="truncate text-[10px] text-muted-foreground" title={err}>
                 {err}
               </div>
             )}
@@ -214,6 +212,7 @@ export function LogsPage() {
           limit={LIMIT}
           onOffsetChange={setOffset}
           onRetry={fetchLogs}
+          onRowClick={setSelectedLog}
           filters={
             <>
               <Input
@@ -297,16 +296,77 @@ export function LogsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={errorDialogMsg !== null} onOpenChange={(open) => { if (!open) setErrorDialogMsg(null) }}>
+      <Dialog open={selectedLog !== null} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
         <DialogContent width="sm">
           <DialogHeader>
-            <DialogTitle>失败原因</DialogTitle>
+            <DialogTitle>请求详情</DialogTitle>
           </DialogHeader>
-          <DialogDescription className="break-words whitespace-pre-wrap">
-            {errorDialogMsg}
-          </DialogDescription>
+          {selectedLog && <LogDetailFields log={selectedLog} />}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function LogDetailFields({ log }: { log: UsageLog }) {
+  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '--')
+  const date = new Date(log.createdAt)
+  const timeText = Number.isNaN(date.getTime())
+    ? log.createdAt
+    : `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`
+  return (
+    <div className="space-y-4 text-xs">
+      <FieldGroup title="基本信息">
+        <DetailRow label="时间" value={timeText} />
+        <DetailRow label="用户" value={log.userId || '--'} />
+        <DetailRow label="令牌" value={log.tokenName || '--'} />
+        <DetailRow label="供应商" value={log.providerName || '--'} />
+        <DetailRow label="模型" value={log.modelName || '--'} />
+      </FieldGroup>
+      <FieldGroup title="用量">
+        <DetailRow label="Tokens" value={`${log.promptTokens} / ${log.completionTokens}`} />
+        <DetailRow label="流式" value={log.isStream ? 'SSE' : '-'} />
+        <DetailRow label="消耗" value={log.quota > 0 ? `¥${log.quota.toFixed(2)}` : '-'} />
+      </FieldGroup>
+      <FieldGroup title="耗时">
+        <DetailRow label="耗时" value={`${(log.useTime / 1000).toFixed(1)}s`} />
+        <DetailRow label="排队" value={fmtMs(log.queueWaitMs)} />
+        <DetailRow label="请求改写" value={fmtMs(log.requestRewriteMs)} />
+        <DetailRow label="连接" value={fmtMs(log.connectMs)} />
+        <DetailRow label="首字" value={fmtMs(log.firstByteMs)} />
+        <DetailRow label="响应改写" value={fmtMs(log.responseRewriteMs)} />
+        <DetailRow label="流式改写" value={fmtMs(log.streamRewriteMs)} />
+      </FieldGroup>
+      <FieldGroup title="状态">
+        <DetailRow label="状态" value={log.status === 'success' ? '成功' : '失败'} />
+        {log.errorMessage && (
+          <div className="col-span-2 flex items-baseline gap-2">
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground">报错原因</span>
+            <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
+          </div>
+        )}
+      </FieldGroup>
+    </div>
+  )
+}
+
+function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <div className="mb-2 flex items-center gap-3">
+        <h4 className="shrink-0 font-medium text-muted-foreground">{title}</h4>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2">{children}</div>
+    </section>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
+      <span className="break-words text-foreground">{value}</span>
     </div>
   )
 }

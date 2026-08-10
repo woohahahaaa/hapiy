@@ -164,6 +164,22 @@ type RelayResponse struct {
 	FirstByteMs       int
 	RequestRewriteMs  int
 	ResponseRewriteMs int
+	// streamRewriter, when set for a streaming response, rewrites each SSE
+	// event as it flows and accumulates the rewrite time. The handler reads
+	// the total via StreamRewriteTotalMs after the stream is forwarded.
+	streamRewriter *streamRewriteReader
+	// QueueWaitMs is the time spent waiting for a concurrency slot before
+	// the upstream request is issued; -1 when no concurrency rule applies.
+	QueueWaitMs int
+}
+
+// StreamRewriteTotalMs returns the cumulative streaming rewrite time, or
+// -1 when the response was not stream-rewritten.
+func (resp *RelayResponse) StreamRewriteTotalMs() int {
+	if resp == nil || resp.streamRewriter == nil {
+		return -1
+	}
+	return int(resp.streamRewriter.TotalRewriteMs())
 }
 
 // UsageInfo tracks token usage.
@@ -182,22 +198,9 @@ type UsageInfo struct {
 //  5. Heartbeat monitoring (response wrapping)
 //  6. Debug logging
 func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
-	// Step 1: Concurrency control. The release func MUST be called on
-	// every exit path so we wrap the rest of the pipeline in a closure
-	// that defers release before returning.
-	var releaseConcurrency func()
-	if plan.ConcurrencyRule != nil {
-		rel, err := e.checkConcurrency(ctx, plan.ConcurrencyRule, req)
-		if err != nil {
-			return nil, err
-		}
-		releaseConcurrency = rel
-	}
-	if releaseConcurrency != nil {
-		defer releaseConcurrency()
-	}
-
-	// Step 2: Request logging and rewrite
+	// Step 1: Request logging and rewrite. The rewrite runs before the
+	// concurrency gate: it is cheap local work and must not consume a
+	// concurrency slot (the gate exists to protect the upstream, not CPU).
 	e.runTopologyLogOutputs(topologyStageRequestBefore, plan.LogOutputs, plan, req, nil)
 	reqRewriteMs := -1
 	if len(plan.CompiledRewrite) > 0 {
@@ -208,6 +211,25 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		reqRewriteMs = int(time.Since(rewriteStart).Milliseconds())
 	}
 	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, plan, req, nil)
+
+	// Step 2: Concurrency control. Only the upstream request is gated; the
+	// rewrite above already completed. The release func MUST be called on
+	// every exit path so we wrap the rest of the pipeline in a closure
+	// that defers release before returning.
+	queueWaitMs := -1
+	var releaseConcurrency func()
+	if plan.ConcurrencyRule != nil {
+		queueStart := time.Now()
+		rel, err := e.checkConcurrency(ctx, plan.ConcurrencyRule, req)
+		if err != nil {
+			return nil, err
+		}
+		releaseConcurrency = rel
+		queueWaitMs = int(time.Since(queueStart).Milliseconds())
+	}
+	if releaseConcurrency != nil {
+		defer releaseConcurrency()
+	}
 
 	// Step 3: Relay to upstream (with failover). The "relay" stage fires
 	// here so a future UI can light up the provider node as the request
@@ -254,11 +276,14 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		return nil, err
 	}
 	resp.RequestRewriteMs = reqRewriteMs
+	resp.QueueWaitMs = queueWaitMs
 	resp.ResponseRewriteMs = -1
 
-	// Step 4: Response logging and rewrite. Per the deliberate design
-	// decision, streaming bodies are never buffered for response rewrite:
-	// the stage event is recorded but the body is forwarded as-is.
+	// Step 4: Response logging and rewrite. Non-streaming bodies are
+	// buffered and rewritten in full. Streaming bodies are never buffered;
+	// when response-rewrite rules are configured they are instead wrapped
+	// in a stream rewriter that rewrites each SSE event as it flows, and
+	// the stage event is still recorded.
 	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, resp)
 	if !req.Stream && len(plan.CompiledResponseRewrites) > 0 {
 		respRewriteStart := time.Now()
@@ -266,6 +291,10 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 			return nil, err
 		}
 		resp.ResponseRewriteMs = int(time.Since(respRewriteStart).Milliseconds())
+	}
+	if req.Stream && resp.Body != nil && len(plan.CompiledResponseRewrites) > 0 {
+		resp.streamRewriter = newStreamRewriteReader(resp.Body, plan.CompiledResponseRewrites)
+		resp.Body = resp.streamRewriter
 	}
 	e.recordTopologyStage(topologyStageEvent{
 		Stage:                topologyStageResponseRewrite,

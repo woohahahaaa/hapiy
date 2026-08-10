@@ -160,6 +160,8 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			FirstByteMs:       intPtr(firstByteMs),
 			RequestRewriteMs:  intPtr(resp.RequestRewriteMs),
 			ResponseRewriteMs: intPtr(resp.ResponseRewriteMs),
+			StreamRewriteMs:   intPtr(resp.StreamRewriteTotalMs()),
+			QueueWaitMs:       intPtr(resp.QueueWaitMs),
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens

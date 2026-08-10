@@ -90,6 +90,8 @@ export type UsageLog = {
   readonly firstByteMs: number
   readonly requestRewriteMs: number
   readonly responseRewriteMs: number
+  readonly streamRewriteMs: number
+  readonly queueWaitMs: number
   readonly status: 'success' | 'failed'
   readonly errorMessage: string
 }
@@ -655,6 +657,8 @@ function parseLog(value: unknown): UsageLog {
     firstByteMs: parseStageMs(value.first_byte_ms),
     requestRewriteMs: parseStageMs(value.request_rewrite_ms),
     responseRewriteMs: parseStageMs(value.response_rewrite_ms),
+    streamRewriteMs: parseStageMs(value.stream_rewrite_ms),
+    queueWaitMs: parseStageMs(value.queue_wait_ms),
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
   }
