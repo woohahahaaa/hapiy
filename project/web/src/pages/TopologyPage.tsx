@@ -400,6 +400,19 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
+  const handleStartLogCapture = useCallback(
+    (slotId: string, deadlineAt: number) => {
+      updateTopologyNodes((list) =>
+        list.map((n) =>
+          n.id === slotId && n.kind === 'slot'
+            ? { ...n, enabled: true, logDeadlineAt: deadlineAt }
+            : n,
+        ),
+      )
+    },
+    [updateTopologyNodes],
+  )
+
   const handleSetLogDeadline = useCallback(
     (slotId: string, deadlineAt: number | null) => {
       updateTopologyNodes((list) =>
@@ -652,6 +665,7 @@ export function TopologyPage() {
                   logDeadlineAt: node.logDeadlineAt ?? null,
                   onToggleLog: (nextEnabled: boolean) => handleToggleLog(node.id, nextEnabled),
                   onSetLogDeadline: (deadlineAt: number | null) => handleSetLogDeadline(node.id, deadlineAt),
+                  onStartCapture: (deadlineAt: number) => handleStartLogCapture(node.id, deadlineAt),
                 }
               : {}),
           },

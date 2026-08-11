@@ -42,6 +42,7 @@ interface FlatSlotNodeData {
   slotType: string
   isProviderSlot?: boolean
   externallyDisabled?: boolean
+  enabled?: boolean
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
   onAddProvider?: () => void
@@ -58,6 +59,7 @@ interface FlatSlotNodeData {
   logDeadlineAt?: number | null
   onToggleLog?: (enabled: boolean) => void
   onSetLogDeadline?: (deadlineAt: number | null) => void
+  onStartCapture?: (deadlineAt: number) => void
 }
 
 interface FlatSlotNodeProps {
@@ -94,6 +96,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     logDeadlineAt,
     onToggleLog,
     onSetLogDeadline,
+    onStartCapture,
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
@@ -195,6 +198,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       deadlineAt={logDeadlineAt ?? null}
       onToggle={(next) => onToggleLog?.(next)}
       onSetDeadline={onSetLogDeadline}
+      onStartCapture={onStartCapture}
       onAutoClose={onAutoCloseEntry}
     />
   ) : (
@@ -260,6 +264,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           onAddNode={handleAddEntry}
           style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
           externallyDisabled={externallyDisabled}
+          dimChildren={isLogOutputSlot && !data.enabled}
         >
           {entries.map((entry) =>
             renderItem(
@@ -268,8 +273,6 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               onChangeEntry,
               onDeleteEntry,
               entryDragProps(entry.index),
-              onAutoCloseEntry,
-              isLogOutputSlot && !data.enabled,
             ),
           )}
         </SlotContainer>
@@ -368,7 +371,6 @@ function renderItem(
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
-  slotDisabled = false,
 ) {
   const onDelete = () => onDeleteEntry?.(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -436,7 +438,6 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
-            slotDisabled={slotDisabled}
             {...drag}
           />
         )
@@ -457,6 +458,7 @@ interface LogOutputSlotHeaderProps {
   readonly deadlineAt: number | null
   readonly onToggle?: (enabled: boolean) => void
   readonly onSetDeadline?: (deadlineAt: number | null) => void
+  readonly onStartCapture?: (deadlineAt: number) => void
   readonly onAutoClose?: () => void
 }
 
@@ -466,6 +468,7 @@ function LogOutputSlotHeader({
   deadlineAt,
   onToggle,
   onSetDeadline,
+  onStartCapture,
   onAutoClose,
 }: LogOutputSlotHeaderProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -497,8 +500,7 @@ function LogOutputSlotHeader({
   const handleConfirm = () => {
     if (totalSeconds <= 0) return
     setDialogOpen(false)
-    onToggle?.(true)
-    onSetDeadline?.(Date.now() + totalSeconds * 1000)
+    onStartCapture?.(Date.now() + totalSeconds * 1000)
   }
 
   const remaining = capturing && deadlineAt !== null ? Math.max(0, deadlineAt - now) : 0

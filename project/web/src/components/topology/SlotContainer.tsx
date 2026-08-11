@@ -9,6 +9,7 @@ interface SlotContainerProps {
   className?: string
   style?: CSSProperties
   externallyDisabled?: boolean
+  dimChildren?: boolean
 }
 
 export function SlotContainer({
@@ -18,6 +19,7 @@ export function SlotContainer({
   className,
   style,
   externallyDisabled = false,
+  dimChildren = false,
 }: SlotContainerProps) {
   const hasNodes = Boolean(children)
 
@@ -36,15 +38,7 @@ export function SlotContainer({
 
       {hasNodes ? (
         <>
-          {/*
-            `items-stretch` makes children fill the cross-axis (horizontal for
-            `flex-col`). The outer SlotContainer uses `width: fit-content` from
-            the caller, so the container widens to the widest child and every
-            child — plus the `w-full` add button below — then matches that
-            slot-local maximum width. Equalization happens at render time; the
-            magic-wand layout does not participate.
-          */}
-          <div className="flex flex-col items-stretch gap-2">{children}</div>
+          <div className={cn('flex flex-col items-stretch gap-2', dimChildren && 'opacity-60')}>{children}</div>
           {onAddNode && (
             <button
               type="button"

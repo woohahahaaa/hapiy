@@ -8,14 +8,12 @@ interface LogOutputSlotItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
-  slotDisabled?: boolean
 }
 
 export function LogOutputSlotItem({
   entry,
   onChange,
   onDelete,
-  slotDisabled = false,
   ...drag
 }: LogOutputSlotItemProps) {
   const [localPrefix, setLocalPrefix] = useState(entry.prefix)
@@ -26,7 +24,6 @@ export function LogOutputSlotItem({
       enabled={entry.enabled}
       onToggleEnabled={(v) => onChange({ ...entry, enabled: v })}
       onDelete={onDelete}
-      className={slotDisabled ? 'opacity-60' : undefined}
       {...drag}
     >
       <div className="flex flex-col gap-0.5">
