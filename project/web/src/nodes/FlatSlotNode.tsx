@@ -1,5 +1,5 @@
 import { Handle, Position } from '@xyflow/react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
@@ -17,6 +17,15 @@ import {
   makeEmptyEntry,
 } from '@/components/topology/slot-items'
 import { RewriteTestDialog } from '@/components/RewriteTestDialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export interface FlatProviderChild {
   readonly id: string
@@ -46,6 +55,8 @@ interface FlatSlotNodeData {
   onDeleteEntry?: (index: number) => void
   onReorderEntries?: (fromIndex: number, toIndex: number) => void
   onAutoCloseEntry?: () => void
+  logDeadlineAt?: number | null
+  onSetLogDeadline?: (deadlineAt: number | null) => void
 }
 
 interface FlatSlotNodeProps {
@@ -79,6 +90,8 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     onDeleteEntry,
     onReorderEntries,
     onAutoCloseEntry,
+    logDeadlineAt,
+    onSetLogDeadline,
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
@@ -149,6 +162,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   } as const
 
   const isRequestResponseModify = !isProviderSlot && (slotType === 'requestModify' || slotType === 'responseModify')
+  const isLogOutputSlot = !isProviderSlot && slotType === 'logOutput'
   const titleBadge = isProviderSlot ? (
     <div className="flex items-center justify-between">
       <span>{title}</span>
@@ -172,6 +186,14 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
         测试
       </button>
     </div>
+  ) : isLogOutputSlot ? (
+    <LogOutputSlotHeader
+      title={title}
+      enabled={data.enabled}
+      deadlineAt={logDeadlineAt ?? null}
+      onSetDeadline={onSetLogDeadline}
+      onAutoClose={onAutoCloseEntry}
+    />
   ) : (
     <span>{title}</span>
   )
@@ -244,6 +266,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               onDeleteEntry,
               entryDragProps(entry.index),
               onAutoCloseEntry,
+              isLogOutputSlot && !data.enabled,
             ),
           )}
         </SlotContainer>
@@ -342,7 +365,7 @@ function renderItem(
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
-  onAutoCloseEntry?: () => void,
+  slotDisabled = false,
 ) {
   const onDelete = () => onDeleteEntry?.(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -410,7 +433,7 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
-            onAutoClose={onAutoCloseEntry}
+            slotDisabled={slotDisabled}
             {...drag}
           />
         )
@@ -423,4 +446,132 @@ function renderItem(
     }
   }
   return content
+}
+
+interface LogOutputSlotHeaderProps {
+  readonly title: string
+  readonly enabled: boolean
+  readonly deadlineAt: number | null
+  readonly onSetDeadline?: (deadlineAt: number | null) => void
+  readonly onAutoClose?: () => void
+}
+
+function LogOutputSlotHeader({
+  title,
+  enabled,
+  deadlineAt,
+  onSetDeadline,
+  onAutoClose,
+}: LogOutputSlotHeaderProps) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [hours, setHours] = useState('0')
+  const [minutes, setMinutes] = useState('5')
+  const [seconds, setSeconds] = useState('0')
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (deadlineAt === null || !enabled) return
+    const timer = window.setInterval(() => setNow(Date.now()), 250)
+    return () => window.clearInterval(timer)
+  }, [deadlineAt, enabled])
+
+  useEffect(() => {
+    if (deadlineAt === null || !enabled || now < deadlineAt) return
+    onSetDeadline?.(null)
+    onAutoClose?.()
+  }, [deadlineAt, enabled, now, onSetDeadline, onAutoClose])
+
+  const totalSeconds =
+    (Number.isNaN(Number(hours)) ? 0 : Number(hours)) * 3600 +
+    (Number.isNaN(Number(minutes)) ? 0 : Number(minutes)) * 60 +
+    (Number.isNaN(Number(seconds)) ? 0 : Number(seconds))
+
+  const handleConfirm = () => {
+    if (totalSeconds <= 0) return
+    setDialogOpen(false)
+    onSetDeadline?.(Date.now() + totalSeconds * 1000)
+  }
+
+  const hasDeadline = deadlineAt !== null && enabled
+  const remaining = hasDeadline ? Math.max(0, deadlineAt - now) : 0
+  const remainingHours = Math.floor(remaining / 3600000)
+  const remainingMinutes = Math.floor((remaining % 3600000) / 60000)
+  const remainingSeconds = Math.floor((remaining % 60000) / 1000)
+
+  const buttonClass =
+    'nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground'
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <span>{title}</span>
+        <div className="flex items-center gap-2">
+          {hasDeadline && (
+            <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+              剩余 {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒
+            </span>
+          )}
+          <button
+            type="button"
+            className={buttonClass}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (enabled) {
+                onSetDeadline?.(null)
+              } else {
+                setDialogOpen(true)
+              }
+            }}
+          >
+            {enabled ? '关闭' : '启动'}
+          </button>
+        </div>
+      </div>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent width="sm">
+          <DialogHeader>
+            <DialogTitle>设置开启时长</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-end justify-center gap-2">
+            <TimeField label="时" value={hours} onChange={setHours} />
+            <TimeField label="分" value={minutes} onChange={setMinutes} />
+            <TimeField label="秒" value={seconds} onChange={setSeconds} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
+              取消
+            </Button>
+            <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
+              确认
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function TimeField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <Input
+        type="number"
+        min={0}
+        max={999}
+        step={1}
+        className="w-16 text-center"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  )
 }

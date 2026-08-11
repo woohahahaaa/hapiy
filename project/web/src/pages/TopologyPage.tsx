@@ -384,6 +384,28 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
+  const handleToggleLog = useCallback(
+    (slotId: string, enabled: boolean) => {
+      updateTopologyNodes((list) =>
+        list.map((n) =>
+          n.id === slotId && n.kind === 'slot'
+            ? { ...n, enabled, ...(enabled ? {} : { logDeadlineAt: null }) }
+            : n,
+        ),
+      )
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleSetLogDeadline = useCallback(
+    (slotId: string, deadlineAt: number | null) => {
+      updateTopologyNodes((list) =>
+        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, logDeadlineAt: deadlineAt } : n)),
+      )
+    },
+    [updateTopologyNodes],
+  )
+
   const handleDeleteSlotEntry = useCallback(
     (slotId: string, slotType: SlotType, index: number) => {
       const cur = tpRef.current
@@ -621,6 +643,12 @@ export function TopologyPage() {
             onAutoCloseEntry: () => {
               void persistTopology()
             },
+            ...(slotType === 'logOutput'
+              ? {
+                  logDeadlineAt: node.logDeadlineAt ?? null,
+                  onSetLogDeadline: (deadlineAt: number | null) => handleSetLogDeadline(node.id, deadlineAt),
+                }
+              : {}),
           },
         })
       }

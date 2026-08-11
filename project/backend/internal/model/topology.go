@@ -20,6 +20,7 @@ type TopologySlotAssignment struct {
 	SlotType   string    `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"slot_type"`
 	Order      int       `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"order"`
 	Enabled    bool      `gorm:"not null" json:"enabled"`
+	NodeEnabled *bool    `gorm:"type:boolean" json:"node_enabled,omitempty"`
 	RuleID     *string   `gorm:"type:text" json:"rule_id"`
 	Name       string    `gorm:"type:text;not null;default:''" json:"name"`
 	Config     string    `gorm:"type:text;not null" json:"-"`

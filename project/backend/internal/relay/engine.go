@@ -399,6 +399,9 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 		if !assignment.Enabled {
 			continue
 		}
+		if !assignment.NodeEnabled {
+			continue
+		}
 		cfg, err := parseLogOutputConfig(assignment.Config)
 		if err != nil {
 			continue
@@ -471,7 +474,7 @@ func captureResponseBody(resp *RelayResponse, stream bool) interface{} {
 // parseLogOutputConfig decodes a logOutput assignment's raw JSON with the
 // documented defaults: auto_close_minutes defaults to 5.
 func parseLogOutputConfig(raw string) (LogOutputNodeConfig, error) {
-	cfg := LogOutputNodeConfig{AutoCloseMinutes: 5}
+	cfg := LogOutputNodeConfig{Enabled: false}
 	if raw == "" {
 		return cfg, nil
 	}
@@ -489,10 +492,7 @@ func autoClosed(assignment LogOutputAssignment, cfg LogOutputNodeConfig) bool {
 	if cfg.DeadlineAt > 0 {
 		return time.Now().UnixMilli() >= cfg.DeadlineAt
 	}
-	if cfg.AutoCloseMinutes <= 0 || assignment.CreatedAt.IsZero() {
-		return false
-	}
-	return time.Since(assignment.CreatedAt) > time.Duration(cfg.AutoCloseMinutes)*time.Minute
+	return false
 }
 
 func logOutputStageType(stage topologyStage) string {

@@ -113,8 +113,7 @@ describe('workflowsFromSlotMaps', () => {
       id: 'log-1', slotType: 'logOutput', index: 1, enabled: false,
       prefix: '/logs/hapiy',
       recordRequest: false, recordResponse: false,
-      recordSystem: true, autoCloseMinutes: 5,
-      deadlineAt: null,
+      recordSystem: true,
       config: {},
     })
     const maps = new Map<string, WorkflowEntry>([
@@ -131,7 +130,6 @@ describe('workflowsFromSlotMaps', () => {
     expect(logNode.config.record_request).toBe(false)
     expect(logNode.config.record_response).toBe(false)
     expect(logNode.config.record_system).toBe(true)
-    expect(logNode.config.auto_close_minutes).toBe(5)
   })
 })
 

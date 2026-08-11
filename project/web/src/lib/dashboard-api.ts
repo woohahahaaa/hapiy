@@ -306,6 +306,7 @@ export type FlatNode = {
   readonly enabled: boolean
   readonly weight?: number
   readonly entries?: readonly SlotEntry[]
+  readonly logDeadlineAt?: number | null
 }
 
 export type FlatWire = {
@@ -339,6 +340,7 @@ function parseFlatNode(value: unknown): FlatNode {
     enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
     weight: typeof value.weight === 'number' ? value.weight : undefined,
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
+    logDeadlineAt: typeof value.log_deadline_at === 'number' ? value.log_deadline_at : null,
   }
 }
 
@@ -366,6 +368,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     enabled: node.enabled,
     ...(node.weight !== undefined ? { weight: node.weight } : {}),
     ...(node.entries !== undefined ? { entries: node.entries } : {}),
+    ...(node.logDeadlineAt !== undefined ? { log_deadline_at: node.logDeadlineAt } : {}),
   }
 }
 

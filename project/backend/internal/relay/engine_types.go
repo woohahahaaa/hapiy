@@ -41,28 +41,29 @@ type ExecutionPlan struct {
 // CreatedAt is the assignment row's creation time, used to auto-close the log
 // node after AutoCloseMinutes.
 type LogOutputAssignment struct {
-	ID        string
-	Order     int
-	Enabled   bool
-	Config    string
-	CreatedAt time.Time
+	ID          string
+	Order       int
+	Enabled     bool
+	NodeEnabled bool
+	Config      string
+	CreatedAt   time.Time
 }
 
-// LogOutputNodeConfig is the parsed logOutput node config. The zero values
-// mirror the validation defaults: recording switches default to false and
-// auto_close_minutes defaults to 5 via parseLogOutputConfig.
+// LogOutputNodeConfig is the parsed logOutput node config. Enabled and
+// DeadlineAt are slot-level (shared by every entry in the slot); Prefix and
+// the record_* switches are per-entry and replicated across the cfg JSON.
 //
 // DeadlineAt is a Unix epoch in milliseconds, set when the user opens the
-// node with a timer. The engine treats it as an absolute wall-clock cutoff:
+// slot with a timer. The engine treats it as an absolute wall-clock cutoff:
 // once time.Now() exceeds it, runTopologyLogOutputs skips the assignment.
-// Zero means "no timer set" — the node stays open until manually closed.
+// Zero means "no timer set" — the slot stays open until manually closed.
 type LogOutputNodeConfig struct {
-	Prefix           string `json:"prefix"`
-	RecordRequest    bool   `json:"record_request"`
-	RecordResponse   bool   `json:"record_response"`
-	RecordSystem     bool   `json:"record_system"`
-	AutoCloseMinutes int    `json:"auto_close_minutes"`
-	DeadlineAt       int64  `json:"deadline_at,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	Prefix          string `json:"prefix"`
+	RecordRequest   bool   `json:"record_request"`
+	RecordResponse  bool   `json:"record_response"`
+	RecordSystem    bool   `json:"record_system"`
+	DeadlineAt      int64  `json:"deadline_at,omitempty"`
 }
 
 // topologyStage labels where in the request pipeline a stage event fires.

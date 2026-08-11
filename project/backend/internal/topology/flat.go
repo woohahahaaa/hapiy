@@ -22,13 +22,14 @@ const (
 // node carries the provider's configured name (resolved against the Provider
 // table at plan time). A request-entry node carries the master switch and weight.
 type FlatNode struct {
-	ID       string          `json:"id"`
-	Kind     NodeKind        `json:"kind"`
-	Name     string          `json:"name,omitempty"`      // provider configured name for KindProvider
-	SlotType string          `json:"slot_type,omitempty"` // for KindSlot
-	Enabled  bool            `json:"enabled"`             // request-entry master switch / provider mini-switch
-	Weight   float64         `json:"weight,omitempty"`    // request-entry weight in [0,1]
-	Entries  json.RawMessage `json:"entries,omitempty"`   // for KindSlot: rule entries, opaque to the engine
+	ID           string          `json:"id"`
+	Kind         NodeKind        `json:"kind"`
+	Name         string          `json:"name,omitempty"`        // provider configured name for KindProvider
+	SlotType     string          `json:"slot_type,omitempty"`   // for KindSlot
+	Enabled      bool            `json:"enabled"`               // request-entry master switch / provider mini-switch / logOutput slot master switch
+	Weight       float64         `json:"weight,omitempty"`      // request-entry weight in [0,1]
+	Entries      json.RawMessage `json:"entries,omitempty"`     // for KindSlot: rule entries, opaque to the engine
+	LogDeadlineAt *int64         `json:"log_deadline_at,omitempty"` // logOutput slot-level deadline, Unix epoch ms
 }
 
 // Wire is one directed connection in the flat topology.

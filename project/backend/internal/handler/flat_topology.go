@@ -117,18 +117,16 @@ func ValidateFlatTopology(db *gorm.DB) gin.HandlerFunc {
 // fields (id, slotType, index, ruleId, enabled, config); logOutput
 // additionally carries its configuration as flattened entry fields.
 type flatSlotEntry struct {
-	ID               string          `json:"id"`
-	SlotType         string          `json:"slotType"`
-	Index            int             `json:"index"`
-	RuleID           *string         `json:"ruleId,omitempty"`
-	Enabled          bool            `json:"enabled"`
-	Prefix           string          `json:"prefix,omitempty"`
-	RecordRequest    bool            `json:"recordRequest,omitempty"`
-	RecordResponse   bool            `json:"recordResponse,omitempty"`
-	RecordSystem     bool            `json:"recordSystem,omitempty"`
-	AutoCloseMinutes int             `json:"autoCloseMinutes,omitempty"`
-	DeadlineAt       int64           `json:"deadlineAt,omitempty"`
-	Config           json.RawMessage `json:"config,omitempty"`
+	ID             string          `json:"id"`
+	SlotType       string          `json:"slotType"`
+	Index          int             `json:"index"`
+	RuleID         *string         `json:"ruleId,omitempty"`
+	Enabled        bool            `json:"enabled"`
+	Prefix         string          `json:"prefix,omitempty"`
+	RecordRequest  bool            `json:"recordRequest,omitempty"`
+	RecordResponse bool            `json:"recordResponse,omitempty"`
+	RecordSystem   bool            `json:"recordSystem,omitempty"`
+	Config         json.RawMessage `json:"config,omitempty"`
 }
 
 // deriveFlatAssignments walks the Flat Topology and produces a normalized
@@ -237,22 +235,21 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 		entryEnabled := providerEnabled && e.Enabled
 
 		if slot.SlotType == "logOutput" {
-			// The frontend flattens logOutput config (prefix, recordXxx, ...) onto
-			// the entry itself; the engine reads them back from Config JSON. Prefer
-			// the incoming Config when it carries real content; otherwise pack the
-			// flattened fields so a user-typed prefix is never dropped on save.
+			// Per-entry fields (prefix, record_*) live on the entry; slot-level
+			// state (enabled, deadlineAt) lives on the FlatNode. Pack both into
+			// the Config JSON so the engine sees one shape.
 			config := e.Config
 			trimmed := bytes.TrimSpace(config)
 			if len(trimmed) == 0 || string(trimmed) == "null" || string(trimmed) == "{}" {
 				cfg := map[string]any{
-					"prefix":             e.Prefix,
-					"record_request":     e.RecordRequest,
-					"record_response":    e.RecordResponse,
-					"record_system":      e.RecordSystem,
-					"auto_close_minutes": e.AutoCloseMinutes,
+					"enabled":         slot.Enabled,
+					"prefix":          e.Prefix,
+					"record_request":  e.RecordRequest,
+					"record_response": e.RecordResponse,
+					"record_system":   e.RecordSystem,
 				}
-				if e.DeadlineAt > 0 {
-					cfg["deadline_at"] = e.DeadlineAt
+				if slot.LogDeadlineAt != nil && *slot.LogDeadlineAt > 0 {
+					cfg["deadline_at"] = *slot.LogDeadlineAt
 				}
 				if packed, err := json.Marshal(cfg); err == nil {
 					config = packed
@@ -260,14 +257,16 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 					config = []byte("{}")
 				}
 			}
+			nodeEnabled := slot.Enabled
 			*rows = append(*rows, model.TopologySlotAssignment{
-				ProviderID: providerID,
-				SlotType:   slot.SlotType,
-				Order:      order,
-				Enabled:    entryEnabled,
-				RuleID:     nil,
-				Name:       "",
-				Config:     string(config),
+				ProviderID:  providerID,
+				SlotType:    slot.SlotType,
+				Order:       order,
+				Enabled:     entryEnabled,
+				NodeEnabled: &nodeEnabled,
+				RuleID:      nil,
+				Name:        "",
+				Config:      string(config),
 			})
 			continue
 		}

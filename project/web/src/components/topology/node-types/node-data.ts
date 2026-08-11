@@ -31,8 +31,6 @@ export interface LogOutputNodeData {
     readonly record_request: boolean
     readonly record_response: boolean
     readonly record_system: boolean
-    readonly auto_close_minutes: number
-    readonly deadline_at?: number
   }
 }
 

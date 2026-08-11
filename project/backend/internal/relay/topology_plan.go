@@ -101,11 +101,12 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment model.TopologySlotAssignment) error {
 	if assignment.SlotType == "logOutput" {
 		plan.LogOutputs = append(plan.LogOutputs, LogOutputAssignment{
-			ID:        assignment.ID,
-			Order:     assignment.Order,
-			Enabled:   assignment.Enabled,
-			Config:    assignment.Config,
-			CreatedAt: assignment.CreatedAt,
+			ID:          assignment.ID,
+			Order:       assignment.Order,
+			Enabled:     assignment.Enabled,
+			NodeEnabled: assignment.NodeEnabled != nil && *assignment.NodeEnabled,
+			Config:      assignment.Config,
+			CreatedAt:   assignment.CreatedAt,
 		})
 		return nil
 	}

@@ -70,11 +70,11 @@ export type LogOutputSlotEntry = {
   readonly recordRequest: boolean
   readonly recordResponse: boolean
   readonly recordSystem: boolean
-  readonly autoCloseMinutes: number
-  // Unix epoch in milliseconds; null when the node is closed.
-  // When set and enabled=true, the node auto-closes at this wall-clock time.
-  readonly deadlineAt: number | null
   readonly config: Readonly<Record<string, unknown>>
+}
+
+export type LogOutputSlotState = {
+  readonly deadlineAt: number | null
 }
 
 export type SlotEntry =
@@ -164,8 +164,6 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
         recordRequest: true,
         recordResponse: true,
         recordSystem: true,
-        autoCloseMinutes: 5,
-        deadlineAt: null,
         config: {},
       }
   }
