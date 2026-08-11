@@ -679,10 +679,10 @@ export function TopologyPage() {
     setError(null)
     try {
       const [providers, flat] = await Promise.all([
-        dashboardApi.listProviders(),
+        dashboardApi.listProviders({ limit: 1000, offset: 0 }),
         dashboardApi.getFlatTopology(),
       ])
-      setProviders(providers)
+      setProviders(providers.providers)
       historyRef.current = []
       redoRef.current = []
       syncHistory()

@@ -14,11 +14,18 @@ import (
 func ListProviders(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var providers []model.Provider
-		if err := db.Find(&providers).Error; err != nil {
+		limit := parseInt(c.Query("limit"), 50)
+		offset := parseInt(c.Query("offset"), 0)
+		var total int64
+		if err := db.Model(&model.Provider{}).Count(&total).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": providers})
+		if err := db.Order("id asc").Limit(limit).Offset(offset).Find(&providers).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": providers, "total": total})
 	}
 }
 

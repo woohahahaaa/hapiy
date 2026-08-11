@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { AppIcon } from '@/components/AppIcon'
 
 export type JsonEditorIdMap = ReadonlyMap<number, string>
 
@@ -62,6 +63,15 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
     }
   }
 
+  const handleFormat = () => {
+    try {
+      setText(JSON.stringify(JSON.parse(text), null, 2))
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '格式化失败：JSON 无效')
+    }
+  }
+
   return (
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
@@ -82,6 +92,10 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
           />
           <DialogFooter>
             <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
+            <Button variant="outline" onClick={handleFormat} disabled={saving}>
+              <AppIcon name="auto_fix_high" data-icon="inline-start" />
+              格式化
+            </Button>
             <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
           </DialogFooter>
         </DialogContent>

@@ -415,6 +415,7 @@ function ActiveRequestsSection() {
         limit={requests.length}
         onOffsetChange={() => {}}
         onRetry={fetchActive}
+        showPagination={false}
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

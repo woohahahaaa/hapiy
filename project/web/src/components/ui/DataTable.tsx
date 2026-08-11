@@ -3,6 +3,14 @@
 import type { ReactNode } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 
 // ── Column definition ──
@@ -28,11 +36,14 @@ interface DataTableProps<T> {
   offset: number
   limit: number
   onOffsetChange: (offset: number) => void
+  pageSizeOptions?: readonly number[]
+  onLimitChange?: (limit: number) => void
   filters?: ReactNode
   actions?: ReactNode
   emptyText?: string
   onRetry?: () => void
   onRowClick?: (row: T) => void
+  showPagination?: boolean
 }
 
 // ── Constants ──
@@ -40,6 +51,7 @@ interface DataTableProps<T> {
 const STORAGE_PREFIX = "hapiy-table-cols-"
 const MIN_COL_PCT = 5
 const TOOLBAR_GAP = 12
+const DEFAULT_PAGE_SIZE_OPTIONS: readonly number[] = [10, 20, 50, 100]
 
 // ── Helpers ──
 
@@ -103,11 +115,14 @@ export function DataTable<T extends Record<string, unknown>>({
   offset,
   limit,
   onOffsetChange,
+  pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
+  onLimitChange,
   filters,
   actions,
   emptyText = "暂无数据",
   onRetry,
   onRowClick,
+  showPagination = true,
 }: DataTableProps<T>) {
   const colCount = columns.length
   const [widths, setWidths] = React.useState<number[]>(() => loadWidths(id, colCount, columns as ColumnDef<unknown>[]))
@@ -212,8 +227,18 @@ export function DataTable<T extends Record<string, unknown>>({
   const pageText = total > 0 ? `第 ${Math.floor(offset / limit) + 1} 页，共 ${total} 条` : ""
   const split = splitIndex ?? 0
 
+  const handleLimitChange = React.useCallback(
+    (value: string) => {
+      const next = Number(value)
+      if (!Number.isFinite(next) || next <= 0) return
+      onLimitChange?.(next)
+      onOffsetChange(0)
+    },
+    [onLimitChange, onOffsetChange],
+  )
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col">
       {/* 筛选栏 */}
       {(filters || actions) && (
         <div ref={toolbarRef} className="mb-4">
@@ -248,7 +273,7 @@ export function DataTable<T extends Record<string, unknown>>({
       )}
 
       {/* 表格 */}
-      <div className="min-h-0 flex-1">
+      <div>
         <div ref={tableRef} className="relative w-full overflow-x-auto rounded-md border border-border">
           <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
             <thead data-slot="table-header" className="[&_tr]:border-b">
@@ -340,28 +365,46 @@ export function DataTable<T extends Record<string, unknown>>({
       </div>
 
       {/* 分页 */}
-      {total > 0 && (
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">{pageText}</div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!hasPrev}
-              onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-            >
-              上一页
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!hasNext}
-              onClick={() => onOffsetChange(offset + limit)}
-            >
-              下一页
-            </Button>
-          </div>
+      {showPagination && (
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">每页</span>
+          <Select value={String(limit)} onValueChange={handleLimitChange}>
+            <SelectTrigger className="w-20">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {pageSizeOptions.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">条</span>
         </div>
+        <div className="text-xs text-muted-foreground">{pageText || '第 1 页，共 0 条'}</div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasPrev}
+            onClick={() => onOffsetChange(Math.max(0, offset - limit))}
+          >
+            上一页
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasNext}
+            onClick={() => onOffsetChange(offset + limit)}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
       )}
     </div>
   )

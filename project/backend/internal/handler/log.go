@@ -24,6 +24,16 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 		if tokenName := c.Query("token"); tokenName != "" {
 			query = query.Where("token_name = ?", tokenName)
 		}
+		if from := c.Query("from"); from != "" {
+			if t, err := time.Parse(time.RFC3339, from); err == nil {
+				query = query.Where("created_at >= ?", t)
+			}
+		}
+		if to := c.Query("to"); to != "" {
+			if t, err := time.Parse(time.RFC3339, to); err == nil {
+				query = query.Where("created_at <= ?", t)
+			}
+		}
 
 		// Pagination
 		limit := 50

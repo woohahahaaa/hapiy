@@ -612,7 +612,7 @@ func (e *Engine) setupUpstreamHeaders(httpReq *http.Request, key string, req *Re
 	httpReq.Header.Set("Authorization", "Bearer "+key)
 	for k, v := range req.Headers {
 		switch k {
-		case "Authorization", "Content-Length", "Host", "Connection":
+		case "Authorization", "Content-Length", "Host", "Connection", "X-Hapiy-Source":
 			continue
 		default:
 			httpReq.Header.Set(k, v)

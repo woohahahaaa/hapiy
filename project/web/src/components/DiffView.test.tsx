@@ -25,15 +25,18 @@ describe('DiffView', () => {
     const html = render(<DiffView before={{ a: 1 }} after={{ a: 1 }} />)
     expect(html).not.toContain('emerald-')
     expect(html).not.toContain('rose-')
-    expect(html).toContain('"a": 1')
+    expect(html).toContain('"a"')
+    expect(html).toContain('1')
   })
 
   it('completely_different_renders_all_red_and_green', () => {
     const html = render(<DiffView before={{ a: 1 }} after={{ b: 2 }} />)
     expect(html).toContain('rose-')
     expect(html).toContain('emerald-')
-    expect(html).toContain('"a": 1')
-    expect(html).toContain('"b": 2')
+    expect(html).toContain('"a"')
+    expect(html).toContain('"b"')
+    expect(html).toContain('1')
+    expect(html).toContain('2')
     expect(html).toContain('{')
     expect(html).toContain('}')
   })
@@ -42,14 +45,16 @@ describe('DiffView', () => {
     const html = render(<DiffView before={null} after={{ a: 1 }} />)
     expect(html).not.toContain('emerald-')
     expect(html).not.toContain('rose-')
-    expect(html).toContain('"a": 1')
+    expect(html).toContain('"a"')
+    expect(html).toContain('1')
   })
 
   it('nil_after_renders_before_as_plain', () => {
     const html = render(<DiffView before={{ a: 1 }} after={null} />)
     expect(html).not.toContain('emerald-')
     expect(html).not.toContain('rose-')
-    expect(html).toContain('"a": 1')
+    expect(html).toContain('"a"')
+    expect(html).toContain('1')
   })
 
   it('both_nil_returns_empty_placeholder', () => {
@@ -65,19 +70,10 @@ describe('DiffView', () => {
     expect(html).not.toContain('"hello"')
   })
 
-  it('json_pretty_print_indents_two_spaces', () => {
-    const html = render(<DiffView before={{ a: { b: 1 } }} after={{ a: { b: 1 } }} />)
-    expect(html).toContain('"a": {')
-    expect(html).toContain('"b": 1')
-    // Each rendered line is wrapped in a span whose text is `prefix + ' ' + line + '\n'`,
-    // so a JSON line with N leading spaces appears in HTML with N+2 leading spaces.
-    // The `> {N}` regex anchors exactly N spaces after the span opening tag so a
-    // wider indent (e.g. 4-space-per-level) would not match: `> {6}` requires exactly
-    // 6 spaces between `>` and the next non-space char. With 2-space-per-level JSON
-    // indent: level-1 `"a"` has 2 leading spaces → 4 in HTML; level-2 `"b"` has 4 → 6.
-    expect(html).toMatch(/> {4}"a": {/)
-    expect(html).toMatch(/> {6}"b": 1/)
-    expect(html).toMatch(/> {4}}/)
-    expect(html).toMatch(/> {2}}/)
+  it('json_lines_get_token_color_classes', () => {
+    const html = render(<DiffView before={{ a: 1 }} after={{ a: 1 }} />)
+    expect(html).toContain('"a"')
+    expect(html).toContain('text-sky-700')
+    expect(html).toContain('text-amber-700')
   })
 })

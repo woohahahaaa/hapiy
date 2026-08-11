@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
-
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -38,6 +37,9 @@ function generatePreviewKey(): string {
 
 export function TokenPage() {
   const [tokens, setTokens] = useState<readonly Token[]>([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(20)
   const [editing, setEditing] = useState<Token | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
@@ -46,29 +48,33 @@ export function TokenPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadTokens = async () => {
+  const loadTokens = useCallback(async (currentOffset: number, currentLimit: number) => {
     setIsLoading(true)
     setError(null)
     try {
-      setTokens(await dashboardApi.listTokens())
-    } catch (error) {
-      setError(toErrorMessage(error))
+      const result = await dashboardApi.listTokens({ limit: currentLimit, offset: currentOffset })
+      setTokens(result.tokens)
+      setTotal(result.total)
+    } catch (err) {
+      setError(toErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { void loadTokens() }, [])
+  useEffect(() => {
+    void loadTokens(offset, limit)
+  }, [loadTokens, offset, limit])
 
   const runMutation = async (operation: () => Promise<unknown>) => {
     setIsSaving(true)
     setError(null)
     try {
       await operation()
-      await loadTokens()
+      await loadTokens(offset, limit)
       return true
-    } catch (error) {
-      setError(toErrorMessage(error))
+    } catch (err) {
+      setError(toErrorMessage(err))
       return false
     } finally {
       setIsSaving(false)
@@ -136,7 +142,7 @@ export function TokenPage() {
 
       const results = await Promise.allSettled(ops)
       const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      await loadTokens()
+      await loadTokens(offset, limit)
       if (failures.length > 0) {
         throw new Error(`${failures.length} 项保存失败`)
       }
@@ -148,55 +154,157 @@ export function TokenPage() {
   const copyToClipboard = async (key: string) => {
     try {
       await navigator.clipboard.writeText(key)
-    } catch (error) {
-      setError(error instanceof Error ? `复制失败：${error.message}` : '复制失败')
+    } catch (err) {
+      setError(err instanceof Error ? `复制失败：${err.message}` : '复制失败')
     }
   }
 
+  const columns: ColumnDef<Token>[] = [
+    {
+      key: 'name',
+      label: '名称',
+      render: (_, row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+      key: 'key',
+      label: 'Token',
+      render: (_, row) => (
+        <div className="flex items-center gap-2">
+          <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{row.key.slice(0, 12)}...</code>
+          <Button variant="ghost" size="icon" onClick={() => void copyToClipboard(row.key)}>
+            <AppIcon name="content_copy" />
+          </Button>
+        </div>
+      ),
+    },
+    {
+      key: 'quota',
+      label: '额度',
+      render: (_, row) =>
+        row.quota === null ? (
+          <span className="text-xs text-muted-foreground">无限制</span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs">¥{row.usedQuota} / ¥{row.quota}</span>
+            <div className="h-1.5 w-16 rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary"
+                style={{ width: `${Math.min((row.usedQuota / row.quota) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        ),
+    },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => (
+        <span className={row.status ? 'text-success' : 'text-destructive'}>
+          {row.status ? '启用' : '禁用'}
+        </span>
+      ),
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isSaving}
+            onClick={() => void runMutation(() => dashboardApi.toggleToken(row.id))}
+          >
+            {row.status ? '禁用' : '启用'}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={isSaving}
+            onClick={() => {
+              setEditing(row)
+              setPendingKey(null)
+              setIsDialogOpen(true)
+            }}
+          >
+            <AppIcon name="edit" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={isSaving}
+            onClick={() => void runMutation(() => dashboardApi.deleteToken(row.id))}
+          >
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="令牌管理" status={`${tokens.length} 个令牌`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">管理下游 API Token 和额度</div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setPendingKey(null); setIsDialogOpen(true) }} disabled={isSaving}><AppIcon name="add" data-icon="inline-start" />添加令牌</Button>
-          </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent><DialogHeader><DialogTitle>{editing ? '编辑令牌' : '添加令牌'}</DialogTitle></DialogHeader><TokenForm token={editing} onSave={handleSave} onCancel={() => { setEditing(null); setPendingKey(null); setIsDialogOpen(false) }} onRefresh={handleRefresh} pendingKey={pendingKey} isSaving={isSaving} /></DialogContent>
-          </Dialog>
-          {jsonOpen && (
-            <JsonEditModal
-              data={tokens}
-              onSave={handleJsonSave}
-              onClose={() => setJsonOpen(false)}
+      <PageHeader title="令牌管理" status={`${total} 个令牌`} />
+      <div className="p-6">
+        <DataTable<Token>
+          id="tokens"
+          columns={columns}
+          data={tokens}
+          total={total}
+          loading={isLoading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText="暂无令牌。添加一个令牌开始使用。"
+          onRetry={() => void loadTokens(offset, limit)}
+          actions={
+            <>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditing(null)
+                  setPendingKey(null)
+                  setIsDialogOpen(true)
+                }}
+                disabled={isSaving}
+              >
+                <AppIcon name="add" data-icon="inline-start" />添加令牌
+              </Button>
+            </>
+          }
+        />
+
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editing ? '编辑令牌' : '添加令牌'}</DialogTitle>
+            </DialogHeader>
+            <TokenForm
+              token={editing}
+              onSave={handleSave}
+              onCancel={() => {
+                setEditing(null)
+                setPendingKey(null)
+                setIsDialogOpen(false)
+              }}
+              onRefresh={handleRefresh}
+              pendingKey={pendingKey}
+              isSaving={isSaving}
             />
-          )}
-        </div>
-
-        {error && <div role="alert" className="mb-4 flex items-center justify-between rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive"><span>{error}</span><Button variant="outline" size="sm" onClick={() => void loadTokens()}>重试</Button></div>}
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader><TableRow><TableHead>名称</TableHead><TableHead>Token</TableHead><TableHead>额度</TableHead><TableHead>状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">正在加载令牌...</TableCell></TableRow>}
-              {!isLoading && tokens.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">暂无令牌。添加一个令牌开始使用。</TableCell></TableRow>}
-              {tokens.map((token) => (
-                <TableRow key={token.id}>
-                  <TableCell className="font-medium">{token.name}</TableCell>
-                  <TableCell><div className="flex items-center gap-2"><code className="rounded bg-muted px-2 py-1 text-xs font-mono">{token.key.slice(0, 12)}...</code><Button variant="ghost" size="icon" onClick={() => void copyToClipboard(token.key)}><AppIcon name="content_copy" /></Button></div></TableCell>
-                  <TableCell>{token.quota === null ? <span className="text-xs text-muted-foreground">无限制</span> : <div className="flex items-center gap-2"><span className="text-xs">¥{token.usedQuota} / ¥{token.quota}</span><div className="h-1.5 w-16 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min((token.usedQuota / token.quota) * 100, 100)}%` }} /></div></div>}</TableCell>
-                  <TableCell><span className={token.status ? 'text-success' : 'text-destructive'}>{token.status ? '启用' : '禁用'}</span></TableCell>
-                  <TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleToken(token.id))}>{token.status ? '禁用' : '启用'}</Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(token); setPendingKey(null); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button><Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteToken(token.id))}><AppIcon name="delete" /></Button></div></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+          </DialogContent>
+        </Dialog>
+        {jsonOpen && (
+          <JsonEditModal
+            data={tokens}
+            onSave={handleJsonSave}
+            onClose={() => setJsonOpen(false)}
+          />
+        )}
       </div>
     </div>
   )

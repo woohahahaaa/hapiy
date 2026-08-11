@@ -4,8 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import {
   Dialog,
   DialogContent,
@@ -22,7 +21,7 @@ import type { PriceConfig, PriceConfigInput } from '@/lib/dashboard-api'
 type LoadState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'error'; readonly message: string }
-  | { readonly kind: 'ready'; readonly prices: readonly PriceConfig[] }
+  | { readonly kind: 'ready'; readonly prices: readonly PriceConfig[]; readonly total: number }
 
 type EditingPrice = PriceConfig | null
 
@@ -102,26 +101,21 @@ export function PricePage() {
   const [editing, setEditing] = useState<EditingPrice>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(20)
 
   const fetch = useCallback(async () => {
     try {
-      const prices = await dashboardApi.listPrices()
-      setState({ kind: 'ready', prices })
+      const result = await dashboardApi.listPrices({ limit, offset })
+      setState({ kind: 'ready', prices: result.prices, total: result.total })
     } catch (err) {
       setState({ kind: 'error', message: toErrorMessage(err) })
     }
-  }, [])
+  }, [limit, offset])
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const prices = await dashboardApi.listPrices()
-        setState({ kind: 'ready', prices })
-      } catch (err) {
-        setState({ kind: 'error', message: toErrorMessage(err) })
-      }
-    })()
-  }, [])
+    void fetch()
+  }, [fetch])
 
   const handleDelete = async (id: string) => {
     setMutating(true)
@@ -162,132 +156,128 @@ export function PricePage() {
     }
   }
 
+  const columns: ColumnDef<PriceConfig>[] = [
+    {
+      key: 'model',
+      label: '模型',
+      render: (_, row) => (
+        <div className="flex items-center gap-2">
+          <span>{row.model}</span>
+          {row.rate.length > 0 && (
+            <span className="text-xs text-muted-foreground">{row.rate.length} 条规则</span>
+          )}
+          {row.cacheWritePrice === 0 && row.cacheReadPrice === 0 && (
+            <span className="text-xs text-muted-foreground">无缓存</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'contextLength',
+      label: 'context',
+      render: (_, row) => (
+        <span className="text-right tabular-nums text-muted-foreground">
+          {row.contextLength > 0 ? row.contextLength.toLocaleString() : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'price',
+      label: '价格',
+      render: (_, row) => (
+        <span className="text-right tabular-nums text-muted-foreground">
+          {`${row.inputPrice.toFixed(2)} / ${row.outputPrice.toFixed(2)} / ${row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : '—'} / ${row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : '—'}`}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={mutating}
+            onClick={(e) => {
+              e.stopPropagation()
+              setEditing(row)
+              setIsOpen(true)
+            }}
+          >
+            <AppIcon name="edit" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={mutating}
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleDelete(row.id)
+            }}
+          >
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="模型信息"
-        status={state.kind === 'ready' ? `${state.prices.length} 条` : '加载中'}
+        status={
+          state.kind === 'ready'
+            ? `${state.total} 条`
+            : state.kind === 'loading'
+              ? '加载中'
+              : undefined
+        }
       />
-      <div className="flex-1 p-6">
-        {state.kind === 'loading' && (
-          <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-            <AppIcon name="progress_activity" size={16} className="animate-spin" />
-            正在加载模型…
-          </div>
-        )}
-
-        {state.kind === 'error' && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-6 text-sm">
-            <div className="flex items-center gap-2 text-destructive">
-              <AppIcon name="warning" size={16} />
-              {state.message}
-            </div>
-            <Button className="mt-3" size="sm" variant="outline" onClick={fetch}>重试</Button>
-          </div>
-        )}
-
-        {state.kind === 'ready' && (
-          <>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">
-                按模型配置输入 / 输出价格，缓存读写价格为可选，单位均为「每 1M tokens」
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                  <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-                </Button>
-                  <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                  <AppIcon name="add" data-icon="inline-start" />
-                  添加模型
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-md border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>模型</TableHead>
-                    <TableHead className="text-right">context</TableHead>
-                    <TableHead className="text-right">
-                      <span className="inline-flex items-center gap-1">
-                        价格
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <AppIcon name="help" size={14} className="text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>1. 输入 / 2. 输出 / 3. 缓存写 / 4. 缓存读</p>
-                              <p className="text-muted-foreground">单位：$/1M tokens</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </span>
-                    </TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {state.prices.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
-                        暂无模型配置，点击「添加模型」创建第一条
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {state.prices.map((price) => (
-                    <TableRow key={price.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{price.model}</span>
-                          {price.rate.length > 0 && (
-                            <span className="text-xs text-muted-foreground">{price.rate.length} 条规则</span>
-                          )}
-                          {price.cacheWritePrice === 0 && price.cacheReadPrice === 0 && (
-                            <span className="text-xs text-muted-foreground">无缓存</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {price.contextLength > 0 ? price.contextLength.toLocaleString() : '—'}
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-muted-foreground">
-                        {`${price.inputPrice.toFixed(2)} / ${price.outputPrice.toFixed(2)} / ${price.cacheWritePrice > 0 ? price.cacheWritePrice.toFixed(2) : '—'} / ${price.cacheReadPrice > 0 ? price.cacheReadPrice.toFixed(2) : '—'}`}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(price); setIsOpen(true); }}>
-                            <AppIcon name="edit" />
-                          </Button>
-                          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(price.id)}>
-                            <AppIcon name="delete" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+      <div className="p-6">
+        <DataTable
+          id="price"
+          columns={columns}
+          data={state.kind === 'ready' ? state.prices : []}
+          total={state.kind === 'ready' ? state.total : 0}
+          loading={state.kind === 'loading'}
+          error={state.kind === 'error' ? state.message : null}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText="暂无模型配置，点击「添加模型」创建第一条"
+          onRetry={() => void fetch()}
+          actions={
+            <>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加模型
+              </Button>
+            </>
+          }
+        />
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-              <DialogContent width="sm">
-                <DialogHeader>
-                  <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
-                </DialogHeader>
-                <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
-              </DialogContent>
-            </Dialog>
+          <DialogContent width="sm">
+            <DialogHeader>
+              <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
+            </DialogHeader>
+            <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
+          </DialogContent>
+        </Dialog>
 
-            {jsonOpen && (
-              <JsonEditModal
-                data={state.prices}
-                onSave={handleJsonSave}
-                onClose={() => setJsonOpen(false)}
-              />
-            )}
-          </>
+        {jsonOpen && state.kind === 'ready' && (
+          <JsonEditModal
+            data={state.prices}
+            onSave={handleJsonSave}
+            onClose={() => setJsonOpen(false)}
+          />
         )}
       </div>
     </div>
@@ -315,9 +305,9 @@ function PriceForm({
   useEffect(() => {
     let cancelled = false
     void dashboardApi
-      .listProviders()
-      .then((providers) => {
-        if (!cancelled) setProviderNames(providers.map((p) => p.name))
+      .listProviders({ limit: 1000, offset: 0 })
+      .then((result) => {
+        if (!cancelled) setProviderNames(result.providers.map((p) => p.name))
       })
       .catch(() => {
         if (!cancelled) setProviderNames([])

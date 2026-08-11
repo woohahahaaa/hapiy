@@ -55,6 +55,11 @@ export type Provider = {
 
 export type ProviderInput = Omit<Provider, 'id'>
 
+export type ProviderListParams = {
+  readonly limit: number
+  readonly offset: number
+}
+
 export type Token = {
   readonly id: string
   readonly name: string
@@ -72,6 +77,16 @@ export type TokenInput = {
   readonly key?: string
   readonly historyKeys?: readonly string[]
   readonly usedQuota?: number
+}
+
+export type TokenListParams = {
+  readonly limit: number
+  readonly offset: number
+}
+
+export type TokenListResult = {
+  readonly tokens: readonly Token[]
+  readonly total: number
 }
 
 export type UsageLog = {
@@ -100,6 +115,8 @@ export type LogListParams = {
   readonly model?: string
   readonly status?: string
   readonly token?: string
+  readonly from?: string
+  readonly to?: string
   readonly limit: number
   readonly offset: number
 }
@@ -267,6 +284,11 @@ export type PriceConfig = {
 
 export type PriceConfigInput = Omit<PriceConfig, 'id'>
 
+export type PriceListParams = {
+  readonly limit: number
+  readonly offset: number
+}
+
 export type CurrentUser = {
   readonly id: string
   readonly username: string
@@ -431,6 +453,19 @@ function parseJson(value: string, field: string): unknown {
   } catch {
     throw new DashboardApiError(`服务端返回的 ${field} 不是有效 JSON`, null)
   }
+}
+
+function toRFC3339Date(date: string | undefined, endOfDay: boolean): string | undefined {
+  if (!date) return undefined
+  // Already RFC3339 — pass through
+  if (date.includes('T')) return date
+  // Treat YYYY-MM-DD as local-time day boundary
+  const suffix = endOfDay ? 'T23:59:59.999' : 'T00:00:00.000'
+  const offset = -new Date().getTimezoneOffset()
+  const sign = offset >= 0 ? '+' : '-'
+  const pad = (n: number) => String(Math.abs(n)).padStart(2, '0')
+  const tz = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
+  return `${date}${suffix}${tz}`
 }
 
 export function parsePrice(value: unknown): PriceConfig {
@@ -1008,6 +1043,16 @@ export type ResponseRewriteRule = {
 
 export type RuleType = 'rewrite' | 'heartbeat' | 'concurrency' | 'failover' | 'rewrite-response'
 
+export type RuleListParams = {
+  readonly limit: number
+  readonly offset: number
+}
+
+export type RuleListResult<T> = {
+  readonly rules: readonly T[]
+  readonly total: number
+}
+
 // ── Rule parse / serialize ──
 
 function parseRewriteRule(value: unknown): RewriteRule {
@@ -1210,12 +1255,19 @@ function parseTopologyVersionList(value: unknown): TopologyVersionList {
 
 export const dashboardApi = {
   // ── Providers ──
-  async listProviders(): Promise<readonly Provider[]> {
-    const data = await request('/providers')
+  async listProviders(params: ProviderListParams): Promise<{ readonly providers: readonly Provider[]; readonly total: number }> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    const body = await requestFull(`/providers?${qp.toString()}`)
+    const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError('服务端返回的供应商列表格式无效', null)
     }
-    return data.map(parseProvider)
+    return {
+      providers: data.map(parseProvider),
+      total: readNumber(body.total, 'total', 0),
+    }
   },
   async createProvider(provider: ProviderInput): Promise<Provider> {
     return parseProvider(await request('/providers', { method: 'POST', body: JSON.stringify(serializeProvider(provider)) }))
@@ -1234,12 +1286,19 @@ export const dashboardApi = {
   },
 
   // ── Tokens ──
-  async listTokens(): Promise<readonly Token[]> {
-    const data = await request('/tokens')
+  async listTokens(params: TokenListParams): Promise<TokenListResult> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    const body = await requestFull(`/tokens?${qp.toString()}`)
+    const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError('服务端返回的令牌列表格式无效', null)
     }
-    return data.map(parseToken)
+    return {
+      tokens: data.map(parseToken),
+      total: readNumber(body.total, 'total', 0),
+    }
   },
   async createToken(token: TokenInput): Promise<Token> {
     return parseToken(await request('/tokens', { method: 'POST', body: JSON.stringify(serializeToken(token)) }))
@@ -1265,6 +1324,8 @@ export const dashboardApi = {
     if (params.model) qp.set('model', params.model)
     if (params.status) qp.set('status', params.status)
     if (params.token) qp.set('token', params.token)
+    if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)
+    if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
 
     const body = await requestFull(`/logs?${qp.toString()}`)
     const data = body.data
@@ -1291,8 +1352,8 @@ export const dashboardApi = {
     qp.set('offset', String(params.offset))
     if (params.prefix) qp.set('prefix', params.prefix)
     if (params.type) qp.set('type', params.type)
-    if (params.from) qp.set('from', params.from)
-    if (params.to) qp.set('to', params.to)
+    if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)
+    if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
     if (params.headerKey) qp.set('headerKey', params.headerKey)
     if (params.headerValue) qp.set('headerValue', params.headerValue)
 
@@ -1338,8 +1399,8 @@ export const dashboardApi = {
     qp.set('offset', String(params.offset))
     if (params.prefix) qp.set('prefix', params.prefix)
     if (params.type) qp.set('type', params.type)
-    if (params.from) qp.set('from', params.from)
-    if (params.to) qp.set('to', params.to)
+    if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)
+    if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
     if (params.headerKey) qp.set('headerKey', params.headerKey)
     if (params.headerValue) qp.set('headerValue', params.headerValue)
     const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
@@ -1385,10 +1446,17 @@ export const dashboardApi = {
   },
 
   // ── Rules ──
-  async listRules<T>(type: RuleType): Promise<readonly T[]> {
-    const data = await request(`/rules/${encodeURIComponent(type)}`)
+  async listRules<T>(type: RuleType, params: RuleListParams): Promise<RuleListResult<T>> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    const body = await requestFull(`/rules/${encodeURIComponent(type)}?${qp.toString()}`)
+    const data = body.data
     if (!Array.isArray(data)) throw new DashboardApiError('服务端返回的规则列表格式无效', null)
-    return data.map(ruleParserForType(type)) as readonly T[]
+    return {
+      rules: data.map(ruleParserForType(type)) as readonly T[],
+      total: readNumber(body.total, 'total', 0),
+    }
   },
   async createRule<T>(type: RuleType, rule: Partial<T> & { readonly status: boolean }): Promise<T> {
     const serializer = ruleSerializerForType(type)
@@ -1449,12 +1517,19 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
   },
 
-  async listPrices(): Promise<readonly PriceConfig[]> {
-    const data = await request('/models')
+  async listPrices(params: PriceListParams): Promise<{ readonly prices: readonly PriceConfig[]; readonly total: number }> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    const body = await requestFull(`/models?${qp.toString()}`)
+    const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError('服务端返回的模型列表格式无效', null)
     }
-    return data.map(parsePrice)
+    return {
+      prices: data.map(parsePrice),
+      total: readNumber(body.total, 'total', 0),
+    }
   },
   async login(username: string, password: string): Promise<void> {
     const response = await fetch(`${apiBaseUrl}/v1/dashboard/users/login`, {

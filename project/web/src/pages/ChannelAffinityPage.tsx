@@ -1,16 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -183,6 +176,8 @@ export function ChannelAffinityPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(20)
 
   const load = async () => {
     setIsLoading(true)
@@ -236,11 +231,65 @@ export function ChannelAffinityPage() {
   }
 
   const current = setting ?? { enabled: false, defaultTtlSeconds: 1800, rules: [] }
+  const total = current.rules.length
+  const pagedRules = useMemo(
+    () => current.rules.slice(offset, offset + limit),
+    [current.rules, offset, limit],
+  )
+
+  const columns: ColumnDef<ChannelAffinityRule>[] = [
+    {
+      key: 'name',
+      label: '规则名称',
+      render: (_, row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+      key: 'modelRegex',
+      label: '模型',
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelRegex.join(', ') || '全部'}</span>,
+    },
+    {
+      key: 'pathRegex',
+      label: 'Endpoint',
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.pathRegex.join(', ') || '不区分'}</span>,
+    },
+    {
+      key: 'keySources',
+      label: '亲和字段',
+      render: (_, row) => (
+        <span className="text-xs text-muted-foreground">
+          {row.keySources.map((source) => source.type === 'request_header' ? source.key : source.path).join(', ') || '-'}
+        </span>
+      ),
+    },
+    {
+      key: 'ttlSeconds',
+      label: 'TTL（秒）',
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.ttlSeconds ?? current.defaultTtlSeconds}</span>,
+    },
+    {
+      key: 'enabled',
+      label: '状态',
+      render: (_, row) => <span className={row.enabled ? 'text-success' : 'text-destructive'}>{row.enabled ? '启用' : '禁用'}</span>,
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...row, enabled: !row.enabled })}>{row.enabled ? '禁用' : '启用'}</Button>
+          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(row); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void handleDeleteRule(row.name)}><AppIcon name="delete" /></Button>
+        </div>
+      ),
+    },
+  ]
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="渠道亲和性" status={`${current.rules.length} 条规则`} />
-      <div className="flex-1 p-6">
+      <PageHeader title="渠道亲和性" status={`${total} 条规则`} />
+      <div className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道。
@@ -252,48 +301,20 @@ export function ChannelAffinityPage() {
           </div>
         </div>
 
-        {error && (
-          <div role="alert" className="mb-4 flex items-center justify-between rounded-md border border-destructive/50 px-3 py-2 text-sm text-destructive">
-            <span>{error}</span><Button variant="outline" size="sm" onClick={() => void load()}>重试</Button>
-          </div>
-        )}
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>规则名称</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>Endpoint</TableHead>
-                <TableHead>亲和字段</TableHead>
-                <TableHead>TTL（秒）</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">正在加载规则...</TableCell></TableRow>}
-              {!isLoading && current.rules.length === 0 && <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">暂无规则。添加一条规则开始配置。</TableCell></TableRow>}
-              {current.rules.map((rule) => (
-                <TableRow key={rule.name}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell><span className="text-xs text-muted-foreground">{rule.modelRegex.join(', ') || '全部'}</span></TableCell>
-                  <TableCell><span className="text-xs text-muted-foreground">{rule.pathRegex.join(', ') || '不区分'}</span></TableCell>
-                  <TableCell><span className="text-xs text-muted-foreground">{rule.keySources.map((source) => source.type === 'request_header' ? source.key : source.path).join(', ') || '-'}</span></TableCell>
-                  <TableCell><span className="text-xs text-muted-foreground">{rule.ttlSeconds ?? current.defaultTtlSeconds}</span></TableCell>
-                  <TableCell><span className={rule.enabled ? 'text-success' : 'text-destructive'}>{rule.enabled ? '启用' : '禁用'}</span></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...rule, enabled: !rule.enabled })}>{rule.enabled ? '禁用' : '启用'}</Button>
-                      <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(rule); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
-                      <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void handleDeleteRule(rule.name)}><AppIcon name="delete" /></Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="channel-affinity"
+          columns={columns}
+          data={pagedRules}
+          total={total}
+          loading={isLoading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText="暂无规则"
+          onRetry={() => void load()}
+        />
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

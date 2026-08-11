@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { JsonHighlight } from '@/components/JsonHighlight'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { RewriteRule, ResponseRewriteRule } from '@/lib/dashboard-api'
 
@@ -195,9 +196,7 @@ export function RewriteTestDialog({
                 <pre className="font-mono text-xs text-destructive whitespace-pre-wrap break-all">{error}</pre>
               </div>
             ) : result ? (
-              <pre className="flex-1 overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all">
-                {JSON.stringify(result.modified, null, 2)}
-              </pre>
+              <JsonHighlight value={result.modified} className="flex-1 whitespace-pre-wrap break-all" />
             ) : (
               <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
                 点击「运行测试」查看结果

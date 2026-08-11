@@ -18,11 +18,18 @@ func init() {
 func ListTokens(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var tokens []model.Token
-		if err := db.Find(&tokens).Error; err != nil {
+		limit := parseInt(c.Query("limit"), 50)
+		offset := parseInt(c.Query("offset"), 0)
+		var total int64
+		if err := db.Model(&model.Token{}).Count(&total).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": tokens})
+		if err := db.Order("id asc").Limit(limit).Offset(offset).Find(&tokens).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": tokens, "total": total})
 	}
 }
 

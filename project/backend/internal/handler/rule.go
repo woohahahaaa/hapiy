@@ -22,50 +22,74 @@ const (
 func ListRules(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ruleType := c.Param("type")
-		var rules interface{}
+		limit := parseInt(c.Query("limit"), 50)
+		offset := parseInt(c.Query("offset"), 0)
 
 		switch ruleType {
 		case RuleTypeRewrite:
 			var r []model.RewriteRule
-			if err := db.Find(&r).Error; err != nil {
+			var total int64
+			if err := db.Model(&model.RewriteRule{}).Count(&total).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			rules = r
+			if err := db.Model(&model.RewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeHeartbeat:
 			var r []model.HeartbeatRule
-			if err := db.Find(&r).Error; err != nil {
+			var total int64
+			if err := db.Model(&model.HeartbeatRule{}).Count(&total).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			rules = r
+			if err := db.Model(&model.HeartbeatRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeConcurrency:
 			var r []model.ConcurrencyRule
-			if err := db.Find(&r).Error; err != nil {
+			var total int64
+			if err := db.Model(&model.ConcurrencyRule{}).Count(&total).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			rules = r
+			if err := db.Model(&model.ConcurrencyRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeFailover:
 			var r []model.FailoverRule
-			if err := db.Find(&r).Error; err != nil {
+			var total int64
+			if err := db.Model(&model.FailoverRule{}).Count(&total).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			rules = r
+			if err := db.Model(&model.FailoverRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeRewriteResponse:
 			var r []model.ResponseRewriteRule
-			if err := db.Find(&r).Error; err != nil {
+			var total int64
+			if err := db.Model(&model.ResponseRewriteRule{}).Count(&total).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			rules = r
+			if err := db.Model(&model.ResponseRewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule type"})
 			return
 		}
-
-		c.JSON(http.StatusOK, gin.H{"data": rules})
 	}
 }
 

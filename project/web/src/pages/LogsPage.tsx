@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '@/components/PageHeader'
+import { DateRangeFilter } from '@/components/DateRangeFilter'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,9 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
-import { dashboardApi, type UsageLog } from '@/lib/dashboard-api'
-
-const LIMIT = 20
+import { dashboardApi, type DateRange, type UsageLog } from '@/lib/dashboard-api'
 
 export function LogsPage() {
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
@@ -34,6 +33,8 @@ export function LogsPage() {
   const [modelFilter, setModelFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
+  const [dateRange, setDateRange] = useState<DateRange>({})
+  const [limit, setLimit] = useState(20)
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
@@ -46,7 +47,9 @@ export function LogsPage() {
         model: modelFilter !== 'all' ? modelFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         token: searchText || undefined,
-        limit: LIMIT,
+        from: dateRange.from,
+        to: dateRange.to,
+        limit,
         offset,
       })
       if (!mountedRef.current) return
@@ -60,7 +63,7 @@ export function LogsPage() {
         setLoading(false)
       }
     }
-  }, [modelFilter, statusFilter, searchText, offset])
+  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, limit, offset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -87,6 +90,8 @@ export function LogsPage() {
       if (modelFilter !== 'all') filters.model = modelFilter
       if (statusFilter !== 'all') filters.status = statusFilter
       if (searchText) filters.token = searchText
+      if (dateRange.from) filters.from = dateRange.from
+      if (dateRange.to) filters.to = dateRange.to
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
       setClearDialogOpen(false)
       toast(`已清空 ${deleted} 条记录`)
@@ -98,7 +103,15 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, statusFilter, searchText, offset, fetchLogs])
+  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, offset, fetchLogs])
+
+  const handleResetFilters = useCallback(() => {
+    setSearchText('')
+    setModelFilter('all')
+    setStatusFilter('all')
+    setDateRange({})
+    setOffset(0)
+  }, [])
 
   const handleClearAll = useCallback(async () => {
     try {
@@ -200,7 +213,7 @@ export function LogsPage() {
         title="使用记录"
         status={total > 0 ? `${total} 条记录` : undefined}
       />
-      <div className="flex-1 p-6">
+      <div className="p-6">
         <DataTable
           id="logs"
           columns={columns}
@@ -209,12 +222,17 @@ export function LogsPage() {
           loading={loading}
           error={error}
           offset={offset}
-          limit={LIMIT}
+          limit={limit}
+          onLimitChange={setLimit}
           onOffsetChange={setOffset}
           onRetry={fetchLogs}
           onRowClick={setSelectedLog}
           filters={
             <>
+              <DateRangeFilter
+                value={dateRange}
+                onChange={(range) => { setDateRange(range); setOffset(0) }}
+              />
               <Input
                 placeholder="搜索令牌..."
                 value={searchText}
@@ -255,6 +273,9 @@ export function LogsPage() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              <Button variant="outline" size="sm" onClick={handleResetFilters}>
+                重置筛选
+              </Button>
             </>
           }
           actions={

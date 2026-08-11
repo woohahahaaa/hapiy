@@ -44,11 +44,18 @@ func validatePriceConfig(price *model.PriceConfig) error {
 func ListPrices(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prices []model.PriceConfig
-		if err := db.Order("model asc").Find(&prices).Error; err != nil {
+		limit := parseInt(c.Query("limit"), 50)
+		offset := parseInt(c.Query("offset"), 0)
+		var total int64
+		if err := db.Model(&model.PriceConfig{}).Count(&total).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": prices})
+		if err := db.Order("model asc").Limit(limit).Offset(offset).Find(&prices).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": prices, "total": total})
 	}
 }
 

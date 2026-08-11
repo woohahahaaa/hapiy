@@ -22,8 +22,6 @@ import {
   type LogCapturePairSummary,
 } from '@/lib/dashboard-api'
 
-const LIMIT = 20
-
 type CaptureRow =
   | { kind: 'pair'; pair: LogCapturePairSummary }
   | { kind: 'system'; file: LogCaptureFile }
@@ -48,6 +46,7 @@ export function LogCapturePage() {
   const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
   const [systemTotal, setSystemTotal] = useState(0)
   const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(20)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -88,7 +87,7 @@ export function LogCapturePage() {
             to: dateRange.to,
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
-            limit: LIMIT,
+            limit,
             offset,
           })
           .then((result) => {
@@ -111,7 +110,7 @@ export function LogCapturePage() {
             to: dateRange.to,
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
-            limit: LIMIT,
+            limit,
             offset,
           })
           .then((result) => {
@@ -138,7 +137,7 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setLoading(false)
     }
-  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, offset])
+  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, offset, limit])
 
   useEffect(() => {
     mountedRef.current = true
@@ -156,6 +155,15 @@ export function LogCapturePage() {
     setSelectedTypes((prev) =>
       prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value],
     )
+    setOffset(0)
+  }, [])
+
+  const handleResetFilters = useCallback(() => {
+    setDateRange({})
+    setSelectedTypes([])
+    setPrefix('')
+    setHeaderKey('')
+    setHeaderValue('')
     setOffset(0)
   }, [])
 
@@ -278,7 +286,7 @@ export function LogCapturePage() {
         status={total > 0 ? `${total} 条记录` : undefined}
         actions={undefined}
       />
-      <div className="flex-1 p-6">
+      <div className="p-6">
         <DataTable
           id="capture"
           columns={columns}
@@ -287,8 +295,9 @@ export function LogCapturePage() {
           loading={loading}
           error={error}
           offset={offset}
-          limit={LIMIT}
+          limit={limit}
           onOffsetChange={setOffset}
+          onLimitChange={setLimit}
           emptyText="暂无抓取日志"
           onRetry={() => void fetchData()}
           filters={
@@ -341,9 +350,9 @@ export function LogCapturePage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void fetchData()}
+                onClick={handleResetFilters}
               >
-                筛选
+                重置筛选
               </Button>
             </>
           }

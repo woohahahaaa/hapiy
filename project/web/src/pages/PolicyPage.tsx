@@ -8,14 +8,7 @@ import { cn } from '@/lib/utils'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 
 import { Switch } from '@/components/ui/switch'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import {
   Dialog,
   DialogContent,
@@ -99,19 +92,25 @@ function useRulesApi<T>(type: RuleType) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
+  const [offset, setOffset] = useState(0)
+  const [limit, setLimit] = useState(20)
+  const [total, setTotal] = useState(0)
 
-  const fetch = useCallback(async () => {
+  const fetch = useCallback(async (specificOffset?: number, specificLimit?: number) => {
+    const useOffset = specificOffset ?? offset
+    const useLimit = specificLimit ?? limit
     setLoading(true)
     setError(null)
     try {
-      const data = await dashboardApi.listRules<T>(type)
-      setRules(data)
+      const result = await dashboardApi.listRules<T>(type, { limit: useLimit, offset: useOffset })
+      setRules(result.rules)
+      setTotal(result.total)
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       setLoading(false)
     }
-  }, [type])
+  }, [type, offset, limit])
 
   useEffect(() => { fetch() }, [fetch])
 
@@ -160,20 +159,10 @@ function useRulesApi<T>(type: RuleType) {
     }
   }
 
-  return { rules, loading, error, mutating, setMutating, fetch, create, update, remove }
+  return { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit }
 }
 
 // ── Empty / Error / Loading helpers ──
-
-function RuleTableEmpty({ message }: { message: string }) {
-  return (
-    <TableRow>
-      <TableCell colSpan={99} className="py-10 text-center text-sm text-muted-foreground">
-        {message}
-      </TableCell>
-    </TableRow>
-  )
-}
 
 function RuleStatusBadge({ active }: { active: boolean }) {
   return <span className={active ? 'text-success' : 'text-destructive'}>{active ? '启用' : '禁用'}</span>
@@ -184,29 +173,6 @@ function RuleToggleButton({ active, disabled, onClick }: { active: boolean; disa
     <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
       {active ? '禁用' : '启用'}
     </Button>
-  )
-}
-
-function RuleTableError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <TableRow>
-      <TableCell colSpan={99} className="py-10 text-center">
-        <div className="flex flex-col gap-2">
-          <p className="text-sm text-destructive">{message}</p>
-          <Button variant="outline" size="sm" onClick={onRetry}>重试</Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function RuleTableLoading() {
-  return (
-    <TableRow>
-      <TableCell colSpan={99} className="py-10 text-center">
-        <AppIcon name="progress_activity" size={20} className="mx-auto animate-spin text-muted-foreground" />
-      </TableCell>
-    </TableRow>
   )
 }
 
@@ -264,7 +230,7 @@ async function diffAndSave<T extends { id: string; status: boolean }>(
 // ── Rewrite ──
 
 function RewritePage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<RewriteRule>('rewrite')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<RewriteRule>('rewrite')
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -296,69 +262,79 @@ function RewritePage() {
     await diffAndSave(data, rules, 'rewrite', fetch, setMutating, idMap)
   }
 
+  const columns: ColumnDef<RewriteRule>[] = [
+    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    {
+      key: 'script',
+      label: '脚本预览',
+      render: (_, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.script.slice(0, 50)}
+          {row.script.length > 50 && '...'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => <RuleStatusBadge active={row.status} />,
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(row); setTestOpen(true); }}>
+            <AppIcon name="play" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+            <AppIcon name="edit" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="请求改写" status={`${rules.length} 条规则`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            使用 JSON 操作数组修改请求体字段
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
-              <AppIcon name="play" data-icon="inline-start" />测试
-            </Button>
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <AppIcon name="add" data-icon="inline-start" />
-              添加规则
-            </Button>
-          </div>
+      <PageHeader title="请求改写" status={`${total} 条规则`} />
+      <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">
+          使用 JSON 操作数组修改请求体字段
         </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>脚本预览</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && <RuleTableLoading />}
-              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无请求改写规则，点击"添加规则"创建第一条' />}
-              {!loading && !error && rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {rule.script.slice(0, 50)}
-                    {rule.script.length > 50 && '...'}
-                  </TableCell>
-                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(rule); setTestOpen(true); }}>
-                        <AppIcon name="play" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <AppIcon name="edit" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <AppIcon name="delete" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="policy-rewrite"
+          columns={columns}
+          data={rules}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText='暂无请求改写规则，点击"添加规则"创建第一条'
+          onRetry={() => void fetch()}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+                <AppIcon name="play" data-icon="inline-start" />测试
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -428,7 +404,7 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
 // ── Heartbeat ──
 
 function HeartbeatPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<HeartbeatRule>('heartbeat')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<HeartbeatRule>('heartbeat')
   const [editing, setEditing] = useState<HeartbeatRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -458,64 +434,71 @@ function HeartbeatPage() {
     await diffAndSave(data, rules, 'heartbeat', fetch, setMutating, idMap)
   }
 
+  const columns: ColumnDef<HeartbeatRule>[] = [
+    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'matchCondition', label: '匹配条件', render: (_, row) => <span className="text-xs">{row.matchCondition}</span> },
+    {
+      key: 'replyContent',
+      label: '回复内容',
+      defaultWidth: 20,
+      render: (_, row) => <span className="text-xs max-w-[200px] truncate">{row.replyContent}</span>,
+    },
+    { key: 'timeout', label: '超时', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => <RuleStatusBadge active={row.status} />,
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+            <AppIcon name="edit" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="心跳回复" status={`${rules.length} 条规则`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            上游无输出超时时自动插入自定义消息
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <AppIcon name="add" data-icon="inline-start" />
-              添加规则
-            </Button>
-          </div>
+      <PageHeader title="心跳回复" status={`${total} 条规则`} />
+      <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">
+          上游无输出超时时自动插入自定义消息
         </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>匹配条件</TableHead>
-                <TableHead>回复内容</TableHead>
-                <TableHead>超时</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && <RuleTableLoading />}
-              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无心跳规则，点击"添加规则"创建第一条' />}
-              {!loading && !error && rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="text-xs">{rule.matchCondition}</TableCell>
-                  <TableCell className="text-xs max-w-[200px] truncate">{rule.replyContent}</TableCell>
-                  <TableCell className="text-xs">{rule.timeout}s</TableCell>
-                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <AppIcon name="edit" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <AppIcon name="delete" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="policy-heartbeat"
+          columns={columns}
+          data={rules}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText='暂无心跳规则，点击"添加规则"创建第一条'
+          onRetry={() => void fetch()}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -572,7 +555,7 @@ function HeartbeatForm({ rule, onSave, onCancel, saving }: { rule: HeartbeatRule
 // ── Concurrency ──
 
 function ConcurrencyPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<ConcurrencyRule>('concurrency')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ConcurrencyRule>('concurrency')
   const [editing, setEditing] = useState<ConcurrencyRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -602,66 +585,69 @@ function ConcurrencyPage() {
     await diffAndSave(data, rules, 'concurrency', fetch, setMutating, idMap)
   }
 
+  const scopeLabel = (scope: ConcurrencyRule['scope']) =>
+    scope === 'global' ? '全局' : scope === 'per_user' ? '每用户' : '每令牌'
+
+  const columns: ColumnDef<ConcurrencyRule>[] = [
+    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'scope', label: '作用域', render: (_, row) => <span className="text-xs">{scopeLabel(row.scope)}</span> },
+    { key: 'maxConcurrent', label: '最大并发', render: (_, row) => <span className="text-xs">{row.maxConcurrent}</span> },
+    { key: 'queueEnabled', label: '排队', render: (_, row) => <span className="text-xs">{row.queueEnabled ? '是' : '否'}</span> },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => <RuleStatusBadge active={row.status} />,
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+            <AppIcon name="edit" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="并发控制" status={`${rules.length} 条规则`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            限制并发请求数量，支持排队
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <AppIcon name="add" data-icon="inline-start" />
-              添加规则
-            </Button>
-          </div>
+      <PageHeader title="并发控制" status={`${total} 条规则`} />
+      <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">
+          限制并发请求数量，支持排队
         </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>作用域</TableHead>
-                <TableHead>最大并发</TableHead>
-                <TableHead>排队</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && <RuleTableLoading />}
-              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无并发规则，点击"添加规则"创建第一条' />}
-              {!loading && !error && rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="text-xs">
-                    {rule.scope === 'global' ? '全局' : rule.scope === 'per_user' ? '每用户' : '每令牌'}
-                  </TableCell>
-                  <TableCell className="text-xs">{rule.maxConcurrent}</TableCell>
-                  <TableCell className="text-xs">{rule.queueEnabled ? '是' : '否'}</TableCell>
-                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <AppIcon name="edit" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <AppIcon name="delete" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="policy-concurrency"
+          columns={columns}
+          data={rules}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText='暂无并发规则，点击"添加规则"创建第一条'
+          onRetry={() => void fetch()}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -735,7 +721,7 @@ function ConcurrencyForm({ rule, onSave, onCancel, saving }: { rule: Concurrency
 // ── Failover ──
 
 function FailoverPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<FailoverRule>('failover')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<FailoverRule>('failover')
   const [editing, setEditing] = useState<FailoverRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -765,66 +751,69 @@ function FailoverPage() {
     await diffAndSave(data, rules, 'failover', fetch, setMutating, idMap)
   }
 
+  const conditionLabel = (c: FailoverRule['condition']) =>
+    c === 'timeout' ? '超时' : c === 'error' ? '错误' : '限流'
+
+  const columns: ColumnDef<FailoverRule>[] = [
+    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'primaryProvider', label: '主供应商', render: (_, row) => <span className="text-xs">{row.primaryProvider}</span> },
+    { key: 'fallbackProvider', label: '备选', render: (_, row) => <span className="text-xs">{row.fallbackProvider}</span> },
+    { key: 'condition', label: '触发条件', render: (_, row) => <span className="text-xs">{conditionLabel(row.condition)}</span> },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => <RuleStatusBadge active={row.status} />,
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+            <AppIcon name="edit" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="故障转移" status={`${rules.length} 条规则`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            主供应商失败时自动切换到备选供应商
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <AppIcon name="add" data-icon="inline-start" />
-              添加规则
-            </Button>
-          </div>
+      <PageHeader title="故障转移" status={`${total} 条规则`} />
+      <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">
+          主供应商失败时自动切换到备选供应商
         </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>主供应商</TableHead>
-                <TableHead>备选</TableHead>
-                <TableHead>触发条件</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && <RuleTableLoading />}
-              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无故障转移规则，点击"添加规则"创建第一条' />}
-              {!loading && !error && rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="text-xs">{rule.primaryProvider}</TableCell>
-                  <TableCell className="text-xs">{rule.fallbackProvider}</TableCell>
-                  <TableCell className="text-xs">
-                    {rule.condition === 'timeout' ? '超时' : rule.condition === 'error' ? '错误' : '限流'}
-                  </TableCell>
-                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <AppIcon name="edit" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <AppIcon name="delete" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="policy-failover"
+          columns={columns}
+          data={rules}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText='暂无故障转移规则，点击"添加规则"创建第一条'
+          onRetry={() => void fetch()}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -895,7 +884,7 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
 // ── Response Rewrite ──
 
 function RewriteResponsePage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove } = useRulesApi<ResponseRewriteRule>('rewrite-response')
+  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ResponseRewriteRule>('rewrite-response')
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
@@ -927,69 +916,79 @@ function RewriteResponsePage() {
     await diffAndSave(data, rules, 'rewrite-response', fetch, setMutating, idMap)
   }
 
+  const columns: ColumnDef<ResponseRewriteRule>[] = [
+    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    {
+      key: 'script',
+      label: '脚本预览',
+      render: (_, row) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {row.script.slice(0, 50)}
+          {row.script.length > 50 && '...'}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: '状态',
+      render: (_, row) => <RuleStatusBadge active={row.status} />,
+    },
+    {
+      key: 'id',
+      label: '操作',
+      showEmptyPlaceholder: false,
+      render: (_, row) => (
+        <div className="flex items-center justify-end gap-2">
+          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(row); setTestOpen(true); }}>
+            <AppIcon name="play" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+            <AppIcon name="edit" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+            <AppIcon name="delete" />
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="响应改写" status={`${rules.length} 条规则`} />
-      <div className="flex-1 p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            使用 JSON 操作数组修改响应体字段
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
-              <AppIcon name="play" data-icon="inline-start" />测试
-            </Button>
-            <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-              <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-            </Button>
-            <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-              <AppIcon name="add" data-icon="inline-start" />
-              添加规则
-            </Button>
-          </div>
+      <PageHeader title="响应改写" status={`${total} 条规则`} />
+      <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">
+          使用 JSON 操作数组修改响应体字段
         </div>
-
-        <div className="rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>脚本预览</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className="text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && <RuleTableLoading />}
-              {!loading && error && <RuleTableError message={error} onRetry={fetch} />}
-              {!loading && !error && rules.length === 0 && <RuleTableEmpty message='暂无响应改写规则，点击"添加规则"创建第一条' />}
-              {!loading && !error && rules.map((rule) => (
-                <TableRow key={rule.id}>
-                  <TableCell className="font-medium">{rule.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {rule.script.slice(0, 50)}
-                    {rule.script.length > 50 && '...'}
-                  </TableCell>
-                  <TableCell><RuleStatusBadge active={rule.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <RuleToggleButton active={rule.status} disabled={mutating} onClick={() => handleToggle(rule.id)} />
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(rule); setTestOpen(true); }}>
-                        <AppIcon name="play" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(rule); setIsOpen(true); }}>
-                        <AppIcon name="edit" />
-                      </Button>
-                      <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(rule.id)}>
-                        <AppIcon name="delete" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <DataTable
+          id="policy-rewrite-response"
+          columns={columns}
+          data={rules}
+          total={total}
+          loading={loading}
+          error={error}
+          offset={offset}
+          limit={limit}
+          onOffsetChange={setOffset}
+          onLimitChange={setLimit}
+          emptyText='暂无响应改写规则，点击"添加规则"创建第一条'
+          onRetry={() => void fetch()}
+          actions={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+                <AppIcon name="play" data-icon="inline-start" />测试
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
+              </Button>
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>

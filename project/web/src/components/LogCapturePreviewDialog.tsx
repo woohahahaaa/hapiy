@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffView } from '@/components/DiffView'
+import { JsonHighlight } from '@/components/JsonHighlight'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { LogCapturePairFull, LogCaptureStageRow, LogCaptureTiming } from '@/lib/dashboard-api'
 
@@ -36,21 +37,11 @@ interface LogCaptureRow {
 }
 
 // ── Helpers kept verbatim from the previous version ──
-function formatBody(body: unknown): string {
-  if (body === null || body === undefined) return ''
-  if (typeof body === 'string') return body
-  return JSON.stringify(body, null, 2)
-}
-
 function renderBody(title: string, body: unknown) {
-  const text = formatBody(body)
-  if (!text) return null
   return (
     <div className="flex flex-col gap-1.5">
       <div className="font-mono text-xs font-medium text-foreground">{title}</div>
-      <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-        {text}
-      </pre>
+      <JsonHighlight value={body} />
     </div>
   )
 }
@@ -130,10 +121,7 @@ function renderStageBody(node: StageNode): ReactNode {
   if (node.modified) {
     bodyEl = <DiffView before={node.before?.body} after={node.after?.body} />
   } else {
-    const text = formatBody(node.before?.body ?? node.after?.body)
-    bodyEl = text
-      ? <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre">{text}</pre>
-      : null
+    bodyEl = <JsonHighlight value={node.before?.body ?? node.after?.body} />
   }
   if (headersEl === null && bodyEl === null) return null
   return (
