@@ -56,6 +56,7 @@ interface FlatSlotNodeData {
   onReorderEntries?: (fromIndex: number, toIndex: number) => void
   onAutoCloseEntry?: () => void
   logDeadlineAt?: number | null
+  onToggleLog?: (enabled: boolean) => void
   onSetLogDeadline?: (deadlineAt: number | null) => void
 }
 
@@ -91,6 +92,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     onReorderEntries,
     onAutoCloseEntry,
     logDeadlineAt,
+    onToggleLog,
     onSetLogDeadline,
   } = data
   const entries = entriesProp ?? []
@@ -191,6 +193,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       title={title}
       enabled={data.enabled}
       deadlineAt={logDeadlineAt ?? null}
+      onToggle={(next) => onToggleLog?.(next)}
       onSetDeadline={onSetLogDeadline}
       onAutoClose={onAutoCloseEntry}
     />
@@ -452,6 +455,7 @@ interface LogOutputSlotHeaderProps {
   readonly title: string
   readonly enabled: boolean
   readonly deadlineAt: number | null
+  readonly onToggle?: (enabled: boolean) => void
   readonly onSetDeadline?: (deadlineAt: number | null) => void
   readonly onAutoClose?: () => void
 }
@@ -460,6 +464,7 @@ function LogOutputSlotHeader({
   title,
   enabled,
   deadlineAt,
+  onToggle,
   onSetDeadline,
   onAutoClose,
 }: LogOutputSlotHeaderProps) {
@@ -475,11 +480,14 @@ function LogOutputSlotHeader({
     return () => window.clearInterval(timer)
   }, [deadlineAt, enabled])
 
+  const capturing = enabled && deadlineAt !== null && deadlineAt > now
+
   useEffect(() => {
-    if (deadlineAt === null || !enabled || now < deadlineAt) return
-    onSetDeadline?.(null)
+    if (!enabled || deadlineAt === null) return
+    if (now < deadlineAt) return
+    onToggle?.(false)
     onAutoClose?.()
-  }, [deadlineAt, enabled, now, onSetDeadline, onAutoClose])
+  }, [deadlineAt, enabled, now, onToggle, onAutoClose])
 
   const totalSeconds =
     (Number.isNaN(Number(hours)) ? 0 : Number(hours)) * 3600 +
@@ -489,11 +497,11 @@ function LogOutputSlotHeader({
   const handleConfirm = () => {
     if (totalSeconds <= 0) return
     setDialogOpen(false)
+    onToggle?.(true)
     onSetDeadline?.(Date.now() + totalSeconds * 1000)
   }
 
-  const hasDeadline = deadlineAt !== null && enabled
-  const remaining = hasDeadline ? Math.max(0, deadlineAt - now) : 0
+  const remaining = capturing && deadlineAt !== null ? Math.max(0, deadlineAt - now) : 0
   const remainingHours = Math.floor(remaining / 3600000)
   const remainingMinutes = Math.floor((remaining % 3600000) / 60000)
   const remainingSeconds = Math.floor((remaining % 60000) / 1000)
@@ -506,7 +514,7 @@ function LogOutputSlotHeader({
       <div className="flex items-center justify-between gap-2">
         <span>{title}</span>
         <div className="flex items-center gap-2">
-          {hasDeadline && (
+          {capturing && (
             <span className="whitespace-nowrap text-[10px] text-muted-foreground">
               剩余 {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒
             </span>
@@ -516,14 +524,14 @@ function LogOutputSlotHeader({
             className={buttonClass}
             onClick={(e) => {
               e.stopPropagation()
-              if (enabled) {
-                onSetDeadline?.(null)
+              if (capturing) {
+                onToggle?.(false)
               } else {
                 setDialogOpen(true)
               }
             }}
           >
-            {enabled ? '关闭' : '启动'}
+            {capturing ? '关闭' : '开启'}
           </button>
         </div>
       </div>

@@ -26,7 +26,7 @@ export function LogOutputSlotItem({
       enabled={entry.enabled}
       onToggleEnabled={(v) => onChange({ ...entry, enabled: v })}
       onDelete={onDelete}
-      className={slotDisabled ? 'opacity-60 pointer-events-none' : undefined}
+      className={slotDisabled ? 'opacity-60' : undefined}
       {...drag}
     >
       <div className="flex flex-col gap-0.5">

@@ -193,6 +193,9 @@ function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
   const enabledEntries = topology.nodes.filter((n) => isRequestEntry(n) && n.enabled === true)
   for (const node of topology.nodes) {
     if (node.kind !== 'slot') continue
+    // logOutput slots own their start/stop switch and stay interactive
+    // regardless of whether they are reachable from an enabled entry.
+    if (node.slotType === 'logOutput') continue
     const reachable = enabledEntries.some((entry) => reaches(topology.wires, entry.id, node.id))
     if (!reachable) disabled.add(node.id)
   }
@@ -633,6 +636,7 @@ export function TopologyPage() {
           data: {
             title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
             slotType: node.slotType ?? '',
+            enabled: node.enabled,
             isProviderSlot: false,
             externallyDisabled: externallyDisabledSet.has(node.id),
             entries: [...(node.entries ?? [])],
@@ -646,6 +650,7 @@ export function TopologyPage() {
             ...(slotType === 'logOutput'
               ? {
                   logDeadlineAt: node.logDeadlineAt ?? null,
+                  onToggleLog: (nextEnabled: boolean) => handleToggleLog(node.id, nextEnabled),
                   onSetLogDeadline: (deadlineAt: number | null) => handleSetLogDeadline(node.id, deadlineAt),
                 }
               : {}),
@@ -1128,7 +1133,12 @@ export function TopologyPage() {
       const cur = tpRef.current
       if (!cur) return
       const id = `${slotType}-${crypto.randomUUID().slice(0, 8)}`
-      const node: FlatNode = { id, kind: 'slot', slotType, enabled: true }
+      const node: FlatNode = {
+        id,
+        kind: 'slot',
+        slotType,
+        enabled: slotType !== 'logOutput',
+      }
       updateTopologyNodes(() => [...cur.nodes, node])
       placeNewNodes([{ id, width: topologyConfig.render.slot.shellMinWidth }])
     },
@@ -1212,7 +1222,12 @@ export function TopologyPage() {
       ...cur.nodes,
       { id: entryId, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 },
       { id: pslotId, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true },
-      ...slotIds.map((st) => ({ id: nodeIds.get(st)!, kind: 'slot' as const, slotType: st, enabled: true })),
+      ...slotIds.map((st) => ({
+        id: nodeIds.get(st)!,
+        kind: 'slot' as const,
+        slotType: st,
+        enabled: st !== 'logOutput',
+      })),
     ]
     const chain: FlatWire[] = [
       { source: entryId, target: pslotId },
