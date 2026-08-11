@@ -262,9 +262,6 @@ export function TokenPage() {
           onRetry={() => void loadTokens(offset, limit)}
           actions={
             <>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button
                 onClick={() => {
                   setEditing(null)
@@ -274,6 +271,9 @@ export function TokenPage() {
                 disabled={isSaving}
               >
                 <AppIcon name="add" data-icon="inline-start" />添加令牌
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </>
           }

@@ -168,6 +168,7 @@ export function ProviderPage() {
     <div className="flex h-full flex-col">
       <PageHeader title="供应商" status={`${total} 供应商`} />
       <div className="p-6">
+        <div className="mb-4 text-sm text-muted-foreground">管理上游 API 供应商配置</div>
         <DataTable
           id="providers"
           columns={columns}
@@ -181,14 +182,13 @@ export function ProviderPage() {
           onLimitChange={setLimit}
           emptyText="暂无供应商。添加一个供应商开始配置。"
           onRetry={() => void loadProviders()}
-          filters={<div className="text-sm text-muted-foreground">管理上游 API 供应商配置</div>}
           actions={(
             <>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />添加供应商
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </>
           )}

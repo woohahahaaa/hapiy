@@ -252,12 +252,12 @@ export function PricePage() {
           onRetry={() => void fetch()}
           actions={
             <>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 添加模型
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </>
           }

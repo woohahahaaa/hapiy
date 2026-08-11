@@ -322,15 +322,15 @@ function RewritePage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
               <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />测试
               </Button>
               <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
                 <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                <AppIcon name="add" data-icon="inline-start" />
-                添加规则
               </Button>
             </div>
           }
@@ -489,12 +489,12 @@ function HeartbeatPage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </div>
           }
@@ -638,12 +638,12 @@ function ConcurrencyPage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </div>
           }
@@ -804,12 +804,12 @@ function FailoverPage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
               <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
+              </Button>
+              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
+                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
               </Button>
             </div>
           }
@@ -976,15 +976,15 @@ function RewriteResponsePage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
+              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                <AppIcon name="add" data-icon="inline-start" />
+                添加规则
+              </Button>
               <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />测试
               </Button>
               <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
                 <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                <AppIcon name="add" data-icon="inline-start" />
-                添加规则
               </Button>
             </div>
           }

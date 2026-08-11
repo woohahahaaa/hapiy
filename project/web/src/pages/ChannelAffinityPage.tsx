@@ -290,15 +290,8 @@ export function ChannelAffinityPage() {
     <div className="flex h-full flex-col">
       <PageHeader title="渠道亲和性" status={`${total} 条规则`} />
       <div className="p-6">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道。
-          </div>
-          <div className="flex items-center gap-4">
-            <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving || isLoading}>
-              <AppIcon name="add" data-icon="inline-start" />添加规则
-            </Button>
-          </div>
+        <div className="mb-4 text-sm text-muted-foreground">
+          请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道。
         </div>
 
         <DataTable
@@ -314,6 +307,11 @@ export function ChannelAffinityPage() {
           onLimitChange={setLimit}
           emptyText="暂无规则"
           onRetry={() => void load()}
+          actions={
+            <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving || isLoading}>
+              <AppIcon name="add" data-icon="inline-start" />添加规则
+            </Button>
+          }
         />
       </div>
 
