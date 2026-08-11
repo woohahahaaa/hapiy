@@ -212,6 +212,16 @@ export type LogCapturePairFull = {
   readonly request?: LogCaptureRequestNode
   readonly responses: readonly LogCaptureResponseNode[]
   readonly error: string
+  readonly timing?: LogCaptureTiming
+}
+
+export type LogCaptureTiming = {
+  readonly connectMs: number // -1 = N/A
+  readonly firstByteMs: number
+  readonly requestRewriteMs: number
+  readonly responseRewriteMs: number
+  readonly streamRewriteMs: number
+  readonly queueWaitMs: number
 }
 
 export type LogCapturePairListResult = {
@@ -766,6 +776,21 @@ function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
     request: value.request == null ? undefined : parseLogCaptureRequestNode(value.request),
     responses: value.responses.map(parseLogCaptureResponseNode),
     error: value.error == null ? '' : readString(value.error, 'pair.error'),
+    timing: value.timing == null ? undefined : parseLogCaptureTiming(value.timing),
+  }
+}
+
+function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的抓取耗时格式无效', null)
+  }
+  return {
+    connectMs: parseStageMs(value.connect_ms),
+    firstByteMs: parseStageMs(value.first_byte_ms),
+    requestRewriteMs: parseStageMs(value.request_rewrite_ms),
+    responseRewriteMs: parseStageMs(value.response_rewrite_ms),
+    streamRewriteMs: parseStageMs(value.stream_rewrite_ms),
+    queueWaitMs: parseStageMs(value.queue_wait_ms),
   }
 }
 

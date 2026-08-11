@@ -101,3 +101,56 @@ describe('dashboardApi.listLogs stage timings', () => {
     expect(log.queueWaitMs).toBe(-1)
   })
 })
+
+describe('dashboardApi.readLogCapturePair timing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('parses numeric timing fields from the pair response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        request_id: 'r1',
+        prefix: '',
+        source: '',
+        provider_id: 'p1',
+        created_at: '2026-01-01T00:00:00Z',
+        responses: [],
+        timing: {
+          connect_ms: 120,
+          first_byte_ms: 890,
+          request_rewrite_ms: 15,
+          response_rewrite_ms: 30,
+          stream_rewrite_ms: 45,
+          queue_wait_ms: 500,
+        },
+      },
+    })))
+
+    const pair = await dashboardApi.readLogCapturePair('r1')
+    expect(pair.timing).toEqual({
+      connectMs: 120,
+      firstByteMs: 890,
+      requestRewriteMs: 15,
+      responseRewriteMs: 30,
+      streamRewriteMs: 45,
+      queueWaitMs: 500,
+    })
+  })
+
+  it('returns undefined timing when the pair has no timing field', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      data: {
+        request_id: 'r1',
+        prefix: '',
+        source: '',
+        provider_id: 'p1',
+        created_at: '2026-01-01T00:00:00Z',
+        responses: [],
+      },
+    })))
+
+    const pair = await dashboardApi.readLogCapturePair('r1')
+    expect(pair.timing).toBeUndefined()
+  })
+})

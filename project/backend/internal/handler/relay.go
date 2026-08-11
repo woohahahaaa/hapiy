@@ -144,6 +144,16 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			handleNonStreamingResponse(c, resp)
 		}
 
+		// Backfill stream timings on log capture rows when the request has
+		// any log output configured. FirstByteMs and StreamRewriteMs are only
+		// known after the stream body is fully forwarded.
+		if relayReq.Stream && plan != nil && len(plan.LogOutputs) > 0 {
+			writer := service.LogCapture()
+			if writer != nil {
+				writer.UpdateStreamTimings(relayReq.RequestID, firstByteMs, resp.StreamRewriteTotalMs())
+			}
+		}
+
 		// Log successful request
 		useTime := int(time.Since(startTime).Milliseconds())
 		logEntry := model.Log{

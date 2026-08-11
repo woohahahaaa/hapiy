@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffView } from '@/components/DiffView'
 import { dashboardApi } from '@/lib/dashboard-api'
-import type { LogCapturePairFull, LogCaptureStageRow } from '@/lib/dashboard-api'
+import type { LogCapturePairFull, LogCaptureStageRow, LogCaptureTiming } from '@/lib/dashboard-api'
 
 // ── Props (discriminated union — TypeScript exhaustiveness on `kind`) ──
 type LogCapturePreviewDialogProps =
@@ -152,6 +152,35 @@ export function LogCapturePreviewDialog(props: LogCapturePreviewDialogProps) {
   return <SystemDialog fileId={props.fileId} fileName={props.fileName} open={props.open} onClose={props.onClose} />
 }
 
+// ── Timing block: request-level stage timings from the pair read ──
+function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
+  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '--')
+  const rows: ReadonlyArray<[string, number]> = [
+    ['排队', timing.queueWaitMs],
+    ['请求改写', timing.requestRewriteMs],
+    ['连接', timing.connectMs],
+    ['首字', timing.firstByteMs],
+    ['响应改写', timing.responseRewriteMs],
+    ['流式改写', timing.streamRewriteMs],
+  ]
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="mb-2 flex items-center gap-3">
+        <h4 className="shrink-0 font-medium text-muted-foreground">耗时</h4>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
+        {rows.map(([label, val]) => (
+          <div key={label} className="flex items-baseline gap-2">
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
+            <span className="break-words text-foreground">{fmtMs(val)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Pair branch (kind === 'pair') ──
 function PairDialog({ requestId, open, onClose }: {
   readonly requestId: string
@@ -217,6 +246,7 @@ function PairDialog({ requestId, open, onClose }: {
                   {pair.error}
                 </div>
               )}
+              {pair.timing && <TimingBlock timing={pair.timing} />}
               {!pair.request && pair.responses.length === 0 ? (
                 <div className="py-16 text-center text-xs text-muted-foreground">暂无内容</div>
               ) : (

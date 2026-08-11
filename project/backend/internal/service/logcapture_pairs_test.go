@@ -566,6 +566,91 @@ func TestReadPair_assembles_multi_response_by_ordinal(t *testing.T) {
 	}
 }
 
+// TestReadPair_exposes_merged_timing: rows carry stage timings across the
+// response stages; assembleFull merges the first non-nil value of each field
+// into LogCapturePairFull.Timing. Request rows have none, response rows split
+// the fields across before/after — the merge picks the non-nil ones.
+func TestReadPair_exposes_merged_timing(t *testing.T) {
+	w := newPairsTestWriter(t)
+	now := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	connect := 12
+	queue := 3
+	reqRewrite := 5
+	respRewrite := 7
+
+	// request_before row carries no timings (request stage has no resp).
+	writeRow(t, w, "r1", "request", "request_before", map[string]any{"a": 1}, 0, nil, now)
+	// response_before carries connect + queue + request rewrite.
+	respBefore := model.LogCapture{
+		RequestID:        "r1",
+		Type:             "response",
+		Stage:            "response_before",
+		CreatedAt:        now.Add(1 * time.Second),
+		ConnectMs:        &connect,
+		QueueWaitMs:      &queue,
+		RequestRewriteMs: &reqRewrite,
+	}
+	if err := w.db.Create(&respBefore).Error; err != nil {
+		t.Fatalf("create respBefore: %v", err)
+	}
+	// response_after carries response rewrite on top.
+	respAfter := model.LogCapture{
+		RequestID:         "r1",
+		Type:              "response",
+		Stage:             "response_after",
+		CreatedAt:         now.Add(2 * time.Second),
+		ConnectMs:         &connect,
+		QueueWaitMs:       &queue,
+		RequestRewriteMs:  &reqRewrite,
+		ResponseRewriteMs: &respRewrite,
+	}
+	if err := w.db.Create(&respAfter).Error; err != nil {
+		t.Fatalf("create respAfter: %v", err)
+	}
+
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if full.Timing == nil {
+		t.Fatalf("Timing = nil, want non-nil")
+	}
+	if full.Timing.ConnectMs == nil || *full.Timing.ConnectMs != connect {
+		t.Fatalf("Timing.ConnectMs = %v, want %d", full.Timing.ConnectMs, connect)
+	}
+	if full.Timing.QueueWaitMs == nil || *full.Timing.QueueWaitMs != queue {
+		t.Fatalf("Timing.QueueWaitMs = %v, want %d", full.Timing.QueueWaitMs, queue)
+	}
+	if full.Timing.RequestRewriteMs == nil || *full.Timing.RequestRewriteMs != reqRewrite {
+		t.Fatalf("Timing.RequestRewriteMs = %v, want %d", full.Timing.RequestRewriteMs, reqRewrite)
+	}
+	if full.Timing.ResponseRewriteMs == nil || *full.Timing.ResponseRewriteMs != respRewrite {
+		t.Fatalf("Timing.ResponseRewriteMs = %v, want %d", full.Timing.ResponseRewriteMs, respRewrite)
+	}
+	if full.Timing.FirstByteMs != nil || full.Timing.StreamRewriteMs != nil {
+		t.Fatalf("Timing.FirstByteMs/StreamRewriteMs should be nil, got %v/%v",
+			full.Timing.FirstByteMs, full.Timing.StreamRewriteMs)
+	}
+}
+
+// TestReadPair_timing_nil_when_no_timings: a pair with no stage timings on
+// any row exposes Timing == nil (not an empty object).
+func TestReadPair_timing_nil_when_no_timings(t *testing.T) {
+	w := newPairsTestWriter(t)
+	now := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+	writeRow(t, w, "r1", "request", "request_before", map[string]any{"a": 1}, 0, nil, now)
+	writeRow(t, w, "r1", "response", "response_before", map[string]any{"b": 1}, 0, nil, now.Add(1*time.Second))
+
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if full.Timing != nil {
+		t.Fatalf("Timing = %+v, want nil (no timing fields on rows)", full.Timing)
+	}
+}
+
 // itoa is a tiny local helper to avoid importing strconv just for one use.
 func itoa(i int) string {
 	return string(rune('0' + i))

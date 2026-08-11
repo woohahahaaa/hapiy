@@ -49,6 +49,17 @@ type LogCapturePairSummary struct {
 	HasRewrite   bool      `json:"has_rewrite"`
 }
 
+// LogCaptureTiming is the per-request stage timing breakdown surfaced on
+// the read endpoint. Values are nil when a stage did not apply.
+type LogCaptureTiming struct {
+	ConnectMs         *int `json:"connect_ms,omitempty"`
+	FirstByteMs       *int `json:"first_byte_ms,omitempty"`
+	RequestRewriteMs  *int `json:"request_rewrite_ms,omitempty"`
+	ResponseRewriteMs *int `json:"response_rewrite_ms,omitempty"`
+	StreamRewriteMs   *int `json:"stream_rewrite_ms,omitempty"`
+	QueueWaitMs       *int `json:"queue_wait_ms,omitempty"`
+}
+
 // LogCapturePairFull is the read-endpoint shape with full bodies.
 type LogCapturePairFull struct {
 	RequestID  string                   `json:"request_id"`
@@ -59,6 +70,7 @@ type LogCapturePairFull struct {
 	Request    *LogCaptureRequestNode   `json:"request,omitempty"`
 	Responses  []LogCaptureResponseNode `json:"responses"`
 	Error      string                   `json:"error,omitempty"`
+	Timing     *LogCaptureTiming        `json:"timing,omitempty"`
 }
 
 // filterSystemFromTypes returns the input slice with any "system" entry
@@ -335,7 +347,49 @@ func assembleFull(rid string, rows []model.LogCapture) *LogCapturePairFull {
 			break
 		}
 	}
+	// Timing fields are written on every row of the request (logfile.go
+	// WriteLog copies them unconditionally), so merge across the response
+	// rows to surface the non-nil ones.
+	full.Timing = mergeTiming(rows)
 	return full
+}
+
+// mergeTiming combines the first non-nil value of each stage-timing field
+// across a request's rows, returning nil when no row carries any timing.
+func mergeTiming(rows []model.LogCapture) *LogCaptureTiming {
+	var t LogCaptureTiming
+	any := false
+	for i := range rows {
+		r := &rows[i]
+		if r.ConnectMs != nil && t.ConnectMs == nil {
+			t.ConnectMs = r.ConnectMs
+			any = true
+		}
+		if r.FirstByteMs != nil && t.FirstByteMs == nil {
+			t.FirstByteMs = r.FirstByteMs
+			any = true
+		}
+		if r.RequestRewriteMs != nil && t.RequestRewriteMs == nil {
+			t.RequestRewriteMs = r.RequestRewriteMs
+			any = true
+		}
+		if r.ResponseRewriteMs != nil && t.ResponseRewriteMs == nil {
+			t.ResponseRewriteMs = r.ResponseRewriteMs
+			any = true
+		}
+		if r.StreamRewriteMs != nil && t.StreamRewriteMs == nil {
+			t.StreamRewriteMs = r.StreamRewriteMs
+			any = true
+		}
+		if r.QueueWaitMs != nil && t.QueueWaitMs == nil {
+			t.QueueWaitMs = r.QueueWaitMs
+			any = true
+		}
+	}
+	if !any {
+		return nil
+	}
+	return &t
 }
 
 // splitStages partitions rows by Stage, dropping system rows (Type=="system"

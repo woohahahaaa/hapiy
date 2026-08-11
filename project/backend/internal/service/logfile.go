@@ -48,6 +48,13 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 		ProviderID: data.ProviderID,
 		Stage:      data.Stage,
 		Error:      data.Error,
+		// Always keep stage timings, even when body recording is off.
+		ConnectMs:         data.ConnectMs,
+		FirstByteMs:       data.FirstByteMs,
+		RequestRewriteMs:  data.RequestRewriteMs,
+		ResponseRewriteMs: data.ResponseRewriteMs,
+		StreamRewriteMs:   data.StreamRewriteMs,
+		QueueWaitMs:       data.QueueWaitMs,
 	}
 
 	// Populate headers and body from whichever capture is relevant
@@ -94,18 +101,50 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 	}
 }
 
+// UpdateStreamTimings backfills first-byte and stream-rewrite timings on the
+// captured rows of a request. Those two values are only known after the
+// streaming body has been fully forwarded, so the handler calls this once
+// the stream ends. Values < 0 are ignored (stage does not apply).
+func (w *LogCaptureWriter) UpdateStreamTimings(requestID string, firstByteMs, streamRewriteMs int) {
+	if w == nil || requestID == "" {
+		return
+	}
+	updates := map[string]interface{}{}
+	if firstByteMs >= 0 {
+		updates["first_byte_ms"] = firstByteMs
+	}
+	if streamRewriteMs >= 0 {
+		updates["stream_rewrite_ms"] = streamRewriteMs
+	}
+	if len(updates) == 0 {
+		return
+	}
+	if err := w.db.Model(&model.LogCapture{}).
+		Where("request_id = ?", requestID).
+		Updates(updates).Error; err != nil {
+		println("logcapture: update stream timings failed:", err.Error())
+	}
+}
+
 // LogCaptureData is the payload for a single capture event.
 type LogCaptureData struct {
-	RequestID string
-	Stage     string // request_before | request_after | response_before | response_after
-	Type      string // request | response | system
+	RequestID  string
+	Stage      string // request_before | request_after | response_before | response_after
+	Type       string // request | response | system
 	ProviderID string
-	Prefix    string
-	Source    string
-	Request   *HTTPCapture
-	Response  *HTTPCapture
-	SystemLog []string
-	Error     string
+	Prefix     string
+	Source     string
+	Request    *HTTPCapture
+	Response   *HTTPCapture
+	SystemLog  []string
+	Error      string
+	// Stage timings (nil = not applicable / not yet known).
+	ConnectMs         *int
+	FirstByteMs       *int
+	RequestRewriteMs  *int
+	ResponseRewriteMs *int
+	StreamRewriteMs   *int
+	QueueWaitMs       *int
 }
 
 // HTTPCapture is a single captured HTTP message (headers + body).

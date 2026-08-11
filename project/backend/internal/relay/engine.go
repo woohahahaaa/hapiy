@@ -250,6 +250,10 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 			e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, plan, req, nil)
 			writer := service.LogCapture()
 			if writer != nil && req != nil {
+				var failConnectMs *int
+				if resp != nil {
+					failConnectMs = msPtr(resp.ConnectMs)
+				}
 				for _, assignment := range plan.LogOutputs {
 					if !assignment.Enabled {
 						continue
@@ -262,13 +266,14 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 						continue
 					}
 					writer.WriteLog(&service.LogCaptureData{
-						RequestID: req.RequestID,
-						Stage:     string(topologyStageResponseAfter),
-						Type:      "response",
+						RequestID:  req.RequestID,
+						Stage:      string(topologyStageResponseAfter),
+						Type:       "response",
 						ProviderID: plan.ID,
-						Prefix:    cfg.Prefix,
-						Source:    service.ResolveSourceMark(req.SourceMark, req.Path),
-						Error:     err.Error(),
+						Prefix:     cfg.Prefix,
+						Source:     service.ResolveSourceMark(req.SourceMark, req.Path),
+						Error:      err.Error(),
+						ConnectMs:  failConnectMs,
 					})
 				}
 			}
@@ -409,6 +414,14 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 			Prefix:     cfg.Prefix,
 			Source:     service.ResolveSourceMark(req.SourceMark, req.Path),
 		}
+		// Stage timings are always recorded (independent of the record_*
+		// switches) so every captured request carries its timing breakdown.
+		if resp != nil {
+			data.ConnectMs = msPtr(resp.ConnectMs)
+			data.RequestRewriteMs = msPtr(resp.RequestRewriteMs)
+			data.ResponseRewriteMs = msPtr(resp.ResponseRewriteMs)
+			data.QueueWaitMs = msPtr(resp.QueueWaitMs)
+		}
 		switch stage {
 		case topologyStageRequestBefore:
 			if cfg.RecordRequest {
@@ -489,6 +502,15 @@ func logOutputStageType(stage topologyStage) string {
 	default:
 		return "request"
 	}
+}
+
+// msPtr converts a stage timing to a pointer, mapping -1 (stage not
+// applicable) to nil so the JSON row omits the field.
+func msPtr(v int) *int {
+	if v < 0 {
+		return nil
+	}
+	return &v
 }
 
 func (e *Engine) recordTopologyStage(event topologyStageEvent) {

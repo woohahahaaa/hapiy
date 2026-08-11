@@ -67,6 +67,7 @@ func (s *JSONSlice) Scan(src interface{}) error {
 // LogCapture stores the full request/response capture data in the database.
 // Each row corresponds to one log event (request-before, request-after,
 // response-before, response-after, or system) for a single log output node.
+// Stage timings mirror model.Log: nil means the stage does not apply.
 type LogCapture struct {
 	ID             string    `gorm:"primaryKey;type:uuid" json:"id"`
 	RequestID      string    `gorm:"not null;index" json:"request_id"`
@@ -82,6 +83,13 @@ type LogCapture struct {
 	SystemLog      JSONSlice `gorm:"type:jsonb" json:"system_log,omitempty"`
 	Error          string    `json:"error,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`
+	// Stage timings mirror model.Log; written on every row of a request.
+	ConnectMs         *int `json:"connect_ms,omitempty"`
+	FirstByteMs       *int `json:"first_byte_ms,omitempty"`
+	RequestRewriteMs  *int `json:"request_rewrite_ms,omitempty"`
+	ResponseRewriteMs *int `json:"response_rewrite_ms,omitempty"`
+	StreamRewriteMs   *int `json:"stream_rewrite_ms,omitempty"`
+	QueueWaitMs       *int `json:"queue_wait_ms,omitempty"`
 }
 
 func (l *LogCapture) BeforeCreate(tx *gorm.DB) error {
