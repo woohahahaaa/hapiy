@@ -150,9 +150,9 @@ function responseStageContentType(headers: Record<string, string> | null): strin
 }
 
 // ── RawSseView splits raw SSE text into per-event blocks so chunks are
-// readable one by one instead of one escaped line. Each block shows its
-// event type and the data payload (JSON-parsed when possible). Falls back
-// to a plain <pre> when the text has no `data:` lines (not an SSE body).
+// readable one by one instead of one escaped line. Each block is collapsed
+// by default and shows the data payload's `id` field as its title. Falls
+// back to a plain <pre> when the text has no `data:` lines (not an SSE body).
 function RawSseView({ text }: { readonly text: string }) {
   const blocks = useMemo(() => {
     if (!/data:/.test(text)) return null
@@ -170,34 +170,62 @@ function RawSseView({ text }: { readonly text: string }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      {blocks.map((block, i) => {
-        const lines = block.split('\n')
-        const eventLine = lines.find((l) => l.startsWith('event:'))
-        const data = lines
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice(5).replace(/^ /, ''))
-          .join('\n')
-        const eventType = eventLine ? eventLine.slice(6).trim() : 'data'
-        const isDone = data === '[DONE]'
-        return (
-          <div key={i} className="overflow-hidden rounded-md border border-border bg-muted/20">
-            <div className="flex items-center gap-2 border-b border-border/60 bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-              <span>#{i + 1}</span>
-              <span className="font-medium text-foreground/80">{eventType}</span>
-              <span className="ml-auto">{isDone ? '[DONE]' : `${data.length} B`}</span>
-            </div>
-            {isDone ? (
-              <div className="px-2 py-1 font-mono text-[10px] text-muted-foreground">[DONE]</div>
-            ) : data ? (
-              <div className="px-2 py-1.5">
-                <JsonHighlight value={data} className="border-0 bg-transparent p-0" />
-              </div>
-            ) : (
-              <div className="px-2 py-1 font-mono text-[10px] text-muted-foreground">（无 data）</div>
-            )}
-          </div>
-        )
-      })}
+      {blocks.map((block, i) => (
+        <SseBlock key={i} index={i} block={block} />
+      ))}
+    </div>
+  )
+}
+
+// ── SseBlock: one SSE event — collapsed by default, title shows the data
+// payload's `id` (falling back to event type when absent).
+function SseBlock({ index, block }: { readonly index: number; readonly block: string }) {
+  const [open, setOpen] = useState(false)
+  const lines = block.split('\n')
+  const eventLine = lines.find((l) => l.startsWith('event:'))
+  const data = lines
+    .filter((l) => l.startsWith('data:'))
+    .map((l) => l.slice(5).replace(/^ /, ''))
+    .join('\n')
+  const eventType = eventLine ? eventLine.slice(6).trim() : 'data'
+  const isDone = data === '[DONE]'
+  const title = useMemo(() => {
+    if (isDone) return '[DONE]'
+    try {
+      const parsed = JSON.parse(data)
+      if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string') {
+        return parsed.id
+      }
+    } catch {
+      // fall through to event type
+    }
+    return eventType
+  }, [data, eventType, isDone])
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border bg-muted/20">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 border-b border-border/60 bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted/50"
+      >
+        <span className="shrink-0">{open ? '▾' : '▸'}</span>
+        <span className="shrink-0">#{index + 1}</span>
+        <span className="truncate font-medium text-foreground/80">{title}</span>
+        <span className="ml-auto shrink-0">{isDone ? '0 B' : `${data.length} B`}</span>
+      </button>
+      {open && (
+        <div className="px-2 py-1.5">
+          <div className="mb-1 font-mono text-[10px] text-muted-foreground">event: {eventType}</div>
+          {isDone ? (
+            <div className="font-mono text-[10px] text-muted-foreground">[DONE]</div>
+          ) : data ? (
+            <JsonHighlight value={data} className="border-0 bg-transparent p-0" />
+          ) : (
+            <div className="font-mono text-[10px] text-muted-foreground">（无 data）</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

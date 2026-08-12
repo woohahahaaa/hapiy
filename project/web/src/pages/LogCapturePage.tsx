@@ -246,6 +246,20 @@ export function LogCapturePage() {
         ),
     },
     {
+      key: 'is_stream',
+      label: '流式',
+      render: (_, row) =>
+        row.kind === 'pair' ? (
+          row.pair.is_stream ? (
+            <Badge variant="secondary">SSE</Badge>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )
+        ) : (
+          <span className="text-muted-foreground">-</span>
+        ),
+    },
+    {
       key: 'name',
       label: '文件名/请求ID',
       render: (_, row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -47,6 +48,7 @@ type LogCapturePairSummary struct {
 	HasResponse  bool      `json:"has_response"`
 	ResponseCount int     `json:"response_count"`
 	HasRewrite   bool      `json:"has_rewrite"`
+	IsStream     bool      `json:"is_stream"`
 }
 
 // LogCaptureTiming is the per-request stage timing breakdown surfaced on
@@ -71,6 +73,7 @@ type LogCapturePairFull struct {
 	Responses  []LogCaptureResponseNode `json:"responses"`
 	Error      string                   `json:"error,omitempty"`
 	Timing     *LogCaptureTiming        `json:"timing,omitempty"`
+	IsStream   bool                     `json:"is_stream"`
 }
 
 // filterSystemFromTypes returns the input slice with any "system" entry
@@ -285,6 +288,7 @@ func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary 
 		}
 	}
 	s.HasRewrite = reqModified || rspModified
+	s.IsStream = responseIsStream(rows)
 	return s
 }
 
@@ -305,6 +309,7 @@ func assembleFull(rid string, rows []model.LogCapture) *LogCapturePairFull {
 		ProviderID: earliest.ProviderID,
 		CreatedAt:  earliest.CreatedAt,
 		Responses:  []LogCaptureResponseNode{},
+		IsStream:   responseIsStream(rows),
 	}
 
 	reqBefore, reqAfter, rspBefore, rspAfter := splitStages(rows)
@@ -390,6 +395,28 @@ func mergeTiming(rows []model.LogCapture) *LogCaptureTiming {
 		return nil
 	}
 	return &t
+}
+
+// responseIsStream reports whether any response row of a pair carries an
+// SSE Content-Type header. This is the pair-level "stream" marker the
+// dashboard mirrors from the request-log page.
+func responseIsStream(rows []model.LogCapture) bool {
+	for i := range rows {
+		r := &rows[i]
+		if r.Type != "response" || r.Headers == nil {
+			continue
+		}
+		for k, v := range r.Headers {
+			if !strings.EqualFold(k, "Content-Type") {
+				continue
+			}
+			s, ok := v.(string)
+			if ok && strings.Contains(strings.ToLower(s), "text/event-stream") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // splitStages partitions rows by Stage, dropping system rows (Type=="system"

@@ -218,6 +218,7 @@ export type LogCapturePairSummary = {
   readonly has_response: boolean
   readonly response_count: number
   readonly has_rewrite: boolean
+  readonly is_stream: boolean
 }
 
 export type LogCapturePairFull = {
@@ -230,6 +231,7 @@ export type LogCapturePairFull = {
   readonly responses: readonly LogCaptureResponseNode[]
   readonly error: string
   readonly timing?: LogCaptureTiming
+  readonly is_stream: boolean
 }
 
 export type LogCaptureTiming = {
@@ -802,6 +804,7 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
     has_response: readBoolean(value.has_response, 'pair.has_response'),
     response_count: responseCount,
     has_rewrite: readBoolean(value.has_rewrite, 'pair.has_rewrite'),
+    is_stream: value.is_stream === undefined ? false : readBoolean(value.is_stream, 'pair.is_stream'),
   }
 }
 
@@ -822,6 +825,7 @@ function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
     responses: value.responses.map(parseLogCaptureResponseNode),
     error: value.error == null ? '' : readString(value.error, 'pair.error'),
     timing: value.timing == null ? undefined : parseLogCaptureTiming(value.timing),
+    is_stream: value.is_stream === undefined ? false : readBoolean(value.is_stream, 'pair.is_stream'),
   }
 }
 
