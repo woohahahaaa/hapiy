@@ -168,6 +168,11 @@ type RelayResponse struct {
 	// event as it flows and accumulates the rewrite time. The handler reads
 	// the total via StreamRewriteTotalMs after the stream is forwarded.
 	streamRewriter *streamRewriteReader
+	// StreamCapture, when set for a streaming response, accumulates the raw
+	// forwarded bytes as the handler reads them. The handler reads the
+	// captured payload via StreamCapturedBytes after the stream completes
+	// and backfills it into the log capture row.
+	StreamCapture *streamCaptureReader
 	// QueueWaitMs is the time spent waiting for a concurrency slot before
 	// the upstream request is issued; -1 when no concurrency rule applies.
 	QueueWaitMs int
@@ -180,6 +185,16 @@ func (resp *RelayResponse) StreamRewriteTotalMs() int {
 		return -1
 	}
 	return int(resp.streamRewriter.TotalRewriteMs())
+}
+
+// StreamCapturedBytes returns the raw SSE bytes forwarded downstream so the
+// handler can backfill them into the log capture row. Returns nil when the
+// response was not wrapped with a stream capture reader.
+func (resp *RelayResponse) StreamCapturedBytes() []byte {
+	if resp == nil || resp.StreamCapture == nil {
+		return nil
+	}
+	return resp.StreamCapture.Captured()
 }
 
 // UsageInfo tracks token usage.
@@ -316,6 +331,18 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		resp = e.wrapWithHeartbeat(resp, plan.HeartbeatRule, req)
 	}
 
+	// Step 5b: Wrap the final streaming body with a capture reader so the
+	// handler can backfill the forwarded bytes into the log capture row
+	// after the stream ends. The capture wrapper sits OUTSIDE the
+	// stream-rewriter and heartbeat wrappers so it observes what the
+	// downstream client actually receives.
+	if req.Stream && resp.Body != nil && resp.StreamCapture == nil {
+		buf := &bytes.Buffer{}
+		capture := newStreamCaptureReader(resp.Body, buf)
+		resp.StreamCapture = capture
+		resp.Body = capture
+	}
+
 	// Step 6: Debug logging
 	if plan.DebugEnabled {
 		e.logDebug(plan, req, resp)
@@ -448,15 +475,17 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 }
 
 // captureResponseBody buffers the response body so a log stage can write it
-// without consuming the stream the handler forwards downstream. Streaming
-// bodies are never buffered; they are recorded as a placeholder. A successful
-// read restores resp.Body from the buffered bytes.
+// without consuming the stream the handler forwards downstream. Non-streaming
+// bodies are buffered in full. Streaming bodies are recorded as an empty
+// placeholder; the handler backfills the real bytes via
+// service.LogCapture().UpdateStreamBody once the stream is fully forwarded.
+// A successful non-streaming read restores resp.Body from the buffered bytes.
 func captureResponseBody(resp *RelayResponse, stream bool) interface{} {
 	if resp == nil || resp.Body == nil {
 		return nil
 	}
 	if stream {
-		return "streaming"
+		return ""
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

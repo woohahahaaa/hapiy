@@ -153,7 +153,7 @@ function responseStageContentType(headers: Record<string, string> | null): strin
 // toggle. Toggle is hidden when the stage has no "raw" text or its
 // content-type is not SSE.
 function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow }) {
-  const [mode, setMode] = useState<'raw' | 'merged'>('raw')
+  const [mode, setMode] = useState<'raw' | 'merged'>('merged')
   const [merged, setMerged] = useState<unknown>(undefined)
   const [mergeLoading, setMergeLoading] = useState(false)
   const [mergeError, setMergeError] = useState<string | null>(null)
@@ -161,27 +161,35 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   const contentType = responseStageContentType(stageRow.headers)
   const canMerge = rawText !== null && contentType.toLowerCase().includes('text/event-stream')
 
+  const loadMerged = useCallback(() => {
+    const stageNode = findResponseNodeForStageRow(stageRow)
+    if (!stageNode) return
+    setMergeLoading(true)
+    setMergeError(null)
+    dashboardApi
+      .readLogCaptureMergedResponse(stageNode.requestId, {
+        stage: stageNode.stage,
+        index: stageNode.index,
+      })
+      .then((result) => setMerged(result.value))
+      .catch((err: unknown) =>
+        setMergeError(err instanceof Error ? err.message : '整合失败'),
+      )
+      .finally(() => setMergeLoading(false))
+  }, [stageRow])
+
+  // Eagerly fetch merged JSON on first render when the toggle is visible;
+  // this matches the default 'merged' mode and avoids an extra click.
+  useEffect(() => {
+    if (canMerge && merged === undefined) loadMerged()
+  }, [canMerge, merged, loadMerged])
+
   const switchTo = useCallback(
     (next: 'raw' | 'merged') => {
       setMode(next)
-      if (next === 'merged' && merged === undefined && canMerge && stageRow.body) {
-        const stageNode = findResponseNodeForStageRow(stageRow)
-        if (!stageNode) return
-        setMergeLoading(true)
-        setMergeError(null)
-        dashboardApi
-          .readLogCaptureMergedResponse(stageNode.requestId, {
-            stage: stageNode.stage,
-            index: stageNode.index,
-          })
-          .then((result) => setMerged(result.value))
-          .catch((err: unknown) =>
-            setMergeError(err instanceof Error ? err.message : '整合失败'),
-          )
-          .finally(() => setMergeLoading(false))
-      }
+      if (next === 'merged' && merged === undefined && canMerge) loadMerged()
     },
-    [merged, canMerge, stageRow],
+    [merged, canMerge, loadMerged],
   )
 
   if (!canMerge) {
@@ -200,33 +208,35 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
         <div className="flex items-center gap-1">
           <Button
             size="sm"
-            variant={mode === 'raw' ? 'default' : 'outline'}
-            onClick={() => switchTo('raw')}
-          >
-            原始内容
-          </Button>
-          <Button
-            size="sm"
             variant={mode === 'merged' ? 'default' : 'outline'}
             disabled={mergeLoading}
             onClick={() => switchTo('merged')}
           >
             {mergeLoading ? '整合中…' : '整合 JSON'}
           </Button>
+          <Button
+            size="sm"
+            variant={mode === 'raw' ? 'default' : 'outline'}
+            onClick={() => switchTo('raw')}
+          >
+            原始内容
+          </Button>
         </div>
       </div>
-      {mode === 'raw' ? (
-        <JsonHighlight value={stageRow.body} />
-      ) : mergeError ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-          {mergeError}
-        </div>
-      ) : merged === undefined ? (
-        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-          整合中…
-        </div>
+      {mode === 'merged' ? (
+        mergeError ? (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+            {mergeError}
+          </div>
+        ) : merged === undefined ? (
+          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            整合中…
+          </div>
+        ) : (
+          <JsonHighlight value={merged} />
+        )
       ) : (
-        <JsonHighlight value={merged} />
+        <JsonHighlight value={stageRow.body} />
       )}
     </div>
   )

@@ -151,6 +151,9 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			writer := service.LogCapture()
 			if writer != nil {
 				writer.UpdateStreamTimings(relayReq.RequestID, firstByteMs, resp.StreamRewriteTotalMs())
+				if captured := resp.StreamCapturedBytes(); len(captured) > 0 {
+					writer.UpdateStreamBody(relayReq.RequestID, captured)
+				}
 			}
 		}
 

@@ -126,6 +126,26 @@ func (w *LogCaptureWriter) UpdateStreamTimings(requestID string, firstByteMs, st
 	}
 }
 
+// UpdateStreamBody replaces the response_before/response_after rows' bodies
+// for every log output node of a request with the bytes the relay handler
+// captured while forwarding the SSE stream. Both stages are backfilled with
+// the same final bytes so the pair assembler does not report a false
+// "modified" diff between a placeholder before-row and the real after-row.
+// A no-op when the request has no streaming capture row (e.g. non-streaming
+// request, or no log output configured). Headers, status, and timings are
+// preserved.
+func (w *LogCaptureWriter) UpdateStreamBody(requestID string, body []byte) {
+	if w == nil || requestID == "" || body == nil {
+		return
+	}
+	wrapped := model.JSONMap{"raw": string(body)}
+	if err := w.db.Model(&model.LogCapture{}).
+		Where("request_id = ? AND stage IN ?", requestID, []string{"response_before", "response_after"}).
+		Update("request_body", wrapped).Error; err != nil {
+		println("logcapture: update stream body failed:", err.Error())
+	}
+}
+
 // LogCaptureData is the payload for a single capture event.
 type LogCaptureData struct {
 	RequestID  string
