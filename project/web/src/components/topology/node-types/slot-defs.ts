@@ -157,7 +157,7 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   logOutput: {
-    label: '日志输出',
+    label: '日志抓取',
     slotOrder: 6,
     headerSlot: { enabled: true, showOrder: false },
     ruleBindingSlot: { enabled: false },

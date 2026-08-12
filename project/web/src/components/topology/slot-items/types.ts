@@ -109,7 +109,7 @@ export const SLOT_LABELS: Record<SlotType, string> = {
   autoReply: '心跳回复',
   concurrency: '并发控制',
   autoSwitch: '故障转移',
-  logOutput: '日志输出',
+  logOutput: '日志抓取',
 }
 
 // Drag-reorder props passed from the slot node down to each item card.
