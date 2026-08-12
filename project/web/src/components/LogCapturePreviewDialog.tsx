@@ -85,27 +85,78 @@ function computeTypeLabel(pair: LogCapturePairFull): string {
 }
 
 // ── Inline hand-rolled collapsible Node (not exported) ──
-function Node({ label, defaultOpen = true, children }: {
+// `actions` slot lives on the right of the toggle so callers can attach a
+// Copy button or other per-section affordances without nesting buttons.
+function Node({ label, defaultOpen = true, actions, children }: {
   readonly label: ReactNode
   readonly defaultOpen?: boolean
+  readonly actions?: ReactNode
   readonly children?: ReactNode
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="flex flex-col gap-1.5">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-left font-mono text-xs font-medium text-foreground hover:text-foreground/80"
-      >
-        <span className="text-muted-foreground">{open ? '▾' : '▸'}</span>
-        {label}
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-1 text-left font-mono text-xs font-medium text-foreground hover:text-foreground/80"
+        >
+          <span className="shrink-0 text-muted-foreground">{open ? '▾' : '▸'}</span>
+          <span className="truncate">{label}</span>
+        </button>
+        {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+      </div>
       {open && children && (
         <div className="ml-4 flex flex-col gap-1.5 border-l border-border pl-3">{children}</div>
       )}
     </div>
   )
+}
+
+// ── CopyButton: writes text to the clipboard and flashes "已复制" for 1.2s.
+// `getText` is a thunk so the copy reads the current value at click time
+// (the pair may have reloaded since this button mounted).
+function CopyButton({ getText }: { readonly getText: () => string }) {
+  const [copied, setCopied] = useState(false)
+  const onClick = useCallback(() => {
+    const text = getText()
+    if (!text) return
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1200)
+      })
+      .catch(() => {
+        // clipboard unavailable (insecure context) — silently noop
+      })
+  }, [getText])
+  return (
+    <Button size="sm" variant="outline" onClick={onClick}>
+      {copied ? '已复制' : '复制'}
+    </Button>
+  )
+}
+
+// ── stageNodeCopyText: builds the plain text representation of a stage row
+// for clipboard export. Streaming rows expose their raw SSE text; everything
+// else serialises as pretty JSON. Modified rows use the `after` stage.
+function stageNodeCopyText(node: StageNode): string {
+  const row = node.after ?? node.before
+  if (!row) return ''
+  const rawText = responseStageRawText(row.body)
+  const ct = responseStageContentType(row.headers)
+  if (rawText !== null && ct.toLowerCase().includes('text/event-stream')) {
+    return rawText
+  }
+  if (row.body === null || row.body === undefined) return ''
+  if (typeof row.body === 'string') return row.body
+  try {
+    return JSON.stringify(row.body, null, 2)
+  } catch {
+    return String(row.body)
+  }
 }
 
 // ── renderStageBody: headers + body (DiffView when modified, plain pre otherwise) ──
@@ -492,6 +543,7 @@ function PairDialog({ requestId, open, onClose }: {
                       label={
                         <span>请求{pair.request.modified ? <span className="text-amber-600 dark:text-amber-400"> ·修改过</span> : null}</span>
                       }
+                      actions={<CopyButton getText={() => stageNodeCopyText(pair.request!)} />}
                     >
                       {renderStageBody(pair.request)}
                     </Node>
@@ -507,6 +559,7 @@ function PairDialog({ requestId, open, onClose }: {
                               {resp.modified ? <span className="text-amber-600 dark:text-amber-400"> ·修改过</span> : null}
                             </span>
                           }
+                          actions={<CopyButton getText={() => stageNodeCopyText(resp)} />}
                         >
                           <ResponseNodeBody resp={resp} />
                         </Node>
