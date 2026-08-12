@@ -140,23 +140,36 @@ function CopyButton({ getText }: { readonly getText: () => string }) {
 }
 
 // ── stageNodeCopyText: builds the plain text representation of a stage row
-// for clipboard export. Streaming rows expose their raw SSE text; everything
+// for clipboard export. Headers dump as `key: value` lines, body follows
+// after a blank line. Streaming bodies keep their raw SSE text; everything
 // else serialises as pretty JSON. Modified rows use the `after` stage.
 function stageNodeCopyText(node: StageNode): string {
   const row = node.after ?? node.before
   if (!row) return ''
+  const parts: string[] = []
+  if (row.headers && Object.keys(row.headers).length > 0) {
+    parts.push(
+      Object.entries(row.headers)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n'),
+    )
+  }
   const rawText = responseStageRawText(row.body)
   const ct = responseStageContentType(row.headers)
   if (rawText !== null && ct.toLowerCase().includes('text/event-stream')) {
-    return rawText
+    parts.push(rawText)
+  } else if (row.body !== null && row.body !== undefined) {
+    if (typeof row.body === 'string') {
+      parts.push(row.body)
+    } else {
+      try {
+        parts.push(JSON.stringify(row.body, null, 2))
+      } catch {
+        parts.push(String(row.body))
+      }
+    }
   }
-  if (row.body === null || row.body === undefined) return ''
-  if (typeof row.body === 'string') return row.body
-  try {
-    return JSON.stringify(row.body, null, 2)
-  } catch {
-    return String(row.body)
-  }
+  return parts.join('\n\n')
 }
 
 // ── renderStageBody: headers + body (DiffView when modified, plain pre otherwise) ──
