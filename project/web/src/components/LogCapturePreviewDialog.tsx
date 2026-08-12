@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -132,6 +132,117 @@ function renderStageBody(node: StageNode): ReactNode {
   )
 }
 
+// ── responseStageRawText pulls the raw text out of a stored body shape.
+// Capture writer wraps non-JSON string bodies as {raw: "<text>"}; bodies
+// that were JSON-parsed at capture time arrive as a map with no "raw".
+function responseStageRawText(body: unknown): string | null {
+  if (body == null || typeof body !== 'object' || Array.isArray(body)) return null
+  const v = (body as Record<string, unknown>)['raw']
+  return typeof v === 'string' ? v : null
+}
+
+function responseStageContentType(headers: Record<string, string> | null): string {
+  if (!headers) return ''
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === 'content-type') return v
+  }
+  return ''
+}
+
+// ── ResponseStageBody renders a stage row's body with a 原始内容 / 整合 JSON
+// toggle. Toggle is hidden when the stage has no "raw" text or its
+// content-type is not SSE.
+function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow }) {
+  const [mode, setMode] = useState<'raw' | 'merged'>('raw')
+  const [merged, setMerged] = useState<unknown>(undefined)
+  const [mergeLoading, setMergeLoading] = useState(false)
+  const [mergeError, setMergeError] = useState<string | null>(null)
+  const rawText = responseStageRawText(stageRow.body)
+  const contentType = responseStageContentType(stageRow.headers)
+  const canMerge = rawText !== null && contentType.toLowerCase().includes('text/event-stream')
+
+  const switchTo = useCallback(
+    (next: 'raw' | 'merged') => {
+      setMode(next)
+      if (next === 'merged' && merged === undefined && canMerge && stageRow.body) {
+        const stageNode = findResponseNodeForStageRow(stageRow)
+        if (!stageNode) return
+        setMergeLoading(true)
+        setMergeError(null)
+        dashboardApi
+          .readLogCaptureMergedResponse(stageNode.requestId, {
+            stage: stageNode.stage,
+            index: stageNode.index,
+          })
+          .then((result) => setMerged(result.value))
+          .catch((err: unknown) =>
+            setMergeError(err instanceof Error ? err.message : '整合失败'),
+          )
+          .finally(() => setMergeLoading(false))
+      }
+    },
+    [merged, canMerge, stageRow],
+  )
+
+  if (!canMerge) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
+        <JsonHighlight value={stageRow.body} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant={mode === 'raw' ? 'default' : 'outline'}
+            onClick={() => switchTo('raw')}
+          >
+            原始内容
+          </Button>
+          <Button
+            size="sm"
+            variant={mode === 'merged' ? 'default' : 'outline'}
+            disabled={mergeLoading}
+            onClick={() => switchTo('merged')}
+          >
+            {mergeLoading ? '整合中…' : '整合 JSON'}
+          </Button>
+        </div>
+      </div>
+      {mode === 'raw' ? (
+        <JsonHighlight value={stageRow.body} />
+      ) : mergeError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+          {mergeError}
+        </div>
+      ) : merged === undefined ? (
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+          整合中…
+        </div>
+      ) : (
+        <JsonHighlight value={merged} />
+      )}
+    </div>
+  )
+}
+
+// ── Module-level stage-row registry: ResponseStageBody needs the
+// (requestId, stage, index) triple to call readLogCaptureMergedResponse.
+// Each row is registered once during render and forgotten on unmount.
+const stageRowRegistry = new Map<
+  LogCaptureStageRow,
+  { readonly requestId: string; readonly stage: 'before' | 'after'; readonly index: number }
+>()
+function findResponseNodeForStageRow(stageRow: LogCaptureStageRow) {
+  return stageRowRegistry.get(stageRow)
+}
+
 // ── Main export: dispatches on props.kind (exhaustive over the union) ──
 export function LogCapturePreviewDialog(props: LogCapturePreviewDialogProps) {
   if (props.kind === 'pair') {
@@ -207,6 +318,28 @@ function PairDialog({ requestId, open, onClose }: {
     }
   }, [requestId, open, reloadKey])
 
+  // Register each response stage row in the module-level map so
+  // ResponseStageBody can resolve its merge-endpoint coords. Entries are
+  // removed on unmount or when the pair reloads.
+  useEffect(() => {
+    if (!pair) return
+    const registered: LogCaptureStageRow[] = []
+    for (let i = 0; i < pair.responses.length; i++) {
+      const node = pair.responses[i]
+      if (node.before) {
+        stageRowRegistry.set(node.before, { requestId, stage: 'before', index: i })
+        registered.push(node.before)
+      }
+      if (node.after) {
+        stageRowRegistry.set(node.after, { requestId, stage: 'after', index: i })
+        registered.push(node.after)
+      }
+    }
+    return () => {
+      for (const row of registered) stageRowRegistry.delete(row)
+    }
+  }, [pair, requestId])
+
   const typeLabel = pair ? computeTypeLabel(pair) : ''
 
   return (
@@ -260,7 +393,7 @@ function PairDialog({ requestId, open, onClose }: {
                             </span>
                           }
                         >
-                          {renderStageBody(resp)}
+                          <ResponseNodeBody resp={resp} />
                         </Node>
                       ))}
                     </Node>
@@ -279,6 +412,17 @@ function PairDialog({ requestId, open, onClose }: {
       </DialogContent>
     </Dialog>
   )
+}
+
+// ResponseNodeBody: DiffView when modified, otherwise toggle on the
+// available stage row (after preferred, falls back to before).
+function ResponseNodeBody({ resp }: { readonly resp: import('@/lib/dashboard-api').LogCaptureResponseNode }) {
+  if (resp.modified) {
+    return <DiffView before={resp.before?.body} after={resp.after?.body} />
+  }
+  if (resp.after) return <ResponseStageBody stageRow={resp.after} />
+  if (resp.before) return <ResponseStageBody stageRow={resp.before} />
+  return null
 }
 
 // ── System branch (kind === 'system') — kept identical to the previous system branch ──

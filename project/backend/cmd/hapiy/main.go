@@ -145,6 +145,7 @@ func main() {
 		dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db))
 		dashboardAuthed.GET("/logs/capture/pairs", handler.ListLogCapturePairs(db))
 		dashboardAuthed.GET("/logs/capture/pairs/:request_id", handler.ReadLogCapturePair(db))
+		dashboardAuthed.GET("/logs/capture/pairs/:request_id/merged-response", handler.ReadLogCaptureMergedResponse(db))
 		dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db))
 		dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db))
 

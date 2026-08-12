@@ -246,6 +246,13 @@ export type LogCapturePairListResult = {
   readonly total: number
 }
 
+export type LogCaptureMergedBody = {
+  readonly value: unknown
+  readonly content_type: string
+  readonly raw: string
+  readonly merged: boolean
+}
+
 export type DateRange = {
   readonly from?: string
   readonly to?: string
@@ -829,6 +836,18 @@ function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
     responseRewriteMs: parseStageMs(value.response_rewrite_ms),
     streamRewriteMs: parseStageMs(value.stream_rewrite_ms),
     queueWaitMs: parseStageMs(value.queue_wait_ms),
+  }
+}
+
+function parseLogCaptureMergedBody(value: unknown): LogCaptureMergedBody {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的整合响应体格式无效', null)
+  }
+  return {
+    value: value.value,
+    content_type: value.content_type == null ? '' : readString(value.content_type, 'merged.content_type'),
+    raw: value.raw == null ? '' : readString(value.raw, 'merged.raw'),
+    merged: value.merged == null ? false : readBoolean(value.merged, 'merged.merged'),
   }
 }
 
@@ -1420,6 +1439,19 @@ export const dashboardApi = {
   async readLogCapturePair(requestId: string): Promise<LogCapturePairFull> {
     const body = await requestFull(`/logs/capture/pairs/${encodeURIComponent(requestId)}`)
     return parseLogCapturePairFull(body.data)
+  },
+
+  async readLogCaptureMergedResponse(
+    requestId: string,
+    opts: { stage?: 'before' | 'after'; index?: number } = {},
+  ): Promise<LogCaptureMergedBody> {
+    const qp = new URLSearchParams()
+    if (opts.stage) qp.set('stage', opts.stage)
+    if (opts.index != null) qp.set('index', String(opts.index))
+    const qs = qp.toString()
+    const path = `/logs/capture/pairs/${encodeURIComponent(requestId)}/merged-response${qs ? `?${qs}` : ''}`
+    const body = await requestFull(path)
+    return parseLogCaptureMergedBody(body.data)
   },
 
   async getLogStats(range: StatsRange): Promise<LogStats> {

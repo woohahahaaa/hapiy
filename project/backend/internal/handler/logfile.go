@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -139,6 +140,110 @@ func ReadLogFile(db *gorm.DB) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusOK, gin.H{"data": row})
 	}
+}
+
+// ReadLogCaptureMergedResponse returns the merged JSON for the response stage
+// of a captured pair. Query params: stage=before|after (default after), and
+// index=N for the Nth response node (0-based; default 0). For non-streaming
+// JSON bodies the merged value equals the parsed body; for SSE bodies the
+// chunks are reconstructed per provider (OpenAI Chat, OpenAI Responses,
+// Anthropic). Empty response bodies return null with status 200.
+func ReadLogCaptureMergedResponse(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rid := c.Param("request_id")
+		if rid == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing request_id"})
+			return
+		}
+		stageName := c.DefaultQuery("stage", "after")
+		var stage string
+		switch stageName {
+		case "before":
+			stage = "response_before"
+		case "after":
+			stage = "response_after"
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "stage must be 'before' or 'after'"})
+			return
+		}
+		responseIndex := parseInt(c.Query("index"), 0)
+		if responseIndex < 0 {
+			responseIndex = 0
+		}
+
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+		pair, err := writer.ReadPair(rid)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		if responseIndex >= len(pair.Responses) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "response index out of range"})
+			return
+		}
+		node := pair.Responses[responseIndex]
+		stageRow := node.After
+		if stage == "response_before" {
+			stageRow = node.Before
+		}
+		if stageRow == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "stage row not present"})
+			return
+		}
+
+		rawText, ok := extractRawText(stageRow.Body)
+		if !ok {
+			c.JSON(http.StatusOK, gin.H{"data": gin.H{"value": stageRow.Body, "content_type": "", "merged": false}})
+			return
+		}
+		contentType := extractContentType(stageRow.Headers)
+		merged, err := service.MergeLLMBody(rawText, contentType)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"value":        merged,
+			"content_type": contentType,
+			"raw":          rawText,
+			"merged":       true,
+		}})
+	}
+}
+
+// extractRawText pulls the raw text out of a stored body. The capture writer
+// wraps non-JSON string bodies as JSONMap{"raw": "<text>"}; bodies that are
+// already a map (i.e. parsed JSON) have no "raw" entry.
+func extractRawText(body model.JSONMap) (string, bool) {
+	if body == nil {
+		return "", false
+	}
+	v, ok := body["raw"]
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+// extractContentType looks up Content-Type case-insensitively in the stored
+// headers map and returns its value.
+func extractContentType(headers model.JSONMap) string {
+	if headers == nil {
+		return ""
+	}
+	for k, v := range headers {
+		if strings.EqualFold(k, "Content-Type") {
+			if s, ok := v.(string); ok {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // ClearLogFiles deletes captured log entries. Body (optional):

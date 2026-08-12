@@ -160,11 +160,6 @@ function StatsSection() {
     ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
     : '--'
 
-  const modelEntries = stats
-    ? [...stats.models].sort((a, b) => b.count - a.count)
-    : []
-  const maxModelCount = modelEntries.length > 0 ? modelEntries[0].count : 0
-
   return (
     <section className="mb-6">
       <div className="mb-4 flex items-center justify-between">
@@ -233,48 +228,6 @@ function StatsSection() {
               value={successRate}
             />
           </div>
-
-          {/* Per-model breakdown */}
-          {modelEntries.length > 0 && (
-            <div className="mt-6">
-              <h4 className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <AppIcon name="layers" className="text-muted-foreground" />
-                按模型
-              </h4>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                {modelEntries.map((m) => {
-                  const barPercent = maxModelCount > 0 ? (m.count / maxModelCount) * 100 : 0
-                  const sharePct = stats.totalRequests > 0 ? (m.count / stats.totalRequests) * 100 : 0
-                  return (
-                    <Card key={m.model} size="sm">
-                      <CardContent>
-                        <p className="truncate text-sm font-medium">{m.model}</p>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className="text-2xl font-bold tabular-nums">{m.count}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {sharePct.toFixed(1)}% · {formatTokens(m.tokens)} tok
-                          </span>
-                        </div>
-                        <div className="mt-2 h-1.5 w-full rounded-full bg-muted">
-                          <div
-                            className="h-full rounded-full bg-primary transition-all"
-                            style={{ width: `${barPercent}%` }}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Empty model state */}
-          {modelEntries.length === 0 && stats.totalRequests === 0 && (
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">暂无请求数据</p>
-            </div>
-          )}
         </>
       ) : null}
 
