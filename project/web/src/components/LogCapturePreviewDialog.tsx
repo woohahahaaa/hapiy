@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -149,6 +149,59 @@ function responseStageContentType(headers: Record<string, string> | null): strin
   return ''
 }
 
+// ── RawSseView splits raw SSE text into per-event blocks so chunks are
+// readable one by one instead of one escaped line. Each block shows its
+// event type and the data payload (JSON-parsed when possible). Falls back
+// to a plain <pre> when the text has no `data:` lines (not an SSE body).
+function RawSseView({ text }: { readonly text: string }) {
+  const blocks = useMemo(() => {
+    if (!/data:/.test(text)) return null
+    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    return normalized.split('\n\n').filter((b) => b.trim() !== '')
+  }, [text])
+
+  if (blocks === null) {
+    return (
+      <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+        {text}
+      </pre>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {blocks.map((block, i) => {
+        const lines = block.split('\n')
+        const eventLine = lines.find((l) => l.startsWith('event:'))
+        const data = lines
+          .filter((l) => l.startsWith('data:'))
+          .map((l) => l.slice(5).replace(/^ /, ''))
+          .join('\n')
+        const eventType = eventLine ? eventLine.slice(6).trim() : 'data'
+        const isDone = data === '[DONE]'
+        return (
+          <div key={i} className="overflow-hidden rounded-md border border-border bg-muted/20">
+            <div className="flex items-center gap-2 border-b border-border/60 bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground">
+              <span>#{i + 1}</span>
+              <span className="font-medium text-foreground/80">{eventType}</span>
+              <span className="ml-auto">{isDone ? '[DONE]' : `${data.length} B`}</span>
+            </div>
+            {isDone ? (
+              <div className="px-2 py-1 font-mono text-[10px] text-muted-foreground">[DONE]</div>
+            ) : data ? (
+              <div className="px-2 py-1.5">
+                <JsonHighlight value={data} className="border-0 bg-transparent p-0" />
+              </div>
+            ) : (
+              <div className="px-2 py-1 font-mono text-[10px] text-muted-foreground">（无 data）</div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── ResponseStageBody renders a stage row's body with a 原始内容 / 整合 JSON
 // toggle. Toggle is hidden when the stage has no "raw" text or its
 // content-type is not SSE.
@@ -180,9 +233,31 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
 
   // Eagerly fetch merged JSON on first render when the toggle is visible;
   // this matches the default 'merged' mode and avoids an extra click.
+  // setState only happens in async callbacks, never synchronously in the
+  // effect body (loading state is implied by merged === undefined).
   useEffect(() => {
-    if (canMerge && merged === undefined) loadMerged()
-  }, [canMerge, merged, loadMerged])
+    if (!canMerge || merged !== undefined) return
+    const stageNode = findResponseNodeForStageRow(stageRow)
+    if (!stageNode) return
+    let cancelled = false
+    dashboardApi
+      .readLogCaptureMergedResponse(stageNode.requestId, {
+        stage: stageNode.stage,
+        index: stageNode.index,
+      })
+      .then((result) => {
+        if (!cancelled) setMerged(result.value)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setMergeError(err instanceof Error ? err.message : '整合失败')
+      })
+      .finally(() => {
+        if (!cancelled) setMergeLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [canMerge, merged, stageRow])
 
   const switchTo = useCallback(
     (next: 'raw' | 'merged') => {
@@ -212,7 +287,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
             disabled={mergeLoading}
             onClick={() => switchTo('merged')}
           >
-            {mergeLoading ? '整合中…' : '整合 JSON'}
+            {mergeLoading ? '整合中…' : '整合JSON'}
           </Button>
           <Button
             size="sm"
@@ -235,6 +310,8 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
         ) : (
           <JsonHighlight value={merged} />
         )
+      ) : rawText !== null ? (
+        <RawSseView text={rawText} />
       ) : (
         <JsonHighlight value={stageRow.body} />
       )}
