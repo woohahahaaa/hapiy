@@ -251,12 +251,12 @@ export function TopologyVersionsModal({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent width="md" height="auto" className="grid-rows-[auto_minmax(0,1fr)]">
+      <DialogContent width="md" height="auto" className="grid-rows-[auto_minmax(0,1fr)] min-h-[640px]">
         <DialogHeader>
           <DialogTitle>历史版本</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 gap-4">
-          <div className="w-72 shrink-0 overflow-y-auto pr-2">
+          <div className="w-72 shrink-0 overflow-y-auto rounded-md border border-border/60 bg-muted p-2">
             {list === null && !listError && (
               <div className="flex items-center gap-2 p-4 text-muted-foreground">
                 <AppIcon name="progress_activity" size={16} className="animate-spin" />

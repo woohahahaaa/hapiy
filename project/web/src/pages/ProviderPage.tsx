@@ -321,6 +321,9 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
             ))}
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          不填写任何 endpoint 表示不限制请求路径；填写后只允许访问这些路径后缀，否则会被拒绝并记录到请求记录表
+        </p>
       </Field>
       <Field>
         <FieldLabel>模型</FieldLabel>

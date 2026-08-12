@@ -27,21 +27,21 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 
 // Provider model (upstream API provider)
 type Provider struct {
-	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Name      string    `gorm:"not null" json:"name"`
-	BaseURLs  string    `gorm:"type:text" json:"base_urls"` // JSON array
-	Keys      string    `gorm:"type:text" json:"keys"`      // JSON array
-	Endpoints string    `gorm:"type:text" json:"endpoints"` // JSON array
-	Models    string    `gorm:"type:text" json:"models"`    // JSON array
-	Status          bool `gorm:"default:true" json:"status"`
-	AutoDisabled    bool `gorm:"default:false" json:"auto_disabled"`
-	WorkflowEnabled bool `gorm:"default:true" json:"workflow_enabled"`
-	Weight          int  `gorm:"default:1" json:"weight"`
-	Priority  int       `gorm:"default:0" json:"priority"`
-	AutoBan   bool      `gorm:"default:true" json:"auto_ban"`
-	Group     string    `gorm:"default:''" json:"group"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Name            string    `gorm:"not null" json:"name"`
+	BaseURLs        string    `gorm:"type:text" json:"base_urls"` // JSON array
+	Keys            string    `gorm:"type:text" json:"keys"`      // JSON array
+	Endpoints       string    `gorm:"type:text" json:"endpoints"` // JSON array
+	Models          string    `gorm:"type:text" json:"models"` // JSON array
+	Status          bool      `gorm:"default:true" json:"status"`
+	AutoDisabled    bool      `gorm:"default:false" json:"auto_disabled"`
+	WorkflowEnabled bool      `gorm:"default:true" json:"workflow_enabled"`
+	Weight          int       `gorm:"default:1" json:"weight"`
+	Priority        int       `gorm:"default:0" json:"priority"`
+	AutoBan         bool      `gorm:"default:true" json:"auto_ban"`
+	Group           string    `gorm:"default:''" json:"group"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 func (p *Provider) BeforeCreate(tx *gorm.DB) error {

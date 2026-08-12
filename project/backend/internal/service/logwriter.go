@@ -1,9 +1,13 @@
 package service
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"sync"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
 )
@@ -90,4 +94,63 @@ func (w *LogWriter) Flush() {
 func (w *LogWriter) Stop() {
 	close(w.stopCh)
 	<-w.doneCh
+}
+
+// LogRelayFailureInput is the argument bag for LogRelayFailure. Every
+// caller — the relay handler, the token-auth middleware — passes the
+// fields it can produce and leaves the rest zero-valued.
+type LogRelayFailureInput struct {
+	UserID       string
+	TokenName    string
+	ProviderName string
+	ModelName    string
+	RequestID    string
+	IP           string
+	UseTimeMs    int
+	Error        error
+}
+
+// LogRelayFailure queues a single "failed" log row for batched insertion.
+// No-op when the log writer is not yet initialised or Error is nil —
+// callers can fire it unconditionally without guarding for boot order.
+// Used by both the relay handler and the token-auth middleware so every
+// rejected request shows up in the logs table.
+func LogRelayFailure(in LogRelayFailureInput) {
+	if globalLogWriter == nil || in.Error == nil {
+		return
+	}
+	globalLogWriter.Write(&model.Log{
+		UserID:       in.UserID,
+		TokenName:    in.TokenName,
+		ProviderName: in.ProviderName,
+		ModelName:    in.ModelName,
+		Status:       "failed",
+		IP:           in.IP,
+		RequestID:    in.RequestID,
+		ErrorMessage: in.Error.Error(),
+		UseTime:      in.UseTimeMs,
+	})
+}
+
+// ExtractModelFromRequestBody reads c.Request.Body to extract the JSON
+// "model" field, then replaces the body with a fresh reader so the
+// downstream handler can re-read the same bytes. Returns "" on any
+// error (no body, read failure, malformed JSON, missing model field) —
+// logging the failed request must never block the rejection path.
+func ExtractModelFromRequestBody(c *gin.Context) string {
+	if c == nil || c.Request == nil || c.Request.Body == nil {
+		return ""
+	}
+	bodyBytes, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return ""
+	}
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+	var probe struct {
+		Model string `json:"model"`
+	}
+	if err := json.Unmarshal(bodyBytes, &probe); err != nil {
+		return ""
+	}
+	return probe.Model
 }

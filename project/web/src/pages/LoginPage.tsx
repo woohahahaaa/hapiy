@@ -35,18 +35,12 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-6">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-sm space-y-6 rounded-lg border border-border bg-card p-8 shadow-sm"
-      >
+      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-10">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <AppIcon name="lock" size={20} />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold">hapiy 控制台</h1>
-            <p className="text-sm text-muted-foreground">登录以管理供应商、规则与价格配置</p>
-          </div>
+          <span className="font-hapiy-logo text-7xl leading-none tracking-tight text-foreground">
+            hapiy
+          </span>
+          <p className="text-xs text-muted-foreground">登录以管理供应商、规则与价格配置</p>
         </div>
 
         <FieldGroup>
@@ -58,6 +52,7 @@ export function LoginPage() {
               autoComplete="username"
               onChange={(e) => setUsername(e.target.value)}
               disabled={submitting}
+              className="rounded-none border-0 border-b border-border/60 bg-transparent px-0 text-sm shadow-none focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </Field>
           <Field>
@@ -69,6 +64,7 @@ export function LoginPage() {
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
+              className="rounded-none border-0 border-b border-border/60 bg-transparent px-0 text-sm shadow-none focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
             />
           </Field>
         </FieldGroup>
@@ -79,7 +75,12 @@ export function LoginPage() {
           </div>
         )}
 
-        <Button type="submit" className="w-full" disabled={submitting || !username.trim() || !password}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full shadow-none"
+          disabled={submitting || !username.trim() || !password}
+        >
           {submitting ? (
             <>
               <AppIcon name="progress_activity" size={16} className="animate-spin" /> 登录中…

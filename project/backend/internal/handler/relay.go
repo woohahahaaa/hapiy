@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/affinity"
@@ -31,14 +32,32 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Parse request body
 		bodyBytes, err := io.ReadAll(c.Request.Body)
 		if err != nil {
-			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(time.Since(startTime).Milliseconds()), 0)
+			useTime := int(time.Since(startTime).Milliseconds())
+			service.LogRelayFailure(service.LogRelayFailureInput{
+				TokenName: getString(tokenName),
+				UserID:    getString(userID),
+				RequestID: c.GetString("request_id"),
+				IP:        c.ClientIP(),
+				UseTimeMs: useTime,
+				Error:     err,
+			})
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 			return
 		}
 
 		var relayReq relay.RelayRequest
 		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
-			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(time.Since(startTime).Milliseconds()), 0)
+			useTime := int(time.Since(startTime).Milliseconds())
+			service.LogRelayFailure(service.LogRelayFailureInput{
+				TokenName: getString(tokenName),
+				UserID:    getString(userID),
+				RequestID: c.GetString("request_id"),
+				IP:        c.ClientIP(),
+				UseTimeMs: useTime,
+				Error:     err,
+			})
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
 			return
 		}
@@ -92,6 +111,44 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		provider := dispatchResult.Provider
 		relayReq.KeyIndex = dispatchResult.KeyIndex
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
+
+		// Endpoint whitelist: an empty endpoints array means unrestricted; a
+		// non-empty one requires an exact pathSuffix match. Malformed config is
+		// treated as empty rather than rejecting every request.
+		var allowed []string
+		if provider.Endpoints != "" {
+			var eps []struct {
+				Name       string `json:"name"`
+				PathSuffix string `json:"pathSuffix"`
+			}
+			if err := json.Unmarshal([]byte(provider.Endpoints), &eps); err == nil {
+				for _, e := range eps {
+					if s := strings.TrimSpace(e.PathSuffix); s != "" {
+						allowed = append(allowed, s)
+					}
+				}
+			}
+		}
+		if len(allowed) > 0 {
+			matched := false
+			for _, p := range allowed {
+				if relayReq.Path == p {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				err := fmt.Errorf("endpoint not allowed: %s (allowed: %s)", relayReq.Path, strings.Join(allowed, ", "))
+				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": gin.H{
+						"message": err.Error(),
+						"type":    "invalid_request_error",
+					},
+				})
+				return
+			}
+		}
 
 		// Get execution plan
 		plan := dispatchResult.Plan
