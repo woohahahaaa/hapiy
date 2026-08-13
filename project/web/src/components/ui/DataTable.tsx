@@ -553,7 +553,7 @@ export function DataTable<T extends Record<string, unknown>>({
       )}
 
       {/* Table */}
-      <div ref={tableRef} className="relative w-full overflow-x-auto rounded-md border border-border">
+      <div ref={tableRef} className="relative w-full overflow-x-hidden rounded-md border border-border">
         <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
           <thead data-slot="table-header" className="[&_tr]:border-b">
             <tr data-slot="table-row" className="border-b transition-colors">

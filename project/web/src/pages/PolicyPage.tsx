@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
+import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 
 import { Switch } from '@/components/ui/switch'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
@@ -332,9 +332,6 @@ function RewritePage() {
               <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />测试
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </div>
           }
         />
@@ -348,14 +345,6 @@ function RewritePage() {
           <RewriteForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
-
-      {jsonOpen && (
-        <JsonEditModal
-          data={rules}
-          onSave={handleJsonSave}
-          onClose={() => setJsonOpen(false)}
-        />
-      )}
 
 {testOpen && (
 <RewriteTestDialog
@@ -502,9 +491,6 @@ function HeartbeatPage() {
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </div>
           }
         />
@@ -517,15 +503,7 @@ function HeartbeatPage() {
           </DialogHeader>
           <HeartbeatForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
-      </Dialog>
-
-      {jsonOpen && (
-        <JsonEditModal
-          data={rules}
-          onSave={handleJsonSave}
-          onClose={() => setJsonOpen(false)}
-        />
-      )}
+</Dialog>
     </div>
   )
 }
@@ -655,9 +633,6 @@ function ConcurrencyPage() {
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </div>
           }
         />
@@ -670,15 +645,7 @@ function ConcurrencyPage() {
           </DialogHeader>
           <ConcurrencyForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
-      </Dialog>
-
-      {jsonOpen && (
-        <JsonEditModal
-          data={rules}
-          onSave={handleJsonSave}
-          onClose={() => setJsonOpen(false)}
-        />
-      )}
+</Dialog>
     </div>
   )
 }
@@ -825,9 +792,6 @@ function FailoverPage() {
                 <AppIcon name="add" data-icon="inline-start" />
                 添加规则
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </div>
           }
         />
@@ -840,15 +804,7 @@ function FailoverPage() {
           </DialogHeader>
           <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
-      </Dialog>
-
-      {jsonOpen && (
-        <JsonEditModal
-          data={rules}
-          onSave={handleJsonSave}
-          onClose={() => setJsonOpen(false)}
-        />
-      )}
+</Dialog>
     </div>
   )
 }
@@ -996,9 +952,6 @@ function RewriteResponsePage() {
               <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />测试
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </div>
           }
         />
@@ -1012,14 +965,6 @@ function RewriteResponsePage() {
           <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
         </DialogContent>
       </Dialog>
-
-      {jsonOpen && (
-        <JsonEditModal
-          data={rules}
-          onSave={handleJsonSave}
-          onClose={() => setJsonOpen(false)}
-        />
-      )}
 
       {testOpen && (
         <RewriteTestDialog

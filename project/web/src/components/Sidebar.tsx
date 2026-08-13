@@ -57,32 +57,18 @@ const navigation: NavItem[] = [
     ],
   },
   {
-    id: 'provider',
-    label: '供应商',
-    icon: <AppIcon name="dns" />,
-    href: '/provider',
-  },
-  {
-    id: 'token',
-    label: '令牌管理',
-    icon: <AppIcon name="key" />,
-    href: '/token',
-  },
-  {
-    id: 'channel-affinity',
-    label: '渠道亲和性',
-    icon: <AppIcon name="call_split" />,
-    href: '/channel-affinity',
-  },
-  {
-    id: 'price',
-    label: '模型信息',
-    icon: <AppIcon name="sell" />,
-    href: '/model',
+    id: 'llm-config',
+    label: 'LLM配置',
+    icon: <AppIcon name="layers" />,
+    children: [
+      { id: 'provider', label: '供应商', href: '/provider' },
+      { id: 'token', label: '令牌管理', href: '/token' },
+      { id: 'price', label: '模型信息', href: '/model' },
+    ],
   },
   {
     id: 'policy',
-    label: '策略配置',
+    label: '请求配置',
     icon: <AppIcon name="description" />,
     children: [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
@@ -91,6 +77,12 @@ const navigation: NavItem[] = [
       { id: 'concurrency', label: '并发控制', href: '/policy/concurrency' },
       { id: 'failover', label: '故障转移', href: '/policy/failover' },
     ],
+  },
+  {
+    id: 'channel-affinity',
+    label: '渠道亲和性',
+    icon: <AppIcon name="call_split" />,
+    href: '/channel-affinity',
   },
   {
     id: 'settings',
@@ -285,7 +277,7 @@ function CollapsedNavItem({
 
 const OPEN_SECTIONS_KEY = 'sidebar_open_sections'
 
-const DEFAULT_OPEN_SECTIONS = ['monitor', 'policy', 'settings']
+const DEFAULT_OPEN_SECTIONS = ['monitor', 'llm-config', 'policy', 'settings']
 
 function readOpenSections(): Set<string> {
   const fallback = () => new Set(DEFAULT_OPEN_SECTIONS)

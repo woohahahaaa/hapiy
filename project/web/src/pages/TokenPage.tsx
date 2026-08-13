@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
+import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -282,9 +282,6 @@ export function TokenPage() {
               >
                 <AppIcon name="add" data-icon="inline-start" />添加令牌
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </>
           }
         />
@@ -308,13 +305,6 @@ export function TokenPage() {
             />
           </DialogContent>
         </Dialog>
-        {jsonOpen && (
-          <JsonEditModal
-            data={tokens}
-            onSave={handleJsonSave}
-            onClose={() => setJsonOpen(false)}
-          />
-        )}
       </div>
     </div>
   )

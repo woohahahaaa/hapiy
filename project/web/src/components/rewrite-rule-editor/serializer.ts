@@ -16,6 +16,7 @@ export type Condition = {
   op: string
   value: string
   invert: boolean
+  scope: Scope
 }
 
 export type Action = {
@@ -49,7 +50,7 @@ export function emptyAction(): Action {
 }
 
 export function emptyCondition(): Condition {
-  return { path: '', op: 'contains', value: '', invert: false }
+  return { path: '', op: 'contains', value: '', invert: false, scope: 'all' }
 }
 
 // 计算下一个可用的 rule-N ID：扫一遍已有 blocks，找最大的 N，N+1 返回。
@@ -112,8 +113,9 @@ export function serializeRule(form: RuleForm): string {
 }
 
 function conditionToJson(c: Condition): JsonObject {
-  const o: JsonObject = { path: c.path.trim(), op: c.op.trim(), value: c.value }
+  const o: JsonObject = { path: withHeaderPrefix(c.path.trim(), c.scope), op: c.op.trim(), value: c.value }
   if (c.invert) o.invert = true
+  if (c.scope !== 'all') o.scope = c.scope
   return o
 }
 
@@ -218,11 +220,13 @@ function conditionsFromJson(raw: unknown): Condition[] {
     const op = typeof c.op === 'string' ? c.op : ''
     // 嵌套 AND/OR 节点只展示在「编辑 JSON」中，结构化编辑器扁平化跳过。
     if ('logic' in c || !op) continue
+    const scope = parseScope(c.scope)
     out.push({
-      path: typeof c.path === 'string' ? c.path : '',
+      path: stripHeaderPrefix(typeof c.path === 'string' ? c.path : '', scope),
       op,
       value: typeof c.value === 'string' ? c.value : '',
       invert: c.invert === true,
+      scope,
     })
   }
   return out

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
+import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { EmptyCell } from '@/components/ui/empty-cell'
 
@@ -274,9 +274,6 @@ export function PricePage() {
                 <AppIcon name="add" data-icon="inline-start" />
                 添加模型
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={mutating}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </>
           }
         />
@@ -289,14 +286,6 @@ export function PricePage() {
             <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
           </DialogContent>
         </Dialog>
-
-        {jsonOpen && state.kind === 'ready' && (
-          <JsonEditModal
-            data={state.prices}
-            onSave={handleJsonSave}
-            onClose={() => setJsonOpen(false)}
-          />
-        )}
       </div>
     </div>
   )

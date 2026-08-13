@@ -68,7 +68,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
           />
           <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <Checkbox
-              className="size-[18px] bg-background"
+              className="size-[18px] bg-background !opacity-100"
               checked={condition.invert}
               onCheckedChange={(v) => onChange({ ...condition, invert: v === true })}
               aria-label="反向"

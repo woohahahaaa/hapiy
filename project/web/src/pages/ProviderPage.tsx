@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
+import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/ui/checkbox'
@@ -194,9 +194,6 @@ export function ProviderPage() {
               <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />添加供应商
               </Button>
-              <Button variant="outline" onClick={() => setJsonOpen(true)} disabled={isSaving}>
-                <AppIcon name="code" data-icon="inline-start" />编辑 JSON
-              </Button>
             </>
           )}
         />
@@ -206,13 +203,6 @@ export function ProviderPage() {
             <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} />
           </DialogContent>
         </Dialog>
-        {jsonOpen && (
-          <JsonEditModal
-            data={providers}
-            onSave={handleJsonSave}
-            onClose={() => setJsonOpen(false)}
-          />
-        )}
       </div>
     </div>
   )
