@@ -330,35 +330,14 @@ function ActiveRequestsSection() {
 
   return (
     <section>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="flex items-center gap-2 text-sm font-medium">
-          <AppIcon name="bolt" className="text-muted-foreground" />
-          活跃请求
-          {requests.length > 0 && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-              {requests.length}
-            </span>
-          )}
-        </h3>
-        <div className="flex items-center gap-2">
-          {error && (
-            <span className="inline-flex items-center gap-1 text-xs text-destructive">
-              <AppIcon name="error" data-icon="inline-start" />
-              {error}
-            </span>
-          )}
-          {configError ? (
-            <span className="text-xs text-destructive" title={configError}>保留时间未知</span>
-          ) : config ? (
-            <span className="text-xs text-muted-foreground">{retentionLabel(config.retentionMinutes)}</span>
-          ) : (
-            <span className="text-xs text-muted-foreground">--</span>
-          )}
-          <Button variant="outline" size="sm" onClick={handleOpenDialog}>
-            <AppIcon name="settings" data-icon="inline-start" />
-            设置
-          </Button>
-        </div>
+      <div className="mb-4 flex items-center gap-2 text-sm font-medium">
+        <AppIcon name="bolt" className="text-muted-foreground" />
+        活跃请求
+        {requests.length > 0 && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            {requests.length}
+          </span>
+        )}
       </div>
 
       <DataTable
@@ -373,6 +352,27 @@ function ActiveRequestsSection() {
         onOffsetChange={() => {}}
         onRetry={fetchActive}
         showPagination={false}
+        actions={
+          <>
+            {error && (
+              <span className="inline-flex items-center gap-1 text-xs text-destructive">
+                <AppIcon name="error" data-icon="inline-start" />
+                {error}
+              </span>
+            )}
+            {configError ? (
+              <span className="text-xs text-destructive" title={configError}>保留时间未知</span>
+            ) : config ? (
+              <span className="text-xs text-muted-foreground">{retentionLabel(config.retentionMinutes)}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground">--</span>
+            )}
+            <Button variant="outline" size="sm" onClick={handleOpenDialog}>
+              <AppIcon name="settings" data-icon="inline-start" />
+              设置
+            </Button>
+          </>
+        }
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
