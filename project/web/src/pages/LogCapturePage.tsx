@@ -5,6 +5,7 @@ import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyCell } from '@/components/ui/empty-cell'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -231,7 +232,10 @@ export function LogCapturePage() {
       key: 'source',
       label: '标记',
       defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
+      render: (_, row) => {
+        const source = row.kind === 'pair' ? row.pair.source : row.file.source
+        return <EmptyCell value={source} />
+      },
     },
     {
       key: 'type',
@@ -253,16 +257,10 @@ export function LogCapturePage() {
       key: 'is_stream',
       label: '流式',
       defaultWidth: { kind: 'pixel', value: 80 },
-      render: (_, row) =>
-        row.kind === 'pair' ? (
-          row.pair.is_stream ? (
-            <Badge variant="secondary">SSE</Badge>
-          ) : (
-            <span className="text-muted-foreground">-</span>
-          )
-        ) : (
-          <span className="text-muted-foreground">-</span>
-        ),
+      render: (_, row) => {
+        const isStream = row.kind === 'pair' ? row.pair.is_stream : false
+        return isStream ? <Badge variant="secondary">SSE</Badge> : <EmptyCell value={null} />
+      },
     },
     {
       key: 'name',

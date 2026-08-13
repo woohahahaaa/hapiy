@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 
 import { Button } from '@/components/ui/button'
+import { EmptyCell } from '@/components/ui/empty-cell'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -151,7 +152,7 @@ export function LogsPage() {
       key: 'isStream',
       label: '流式',
       defaultWidth: { kind: 'percent', value: 5 },
-      render: (v) => (v ? 'SSE' : '-'),
+      render: (v) => (v ? 'SSE' : <EmptyCell value={null} />),
     },
     {
       key: 'quota',
@@ -160,7 +161,7 @@ export function LogsPage() {
       defaultAlign: 'right',
       render: (v) => {
         const q = v as number
-        return q > 0 ? `¥${q.toFixed(2)}` : '-'
+        return q > 0 ? `¥${q.toFixed(2)}` : <EmptyCell value={null} />
       },
     },
     {

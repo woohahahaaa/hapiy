@@ -235,7 +235,6 @@ function RewritePage() {
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
-  const [testRule, setTestRule] = useState<RewriteRule | null>(null)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -284,15 +283,12 @@ function RewritePage() {
     {
       key: 'id',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 180 },
+      defaultWidth: { kind: 'pixel', value: 140 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(row); setTestOpen(true); }}>
-            <AppIcon name="play" />
-          </Button>
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
@@ -903,7 +899,6 @@ function RewriteResponsePage() {
   const [isOpen, setIsOpen] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
-  const [testRule, setTestRule] = useState<ResponseRewriteRule | null>(null)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -952,15 +947,12 @@ function RewriteResponsePage() {
     {
       key: 'id',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 180 },
+      defaultWidth: { kind: 'pixel', value: 140 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setTestRule(row); setTestOpen(true); }}>
-            <AppIcon name="play" />
-          </Button>
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>

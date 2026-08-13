@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { JsonEditModal, parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
+import { EmptyCell } from '@/components/ui/empty-cell'
 
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import {
@@ -180,7 +181,7 @@ export function PricePage() {
       defaultAlign: 'right',
       render: (_, row) => (
         <span className="text-right tabular-nums text-muted-foreground">
-          {row.contextLength > 0 ? row.contextLength.toLocaleString() : '—'}
+          {row.contextLength > 0 ? row.contextLength.toLocaleString() : <EmptyCell value={null} />}
         </span>
       ),
     },
@@ -191,7 +192,16 @@ export function PricePage() {
       defaultAlign: 'right',
       render: (_, row) => (
         <span className="text-right tabular-nums text-muted-foreground">
-          {`${row.inputPrice.toFixed(2)} / ${row.outputPrice.toFixed(2)} / ${row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : '—'} / ${row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : '—'}`}
+          {[
+            row.inputPrice.toFixed(2),
+            row.outputPrice.toFixed(2),
+            row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : <EmptyCell key="w" value={null} />,
+            row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : <EmptyCell key="r" value={null} />,
+          ].reduce<ReactNode[]>((acc, part, i) => {
+            if (i > 0) acc.push(<span key={`s${i}`}> / </span>)
+            acc.push(<span key={i}>{part}</span>)
+            return acc
+          }, [])}
         </span>
       ),
     },

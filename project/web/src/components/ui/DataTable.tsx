@@ -3,6 +3,8 @@
 import type { ReactNode } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { DateTimeCell } from "@/components/ui/date-time-cell"
+import { EmptyCell } from "@/components/ui/empty-cell"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
@@ -67,27 +69,6 @@ const SAVE_DEBOUNCE_MS = 500
 const RESIZE_DEBOUNCE_MS = 100
 
 // ── Helpers ──
-
-function formatDateTime(iso: string): ReactNode {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const pad = (n: number) => String(n).padStart(2, "0")
-  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  return (
-    <span className="block leading-tight">
-      <span className="block whitespace-nowrap">{date}</span>
-      <span className="block whitespace-nowrap text-muted-foreground">{time}</span>
-    </span>
-  )
-}
-
-function renderValue(value: unknown): ReactNode {
-  if (value === null || value === undefined || value === "") {
-    return <span className="italic text-muted-foreground/50">(空)</span>
-  }
-  return String(value)
-}
 
 function formatWidth(w: ColumnWidthConfig): string {
   return w.kind === 'percent' ? `${w.value} %` : `${w.value} px`
@@ -642,11 +623,11 @@ export function DataTable<T extends Record<string, unknown>>({
                     const showEmpty = col.showEmptyPlaceholder !== false
                     const rendered = col.render ? col.render(raw, row) : undefined
                     const content = col.isTime
-                      ? formatDateTime((rendered ?? raw) as string)
+                      ? <DateTimeCell value={rendered ?? raw} />
                       : col.render
                         ? rendered
                         : showEmpty
-                          ? renderValue(raw)
+                          ? <EmptyCell value={raw} />
                           : String(raw ?? "")
                     const cfg = configs[idx] ?? defaultConfigForColumn(col as ColumnDef<unknown>)
                     const isEllipsis = cfg.overflow === 'ellipsis'

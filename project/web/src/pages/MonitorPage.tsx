@@ -3,6 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 
 import { Button } from '@/components/ui/button'
+import { EmptyCell } from '@/components/ui/empty-cell'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -66,7 +67,7 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 20 } },
   { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'pixel', value: 160 } },
   { key: 'userId', label: '用户', defaultWidth: { kind: 'pixel', value: 140 } },
-  { key: 'stream', label: '类型', defaultWidth: { kind: 'pixel', value: 80 }, render: (v) => (v ? 'SSE' : '--') },
+  { key: 'stream', label: '类型', defaultWidth: { kind: 'pixel', value: 80 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
   {
     key: 'elapsedMs',
     label: '耗时',
