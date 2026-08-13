@@ -1,0 +1,91 @@
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { AppIcon } from '@/components/AppIcon'
+import { COND_OPS, SCOPE_OPTIONS } from './modes'
+import type { Condition } from './serializer'
+
+interface ConditionRowProps {
+  index: number
+  condition: Condition
+  onChange: (next: Condition) => void
+  onRemove: () => void
+  canRemove: boolean
+}
+
+// 第二排字段左对齐 scope 触发器（pl-[24px]：index w-4 + gap-2）。
+const FIELDS_LEFT_OFFSET = 'pl-[24px]'
+
+export function ConditionRow({ index, condition, onChange, onRemove, canRemove }: ConditionRowProps) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">{index + 1}</span>
+          <Select
+            value={condition.scope}
+            onValueChange={(v) => onChange({ ...condition, scope: v as typeof condition.scope })}
+          >
+            <SelectTrigger className="h-7 w-[112px] shrink-0" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {SCOPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Input
+            className="h-7 min-w-0 flex-1 font-mono text-xs"
+            value={condition.path}
+            onChange={(e) => onChange({ ...condition, path: e.target.value })}
+            placeholder="gjson 路径"
+          />
+        </div>
+        <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
+          <Select
+            value={condition.op}
+            onValueChange={(v) => onChange({ ...condition, op: v })}
+          >
+            <SelectTrigger className="h-7 w-[112px] shrink-0" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {COND_OPS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Input
+            className="h-7 min-w-0 flex-1 font-mono text-xs"
+            value={condition.value}
+            onChange={(e) => onChange({ ...condition, value: e.target.value })}
+            placeholder="value"
+          />
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <Checkbox
+              className="size-[18px] bg-background"
+              checked={condition.invert}
+              onCheckedChange={(v) => onChange({ ...condition, invert: v === true })}
+              aria-label="反向"
+            />
+            反向
+          </label>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={!canRemove}
+        className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+        aria-label={`删除条件 ${index + 1}`}
+      >
+        <AppIcon name="close" size={14} />
+      </button>
+    </div>
+  )
+}

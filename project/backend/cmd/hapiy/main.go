@@ -2,7 +2,10 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -214,6 +217,10 @@ func main() {
 		}
 	}
 
+	// Production mode: serve the built frontend from the same Go origin so
+	// the API is same-origin (no dev proxy needed).
+	registerFrontend(r, cfg.WebDistDir)
+
 	// Start server
 	addr := cfg.Host + ":" + cfg.Port
 	log.Printf("Server starting on %s", addr)
@@ -221,4 +228,40 @@ func main() {
 		log.Fatalf("Failed to start server: %v", err)
 		os.Exit(1)
 	}
+}
+
+// registerFrontend serves the built frontend (SPA) from distDir when it is
+// non-empty: static assets under /assets, an SPA fallback to index.html for
+// client-side routes, and 404 for unknown API paths.
+func registerFrontend(r *gin.Engine, distDir string) {
+	if distDir == "" {
+		return
+	}
+	info, err := os.Stat(distDir)
+	if err != nil || !info.IsDir() {
+		log.Printf("Warning: frontend dist dir %q not found; serving API only", distDir)
+		return
+	}
+	fileServer := http.FileServer(http.Dir(distDir))
+	r.NoRoute(func(c *gin.Context) {
+		p := path.Clean(c.Request.URL.Path)
+		if p == "." {
+			p = "/"
+		}
+		if p == "/" || strings.HasPrefix(p, "/assets/") {
+			fileServer.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+		if strings.HasPrefix(p, "/health") ||
+			strings.HasPrefix(p, "/metrics") ||
+			strings.HasPrefix(p, "/v1") ||
+			strings.HasPrefix(p, "/proxy") {
+			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+		req := c.Request.Clone(c.Request.Context())
+		req.URL.Path = "/"
+		fileServer.ServeHTTP(c.Writer, req)
+	})
+	log.Printf("Serving frontend from %s (production mode)", distDir)
 }

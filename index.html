@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>改写规则编辑器原型</title>
+<style>
+  :root {
+    --bg: #f7f7f8;
+    --panel: #ffffff;
+    --border: #e4e4e7;
+    --border-strong: #d4d4d8;
+    --text: #18181b;
+    --muted: #71717a;
+    --primary: #2563eb;
+    --primary-soft: #dbeafe;
+    --danger: #dc2626;
+    --danger-soft: #fee2e2;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 24px 24px 80px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
+  h3 { font-size: 13px; margin: 0 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 24px; }
+
+  .decision-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .decision-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .decision-title { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+  .decision-options { display: flex; flex-direction: column; gap: 6px; }
+  .decision-options label {
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .decision-options label:hover { border-color: var(--border-strong); }
+  .decision-options label.active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+  }
+  .decision-options input { margin-top: 2px; }
+  .decision-options .opt-title { font-weight: 500; }
+  .decision-options .opt-desc { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  /* Editor */
+  .editor {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+  .input, .select {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+    color: inherit;
+  }
+  .input:focus, .select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+  }
+
+  /* Block */
+  .block {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    background: #fafafa;
+  }
+  .block-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: #fff;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .block-idx {
+    width: 22px; height: 22px;
+    background: var(--muted); color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+  }
+  .block-title { font-weight: 500; flex: 1; font-size: 13px; }
+  .icon-btn {
+    border: none; background: transparent;
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .icon-btn:hover { background: var(--danger-soft); color: var(--danger); }
+  .block-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+
+  .section-label {
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 6px; font-weight: 600;
+  }
+  .row-list { display: flex; flex-direction: column; gap: 6px; }
+  .row-list.empty::before {
+    content: attr(data-empty);
+    display: block; text-align: center;
+    padding: 8px;
+    color: var(--muted); font-size: 12px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .row .input, .row .select { padding: 4px 8px; font-size: 13px; }
+  .row .input.num { width: 80px; }
+  .row-fields {
+    display: contents;
+  }
+  .row-fields .input { min-width: 0; }
+  .add-btn {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: var(--muted);
+    font: inherit; font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.12s;
+  }
+  .add-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--primary-soft);
+  }
+
+  /* Actions */
+  .editor-footer { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+  .btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #fff;
+    cursor: pointer;
+    font: inherit;
+  }
+  .btn:hover { border-color: var(--border-strong); }
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
+  .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
+  .global-precond {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+  .global-precond .section-label { color: var(--warn); }
+
+  /* Scope inline (option A: text prefix) */
+  .path-wrap { display: flex; gap: 4px; align-items: center; }
+  .path-prefix {
+    background: var(--primary-soft);
+    color: var(--primary);
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .path-prefix.active { background: var(--primary); color: #fff; }
+
+  /* Output JSON */
+  .output {
+    margin-top: 24px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    max-height: 360px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--border);
+    color: var(--muted);
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<h1>改写规则编辑器原型</h1>
+<p class="sub">两个待定设计选择用顶部卡片决定，下面的编辑器实时反映。底部「保存」输出最终 JSON。</p>
+
+<!-- Design decisions -->
+<div class="decision-grid">
+  <div class="decision-card">
+    <div class="decision-title">Q1 · 条件组织方式</div>
+    <div class="decision-options" id="q1">
+      <label class="active" data-value="per-block">
+        <input type="radio" name="q1" value="per-block" checked />
+        <div>
+          <div class="opt-title">每个块自带条件 <span class="badge">当前默认</span></div>
+          <div class="opt-desc">跨块无条件，靠「加多个块」表达「A 或 B」</div>
+        </div>
+      </label>
+      <label data-value="global-plus-per-block">
+        <input type="radio" name="q1" value="global-plus-per-block" />
+        <div>
+          <div class="opt-title">全局前置条件 + 块带条件</div>
+          <div class="opt-desc">在所有块上方多一条全局条件，全局不满足则整条规则跳过</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="decision-title">Q2 · header 路径输入方式</div>
+    <div class="decision-options" id="q2">
+      <label class="active" data-value="prefix">
+        <input type="radio" name="q2" value="prefix" checked />
+        <div>
+          <div class="opt-title">手敲 <code>header.</code> 前缀 + helper 提示 <span class="badge">当前默认</span></div>
+          <div class="opt-desc">路径输入框旁一个可切换的「header.」小标签，点一下插入/移除</div>
+        </div>
+      </label>
+      <label data-value="toggle">
+        <input type="radio" name="q2" value="toggle" />
+        <div>
+          <div class="opt-title">单独的 scope toggle</div>
+          <div class="opt-desc">条件/执行旁边一个独立的「header / body」开关，path 字段不带前缀</div>
+        </div>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- Editor -->
+<div class="editor" id="editor">
+  <div class="field">
+    <label>规则名称</label>
+    <input class="input" id="ruleName" value="请求改写示例" />
+  </div>
+
+  <div id="globalPrecondSlot"></div>
+
+  <div id="blocks"></div>
+
+  <button class="add-btn" id="addBlock" style="margin-top: 4px;">+ 块</button>
+
+  <div class="editor-footer">
+    <button class="btn" id="resetBtn">重置</button>
+    <button class="btn btn-primary" id="saveBtn">保存并查看 JSON</button>
+  </div>
+</div>
+
+<div class="output" id="output">点击「保存并查看 JSON」查看输出</div>
+
+</div>
+
+<script>
+// ───────── Modes / conditions metadata ─────────
+const MODES = [
+  { value: 'set', needs: ['value'] },
+  { value: 'delete', needs: [] },
+  { value: 'append', needs: ['value'] },
+  { value: 'prepend', needs: ['value'] },
+  { value: 'first_prepend', needs: ['value'] },
+  { value: 'last_append', needs: ['value'] },
+  { value: 'trim_prefix', needs: ['value'] },
+  { value: 'trim_suffix', needs: ['value'] },
+  { value: 'ensure_prefix', needs: ['value'] },
+  { value: 'ensure_suffix', needs: ['value'] },
+  { value: 'trim_space', needs: [] },
+  { value: 'to_lower', needs: [] },
+  { value: 'to_upper', needs: [] },
+  { value: 'replace', needs: ['from', 'to'] },
+  { value: 'regex_replace', needs: ['from', 'to'] },
+  { value: 'move', needs: ['dst'] },
+  { value: 'copy', needs: ['dst'] },
+];
+
+const COND_OPS = ['contains', 'prefix', 'suffix', 'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'matches'];
+
+// ───────── State ─────────
+const state = {
+  decisions: { q1: 'per-block', q2: 'prefix' },
+  globalPrecond: [],
+  blocks: [],
+};
+
+function newId() { return Math.random().toString(36).slice(2, 9); }
+
+function emptyAction() {
+  return { id: newId(), mode: 'set', path: '', value: '', from: '', to: '', dst: '', scope: '' };
+}
+function emptyCondition() {
+  return { id: newId(), path: '', op: 'contains', value: '', invert: false };
+}
+function emptyBlock() {
+  return { id: newId(), conditions: [], actions: [emptyAction()] };
+}
+
+// ───────── Render ─────────
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (k === 'data') Object.assign(e.dataset, v);
+    else if (v !== false && v !== null && v !== undefined) e.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) {
+    if (c == null || c === false) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+function renderGlobalPrecond() {
+  const slot = $('#globalPrecondSlot');
+  slot.innerHTML = '';
+  if (state.decisions.q1 !== 'global-plus-per-block') return;
+  const wrap = el('div', { class: 'global-precond' }, [
+    el('div', { class: 'section-label' }, '全局前置条件（全部满足才执行）'),
+    renderCondList(state.globalPrecond, (idx) => { state.globalPrecond.splice(idx, 1); render(); }),
+    el('button', { class: 'add-btn', onClick: () => { state.globalPrecond.push(emptyCondition()); render(); } }, '+ 条件'),
+  ]);
+  slot.appendChild(wrap);
+}
+
+function renderCondList(conds, onDelete) {
+  const list = el('div', { class: 'row-list' + (conds.length === 0 ? ' empty' : ''), 'data-empty': '暂无条件' });
+  conds.forEach((c, idx) => list.appendChild(renderCondRow(c, idx, onDelete)));
+  return list;
+}
+
+function renderCondRow(c, idx, onDelete) {
+  const row = el('div', { class: 'row' });
+  // path + optional header. prefix chip
+  const pathWrap = el('div', { class: 'path-wrap', style: 'grid-column: span 1;' });
+  if (state.decisions.q2 === 'prefix') {
+    const isHeader = c.path.startsWith('header.');
+    const chip = el('span', { class: 'path-prefix' + (isHeader ? ' active' : ''), title: '点击切换 header. 前缀' }, 'header.');
+    chip.onclick = () => {
+      c.path = isHeader ? c.path.replace(/^header\./, '') : 'header.' + c.path;
+      render();
+    };
+    pathWrap.appendChild(chip);
+  }
+  const pathInput = el('input', {
+    class: 'input', placeholder: 'path 例如 model / messages.0.content',
+    value: c.path,
+    onInput: (e) => { c.path = e.target.value; },
+  });
+  pathWrap.appendChild(pathInput);
+  row.appendChild(pathWrap);
+
+  // op dropdown
+  const opSelect = el('select', { class: 'select', onChange: (e) => { c.op = e.target.value; } });
+  COND_OPS.forEach((op) => opSelect.appendChild(el('option', { value: op, selected: c.op === op ? '' : false }, op)));
+  row.appendChild(opSelect);
+
+  // value
+  row.appendChild(el('input', {
+    class: 'input', placeholder: 'value',
+    value: c.value, onInput: (e) => { c.value = e.target.value; },
+  }));
+
+  // invert checkbox
+  const invertLabel = el('label', { style: 'display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted);' });
+  const invertBox = el('input', { type: 'checkbox', checked: c.invert ? '' : false, onChange: (e) => { c.invert = e.target.checked; } });
+  invertLabel.appendChild(invertBox);
+  invertLabel.appendChild(document.createTextNode('取反'));
+  row.appendChild(invertLabel);
+
+  // delete
+  const delBtn = el('button', { class: 'icon-btn', title: '删除条件', onClick: () => { onDelete(idx); } }, '×');
+  row.appendChild(delBtn);
+
+  return row;
+}
+
+function renderActionRow(a, idx, onDelete) {
+  const row = el('div', { class: 'row' });
+
+  // mode dropdown
+  const modeSelect = el('select', { class: 'select', onChange: (e) => { a.mode = e.target.value; render(); } });
+  MODES.forEach((m) => modeSelect.appendChild(el('option', { value: m.value, selected: a.mode === m.value ? '' : false }, m.value)));
+  row.appendChild(modeSelect);
+
+  // path + optional header. prefix chip
+  const pathWrap = el('div', { class: 'path-wrap' });
+  if (state.decisions.q2 === 'prefix') {
+    const isHeader = a.path.startsWith('header.');
+    const chip = el('span', { class: 'path-prefix' + (isHeader ? ' active' : ''), title: '点击切换 header. 前缀' }, 'header.');
+    chip.onclick = () => {
+      a.path = isHeader ? a.path.replace(/^header\./, '') : 'header.' + a.path;
+      render();
+    };
+    pathWrap.appendChild(chip);
+  } else {
+    // toggle scope
+    const scopeSelect = el('select', { class: 'select', style: 'width:auto;', onChange: (e) => { a.scope = e.target.value; } });
+    [['all', 'all'], ['header', 'header'], ['body', 'body']].forEach(([v, label]) => {
+      scopeSelect.appendChild(el('option', { value: v, selected: a.scope === v ? '' : false }, label));
+    });
+    pathWrap.appendChild(scopeSelect);
+  }
+  const pathInput = el('input', {
+    class: 'input', placeholder: 'path',
+    value: a.path,
+    onInput: (e) => { a.path = e.target.value; },
+  });
+  pathWrap.appendChild(pathInput);
+  row.appendChild(pathWrap);
+
+  // mode-specific fields
+  const modeSpec = MODES.find((m) => m.value === a.mode) || { needs: [] };
+  if (modeSpec.needs.includes('value')) {
+    row.appendChild(el('input', { class: 'input', placeholder: 'value', value: a.value, onInput: (e) => { a.value = e.target.value; } }));
+  } else if (modeSpec.needs.includes('from')) {
+    row.appendChild(el('input', { class: 'input', placeholder: 'from', value: a.from, onInput: (e) => { a.from = e.target.value; } }));
+  } else if (modeSpec.needs.includes('to')) {
+    row.appendChild(el('input', { class: 'input', placeholder: 'to', value: a.to, onInput: (e) => { a.to = e.target.value; } }));
+  } else if (modeSpec.needs.includes('dst')) {
+    row.appendChild(el('input', { class: 'input', placeholder: 'dst 目标路径', value: a.dst, onInput: (e) => { a.dst = e.target.value; } }));
+  } else {
+    row.appendChild(el('span', { style: 'color:var(--muted); font-size:12px;' }, '— 无需额外字段 —'));
+  }
+
+  // delete
+  row.appendChild(el('button', { class: 'icon-btn', title: '删除执行', onClick: () => { onDelete(idx); } }, '×'));
+
+  return row;
+}
+
+function renderActionList(actions, onDelete) {
+  const list = el('div', { class: 'row-list' + (actions.length === 0 ? ' empty' : ''), 'data-empty': '暂无执行' });
+  actions.forEach((a, idx) => list.appendChild(renderActionRow(a, idx, onDelete)));
+  return list;
+}
+
+function renderBlocks() {
+  const root = $('#blocks');
+  root.innerHTML = '';
+  state.blocks.forEach((b, bi) => {
+    const card = el('div', { class: 'block' });
+    const header = el('div', { class: 'block-header' }, [
+      el('div', { class: 'block-idx' }, String(bi + 1)),
+      el('div', { class: 'block-title' }, `块 ${bi + 1}`),
+      el('button', { class: 'icon-btn', title: '删除块', onClick: () => { state.blocks.splice(bi, 1); render(); } }, '×'),
+    ]);
+    card.appendChild(header);
+
+    const body = el('div', { class: 'block-body' });
+
+    // conditions
+    body.appendChild(el('div', { class: 'section-label' }, '条件（AND，全部满足才执行下面的执行）'));
+    body.appendChild(renderCondList(b.conditions, (idx) => { b.conditions.splice(idx, 1); render(); }));
+    body.appendChild(el('button', {
+      class: 'add-btn',
+      onClick: () => { b.conditions.push(emptyCondition()); render(); },
+    }, '+ 条件'));
+
+    // actions
+    body.appendChild(el('div', { class: 'section-label', style: 'margin-top:6px;' }, '执行（按顺序串行）'));
+    body.appendChild(renderActionList(b.actions, (idx) => { b.actions.splice(idx, 1); render(); }));
+    body.appendChild(el('button', {
+      class: 'add-btn',
+      onClick: () => { b.actions.push(emptyAction()); render(); },
+    }, '+ 执行'));
+
+    card.appendChild(body);
+    root.appendChild(card);
+  });
+}
+
+// ───────── Serializer ─────────
+function serialize() {
+  const out = [];
+  // global preconditions become a no-op-equivalent: prepend a "set" on a dummy? No — backend supports conditions on each op, not a global guard.
+  // For the prototype, we represent global preconditions as conditions attached to every action in every block.
+  // To keep wire format compatible, just emit them as a separate field under "global_conditions" and rely on backend to AND them.
+  for (const b of state.blocks) {
+    const conds = [];
+    if (state.decisions.q1 === 'global-plus-per-block' && state.globalPrecond.length) {
+      for (const c of state.globalPrecond) conds.push(serializeCond(c));
+    }
+    for (const c of b.conditions) conds.push(serializeCond(c));
+    for (const a of b.actions) {
+      const op = { mode: a.mode, path: a.path };
+      const spec = MODES.find((m) => m.value === a.mode);
+      for (const f of spec.needs) op[f] = a[f] || '';
+      if (conds.length) op.conditions = conds;
+      if (state.decisions.q2 === 'toggle' && a.scope) op.scope = a.scope;
+      out.push(op);
+    }
+  }
+  return out;
+}
+function serializeCond(c) {
+  const o = { path: c.path, op: c.op, value: c.value };
+  if (c.invert) o.invert = true;
+  return o;
+}
+
+// ───────── Wiring ─────────
+function render() {
+  renderGlobalPrecond();
+  renderBlocks();
+}
+
+function bindDecisions() {
+  $$('#q1 label').forEach((label) => {
+    label.addEventListener('click', () => {
+      $$('#q1 label').forEach((l) => l.classList.remove('active'));
+      label.classList.add('active');
+      state.decisions.q1 = label.dataset.value;
+      render();
+    });
+  });
+  $$('#q2 label').forEach((label) => {
+    label.addEventListener('click', () => {
+      $$('#q2 label').forEach((l) => l.classList.remove('active'));
+      label.classList.add('active');
+      state.decisions.q2 = label.dataset.value;
+      render();
+    });
+  });
+}
+
+function bindActions() {
+  $('#addBlock').addEventListener('click', () => {
+    state.blocks.push(emptyBlock());
+    render();
+  });
+  $('#saveBtn').addEventListener('click', () => {
+    const out = serialize();
+    $('#output').textContent = JSON.stringify(out, null, 2);
+  });
+  $('#resetBtn').addEventListener('click', () => {
+    state.globalPrecond = [];
+    state.blocks = [emptyBlock()];
+    render();
+  });
+}
+
+// ───────── Boot ─────────
+function boot() {
+  bindDecisions();
+  bindActions();
+  state.blocks = [emptyBlock()];
+  // seed with a meaningful sample block
+  const sampleBlock = emptyBlock();
+  sampleBlock.actions[0] = { id: newId(), mode: 'set', path: 'model', value: 'gpt-4', from: '', to: '', dst: '', scope: '' };
+  state.blocks = [sampleBlock];
+  if (state.decisions.q1 === 'global-plus-per-block') {
+    state.globalPrecond = [emptyCondition()];
+  }
+  render();
+}
+
+boot();
+</script>
+</body>
+</html>

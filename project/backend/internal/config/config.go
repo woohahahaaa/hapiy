@@ -11,6 +11,10 @@ type Config struct {
 	DatabasePath string
 	JWTSecret    string
 	LogDir       string
+	// WebDistDir is the directory containing the built frontend (index.html +
+	// assets). Empty means the backend serves API-only (dev mode). When set,
+	// the backend also serves static files with SPA fallback.
+	WebDistDir string
 }
 
 func Load() *Config {
@@ -21,6 +25,7 @@ func Load() *Config {
 		DatabasePath: getEnv("HAPIY_DB_PATH", "./hapiy.db"),
 		JWTSecret:    getEnv("HAPIY_JWT_SECRET", "change-me-in-production"),
 		LogDir:       getEnv("HAPIY_LOG_DIR", "./logs"),
+		WebDistDir:   getEnv("HAPIY_WEB_DIST", ""),
 	}
 }
 

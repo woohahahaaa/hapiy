@@ -1,14 +1,17 @@
 #!/usr/bin/env sh
-# scripts/backend.sh — Build (if needed) + start the Go backend as a detached
-# background process, and provide --status / --stop subcommands.
+# scripts/backend-prod.sh — Build + start the Go backend in PRODUCTION mode.
+#
+# Production mode differences vs scripts/backend.sh:
+#   - forces a rebuild so the binary always matches current source
+#   - sets HAPIY_ENV=production (Gin release mode)
+#   - serves the built frontend (web/dist) from the same origin
 #
 # Usage:
-#   ./scripts/backend.sh            # build (if needed) + start detached
-#   ./scripts/backend.sh --status   # show pid / port / log
-#   ./scripts/backend.sh --stop     # stop the running backend
+#   ./scripts/backend-prod.sh          # build + start detached
+#   ./scripts/backend-prod.sh --status # show pid / port / log
+#   ./scripts/backend-prod.sh --stop   # stop the running backend
 #
-# Designed for use outside an interactive agent session so the binary keeps
-# running after the session ends.
+# The frontend must already be built (pnpm build) — see ../.. of start.sh.
 
 set -eu
 
@@ -16,10 +19,11 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
 PORT="${PORT:-8080}"
-LOG_FILE="${LOG_FILE:-/tmp/hapiy-backend.log}"
-PID_FILE="${PID_FILE:-/tmp/hapiy-backend.pid}"
+LOG_FILE="${LOG_FILE:-/tmp/hapiy-backend-prod.log}"
+PID_FILE="${PID_FILE:-/tmp/hapiy-backend-prod.pid}"
 BINARY="${BINARY:-./hapiy}"
 HOST="${HOST:-0.0.0.0}"
+WEB_DIST="${WEB_DIST:-$ROOT_DIR/../web/dist}"
 
 is_listening() {
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1
@@ -30,20 +34,20 @@ read_pid() {
 }
 
 show_status() {
-  echo "[backend] log:    $LOG_FILE"
-  echo "[backend] pidfile: $PID_FILE"
+  echo "[backend-prod] log:    $LOG_FILE"
+  echo "[backend-prod] pidfile: $PID_FILE"
   if pid=$(read_pid) && [ -n "$pid" ]; then
     if kill -0 "$pid" 2>/dev/null; then
-      echo "[backend] pid:    $pid (running)"
+      echo "[backend-prod] pid:    $pid (running)"
     else
-      echo "[backend] pid:    $pid (stale, removing)"
+      echo "[backend-prod] pid:    $pid (stale, removing)"
       rm -f "$PID_FILE"
     fi
   fi
   if is_listening; then
-    echo "[backend] port:   $PORT (listening)"
+    echo "[backend-prod] port:   $PORT (listening)"
   else
-    echo "[backend] port:   $PORT (no listener)"
+    echo "[backend-prod] port:   $PORT (no listener)"
   fi
   if [ -f "$LOG_FILE" ]; then
     echo "---- last log lines ----"
@@ -59,32 +63,30 @@ stop_server() {
       if kill -0 "$pid" 2>/dev/null; then
         kill -9 "$pid" 2>/dev/null || true
       fi
-      echo "[backend] stopped pid $pid"
+      echo "[backend-prod] stopped pid $pid"
     fi
     rm -f "$PID_FILE"
   fi
   if is_listening; then
-    echo "[backend] listener still present on $PORT; another process may hold it." >&2
+    echo "[backend-prod] listener still present on $PORT; another process may hold it." >&2
   fi
 }
 
-build_if_needed() {
-  if [ ! -x "$BINARY" ] || [ -n "${FORCE_REBUILD:-}" ]; then
-    echo "[backend] building $(basename "$BINARY")..."
-    go build -o "$BINARY" ./cmd/hapiy
-  fi
+build() {
+  echo "[backend-prod] building $(basename "$BINARY")..."
+  go build -o "$BINARY" ./cmd/hapiy
 }
 
 # kill_occupant: ask the user whether to kill whoever holds $PORT; abort if no.
 kill_occupant() {
-  echo "[backend] port $PORT is ALREADY IN USE."
-  echo "[backend] Occupied by:"
+  echo "[backend-prod] port $PORT is ALREADY IN USE."
+  echo "[backend-prod] Occupied by:"
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
-  printf "[backend] Kill it and start a fresh backend? [y/N] "
+  printf "[backend-prod] Kill it and start a fresh instance? [y/N] "
   read answer || true
   case "$answer" in
     y|Y|yes|YES)
-      echo "[backend] killing old process..."
+      echo "[backend-prod] killing old process..."
       lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | while read -r p; do
         kill "$p" 2>/dev/null || true
       done
@@ -96,7 +98,7 @@ kill_occupant() {
       rm -f "$PID_FILE"
       ;;
     *)
-      echo "[backend] abort; not starting."
+      echo "[backend-prod] abort; not starting."
       exit 1
       ;;
   esac
@@ -115,13 +117,17 @@ case "${1:-start}" in
     if is_listening; then
       kill_occupant || exit 1
     fi
-    build_if_needed
+    build
     : > "$LOG_FILE"
-    HAPIY_HOST="$HOST" nohup "$BINARY" >>"$LOG_FILE" 2>&1 </dev/null &
+    HAPIY_ENV=production \
+    HAPIY_HOST="$HOST" \
+    HAPIY_PORT="$PORT" \
+    HAPIY_WEB_DIST="$WEB_DIST" \
+      nohup "$BINARY" >>"$LOG_FILE" 2>&1 </dev/null &
     echo $! > "$PID_FILE"
     disown || true
     sleep 2
-    echo "[backend] launched; log: $LOG_FILE, pid: $(cat "$PID_FILE")"
+    echo "[backend-prod] launched (prod, dist=$WEB_DIST); log: $LOG_FILE, pid: $(cat "$PID_FILE")"
     show_status
     ;;
   *)

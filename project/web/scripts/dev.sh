@@ -65,6 +65,33 @@ stop_server() {
   fi
 }
 
+# kill_occupant: ask the user whether to kill whoever holds $PORT; abort if no.
+kill_occupant() {
+  echo "[dev] port $PORT is ALREADY IN USE."
+  echo "[dev] Occupied by:"
+  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
+  printf "[dev] Kill it and start a fresh dev server? [y/N] "
+  read answer || true
+  case "$answer" in
+    y|Y|yes|YES)
+      echo "[dev] killing old process..."
+      lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | while read -r p; do
+        kill "$p" 2>/dev/null || true
+      done
+      sleep 1
+      running=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null || true)
+      for p in $running; do
+        kill -9 "$p" 2>/dev/null || true
+      done
+      rm -f "$PID_FILE"
+      ;;
+    *)
+      echo "[dev] abort; not starting."
+      exit 1
+      ;;
+  esac
+}
+
 case "${1:-start}" in
   --status|status)
     show_status
@@ -76,9 +103,7 @@ case "${1:-start}" in
     ;;
   start|"")
     if is_listening; then
-      echo "[dev] port $PORT already in use; nothing to do."
-      show_status
-      exit 0
+      kill_occupant || exit 1
     fi
     if [ ! -d node_modules ]; then
       echo "[dev] installing dependencies..."
