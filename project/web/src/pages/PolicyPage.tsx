@@ -302,11 +302,12 @@ function RewritePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="请求改写" status={`${total} 条规则`} />
+      <PageHeader
+        title="请求改写"
+        description="使用 JSON 操作数组修改请求体字段"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          使用 JSON 操作数组修改请求体字段
-        </div>
         <DataTable
           id="policy-rewrite"
           columns={columns}
@@ -473,11 +474,12 @@ function HeartbeatPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="心跳回复" status={`${total} 条规则`} />
+      <PageHeader
+        title="心跳回复"
+        description="上游无输出超时时自动插入自定义消息"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          上游无输出超时时自动插入自定义消息
-        </div>
         <DataTable
           id="policy-heartbeat"
           columns={columns}
@@ -625,11 +627,12 @@ function ConcurrencyPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="并发控制" status={`${total} 条规则`} />
+      <PageHeader
+        title="并发控制"
+        description="限制并发请求数量，支持排队"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          限制并发请求数量，支持排队
-        </div>
         <DataTable
           id="policy-concurrency"
           columns={columns}
@@ -794,11 +797,12 @@ function FailoverPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="故障转移" status={`${total} 条规则`} />
+      <PageHeader
+        title="故障转移"
+        description="主供应商失败时自动切换到备选供应商"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          主供应商失败时自动切换到备选供应商
-        </div>
         <DataTable
           id="policy-failover"
           columns={columns}
@@ -966,11 +970,12 @@ function RewriteResponsePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="响应改写" status={`${total} 条规则`} />
+      <PageHeader
+        title="响应改写"
+        description="使用 JSON 操作数组修改响应体字段"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          使用 JSON 操作数组修改响应体字段
-        </div>
         <DataTable
           id="policy-rewrite-response"
           columns={columns}

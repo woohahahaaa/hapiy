@@ -299,12 +299,12 @@ export function ChannelAffinityPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="渠道亲和性" status={`${total} 条规则`} />
+      <PageHeader
+        title="渠道亲和性"
+        description="请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道"
+        status={`${total} 条规则`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">
-          请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道。
-        </div>
-
         <DataTable
           id="channel-affinity"
           columns={columns}

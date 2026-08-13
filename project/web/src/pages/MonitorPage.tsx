@@ -412,7 +412,10 @@ function ActiveRequestsSection() {
 export function MonitorPage() {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="活动监视" />
+      <PageHeader
+        title="活动监视"
+        description="实时活动请求与运行统计"
+      />
       <div className="flex-1 overflow-auto p-6">
         <StatsSection />
         <ActiveRequestsSection />

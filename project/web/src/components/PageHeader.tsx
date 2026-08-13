@@ -3,19 +3,28 @@ import { Separator } from '@/components/ui/separator'
 
 interface PageHeaderProps {
   title: string
+  description?: string
   status?: string
   actions?: ReactNode
 }
 
-export function PageHeader({ title, status, actions }: PageHeaderProps) {
+export function PageHeader({ title, description, status, actions }: PageHeaderProps) {
   return (
     <div className="bg-card">
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold">{title}</h1>
-            {status && (
-              <p className="text-xs text-muted-foreground">{status}</p>
+            {(description || status) && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {description}
+                {status && (
+                  <>
+                    {' '}
+                    <span className="text-muted-foreground/80">[{status}]</span>
+                  </>
+                )}
+              </p>
             )}
           </div>
           {actions && <div className="flex items-center gap-2">{actions}</div>}

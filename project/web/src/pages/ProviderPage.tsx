@@ -170,9 +170,12 @@ export function ProviderPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="供应商" status={`${total} 供应商`} />
+      <PageHeader
+        title="供应商"
+        description="管理上游 API 供应商配置"
+        status={`${total} 供应商`}
+      />
       <div className="p-6">
-        <div className="mb-4 text-sm text-muted-foreground">管理上游 API 供应商配置</div>
         <DataTable
           id="providers"
           columns={columns}

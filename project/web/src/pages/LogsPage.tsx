@@ -217,6 +217,7 @@ export function LogsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="使用记录"
+        description="查询 API 请求的使用记录、消耗与耗时"
         status={total > 0 ? `${total} 条记录` : undefined}
       />
       <div className="p-6">

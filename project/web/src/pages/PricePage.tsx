@@ -245,6 +245,7 @@ export function PricePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="模型信息"
+        description="配置每个模型的输入/输出价格与上下文长度"
         status={
           state.kind === 'ready'
             ? `${state.total} 条`

@@ -107,6 +107,7 @@ export function ProfilePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="个人资料"
+        description="管理账户信息与修改登录密码"
       />
       <div className="flex-1 space-y-6 p-6">
         {state.kind === 'loading' && (

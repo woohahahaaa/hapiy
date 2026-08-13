@@ -305,6 +305,7 @@ export function LogCapturePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="日志抓取"
+        description="查看已抓取的请求/响应日志原文"
         status={total > 0 ? `${total} 条记录` : undefined}
         actions={undefined}
       />

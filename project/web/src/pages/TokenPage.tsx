@@ -251,7 +251,11 @@ export function TokenPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="令牌管理" status={`${total} 个令牌`} />
+      <PageHeader
+        title="令牌管理"
+        description="为客户端签发 API 访问令牌，配置访问额度与允许的模型"
+        status={`${total} 个令牌`}
+      />
       <div className="p-6">
         <DataTable<Token>
           id="tokens"

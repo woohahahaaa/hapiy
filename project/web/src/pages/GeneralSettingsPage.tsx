@@ -6,6 +6,7 @@ export function GeneralSettingsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="通用设置"
+        description="系统通用配置"
       />
       <div className="flex-1 flex flex-col gap-6 p-6">
         <GeneralSettings />

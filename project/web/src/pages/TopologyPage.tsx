@@ -1289,7 +1289,7 @@ export function TopologyPage() {
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" />
+        <PageHeader title="转发拓扑" description="可视化编辑请求转发的拓扑结构" />
         <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
           <AppIcon name="progress_activity" size={20} className="animate-spin" />
           <span className="text-sm">加载拓扑数据…</span>
@@ -1301,7 +1301,7 @@ export function TopologyPage() {
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" />
+        <PageHeader title="转发拓扑" description="可视化编辑请求转发的拓扑结构" />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
             <AppIcon name="warning" size={40} className="text-destructive" />
@@ -1320,6 +1320,7 @@ export function TopologyPage() {
     <div className="flex h-screen flex-col">
       <PageHeader
         title="转发拓扑"
+        description="可视化编辑请求转发的拓扑结构"
         status={`请求入口：${activeEntries}/${totalEntries} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
         actions={
           <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
