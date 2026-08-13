@@ -163,11 +163,13 @@ export function TokenPage() {
     {
       key: 'name',
       label: '名称',
+      defaultWidth: { kind: 'pixel', value: 160 },
       render: (_, row) => <span className="font-medium">{row.name}</span>,
     },
     {
       key: 'key',
       label: 'Token',
+      defaultWidth: { kind: 'pixel', value: 220 },
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{row.key.slice(0, 12)}...</code>
@@ -180,6 +182,7 @@ export function TokenPage() {
     {
       key: 'quota',
       label: '额度',
+      defaultWidth: { kind: 'pixel', value: 220 },
       render: (_, row) =>
         row.quota === null ? (
           <span className="text-xs text-muted-foreground">无限制</span>
@@ -198,6 +201,7 @@ export function TokenPage() {
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => (
         <span className={row.status ? 'text-success' : 'text-destructive'}>
           {row.status ? '启用' : '禁用'}
@@ -207,6 +211,8 @@ export function TokenPage() {
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 160 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">

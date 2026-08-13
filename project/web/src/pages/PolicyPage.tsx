@@ -263,10 +263,11 @@ function RewritePage() {
   }
 
   const columns: ColumnDef<RewriteRule>[] = [
-    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
     {
       key: 'script',
       label: '脚本预览',
+      defaultWidth: { kind: 'percent', value: 30 },
       render: (_, row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.script.slice(0, 50)}
@@ -277,11 +278,14 @@ function RewritePage() {
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <RuleStatusBadge active={row.status} />,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
@@ -435,23 +439,27 @@ function HeartbeatPage() {
   }
 
   const columns: ColumnDef<HeartbeatRule>[] = [
-    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'matchCondition', label: '匹配条件', render: (_, row) => <span className="text-xs">{row.matchCondition}</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'matchCondition', label: '匹配条件', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.matchCondition}</span> },
     {
       key: 'replyContent',
       label: '回复内容',
-      defaultWidth: 20,
+      defaultWidth: { kind: 'percent', value: 20 },
+      defaultOverflow: 'wrap',
       render: (_, row) => <span className="text-xs max-w-[200px] truncate">{row.replyContent}</span>,
     },
-    { key: 'timeout', label: '超时', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
+    { key: 'timeout', label: '超时', defaultWidth: { kind: 'pixel', value: 80 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <RuleStatusBadge active={row.status} />,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 140 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
@@ -589,18 +597,21 @@ function ConcurrencyPage() {
     scope === 'global' ? '全局' : scope === 'per_user' ? '每用户' : '每令牌'
 
   const columns: ColumnDef<ConcurrencyRule>[] = [
-    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'scope', label: '作用域', render: (_, row) => <span className="text-xs">{scopeLabel(row.scope)}</span> },
-    { key: 'maxConcurrent', label: '最大并发', render: (_, row) => <span className="text-xs">{row.maxConcurrent}</span> },
-    { key: 'queueEnabled', label: '排队', render: (_, row) => <span className="text-xs">{row.queueEnabled ? '是' : '否'}</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'scope', label: '作用域', defaultWidth: { kind: 'pixel', value: 100 }, render: (_, row) => <span className="text-xs">{scopeLabel(row.scope)}</span> },
+    { key: 'maxConcurrent', label: '最大并发', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.maxConcurrent}</span> },
+    { key: 'queueEnabled', label: '排队', defaultWidth: { kind: 'pixel', value: 80 }, render: (_, row) => <span className="text-xs">{row.queueEnabled ? '是' : '否'}</span> },
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <RuleStatusBadge active={row.status} />,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 140 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
@@ -755,18 +766,21 @@ function FailoverPage() {
     c === 'timeout' ? '超时' : c === 'error' ? '错误' : '限流'
 
   const columns: ColumnDef<FailoverRule>[] = [
-    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'primaryProvider', label: '主供应商', render: (_, row) => <span className="text-xs">{row.primaryProvider}</span> },
-    { key: 'fallbackProvider', label: '备选', render: (_, row) => <span className="text-xs">{row.fallbackProvider}</span> },
-    { key: 'condition', label: '触发条件', render: (_, row) => <span className="text-xs">{conditionLabel(row.condition)}</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'primaryProvider', label: '主供应商', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.primaryProvider}</span> },
+    { key: 'fallbackProvider', label: '备选', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.fallbackProvider}</span> },
+    { key: 'condition', label: '触发条件', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{conditionLabel(row.condition)}</span> },
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <RuleStatusBadge active={row.status} />,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 140 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">
@@ -917,10 +931,11 @@ function RewriteResponsePage() {
   }
 
   const columns: ColumnDef<ResponseRewriteRule>[] = [
-    { key: 'name', label: '名称', render: (_, row) => <span className="font-medium">{row.name}</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
     {
       key: 'script',
       label: '脚本预览',
+      defaultWidth: { kind: 'percent', value: 30 },
       render: (_, row) => (
         <span className="font-mono text-xs text-muted-foreground">
           {row.script.slice(0, 50)}
@@ -931,11 +946,14 @@ function RewriteResponsePage() {
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <RuleStatusBadge active={row.status} />,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">

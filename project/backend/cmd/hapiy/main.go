@@ -189,6 +189,10 @@ func main() {
 			dashboardAuthed.GET("/channel-affinity", handler.GetChannelAffinity(db))
 			dashboardAuthed.PUT("/channel-affinity", handler.SaveChannelAffinity(db, engine))
 
+			// Table configs (per-table column display config)
+			dashboardAuthed.GET("/table-configs/:id", handler.GetTableConfig(db))
+			dashboardAuthed.PUT("/table-configs/:id", handler.UpsertTableConfig(db))
+
 			// Runtime metrics (dashboard-authenticated)
 			dashboard.GET("/runtime/metrics", handler.RuntimeMetrics(db))
 			dashboardAuthed.GET("/active-requests/config", handler.GetActiveRequestConfig(db))

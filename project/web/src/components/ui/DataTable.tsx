@@ -3,6 +3,12 @@
 import type { ReactNode } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -11,17 +17,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AppIcon } from "@/components/AppIcon"
+import { dashboardApi } from "@/lib/dashboard-api"
+import type {
+  ColumnDisplayConfig,
+  ColumnWidthConfig,
+} from "@/lib/dashboard-api"
 import { cn } from "@/lib/utils"
 
 // ── Column definition ──
 
 export interface ColumnDef<T> {
-  key: string
-  label: string
-  render?: (value: unknown, row: T) => ReactNode
-  isTime?: boolean
-  showEmptyPlaceholder?: boolean
-  defaultWidth?: number
+  readonly key: string
+  readonly label: ReactNode
+  readonly render?: (value: unknown, row: T) => ReactNode
+  readonly isTime?: boolean
+  readonly showEmptyPlaceholder?: boolean
+  readonly defaultWidth: ColumnWidthConfig
+  readonly defaultAlign?: 'left' | 'right'
+  readonly defaultOverflow?: 'ellipsis' | 'wrap'
 }
 
 // ── Props ──
@@ -48,10 +62,9 @@ interface DataTableProps<T> {
 
 // ── Constants ──
 
-const STORAGE_PREFIX = "hapiy-table-cols-"
-const MIN_COL_PCT = 5
-const TOOLBAR_GAP = 12
 const DEFAULT_PAGE_SIZE_OPTIONS: readonly number[] = [10, 20, 50, 100]
+const SAVE_DEBOUNCE_MS = 500
+const RESIZE_DEBOUNCE_MS = 100
 
 // ── Helpers ──
 
@@ -76,30 +89,86 @@ function renderValue(value: unknown): ReactNode {
   return String(value)
 }
 
-// splitFilters 从右往左数第二行能装下的筛选条件数量：
-// 返回 split，表示第二行从 filterArray[split] 开始；[0, split) 上移到第一行。
-function splitFilters(children: readonly HTMLElement[], available: number, gap: number): number {
-  let running = 0
-  for (let i = children.length - 1; i >= 0; i--) {
-    const w = children[i].offsetWidth
-    const itemGap = i < children.length - 1 ? gap : 0
-    if (running + w + itemGap > available) return i + 1
-    running += w + itemGap
-  }
-  return 0
+function formatWidth(w: ColumnWidthConfig): string {
+  return w.kind === 'percent' ? `${w.value} %` : `${w.value} px`
 }
 
-// flattenChildren 递归展开 Fragment，返回扁平的元素数组。
-// React.Children.toArray 不展开单个 Fragment，slice 会失效。
-function flattenChildren(children: ReactNode): ReactNode[] {
-  const result: ReactNode[] = []
-  React.Children.forEach(children, (child) => {
-    if (React.isValidElement(child) && child.type === React.Fragment) {
-      result.push(...flattenChildren(child.props.children))
+function parseWidthInput(raw: string): { ok: true; value: ColumnWidthConfig } | { ok: false; error: string } {
+  const trimmed = raw.trim().toLowerCase().replace(/\s+/g, '')
+  const pctMatch = /^([0-9]+(?:\.[0-9]+)?)%$/.exec(trimmed)
+  if (pctMatch) return { ok: true, value: { kind: 'percent', value: Number(pctMatch[1]) } }
+  const pxMatch = /^([0-9]+(?:\.[0-9]+)?)(pt|px)$/.exec(trimmed)
+  if (pxMatch) return { ok: true, value: { kind: 'pixel', value: Number(pxMatch[1]) } }
+  if (trimmed === '') return { ok: false, error: '宽度不能为空' }
+  return { ok: false, error: '必须以 % 或 pt/px 结尾（如 "200 px" 或 "30 %"）' }
+}
+
+function defaultConfigForColumn(col: ColumnDef<unknown>): ColumnDisplayConfig {
+  return {
+    width: col.defaultWidth,
+    align: col.defaultAlign ?? 'left',
+    overflow: col.defaultOverflow ?? 'ellipsis',
+  }
+}
+
+function configsFromColumns(columns: readonly ColumnDef<unknown>[]): ColumnDisplayConfig[] {
+  return columns.map(defaultConfigForColumn)
+}
+
+function inputsFromColumns(columns: readonly ColumnDef<unknown>[]): string[] {
+  return columns.map((c) => formatWidth(c.defaultWidth))
+}
+
+function computeResolvedWidths(
+  parentWidth: number,
+  columns: readonly ColumnDef<unknown>[],
+  configs: readonly ColumnDisplayConfig[],
+): number[] {
+  const count = columns.length
+  if (count === 0) return []
+
+  let pixelTotal = 0
+  let pctDenominator = 0
+  const pixelIndices: number[] = []
+  const percentIndices: number[] = []
+
+  for (let i = 0; i < count; i++) {
+    const cfg = configs[i] ?? defaultConfigForColumn(columns[i]!)
+    if (cfg.width.kind === 'pixel') {
+      pixelTotal += cfg.width.value
+      pixelIndices.push(i)
     } else {
-      result.push(child)
+      pctDenominator += cfg.width.value
+      percentIndices.push(i)
     }
-  })
+  }
+
+  if (parentWidth < pixelTotal) {
+    const each = parentWidth / count
+    return Array.from({ length: count }, () => each)
+  }
+
+  const remaining = parentWidth - pixelTotal
+  const result: number[] = new Array(count).fill(0)
+  for (const i of pixelIndices) {
+    const cfg = configs[i] ?? defaultConfigForColumn(columns[i]!)
+    result[i] = cfg.width.kind === 'pixel' ? cfg.width.value : 0
+  }
+  if (pctDenominator > 0) {
+    for (const i of percentIndices) {
+      const cfg = configs[i] ?? defaultConfigForColumn(columns[i]!)
+      const pctValue = cfg.width.kind === 'percent' ? cfg.width.value : 0
+      result[i] = (remaining / pctDenominator) * pctValue
+    }
+  } else if (remaining > 0) {
+    // Only pixel columns declared; distribute remaining evenly across all columns
+    // so widths are always visible. Pixel columns keep their declared value.
+    const each = remaining / count
+    for (let i = 0; i < count; i++) {
+      result[i] = (result[i] ?? 0) + each
+    }
+  }
+
   return result
 }
 
@@ -124,108 +193,205 @@ export function DataTable<T extends Record<string, unknown>>({
   onRowClick,
   showPagination = true,
 }: DataTableProps<T>) {
+  // Fail loudly if any column is missing the required defaultWidth.
+  const missing = columns.find((c) => !c.defaultWidth)
+  if (missing) {
+    const msg = `DataTable "${id ?? '(no id)'}": column "${missing.key}" is missing required defaultWidth`
+    console.error(msg)
+    throw new Error(msg)
+  }
+
   const colCount = columns.length
-  const [widths, setWidths] = React.useState<number[]>(() => loadWidths(id, colCount, columns as ColumnDef<unknown>[]))
-  const dragRef = React.useRef<{
-    colIndex: number
-    startX: number
-    startWidth: number
-    totalWidth: number
-  } | null>(null)
+
   const tableRef = React.useRef<HTMLDivElement>(null)
-  const toolbarRef = React.useRef<HTMLDivElement>(null)
-  const measureFiltersRef = React.useRef<HTMLDivElement>(null)
-  const measureActionsRef = React.useRef<HTMLDivElement>(null)
-  const [splitIndex, setSplitIndex] = React.useState<number | null>(null)
+  const [parentWidth, setParentWidth] = React.useState<number>(0)
 
-  React.useEffect(() => {
-    saveWidths(id, widths)
-  }, [id, widths])
-
-  const filterArray = React.useMemo(() => flattenChildren(filters), [filters])
-
-  // 用隐藏行（完整 filters + 操作区）量宽，避免测量与实际渲染互相依赖。
-  const recalcSplit = React.useCallback(() => {
-    const container = toolbarRef.current
-    const measureFilters = measureFiltersRef.current
-    const measureActions = measureActionsRef.current
-    if (!container || !measureFilters || !measureActions) {
-      setSplitIndex(null)
-      return
-    }
-    const available = container.offsetWidth - measureActions.offsetWidth - TOOLBAR_GAP
-    if (available <= 0) {
-      setSplitIndex(0)
-      return
-    }
-    setSplitIndex(splitFilters(Array.from(measureFilters.children) as HTMLElement[], available, TOOLBAR_GAP))
-  }, [])
-
-  React.useLayoutEffect(() => {
-    recalcSplit()
-    window.addEventListener("resize", recalcSplit)
-    const timer = window.setTimeout(recalcSplit, 100)
-    return () => {
-      window.removeEventListener("resize", recalcSplit)
-      window.clearTimeout(timer)
-    }
-  }, [recalcSplit, filterArray, actions])
-
-  React.useLayoutEffect(() => {
-    const container = toolbarRef.current
-    if (!container) return
-    const ro = new ResizeObserver(() => recalcSplit())
-    ro.observe(container)
-    return () => ro.disconnect()
-  }, [recalcSplit])
-
-  const handleMouseDown = React.useCallback(
-    (colIndex: number) => (e: React.MouseEvent) => {
-      e.preventDefault()
-      const tableEl = tableRef.current
-      if (!tableEl) return
-      const rect = tableEl.getBoundingClientRect()
-      dragRef.current = {
-        colIndex,
-        startX: e.clientX,
-        startWidth: widths[colIndex],
-        totalWidth: rect.width,
-      }
-      const handleMouseMove = (ev: MouseEvent) => {
-        const drag = dragRef.current
-        if (!drag) return
-        const dx = ev.clientX - drag.startX
-        const pctDelta = (dx / drag.totalWidth) * 100
-        let newVal = Math.round(drag.startWidth + pctDelta)
-        newVal = Math.max(MIN_COL_PCT, Math.min(100, newVal))
-        setWidths((prev) => {
-          const next = [...prev]
-          next[drag.colIndex] = newVal
-          const sum = next.reduce((a, b) => a + b, 0)
-          const lastIdx = next.length - 1
-          next[lastIdx] = Math.max(MIN_COL_PCT, next[lastIdx] + (100 - sum))
-          return next
-        })
-      }
-      const handleMouseUp = () => {
-        dragRef.current = null
-        document.removeEventListener("mousemove", handleMouseMove)
-        document.removeEventListener("mouseup", handleMouseUp)
-        document.body.style.userSelect = ""
-        document.body.style.cursor = ""
-      }
-      document.addEventListener("mousemove", handleMouseMove)
-      document.addEventListener("mouseup", handleMouseUp)
-      document.body.style.userSelect = "none"
-      document.body.style.cursor = "col-resize"
-    },
-    [widths],
+  const [configs, setConfigs] = React.useState<ColumnDisplayConfig[]>(() =>
+    configsFromColumns(columns as ColumnDef<unknown>[]),
   )
+  const [widthInput, setWidthInput] = React.useState<string[]>(() =>
+    inputsFromColumns(columns as ColumnDef<unknown>[]),
+  )
+  const [widthError, setWidthError] = React.useState<(string | null)[]>(() =>
+    columns.map(() => null),
+  )
+  const [popoverOpen, setPopoverOpen] = React.useState(false)
+
+  // Map rowIdx -> <tr> element. Used by the line-clamp measurement effect
+  // to read the row's natural height after wrap columns have expanded it.
+  const trRefs = React.useRef<Map<number, HTMLTableRowElement>>(new Map())
+  const setTrRef = React.useCallback(
+    (rowIdx: number) => (el: HTMLTableRowElement | null) => {
+      if (el) trRefs.current.set(rowIdx, el)
+      else trRefs.current.delete(rowIdx)
+    },
+    [],
+  )
+  const [rowMaxLines, setRowMaxLines] = React.useState<number[]>([])
+
+  // Fetch saved config on mount; replace defaults if the backend has one for this id.
+  React.useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const saved = await dashboardApi.getTableConfig(id)
+        if (cancelled) return
+        if (!saved) return
+        if (saved.configs.length !== columns.length) {
+          console.warn(
+            `DataTable "${id}": saved config length (${saved.configs.length}) does not match column count (${columns.length}); using defaults.`,
+          )
+          return
+        }
+        const next = saved.configs.map((cfg) => ({ ...cfg }))
+        setConfigs(next)
+        setWidthInput(next.map((cfg) => formatWidth(cfg.width)))
+        setWidthError(columns.map(() => null))
+      } catch (err) {
+        console.warn(`DataTable "${id}": failed to load saved config`, err)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [id, columns])
+
+  // Auto-save (debounced) whenever configs change after the initial mount.
+  const initialConfigRef = React.useRef(true)
+  React.useEffect(() => {
+    if (initialConfigRef.current) {
+      initialConfigRef.current = false
+      return
+    }
+    const handle = window.setTimeout(() => {
+      void dashboardApi.saveTableConfig(id, configs).catch((err) => {
+        console.warn(`DataTable "${id}": failed to save config`, err)
+      })
+    }, SAVE_DEBOUNCE_MS)
+    return () => window.clearTimeout(handle)
+  }, [id, configs])
+
+  // Measure parent width + recompute on resize and when the popover closes.
+  const [resolvedWidths, setResolvedWidths] = React.useState<number[]>(() =>
+    computeResolvedWidths(0, columns as ColumnDef<unknown>[], configs),
+  )
+
+  const recompute = React.useCallback(() => {
+    const el = tableRef.current
+    const w = el ? el.getBoundingClientRect().width : 0
+    setParentWidth(w)
+    setResolvedWidths(
+      computeResolvedWidths(w, columns as ColumnDef<unknown>[], configs),
+    )
+  }, [columns, configs])
+
+  React.useLayoutEffect(() => {
+    recompute()
+    const handleResize = () => {
+      window.clearTimeout((handleResize as Window['setTimeout'] & { t?: number }).t)
+      const t = window.setTimeout(recompute, RESIZE_DEBOUNCE_MS)
+      ;(handleResize as Window['setTimeout'] & { t?: number }).t = t
+    }
+    window.addEventListener("resize", handleResize)
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => recompute()) : null
+    if (ro && tableRef.current) ro.observe(tableRef.current)
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      if (ro) ro.disconnect()
+    }
+  }, [recompute])
+
+  // Re-measure when the popover closes so users see the result of edits.
+  React.useEffect(() => {
+    if (!popoverOpen) {
+      recompute()
+    }
+  }, [popoverOpen, recompute])
+
+// Two-phase ellipsis layout:
+//   Phase 1 — clamp every ellipsis inner div to 1 line so the wrap columns
+//             dictate the row's natural height.
+//   Phase 2 — measure tr.offsetHeight, convert to a line count, and back-fill
+//             that line-clamp onto the ellipsis cells. Result: an ellipsis
+//             cell on a row whose wrap column expanded to N lines is allowed
+//             up to N lines before truncation.
+  React.useLayoutEffect(() => {
+    const ellipsisDivs: { el: HTMLElement; rowIdx: number; prev: string }[] = []
+    trRefs.current.forEach((tr, rowIdx) => {
+      tr.querySelectorAll<HTMLTableCellElement>('td[data-overflow="ellipsis"]').forEach((td) => {
+        const inner = td.firstElementChild as HTMLElement | null
+        if (!inner) return
+        ellipsisDivs.push({ el: inner, rowIdx, prev: inner.style.webkitLineClamp })
+        inner.style.webkitLineClamp = '1'
+      })
+    })
+    void tableRef.current?.offsetHeight
+
+    const counts: number[] = []
+    let anyChange = false
+    data.forEach((_, rowIdx) => {
+      const tr = trRefs.current.get(rowIdx)
+      const firstTd = tr?.querySelector<HTMLTableCellElement>('td')
+      let maxLines = 1
+      if (tr && firstTd) {
+        const cs = window.getComputedStyle(firstTd)
+        const lineHeight = parseFloat(cs.lineHeight) || 16
+        const paddingTop = parseFloat(cs.paddingTop) || 0
+        const paddingBottom = parseFloat(cs.paddingBottom) || 0
+        const contentHeight = tr.offsetHeight - paddingTop - paddingBottom
+        maxLines = Math.max(1, Math.round(contentHeight / lineHeight))
+      }
+      counts.push(maxLines)
+      if (rowMaxLines[rowIdx] !== maxLines) anyChange = true
+    })
+
+    if (anyChange) {
+      setRowMaxLines(counts)
+    }
+    // When no state change was needed, restore the inline style so the DOM
+    // matches what React already believes.
+    ellipsisDivs.forEach(({ el, rowIdx, prev }) => {
+      if (!anyChange) el.style.webkitLineClamp = prev
+      else if (counts[rowIdx] === undefined) el.style.webkitLineClamp = prev
+    })
+    // rowMaxLines intentionally excluded from deps: only re-measure when the
+    // rendered table shape changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, columns, configs, resolvedWidths])
+
+  function updateConfig(i: number, next: ColumnDisplayConfig) {
+    setConfigs((prev) => {
+      const out = [...prev]
+      out[i] = next
+      return out
+    })
+  }
+
+  function handleWidthInput(i: number, raw: string) {
+    setWidthInput((prev) => {
+      const out = [...prev]
+      out[i] = raw
+      return out
+    })
+    const result = parseWidthInput(raw)
+    setWidthError((prev) => {
+      const out = [...prev]
+      out[i] = result.ok ? null : result.error
+      return out
+    })
+    if (result.ok) {
+      setConfigs((prev) => {
+        const out = [...prev]
+        const cur = out[i] ?? defaultConfigForColumn(columns[i] as ColumnDef<unknown>)
+        out[i] = { ...cur, width: result.value }
+        return out
+      })
+    }
+  }
 
   const hasPrev = offset > 0
   const hasNext = offset + limit < total
   const pageText = total > 0 ? `第 ${Math.floor(offset / limit) + 1} 页，共 ${total} 条` : ""
-  const split = splitIndex ?? 0
 
   const handleLimitChange = React.useCallback(
     (value: string) => {
@@ -239,218 +405,335 @@ export function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className="flex flex-col">
-      {/* 筛选栏 */}
+      {/* Toolbar (filters + actions + settings) */}
       {(filters || actions) && (
-        <div ref={toolbarRef} className="mb-4">
-          {/* 隐藏测量行：完整 filters + 操作区，仅用于量宽 */}
-          <div aria-hidden className="pointer-events-none absolute invisible flex flex-wrap items-center gap-3" ref={measureFiltersRef}>
-            {filters}
-          </div>
-          <div aria-hidden className="pointer-events-none absolute invisible flex flex-wrap items-center gap-3">
-            <div ref={measureActionsRef} className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-              {actions}
-            </div>
-          </div>
-
-          {filters && split > 0 && (
-            <div className="mb-3 flex flex-wrap items-center gap-3">
-              {filterArray.slice(0, split)}
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          {filters && (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+              {filters}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-3">
-            {filters && (
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                {splitIndex !== null ? filterArray.slice(split) : filters}
-              </div>
-            )}
-            {actions && (
-              <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-                {actions}
-              </div>
-            )}
+          {actions && (
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+              {actions}
+            </div>
+          )}
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="列设置">
+                  <AppIcon name="settings" size={16} />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" sideOffset={8} className="w-80 p-3">
+                <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+                  <div className="text-xs font-medium">列设置</div>
+                  {columns.map((col, i) => {
+                    const cfg =
+                      configs[i] ??
+                      defaultConfigForColumn(col as ColumnDef<unknown>)
+                    return (
+                      <div key={col.key} className="flex flex-col gap-1.5">
+                        <div className="text-xs font-medium">{col.label}</div>
+                        <div className="flex gap-2">
+                          <Input
+                            value={widthInput[i] ?? formatWidth(col.defaultWidth)}
+                            onChange={(e) => handleWidthInput(i, e.target.value)}
+                            placeholder="如 200 px 或 30 %"
+                            className="flex-1"
+                          />
+                          <div className="flex rounded-md border border-border">
+                            <Button
+                              variant={cfg.align === 'left' ? 'secondary' : 'ghost'}
+                              size="icon-sm"
+                              aria-label="左对齐"
+                              onClick={() => updateConfig(i, { ...cfg, align: 'left' })}
+                            >
+                              <AppIcon name="format_align_left" size={14} />
+                            </Button>
+                            <Button
+                              variant={cfg.align === 'right' ? 'secondary' : 'ghost'}
+                              size="icon-sm"
+                              aria-label="右对齐"
+                              onClick={() => updateConfig(i, { ...cfg, align: 'right' })}
+                            >
+                              <AppIcon name="format_align_right" size={14} />
+                            </Button>
+                          </div>
+                          <div className="flex rounded-md border border-border">
+                            <Button
+                              variant={cfg.overflow === 'ellipsis' ? 'secondary' : 'ghost'}
+                              size="icon-sm"
+                              title="省略号"
+                              aria-label="省略号"
+                              onClick={() => updateConfig(i, { ...cfg, overflow: 'ellipsis' })}
+                            >
+                              <AppIcon name="more_horiz" size={14} />
+                            </Button>
+                            <Button
+                              variant={cfg.overflow === 'wrap' ? 'secondary' : 'ghost'}
+                              size="icon-sm"
+                              title="换行"
+                              aria-label="换行"
+                              onClick={() => updateConfig(i, { ...cfg, overflow: 'wrap' })}
+                            >
+                              <AppIcon name="paragraph_break" size={14} />
+                            </Button>
+                          </div>
+                        </div>
+                        {widthError[i] && (
+                          <p className="text-xs text-destructive">{widthError[i]}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       )}
 
-      {/* 表格 */}
-      <div>
-        <div ref={tableRef} className="relative w-full overflow-x-auto rounded-md border border-border">
-          <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
-            <thead data-slot="table-header" className="[&_tr]:border-b">
-              <tr data-slot="table-row" className="border-b transition-colors">
-                {columns.map((col, i) => (
+      {/* If no filters/actions, still show the settings button above the table. */}
+      {!filters && !actions && (
+        <div className="mb-4 flex justify-end">
+          <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="列设置">
+                <AppIcon name="settings" size={16} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-80 p-3">
+              <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+                <div className="text-xs font-medium">列设置</div>
+                {columns.map((col, i) => {
+                  const cfg =
+                    configs[i] ??
+                    defaultConfigForColumn(col as ColumnDef<unknown>)
+                  return (
+                    <div key={col.key} className="flex flex-col gap-1.5">
+                      <div className="text-xs font-medium">{col.label}</div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={widthInput[i] ?? formatWidth(col.defaultWidth)}
+                          onChange={(e) => handleWidthInput(i, e.target.value)}
+                          placeholder="如 200 px 或 30 %"
+                          className="flex-1"
+                        />
+                        <div className="flex rounded-md border border-border">
+                          <Button
+                            variant={cfg.align === 'left' ? 'secondary' : 'ghost'}
+                            size="icon-sm"
+                            aria-label="左对齐"
+                            onClick={() => updateConfig(i, { ...cfg, align: 'left' })}
+                          >
+                            <AppIcon name="format_align_left" size={14} />
+                          </Button>
+                          <Button
+                            variant={cfg.align === 'right' ? 'secondary' : 'ghost'}
+                            size="icon-sm"
+                            aria-label="右对齐"
+                            onClick={() => updateConfig(i, { ...cfg, align: 'right' })}
+                          >
+                            <AppIcon name="format_align_right" size={14} />
+                          </Button>
+                        </div>
+                        <div className="flex rounded-md border border-border">
+                          <Button
+                            variant={cfg.overflow === 'ellipsis' ? 'secondary' : 'ghost'}
+                            size="icon-sm"
+                            title="省略号"
+                            aria-label="省略号"
+                            onClick={() => updateConfig(i, { ...cfg, overflow: 'ellipsis' })}
+                          >
+                            <AppIcon name="more_horiz" size={14} />
+                          </Button>
+                          <Button
+                            variant={cfg.overflow === 'wrap' ? 'secondary' : 'ghost'}
+                            size="icon-sm"
+                            title="换行"
+                            aria-label="换行"
+                            onClick={() => updateConfig(i, { ...cfg, overflow: 'wrap' })}
+                          >
+                            <AppIcon name="paragraph_break" size={14} />
+                          </Button>
+                        </div>
+                      </div>
+                      {widthError[i] && (
+                        <p className="text-xs text-destructive">{widthError[i]}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+
+      {/* Table */}
+      <div ref={tableRef} className="relative w-full overflow-x-auto rounded-md border border-border">
+        <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
+          <thead data-slot="table-header" className="[&_tr]:border-b">
+            <tr data-slot="table-row" className="border-b transition-colors">
+              {columns.map((col, i) => {
+                const cfg = configs[i] ?? defaultConfigForColumn(col as ColumnDef<unknown>)
+                const widthPx = resolvedWidths[i]
+                return (
                   <th
                     key={col.key}
                     data-slot="table-head"
-                    className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0 relative overflow-hidden text-ellipsis"
-                    style={{ width: `${widths[i]}%` }}
+                    className={cn(
+                      "h-10 px-2 align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+                      cfg.align === 'right' ? 'text-right' : 'text-left',
+                    )}
+                    style={widthPx !== undefined ? { width: `${widthPx}px` } : undefined}
                   >
                     {col.label}
-                    <div
-                      className="absolute right-0 top-0 bottom-0 z-10"
-                      style={{ width: "4px", cursor: "col-resize", userSelect: "none" }}
-                      onMouseDown={handleMouseDown(i)}
-                    />
                   </th>
-                ))}
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody data-slot="table-body">
+            {loading && (
+              <tr data-slot="table-row">
+                <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
+                  加载中...
+                </td>
               </tr>
-            </thead>
-            <tbody data-slot="table-body">
-              {loading && (
-                <tr data-slot="table-row">
-                  <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
-                    加载中...
-                  </td>
-                </tr>
-              )}
-              {!loading && error && (
-                <tr data-slot="table-row">
-                  <td colSpan={colCount} className="p-2 text-center py-8">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-xs text-destructive">{error}</span>
-                      {onRetry && (
-                        <Button variant="outline" size="sm" onClick={onRetry}>
-                          重试
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && data.length === 0 && (
-                <tr data-slot="table-row">
-                  <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
-                    {emptyText}
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                !error &&
-                data.map((row, rowIdx) => (
-                  <tr
-                    key={rowIdx}
-                    data-slot="table-row"
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                    className={cn(
-                      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
-                      onRowClick && "cursor-pointer",
+            )}
+            {!loading && error && (
+              <tr data-slot="table-row">
+                <td colSpan={colCount} className="p-2 text-center py-8">
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-xs text-destructive">{error}</span>
+                    {onRetry && (
+                      <Button variant="outline" size="sm" onClick={onRetry}>
+                        重试
+                      </Button>
                     )}
-                  >
-                    {columns.map((col) => {
-                      const raw = row[col.key]
-                      const showEmpty = col.showEmptyPlaceholder !== false
-                      const rendered = col.render ? col.render(raw, row) : undefined
-                      const content = col.isTime
-                        ? formatDateTime((rendered ?? raw) as string)
-                        : col.render
-                          ? rendered
-                          : showEmpty
-                            ? renderValue(raw)
-                            : String(raw ?? "")
-                      return (
-                        <td
-                          key={col.key}
-                          data-slot="table-cell"
-                          className="p-2 align-middle overflow-hidden text-ellipsis whitespace-nowrap"
-                        >
-                          {content}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!loading && !error && data.length === 0 && (
+              <tr data-slot="table-row">
+                <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
+                  {emptyText}
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              !error &&
+              data.map((row, rowIdx) => (
+                <tr
+                  key={rowIdx}
+                  data-slot="table-row"
+                  ref={setTrRef(rowIdx)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  className={cn(
+                    "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+                    onRowClick && "cursor-pointer",
+                  )}
+                >
+                  {columns.map((col, idx) => {
+                    const raw = row[col.key]
+                    const showEmpty = col.showEmptyPlaceholder !== false
+                    const rendered = col.render ? col.render(raw, row) : undefined
+                    const content = col.isTime
+                      ? formatDateTime((rendered ?? raw) as string)
+                      : col.render
+                        ? rendered
+                        : showEmpty
+                          ? renderValue(raw)
+                          : String(raw ?? "")
+                    const cfg = configs[idx] ?? defaultConfigForColumn(col as ColumnDef<unknown>)
+                    const isEllipsis = cfg.overflow === 'ellipsis'
+                    const overflowClass = isEllipsis
+                      ? 'overflow-hidden'
+                      : 'whitespace-normal break-words'
+                    const widthPx = resolvedWidths[idx]
+                    const maxLines = rowMaxLines[rowIdx] ?? 1
+                    const contentNode = isEllipsis ? (
+                      <div
+                        style={{
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical' as React.CSSProperties['WebkitBoxOrient'],
+                          WebkitLineClamp: maxLines,
+                          overflow: 'hidden',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {content}
+                      </div>
+                    ) : (
+                      content
+                    )
+                    return (
+                      <td
+                        key={col.key}
+                        data-slot="table-cell"
+                        data-overflow={isEllipsis ? 'ellipsis' : 'wrap'}
+                        className={cn(
+                          "p-2 align-middle",
+                          overflowClass,
+                          cfg.align === 'right' ? 'text-right' : 'text-left',
+                        )}
+                        style={widthPx !== undefined ? { width: `${widthPx}px` } : undefined}
+                      >
+                        {contentNode}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+          </tbody>
+        </table>
       </div>
 
-      {/* 分页 */}
+      {/* Pagination */}
       {showPagination && (
-      <div className="mt-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">每页</span>
-          <Select value={String(limit)} onValueChange={handleLimitChange}>
-            <SelectTrigger className="w-20">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {pageSizeOptions.map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    {n}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <span className="text-xs text-muted-foreground">条</span>
+        <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">每页</span>
+            <Select value={String(limit)} onValueChange={handleLimitChange}>
+              <SelectTrigger className="w-20">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {pageSizeOptions.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      {n}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground">条</span>
+          </div>
+          <div className="text-xs text-muted-foreground">{pageText || '第 1 页，共 0 条'}</div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasPrev}
+              onClick={() => onOffsetChange(Math.max(0, offset - limit))}
+            >
+              上一页
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!hasNext}
+              onClick={() => onOffsetChange(offset + limit)}
+            >
+              下一页
+            </Button>
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground">{pageText || '第 1 页，共 0 条'}</div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasPrev}
-            onClick={() => onOffsetChange(Math.max(0, offset - limit))}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!hasNext}
-            onClick={() => onOffsetChange(offset + limit)}
-          >
-            下一页
-          </Button>
-        </div>
-      </div>
       )}
     </div>
   )
-}
-
-// ── Storage helpers ──
-
-function loadWidths(id: string, count: number, columns: ColumnDef<unknown>[]): number[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + id)
-    if (raw) {
-      const parsed = JSON.parse(raw) as number[]
-      if (Array.isArray(parsed) && parsed.length === count) {
-        return parsed.map((v) => Math.max(MIN_COL_PCT, Math.min(100, Math.round(v))))
-      }
-    }
-  } catch {
-    /* ignore corrupt data */
-  }
-  // Use defaultWidth from column definitions when available
-  const defaults = columns.map((c) => c.defaultWidth)
-  const hasDefaults = defaults.some((d) => d !== undefined)
-  if (hasDefaults) {
-    let sum = 0
-    const result = defaults.map((d) => {
-      if (d !== undefined) {
-        sum += d
-        return d
-      }
-      return 0
-    })
-    // Distribute remaining space evenly among columns without defaultWidth
-    const remaining = 100 - sum
-    const undefCount = result.filter((w) => w === 0).length
-    if (undefCount > 0) {
-      const each = Math.floor(remaining / undefCount)
-      return result.map((w) => (w === 0 ? each : w))
-    }
-    // All have defaults — normalize to 100
-    const scale = 100 / sum
-    return result.map((w) => Math.round(w * scale))
-  }
-  const pct = Math.floor(100 / count)
-  return Array.from({ length: count }, () => pct)
-}
-
-function saveWidths(id: string, widths: number[]) {
-  localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(widths))
 }

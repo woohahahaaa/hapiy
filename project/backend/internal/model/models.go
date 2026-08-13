@@ -244,6 +244,23 @@ type Setting struct {
 	Value string `gorm:"type:text" json:"value"`
 }
 
+// TableConfig — per-table column display config, shared across all clients.
+// Width is a required user-provided value parsed client-side; this table only
+// stores the resolved config blob.
+type TableConfig struct {
+	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
+	TableID   string    `gorm:"uniqueIndex;not null" json:"table_id"`
+	Configs   string    `gorm:"type:text" json:"configs"` // JSON array of ColumnDisplayConfig
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (t *TableConfig) BeforeCreate(tx *gorm.DB) error {
+	if t.ID == "" {
+		t.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // BaseUrlPath model — display-only path names for the BaseURL settings page;
 // never consulted by the relay, which reads the "__name" path convention directly.
 type BaseUrlPath struct {

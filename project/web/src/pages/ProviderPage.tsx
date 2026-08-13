@@ -132,13 +132,14 @@ export function ProviderPage() {
   }
 
   const columns: ColumnDef<Provider>[] = [
-    { key: 'name', label: '名称', render: (_, provider) => <span className="font-medium">{provider.name}</span> },
-    { key: 'baseUrls', label: 'Base URLs', render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.baseUrls.length} URLs</span> },
-    { key: 'keys', label: 'Keys', render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.keys.length} Keys</span> },
-    { key: 'endpoints', label: 'Endpoints', render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.endpoints.length} Endpoints</span> },
+    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, provider) => <span className="font-medium">{provider.name}</span> },
+    { key: 'baseUrls', label: 'Base URLs', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.baseUrls.length} URLs</span> },
+    { key: 'keys', label: 'Keys', defaultWidth: { kind: 'pixel', value: 100 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.keys.length} Keys</span> },
+    { key: 'endpoints', label: 'Endpoints', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.endpoints.length} Endpoints</span> },
     {
       key: 'models',
       label: '模型',
+      defaultWidth: { kind: 'pixel', value: 240 },
       render: (_, provider) => (
         <div className="flex flex-wrap gap-1">
           {provider.models.map((model) => <span key={model.model} className="text-xs text-muted-foreground">{model.model}</span>)}
@@ -148,11 +149,14 @@ export function ProviderPage() {
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, provider) => <span className={provider.status ? 'text-success' : 'text-destructive'}>{provider.status ? '启用' : '禁用'}</span>,
     },
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 220 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, provider) => (
         <div className="flex items-center justify-end gap-2">

@@ -419,6 +419,24 @@ export type ChannelAffinitySetting = {
 
 export type ChannelAffinitySettingInput = ChannelAffinitySetting
 
+// ── Per-table column display config ──
+export type ColumnWidthConfig =
+  | { readonly kind: 'percent'; readonly value: number }
+  | { readonly kind: 'pixel'; readonly value: number }
+
+export type ColumnDisplayConfig = {
+  readonly width: ColumnWidthConfig
+  readonly align: 'left' | 'right'
+  readonly overflow: 'ellipsis' | 'wrap'
+}
+
+export type TableConfig = {
+  readonly id: string
+  readonly tableId: string
+  readonly configs: readonly ColumnDisplayConfig[]
+  readonly updatedAt: string
+}
+
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
@@ -630,6 +648,56 @@ function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
     enabled: readBoolean(value.enabled, 'affinity.enabled'),
     defaultTtlSeconds: readNumber(value.default_ttl_seconds, 'affinity.default_ttl_seconds', 1800),
     rules: readObjectArray(value.rules, 'affinity.rules', parseChannelAffinityRule),
+  }
+}
+
+function parseColumnWidth(value: unknown): ColumnWidthConfig | null {
+  if (!isRecord(value)) return null
+  const kind = value.kind
+  const rawVal = value.value
+  if (typeof rawVal !== 'number' || !Number.isFinite(rawVal)) return null
+  if (kind === 'percent') return { kind: 'percent', value: rawVal }
+  if (kind === 'pixel') return { kind: 'pixel', value: rawVal }
+  return null
+}
+
+function parseColumnDisplayConfig(value: unknown): ColumnDisplayConfig | null {
+  if (!isRecord(value)) return null
+  const width = parseColumnWidth(value.width)
+  if (!width) return null
+  const align = value.align
+  if (align !== 'left' && align !== 'right') return null
+  const overflow = value.overflow
+  if (overflow !== 'ellipsis' && overflow !== 'wrap') return null
+  return { width, align, overflow }
+}
+
+function parseTableConfig(value: unknown): TableConfig {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的表格配置格式无效', null)
+  }
+  const rawConfigs = value.configs
+  let parsedConfigs: readonly ColumnDisplayConfig[] = []
+  if (typeof rawConfigs === 'string') {
+    const decoded = parseJson(rawConfigs, 'table.configs')
+    if (!Array.isArray(decoded)) {
+      throw new DashboardApiError('table.configs 必须是数组', null)
+    }
+    parsedConfigs = decoded
+      .map(parseColumnDisplayConfig)
+      .filter((cfg): cfg is ColumnDisplayConfig => cfg !== null)
+  } else if (Array.isArray(rawConfigs)) {
+    parsedConfigs = rawConfigs
+      .map(parseColumnDisplayConfig)
+      .filter((cfg): cfg is ColumnDisplayConfig => cfg !== null)
+  } else {
+    throw new DashboardApiError('table.configs 必须是数组', null)
+  }
+  return {
+    id: readString(value.id, 'table.id'),
+    tableId: readString(value.table_id, 'table.table_id'),
+    configs: parsedConfigs,
+    updatedAt: readString(value.updated_at, 'table.updated_at'),
   }
 }
 
@@ -1666,6 +1734,23 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(serializeChannelAffinity(input)),
     })
     return parseChannelAffinity(body)
+  },
+
+  async getTableConfig(id: string): Promise<TableConfig | null> {
+    try {
+      const body = await requestFull(`/table-configs/${encodeURIComponent(id)}`)
+      return parseTableConfig(body.data)
+    } catch (err) {
+      if (err instanceof DashboardApiError && err.status === 404) return null
+      throw err
+    }
+  },
+  async saveTableConfig(id: string, configs: readonly ColumnDisplayConfig[]): Promise<TableConfig> {
+    const body = await requestFull(`/table-configs/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ configs }),
+    })
+    return parseTableConfig(body.data)
   },
 
   async getFlatTopology(): Promise<FlatTopology> {

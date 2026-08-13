@@ -160,6 +160,7 @@ export function PricePage() {
     {
       key: 'model',
       label: '模型',
+      defaultWidth: { kind: 'pixel', value: 240 },
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <span>{row.model}</span>
@@ -175,6 +176,8 @@ export function PricePage() {
     {
       key: 'contextLength',
       label: 'context',
+      defaultWidth: { kind: 'pixel', value: 120 },
+      defaultAlign: 'right',
       render: (_, row) => (
         <span className="text-right tabular-nums text-muted-foreground">
           {row.contextLength > 0 ? row.contextLength.toLocaleString() : '—'}
@@ -184,6 +187,8 @@ export function PricePage() {
     {
       key: 'price',
       label: '价格',
+      defaultWidth: { kind: 'pixel', value: 240 },
+      defaultAlign: 'right',
       render: (_, row) => (
         <span className="text-right tabular-nums text-muted-foreground">
           {`${row.inputPrice.toFixed(2)} / ${row.outputPrice.toFixed(2)} / ${row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : '—'} / ${row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : '—'}`}
@@ -193,6 +198,8 @@ export function PricePage() {
     {
       key: 'actions',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 100 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">

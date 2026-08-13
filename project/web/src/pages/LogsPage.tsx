@@ -135,27 +135,29 @@ export function LogsPage() {
   }, [logs, modelFilter])
 
   const columns: ColumnDef<UsageLog>[] = [
-    { key: 'createdAt', label: '时间', isTime: true },
-    { key: 'userId', label: '用户', defaultWidth: 7 },
-    { key: 'tokenName', label: '令牌', defaultWidth: 10 },
-    { key: 'providerName', label: '供应商', defaultWidth: 10 },
-    { key: 'modelName', label: '模型', defaultWidth: 12 },
+    { key: 'createdAt', label: '时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
+    { key: 'userId', label: '用户', defaultWidth: { kind: 'percent', value: 7 } },
+    { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
     {
       key: 'promptTokens',
       label: 'Tokens',
-      defaultWidth: 8,
+      defaultWidth: { kind: 'percent', value: 8 },
+      defaultAlign: 'right',
       render: (v, row) => `${v} / ${row.completionTokens}`,
     },
     {
       key: 'isStream',
       label: '流式',
-      defaultWidth: 5,
+      defaultWidth: { kind: 'percent', value: 5 },
       render: (v) => (v ? 'SSE' : '-'),
     },
     {
       key: 'quota',
       label: '消耗',
-      defaultWidth: 8,
+      defaultWidth: { kind: 'percent', value: 8 },
+      defaultAlign: 'right',
       render: (v) => {
         const q = v as number
         return q > 0 ? `¥${q.toFixed(2)}` : '-'
@@ -164,7 +166,8 @@ export function LogsPage() {
     {
       key: 'useTime',
       label: '耗时',
-      defaultWidth: 13,
+      defaultWidth: { kind: 'percent', value: 13 },
+      defaultAlign: 'right',
       render: (v, row) => {
         const main = `${(v as number / 1000).toFixed(1)}s`
         const log = row as UsageLog
@@ -187,6 +190,8 @@ export function LogsPage() {
     {
       key: 'status',
       label: '状态',
+      defaultWidth: { kind: 'percent', value: 25 },
+      defaultOverflow: 'wrap',
       render: (v, row) => {
         const s = v as string
         const log = row as UsageLog

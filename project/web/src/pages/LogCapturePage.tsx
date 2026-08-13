@@ -217,22 +217,26 @@ export function LogCapturePage() {
     {
       key: 'created_at',
       label: '时间',
+      defaultWidth: { kind: 'pixel', value: 160 },
       isTime: true,
       render: (_, row) => (row.kind === 'pair' ? row.pair.created_at : row.file.created_at),
     },
     {
       key: 'prefix',
       label: '文件夹路径',
+      defaultWidth: { kind: 'percent', value: 18 },
       render: (_, row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
     },
     {
       key: 'source',
       label: '标记',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
     },
     {
       key: 'type',
       label: '类型',
+      defaultWidth: { kind: 'pixel', value: 120 },
       render: (_, row) =>
         row.kind === 'pair' ? (
           <Badge variant="default">
@@ -248,6 +252,7 @@ export function LogCapturePage() {
     {
       key: 'is_stream',
       label: '流式',
+      defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) =>
         row.kind === 'pair' ? (
           row.pair.is_stream ? (
@@ -262,11 +267,14 @@ export function LogCapturePage() {
     {
       key: 'name',
       label: '文件名/请求ID',
+      defaultWidth: { kind: 'percent', value: 25 },
       render: (_, row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),
     },
     {
       key: 'size',
       label: '大小',
+      defaultWidth: { kind: 'pixel', value: 100 },
+      defaultAlign: 'right',
       render: (_, row) =>
         row.kind === 'system' ? (
           formatSize(row.file.size)
@@ -277,6 +285,8 @@ export function LogCapturePage() {
     {
       key: 'id',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 100 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <Button

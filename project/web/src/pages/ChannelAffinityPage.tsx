@@ -241,21 +241,25 @@ export function ChannelAffinityPage() {
     {
       key: 'name',
       label: '规则名称',
+      defaultWidth: { kind: 'pixel', value: 160 },
       render: (_, row) => <span className="font-medium">{row.name}</span>,
     },
     {
       key: 'modelRegex',
       label: '模型',
+      defaultWidth: { kind: 'pixel', value: 200 },
       render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelRegex.join(', ') || '全部'}</span>,
     },
     {
       key: 'pathRegex',
       label: 'Endpoint',
+      defaultWidth: { kind: 'pixel', value: 160 },
       render: (_, row) => <span className="text-xs text-muted-foreground">{row.pathRegex.join(', ') || '不区分'}</span>,
     },
     {
       key: 'keySources',
       label: '亲和字段',
+      defaultWidth: { kind: 'percent', value: 25 },
       render: (_, row) => (
         <span className="text-xs text-muted-foreground">
           {row.keySources.map((source) => source.type === 'request_header' ? source.key : source.path).join(', ') || '-'}
@@ -265,16 +269,21 @@ export function ChannelAffinityPage() {
     {
       key: 'ttlSeconds',
       label: 'TTL（秒）',
+      defaultWidth: { kind: 'pixel', value: 100 },
+      defaultAlign: 'right',
       render: (_, row) => <span className="text-xs text-muted-foreground">{row.ttlSeconds ?? current.defaultTtlSeconds}</span>,
     },
     {
       key: 'enabled',
       label: '状态',
+      defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => <span className={row.enabled ? 'text-success' : 'text-destructive'}>{row.enabled ? '启用' : '禁用'}</span>,
     },
     {
       key: 'actions',
       label: '操作',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="flex items-center justify-end gap-2">

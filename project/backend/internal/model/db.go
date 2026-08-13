@@ -39,6 +39,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&LogCapture{},
 		&Setting{},
 		&BaseUrlPath{},
+		&TableConfig{},
 	)
 }
 

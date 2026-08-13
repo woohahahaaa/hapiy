@@ -60,18 +60,21 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   {
     key: 'status',
     label: '状态',
+    defaultWidth: { kind: 'pixel', value: 100 },
     render: (_, row) => (row.endTime ? '已结束' : '活跃中'),
   },
-  { key: 'model', label: '模型' },
-  { key: 'tokenName', label: '令牌' },
-  { key: 'userId', label: '用户' },
-  { key: 'stream', label: '类型', render: (v) => (v ? 'SSE' : '--') },
+  { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 20 } },
+  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'pixel', value: 160 } },
+  { key: 'userId', label: '用户', defaultWidth: { kind: 'pixel', value: 140 } },
+  { key: 'stream', label: '类型', defaultWidth: { kind: 'pixel', value: 80 }, render: (v) => (v ? 'SSE' : '--') },
   {
     key: 'elapsedMs',
     label: '耗时',
+    defaultWidth: { kind: 'pixel', value: 100 },
+    defaultAlign: 'right',
     render: (v) => formatElapsed(v as number),
   },
-  { key: 'startTime', label: '开始时间', isTime: true },
+  { key: 'startTime', label: '开始时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
 ]
 
 type MetricCardProps = {
