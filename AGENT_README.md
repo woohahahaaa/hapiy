@@ -36,11 +36,11 @@ hapiy 项目的一站式运行说明：前端 Vite + 后端 Go + 反向代理 + 
 
 agent 会：
 
-1. 用 `project/web/scripts/dev.sh` 把前端 detach 到后台，监听 `0.0.0.0:28001`。
+1. 用 `project/web/scripts/dev.sh` 把前端 detach 到后台，监听 `0.0.0.0:18009`。
 2. 用 `project/backend/scripts/backend.sh` 把后端 detach 到后台，监听 `0.0.0.0:8080`。
-3. 提示你确认前端 dev 端口与后端 API 端口，并在反代里同时转发 `28001 → 28001` 与 `/v1/ → 8080`。
+3. 提示你确认前端 dev 端口与后端 API 端口，并在反代里同时转发 `18009 → 18009` 与 `/v1/ → 8080`。
 
-> *Hand the project directory to the agent and say "Prepare frontend, backend, and reverse proxy per AGENT_README.md". It launches both servers detached, then asks for proxy routing on `28001` and `/v1/`.*
+> *Hand the project directory to the agent and say "Prepare frontend, backend, and reverse proxy per AGENT_README.md". It launches both servers detached, then asks for proxy routing on `18009` and `/v1/`.*
 
 ### 🛟 兜底：手动启动
 
@@ -65,9 +65,9 @@ cd project/backend
 ## 🌍 反代配置（nginx 示例）
 
 ```nginx
-# 前端 28001
+# 前端 18009
 location / {
-    proxy_pass http://127.0.0.1:28001;
+    proxy_pass http://127.0.0.1:18009;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header Upgrade $http_upgrade;
@@ -90,7 +90,7 @@ location /v1/ {
 ### 端口没人在听
 
 ```bash
-lsof -nP -iTCP:28001 -sTCP:LISTEN
+lsof -nP -iTCP:18009 -sTCP:LISTEN
 lsof -nP -iTCP:8080  -sTCP:LISTEN
 ```
 

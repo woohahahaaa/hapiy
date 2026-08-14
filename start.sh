@@ -19,7 +19,7 @@ cd "$ROOT_DIR"
 
 WEB_DIR="$ROOT_DIR/project/web"
 BACKEND_DIR="$ROOT_DIR/project/backend"
-WEB_PORT="${WEB_PORT:-28001}"
+WEB_PORT="${WEB_PORT:-18009}"
 API_PORT="${API_PORT:-8080}"
 
 need() {

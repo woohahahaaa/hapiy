@@ -10,7 +10,7 @@ Always start the frontend with the project launcher:
 ./start.sh
 ```
 
-It runs Vite on `0.0.0.0:28001`. Open `http://localhost:28001` locally, or use the machine's LAN address with port `28001` from another device.
+It runs Vite on `0.0.0.0:18009`. Open `http://localhost:18009` locally, or use the machine's LAN address with port `18009` from another device.
 
 ## Adding components
 

@@ -8,7 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: "0.0.0.0",
-    port: 28001,
+    port: 18009,
     strictPort: true,
     allowedHosts: ["macs1.hihy.me"],
     proxy: {

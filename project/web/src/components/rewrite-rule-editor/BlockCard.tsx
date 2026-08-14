@@ -57,7 +57,8 @@ export function BlockCard({
     })
   }
   const removeAction = (i: number) => {
-    onChange({ ...block, actions: block.actions.filter((_, ai) => ai !== i) })
+    const next = block.actions.filter((_, ai) => ai !== i)
+    onChange({ ...block, actions: next.length === 0 ? [emptyAction()] : next })
   }
   const addAction = () => {
     onChange({ ...block, actions: [...block.actions, emptyAction()] })
@@ -150,7 +151,7 @@ export function BlockCard({
                   condition={c}
                   onChange={(next) => updateCond(i, next)}
                   onRemove={() => removeCond(i)}
-                  canRemove={block.conditions.length > 1}
+                  canRemove={block.conditions.length > 0}
                 />
               ))}
             </div>

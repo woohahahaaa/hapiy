@@ -7,14 +7,14 @@
 #   ./scripts/dev.sh --stop   # stop the running dev server
 #
 # Designed for use outside an interactive agent session, including via a
-# reverse proxy that points at this machine's LAN address on port 28001.
+# reverse proxy that points at this machine's LAN address on port 18009.
 
 set -eu
 
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
-PORT="${PORT:-28001}"
+PORT="${PORT:-18009}"
 LOG_FILE="${LOG_FILE:-/tmp/hapiy-web-dev.log}"
 PID_FILE="${PID_FILE:-/tmp/hapiy-web-dev.pid}"
 

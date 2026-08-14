@@ -46,14 +46,14 @@ agent 会执行 `project/backend/scripts/backend.sh`，把 Go 后端 detach 启�
 
 ### 🌍 打开浏览器
 
-dev server 默认监听 `0.0.0.0:28001`：
+dev server 默认监听 `0.0.0.0:18009`：
 
 ```text
-http://localhost:28001        # 本机
-http://<lan-ip>:28001         # 反代后的局域网地址
+http://localhost:18009        # 本机
+http://<lan-ip>:18009         # 反代后的局域网地址
 ```
 
-> *The dev server listens on `0.0.0.0:28001` by default. Access it locally or via your reverse proxy.*
+> *The dev server listens on `0.0.0.0:18009` by default. Access it locally or via your reverse proxy.*
 
 ### 🛰️ 后端服务
 
@@ -111,7 +111,7 @@ detached 后台启动脚本，行为：
 环境变量可覆盖默认行为：
 
 ```bash
-PORT=28001 LOG_FILE=/var/log/hapiy-web-dev.log PID_FILE=/var/run/hapiy-web-dev.pid ./scripts/dev.sh
+PORT=18009 LOG_FILE=/var/log/hapiy-web-dev.log PID_FILE=/var/run/hapiy-web-dev.pid ./scripts/dev.sh
 ```
 
 > *Override defaults via `PORT`, `LOG_FILE`, `PID_FILE`.*
