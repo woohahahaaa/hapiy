@@ -117,6 +117,14 @@ case "${1:-start}" in
     fi
     build_if_needed
     : > "$LOG_FILE"
+
+    firewall_mode_arg=""
+    [ "${HAPIY_FIREWALL:-global}" = "per-binary" ] || firewall_mode_arg="--global"
+    "$ROOT_DIR/scripts/firewall-allow.sh" $firewall_mode_arg "$BINARY" || {
+      echo "[backend] firewall allow-list setup failed; aborting so we don't start a server nobody can reach." >&2
+      exit 1
+    }
+
     HAPIY_HOST="$HOST" nohup "$BINARY" >>"$LOG_FILE" 2>&1 </dev/null &
     echo $! > "$PID_FILE"
     disown || true

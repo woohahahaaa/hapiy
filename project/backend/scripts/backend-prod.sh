@@ -119,6 +119,14 @@ case "${1:-start}" in
     fi
     build
     : > "$LOG_FILE"
+
+    firewall_mode_arg=""
+    [ "${HAPIY_FIREWALL:-global}" = "per-binary" ] || firewall_mode_arg="--global"
+    "$ROOT_DIR/scripts/firewall-allow.sh" $firewall_mode_arg "$BINARY" || {
+      echo "[backend-prod] firewall allow-list setup failed; aborting so we don't start a server nobody can reach." >&2
+      exit 1
+    }
+
     HAPIY_ENV=production \
     HAPIY_HOST="$HOST" \
     HAPIY_PORT="$PORT" \

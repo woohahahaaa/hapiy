@@ -185,7 +185,6 @@ export function DataTable<T extends Record<string, unknown>>({
   const colCount = columns.length
 
   const tableRef = React.useRef<HTMLDivElement>(null)
-  const [parentWidth, setParentWidth] = React.useState<number>(0)
 
   const [configs, setConfigs] = React.useState<ColumnDisplayConfig[]>(() =>
     configsFromColumns(columns as ColumnDef<unknown>[]),
@@ -260,7 +259,6 @@ export function DataTable<T extends Record<string, unknown>>({
   const recompute = React.useCallback(() => {
     const el = tableRef.current
     const w = el ? el.getBoundingClientRect().width : 0
-    setParentWidth(w)
     setResolvedWidths(
       computeResolvedWidths(w, columns as ColumnDef<unknown>[], configs),
     )
@@ -268,10 +266,10 @@ export function DataTable<T extends Record<string, unknown>>({
 
   React.useLayoutEffect(() => {
     recompute()
+    let pendingTimer: number | undefined
     const handleResize = () => {
-      window.clearTimeout((handleResize as Window['setTimeout'] & { t?: number }).t)
-      const t = window.setTimeout(recompute, RESIZE_DEBOUNCE_MS)
-      ;(handleResize as Window['setTimeout'] & { t?: number }).t = t
+      if (pendingTimer !== undefined) window.clearTimeout(pendingTimer)
+      pendingTimer = window.setTimeout(recompute, RESIZE_DEBOUNCE_MS)
     }
     window.addEventListener("resize", handleResize)
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => recompute()) : null

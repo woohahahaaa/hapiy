@@ -5,7 +5,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
+
+
 
 import { Switch } from '@/components/ui/switch'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
@@ -17,10 +18,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { DashboardApiError, dashboardApi,
+import { dashboardApi,
   type RewriteRule,
   type HeartbeatRule,
   type ConcurrencyRule,
@@ -166,7 +167,7 @@ function useRulesApi<T>(type: RuleType) {
     }
   }
 
-  return { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit }
+  return { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit }
 }
 
 // ── Empty / Error / Loading helpers ──
@@ -183,64 +184,13 @@ function RuleToggleButton({ active, disabled, onClick }: { active: boolean; disa
   )
 }
 
-// ── Diff-based JSON save helper ──
-
-async function diffAndSave<T extends { id: string; status: boolean }>(
-  data: unknown,
-  rules: readonly T[],
-  type: RuleType,
-  fetch: () => Promise<void>,
-  setMutating: (v: boolean) => void,
-  idMap: JsonEditorIdMap,
-) {
-  setMutating(true)
-  try {
-    const parsed = parseJsonEditorArray<T>(data)
-    const currentMap = new Map(rules.map((r) => [r.id, r]))
-    const retainedIds = new Set<string>()
-    const ops: Promise<unknown>[] = []
-
-    for (const item of parsed) {
-      const id = idMap.get(item.id)
-      if (id && currentMap.has(id)) {
-        retainedIds.add(id)
-        const { id: _editorId, ...edited } = item
-        const currentRecord = currentMap.get(id)
-        if (!currentRecord) continue
-        const { id: _backendId, ...current } = currentRecord
-        if (JSON.stringify(edited) !== JSON.stringify(current)) {
-          ops.push(dashboardApi.updateRule(type, id, { ...edited, status: item.status }))
-        }
-      } else {
-        const { id: _editorId, ...created } = item
-        ops.push(dashboardApi.createRule(type, { ...created, status: item.status }))
-      }
-    }
-
-    for (const id of currentMap.keys()) {
-      if (!retainedIds.has(id)) {
-        ops.push(dashboardApi.deleteRule(type, id))
-      }
-    }
-
-    const results = await Promise.allSettled(ops)
-    const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-    await fetch()
-    if (failures.length > 0) {
-      throw new Error(`${failures.length} 项保存失败`)
-    }
-  } finally {
-    setMutating(false)
-  }
-}
 
 // ── Rewrite ──
 
 function RewritePage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<RewriteRule>('rewrite')
+  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<RewriteRule>('rewrite')
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
@@ -262,10 +212,6 @@ function RewritePage() {
       const result = await create({ name: rule.name, script: rule.script, status: rule.status })
       if (result) { setIsOpen(false) }
     }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    await diffAndSave(data, rules, 'rewrite', fetch, setMutating, idMap)
   }
 
   const columns: ColumnDef<RewriteRule>[] = [
@@ -397,10 +343,9 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
 // ── Heartbeat ──
 
 function HeartbeatPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<HeartbeatRule>('heartbeat')
+  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<HeartbeatRule>('heartbeat')
   const [editing, setEditing] = useState<HeartbeatRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -421,10 +366,6 @@ function HeartbeatPage() {
       const result = await create({ name: rule.name, matchCondition: rule.matchCondition, replyContent: rule.replyContent, timeout: rule.timeout, status: rule.status })
       if (result) { setIsOpen(false) }
     }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    await diffAndSave(data, rules, 'heartbeat', fetch, setMutating, idMap)
   }
 
   const columns: ColumnDef<HeartbeatRule>[] = [
@@ -542,10 +483,9 @@ function HeartbeatForm({ rule, onSave, onCancel, saving }: { rule: HeartbeatRule
 // ── Concurrency ──
 
 function ConcurrencyPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ConcurrencyRule>('concurrency')
+  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ConcurrencyRule>('concurrency')
   const [editing, setEditing] = useState<ConcurrencyRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -566,10 +506,6 @@ function ConcurrencyPage() {
       const result = await create({ name: rule.name, scope: rule.scope, maxConcurrent: rule.maxConcurrent, queueEnabled: rule.queueEnabled, status: rule.status })
       if (result) { setIsOpen(false) }
     }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    await diffAndSave(data, rules, 'concurrency', fetch, setMutating, idMap)
   }
 
   const scopeLabel = (scope: ConcurrencyRule['scope']) =>
@@ -701,10 +637,9 @@ function ConcurrencyForm({ rule, onSave, onCancel, saving }: { rule: Concurrency
 // ── Failover ──
 
 function FailoverPage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<FailoverRule>('failover')
+  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<FailoverRule>('failover')
   const [editing, setEditing] = useState<FailoverRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
@@ -725,10 +660,6 @@ function FailoverPage() {
       const result = await create({ name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: rule.status })
       if (result) { setIsOpen(false) }
     }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    await diffAndSave(data, rules, 'failover', fetch, setMutating, idMap)
   }
 
   const conditionLabel = (c: FailoverRule['condition']) =>
@@ -857,10 +788,9 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
 // ── Response Rewrite ──
 
 function RewriteResponsePage() {
-  const { rules, loading, error, mutating, setMutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ResponseRewriteRule>('rewrite-response')
+  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ResponseRewriteRule>('rewrite-response')
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
 
   const handleToggle = async (id: string) => {
@@ -882,10 +812,6 @@ function RewriteResponsePage() {
       const result = await create({ name: rule.name, script: rule.script, status: rule.status })
       if (result) { setIsOpen(false) }
     }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    await diffAndSave(data, rules, 'rewrite-response', fetch, setMutating, idMap)
   }
 
   const columns: ColumnDef<ResponseRewriteRule>[] = [

@@ -1,9 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
 import { topologyConfig } from '@/config/topology-config'
 import type {
+  RequestModifySlotEntry,
+  ResponseModifySlotEntry,
   SlotEntry,
   SlotEntryMap,
   SlotRuleMap,
@@ -64,7 +66,9 @@ export function SlotNode({ data }: SlotNodeProps) {
 
   // Collect all slot entries that have a ruleId bound, in index order.
   const boundEntries = entries
-    .filter((e) => e.ruleId && (slotType === 'requestModify' || slotType === 'responseModify'))
+    .filter((e): e is RequestModifySlotEntry | ResponseModifySlotEntry =>
+      'ruleId' in e && (slotType === 'requestModify' || slotType === 'responseModify'),
+    )
     .sort((a, b) => a.index - b.index)
 
   // Resolve rule objects from bound entry ruleIds.

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SlotItemCard } from './SlotItemCard'
@@ -8,15 +8,23 @@ interface LogOutputSlotItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
+  onAutoClose?: () => void
 }
 
 export function LogOutputSlotItem({
   entry,
   onChange,
   onDelete,
+  onAutoClose,
   ...drag
 }: LogOutputSlotItemProps) {
   const [localPrefix, setLocalPrefix] = useState(entry.prefix)
+
+  // When the slot is disabled while a callback is wired, notify the parent so
+  // it can close any open capture dialog or clear related state.
+  useEffect(() => {
+    if (!entry.enabled) onAutoClose?.()
+  }, [entry.enabled, onAutoClose])
 
   return (
     <SlotItemCard

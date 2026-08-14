@@ -178,14 +178,15 @@ export function parseRule(script: string): RuleForm {
 }
 
 function actionFromJson(op: JsonObject): Action | null {
-  const mode = typeof op.mode === 'string' ? (op.mode.trim() as ModeName) : ''
-  if (!MODE_BY_VALUE.has(mode)) return null
+  const mode = typeof op.mode === 'string' ? op.mode.trim() : ''
+  if (!mode || !MODE_BY_VALUE.has(mode as ModeName)) return null
+  const typedMode = mode as ModeName
   const rawPath = typeof op.path === 'string' ? op.path : ''
   const scope = parseScope(op.scope)
   const path = stripHeaderPrefix(rawPath, scope)
-  const spec = MODE_BY_VALUE.get(mode)!
+  const spec = MODE_BY_VALUE.get(typedMode)!
   const a: Action = {
-    mode,
+    mode: typedMode,
     path,
     value: '',
     from: '',

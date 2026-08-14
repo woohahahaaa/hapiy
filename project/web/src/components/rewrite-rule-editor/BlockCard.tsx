@@ -105,7 +105,7 @@ export function BlockCard({
               <AppIcon name="drag_handle" size={16} />
             </button>
           )}
-          <span className="text-xs font-medium text-foreground">规则 {ruleNumber(block.id)}</span>
+          <span className="text-xs font-medium text-foreground">规则 {ruleNumber(block.id, index)}</span>
           <span className="text-xs text-muted-foreground tabular-nums">
             {block.conditions.length} 条件 · {block.actions.length} 执行
           </span>

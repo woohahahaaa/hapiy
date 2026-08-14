@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -43,7 +42,6 @@ export function TokenPage() {
   const [editing, setEditing] = useState<Token | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)
-  const [jsonOpen, setJsonOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -99,56 +97,6 @@ export function TokenPage() {
 
   const handleRefresh = () => {
     setPendingKey(generatePreviewKey())
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    setIsSaving(true)
-    setError(null)
-    try {
-      const parsed = parseJsonEditorArray<Token>(data)
-      const currentMap = new Map(tokens.map((t) => [t.id, t]))
-      const retainedIds = new Set<string>()
-      const ops: Promise<unknown>[] = []
-
-      for (const item of parsed) {
-        const id = idMap.get(item.id)
-        const tokenInput: TokenInput = {
-          name: item.name,
-          quota: item.quota,
-          status: item.status,
-          key: item.key,
-          historyKeys: item.historyKeys,
-          usedQuota: item.usedQuota,
-        }
-        if (id && currentMap.has(id)) {
-          retainedIds.add(id)
-          const { id: _editorId, ...edited } = item
-          const currentRecord = currentMap.get(id)
-          if (!currentRecord) continue
-          const { id: _backendId, ...current } = currentRecord
-          if (JSON.stringify(edited) !== JSON.stringify(current)) {
-            ops.push(dashboardApi.updateToken(id, tokenInput))
-          }
-        } else {
-          ops.push(dashboardApi.createToken(tokenInput))
-        }
-      }
-
-      for (const id of currentMap.keys()) {
-        if (!retainedIds.has(id)) {
-          ops.push(dashboardApi.deleteToken(id))
-        }
-      }
-
-      const results = await Promise.allSettled(ops)
-      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      await loadTokens(offset, limit)
-      if (failures.length > 0) {
-        throw new Error(`${failures.length} 项保存失败`)
-      }
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   const copyToClipboard = async (key: string) => {

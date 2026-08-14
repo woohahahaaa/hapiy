@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,7 +36,6 @@ export function ProviderPage() {
   const [limit, setLimit] = useState(20)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,53 +79,6 @@ export function ProviderPage() {
     if (saved) {
       setEditing(null)
       setIsDialogOpen(false)
-    }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    setIsSaving(true)
-    setError(null)
-    try {
-      const parsed = parseJsonEditorArray<Provider>(data)
-      const currentMap = new Map(providers.map((p) => [p.id, p]))
-      const retainedIds = new Set<string>()
-      const ops: Promise<unknown>[] = []
-
-      for (const item of parsed) {
-        const id = idMap.get(item.id)
-          const providerInput: ProviderInput = {
-          name: item.name, baseUrls: item.baseUrls, keys: item.keys,
-          endpoints: item.endpoints, models: item.models,
-          status: item.status, workflowEnabled: item.workflowEnabled, autoDisabled: item.autoDisabled,
-        }
-        if (id && currentMap.has(id)) {
-          retainedIds.add(id)
-          const { id: _editorId, ...edited } = item
-          const currentRecord = currentMap.get(id)
-          if (!currentRecord) continue
-          const { id: _backendId, ...current } = currentRecord
-          if (JSON.stringify(edited) !== JSON.stringify(current)) {
-            ops.push(dashboardApi.updateProvider(id, providerInput))
-          }
-        } else {
-          ops.push(dashboardApi.createProvider(providerInput))
-        }
-      }
-
-      for (const id of currentMap.keys()) {
-        if (!retainedIds.has(id)) {
-          ops.push(dashboardApi.deleteProvider(id))
-        }
-      }
-
-      const results = await Promise.allSettled(ops)
-      const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-      await loadProviders()
-      if (failures.length > 0) {
-        throw new Error(`${failures.length} 项保存失败`)
-      }
-    } finally {
-      setIsSaving(false)
     }
   }
 

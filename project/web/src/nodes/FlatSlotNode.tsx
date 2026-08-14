@@ -6,7 +6,13 @@ import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
 import { SlotItemCard } from '@/components/topology/slot-items/SlotItemCard'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
-import type { SlotEntry, SlotRuleMap, SlotType } from '@/components/topology/slot-items'
+import type {
+  RequestModifySlotEntry,
+  ResponseModifySlotEntry,
+  SlotEntry,
+  SlotRuleMap,
+  SlotType,
+} from '@/components/topology/slot-items'
 import {
   RequestModifySlotItem,
   ResponseModifySlotItem,
@@ -110,7 +116,9 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
 
   // Collect all bound rewrite entries in index order for sequential testing.
   const boundEntries = entries
-    .filter((e) => e.ruleId && (slotType === 'requestModify' || slotType === 'responseModify'))
+    .filter((e): e is RequestModifySlotEntry | ResponseModifySlotEntry =>
+      'ruleId' in e && (slotType === 'requestModify' || slotType === 'responseModify'),
+    )
     .sort((a, b) => a.index - b.index)
 
   const rewriteRules = slotType === 'requestModify'
@@ -194,7 +202,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
   ) : isLogOutputSlot ? (
     <LogOutputSlotHeader
       title={title}
-      enabled={data.enabled}
+      enabled={data.enabled ?? false}
       deadlineAt={logDeadlineAt ?? null}
       onToggle={(next) => onToggleLog?.(next)}
       onSetDeadline={onSetLogDeadline}
@@ -467,7 +475,6 @@ function LogOutputSlotHeader({
   enabled,
   deadlineAt,
   onToggle,
-  onSetDeadline,
   onStartCapture,
   onAutoClose,
 }: LogOutputSlotHeaderProps) {

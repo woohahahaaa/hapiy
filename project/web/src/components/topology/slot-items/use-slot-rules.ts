@@ -24,20 +24,23 @@ export function useSlotRules(): { rules: SlotRuleMap; loading: boolean } {
   useEffect(() => {
     let cancelled = false
     async function loadAll() {
+      const params = { limit: 200, offset: 0 }
       const settled = await Promise.allSettled([
-        dashboardApi.listRules<RewriteRule>('rewrite'),
-        dashboardApi.listRules<ResponseRewriteRule>('rewrite-response'),
-        dashboardApi.listRules<HeartbeatRule>('heartbeat'),
-        dashboardApi.listRules<ConcurrencyRule>('concurrency'),
-        dashboardApi.listRules<FailoverRule>('failover'),
+        dashboardApi.listRules<RewriteRule>('rewrite', params),
+        dashboardApi.listRules<ResponseRewriteRule>('rewrite-response', params),
+        dashboardApi.listRules<HeartbeatRule>('heartbeat', params),
+        dashboardApi.listRules<ConcurrencyRule>('concurrency', params),
+        dashboardApi.listRules<FailoverRule>('failover', params),
       ])
       if (cancelled) return
+      const pick = <T,>(r: PromiseSettledResult<{ readonly rules: readonly T[]; readonly total: number }>): readonly T[] =>
+        r.status === 'fulfilled' ? r.value.rules : []
       setRules({
-        requestModify: settled[0].status === 'fulfilled' ? settled[0].value : [],
-        responseModify: settled[1].status === 'fulfilled' ? settled[1].value : [],
-        autoReply: settled[2].status === 'fulfilled' ? settled[2].value : [],
-        concurrency: settled[3].status === 'fulfilled' ? settled[3].value : [],
-        autoSwitch: settled[4].status === 'fulfilled' ? settled[4].value : [],
+        requestModify: pick(settled[0]),
+        responseModify: pick(settled[1]),
+        autoReply: pick(settled[2]),
+        concurrency: pick(settled[3]),
+        autoSwitch: pick(settled[4]),
       })
       setLoading(false)
     }

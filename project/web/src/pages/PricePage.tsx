@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { parseJsonEditorArray, type JsonEditorIdMap } from '@/components/JsonEditModal'
 import { Button } from '@/components/ui/button'
 import { EmptyCell } from '@/components/ui/empty-cell'
 
@@ -46,62 +45,12 @@ function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : '发生意外错误，请重试'
 }
 
-async function diffAndSave(
-  data: unknown,
-  prices: readonly PriceConfig[],
-  fetch: () => Promise<void>,
-  setMutating: (v: boolean) => void,
-  idMap: JsonEditorIdMap,
-): Promise<void> {
-  setMutating(true)
-  try {
-    const parsed = parseJsonEditorArray<PriceConfigInput>(data)
-    const currentMap = new Map(prices.map((p) => [p.id, p]))
-    const retainedIds = new Set<string>()
-    const ops: Promise<unknown>[] = []
-
-    for (const item of parsed) {
-      const id = idMap.get(item.id)
-      if (id && currentMap.has(id)) {
-        const current = currentMap.get(id)!
-        retainedIds.add(id)
-        if (
-          item.inputPrice !== current.inputPrice ||
-          item.outputPrice !== current.outputPrice ||
-          item.cacheWritePrice !== current.cacheWritePrice ||
-          item.cacheReadPrice !== current.cacheReadPrice ||
-          item.contextLength !== current.contextLength ||
-          item.maxToken !== current.maxToken ||
-          JSON.stringify(item.supportedTypes) !== JSON.stringify(current.supportedTypes) ||
-          JSON.stringify(item.aliases) !== JSON.stringify(current.aliases) ||
-          JSON.stringify(item.endpoints) !== JSON.stringify(current.endpoints) ||
-          JSON.stringify(item.thinkingLevels) !== JSON.stringify(current.thinkingLevels) ||
-          JSON.stringify(item.rate) !== JSON.stringify(current.rate)
-        ) {
-          ops.push(dashboardApi.updatePrice(id, item))
-        }
-      } else {
-        ops.push(dashboardApi.createPrice(item))
-      }
-    }
-    for (const id of currentMap.keys()) {
-      if (!retainedIds.has(id)) {
-        ops.push(dashboardApi.deletePrice(id))
-      }
-    }
-    await Promise.allSettled(ops)
-    await fetch()
-  } finally {
-    setMutating(false)
-  }
-}
 
 export function PricePage() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [mutating, setMutating] = useState(false)
   const [editing, setEditing] = useState<EditingPrice>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [jsonOpen, setJsonOpen] = useState(false)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(20)
 
@@ -145,15 +94,6 @@ export function PricePage() {
       setState({ kind: 'error', message: toErrorMessage(err) })
     } finally {
       setMutating(false)
-    }
-  }
-
-  const handleJsonSave = async (data: unknown, idMap: JsonEditorIdMap) => {
-    if (state.kind !== 'ready') return
-    try {
-      await diffAndSave(data, state.prices, fetch, setMutating, idMap)
-    } catch (err) {
-      setState({ kind: 'error', message: toErrorMessage(err) })
     }
   }
 
