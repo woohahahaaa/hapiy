@@ -28,6 +28,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&RewriteRule{},
 		&ResponseRewriteRule{},
 		&HeartbeatRule{},
+		&LayoutConfig{},
 		&ConcurrencyRule{},
 		&FailoverRule{},
 		&TopologyConfig{},

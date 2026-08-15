@@ -31,6 +31,7 @@ import { dashboardApi,
 } from '@/lib/dashboard-api'
 import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 import { RewriteRuleEditor, GjsonPathHelp, parseRule, isActionValid } from '@/components/rewrite-rule-editor'
+import { RewriteResponseForm } from '@/components/response-rewrite-editor'
 
 const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite',
@@ -852,7 +853,7 @@ function RewriteResponsePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="响应改写"
-        description="使用 JSON 操作数组修改响应体字段"
+        description="按顺序对响应字段执行：重命名 / 加前缀 / 加后缀 / 删除"
         status={`${total} 条规则`}
       />
       <div className="p-6">
@@ -908,34 +909,4 @@ function RewriteResponsePage() {
   )
 }
 
-function RewriteResponseForm({ rule, onSave, onCancel, saving }: { rule: ResponseRewriteRule | null; onSave: (r: ResponseRewriteRule) => void; onCancel: () => void; saving: boolean }) {
-  const [form, setForm] = useState<ResponseRewriteRule>(
-    rule || { id: '', name: '', script: '[]', status: true }
-  )
 
-  const formKey = rule?.id ?? 'new'
-
-  return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="rr-name">名称</FieldLabel>
-        <Input id="rr-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </Field>
-      <Field>
-        <FieldLabel>改写规则</FieldLabel>
-        <RewriteRuleEditor
-          key={formKey}
-          initialScript={form.script}
-          onScriptChange={(next) => setForm((p) => ({ ...p, script: next }))}
-        />
-      </Field>
-      <div className="flex items-center justify-between border-t border-border pt-3">
-        <GjsonPathHelp />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel}>取消</Button>
-          <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
-        </div>
-      </div>
-    </FieldGroup>
-  )
-}

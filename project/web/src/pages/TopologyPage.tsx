@@ -27,7 +27,7 @@ import { FlatSlotNode } from '@/nodes/FlatSlotNode'
 import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type Provider } from '@/lib/dashboard-api'
+import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -62,28 +62,6 @@ const nodeTypes = {
 const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
-}
-
-type LayoutSnapshot = Record<string, { x: number; y: number }>
-
-function loadLayoutFromStorage(): LayoutSnapshot {
-  if (typeof window === 'undefined') return {}
-  try {
-    const raw = window.localStorage.getItem('hapiy-layout')
-    if (!raw) return {}
-    return JSON.parse(raw) as LayoutSnapshot
-  } catch {
-    return {}
-  }
-}
-
-function saveLayoutToStorage(layout: LayoutSnapshot): void {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem('hapiy-layout', JSON.stringify(layout))
-  } catch {
-    // storage may be full — silently skip
-  }
 }
 
 function canvasWiresFromEdges(edges: readonly Edge[]): FlatWire[] {
@@ -221,6 +199,7 @@ export function TopologyPage() {
   }, [])
   const [versionsOpen, setVersionsOpen] = useState(false)
   const lastKnownVersionRef = useRef<number | null>(null)
+  const lastKnownLayoutVersionRef = useRef<number | null>(null)
 
   const MAX_HISTORY = 100
   const historyRef = useRef<FlatTopology[]>([])
@@ -308,7 +287,7 @@ export function TopologyPage() {
   }, [handleSelEnd])
 
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
-  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>(() => loadLayoutFromStorage())
+  const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>({})
   const layoutSnapshotRef = useRef(layoutSnapshot)
   layoutSnapshotRef.current = layoutSnapshot
   const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
@@ -721,6 +700,17 @@ export function TopologyPage() {
     setEdges(baseEdges)
   }, [baseEdges, setEdges])
 
+  const loadLayoutBestEffort = useCallback(async () => {
+    try {
+      const layout = await dashboardApi.getLayout()
+      setLayoutSnapshot(layout.layout)
+      lastKnownLayoutVersionRef.current = layout.version
+    } catch {
+      setLayoutSnapshot({})
+      lastKnownLayoutVersionRef.current = null
+    }
+  }, [])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -737,12 +727,13 @@ export function TopologyPage() {
       lastKnownVersionRef.current = flat.version ?? null
       dirtyRef.current = false
       setDirty(false)
+      await loadLayoutBestEffort()
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
     } finally {
       setLoading(false)
     }
-  }, [setTopology, syncHistory])
+  }, [setTopology, syncHistory, loadLayoutBestEffort])
 
   useEffect(() => {
     loadData()
@@ -759,6 +750,17 @@ export function TopologyPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '拓扑保存失败')
     }
+  }, [])
+
+  const persistLayoutSnapshot = useCallback((snapshot: LayoutSnapshot) => {
+    setLayoutSnapshot(snapshot)
+    void dashboardApi.saveLayout(snapshot)
+      .then(({ version }) => {
+        lastKnownLayoutVersionRef.current = version
+      })
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : '布局保存失败')
+      })
   }, [])
 
   useEffect(() => {
@@ -801,6 +803,43 @@ export function TopologyPage() {
       void check()
     }, 5000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  // Poll the backend layout version every 5s. If another tab saved a layout,
+  // the backend version diverges from the version we loaded/saved last —
+  // surface a refresh prompt. Polling never overwrites the local layout.
+  useEffect(() => {
+    const timer = window.setInterval(async () => {
+      const known = lastKnownLayoutVersionRef.current
+      if (known === null) return
+      try {
+        const { version } = await dashboardApi.getLayout()
+        if (version > known) {
+          toast.error('布局已在其他页面被修改，请刷新以加载最新布局')
+          lastKnownLayoutVersionRef.current = version
+        }
+      } catch {
+        // transient error, next tick retries
+      }
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  // One-shot retry after 5s if the initial layout GET failed — give the
+  // backend one more chance before settling on default positions. If it still
+  // fails, toast once and leave the ref null; the poll above then skips.
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      if (lastKnownLayoutVersionRef.current !== null) return
+      try {
+        const { layout, version } = await dashboardApi.getLayout()
+        setLayoutSnapshot(layout)
+        lastKnownLayoutVersionRef.current = version
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : '布局加载失败，使用默认位置')
+      }
+    }, 5000)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handlePaneClick = useCallback(() => {
@@ -988,7 +1027,7 @@ export function TopologyPage() {
     const result = pasteTopologySnapshot(snapshot, new Set(cur.nodes.map((n) => n.id)))
     if (!result) return
     commitHistory(cur)
-    const layout = loadLayoutFromStorage()
+    const layout = { ...layoutSnapshotRef.current }
     const fallbackPos = { x: topologyConfig.initialPositions.slot.x, y: topologyConfig.initialPositions.slot.y }
     for (const original of snapshot.nodes) {
       const fresh = result.idMap.get(original.id)
@@ -996,11 +1035,10 @@ export function TopologyPage() {
       const pos = layout[original.id] ?? fallbackPos
       layout[fresh] = { x: pos.x + 40, y: pos.y + 40 }
     }
-    saveLayoutToStorage(layout)
-    setLayoutSnapshot(layout)
+    persistLayoutSnapshot(layout)
     setTopology({ nodes: [...cur.nodes, ...result.nodes], wires: [...cur.wires, ...result.wires] })
     markDirty()
-  }, [commitHistory, setTopology, setLayoutSnapshot, markDirty])
+  }, [commitHistory, setTopology, persistLayoutSnapshot, markDirty])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1052,16 +1090,16 @@ export function TopologyPage() {
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
       onNodesChange(changes)
+      let snapshot: LayoutSnapshot | null = null
       for (const change of changes) {
         if (change.type === 'position' && change.position && !change.dragging) {
-          const snapshot = loadLayoutFromStorage()
+          if (snapshot === null) snapshot = { ...layoutSnapshotRef.current }
           snapshot[change.id] = change.position
-          saveLayoutToStorage(snapshot)
-          setLayoutSnapshot(snapshot)
         }
       }
+      if (snapshot !== null) persistLayoutSnapshot(snapshot)
     },
-    [onNodesChange],
+    [onNodesChange, persistLayoutSnapshot],
   )
 
   const handleAutoLayout = useCallback(() => {
@@ -1081,10 +1119,9 @@ export function TopologyPage() {
       const node = baseNodes.find((n) => n.id === id)
       if (node) next[id] = pos
     }
-    saveLayoutToStorage(next)
-    setLayoutSnapshot(next)
+    persistLayoutSnapshot(next)
     setNodes(baseNodes.map((n) => (next[n.id] ? { ...n, position: next[n.id] } : n)))
-  }, [canvas, sizesRef, baseNodes, setNodes])
+  }, [canvas, sizesRef, baseNodes, setNodes, persistLayoutSnapshot])
 
   // New nodes have no layout-snapshot record, so without an explicit position
   // they all fall back to the same hardcoded default and stack on top of each
@@ -1092,7 +1129,7 @@ export function TopologyPage() {
   // left-aligned to the workflow area, so the addition is immediately visible.
   const placeNewNodes = useCallback(
     (placements: ReadonlyArray<{ id: string; width: number }>) => {
-      const layout = loadLayoutFromStorage()
+      const layout = layoutSnapshotRef.current
       let maxBottom = 0
       let hasLayout = false
       for (const pos of Object.values(layout)) {
@@ -1114,10 +1151,9 @@ export function TopologyPage() {
         next[p.id] = { x: cursorX, y: baseY }
         cursorX += p.width + topologyConfig.layout.nodeGap
       }
-      saveLayoutToStorage(next)
-      setLayoutSnapshot(next)
+      persistLayoutSnapshot(next)
     },
-    [setLayoutSnapshot],
+    [persistLayoutSnapshot],
   )
 
   const handleAddEntry = useCallback(() => {

@@ -330,6 +330,9 @@ export type FlatTopology = {
   readonly updatedAt?: string
 }
 
+// ── Canvas layout (per-node x/y positions on the topology canvas) ──
+export type LayoutSnapshot = Record<string, { x: number; y: number }>
+
 export type DuplicateActivation = {
   readonly providerName: string
   readonly entryIds: readonly string[]
@@ -385,6 +388,30 @@ function serializeFlatTopology(tp: FlatTopology): JsonRecord {
   return {
     nodes: tp.nodes.map(serializeFlatNode),
     wires: tp.wires.map((wire) => ({ source: wire.source, target: wire.target })),
+  }
+}
+
+function parseLayoutSnapshot(value: unknown): LayoutSnapshot {
+  const result: LayoutSnapshot = {}
+  if (!isRecord(value)) return result
+  for (const [id, pos] of Object.entries(value)) {
+    if (!isRecord(pos)) continue
+    const x = pos.x
+    const y = pos.y
+    if (typeof x !== 'number' || !Number.isFinite(x)) continue
+    if (typeof y !== 'number' || !Number.isFinite(y)) continue
+    result[id] = { x, y }
+  }
+  return result
+}
+
+function parseLayoutResponse(value: unknown): { layout: LayoutSnapshot; version: number; updatedAt: string } {
+  const defaults = { layout: {} as LayoutSnapshot, version: 0, updatedAt: '' }
+  if (!isRecord(value)) return defaults
+  return {
+    layout: parseLayoutSnapshot(value.layout),
+    version: typeof value.version === 'number' ? value.version : 0,
+    updatedAt: typeof value.updated_at === 'string' ? value.updated_at : '',
   }
 }
 
@@ -1763,6 +1790,18 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(serializeFlatTopology(tp)),
     })
     return parseFlatTopology(body)
+  },
+
+  async getLayout(): Promise<{ layout: LayoutSnapshot; version: number; updatedAt: string }> {
+    const body = await request('/layout')
+    return parseLayoutResponse(body)
+  },
+  async saveLayout(layout: LayoutSnapshot): Promise<{ layout: LayoutSnapshot; version: number; updatedAt: string }> {
+    const body = await request('/layout', {
+      method: 'PUT',
+      body: JSON.stringify({ layout }),
+    })
+    return parseLayoutResponse(body)
   },
   async validateFlatTopology(): Promise<readonly DuplicateActivation[]> {
     const body = await request('/flat-topology/validate')

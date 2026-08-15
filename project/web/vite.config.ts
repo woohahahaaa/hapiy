@@ -10,7 +10,7 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 18009,
     strictPort: true,
-    allowedHosts: ["macs1.hihy.me"],
+    allowedHosts: ["macs1.hihy.me", "hapiying.hihy.me"],
     proxy: {
       // Agent 接入走 /proxy/__来源 前缀（来源标记），转发到后端 API。
       // 例：/proxy/__opencodetest/chat/completions -> /v1/chat/completions

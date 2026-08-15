@@ -188,6 +188,10 @@ func main() {
 			dashboardAuthed.PUT("/flat-topology", handler.SaveFlatTopology(db, engine))
 			dashboardAuthed.GET("/flat-topology/validate", handler.ValidateFlatTopology(db))
 
+			// Topology canvas layout (node positions)
+			dashboardAuthed.GET("/layout", handler.GetLayout(db))
+			dashboardAuthed.PUT("/layout", handler.PutLayout(db))
+
 			// Channel affinity
 			dashboardAuthed.GET("/channel-affinity", handler.GetChannelAffinity(db))
 			dashboardAuthed.PUT("/channel-affinity", handler.SaveChannelAffinity(db, engine))
