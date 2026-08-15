@@ -46,7 +46,7 @@ export const HEADER_PREFIX = 'header.'
 // ── Form factory ──
 
 export function emptyAction(): Action {
-  return { mode: '', path: '', value: '', from: '', to: '', dst: '', scope: 'all' }
+  return { mode: 'set', path: '', value: '', from: '', to: '', dst: '', scope: 'all' }
 }
 
 export function emptyCondition(): Condition {

@@ -1,151 +1,187 @@
 import { describe, expect, it } from 'vitest'
 import {
-  isOpComplete,
+  isActionValid,
   parseRule,
   serializeRule,
-  type DeleteOp,
-  type PrefixOp,
-  type RenameOp,
+  type Action,
+  type Block,
   type RuleForm,
-  type SuffixOp,
 } from './serializer'
 
-function makeId(op: { type: string }): string {
-  // 序列化不依赖 id；为了比较我们重置 id。
-  void op
-  return 'op-test'
+function makeAction(partial: Partial<Action>): Action {
+  return { mode: 'move', path: '', value: '', ...partial }
+}
+
+function makeBlock(actions: Action[]): Block {
+  return { id: 'rule-test', actions }
 }
 
 describe('response-rewrite serializer — round-trip', () => {
-  it('rename → move → rename (nested path)', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'rename', id: makeId({ type: 'rename' }), path: 'messages.0.content', newName: 'text' } as RenameOp,
+  it('rename (move) → script → rename', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([
+          makeAction({ mode: 'move', path: 'messages.0.content', value: 'messages.0.text' }),
+        ]),
       ],
     }
-    const script = serializeRule(original)
+    const script = serializeRule(form)
     expect(script).toBe('[{"mode":"move","path":"messages.0.content","dst":"messages.0.text"}]')
     const parsed = parseRule(script)
-    expect(parsed.ops).toHaveLength(1)
-    const op = parsed.ops[0] as RenameOp
-    expect(op.type).toBe('rename')
-    expect(op.path).toBe('messages.0.content')
-    expect(op.newName).toBe('text')
+    expect(parsed.blocks).toHaveLength(1)
+    const a = parsed.blocks[0].actions[0]
+    expect(a.mode).toBe('move')
+    expect(a.path).toBe('messages.0.content')
+    expect(a.value).toBe('messages.0.text')
   })
 
-  it('rename at root level', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'rename', id: makeId({ type: 'rename' }), path: 'model', newName: 'model_name' } as RenameOp,
+  it('prefix (first_prepend) → script → prefix', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([
+          makeAction({ mode: 'first_prepend', path: 'choices.0.message.content', value: '\n<think>' }),
+        ]),
       ],
     }
-    const script = serializeRule(original)
-    expect(script).toBe('[{"mode":"move","path":"model","dst":"model_name"}]')
-    const parsed = parseRule(script)
-    const op = parsed.ops[0] as RenameOp
-    expect(op.type).toBe('rename')
-    expect(op.newName).toBe('model_name')
-  })
-
-  it('prefix → first_prepend → prefix', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'prefix', id: makeId({ type: 'prefix' }), path: 'choices.0.message.content', value: '\n<think>' } as PrefixOp,
-      ],
-    }
-    const script = serializeRule(original)
+    const script = serializeRule(form)
     expect(script).toBe('[{"mode":"first_prepend","path":"choices.0.message.content","value":"\\n<think>"}]')
     const parsed = parseRule(script)
-    const op = parsed.ops[0] as PrefixOp
-    expect(op.type).toBe('prefix')
-    expect(op.path).toBe('choices.0.message.content')
-    expect(op.value).toBe('\n<think>')
+    const a = parsed.blocks[0].actions[0]
+    expect(a.mode).toBe('first_prepend')
+    expect(a.value).toBe('\n<think>')
   })
 
-  it('suffix → last_append → suffix', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'suffix', id: makeId({ type: 'suffix' }), path: 'choices.0.message.content', value: '\n</think>' } as SuffixOp,
+  it('suffix (last_append) → script → suffix', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([
+          makeAction({ mode: 'last_append', path: 'choices.0.message.content', value: '\n</think>' }),
+        ]),
       ],
     }
-    const script = serializeRule(original)
+    const script = serializeRule(form)
     expect(script).toBe('[{"mode":"last_append","path":"choices.0.message.content","value":"\\n</think>"}]')
     const parsed = parseRule(script)
-    const op = parsed.ops[0] as SuffixOp
-    expect(op.type).toBe('suffix')
-    expect(op.value).toBe('\n</think>')
+    const a = parsed.blocks[0].actions[0]
+    expect(a.mode).toBe('last_append')
+    expect(a.value).toBe('\n</think>')
   })
 
-  it('delete → delete → delete', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'delete', id: makeId({ type: 'delete' }), path: 'choices.0.finish_reason' } as DeleteOp,
+  it('delete → script → delete (value ignored)', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([
+          makeAction({ mode: 'delete', path: 'choices.0.finish_reason', value: 'should-be-ignored' }),
+        ]),
       ],
     }
-    const script = serializeRule(original)
+    const script = serializeRule(form)
     expect(script).toBe('[{"mode":"delete","path":"choices.0.finish_reason"}]')
     const parsed = parseRule(script)
-    const op = parsed.ops[0] as DeleteOp
-    expect(op.type).toBe('delete')
-    expect(op.path).toBe('choices.0.finish_reason')
+    const a = parsed.blocks[0].actions[0]
+    expect(a.mode).toBe('delete')
+    expect(a.path).toBe('choices.0.finish_reason')
+    expect(a.value).toBe('')
   })
 
-  it('multiple ops preserve order', () => {
-    const original: RuleForm = {
-      ops: [
-        { type: 'prefix', id: makeId({ type: 'p' }), path: 'choices.0.message.content', value: 'A' } as PrefixOp,
-        { type: 'suffix', id: makeId({ type: 's' }), path: 'choices.0.message.content', value: 'Z' } as SuffixOp,
-        { type: 'delete', id: makeId({ type: 'd' }), path: 'choices.0.finish_reason' } as DeleteOp,
+  it('multiple actions within one block preserve order', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([
+          makeAction({ mode: 'first_prepend', path: 'choices.0.message.content', value: 'A' }),
+          makeAction({ mode: 'last_append', path: 'choices.0.message.content', value: 'Z' }),
+          makeAction({ mode: 'delete', path: 'choices.0.finish_reason' }),
+        ]),
       ],
     }
-    const parsed = parseRule(serializeRule(original))
-    expect(parsed.ops.map((o) => o.type)).toEqual(['prefix', 'suffix', 'delete'])
+    const parsed = parseRule(serializeRule(form))
+    expect(parsed.blocks[0].actions.map((a) => a.mode)).toEqual([
+      'first_prepend',
+      'last_append',
+      'delete',
+    ])
+  })
+
+  it('multiple blocks flatten into one block on parse (script is a flat array)', () => {
+    const form: RuleForm = {
+      blocks: [
+        makeBlock([makeAction({ mode: 'first_prepend', path: 'a', value: 'X' })]),
+        makeBlock([makeAction({ mode: 'delete', path: 'b' })]),
+      ],
+    }
+    const script = serializeRule(form)
+    expect(JSON.parse(script)).toHaveLength(2)
+    const parsed = parseRule(script)
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].actions).toHaveLength(2)
+    expect(parsed.blocks[0].actions.map((a) => a.mode)).toEqual(['first_prepend', 'delete'])
   })
 })
 
-describe('response-rewrite serializer — partial inputs', () => {
-  it('incomplete op is dropped on serialize', () => {
+describe('response-rewrite serializer — validation', () => {
+  it('incomplete action is dropped on serialize', () => {
     const form: RuleForm = {
-      ops: [
-        { type: 'rename', id: makeId({ type: 'r' }), path: '', newName: '' } as RenameOp, // empty
-        { type: 'prefix', id: makeId({ type: 'p' }), path: 'foo', value: '' } as PrefixOp, // empty value
-        { type: 'delete', id: makeId({ type: 'd' }), path: 'foo' } as DeleteOp, // valid
+      blocks: [
+        makeBlock([
+          makeAction({ mode: '', path: '', value: '' }),                                 // empty
+          makeAction({ mode: 'first_prepend', path: 'foo', value: '' }),                 // empty value
+          makeAction({ mode: 'move', path: 'foo', value: '' }),                            // empty value (=dst)
+          makeAction({ mode: 'delete', path: 'foo' }),                                    // valid
+        ]),
       ],
     }
     expect(serializeRule(form)).toBe('[{"mode":"delete","path":"foo"}]')
   })
 
-  it('isOpComplete reflects required fields', () => {
-    expect(isOpComplete({ type: 'rename', id: 'a', path: '', newName: '' })).toBe(false)
-    expect(isOpComplete({ type: 'rename', id: 'a', path: 'foo', newName: '' })).toBe(false)
-    expect(isOpComplete({ type: 'rename', id: 'a', path: 'foo', newName: 'bar' })).toBe(true)
-    expect(isOpComplete({ type: 'prefix', id: 'a', path: 'foo', value: '' })).toBe(false)
-    expect(isOpComplete({ type: 'suffix', id: 'a', path: 'foo', value: 'x' })).toBe(true)
-    expect(isOpComplete({ type: 'delete', id: 'a', path: 'foo' })).toBe(true)
-    expect(isOpComplete({ type: 'delete', id: 'a', path: '' })).toBe(false)
+  it('isActionValid reflects required fields', () => {
+    expect(isActionValid(makeAction({ mode: '' }))).toBe(false)
+    expect(isActionValid(makeAction({ mode: 'move', path: '', value: '' }))).toBe(false)
+    expect(isActionValid(makeAction({ mode: 'move', path: 'foo', value: '' }))).toBe(false)
+    expect(isActionValid(makeAction({ mode: 'move', path: 'foo', value: 'bar' }))).toBe(true)
+    expect(isActionValid(makeAction({ mode: 'first_prepend', path: 'foo', value: '' }))).toBe(false)
+    expect(isActionValid(makeAction({ mode: 'first_prepend', path: 'foo', value: 'x' }))).toBe(true)
+    expect(isActionValid(makeAction({ mode: 'delete', path: 'foo' }))).toBe(true)
+    expect(isActionValid(makeAction({ mode: 'delete', path: '' }))).toBe(false)
   })
 })
 
 describe('response-rewrite serializer — legacy script parsing', () => {
-  it('parses existing move script from before refactor', () => {
-    const script = '[{"mode":"move","path":"choices.0.message.content","dst":"choices.0.message.text"}]'
+  it('parses existing first_prepend / last_append / move / delete scripts', () => {
+    const script = JSON.stringify([
+      { mode: 'move', path: 'a', dst: 'b' },
+      { mode: 'first_prepend', path: 'c', value: 'v1' },
+      { mode: 'last_append', path: 'd', value: 'v2' },
+      { mode: 'delete', path: 'e' },
+    ])
     const parsed = parseRule(script)
-    const op = parsed.ops[0] as RenameOp
-    expect(op.type).toBe('rename')
-    expect(op.path).toBe('choices.0.message.content')
-    expect(op.newName).toBe('text')
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].actions.map((a) => a.mode)).toEqual([
+      'move',
+      'first_prepend',
+      'last_append',
+      'delete',
+    ])
+    expect(parsed.blocks[0].actions[0].value).toBe('b')
+    expect(parsed.blocks[0].actions[1].value).toBe('v1')
   })
 
-  it('unknown modes fall back to raw op', () => {
-    const script = '[{"mode":"set","path":"foo","value":"bar"}]'
+  it('unknown modes are silently skipped; parseRule returns fallback empty block', () => {
+    const script = JSON.stringify([
+      { mode: 'ensure_prefix', path: 'foo', value: 'bar' },
+      { mode: 'replace', path: 'foo', from: 'a', to: 'b' },
+    ])
     const parsed = parseRule(script)
-    expect(parsed.ops[0].type).toBe('raw')
+    expect(parsed.blocks).toHaveLength(1)
+    expect(parsed.blocks[0].actions).toHaveLength(1)
+    expect(parsed.blocks[0].actions[0].mode).toBe('move')
+    expect(parsed.blocks[0].actions[0].path).toBe('')
+    expect(parsed.blocks[0].actions[0].value).toBe('')
   })
 
-  it('empty / invalid input returns empty form', () => {
-    expect(parseRule('').ops).toEqual([])
-    expect(parseRule('not json').ops).toEqual([])
-    expect(parseRule('{}').ops).toEqual([])
-    expect(parseRule('[]').ops).toEqual([])
+  it('empty / invalid input returns fallback empty rule', () => {
+    expect(parseRule('').blocks[0].actions).toEqual([makeAction({})])
+    expect(parseRule('not json').blocks[0].actions).toEqual([makeAction({})])
+    expect(parseRule('{}').blocks[0].actions).toEqual([makeAction({})])
+    expect(parseRule('[]').blocks[0].actions).toEqual([makeAction({})])
   })
 })

@@ -47,7 +47,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
             placeholder="gjson 路径"
           />
         </div>
-        {spec && spec.needs.length > 0 && (
+        {spec && (
           <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
             <Select
               value={action.mode}
@@ -64,7 +64,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                 </SelectGroup>
               </SelectContent>
             </Select>
-            {spec.needs.map((field) => (
+            {spec.needs.length > 0 && spec.needs.map((field) => (
               <Input
                 key={field}
                 className="h-7 min-w-0 flex-1 font-mono text-xs"
@@ -73,6 +73,25 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                 placeholder={fieldPlaceholder(field)}
               />
             ))}
+          </div>
+        )}
+        {!spec && (
+          <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
+            <Select
+              value={action.mode}
+              onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
+            >
+              <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
+                <SelectValue placeholder="选择操作" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {MODES.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>

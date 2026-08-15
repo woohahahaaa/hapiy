@@ -265,7 +265,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
           <div className="flex flex-wrap gap-2">
             {form.endpoints.map((endpoint) => (
-              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">{endpoint.name}: {endpoint.pathSuffix}<button className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><AppIcon name="close" size={12} className="inline" /></button></span>
+              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><AppIcon name="close" size={12} className="inline" /></button>{endpoint.name}: {endpoint.pathSuffix}</span>
             ))}
           </div>
         </div>
