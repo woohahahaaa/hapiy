@@ -134,7 +134,7 @@ export function ModelAutocomplete({ value, onChange, onPick }: ModelAutocomplete
       )}
       {open && !loadError && suggestions.length > 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-md">
-          <ScrollArea className="max-h-72">
+          <ScrollArea className="h-72">
             <ul className="py-1">
               {suggestions.map((model, index) => (
                 <li key={`${model.providerId}:${model.id}`}>
