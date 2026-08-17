@@ -15,6 +15,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { RateRulesEditor } from '@/components/RateRulesEditor'
+import { ModelAutocomplete } from '@/components/ModelAutocomplete'
+import type { ModelsDevModel } from '@/lib/models-dev'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { PriceConfig, PriceConfigInput } from '@/lib/dashboard-api'
 
@@ -244,6 +246,8 @@ function PriceForm({
 }) {
   const [form, setForm] = useState<PriceConfigInput>(initial ? toInput(initial) : emptyPrice)
   const [providerNames, setProviderNames] = useState<readonly string[]>([])
+  const [pickedModel, setPickedModel] = useState<ModelsDevModel | null>(null)
+  const [autoFillError, setAutoFillError] = useState<string | null>(null)
 
   useEffect(() => {
     setForm(initial ? toInput(initial) : emptyPrice)
@@ -270,6 +274,25 @@ function PriceForm({
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
 
+  const applyModelsDevData = () => {
+    if (!pickedModel) return
+    setAutoFillError(null)
+    const supportedTypes = [
+      ...new Set([...pickedModel.inputTypes, ...pickedModel.outputTypes]),
+    ]
+    setForm((current) => ({
+      ...current,
+      inputPrice: pickedModel.inputPrice,
+      outputPrice: pickedModel.outputPrice,
+      cacheWritePrice: pickedModel.cacheWritePrice,
+      cacheReadPrice: pickedModel.cacheReadPrice,
+      contextLength: pickedModel.contextLength,
+      maxToken: pickedModel.maxOutput,
+      supportedTypes,
+    }))
+    setPickedModel(null)
+  }
+
   const valid =
     form.model.trim().length > 0 &&
     form.inputPrice >= 0 &&
@@ -281,12 +304,21 @@ function PriceForm({
     <FieldGroup>
       <Field>
         <FieldLabel htmlFor="price-model">模型名称</FieldLabel>
-        <Input
-          id="price-model"
-          value={form.model}
-          onChange={(e) => setForm((p) => ({ ...p, model: e.target.value }))}
-          placeholder="gpt-4"
-        />
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <ModelAutocomplete
+              value={form.model}
+              onChange={(model) => setForm((current) => ({ ...current, model }))}
+              onPick={setPickedModel}
+            />
+          </div>
+          {pickedModel && (
+            <Button type="button" variant="outline" size="sm" onClick={applyModelsDevData}>
+              从 models.dev 获取模型信息
+            </Button>
+          )}
+        </div>
+        {autoFillError && <p role="alert" className="text-xs text-destructive">{autoFillError}</p>}
         <p className="text-xs text-muted-foreground">大小写不敏感</p>
       </Field>
       <Field>
@@ -295,9 +327,11 @@ function PriceForm({
           id="price-aliases"
           value={form.aliases.join(', ')}
           onChange={(e) => setForm((p) => ({ ...p, aliases: splitList(e.target.value) }))}
-          placeholder="逗号分隔，如 GPT-5.6, gpt5.6"
+          placeholder="用逗号分隔，例如：ChatGPT-5.6, ChatGPT 5.6"
         />
-        <p className="text-xs text-muted-foreground">用于匹配转发时名称有差异的同模型</p>
+        <p className="text-xs text-muted-foreground">
+          转发时用于匹配写法有差异的同模型，多个名称之间用逗号分隔，例如「ChatGPT 5.6」可写成 ChatGPT-5.6 或 ChatGPT 5.6
+        </p>
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field>

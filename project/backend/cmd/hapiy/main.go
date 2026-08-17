@@ -169,6 +169,7 @@ func main() {
 			dashboard.POST("/models", handler.CreatePrice(db))
 			dashboard.PUT("/models/:id", handler.UpdatePrice(db))
 			dashboard.DELETE("/models/:id", handler.DeletePrice(db))
+			dashboardAuthed.GET("/models-dev", handler.ModelsDevList())
 
 			// Settings
 			dashboardAuthed.GET("/settings", handler.ListSettings(db))
