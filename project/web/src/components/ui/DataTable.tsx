@@ -209,13 +209,21 @@ export function DataTable<T extends Record<string, unknown>>({
   )
   const [rowMaxLines, setRowMaxLines] = React.useState<number[]>([])
 
-  // Fetch saved config on mount; replace defaults if the backend has one for this id.
+  const userEditedRef = React.useRef(false)
+
+  const configsRef = React.useRef<ColumnDisplayConfig[]>(configs)
   React.useEffect(() => {
-    let cancelled = false
+    configsRef.current = configs
+  }, [configs])
+
+  const loadSeqRef = React.useRef(0)
+  React.useEffect(() => {
+    const seq = ++loadSeqRef.current
     void (async () => {
       try {
         const saved = await dashboardApi.getTableConfig(id)
-        if (cancelled) return
+        if (loadSeqRef.current !== seq) return
+        if (userEditedRef.current) return
         if (!saved) return
         if (saved.configs.length !== columns.length) {
           console.warn(
@@ -231,12 +239,8 @@ export function DataTable<T extends Record<string, unknown>>({
         console.warn(`DataTable "${id}": failed to load saved config`, err)
       }
     })()
-    return () => {
-      cancelled = true
-    }
-  }, [id, columns])
+  }, [id])
 
-  // Auto-save (debounced) whenever configs change after the initial mount.
   const initialConfigRef = React.useRef(true)
   React.useEffect(() => {
     if (initialConfigRef.current) {
@@ -244,12 +248,31 @@ export function DataTable<T extends Record<string, unknown>>({
       return
     }
     const handle = window.setTimeout(() => {
-      void dashboardApi.saveTableConfig(id, configs).catch((err) => {
+      const toSave = configsRef.current
+      void dashboardApi.saveTableConfig(id, toSave).catch((err) => {
         console.warn(`DataTable "${id}": failed to save config`, err)
       })
     }, SAVE_DEBOUNCE_MS)
-    return () => window.clearTimeout(handle)
+    return () => {
+      window.clearTimeout(handle)
+    }
   }, [id, configs])
+
+  // Flush pending unsaved config before unmount/id-change; the debounce timer
+  // above only clears, so quick edits + navigate-away would otherwise be lost.
+  const lastSavedRef = React.useRef<ColumnDisplayConfig[] | null>(null)
+  React.useEffect(() => {
+    lastSavedRef.current = configsRef.current
+    return () => {
+      const latest = configsRef.current
+      if (!userEditedRef.current) return
+      if (latest === lastSavedRef.current) return
+      lastSavedRef.current = latest
+      void dashboardApi.saveTableConfig(id, latest).catch((err) => {
+        console.warn(`DataTable "${id}": failed to flush config`, err)
+      })
+    }
+  }, [id])
 
   // Measure parent width + recompute on resize and when the popover closes.
   const [resolvedWidths, setResolvedWidths] = React.useState<number[]>(() =>
@@ -339,6 +362,7 @@ export function DataTable<T extends Record<string, unknown>>({
   }, [data, columns, configs, resolvedWidths])
 
   function updateConfig(i: number, next: ColumnDisplayConfig) {
+    userEditedRef.current = true
     setConfigs((prev) => {
       const out = [...prev]
       out[i] = next
@@ -347,6 +371,7 @@ export function DataTable<T extends Record<string, unknown>>({
   }
 
   function handleWidthInput(i: number, raw: string) {
+    userEditedRef.current = true
     setWidthInput((prev) => {
       const out = [...prev]
       out[i] = raw
