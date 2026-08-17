@@ -61,13 +61,19 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   {
     key: 'status',
     label: '状态',
-    defaultWidth: { kind: 'pixel', value: 100 },
-    render: (_, row) => (row.endTime ? '已结束' : '活跃中'),
+    defaultWidth: { kind: 'pixel', value: 90 },
+    render: (_, row) => {
+      const finished = row.endTime !== null
+      return (
+        <span className={finished ? 'text-muted-foreground' : 'text-success'}>
+          {finished ? '已结束' : '活跃中'}
+        </span>
+      )
+    },
   },
+  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 15 } },
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 20 } },
-  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'pixel', value: 160 } },
-  { key: 'userId', label: '用户', defaultWidth: { kind: 'pixel', value: 140 } },
-  { key: 'stream', label: '类型', defaultWidth: { kind: 'pixel', value: 80 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
+  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
   {
     key: 'elapsedMs',
     label: '耗时',
@@ -76,6 +82,13 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
     render: (v) => formatElapsed(v as number),
   },
   { key: 'startTime', label: '开始时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
+  {
+    key: 'endTime',
+    label: '结束时间',
+    defaultWidth: { kind: 'pixel', value: 160 },
+    isTime: true,
+    render: (v) => (v === null || v === undefined ? <EmptyCell value={null} /> : v),
+  },
 ]
 
 type MetricCardProps = {

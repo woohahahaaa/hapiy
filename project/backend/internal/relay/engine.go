@@ -13,6 +13,7 @@ import (
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
+	"github.com/hapiy/hapiy/internal/topology"
 )
 
 // LoadProviders loads all enabled providers from database and compiles execution plans.
@@ -202,6 +203,8 @@ type UsageInfo struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+	CacheWriteTokens int
+	CacheReadTokens  int
 }
 
 // RelayRequest executes the request through the compiled pipeline.
@@ -271,6 +274,9 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 				}
 				for _, assignment := range plan.LogOutputs {
 					if !assignment.Enabled {
+						continue
+					}
+					if !assignment.NodeEnabled {
 						continue
 					}
 					cfg, err2 := parseLogOutputConfig(assignment.Config)
@@ -472,6 +478,64 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 		}
 		writer.WriteLog(data)
 	}
+}
+
+// RecordDispatchRejection writes a log_captures row for every enabled logOutput
+// node in the topology when dispatch rejects a request, so rejected requests
+// stay visible in the log-capture view. No-op when no enabled logOutput node
+// exists, the capture writer is uninitialised, or inputs are nil.
+func (e *Engine) RecordDispatchRejection(req *RelayRequest, err error) {
+	writer := service.LogCapture()
+	if writer == nil || req == nil || err == nil {
+		return
+	}
+	tp, loadErr := topology.NewStore(e.db).Load()
+	if loadErr != nil || tp == nil {
+		return
+	}
+	for _, node := range tp.Nodes {
+		if node.Kind != topology.KindSlot || node.SlotType != "logOutput" || !node.Enabled {
+			continue
+		}
+		if len(node.Entries) == 0 {
+			continue
+		}
+		var entries []logOutputFlatEntry
+		if unmarshalErr := json.Unmarshal(node.Entries, &entries); unmarshalErr != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.Enabled {
+				continue
+			}
+			cfg, cfgErr := parseLogOutputConfig(string(entry.Config))
+			if cfgErr != nil {
+				continue
+			}
+			if autoClosed(LogOutputAssignment{}, cfg) {
+				continue
+			}
+			data := &service.LogCaptureData{
+				RequestID: req.RequestID,
+				Stage:     string(topologyStageRequestBefore),
+				Type:      "request",
+				Prefix:    cfg.Prefix,
+				Source:    service.ResolveSourceMark(req.SourceMark, req.Path),
+				Error:     err.Error(),
+			}
+			if cfg.RecordRequest {
+				data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
+			}
+			writer.WriteLog(data)
+		}
+	}
+}
+
+// logOutputFlatEntry mirrors the logOutput entry shape stored on a flat
+// topology slot node; only the fields the rejection recorder needs are kept.
+type logOutputFlatEntry struct {
+	Enabled bool            `json:"enabled"`
+	Config  json.RawMessage `json:"config"`
 }
 
 // captureResponseBody buffers the response body so a log stage can write it

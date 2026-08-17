@@ -99,6 +99,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			Body:    bodyBytes,
 		})
 		if err != nil {
+			engine.RecordDispatchRejection(&relayReq, err)
 			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
@@ -236,6 +237,8 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
 			logEntry.CompletionTokens = resp.Usage.CompletionTokens
+			logEntry.PromptCacheMissTokens = resp.Usage.CacheWriteTokens
+			logEntry.PromptCacheHitTokens = resp.Usage.CacheReadTokens
 		}
 
 		service.Logs().Write(&logEntry)
@@ -267,6 +270,64 @@ func intPtr(v int) *int {
 	return &v
 }
 
+// Reuses MergeLLMBody so both non-SSE JSON and SSE bodies yield usage.
+func extractUsageInfo(body []byte, contentType string) *relay.UsageInfo {
+	if len(body) == 0 {
+		return nil
+	}
+	merged, err := service.MergeLLMBody(string(body), contentType)
+	if err != nil {
+		return nil
+	}
+	obj, ok := merged.(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, ok := obj["usage"]
+	if !ok || raw == nil {
+		return nil
+	}
+	usage, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	asInt := func(keys ...string) int {
+		for _, k := range keys {
+			switch v := usage[k].(type) {
+			case float64:
+				return int(v)
+			case int:
+				return v
+			case int64:
+				return int(v)
+			case json.Number:
+				if i, err := v.Int64(); err == nil {
+					return int(i)
+				}
+			}
+		}
+		return 0
+	}
+
+	// OpenAI uses prompt_tokens/completion_tokens; Anthropic uses
+	// input_tokens/output_tokens.
+	prompt := asInt("prompt_tokens", "input_tokens")
+	completion := asInt("completion_tokens", "output_tokens")
+	cacheWrite := asInt("prompt_cache_miss_tokens", "cache_creation_input_tokens")
+	cacheRead := asInt("prompt_cache_hit_tokens", "cache_read_input_tokens")
+	if prompt == 0 && completion == 0 {
+		return nil
+	}
+	return &relay.UsageInfo{
+		PromptTokens:     prompt,
+		CompletionTokens: completion,
+		TotalTokens:      prompt + completion,
+		CacheWriteTokens: cacheWrite,
+		CacheReadTokens:  cacheRead,
+	}
+}
+
 func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 	defer resp.Body.Close()
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -274,6 +335,7 @@ func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read response"})
 		return
 	}
+	resp.Usage = extractUsageInfo(bodyBytes, resp.Headers["content-type"])
 	c.Data(resp.StatusCode, "application/json", bodyBytes)
 }
 
@@ -295,6 +357,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 
 	firstByteMs := -1
 	buf := make([]byte, 4096)
+	var captured []byte
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
@@ -303,6 +366,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 			}
 			c.Writer.Write(buf[:n])
 			flusher.Flush()
+			captured = append(captured, buf[:n]...)
 		}
 		if err == io.EOF {
 			break
@@ -311,6 +375,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 			break
 		}
 	}
+	resp.Usage = extractUsageInfo(captured, resp.Headers["content-type"])
 	return firstByteMs
 }
 

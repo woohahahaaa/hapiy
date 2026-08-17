@@ -81,6 +81,9 @@ type Log struct {
 	ModelName        string    `json:"model_name"`
 	PromptTokens     int       `json:"prompt_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
+	// Miss = written to cache; Hit = served from cache.
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
 	IsStream         bool      `json:"is_stream"`
 	Quota            float64   `json:"quota"`
 	UseTime          int       `json:"use_time"` // milliseconds

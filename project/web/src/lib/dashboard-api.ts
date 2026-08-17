@@ -98,6 +98,8 @@ export type UsageLog = {
   readonly modelName: string
   readonly promptTokens: number
   readonly completionTokens: number
+  readonly promptCacheMissTokens: number
+  readonly promptCacheHitTokens: number
   readonly isStream: boolean
   readonly quota: number
   readonly useTime: number
@@ -802,6 +804,8 @@ function parseLog(value: unknown): UsageLog {
     modelName: readString(value.model_name, 'log.model_name'),
     promptTokens: readNumber(value.prompt_tokens, 'log.prompt_tokens'),
     completionTokens: readNumber(value.completion_tokens, 'log.completion_tokens'),
+    promptCacheMissTokens: readNumber(value.prompt_cache_miss_tokens, 'log.prompt_cache_miss_tokens', 0),
+    promptCacheHitTokens: readNumber(value.prompt_cache_hit_tokens, 'log.prompt_cache_hit_tokens', 0),
     isStream: readBoolean(value.is_stream, 'log.is_stream'),
     quota: readNumber(value.quota, 'log.quota'),
     useTime: readNumber(value.use_time, 'log.use_time'),

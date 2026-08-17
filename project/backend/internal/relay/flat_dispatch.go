@@ -115,7 +115,12 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 	}
 	if tp != nil && len(tp.Nodes) > 0 {
 		eligible, err := e.SelectByFlatTopology(tp, model, path)
-		if err == nil && eligible != nil {
+		if err != nil {
+			// Topology exists but yields no eligible provider: reject, never
+			// degrade to SelectProvider (it ignores topology switches/wires).
+			return nil, err
+		}
+		if eligible != nil {
 			provider, plan, err := e.buildPlanForProvider(eligible.Name, eligible.Chain)
 			if err != nil {
 				return nil, err

@@ -137,16 +137,22 @@ export function LogsPage() {
 
   const columns: ColumnDef<UsageLog>[] = [
     { key: 'createdAt', label: '时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
-    { key: 'userId', label: '用户', defaultWidth: { kind: 'percent', value: 7 } },
     { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
     {
       key: 'promptTokens',
       label: 'Tokens',
-      defaultWidth: { kind: 'percent', value: 8 },
+      defaultWidth: { kind: 'percent', value: 22 },
       defaultAlign: 'right',
-      render: (v, row) => `${v} / ${row.completionTokens}`,
+      render: (_, row) => {
+        const log = row as UsageLog
+        return (
+          <div className="whitespace-nowrap text-xs">
+            输入 {log.promptTokens} · 缓存写入 {log.promptCacheMissTokens} · 输出 {log.completionTokens} · 缓存读取 {log.promptCacheHitTokens}
+          </div>
+        )
+      },
     },
     {
       key: 'isStream',
@@ -352,7 +358,10 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow label="模型" value={log.modelName || '--'} />
       </FieldGroup>
       <FieldGroup title="用量">
-        <DetailRow label="Tokens" value={`${log.promptTokens} / ${log.completionTokens}`} />
+        <DetailRow
+          label="Tokens"
+          value={`输入 ${log.promptTokens}（缓存写入 ${log.promptCacheMissTokens}） / 输出 ${log.completionTokens}（缓存读取 ${log.promptCacheHitTokens}）`}
+        />
         <DetailRow label="流式" value={log.isStream ? 'SSE' : '-'} />
         <DetailRow label="消耗" value={log.quota > 0 ? `¥${log.quota.toFixed(2)}` : '-'} />
       </FieldGroup>
