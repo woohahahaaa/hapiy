@@ -79,6 +79,7 @@ type Log struct {
 	TokenName        string    `json:"token_name"`
 	ProviderName     string    `json:"provider_name"`
 	ModelName        string    `json:"model_name"`
+	Source           string    `json:"source"`
 	PromptTokens     int       `json:"prompt_tokens"`
 	CompletionTokens int       `json:"completion_tokens"`
 	// Miss = written to cache; Hit = served from cache.

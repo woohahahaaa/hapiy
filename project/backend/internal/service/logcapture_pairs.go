@@ -43,6 +43,9 @@ type LogCapturePairSummary struct {
 	Prefix       string    `json:"prefix"`
 	Source       string    `json:"source"`
 	ProviderID   string    `json:"provider_id"`
+	ProviderName string    `json:"provider_name"`
+	ModelName    string    `json:"model_name"`
+	TokenName    string    `json:"token_name"`
 	CreatedAt    time.Time `json:"created_at"`
 	HasRequest   bool      `json:"has_request"`
 	HasResponse  bool      `json:"has_response"`
@@ -254,11 +257,14 @@ func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary 
 	// should agree; we use the earliest for determinism).
 	earliest := rows[0]
 	s := LogCapturePairSummary{
-		RequestID:  rid,
-		Prefix:     earliest.Prefix,
-		Source:     earliest.Source,
-		ProviderID: earliest.ProviderID,
-		CreatedAt:  earliest.CreatedAt,
+		RequestID:    rid,
+		Prefix:       earliest.Prefix,
+		Source:       earliest.Source,
+		ProviderID:   earliest.ProviderID,
+		ProviderName: earliest.ProviderName,
+		ModelName:    earliest.ModelName,
+		TokenName:    earliest.TokenName,
+		CreatedAt:    earliest.CreatedAt,
 	}
 
 	reqBefore, reqAfter, rspBefore, rspAfter := splitStages(rows)

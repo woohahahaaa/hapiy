@@ -27,7 +27,10 @@ type Metrics struct {
 
 	// retentionMinutes keeps finished request entries visible for this many
 	// minutes after they end (0 = evict immediately). Configurable at runtime.
-	retentionMinutes atomic.Int64
+	// A float64 (not an int64) because sub-minute retentions such as 30s are
+	// valid. Guarded by retentionMu; write frequency is negligible.
+	retentionMinutes float64
+	retentionMu      sync.Mutex
 
 	startTime time.Time
 }
@@ -40,33 +43,45 @@ type modelCounter struct {
 
 // ActiveRequest describes an in-flight request for the monitoring API.
 // EndTime is nil while the request is running and set when it finishes.
+// Stage/ChunkCount/BytesReceived describe live progress for in-flight
+// requests and are refreshed periodically by the relay handler.
 type ActiveRequest struct {
-	RequestID  string     `json:"request_id"`
-	Model      string     `json:"model"`
-	TokenName  string     `json:"token_name"`
-	UserID     string     `json:"user_id"`
-	Stream     bool       `json:"stream"`
-	StartTime  time.Time  `json:"start_time"`
-	ElapsedMs  int64      `json:"elapsed_ms"`
-	EndTime    *time.Time `json:"end_time"`
+	RequestID     string     `json:"request_id"`
+	Model         string     `json:"model"`
+	TokenName     string     `json:"token_name"`
+	UserID        string     `json:"user_id"`
+	Provider      string     `json:"provider"`
+	Source        string     `json:"source"`
+	Stream        bool       `json:"stream"`
+	StartTime     time.Time  `json:"start_time"`
+	ElapsedMs     int64      `json:"elapsed_ms"`
+	EndTime       *time.Time `json:"end_time"`
+	Outcome       string     `json:"outcome"`
+	Stage         string     `json:"stage"`
+	ChunkCount    int64      `json:"chunk_count"`
+	BytesReceived int64      `json:"bytes_received"`
 }
 
 var globalMetrics = NewMetrics()
 
 func NewMetrics() *Metrics {
 	m := &Metrics{startTime: time.Now()}
-	m.retentionMinutes.Store(5)
+	m.retentionMinutes = 5
 	return m
 }
 
 // SetRetentionMinutes updates how long finished requests stay visible.
 // 0 evicts finished requests immediately.
-func (m *Metrics) SetRetentionMinutes(minutes int64) {
-	m.retentionMinutes.Store(minutes)
+func (m *Metrics) SetRetentionMinutes(minutes float64) {
+	m.retentionMu.Lock()
+	m.retentionMinutes = minutes
+	m.retentionMu.Unlock()
 }
 
-func (m *Metrics) RetentionMinutes() int64 {
-	return m.retentionMinutes.Load()
+func (m *Metrics) RetentionMinutes() float64 {
+	m.retentionMu.Lock()
+	defer m.retentionMu.Unlock()
+	return m.retentionMinutes
 }
 
 func Global() *Metrics {
@@ -85,10 +100,33 @@ func (m *Metrics) TrackActiveRequest(req ActiveRequest) {
 	m.activeEntries.Store(req.RequestID, &req)
 }
 
+// UpdateActiveRequestProgress refreshes the live progress fields (stage, chunk
+// count, bytes received) of an in-flight request. The stored entry is replaced
+// copy-on-write; no progress fields are touched when the request has finished.
+func (m *Metrics) UpdateActiveRequestProgress(requestID, stage string, chunks, bytesReceived int64) {
+	if requestID == "" {
+		return
+	}
+	v, ok := m.activeEntries.Load(requestID)
+	if !ok {
+		return
+	}
+	req := *v.(*ActiveRequest)
+	if req.EndTime != nil {
+		return
+	}
+	req.Stage = stage
+	req.ChunkCount = chunks
+	req.BytesReceived = bytesReceived
+	m.activeEntries.Store(requestID, &req)
+}
+
 // EndRequest records completion of a request. The active entry (if any) is
 // kept with its EndTime set so the monitoring API can show finished requests
-// for the configured retention period.
-func (m *Metrics) EndRequest(requestID, model string, success bool, latencyMs int64, tokens int64) {
+// for the configured retention period. Outcome classifies how it ended:
+// completed | upstream_error | client_disconnected | queued_rejected |
+// invalid_request.
+func (m *Metrics) EndRequest(requestID, model string, success bool, latencyMs int64, tokens int64, outcome string) {
 	m.activeRequests.Add(-1)
 	m.totalLatencyMs.Add(latencyMs)
 	m.totalTokens.Add(tokens)
@@ -98,6 +136,7 @@ func (m *Metrics) EndRequest(requestID, model string, success bool, latencyMs in
 			req := *v.(*ActiveRequest)
 			now := time.Now()
 			req.EndTime = &now
+			req.Outcome = outcome
 			m.activeEntries.Store(requestID, &req)
 		}
 	}
@@ -138,7 +177,7 @@ func (m *Metrics) evictExpired(retention time.Duration) {
 // plus finished ones still within the retention window), evicting expired
 // entries first. ElapsedMs is the total duration for finished requests.
 func (m *Metrics) ActiveRequests() []ActiveRequest {
-	m.evictExpired(time.Duration(m.retentionMinutes.Load()) * time.Minute)
+	m.evictExpired(time.Duration(m.RetentionMinutes()) * time.Minute)
 	now := time.Now()
 	out := make([]ActiveRequest, 0)
 	m.activeEntries.Range(func(k, v interface{}) bool {
@@ -165,7 +204,7 @@ func (m *Metrics) StartEvictionLoop(interval time.Duration) func() {
 		for {
 			select {
 			case <-ticker.C:
-				m.evictExpired(time.Duration(m.retentionMinutes.Load()) * time.Minute)
+				m.evictExpired(time.Duration(m.RetentionMinutes()) * time.Minute)
 			case <-stop:
 				return
 			}

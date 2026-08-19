@@ -26,7 +26,7 @@ func TestRelayInvalidJSONCompletesMetrics(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := relay.NewEngine(nil) // malformed JSON returns before any engine method is called
 	router := gin.New()
-	router.POST("/v1/chat/completions", handler.Relay(engine))
+	router.POST("/v1/chat/completions", handler.Relay(nil, engine))
 
 	before := common.Global().Snapshot().ActiveRequests
 

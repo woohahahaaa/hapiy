@@ -229,8 +229,26 @@ export function LogCapturePage() {
       render: (_, row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
     },
     {
+      key: 'token_name',
+      label: '令牌',
+      defaultWidth: { kind: 'percent', value: 10 },
+      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.token_name} /> : <EmptyCell value={null} />),
+    },
+    {
+      key: 'provider_name',
+      label: '供应商',
+      defaultWidth: { kind: 'percent', value: 12 },
+      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.provider_name} /> : <EmptyCell value={null} />),
+    },
+    {
+      key: 'model_name',
+      label: '模型',
+      defaultWidth: { kind: 'percent', value: 12 },
+      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.model_name} /> : <EmptyCell value={null} />),
+    },
+    {
       key: 'source',
-      label: '标记',
+      label: '来源',
       defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => {
         const source = row.kind === 'pair' ? row.pair.source : row.file.source

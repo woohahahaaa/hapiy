@@ -22,7 +22,7 @@ func InitActiveRequestRetention(db *gorm.DB) {
 	if err := db.First(&setting, "key = ?", activeRequestRetentionKey).Error; err != nil {
 		return
 	}
-	if minutes, err := strconv.ParseInt(setting.Value, 10, 64); err == nil {
+	if minutes, err := strconv.ParseFloat(setting.Value, 64); err == nil {
 		common.Global().SetRetentionMinutes(minutes)
 	}
 }
@@ -33,7 +33,7 @@ func GetActiveRequestConfig(db *gorm.DB) gin.HandlerFunc {
 		var setting model.Setting
 		err := db.First(&setting, "key = ?", activeRequestRetentionKey).Error
 		if err == nil {
-			if minutes, convErr := strconv.ParseInt(setting.Value, 10, 64); convErr == nil {
+			if minutes, convErr := strconv.ParseFloat(setting.Value, 64); convErr == nil {
 				c.JSON(http.StatusOK, gin.H{"data": gin.H{"retention_minutes": minutes}})
 				return
 			}
@@ -47,7 +47,7 @@ func GetActiveRequestConfig(db *gorm.DB) gin.HandlerFunc {
 func PutActiveRequestConfig(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			RetentionMinutes int64 `json:"retention_minutes"`
+			RetentionMinutes float64 `json:"retention_minutes"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -58,7 +58,7 @@ func PutActiveRequestConfig(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		setting := model.Setting{Key: activeRequestRetentionKey, Value: strconv.FormatInt(req.RetentionMinutes, 10)}
+		setting := model.Setting{Key: activeRequestRetentionKey, Value: strconv.FormatFloat(req.RetentionMinutes, 'f', -1, 64)}
 		if err := db.Where("key = ?", setting.Key).
 			Assign(model.Setting{Value: setting.Value}).
 			FirstOrCreate(&setting).Error; err != nil {

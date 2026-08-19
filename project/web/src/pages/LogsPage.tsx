@@ -140,15 +140,17 @@ export function LogsPage() {
     { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
+    { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, render: (v) => (v ? String(v) : <EmptyCell value={null} />) },
     {
       key: 'promptTokens',
       label: 'Tokens',
       defaultWidth: { kind: 'percent', value: 22 },
       defaultAlign: 'right',
+      defaultOverflow: 'wrap',
       render: (_, row) => {
         const log = row as UsageLog
         return (
-          <div className="whitespace-nowrap text-xs">
+          <div className="text-xs">
             输入 {log.promptTokens} · 缓存写入 {log.promptCacheMissTokens} · 输出 {log.completionTokens} · 缓存读取 {log.promptCacheHitTokens}
           </div>
         )
@@ -167,7 +169,7 @@ export function LogsPage() {
       defaultAlign: 'right',
       render: (v) => {
         const q = v as number
-        return q > 0 ? `¥${q.toFixed(2)}` : <EmptyCell value={null} />
+        return q > 0 ? formatQuota(q) : <EmptyCell value={null} />
       },
     },
     {
@@ -363,7 +365,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
           value={`输入 ${log.promptTokens}（缓存写入 ${log.promptCacheMissTokens}） / 输出 ${log.completionTokens}（缓存读取 ${log.promptCacheHitTokens}）`}
         />
         <DetailRow label="流式" value={log.isStream ? 'SSE' : '-'} />
-        <DetailRow label="消耗" value={log.quota > 0 ? `¥${log.quota.toFixed(2)}` : '-'} />
+        <DetailRow label="消耗" value={log.quota > 0 ? formatQuota(log.quota) : '-'} />
       </FieldGroup>
       <FieldGroup title="耗时">
         <DetailRow label="耗时" value={`${(log.useTime / 1000).toFixed(1)}s`} />
@@ -406,4 +408,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="break-words text-foreground">{value}</span>
     </div>
   )
+}
+
+function formatQuota(quota: number): string {
+  return `¥${quota.toFixed(6).replace(/\.?0+$/, '')}`
 }

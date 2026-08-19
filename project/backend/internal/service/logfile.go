@@ -46,6 +46,9 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 		Prefix:     data.Prefix,
 		Source:     data.Source,
 		ProviderID: data.ProviderID,
+		ProviderName: data.ProviderName,
+		ModelName:  data.ModelName,
+		TokenName:  data.TokenName,
 		Stage:      data.Stage,
 		Error:      data.Error,
 		// Always keep stage timings, even when body recording is off.
@@ -152,6 +155,9 @@ type LogCaptureData struct {
 	Stage      string // request_before | request_after | response_before | response_after
 	Type       string // request | response | system
 	ProviderID string
+	ProviderName string
+	ModelName  string
+	TokenName  string
 	Prefix     string
 	Source     string
 	Request    *HTTPCapture

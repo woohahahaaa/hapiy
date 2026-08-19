@@ -156,6 +156,36 @@ func TestPriceCreate_rejects_empty_model(t *testing.T) {
 	}
 }
 
+func TestPriceCreate_rejectsModelNameMatchingExistingAlias(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.PriceConfig{Model: "canonical-model", Aliases: `["shared-name"]`}).Error; err != nil {
+		t.Fatalf("create existing price: %v", err)
+	}
+
+	rec := priceRequest(t, http.MethodPost, "/models", `{"model":"SHARED-NAME"}`, CreatePrice(db))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "已被历史模型或别名占用") {
+		t.Fatalf("error message: got %s", rec.Body.String())
+	}
+}
+
+func TestPriceCreate_rejectsAliasMatchingExistingModelName(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.PriceConfig{Model: "canonical-model"}).Error; err != nil {
+		t.Fatalf("create existing price: %v", err)
+	}
+
+	rec := priceRequest(t, http.MethodPost, "/models", `{"model":"other-model","aliases":"[\"CANONICAL-MODEL\"]"}`, CreatePrice(db))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: want 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "已被历史模型或别名占用") {
+		t.Fatalf("error message: got %s", rec.Body.String())
+	}
+}
+
 func TestPriceUpdate_preserves_and_updates_new_fields(t *testing.T) {
 	db := newPriceTestDB(t)
 	createBody := `{"model":"gpt-4o","input_price":5,"output_price":15,"context_length":128000,` +

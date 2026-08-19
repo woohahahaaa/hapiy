@@ -75,6 +75,9 @@ type LogCapture struct {
 	Prefix         string    `json:"prefix"`
 	Source         string    `json:"source"`
 	ProviderID     string    `json:"provider_id"`
+	ProviderName   string    `json:"provider_name"`
+	ModelName      string    `json:"model_name"`
+	TokenName      string    `json:"token_name"`
 	Stage          string    `json:"stage"` // request_before | request_after | response_before | response_after
 	Headers        JSONMap   `gorm:"type:jsonb" json:"headers,omitempty"`
 	RequestBody    JSONMap   `gorm:"type:jsonb" json:"request_body,omitempty"`

@@ -213,12 +213,12 @@ func main() {
 		relayGroup.Use(middleware.TokenAuth(db))
 		{
 			// OpenAI-compatible endpoints
-			relayGroup.POST("/chat/completions", handler.Relay(engine))
-			relayGroup.POST("/completions", handler.Relay(engine))
-			relayGroup.POST("/embeddings", handler.Relay(engine))
-			relayGroup.POST("/images/generations", handler.Relay(engine))
-			relayGroup.POST("/audio/speech", handler.Relay(engine))
-			relayGroup.POST("/audio/transcriptions", handler.Relay(engine))
+			relayGroup.POST("/chat/completions", handler.Relay(db, engine))
+			relayGroup.POST("/completions", handler.Relay(db, engine))
+			relayGroup.POST("/embeddings", handler.Relay(db, engine))
+			relayGroup.POST("/images/generations", handler.Relay(db, engine))
+			relayGroup.POST("/audio/speech", handler.Relay(db, engine))
+			relayGroup.POST("/audio/transcriptions", handler.Relay(db, engine))
 		}
 	}
 

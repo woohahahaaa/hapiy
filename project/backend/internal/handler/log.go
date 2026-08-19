@@ -76,9 +76,24 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 			since = &t
 		}
 
+		var until *time.Time
+		if to := c.Query("to"); to != "" {
+			if t, err := time.Parse(time.RFC3339, to); err == nil {
+				until = &t
+			}
+		}
+		if from := c.Query("from"); from != "" {
+			if t, err := time.Parse(time.RFC3339, from); err == nil {
+				since = &t
+			}
+		}
+
 		applyRange := func(q *gorm.DB) *gorm.DB {
 			if since != nil {
-				return q.Where("created_at >= ?", *since)
+				q = q.Where("created_at >= ?", *since)
+			}
+			if until != nil {
+				q = q.Where("created_at <= ?", *until)
 			}
 			return q
 		}

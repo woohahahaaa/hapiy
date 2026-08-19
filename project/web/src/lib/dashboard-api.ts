@@ -31,14 +31,13 @@ const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 type JsonRecord = Record<string, unknown>
 
 export type ProviderEndpoint = {
-  readonly name: string
   readonly pathSuffix: string
 }
 
 export type ProviderModel = {
   readonly model: string
   readonly endpoints: readonly string[]
-  readonly discount?: number
+  readonly rate: string
 }
 
 export type Provider = {
@@ -96,6 +95,7 @@ export type UsageLog = {
   readonly tokenName: string
   readonly providerName: string
   readonly modelName: string
+  readonly source: string
   readonly promptTokens: number
   readonly completionTokens: number
   readonly promptCacheMissTokens: number
@@ -145,10 +145,16 @@ export type ActiveRequest = {
   readonly model: string
   readonly tokenName: string
   readonly userId: string
+  readonly provider: string
+  readonly source: string
   readonly startTime: string
   readonly stream: boolean
   readonly elapsedMs: number
   readonly endTime: string | null
+  readonly outcome: string
+  readonly stage: string
+  readonly chunkCount: number
+  readonly bytesReceived: number
 }
 
 export type ActiveRequestConfig = {
@@ -215,6 +221,9 @@ export type LogCapturePairSummary = {
   readonly prefix: string
   readonly source: string
   readonly provider_id: string
+  readonly provider_name: string
+  readonly model_name: string
+  readonly token_name: string
   readonly created_at: string
   readonly has_request: boolean
   readonly has_response: boolean
@@ -612,7 +621,6 @@ function parseEndpoint(value: unknown): ProviderEndpoint {
     throw new DashboardApiError('服务端返回的 endpoints 格式无效', null)
   }
   return {
-    name: readString(value.name, 'endpoints.name'),
     pathSuffix: readString(value.pathSuffix ?? value.path_suffix, 'endpoints.path_suffix'),
   }
 }
@@ -621,11 +629,13 @@ function parseModel(value: unknown): ProviderModel {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的 models 格式无效', null)
   }
-  const discount = value.discount
+  const legacyRate = typeof value.discount === 'number' && Number.isFinite(value.discount)
+    ? String(value.discount)
+    : undefined
   return {
     model: readString(value.model, 'models.model'),
     endpoints: readStringArray(value.endpoints ?? [], 'models.endpoints'),
-    ...(typeof discount === 'number' && Number.isFinite(discount) ? { discount } : {}),
+    rate: readString(value.rate ?? legacyRate ?? '1', 'models.rate'),
   }
 }
 
@@ -802,6 +812,7 @@ function parseLog(value: unknown): UsageLog {
     tokenName: readString(value.token_name, 'log.token_name'),
     providerName: readString(value.provider_name, 'log.provider_name'),
     modelName: readString(value.model_name, 'log.model_name'),
+    source: readString(value.source ?? '', 'log.source'),
     promptTokens: readNumber(value.prompt_tokens, 'log.prompt_tokens'),
     completionTokens: readNumber(value.completion_tokens, 'log.completion_tokens'),
     promptCacheMissTokens: readNumber(value.prompt_cache_miss_tokens, 'log.prompt_cache_miss_tokens', 0),
@@ -898,6 +909,9 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
     prefix: readString(value.prefix, 'pair.prefix'),
     source: readString(value.source, 'pair.source'),
     provider_id: readString(value.provider_id, 'pair.provider_id'),
+    provider_name: readString(value.provider_name ?? '', 'pair.provider_name'),
+    model_name: readString(value.model_name ?? '', 'pair.model_name'),
+    token_name: readString(value.token_name ?? '', 'pair.token_name'),
     created_at: readString(value.created_at, 'pair.created_at'),
     has_request: readBoolean(value.has_request, 'pair.has_request'),
     has_response: readBoolean(value.has_response, 'pair.has_response'),
@@ -988,10 +1002,16 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     model: readString(value.model, 'active.model'),
     tokenName: readString(value.token_name, 'active.token_name'),
     userId: readString(value.user_id, 'active.user_id'),
+    provider: readString(value.provider ?? '', 'active.provider'),
+    source: readString(value.source ?? '', 'active.source'),
     startTime: readString(value.start_time, 'active.start_time'),
     stream: readBoolean(value.stream, 'active.stream'),
     elapsedMs: readNumber(value.elapsed_ms, 'active.elapsed_ms'),
     endTime: value.end_time == null || value.end_time === '' ? null : readString(value.end_time, 'active.end_time'),
+    outcome: readString(value.outcome ?? '', 'active.outcome'),
+    stage: readString(value.stage ?? '', 'active.stage'),
+    chunkCount: readNumber(value.chunk_count ?? 0, 'active.chunk_count'),
+    bytesReceived: readNumber(value.bytes_received ?? 0, 'active.bytes_received'),
   }
 }
 
@@ -1557,8 +1577,11 @@ export const dashboardApi = {
     return parseLogCaptureMergedBody(body.data)
   },
 
-  async getLogStats(range: StatsRange): Promise<LogStats> {
-    const data = await request(`/logs/stats?range=${encodeURIComponent(range)}`)
+  async getLogStats(range: DateRange): Promise<LogStats> {
+    const qp = new URLSearchParams()
+    if (range.from) qp.set('from', toRFC3339Date(range.from, false) ?? range.from)
+    if (range.to) qp.set('to', toRFC3339Date(range.to, true) ?? range.to)
+    const data = await request(`/logs/stats?${qp.toString()}`)
     return parseLogStats(data)
   },
 

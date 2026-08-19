@@ -67,13 +67,18 @@ func (e *Engine) GetPlan(providerID string) (*ExecutionPlan, error) {
 	return plan, nil
 }
 
-// InvalidatePlan forces recompilation of a provider's execution plan
+// InvalidatePlan forces recompilation of a provider's execution plan.
+// The provider row is reloaded from the database first so recent edits
+// take effect immediately instead of recompiling a stale snapshot.
 func (e *Engine) InvalidatePlan(providerID string) {
-	p, err := e.GetProvider(providerID)
-	if err != nil {
+	var p model.Provider
+	if err := e.db.First(&p, "id = ?", providerID).Error; err != nil {
 		return
 	}
-	e.compilePlan(p)
+	e.providersMu.Lock()
+	e.providers[providerID] = &p
+	e.providersMu.Unlock()
+	e.compilePlan(&p)
 }
 
 // compilePlan builds an execution plan from provider configuration
@@ -131,6 +136,9 @@ type RelayRequest struct {
 	// rules with scope=per_user / per_token can key their waitlists.
 	UserID string `json:"-"`
 	TokenID string `json:"-"`
+	// TokenName is the display name of the authenticated token, populated by
+	// the handler for log capture rows.
+	TokenName string `json:"-"`
 	// Model is the literal user-supplied model name (e.g. "gpt-4").
 	Model       string                   `json:"model"`
 	Messages    []map[string]interface{} `json:"messages,omitempty"`
@@ -149,6 +157,11 @@ type RelayRequest struct {
 	// from the first available).
 	KeyIndex     int `json:"-"`
 	BaseURLIndex int `json:"-"`
+	// Progress, when non-nil, receives stage updates as the request advances
+	// through the relay pipeline (queued, connecting, receiving). It lets the
+	// caller surface live progress on the monitoring page without polling the
+	// engine internals.
+	Progress func(stage string) `json:"-"`
 }
 
 // RelayResponse represents the upstream response.
@@ -237,6 +250,9 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	queueWaitMs := -1
 	var releaseConcurrency func()
 	if plan.ConcurrencyRule != nil {
+		if req.Progress != nil {
+			req.Progress("queued")
+		}
 		queueStart := time.Now()
 		rel, err := e.checkConcurrency(ctx, plan.ConcurrencyRule, req)
 		if err != nil {
@@ -247,6 +263,9 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	}
 	if releaseConcurrency != nil {
 		defer releaseConcurrency()
+	}
+	if req.Progress != nil {
+		req.Progress("connecting")
 	}
 
 	// Step 3: Relay to upstream (with failover). The "relay" stage fires
@@ -287,14 +306,17 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 						continue
 					}
 					writer.WriteLog(&service.LogCaptureData{
-						RequestID:  req.RequestID,
-						Stage:      string(topologyStageResponseAfter),
-						Type:       "response",
-						ProviderID: plan.ID,
-						Prefix:     cfg.Prefix,
-						Source:     service.ResolveSourceMark(req.SourceMark, req.Path),
-						Error:      err.Error(),
-						ConnectMs:  failConnectMs,
+						RequestID:    req.RequestID,
+						Stage:        string(topologyStageResponseAfter),
+						Type:         "response",
+						ProviderID:   plan.ID,
+						ProviderName: plan.Provider.Name,
+						ModelName:    req.Model,
+						TokenName:    req.TokenName,
+						Prefix:       cfg.Prefix,
+						Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
+						Error:        err.Error(),
+						ConnectMs:    failConnectMs,
 					})
 				}
 			}
@@ -443,12 +465,15 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 			continue
 		}
 		data := &service.LogCaptureData{
-			RequestID:  req.RequestID,
-			Stage:      string(stage),
-			Type:       logOutputStageType(stage),
-			ProviderID: plan.ID,
-			Prefix:     cfg.Prefix,
-			Source:     service.ResolveSourceMark(req.SourceMark, req.Path),
+			RequestID:    req.RequestID,
+			Stage:        string(stage),
+			Type:         logOutputStageType(stage),
+			ProviderID:   plan.ID,
+			ProviderName: plan.Provider.Name,
+			ModelName:    req.Model,
+			TokenName:    req.TokenName,
+			Prefix:       cfg.Prefix,
+			Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 		}
 		// Stage timings are always recorded (independent of the record_*
 		// switches) so every captured request carries its timing breakdown.
@@ -519,6 +544,8 @@ func (e *Engine) RecordDispatchRejection(req *RelayRequest, err error) {
 				RequestID: req.RequestID,
 				Stage:     string(topologyStageRequestBefore),
 				Type:      "request",
+				ModelName: req.Model,
+				TokenName: req.TokenName,
 				Prefix:    cfg.Prefix,
 				Source:    service.ResolveSourceMark(req.SourceMark, req.Path),
 				Error:     err.Error(),

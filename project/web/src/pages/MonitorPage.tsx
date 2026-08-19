@@ -14,15 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import {
@@ -30,7 +23,7 @@ import {
   type LogStats,
   type ActiveRequest,
   type ActiveRequestConfig,
-  type StatsRange,
+  type DateRange,
 } from '@/lib/dashboard-api'
 
 const POLL_INTERVAL_MS = 2000
@@ -40,6 +33,56 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}MB`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}KB`
+  return `${n}B`
+}
+
+function formatActiveStage(row: ActiveRequest): string {
+  const elapsed = `${(row.elapsedMs / 1000).toFixed(1)}s`
+  switch (row.stage) {
+    case 'queued':
+      return `排队中 · 已等 ${elapsed}`
+    case 'waiting_upstream':
+      return `等待上游响应 · 已 ${elapsed}`
+    case 'receiving_stream':
+      return `接收中 · 第 ${row.chunkCount} chunk · 已收 ${formatBytes(row.bytesReceived)}`
+    case 'receiving':
+      return `接收响应中 · 已读 ${formatBytes(row.bytesReceived)}`
+    default:
+      return '活跃中'
+  }
+}
+
+function formatOutcome(outcome: string): string {
+  switch (outcome) {
+    case 'client_disconnected':
+      return '客户端断开'
+    case 'upstream_error':
+      return '上游报错'
+    case 'queued_rejected':
+      return '排队拒绝'
+    case 'invalid_request':
+      return '请求无效'
+    default:
+      return '已结束'
+  }
+}
+
+function formatOutcomeClass(outcome: string): string {
+  switch (outcome) {
+    case 'client_disconnected':
+      return 'text-warning'
+    case 'upstream_error':
+    case 'queued_rejected':
+    case 'invalid_request':
+      return 'text-destructive'
+    default:
+      return 'text-muted-foreground'
+  }
 }
 
 function formatLatency(ms: number): string {
@@ -61,25 +104,19 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   {
     key: 'status',
     label: '状态',
-    defaultWidth: { kind: 'pixel', value: 90 },
+    defaultWidth: { kind: 'pixel', value: 230 },
     render: (_, row) => {
       const finished = row.endTime !== null
       return (
-        <span className={finished ? 'text-muted-foreground' : 'text-success'}>
-          {finished ? '已结束' : '活跃中'}
+        <span className={finished ? formatOutcomeClass(row.outcome) : 'text-success'}>
+          {finished ? formatOutcome(row.outcome) : formatActiveStage(row)}
         </span>
       )
     },
-  },
-  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 15 } },
-  { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 20 } },
-  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
-  {
-    key: 'elapsedMs',
-    label: '耗时',
-    defaultWidth: { kind: 'pixel', value: 100 },
-    defaultAlign: 'right',
-    render: (v) => formatElapsed(v as number),
+    rowClassName: (row) => {
+      if (row.endTime !== null) return ''
+      return row.stage === 'queued' ? 'bg-warning/30' : 'bg-primary/15'
+    },
   },
   { key: 'startTime', label: '开始时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
   {
@@ -87,7 +124,19 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
     label: '结束时间',
     defaultWidth: { kind: 'pixel', value: 160 },
     isTime: true,
-    render: (v) => (v === null || v === undefined ? <EmptyCell value={null} /> : v),
+    render: (v) => (v === null || v === undefined ? null : v),
+  },
+  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
+  { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
+  { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
+  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, render: (v) => (v ? String(v) : <EmptyCell value={null} />) },
+  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
+  {
+    key: 'elapsedMs',
+    label: '耗时',
+    defaultWidth: { kind: 'pixel', value: 100 },
+    defaultAlign: 'right',
+    render: (v) => formatElapsed(v as number),
   },
 ]
 
@@ -131,21 +180,14 @@ function MetricSkeleton() {
 
 // ── 统计模块 ──
 
-const RANGE_OPTIONS: readonly { value: StatsRange; label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: '30d', label: '30天' },
-  { value: '7d', label: '7天' },
-  { value: '1d', label: '24小时' },
-]
-
 function StatsSection() {
-  const [range, setRange] = useState<StatsRange>('all')
+  const [dateRange, setDateRange] = useState<DateRange>({})
   const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const mountedRef = useRef(true)
 
-  const fetchStats = useCallback(async (r: StatsRange) => {
+  const fetchStats = useCallback(async (r: DateRange) => {
     setLoading(true)
     setError(null)
     try {
@@ -166,12 +208,12 @@ function StatsSection() {
   }, [])
 
   useEffect(() => {
-    void fetchStats(range)
-  }, [range, fetchStats])
+    void fetchStats(dateRange)
+  }, [dateRange, fetchStats])
 
   const handleRetry = useCallback(() => {
-    void fetchStats(range)
-  }, [range, fetchStats])
+    void fetchStats(dateRange)
+  }, [dateRange, fetchStats])
 
   const successRate = stats && stats.totalRequests > 0
     ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
@@ -181,18 +223,7 @@ function StatsSection() {
     <section className="mb-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-medium">统计</h3>
-        <Select value={range} onValueChange={(value) => setRange((value ?? 'all') as StatsRange)}>
-          <SelectTrigger className="w-32">
-            <SelectValue placeholder="时间范围" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {RANGE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <DateRangeFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Loading state: first load only */}
@@ -261,15 +292,26 @@ function StatsSection() {
 // ── 活跃请求模块 ──
 
 const RETENTION_CHOICES: readonly { value: number; label: string }[] = [
-  { value: 0, label: '立即移除' },
+  { value: 0, label: '请求完成后立即移除' },
+  { value: 0.5, label: '30 秒' },
+  { value: 1, label: '1 分钟' },
+  { value: 2, label: '2 分钟' },
   { value: 5, label: '5 分钟' },
   { value: 10, label: '10 分钟' },
   { value: 30, label: '30 分钟' },
 ]
 
+function formatRetention(minutes: number): string {
+  if (minutes <= 0) return '请求完成后立即移除'
+  if (minutes < 1) return `${Math.round(minutes * 60)} 秒`
+  if (minutes === 1) return '1 分钟'
+  if (Number.isInteger(minutes)) return `${minutes} 分钟`
+  return `${minutes} 分钟`
+}
+
 function retentionLabel(minutes: number): string {
-  if (minutes <= 0) return '立即移除'
-  return `保留 ${minutes} 分钟`
+  if (minutes <= 0) return '请求完成后立即移除'
+  return `显示 ${formatRetention(minutes)} 内的活跃请求`
 }
 
 function ActiveRequestsSection() {
@@ -288,7 +330,8 @@ function ActiveRequestsSection() {
     try {
       const data = await dashboardApi.getActiveRequests()
       if (!mountedRef.current) return
-      setRequests(data)
+      const sorted = [...data].sort((a, b) => (a.startTime < b.startTime ? 1 : a.startTime > b.startTime ? -1 : 0))
+      setRequests(sorted)
       setError(null)
     } catch (err) {
       if (!mountedRef.current) return
@@ -374,16 +417,21 @@ function ActiveRequestsSection() {
               </span>
             )}
             {configError ? (
-              <span className="text-xs text-destructive" title={configError}>保留时间未知</span>
+              <Button variant="outline" size="sm" onClick={handleOpenDialog} title={configError}>
+                <AppIcon name="settings" data-icon="inline-start" />
+                保留时间未知
+              </Button>
             ) : config ? (
-              <span className="text-xs text-muted-foreground">{retentionLabel(config.retentionMinutes)}</span>
+              <Button variant="outline" size="sm" onClick={handleOpenDialog} title="设置保留时间">
+                <AppIcon name="settings" data-icon="inline-start" />
+                {retentionLabel(config.retentionMinutes)}
+              </Button>
             ) : (
-              <span className="text-xs text-muted-foreground">--</span>
+              <Button variant="outline" size="sm" onClick={handleOpenDialog}>
+                <AppIcon name="settings" data-icon="inline-start" />
+                --
+              </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handleOpenDialog}>
-              <AppIcon name="settings" data-icon="inline-start" />
-              设置
-            </Button>
           </>
         }
       />
@@ -396,7 +444,7 @@ function ActiveRequestsSection() {
               请求结束后，在列表中保留多久
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-wrap gap-2">
             {RETENTION_CHOICES.map((choice) => (
               <Button
                 key={choice.value}

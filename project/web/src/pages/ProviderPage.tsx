@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel, FetchedModel } from '@/lib/dashboard-api'
@@ -161,8 +162,10 @@ export function ProviderPage() {
 
 function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
-  const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ name: '', pathSuffix: '' })
-  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [] })
+  const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ pathSuffix: '' })
+  const [endpointError, setEndpointError] = useState<string | null>(null)
+  const endpointInputRef = useRef<HTMLInputElement | null>(null)
+  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], rate: '1' })
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
   const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
@@ -225,8 +228,15 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
+  const updateModel = (oldName: string, patch: Partial<ProviderModel>) => {
+    setForm((current) => ({
+      ...current,
+      models: current.models.map((item) => (item.model === oldName ? { ...item, ...patch } : item)),
+    }))
+  }
+
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
-    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [] }))
+    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1' }))
     if (replace) {
       setForm((current) => ({ ...current, models: additions }))
     } else {
@@ -259,18 +269,32 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         <FieldLabel>Endpoints</FieldLabel>
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
-            <Input value={newEndpoint.name} onChange={(event) => setNewEndpoint((current) => ({ ...current, name: event.target.value }))} placeholder="名称" />
-            <Input value={newEndpoint.pathSuffix} onChange={(event) => setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value }))} placeholder="路径后缀" />
-            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.name || !newEndpoint.pathSuffix} onClick={() => { setForm((current) => ({ ...current, endpoints: [...current.endpoints, newEndpoint] })); setNewEndpoint({ name: '', pathSuffix: '' }) }}><AppIcon name="add" /></Button>
+            <Input ref={endpointInputRef} value={newEndpoint.pathSuffix} onChange={(event) => { setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value })); setEndpointError(null) }} placeholder="如 /chat/completions 或 /responses" />
+            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.pathSuffix} onClick={() => {
+              const path = newEndpoint.pathSuffix.trim()
+              if (!path.startsWith('/')) {
+                setEndpointError('路径必须以斜杠开头（/）')
+                return
+              }
+              if (form.endpoints.some((item) => item.pathSuffix === path)) {
+                setEndpointError('该路径已添加')
+                return
+              }
+              setForm((current) => ({ ...current, endpoints: [...current.endpoints, { pathSuffix: path }] }))
+              setNewEndpoint((current) => ({ ...current, pathSuffix: '' }))
+              setEndpointError(null)
+              endpointInputRef.current?.focus()
+            }}><AppIcon name="add" /></Button>
           </div>
+          {endpointError && <p role="alert" className="text-xs text-destructive">{endpointError}</p>}
           <div className="flex flex-wrap gap-2">
             {form.endpoints.map((endpoint) => (
-              <span key={`${endpoint.name}:${endpoint.pathSuffix}`} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item !== endpoint) }))}><AppIcon name="close" size={12} className="inline" /></button>{endpoint.name}: {endpoint.pathSuffix}</span>
+              <span key={endpoint.pathSuffix} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item.pathSuffix !== endpoint.pathSuffix), models: current.models.map((model) => model.endpoints.includes(endpoint.pathSuffix) ? { ...model, endpoints: model.endpoints.filter((path) => path !== endpoint.pathSuffix) } : model) }))}><AppIcon name="close" size={12} className="inline" /></button>{endpoint.pathSuffix}</span>
             ))}
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          不填写任何 endpoint 表示不限制请求路径；填写后只允许访问这些路径后缀，否则会被拒绝并记录到请求记录表
+          填写请求允许访问的路径（必须以 / 开头）；不填写任何 endpoint 表示不限制请求路径
         </p>
       </Field>
       <Field>
@@ -285,14 +309,45 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               <AppIcon name="settings" />
             </Button>
           </div>
-          <div className="flex gap-2">
-            <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" />
-            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, newModel] })); setNewModel({ model: '', endpoints: [] }) }}><AppIcon name="add" /></Button>
+          <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_14rem_5rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
+              <span>模型名称</span>
+              <span>Endpoint</span>
+              <span>价格倍率</span>
+              <span />
+            </div>
+            {[...form.models].sort((a, b) => a.model.localeCompare(b.model)).map((model) => {
+              const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__all__'
+              return (
+                <div key={model.model} className="grid grid-cols-[minmax(0,1fr)_14rem_5rem_2rem] items-center gap-2">
+                  <Input value={model.model} onChange={(event) => updateModel(model.model, { model: event.target.value })} className="flex-1" />
+                  <Select
+                    value={endpointValue}
+                    onValueChange={(value) => updateModel(model.model, { endpoints: value === '__all__' ? [] : [value] })}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">不限</SelectItem>
+                      {form.endpoints.map((endpoint) => (
+                        <SelectItem key={endpoint.pathSuffix} value={endpoint.pathSuffix}>{endpoint.pathSuffix}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={model.rate}
+                    onChange={(event) => updateModel(model.model, { rate: event.target.value })}
+                    className="w-full"
+                    placeholder="1"
+                    title="倍率，支持分数，如 1/2"
+                  />
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item.model !== model.model) }))}><AppIcon name="delete" /></Button>
+                </div>
+              )
+            })}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {form.models.map((model) => (
-              <span key={model.model} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item !== model) }))}><AppIcon name="close" size={12} className="inline" /></button>{model.model}</span>
-            ))}
+          <div className="flex gap-2">
+            <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" className="flex-1" />
+            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, { ...newModel, model: newModel.model.trim() }] })); setNewModel({ model: '', endpoints: [], rate: '1' }) }}><AppIcon name="add" /></Button>
           </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>

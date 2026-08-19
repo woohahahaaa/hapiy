@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,16 +11,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
-	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // Relay handles OpenAI-compatible API requests
-func Relay(engine *relay.Engine) gin.HandlerFunc {
+func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
 		common.Global().BeginRequest()
@@ -41,7 +43,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 				UseTimeMs: useTime,
 				Error:     err,
 			})
-			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0)
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 			return
 		}
@@ -57,7 +59,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 				UseTimeMs: useTime,
 				Error:     err,
 			})
-			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0)
+			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
 			return
 		}
@@ -73,10 +75,11 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 				relayReq.Headers[k] = v[0]
 			}
 		}
-	relayReq.RequestID = c.GetString("request_id")
-	relayReq.Path = c.Request.URL.Path
-	relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
-	relayReq.UserID = getString(userID)
+		relayReq.RequestID = c.GetString("request_id")
+		relayReq.Path = c.Request.URL.Path
+		relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
+		relayReq.UserID = getString(userID)
+		relayReq.TokenName = getString(tokenName)
 		if tokenID, ok := tokenIDRaw.(string); ok {
 			relayReq.TokenID = tokenID
 		}
@@ -88,6 +91,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			UserID:    getString(userID),
 			Stream:    relayReq.Stream,
 			StartTime: startTime,
+			Stage:     "queued",
 		})
 
 		// Select provider for the model (channel affinity -> flat topology ->
@@ -112,6 +116,17 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		provider := dispatchResult.Provider
 		relayReq.KeyIndex = dispatchResult.KeyIndex
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
+		common.Global().TrackActiveRequest(common.ActiveRequest{
+			RequestID: relayReq.RequestID,
+			Model:     relayReq.Model,
+			TokenName: getString(tokenName),
+			UserID:    getString(userID),
+			Provider:  provider.Name,
+			Source:    service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			Stream:    relayReq.Stream,
+			StartTime: startTime,
+			Stage:     "queued",
+		})
 
 		// Endpoint whitelist: an empty endpoints array means unrestricted; a
 		// non-empty one requires an exact pathSuffix match. Malformed config is
@@ -154,7 +169,14 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Get execution plan
 		plan := dispatchResult.Plan
 
-		// Execute relay request
+		// Execute relay request. Live progress is pushed through the engine's
+		// Progress callback so stages that happen inside RelayRequest (queue,
+		// upstream connect) are surfaced truthfully instead of lingering on
+		// the initial queued stage.
+		requestID := c.GetString("request_id")
+		relayReq.Progress = func(stage string) {
+			common.Global().UpdateActiveRequestProgress(requestID, stage, 0, 0)
+		}
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
 		if err != nil {
 			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
@@ -196,9 +218,12 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 		// Forward the response first so use_time spans the full transfer for
 		// streaming requests; the log row is written after the stream ends.
 		firstByteMs := -1
+		clientDisconnected := false
 		if relayReq.Stream {
-			firstByteMs = handleStreamingResponse(c, resp)
+			common.Global().UpdateActiveRequestProgress(requestID, "waiting_upstream", 0, 0)
+			firstByteMs, clientDisconnected = handleStreamingResponse(c, resp, requestID)
 		} else {
+			common.Global().UpdateActiveRequestProgress(requestID, "receiving", 0, 0)
 			handleNonStreamingResponse(c, resp)
 		}
 
@@ -222,6 +247,7 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			TokenName:         getString(tokenName),
 			ProviderName:      provider.Name,
 			ModelName:         relayReq.Model,
+			Source:            service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			IsStream:          relayReq.Stream,
 			Status:            "success",
 			IP:                c.ClientIP(),
@@ -239,6 +265,11 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			logEntry.CompletionTokens = resp.Usage.CompletionTokens
 			logEntry.PromptCacheMissTokens = resp.Usage.CacheWriteTokens
 			logEntry.PromptCacheHitTokens = resp.Usage.CacheReadTokens
+			logEntry.Quota = computeQuota(db, quotaRequest{
+				provider:  provider,
+				modelName: relayReq.Model,
+				usage:     resp.Usage,
+			})
 		}
 
 		service.Logs().Write(&logEntry)
@@ -250,8 +281,12 @@ func Relay(engine *relay.Engine) gin.HandlerFunc {
 			}
 		}
 
+		outcome := "completed"
+		if clientDisconnected {
+			outcome = "client_disconnected"
+		}
 		common.Global().EndRequest(relayReq.RequestID, relayReq.Model, true, int64(useTime),
-			int64(logEntry.PromptTokens+logEntry.CompletionTokens))
+			int64(logEntry.PromptTokens+logEntry.CompletionTokens), outcome)
 	}
 }
 
@@ -341,8 +376,9 @@ func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
 
 // handleStreamingResponse forwards the SSE body and returns the elapsed
 // milliseconds from upstream headers until the first body byte (-1 when the
-// stream produced no bytes, e.g. it errored immediately).
-func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
+// stream produced no bytes, e.g. it errored immediately), plus whether the
+// client disconnected before the stream finished.
+func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestID string) (int, bool) {
 	defer resp.Body.Close()
 
 	c.Header("Content-Type", "text/event-stream")
@@ -352,31 +388,55 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
-		return -1
+		return -1, false
 	}
 
 	firstByteMs := -1
 	buf := make([]byte, 4096)
 	var captured []byte
+	var chunks int64
+	var bytesReceived int64
+	var lastProgressUpdate time.Time
+	clientDisconnected := false
 	for {
+		if c.Request.Context().Err() != nil {
+			clientDisconnected = true
+			break
+		}
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
 			if firstByteMs < 0 {
 				firstByteMs = int(time.Since(resp.FirstByteAt).Milliseconds())
 			}
-			c.Writer.Write(buf[:n])
+			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+				clientDisconnected = true
+				break
+			}
 			flusher.Flush()
+			if c.Request.Context().Err() != nil {
+				clientDisconnected = true
+				break
+			}
 			captured = append(captured, buf[:n]...)
+			chunks++
+			bytesReceived += int64(n)
+			if time.Since(lastProgressUpdate) >= 500*time.Millisecond {
+				common.Global().UpdateActiveRequestProgress(requestID, "receiving_stream", chunks, bytesReceived)
+				lastProgressUpdate = time.Now()
+			}
 		}
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
+			if c.Request.Context().Err() != nil || errors.Is(err, context.Canceled) {
+				clientDisconnected = true
+			}
 			break
 		}
 	}
 	resp.Usage = extractUsageInfo(captured, resp.Headers["content-type"])
-	return firstByteMs
+	return firstByteMs, clientDisconnected
 }
 
 func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest) {
@@ -386,13 +446,18 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		TokenName:    getString(tokenName),
 		ProviderName: providerName,
 		ModelName:    modelName,
+		Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 		Status:       "failed",
 		IP:           c.ClientIP(),
 		RequestID:    c.GetString("request_id"),
 		ErrorMessage: err.Error(),
 		UseTime:      useTime,
 	})
-	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0)
+	outcome := "upstream_error"
+	if errors.Is(err, relay.ErrConcurrencyRejected) {
+		outcome = "queued_rejected"
+	}
+	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0, outcome)
 }
 
 func getString(v interface{}) string {

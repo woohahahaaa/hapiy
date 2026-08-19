@@ -3,8 +3,10 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/gin-gonic/gin"
@@ -41,6 +43,65 @@ func validatePriceConfig(price *model.PriceConfig) error {
 	return nil
 }
 
+func validatePriceNames(db *gorm.DB, price *model.PriceConfig) error {
+	candidates, err := priceNames(price)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(candidates))
+	for _, name := range candidates {
+		if _, exists := seen[name]; exists {
+			return fmt.Errorf("名称 %q 重复", name)
+		}
+		seen[name] = struct{}{}
+	}
+
+	var prices []model.PriceConfig
+	if err := db.Find(&prices).Error; err != nil {
+		return fmt.Errorf("查询历史模型: %w", err)
+	}
+	occupied := make(map[string]struct{})
+	for _, existing := range prices {
+		if existing.ID == price.ID {
+			continue
+		}
+		names, err := priceNames(&existing)
+		if err != nil {
+			continue
+		}
+		for _, name := range names {
+			occupied[name] = struct{}{}
+		}
+	}
+	for _, name := range candidates {
+		if _, exists := occupied[name]; exists {
+			return fmt.Errorf("名称 %q 已被历史模型或别名占用", name)
+		}
+	}
+	return nil
+}
+
+func priceNames(price *model.PriceConfig) ([]string, error) {
+	names := []string{normalizePriceName(price.Model)}
+	if strings.TrimSpace(price.Aliases) == "" {
+		return names, nil
+	}
+	var aliases []string
+	if err := json.Unmarshal([]byte(price.Aliases), &aliases); err != nil {
+		return nil, errors.New("aliases 不是有效的 JSON 数组")
+	}
+	for _, alias := range aliases {
+		if normalized := normalizePriceName(alias); normalized != "" {
+			names = append(names, normalized)
+		}
+	}
+	return names, nil
+}
+
+func normalizePriceName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
 func ListPrices(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var prices []model.PriceConfig
@@ -67,6 +128,10 @@ func CreatePrice(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if err := validatePriceConfig(&price); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := validatePriceNames(db, &price); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -112,6 +177,10 @@ func UpdatePrice(db *gorm.DB) gin.HandlerFunc {
 		// Validate the merged record: a partial update without a model keeps the
 		// existing non-empty model, while the new fields are taken verbatim.
 		if err := validatePriceConfig(&price); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := validatePriceNames(db, &price); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}

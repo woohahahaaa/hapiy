@@ -33,6 +33,7 @@ export interface ColumnDef<T> {
   readonly key: string
   readonly label: ReactNode
   readonly render?: (value: unknown, row: T) => ReactNode
+  readonly rowClassName?: (row: T) => string
   readonly isTime?: boolean
   readonly showEmptyPlaceholder?: boolean
   readonly defaultWidth: ColumnWidthConfig
@@ -639,6 +640,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   className={cn(
                     "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
                     onRowClick && "cursor-pointer",
+                    (columns.find((col) => col.rowClassName)?.rowClassName?.(row) ?? ""),
                   )}
                 >
                   {columns.map((col, idx) => {

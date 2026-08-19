@@ -14,9 +14,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { RateRulesEditor } from '@/components/RateRulesEditor'
 import { ModelAutocomplete } from '@/components/ModelAutocomplete'
 import type { ModelsDevModel } from '@/lib/models-dev'
+import { getModelNameConflicts } from '@/lib/model-name-validation'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { PriceConfig, PriceConfigInput } from '@/lib/dashboard-api'
 
@@ -26,6 +26,11 @@ type LoadState =
   | { readonly kind: 'ready'; readonly prices: readonly PriceConfig[]; readonly total: number }
 
 type EditingPrice = PriceConfig | null
+
+type ExistingNamesState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'ready'; readonly prices: readonly PriceConfig[] }
+  | { readonly kind: 'error' }
 
 const emptyPrice: PriceConfigInput = {
   model: '',
@@ -107,9 +112,6 @@ export function PricePage() {
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <span>{row.model}</span>
-          {row.rate.length > 0 && (
-            <span className="text-xs text-muted-foreground">{row.rate.length} 条规则</span>
-          )}
           {row.cacheWritePrice === 0 && row.cacheReadPrice === 0 && (
             <span className="text-xs text-muted-foreground">无缓存</span>
           )}
@@ -245,9 +247,9 @@ function PriceForm({
   saving: boolean
 }) {
   const [form, setForm] = useState<PriceConfigInput>(initial ? toInput(initial) : emptyPrice)
-  const [providerNames, setProviderNames] = useState<readonly string[]>([])
   const [pickedModel, setPickedModel] = useState<ModelsDevModel | null>(null)
   const [autoFillError, setAutoFillError] = useState<string | null>(null)
+  const [existingNames, setExistingNames] = useState<ExistingNamesState>({ kind: 'loading' })
 
   useEffect(() => {
     setForm(initial ? toInput(initial) : emptyPrice)
@@ -255,18 +257,15 @@ function PriceForm({
 
   useEffect(() => {
     let cancelled = false
-    void dashboardApi
-      .listProviders({ limit: 1000, offset: 0 })
+    void dashboardApi.listPrices({ limit: 10000, offset: 0 })
       .then((result) => {
-        if (!cancelled) setProviderNames(result.providers.map((p) => p.name))
+        if (!cancelled) setExistingNames({ kind: 'ready', prices: result.prices })
       })
       .catch(() => {
-        if (!cancelled) setProviderNames([])
+        if (!cancelled) setExistingNames({ kind: 'error' })
       })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    return () => { cancelled = true }
+  }, [initial?.id])
 
   const splitList = (value: string): string[] =>
     value
@@ -293,12 +292,22 @@ function PriceForm({
     setPickedModel(null)
   }
 
+  const nameConflicts = existingNames.kind === 'ready'
+    ? getModelNameConflicts(form, existingNames.prices, initial?.id ?? null)
+    : []
+  const nameValidationMessages = nameConflicts.map((conflict) => (
+    conflict.source === 'history'
+      ? `「${conflict.name}」已被历史模型或别名占用`
+      : `「${conflict.name}」在当前模型名称和别名中重复`
+  ))
   const valid =
     form.model.trim().length > 0 &&
     form.inputPrice >= 0 &&
     form.outputPrice >= 0 &&
     form.contextLength >= 0 &&
-    form.maxToken >= 0
+    form.maxToken >= 0 &&
+    existingNames.kind === 'ready' &&
+    nameConflicts.length === 0
 
   return (
     <FieldGroup>
@@ -319,6 +328,8 @@ function PriceForm({
           )}
         </div>
         {autoFillError && <p role="alert" className="text-xs text-destructive">{autoFillError}</p>}
+        {existingNames.kind === 'loading' && <p className="text-xs text-muted-foreground">正在检查历史模型名称...</p>}
+        {existingNames.kind === 'error' && <p role="alert" className="text-xs text-destructive">无法检查历史模型名称，请稍后重试</p>}
         <p className="text-xs text-muted-foreground">大小写不敏感</p>
       </Field>
       <Field>
@@ -332,6 +343,7 @@ function PriceForm({
         <p className="text-xs text-muted-foreground">
           转发时用于匹配写法有差异的同模型，多个名称之间用逗号分隔，例如「ChatGPT 5.6」可写成 ChatGPT-5.6 或 ChatGPT 5.6
         </p>
+        {nameValidationMessages.map((message) => <p key={message} role="alert" className="text-xs text-destructive">{message}</p>)}
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field>
@@ -409,29 +421,12 @@ function PriceForm({
         />
       </Field>
       <Field>
-        <FieldLabel htmlFor="price-endpoints">支持的格式</FieldLabel>
-        <Input
-          id="price-endpoints"
-          value={form.endpoints.join(', ')}
-          onChange={(e) => setForm((p) => ({ ...p, endpoints: splitList(e.target.value) }))}
-          placeholder="逗号分隔，如 /v1/chat/completions, /v1/embeddings"
-        />
-      </Field>
-      <Field>
         <FieldLabel htmlFor="price-thinking-levels">thinking levels</FieldLabel>
         <Input
           id="price-thinking-levels"
           value={form.thinkingLevels.join(', ')}
           onChange={(e) => setForm((p) => ({ ...p, thinkingLevels: splitList(e.target.value) }))}
           placeholder="逗号分隔，如 none, low, high"
-        />
-      </Field>
-      <Field>
-        <FieldLabel>倍率规则</FieldLabel>
-        <RateRulesEditor
-          rate={form.rate}
-          onChange={(rate) => setForm((p) => ({ ...p, rate: [...rate] }))}
-          providerNames={providerNames}
         />
       </Field>
       <DialogFooter>
