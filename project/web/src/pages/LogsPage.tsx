@@ -3,7 +3,6 @@ import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 
 import { Button } from '@/components/ui/button'
-import { EmptyCell } from '@/components/ui/empty-cell'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -13,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
   Dialog,
   DialogContent,
@@ -135,18 +134,41 @@ export function LogsPage() {
     return fromLogs
   }, [logs, modelFilter])
 
+  function formatDateTimeCell(row: UsageLog): { date: string; time: string } | null {
+    const v = row.createdAt
+    if (v === null || v === undefined || v === '') return null
+    const d = v instanceof Date ? v : new Date(v as string | number)
+    if (Number.isNaN(d.getTime())) return { date: String(v), time: '' }
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return {
+      date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+    }
+  }
+
   const columns: ColumnDef<UsageLog>[] = [
-    { key: 'createdAt', label: '时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
+    {
+      key: 'createdAt',
+      label: '时间',
+      defaultWidth: { kind: 'pixel', value: 160 },
+      defaultOverflow: 'wrap',
+      slot: {
+        line1: (row) => formatDateTimeCell(row)?.date ?? null,
+        line2: (row) => formatDateTimeCell(row)?.time ?? null,
+      },
+    },
     { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
-    { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, render: (v) => (v ? String(v) : <EmptyCell value={null} />) },
+    { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 } },
     {
       key: 'promptTokens',
       label: 'Tokens',
       defaultWidth: { kind: 'percent', value: 22 },
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
+      accessor: (row) =>
+        `输入 ${row.promptTokens} · 缓存写入 ${row.promptCacheMissTokens} · 输出 ${row.completionTokens} · 缓存读取 ${row.promptCacheHitTokens}`,
       render: (_, row) => {
         const log = row as UsageLog
         return (
@@ -160,40 +182,33 @@ export function LogsPage() {
       key: 'isStream',
       label: '流式',
       defaultWidth: { kind: 'percent', value: 5 },
-      render: (v) => (v ? 'SSE' : <EmptyCell value={null} />),
+      accessor: (row) => (row.isStream ? 'SSE' : null),
     },
     {
       key: 'quota',
       label: '消耗',
       defaultWidth: { kind: 'percent', value: 8 },
       defaultAlign: 'right',
-      render: (v) => {
-        const q = v as number
-        return q > 0 ? formatQuota(q) : <EmptyCell value={null} />
-      },
+      accessor: (row) => (row.quota > 0 ? formatQuota(row.quota) : null),
     },
     {
       key: 'useTime',
       label: '耗时',
       defaultWidth: { kind: 'percent', value: 13 },
       defaultAlign: 'right',
-      render: (v, row) => {
-        const main = `${(v as number / 1000).toFixed(1)}s`
-        const log = row as UsageLog
-        const fmt = (val: number, label: string) => `${label}: ${val >= 0 ? `${val}ms` : '--'}`
-        const stages: string[] = []
-        stages.push(fmt(log.queueWaitMs, '排队'))
-        stages.push(fmt(log.requestRewriteMs, '请求改写'))
-        stages.push(fmt(log.connectMs, '连接'))
-        stages.push(fmt(log.firstByteMs, '首字'))
-        stages.push(fmt(log.responseRewriteMs, '响应改写'))
-        stages.push(fmt(log.streamRewriteMs, '流式改写'))
-        return (
-          <div className="leading-tight">
-            <div>{main}</div>
-            <div className="text-[10px] text-muted-foreground">{stages.join(' · ')}</div>
-          </div>
-        )
+      slot: {
+        line1: (row) => `${(row.useTime / 1000).toFixed(1)}s`,
+        line2: (row) => {
+          const fmt = (val: number, label: string) => `${label}: ${val >= 0 ? `${val}ms` : '--'}`
+          return [
+            fmt(row.queueWaitMs, '排队'),
+            fmt(row.requestRewriteMs, '请求改写'),
+            fmt(row.connectMs, '连接'),
+            fmt(row.firstByteMs, '首字'),
+            fmt(row.responseRewriteMs, '响应改写'),
+            fmt(row.streamRewriteMs, '流式改写'),
+          ].join(' · ')
+        },
       },
     },
     {
@@ -201,22 +216,12 @@ export function LogsPage() {
       label: '状态',
       defaultWidth: { kind: 'percent', value: 25 },
       defaultOverflow: 'wrap',
-      render: (v, row) => {
-        const s = v as string
-        const log = row as UsageLog
-        const err = log.errorMessage
-        return (
-          <div className="space-y-0.5">
-            <span className={s === 'success' ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
-              {s === 'success' ? '成功' : '失败'}
-            </span>
-            {err && (
-              <div className="truncate text-[10px] text-muted-foreground" title={err}>
-                {err}
-              </div>
-            )}
-          </div>
-        )
+      slot: {
+        line1: (row) =>
+          row.status === 'success'
+            ? '<#16a34a>成功</#16a34a>'
+            : '<#dc2626>失败</#dc2626>',
+        line2: (row) => row.errorMessage ?? null,
       },
     },
   ]

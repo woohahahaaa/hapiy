@@ -27,7 +27,8 @@ import { FlatSlotNode } from '@/nodes/FlatSlotNode'
 import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { dashboardApi, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
+import { dashboardApi, apiBaseUrl, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
+import { FlowLightEdge, type FlowLightPayload } from '@/edges/FlowLightEdge'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -59,6 +60,15 @@ const nodeTypes = {
   requestEntry: RequestEntryNode,
 }
 
+const edgeTypes = {
+  flowLight: FlowLightEdge,
+}
+
+// Flow-light animation timing (ms): each chain edge sweeps FLOW_PER_EDGE_MS;
+// one full chain cycle lasts edgeCount * FLOW_PER_EDGE_MS and loops while the
+// request is active.
+const FLOW_PER_EDGE_MS = 340
+
 const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
   style: { strokeWidth: topologyConfig.edge.strokeWidth },
@@ -72,6 +82,121 @@ function canvasWiresFromEdges(edges: readonly Edge[]): FlatWire[] {
 
 function wiringEdgeId(source: string, target: string): string {
   return `${source}→${target}`
+}
+
+/**
+ * Ordered node-id chain a request for `model` travels, starting at the
+ * `model-{model}` hub node and ending at the workflow's last node. Every chain
+ * the hub fans out to is collected by DFS (a model hub may wire to several
+ * entries; other nodes have at most one outgoing edge). When `providerName` is
+ * given, prefer the chain whose provider slot hosts that provider. Returns null
+ * when the model node is not wired into the current canvas.
+ */
+function computeLightChain(
+  model: string,
+  providerName: string | null,
+  edges: readonly Edge[],
+  canvas: FlatCanvas | null,
+): string[] | null {
+  const modelId = `model-${model}`
+  const outgoing = new Map<string, Set<string>>()
+  for (const edge of edges) {
+    const targets = outgoing.get(edge.source) ?? new Set<string>()
+    targets.add(edge.target)
+    outgoing.set(edge.source, targets)
+  }
+  if (!outgoing.has(modelId)) return null
+
+  const chains: string[][] = []
+  const path: string[] = [modelId]
+  const visit = (node: string) => {
+    const nexts = outgoing.get(node)
+    if (!nexts || nexts.size === 0) {
+      chains.push([...path])
+      return
+    }
+    for (const next of nexts) {
+      if (path.includes(next)) continue
+      path.push(next)
+      visit(next)
+      path.pop()
+    }
+  }
+  visit(modelId)
+
+  if (providerName && canvas) {
+    for (const provider of canvas.providers) {
+      if (provider.name !== providerName) continue
+      const slotId = canvas.providerSlotOf.get(provider.id)
+      if (!slotId) continue
+      const matched = chains.find((chain) => chain.includes(slotId))
+      if (matched) return matched
+    }
+  }
+  return chains[0] ?? null
+}
+
+/**
+ * A provider child is unusable when its own canvas toggle is off or the
+ * registered provider is disabled/auto-disabled/non-workflow/duplicated.
+ */
+function providerUnavailable(
+  node: FlatNode,
+  providerByName: Map<string, Provider>,
+  duplicateProviderNames: Set<string>,
+): boolean {
+  if (node.enabled !== true) return true
+  if (node.name && duplicateProviderNames.has(node.name)) return true
+  const provider = node.name ? providerByName.get(node.name) : undefined
+  if (!provider) return true
+  if (provider.status === false || provider.workflowEnabled === false || provider.autoDisabled === true) return true
+  return false
+}
+
+/**
+ * Truncate a flow-light chain at the first internal break point so the light
+ * stops instead of travelling past it. Rules: a closed request entry stops the
+ * light right after the model hub; a provider slot whose inspected provider(s)
+ * are all unusable stops it at the slot itself. Backend-side failures (upstream
+ * errors, disconnects) are invisible here and never truncate.
+ */
+function applyInternalBreak(
+  chain: string[],
+  providerName: string | null,
+  canvas: FlatCanvas | null,
+  providerByName: Map<string, Provider>,
+  duplicateProviderNames: Set<string>,
+): string[] {
+  if (!canvas || chain.length < 2) return chain
+
+  const entry = canvas.topLevel.find((n) => n.id === chain[1] && isRequestEntry(n))
+  if (entry && entry.enabled !== true) return chain.slice(0, 2)
+
+  let slotId: string | null = null
+  let namedProvider: FlatNode | null = null
+  if (providerName) {
+    for (const p of canvas.providers) {
+      if (p.name !== providerName) continue
+      const sid = canvas.providerSlotOf.get(p.id)
+      if (sid && chain.includes(sid)) {
+        slotId = sid
+        namedProvider = p
+        break
+      }
+    }
+  }
+  if (slotId === null) {
+    slotId = chain.find((nodeId) => canvas.providers.some((p) => canvas.providerSlotOf.get(p.id) === nodeId)) ?? null
+  }
+  if (slotId === null) return chain
+  const breakIndex = chain.indexOf(slotId)
+  if (breakIndex < 0) return chain
+
+  const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === slotId)
+  const blocked = namedProvider
+    ? providerUnavailable(namedProvider, providerByName, duplicateProviderNames)
+    : children.length > 0 && children.every((p) => providerUnavailable(p, providerByName, duplicateProviderNames))
+  return blocked ? chain.slice(0, breakIndex + 1) : chain
 }
 
 function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: string): boolean {
@@ -672,6 +797,7 @@ export function TopologyPage() {
         id: wiringEdgeId(w.source, w.target),
         source: w.source,
         target: w.target,
+        type: 'flowLight',
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
       })
@@ -681,6 +807,7 @@ export function TopologyPage() {
         id: wiringEdgeId(link.nodeId, link.entryId),
         source: link.nodeId,
         target: link.entryId,
+        type: 'flowLight',
         sourceHandle: link.modelName,
         targetHandle: link.modelName,
         animated: topologyConfig.edge.animated,
@@ -698,6 +825,123 @@ export function TopologyPage() {
   useEffect(() => {
     setEdges(baseEdges)
   }, [baseEdges, setEdges])
+
+  // ── Flow light (request_started SSE) ──
+  // The backend emits `request_started` when a queued request begins executing
+  // and `request_finished` when it ends. While at least one request for a model
+  // is active, the primary-color beam loops down its workflow chain; when the
+  // last request finishes the beam is removed.
+  const canvasRef = useRef<FlatCanvas | null>(null)
+  canvasRef.current = canvas
+  const flowRunIdRef = useRef(0)
+  const activeByModelRef = useRef<Map<string, Set<string>>>(new Map())
+  const modelRunRef = useRef<Map<string, number>>(new Map())
+  const clearLightForModel = useCallback(
+    (model: string) => {
+      const runId = modelRunRef.current.get(model)
+      if (runId === undefined) return
+      modelRunRef.current.delete(model)
+      setEdges((prev) =>
+        prev.map((edge) => {
+          const light = edge.data?.light as FlowLightPayload | undefined
+          if (!light || light.runId !== runId) return edge
+          const rest: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(edge.data ?? {})) {
+            if (key !== 'light') rest[key] = value
+          }
+          return { ...edge, data: Object.keys(rest).length > 0 ? rest : undefined }
+        }),
+      )
+    },
+    [setEdges],
+  )
+
+  const applyLightToChain = useCallback(
+    (model: string, chain: string[]) => {
+      const runId = (flowRunIdRef.current += 1)
+      modelRunRef.current.set(model, runId)
+      const edgeCount = chain.length - 1
+      const cycleMs = edgeCount * FLOW_PER_EDGE_MS
+      const lights = new Map<string, FlowLightPayload>()
+      for (let i = 0; i < edgeCount; i++) {
+        lights.set(wiringEdgeId(chain[i], chain[i + 1]), {
+          runId,
+          cycleMs,
+          phaseMs: i * FLOW_PER_EDGE_MS,
+          durMs: FLOW_PER_EDGE_MS,
+        })
+      }
+      setEdges((prev) =>
+        prev.map((edge) => {
+          const light = lights.get(edge.id)
+          if (!light) return edge
+          return { ...edge, data: { ...edge.data, light } }
+        }),
+      )
+    },
+    [setEdges],
+  )
+
+  const handleRequestStarted = useCallback(
+    (event: MessageEvent) => {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (typeof parsed !== 'object' || parsed === null) return
+      const record = parsed as Record<string, unknown>
+      if (typeof record.model !== 'string') return
+      const requestId = typeof record.request_id === 'string' ? record.request_id : null
+      const provider = typeof record.provider === 'string' ? record.provider : null
+
+      const active = activeByModelRef.current.get(record.model) ?? new Set<string>()
+      if (requestId) active.add(requestId)
+      activeByModelRef.current.set(record.model, active)
+      if (modelRunRef.current.has(record.model)) return
+
+      const chain = computeLightChain(record.model, provider, edgesRef.current, canvasRef.current)
+      if (!chain || chain.length < 2) return
+      const chainWithBreak = applyInternalBreak(chain, provider, canvasRef.current, providerByName, duplicateProviderNames)
+      if (chainWithBreak.length < 2) return
+      applyLightToChain(record.model, chainWithBreak)
+    },
+    [providerByName, duplicateProviderNames, applyLightToChain],
+  )
+
+  const handleRequestFinished = useCallback(
+    (event: MessageEvent) => {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(event.data)
+      } catch {
+        return
+      }
+      if (typeof parsed !== 'object' || parsed === null) return
+      const record = parsed as Record<string, unknown>
+      if (typeof record.model !== 'string') return
+      const requestId = typeof record.request_id === 'string' ? record.request_id : null
+      const active = activeByModelRef.current.get(record.model)
+      if (!active) return
+      if (requestId) active.delete(requestId)
+      if (active.size > 0) return
+      activeByModelRef.current.delete(record.model)
+      clearLightForModel(record.model)
+    },
+    [clearLightForModel],
+  )
+
+  useEffect(() => {
+    const es = new EventSource(`${apiBaseUrl}/v1/dashboard/events`, { withCredentials: true })
+    es.addEventListener('request_started', handleRequestStarted)
+    es.addEventListener('request_finished', handleRequestFinished)
+    return () => {
+      es.removeEventListener('request_started', handleRequestStarted)
+      es.removeEventListener('request_finished', handleRequestFinished)
+      es.close()
+    }
+  }, [handleRequestStarted, handleRequestFinished])
 
   const loadLayoutBestEffort = useCallback(async () => {
     try {
@@ -872,6 +1116,7 @@ export function TopologyPage() {
         id: wiringEdgeId(source, target),
         source,
         target,
+        type: 'flowLight',
         sourceHandle: connection.sourceHandle,
         targetHandle: connection.targetHandle,
         animated: topologyConfig.edge.animated,
@@ -899,6 +1144,7 @@ export function TopologyPage() {
         id: wiringEdgeId(source, target),
         source,
         target,
+        type: 'flowLight',
         sourceHandle: newConnection.sourceHandle,
         targetHandle: newConnection.targetHandle,
       }
@@ -1384,6 +1630,7 @@ export function TopologyPage() {
           onReconnect={handleReconnect}
           onSelectionChange={handleSelectionChange}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
           nodesConnectable
           edgesReconnectable

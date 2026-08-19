@@ -174,11 +174,30 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// upstream connect) are surfaced truthfully instead of lingering on
 		// the initial queued stage.
 		requestID := c.GetString("request_id")
+		flowStarted := false
 		relayReq.Progress = func(stage string) {
 			common.Global().UpdateActiveRequestProgress(requestID, stage, 0, 0)
+			if stage == "connecting" {
+				// The request has passed the concurrency gate (or none was
+				// configured) and is about to hit the upstream: notify
+				// dashboard subscribers so the topology can animate.
+				flowStarted = true
+				dashboardEventsHub.publish("request_started", map[string]any{
+					"model":      relayReq.Model,
+					"provider":   provider.Name,
+					"request_id": requestID,
+				})
+			}
 		}
 		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
 		if err != nil {
+			if flowStarted {
+				dashboardEventsHub.publish("request_finished", map[string]any{
+					"model":      relayReq.Model,
+					"provider":   provider.Name,
+					"request_id": requestID,
+				})
+			}
 			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
@@ -284,6 +303,13 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		outcome := "completed"
 		if clientDisconnected {
 			outcome = "client_disconnected"
+		}
+		if flowStarted {
+			dashboardEventsHub.publish("request_finished", map[string]any{
+				"model":      relayReq.Model,
+				"provider":   provider.Name,
+				"request_id": requestID,
+			})
 		}
 		common.Global().EndRequest(relayReq.RequestID, relayReq.Model, true, int64(useTime),
 			int64(logEntry.PromptTokens+logEntry.CompletionTokens), outcome)

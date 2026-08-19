@@ -26,7 +26,7 @@ export type TopologyVersionList = {
   readonly versions: readonly TopologyVersionSummary[]
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+export const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
 type JsonRecord = Record<string, unknown>
 

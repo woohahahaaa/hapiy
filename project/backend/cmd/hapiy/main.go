@@ -206,6 +206,7 @@ func main() {
 			dashboardAuthed.GET("/active-requests/config", handler.GetActiveRequestConfig(db))
 			dashboardAuthed.PUT("/active-requests/config", handler.PutActiveRequestConfig(db))
 			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())
+			dashboardAuthed.GET("/events", handler.DashboardEvents())
 		}
 
 		// Relay endpoints (token auth)
