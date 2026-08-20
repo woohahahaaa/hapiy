@@ -743,6 +743,7 @@ export function TopologyPage() {
               modelCount: provider?.models.length ?? 0,
               enabled: p.enabled,
               providerStatus: provider?.status ?? false,
+              autoDisabled: provider?.autoDisabled ?? false,
             }
           })
         nodes.push({
@@ -750,7 +751,7 @@ export function TopologyPage() {
           type: 'slot',
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
           data: {
-            title: 'provider',
+            title: '供应商',
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
             externallyDisabled: externallyDisabledSet.has(node.id),

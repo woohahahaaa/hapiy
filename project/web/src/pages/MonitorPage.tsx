@@ -62,6 +62,8 @@ function formatOutcome(outcome: string): string {
       return '客户端断开'
     case 'upstream_error':
       return '上游报错'
+    case 'failed':
+      return '失败'
     case 'queued_rejected':
       return '排队拒绝'
     case 'invalid_request':
@@ -76,6 +78,7 @@ function formatOutcomeClass(outcome: string): string {
     case 'client_disconnected':
       return 'text-warning'
     case 'upstream_error':
+    case 'failed':
     case 'queued_rejected':
     case 'invalid_request':
       return 'text-destructive'

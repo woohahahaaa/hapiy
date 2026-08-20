@@ -119,7 +119,7 @@ func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
 	}
 
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("no provider available for model %s", modelName)
+		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, modelName)
 	}
 
 	// Simple round-robin (TODO: implement weighted selection)
@@ -134,7 +134,7 @@ type RelayRequest struct {
 	RequestID string `json:"-"`
 	// UserID and TokenID are populated by the handler so concurrency
 	// rules with scope=per_user / per_token can key their waitlists.
-	UserID string `json:"-"`
+	UserID  string `json:"-"`
 	TokenID string `json:"-"`
 	// TokenName is the display name of the authenticated token, populated by
 	// the handler for log capture rows.
@@ -672,11 +672,11 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 	}
 
 	return &RelayResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    flattenHeaders(resp.Header),
-		Body:       resp.Body,
-		Usage:      nil,
-		ConnectMs:  connectMs,
+		StatusCode:  resp.StatusCode,
+		Headers:     flattenHeaders(resp.Header),
+		Body:        resp.Body,
+		Usage:       nil,
+		ConnectMs:   connectMs,
 		FirstByteAt: time.Now(),
 	}, nil
 }
@@ -712,10 +712,10 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 	}
 
 	return &RelayResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    flattenHeaders(resp.Header),
-		Body:       resp.Body,
-		ConnectMs:  connectMs,
+		StatusCode:  resp.StatusCode,
+		Headers:     flattenHeaders(resp.Header),
+		Body:        resp.Body,
+		ConnectMs:   connectMs,
 		FirstByteAt: time.Now(),
 	}, nil
 }

@@ -160,6 +160,65 @@ func TestFindEligibleProvidersProviderStatusOff(t *testing.T) {
 	}
 }
 
+func TestFindEligibleProvidersSequentialSlotFallback(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "re", Kind: KindRequestEntry, Enabled: true, Weight: 1},
+			{ID: "ps", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "prov-a", Kind: KindProvider, Name: "duoyuan", Enabled: true},
+			{ID: "prov-b", Kind: KindProvider, Name: "moreai", Enabled: true},
+			{ID: "prov-off", Kind: KindProvider, Name: "disabled", Enabled: false},
+			{ID: "rm", Kind: KindSlot, SlotType: "requestModify", Enabled: true},
+		},
+		Wires: []Wire{
+			{Source: "re", Target: "ps"},
+			{Source: "ps", Target: "prov-a"},
+			{Source: "prov-a", Target: "rm"},
+			{Source: "prov-b", Target: "rm"},
+			{Source: "prov-off", Target: "rm"},
+		},
+	}
+	refs := map[string]ProviderRef{
+		"duoyuan":  {Name: "duoyuan", Status: true, Enabled: true, Workflow: true, Models: map[string]struct{}{"deepseek-chat": {}}},
+		"moreai":   {Name: "moreai", Status: true, Enabled: true, Workflow: true, Models: map[string]struct{}{"minimax-m3": {}}},
+		"disabled": {Name: "disabled", Status: true, Enabled: true, Workflow: true, Models: map[string]struct{}{"minimax-m3": {}}},
+	}
+
+	// The wired provider doesn't support the model; the slot's next active
+	// child (moreai) must be selected, skipping the disabled one.
+	got, err := FindEligibleProviders(tp, refs, "minimax-m3", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 eligible provider, got %d", len(got))
+	}
+	if got[0].Name != "moreai" {
+		t.Fatalf("expected fallback to moreai, got %s", got[0].Name)
+	}
+	if len(got[0].Chain) != 1 || got[0].Chain[0] != "requestModify" {
+		t.Fatalf("expected chain [requestModify], got %v", got[0].Chain)
+	}
+
+	// The wired provider supports the model: no fallback, it stays primary.
+	got, err = FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "duoyuan" {
+		t.Fatalf("expected duoyuan to stay primary, got %+v", got)
+	}
+
+	// No child supports the model: nothing eligible.
+	got, err = FindEligibleProviders(tp, refs, "unknown-model", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 eligible for unknown model, got %d", len(got))
+	}
+}
+
 func TestFindDuplicateActivationsNone(t *testing.T) {
 	tp := &Topology{
 		Nodes: []FlatNode{

@@ -125,7 +125,7 @@ func (m *Metrics) UpdateActiveRequestProgress(requestID, stage string, chunks, b
 // kept with its EndTime set so the monitoring API can show finished requests
 // for the configured retention period. Outcome classifies how it ended:
 // completed | upstream_error | client_disconnected | queued_rejected |
-// invalid_request.
+// invalid_request | failed.
 func (m *Metrics) EndRequest(requestID, model string, success bool, latencyMs int64, tokens int64, outcome string) {
 	m.activeRequests.Add(-1)
 	m.totalLatencyMs.Add(latencyMs)

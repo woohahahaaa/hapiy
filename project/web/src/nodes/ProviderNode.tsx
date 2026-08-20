@@ -81,8 +81,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
       className={cn(
         'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         !active && 'opacity-60',
-        providerState === 'disabled' && 'border-destructive/70 bg-destructive/5',
-        providerState === 'auto-disabled' && 'border-warning/70 bg-warning/5'
+        (providerState === 'disabled' || providerState === 'auto-disabled') && 'opacity-60'
       )}
       style={{
         width: 'fit-content',
@@ -141,7 +140,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
               {providerState === 'disabled' ? '禁用' : '自动禁用'}
             </span>
           )}
-          <span className="truncate text-sm font-medium">{label || 'Provider'}</span>
+          <span className="truncate text-sm font-medium">{label || '供应商'}</span>
         </span>
         <Switch
           checked={active}
@@ -155,17 +154,28 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
       </div>
 
       <div className="flex flex-col gap-1 p-3">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="text-xs text-muted-foreground">
-            {baseURLCount} URLs
+        {providerState !== 'enabled' ? (
+          <span
+            className={cn(
+              'text-xs font-medium',
+              providerState === 'disabled' ? 'text-destructive' : 'text-warning'
+            )}
+          >
+            {providerState === 'disabled' ? '禁用' : '自动禁用'}
           </span>
-          <span className="text-xs text-muted-foreground">
-            {keyCount} Keys
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {modelCount} Models
-          </span>
-        </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
+              {baseURLCount} URLs
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {keyCount} Keys
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {modelCount} Models
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

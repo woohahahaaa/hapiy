@@ -22,14 +22,14 @@ const (
 // node carries the provider's configured name (resolved against the Provider
 // table at plan time). A request-entry node carries the master switch and weight.
 type FlatNode struct {
-	ID           string          `json:"id"`
-	Kind         NodeKind        `json:"kind"`
-	Name         string          `json:"name,omitempty"`        // provider configured name for KindProvider
-	SlotType     string          `json:"slot_type,omitempty"`   // for KindSlot
-	Enabled      bool            `json:"enabled"`               // request-entry master switch / provider mini-switch / logOutput slot master switch
-	Weight       float64         `json:"weight,omitempty"`      // request-entry weight in [0,1]
-	Entries      json.RawMessage `json:"entries,omitempty"`     // for KindSlot: rule entries, opaque to the engine
-	LogDeadlineAt *int64         `json:"log_deadline_at,omitempty"` // logOutput slot-level deadline, Unix epoch ms
+	ID            string          `json:"id"`
+	Kind          NodeKind        `json:"kind"`
+	Name          string          `json:"name,omitempty"`            // provider configured name for KindProvider
+	SlotType      string          `json:"slot_type,omitempty"`       // for KindSlot
+	Enabled       bool            `json:"enabled"`                   // request-entry master switch / provider mini-switch / logOutput slot master switch
+	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
+	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
+	LogDeadlineAt *int64          `json:"log_deadline_at,omitempty"` // logOutput slot-level deadline, Unix epoch ms
 }
 
 // Wire is one directed connection in the flat topology.
@@ -50,9 +50,9 @@ type Topology struct {
 // provider node can serve a request.
 type ProviderRef struct {
 	Name     string
-	Status   bool   // Provider table status
-	Enabled  bool   // provider node mini-switch in its slot
-	Workflow bool   // master-switch activation (derived from its request entry)
+	Status   bool // Provider table status
+	Enabled  bool // provider node mini-switch in its slot
+	Workflow bool // master-switch activation (derived from its request entry)
 	Models   map[string]struct{}
 	Paths    map[string]struct{} // supported endpoint paths; empty set = any
 }
@@ -61,10 +61,10 @@ type ProviderRef struct {
 // It is what dispatch returns: the chosen provider plus the ordered slot types
 // that follow it in the wiring.
 type Chain struct {
-	ProviderID  string   // provider node ID (KindProvider)
-	ProviderName string  // configured provider name
-	Weight      float64  // request-entry weight
-	SlotTypes   []string // slot types reachable after the provider, in wire order
+	ProviderID   string   // provider node ID (KindProvider)
+	ProviderName string   // configured provider name
+	Weight       float64  // request-entry weight
+	SlotTypes    []string // slot types reachable after the provider, in wire order
 }
 
 // ValidateTopology checks the flat model's structural invariants: node IDs are
@@ -195,6 +195,9 @@ type EligibleProvider struct {
 // downstream provider is tagged with the entry's weight. A provider must be
 // enabled (mini-switch), its configured provider must be Status-enabled and
 // match the model, and (when the provider declares paths) the request path.
+// When a provider slot holds several providers, the slot's "按顺序" semantics
+// apply: if the provider the walk lands on cannot serve the request, the next
+// child of the same slot (in array order) is tried.
 func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path string) ([]EligibleProvider, error) {
 	if err := ValidateTopology(t); err != nil {
 		return nil, err
@@ -214,25 +217,25 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 				break
 			}
 			if node.Kind == KindProvider {
-				ref, ok := refs[node.Name]
-				if !ok || !ref.Status || !node.Enabled || !ref.Enabled || !ref.Workflow {
-					// provider unavailable — skip, keep walking its slot output? A
-					// provider is a leaf for selection (single provider per entry
-					// chain), so stop this branch.
+				selected := node
+				if !providerEligible(refs, node, model, path) {
+					// 按顺序 fallback: the slot may hold several providers;
+					// when the wired one can't serve the request, try the
+					// remaining children in order.
+					selected = nextEligibleSibling(t, refs, node, model, path)
+				}
+				if selected.ID == "" {
 					break
 				}
-				if !providerSupports(ref, model, path) {
-					break
-				}
-				chain := collectChain(t, node)
-				key := node.ID + ":" + entry.ID
+				chain := collectChain(t, selected)
+				key := selected.ID + ":" + entry.ID
 				if seen[key] {
 					break
 				}
 				seen[key] = true
 				result = append(result, EligibleProvider{
-					Node:   node,
-					Name:   node.Name,
+					Node:   selected,
+					Name:   selected.Name,
 					Weight: entry.Weight,
 					Chain:  chain,
 				})
@@ -256,6 +259,53 @@ func providerSupports(ref ProviderRef, model, path string) bool {
 		}
 	}
 	return true
+}
+
+// providerEligible reports whether the provider node can serve the request:
+// its configured provider must be present and Status-enabled, the node's own
+// mini-switch must be on, and it must support the model (and path).
+func providerEligible(refs map[string]ProviderRef, node FlatNode, model, path string) bool {
+	ref, ok := refs[node.Name]
+	if !ok || !ref.Status || !node.Enabled || !ref.Enabled || !ref.Workflow {
+		return false
+	}
+	return providerSupports(ref, model, path)
+}
+
+// nextEligibleSibling implements the provider slot's sequential ("按顺序")
+// selection. When the provider the walk landed on cannot serve the request, it
+// returns the first later child of the same provider slot that can. Slot
+// children are the providers adjacent to the slot in the node list, in array
+// (display) order; disabled or model-mismatched children are skipped. Returns
+// an empty FlatNode when no sibling qualifies.
+func nextEligibleSibling(t *Topology, refs map[string]ProviderRef, node FlatNode, model, path string) FlatNode {
+	idx := -1
+	slotID := ""
+	for i, n := range t.Nodes {
+		if n.ID == node.ID {
+			idx = i
+			break
+		}
+		if n.Kind == KindSlot && n.SlotType == "provider" {
+			slotID = n.ID
+		}
+		if n.Kind == KindRequestEntry {
+			slotID = ""
+		}
+	}
+	if idx < 0 || slotID == "" {
+		return FlatNode{}
+	}
+	for i := idx + 1; i < len(t.Nodes); i++ {
+		n := t.Nodes[i]
+		if n.Kind != KindProvider {
+			break
+		}
+		if providerEligible(refs, n, model, path) {
+			return n
+		}
+	}
+	return FlatNode{}
 }
 
 // DuplicateActivation is one provider that is reachable from more than one

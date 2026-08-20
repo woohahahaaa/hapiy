@@ -16,15 +16,18 @@ export type FlowLightPayload = {
 
 // The light is a moving dash on the edge path (pathLength normalises it to 100
 // units). The dash grows from zero length at the edge start, then slides to
-// the far end (dashoffset 100 → 22 lands the dash exactly at the path end; 0
-// would wrap it back around to the start). A longer, fainter trailing dash
-// shares the same keyframes via CSS variables.
-// The bright head sits at the dash's downstream end (leading edge of the
-// sweep) via a leading empty dash segment, so the beam looks like a comet:
-// bright front, fading tail behind it upstream.
+// the far end: dashoffset animates 100 → FLOW_END_OFFSET. A positive
+// stroke-dashoffset pushes the pattern toward the path start, so decreasing
+// the offset moves the dash forward: at 100 the tail sits at [0,55] (path
+// start), at FLOW_END_OFFSET (= FLOW_TAIL_LEN = 55) it sits at [45,100] (path
+// end) — a full forward sweep that never wraps. A longer, fainter trailing
+// dash shares the same keyframes via CSS variables.
+// The bright head sits at the beam's upstream end (start of the sweep) so the
+// fully opaque part appears first at the path origin, and the fainter tail
+// trails behind it toward the downstream end.
 const FLOW_HEAD_LEN = 22
 const FLOW_TAIL_LEN = 55
-const FLOW_HEAD_LEAD = FLOW_TAIL_LEN - FLOW_HEAD_LEN
+const FLOW_END_OFFSET = FLOW_TAIL_LEN
 const FLOW_TAIL_OPACITY = 0.35
 const FLOW_GROW_FRACTION = 0.3
 
@@ -46,9 +49,9 @@ function buildKeyframes(name: string, light: FlowLightPayload): string {
     `0%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:0}` +
     `${s}%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:1}` +
     `${g}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:0}` +
-    `100%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:0}}`
+    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:var(--beam-on)}` +
+    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}` +
+    `100%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}}`
   )
 }
 
@@ -127,7 +130,7 @@ export function FlowLightEdge(props: EdgeProps) {
             pathLength={100}
             style={{
               ...animStyle,
-              ...dashVars(`${FLOW_HEAD_LEAD} ${FLOW_HEAD_LEN} ${FLOW_TAIL_LEN} 0`, 1),
+              ...dashVars(`${FLOW_HEAD_LEN} ${100 - FLOW_HEAD_LEN}`, 1),
             }}
           />
         </g>

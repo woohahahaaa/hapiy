@@ -163,7 +163,7 @@ export function TokenPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2 ms-auto">
           <Button
             variant="outline"
             size="sm"

@@ -6,6 +6,7 @@ import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
 import { SlotItemCard } from '@/components/topology/slot-items/SlotItemCard'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
+import { cn } from '@/lib/utils'
 import type {
   RequestModifySlotEntry,
   ResponseModifySlotEntry,
@@ -41,6 +42,7 @@ export interface FlatProviderChild {
   readonly modelCount: number
   readonly enabled: boolean
   readonly providerStatus: boolean
+  readonly autoDisabled: boolean
 }
 
 interface FlatSlotNodeData {
@@ -328,6 +330,7 @@ interface ProviderCardProps {
 
 function ProviderCard({ index, child, providers, takenLabels, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
   const filteredProviders = providers.filter((n) => n === child.label || !takenLabels.has(n))
+  const state = child.autoDisabled ? 'auto-disabled' : child.providerStatus ? 'enabled' : 'disabled'
   return (
     <SlotItemCard
       index={index}
@@ -339,6 +342,10 @@ function ProviderCard({ index, child, providers, takenLabels, isDragging, isDrag
       onDrop={onDrop}
       isDragging={isDragging}
       isDragOver={isDragOver}
+      className={cn(
+        state === 'disabled' && 'opacity-60',
+        state === 'auto-disabled' && 'opacity-60',
+      )}
     >
       <div className="space-y-1.5">
         <Select value={child.label ?? ''} onValueChange={(value) => value && onSelect(value)}>
@@ -354,11 +361,22 @@ function ProviderCard({ index, child, providers, takenLabels, isDragging, isDrag
           </SelectContent>
         </Select>
         {child.label && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span>{child.baseURLCount} URL{child.baseURLCount !== 1 ? 's' : ''}</span>
-            <span>{child.keyCount} Key{child.keyCount !== 1 ? 's' : ''}</span>
-            <span>{child.modelCount} 模型</span>
-          </div>
+          state !== 'enabled' ? (
+            <span
+              className={cn(
+                'pl-2.5 text-xs font-medium',
+                state === 'disabled' ? 'text-destructive' : 'text-warning',
+              )}
+            >
+              {state === 'disabled' ? '禁用' : '自动禁用'}
+            </span>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>{child.baseURLCount} URL{child.baseURLCount !== 1 ? 's' : ''}</span>
+              <span>{child.keyCount} Key{child.keyCount !== 1 ? 's' : ''}</span>
+              <span>{child.modelCount} 模型</span>
+            </div>
+          )
         )}
       </div>
     </SlotItemCard>

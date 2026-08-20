@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 
@@ -9,6 +10,11 @@ import (
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
 )
+
+// ErrNoProvider is returned when no enabled provider supports the requested
+// model. It lets the handler distinguish "nothing could serve this request"
+// from genuine upstream failures.
+var ErrNoProvider = errors.New("no provider available")
 
 // buildFlatProviderRefs builds ProviderRef values for every enabled provider
 // known to the engine, keyed by provider name. It reflects the provider's
@@ -46,7 +52,7 @@ func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string)
 		return nil, err
 	}
 	if len(eligible) == 0 {
-		return nil, fmt.Errorf("no provider available for model %s", model)
+		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, model)
 	}
 	// Weighted selection: each eligible provider carries its request-entry
 	// weight in [0,1]. Higher weight => higher chance.
@@ -98,10 +104,10 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, nil)
 			if err == nil {
 				return &DispatchResult{
-					Plan:         plan,
-					Provider:     provider,
-					KeyIndex:     match.Triple.KeyIndex,
-					BaseURLIndex: match.Triple.BaseURLIndex,
+					Plan:          plan,
+					Provider:      provider,
+					KeyIndex:      match.Triple.KeyIndex,
+					BaseURLIndex:  match.Triple.BaseURLIndex,
 					AffinityMatch: &match,
 				}, nil
 			}

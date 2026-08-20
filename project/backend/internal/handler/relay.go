@@ -483,6 +483,9 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 	if errors.Is(err, relay.ErrConcurrencyRejected) {
 		outcome = "queued_rejected"
 	}
+	if errors.Is(err, relay.ErrNoProvider) {
+		outcome = "failed"
+	}
 	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0, outcome)
 }
 

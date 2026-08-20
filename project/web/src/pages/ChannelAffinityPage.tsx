@@ -287,7 +287,7 @@ export function ChannelAffinityPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2 ms-auto">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...row, enabled: !row.enabled })}>{row.enabled ? '禁用' : '启用'}</Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(row); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void handleDeleteRule(row.name)}><AppIcon name="delete" /></Button>
