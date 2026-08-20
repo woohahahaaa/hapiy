@@ -289,6 +289,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				modelName: relayReq.Model,
 				usage:     resp.Usage,
 			})
+			logEntry.Currency = service.GetBillingCurrency(db)
 		}
 
 		service.Logs().Write(&logEntry)

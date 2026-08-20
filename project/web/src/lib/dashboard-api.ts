@@ -102,6 +102,7 @@ export type UsageLog = {
   readonly promptCacheHitTokens: number
   readonly isStream: boolean
   readonly quota: number
+  readonly currency: 'USD' | 'CNY' | ''
   readonly useTime: number
   readonly connectMs: number
   readonly firstByteMs: number
@@ -819,6 +820,7 @@ function parseLog(value: unknown): UsageLog {
     promptCacheHitTokens: readNumber(value.prompt_cache_hit_tokens, 'log.prompt_cache_hit_tokens', 0),
     isStream: readBoolean(value.is_stream, 'log.is_stream'),
     quota: readNumber(value.quota, 'log.quota'),
+    currency: readString(value.currency ?? '', 'log.currency') as 'USD' | 'CNY' | '',
     useTime: readNumber(value.use_time, 'log.use_time'),
     connectMs: parseStageMs(value.connect_ms),
     firstByteMs: parseStageMs(value.first_byte_ms),
@@ -1739,6 +1741,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ key, value }),
     }))
+  },
+  async refreshExchangeRate(): Promise<number> {
+    const body = await request('/exchange-rate/refresh', { method: 'POST' })
+    const rate = isRecord(body) && isRecord(body.data) ? readNumber(body.data.rate, 'exchange-rate.rate', 0) : 0
+    if (rate <= 0) {
+      throw new DashboardApiError('服务端返回的汇率格式无效', null)
+    }
+    return rate
   },
   async getBaseUrlPaths(): Promise<readonly string[]> {
     const data = await request('/settings/base-url-paths')

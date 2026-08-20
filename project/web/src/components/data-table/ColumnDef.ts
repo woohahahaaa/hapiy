@@ -42,7 +42,7 @@ export interface ColumnDef<T> {
   /** Class applied to the `<tr>` for this row. */
   readonly rowClassName?: (row: T) => string
 
-  /** Show the muted "--" placeholder when value is empty. Default true. */
+  /** Show the muted "-" placeholder when value is empty. Default true. */
   readonly showEmptyPlaceholder?: boolean
 
   readonly defaultWidth: ColumnWidthConfig

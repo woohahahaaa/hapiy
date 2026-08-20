@@ -37,8 +37,8 @@ export function DateCell({
 
   if (bothEmpty) {
     return (
-      <span className={cn("text-muted-foreground/60", className)}>
-        {emptyText ?? "--"}
+      <span className={cn("text-muted-foreground/40", className)}>
+        {emptyText ?? "-"}
       </span>
     );
   }

@@ -87,6 +87,10 @@ type Log struct {
 	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
 	IsStream         bool      `json:"is_stream"`
 	Quota            float64   `json:"quota"`
+	// Currency is the billing currency this quota was computed in ("USD" or
+	// "CNY"). Historical records keep the currency they were written with;
+	// switching the global billing currency only affects new records.
+	Currency         string    `json:"currency"`
 	UseTime          int       `json:"use_time"` // milliseconds
 	Status           string    `json:"status"`   // success / failed
 	IP               string    `json:"ip"`

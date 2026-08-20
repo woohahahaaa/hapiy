@@ -432,7 +432,7 @@ export function LogCapturePreviewDialog(props: LogCapturePreviewDialogProps) {
 
 // ── Timing block: request-level stage timings from the pair read ──
 function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
-  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '--')
+  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '-')
   const rows: ReadonlyArray<[string, number]> = [
     ['排队', timing.queueWaitMs],
     ['请求改写', timing.requestRewriteMs],

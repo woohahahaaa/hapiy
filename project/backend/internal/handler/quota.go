@@ -7,6 +7,7 @@ import (
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -31,7 +32,11 @@ func computeQuota(db *gorm.DB, request quotaRequest) float64 {
 		float64(usage.CompletionTokens)/tokensPerMillion*price.OutputPrice +
 		float64(usage.CacheWriteTokens)/tokensPerMillion*price.CacheWritePrice +
 		float64(usage.CacheReadTokens)/tokensPerMillion*price.CacheReadPrice
-	return total * parseModelRate(request.provider, request.modelName)
+	quota := total * parseModelRate(request.provider, request.modelName)
+	if service.GetBillingCurrency(db) == "CNY" {
+		quota *= service.GetExchangeRate(db)
+	}
+	return quota
 }
 
 func findPriceConfig(db *gorm.DB, modelName string) (model.PriceConfig, bool) {

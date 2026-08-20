@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -59,6 +59,27 @@ export function PricePage() {
   const [isOpen, setIsOpen] = useState(false)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(20)
+  const [currency, setCurrency] = useState<'USD' | 'CNY'>('CNY')
+  const [rate, setRate] = useState(7.2)
+
+  useEffect(() => {
+    dashboardApi
+      .getSettings()
+      .then((settings) => {
+        const currencySetting = settings.find((s) => s.key === 'billing_currency')
+        setCurrency(currencySetting?.value === 'USD' ? 'USD' : 'CNY')
+        const rateSetting = settings.find((s) => s.key === 'exchange_rate_usd_cny')
+        const rateValue = Number(rateSetting?.value)
+        if (Number.isFinite(rateValue) && rateValue > 0) setRate(rateValue)
+      })
+      .catch(() => {})
+  }, [])
+
+  const symbol = currency === 'CNY' ? '¥' : '$'
+  const formatPrice = (usd: number): string => {
+    const value = currency === 'CNY' ? usd * rate : usd
+    return `${symbol}${value.toFixed(2)}`
+  }
 
   const fetch = useCallback(async () => {
     try {
@@ -120,29 +141,40 @@ export function PricePage() {
     {
       key: 'contextLength',
       label: 'context',
-      defaultWidth: { kind: 'pixel', value: 120 },
+      defaultWidth: { kind: 'pixel', value: 110 },
       defaultAlign: 'right',
       accessor: (row) => (row.contextLength > 0 ? row.contextLength.toLocaleString() : null),
     },
     {
+      key: 'maxToken',
+      label: 'max token',
+      defaultWidth: { kind: 'pixel', value: 110 },
+      defaultAlign: 'right',
+      accessor: (row) => (row.maxToken > 0 ? row.maxToken.toLocaleString() : null),
+    },
+    {
+      key: 'supportedTypes',
+      label: '支持类型',
+      defaultWidth: { kind: 'pixel', value: 150 },
+      accessor: (row) => (row.supportedTypes.length > 0 ? row.supportedTypes.join(', ') : null),
+    },
+    {
       key: 'price',
       label: '价格',
-      defaultWidth: { kind: 'pixel', value: 240 },
+      defaultWidth: { kind: 'pixel', value: 220 },
       defaultAlign: 'right',
-      render: (_, row) => (
-        <span className="text-right tabular-nums text-muted-foreground">
-          {[
-            row.inputPrice.toFixed(2),
-            row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : <span key="w" className="text-muted-foreground/60">--</span>,
-            row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : <span key="r" className="text-muted-foreground/60">--</span>,
-            row.outputPrice.toFixed(2),
-          ].reduce<ReactNode[]>((acc, part, i) => {
-            if (i > 0) acc.push(<span key={`s${i}`}> / </span>)
-            acc.push(<span key={i}>{part}</span>)
-            return acc
-          }, [])}
-        </span>
-      ),
+      defaultOverflow: 'wrap',
+      render: (_, row) => {
+        const label = (text: string) => <span className="text-muted-foreground/40">{text}</span>
+        return (
+          <div className="flex flex-col gap-0.5 text-xs tabular-nums">
+            <div>{label('输入')} {formatPrice(row.inputPrice)}</div>
+            <div>{label('缓存写入')} {row.cacheWritePrice > 0 ? formatPrice(row.cacheWritePrice) : <span className="text-muted-foreground/40">-</span>}</div>
+            <div>{label('缓存读取')} {row.cacheReadPrice > 0 ? formatPrice(row.cacheReadPrice) : <span className="text-muted-foreground/40">-</span>}</div>
+            <div>{label('输出')} {formatPrice(row.outputPrice)}</div>
+          </div>
+        )
+      },
     },
     {
       key: 'actions',
@@ -222,7 +254,7 @@ export function PricePage() {
             <DialogHeader>
               <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
             </DialogHeader>
-            <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
+            <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} currency={currency} rate={rate} />
           </DialogContent>
         </Dialog>
       </div>
@@ -235,20 +267,40 @@ function PriceForm({
   onSave,
   onCancel,
   saving,
+  currency,
+  rate,
 }: {
   initial: EditingPrice
   onSave: (input: PriceConfigInput) => void
   onCancel: () => void
   saving: boolean
+  currency: 'USD' | 'CNY'
+  rate: number
 }) {
-  const [form, setForm] = useState<PriceConfigInput>(initial ? toInput(initial) : emptyPrice)
+  const toDisplay = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
+  const toUsd = (display: number): number => (currency === 'CNY' ? display / rate : display)
+  const [form, setForm] = useState<PriceConfigInput>(initial ? toDisplayInput(initial, toDisplay) : emptyPrice)
   const [pickedModel, setPickedModel] = useState<ModelsDevModel | null>(null)
   const [autoFillError, setAutoFillError] = useState<string | null>(null)
   const [existingNames, setExistingNames] = useState<ExistingNamesState>({ kind: 'loading' })
 
   useEffect(() => {
-    setForm(initial ? toInput(initial) : emptyPrice)
-  }, [initial])
+    if (!initial) {
+      setForm(emptyPrice)
+      return
+    }
+    const convert = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
+    setForm({
+      ...toInput(initial),
+      inputPrice: convert(initial.inputPrice),
+      outputPrice: convert(initial.outputPrice),
+      cacheWritePrice: convert(initial.cacheWritePrice),
+      cacheReadPrice: convert(initial.cacheReadPrice),
+    })
+  }, [initial, currency, rate])
+
+  const symbol = currency === 'CNY' ? '¥' : '$'
+  const unitLabel = `(${symbol}/1M tokens)`
 
   useEffect(() => {
     let cancelled = false
@@ -276,10 +328,10 @@ function PriceForm({
     ]
     setForm((current) => ({
       ...current,
-      inputPrice: pickedModel.inputPrice,
-      outputPrice: pickedModel.outputPrice,
-      cacheWritePrice: pickedModel.cacheWritePrice,
-      cacheReadPrice: pickedModel.cacheReadPrice,
+      inputPrice: toDisplay(pickedModel.inputPrice),
+      outputPrice: toDisplay(pickedModel.outputPrice),
+      cacheWritePrice: toDisplay(pickedModel.cacheWritePrice),
+      cacheReadPrice: toDisplay(pickedModel.cacheReadPrice),
       contextLength: pickedModel.contextLength,
       maxToken: pickedModel.maxOutput,
       supportedTypes,
@@ -342,7 +394,7 @@ function PriceForm({
       </Field>
       <div className="grid grid-cols-2 gap-4">
         <Field>
-          <FieldLabel htmlFor="price-input">输入价格 ($/1M tokens)</FieldLabel>
+          <FieldLabel htmlFor="price-input">输入价格 {unitLabel}</FieldLabel>
           <Input
             id="price-input"
             type="number"
@@ -351,9 +403,10 @@ function PriceForm({
             value={form.inputPrice}
             onChange={(e) => setForm((p) => ({ ...p, inputPrice: Number(e.target.value) }))}
           />
+          {currency === 'CNY' && <ConversionHint display={form.inputPrice} usd={toUsd(form.inputPrice)} rate={rate} />}
         </Field>
         <Field>
-          <FieldLabel htmlFor="price-output">输出价格 ($/1M tokens)</FieldLabel>
+          <FieldLabel htmlFor="price-output">输出价格 {unitLabel}</FieldLabel>
           <Input
             id="price-output"
             type="number"
@@ -362,9 +415,10 @@ function PriceForm({
             value={form.outputPrice}
             onChange={(e) => setForm((p) => ({ ...p, outputPrice: Number(e.target.value) }))}
           />
+          {currency === 'CNY' && <ConversionHint display={form.outputPrice} usd={toUsd(form.outputPrice)} rate={rate} />}
         </Field>
         <Field>
-          <FieldLabel htmlFor="price-cache-write">缓存写入价格</FieldLabel>
+          <FieldLabel htmlFor="price-cache-write">缓存写入价格 {unitLabel}</FieldLabel>
           <Input
             id="price-cache-write"
             type="number"
@@ -373,9 +427,10 @@ function PriceForm({
             value={form.cacheWritePrice}
             onChange={(e) => setForm((p) => ({ ...p, cacheWritePrice: Number(e.target.value) }))}
           />
+          {currency === 'CNY' && <ConversionHint display={form.cacheWritePrice} usd={toUsd(form.cacheWritePrice)} rate={rate} />}
         </Field>
         <Field>
-          <FieldLabel htmlFor="price-cache-read">缓存读取价格</FieldLabel>
+          <FieldLabel htmlFor="price-cache-read">缓存读取价格 {unitLabel}</FieldLabel>
           <Input
             id="price-cache-read"
             type="number"
@@ -384,6 +439,7 @@ function PriceForm({
             value={form.cacheReadPrice}
             onChange={(e) => setForm((p) => ({ ...p, cacheReadPrice: Number(e.target.value) }))}
           />
+          {currency === 'CNY' && <ConversionHint display={form.cacheReadPrice} usd={toUsd(form.cacheReadPrice)} rate={rate} />}
         </Field>
       </div>
       <Field>
@@ -426,7 +482,14 @@ function PriceForm({
       </Field>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={!valid || saving} onClick={() => onSave({ ...form, model: form.model.trim() })}>
+        <Button disabled={!valid || saving} onClick={() => onSave({
+          ...form,
+          model: form.model.trim(),
+          inputPrice: toUsd(form.inputPrice),
+          outputPrice: toUsd(form.outputPrice),
+          cacheWritePrice: toUsd(form.cacheWritePrice),
+          cacheReadPrice: toUsd(form.cacheReadPrice),
+        })}>
           {saving ? '保存中...' : '保存'}
         </Button>
       </DialogFooter>
@@ -449,4 +512,25 @@ function toInput(price: PriceConfig): PriceConfigInput {
     thinkingLevels: price.thinkingLevels,
     rate: price.rate,
   }
+}
+
+function toDisplayInput(
+  price: PriceConfig,
+  toDisplay: (usd: number) => number,
+): PriceConfigInput {
+  return {
+    ...toInput(price),
+    inputPrice: toDisplay(price.inputPrice),
+    outputPrice: toDisplay(price.outputPrice),
+    cacheWritePrice: toDisplay(price.cacheWritePrice),
+    cacheReadPrice: toDisplay(price.cacheReadPrice),
+  }
+}
+
+function ConversionHint({ display, usd, rate }: { display: number; usd: number; rate: number }) {
+  return (
+    <p className="text-xs text-muted-foreground/40">
+      原 ${usd.toFixed(4)} × 汇率 {rate} = ¥{display.toFixed(2)}
+    </p>
+  )
 }

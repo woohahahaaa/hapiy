@@ -173,10 +173,10 @@ export function LogsPage() {
         const log = row as UsageLog
         return (
           <div className="text-xs">
-            <span className="text-muted-foreground/60">输入</span> {log.promptTokens} ·{' '}
-            <span className="text-muted-foreground/60">缓存写入</span> {log.promptCacheMissTokens} ·{' '}
-            <span className="text-muted-foreground/60">缓存读取</span> {log.promptCacheHitTokens} ·{' '}
-            <span className="text-muted-foreground/60">输出</span> {log.completionTokens}
+            <span className="text-muted-foreground/40">输入</span> {log.promptTokens}{' '}
+            <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens}{' '}
+            <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}{' '}
+            <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
           </div>
         )
       },
@@ -192,7 +192,7 @@ export function LogsPage() {
       label: '消耗',
       defaultWidth: { kind: 'percent', value: 8 },
       defaultAlign: 'right',
-      accessor: (row) => (row.quota > 0 ? formatQuota(row.quota) : null),
+      accessor: (row) => (row.quota > 0 ? formatQuota(row) : null),
     },
     {
       key: 'useTime',
@@ -202,18 +202,21 @@ export function LogsPage() {
       render: (_, row) => {
         const log = row as UsageLog
         const fmt = (val: number, label: string) => (
-          <span key={label}>
-            <span className="text-muted-foreground/60">{label}: </span>
-            <span className="text-foreground">{val >= 0 ? `${val}ms` : '--'}</span>
+          <span key={label} className="whitespace-nowrap">
+            <span className="text-muted-foreground/40">{label}: </span>
+            <span className="text-foreground">{val >= 0 ? `${val}ms` : '-'}</span>
           </span>
         )
         return (
           <div className="leading-tight tabular-nums">
             <div className="text-foreground">{(log.useTime / 1000).toFixed(1)}s</div>
-            <div className="text-foreground">
-              {fmt(log.queueWaitMs, '排队')} · {fmt(log.requestRewriteMs, '请求改写')} ·{' '}
-              {fmt(log.connectMs, '连接')} · {fmt(log.firstByteMs, '首字')} ·{' '}
-              {fmt(log.responseRewriteMs, '响应改写')} · {fmt(log.streamRewriteMs, '流式改写')}
+            <div className="flex flex-wrap justify-end gap-x-2">
+              {fmt(log.queueWaitMs, '排队')}
+              {fmt(log.requestRewriteMs, '请求改写')}
+              {fmt(log.connectMs, '连接')}
+              {fmt(log.firstByteMs, '首字')}
+              {fmt(log.responseRewriteMs, '响应改写')}
+              {fmt(log.streamRewriteMs, '流式改写')}
             </div>
           </div>
         )
@@ -358,7 +361,7 @@ export function LogsPage() {
 }
 
 function LogDetailFields({ log }: { log: UsageLog }) {
-  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '--')
+  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '-')
   const date = new Date(log.createdAt)
   const timeText = Number.isNaN(date.getTime())
     ? log.createdAt
@@ -367,25 +370,25 @@ function LogDetailFields({ log }: { log: UsageLog }) {
     <div className="space-y-4 text-xs">
       <FieldGroup title="基本信息">
         <DetailRow label="时间" value={timeText} />
-        <DetailRow label="用户" value={log.userId || '--'} />
-        <DetailRow label="令牌" value={log.tokenName || '--'} />
-        <DetailRow label="供应商" value={log.providerName || '--'} />
-        <DetailRow label="模型" value={log.modelName || '--'} />
+        <DetailRow label="用户" value={log.userId || '-'} />
+        <DetailRow label="令牌" value={log.tokenName || '-'} />
+        <DetailRow label="供应商" value={log.providerName || '-'} />
+        <DetailRow label="模型" value={log.modelName || '-'} />
       </FieldGroup>
       <FieldGroup title="用量">
         <DetailRow
           label="Tokens"
           value={
             <span>
-              <span className="text-muted-foreground/60">输入</span> {log.promptTokens}（
-              <span className="text-muted-foreground/60">缓存写入</span> {log.promptCacheMissTokens} /{' '}
-              <span className="text-muted-foreground/60">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
-              <span className="text-muted-foreground/60">输出</span> {log.completionTokens}
+              <span className="text-muted-foreground/40">输入</span> {log.promptTokens}（
+              <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens} /{' '}
+              <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
+              <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
             </span>
           }
         />
         <DetailRow label="流式" value={log.isStream ? 'SSE' : '-'} />
-        <DetailRow label="消耗" value={log.quota > 0 ? formatQuota(log.quota) : '-'} />
+        <DetailRow label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
       </FieldGroup>
       <FieldGroup title="耗时">
         <DetailRow label="耗时" value={`${(log.useTime / 1000).toFixed(1)}s`} />
@@ -430,6 +433,7 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function formatQuota(quota: number): string {
-  return `¥${quota.toFixed(6).replace(/\.?0+$/, '')}`
+function formatQuota(log: UsageLog): string {
+  const symbol = log.currency === 'USD' ? '$' : '¥'
+  return `${symbol}${log.quota.toFixed(6).replace(/\.?0+$/, '')}`
 }

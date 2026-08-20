@@ -22,8 +22,8 @@ export function NumberCell({
   if (isEmpty) {
     if (!showEmpty) return null;
     return (
-      <span className={cn("text-muted-foreground/60", className)}>
-        {emptyText ?? "--"}
+      <span className={cn("text-muted-foreground/40", className)}>
+        {emptyText ?? "-"}
       </span>
     );
   }

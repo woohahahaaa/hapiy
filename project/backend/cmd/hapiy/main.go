@@ -78,6 +78,10 @@ func main() {
 
 	service.InitQuotaLedger(db)
 
+	// Exchange-rate scheduler: daily auto refresh with 30-minute retry on
+	// failure when auto refresh is enabled.
+	service.StartExchangeRateScheduler(db)
+
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
 	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
 	defer stopTopologyArchive()
@@ -176,6 +180,7 @@ func main() {
 			dashboardAuthed.PUT("/settings", handler.UpsertSetting(db))
 			dashboardAuthed.GET("/settings/base-url-paths", handler.ListBaseUrlPaths(db))
 			dashboardAuthed.PUT("/settings/base-url-paths", handler.ReplaceBaseUrlPaths(db))
+			dashboardAuthed.POST("/exchange-rate/refresh", handler.RefreshExchangeRate(db))
 
 			dashboardAuthed.GET("/topology", handler.TopologyGet(db))
 			dashboardAuthed.PUT("/topology", handler.TopologyPut(db, engine))

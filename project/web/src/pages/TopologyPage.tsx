@@ -132,8 +132,12 @@ function computeLightChain(
   visit(modelId)
 
   if (providerName && canvas) {
-    for (const provider of canvas.providers) {
-      if (provider.name !== providerName) continue
+    // 同名 provider 可能有多个(如不同插槽各有一个 deepseek)。请求实际
+    // 只会走 enabled 的那个,所以优先匹配 enabled 的 provider,避免匹配到
+    // 已停用的同名节点导致 chain 选错插槽。
+    const candidates = canvas.providers.filter((p) => p.name === providerName)
+    const ordered = [...candidates].sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1))
+    for (const provider of ordered) {
       const slotId = canvas.providerSlotOf.get(provider.id)
       if (!slotId) continue
       const matched = chains.find((chain) => chain.includes(slotId))
@@ -182,8 +186,11 @@ function applyInternalBreak(
   let slotId: string | null = null
   let namedProvider: FlatNode | null = null
   if (providerName) {
-    for (const p of canvas.providers) {
-      if (p.name !== providerName) continue
+    // 同名 provider 可能有多个(如不同插槽各有一个 deepseek)。请求实际
+    // 只会走 enabled 的那个,先匹配 enabled 的,避免误判为不可用而截断。
+    const candidates = canvas.providers.filter((p) => p.name === providerName)
+    const ordered = [...candidates].sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1))
+    for (const p of ordered) {
       const sid = canvas.providerSlotOf.get(p.id)
       if (sid && chain.includes(sid)) {
         slotId = sid
@@ -975,8 +982,12 @@ export function TopologyPage() {
             }
             continue
           }
-          flashedIds.push(nodeId)
-          setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+          // 非 provider slot(请求改写/日志抓取等)只在自身启用时点亮,
+          // 与"生效的节点才点亮"的语义一致:总开关关闭的插槽内部节点不闪。
+          if (node.enabled === true) {
+            flashedIds.push(nodeId)
+            setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+          }
         }
       }
       modelNodeIdsRef.current.set(model, flashedIds)
@@ -1013,6 +1024,20 @@ export function TopologyPage() {
       if (!activeModels.has(model)) clearLightForModel(model)
     }
   }, [providerByName, duplicateProviderNames, applyLightToChain, clearLightForModel])
+
+  // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
+  // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
+  // 清空后立即重新同步流光,不等下一个轮询周期:短请求可能在 2 秒
+  // 轮询窗口内结束,导致拓扑变化后新生效的节点(如 logOutput)不亮。
+  useEffect(() => {
+    setEdges(baseEdges)
+    modelRunRef.current.clear()
+    modelNodeIdsRef.current.clear()
+    providerFlashesRef.current.clear()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProviderFlashes(new Map())
+    void syncFlowLights()
+  }, [baseEdges, setEdges, syncFlowLights])
 
   useEffect(() => {
     void syncFlowLights()

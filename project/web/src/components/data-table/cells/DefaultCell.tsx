@@ -20,8 +20,8 @@ export function DefaultCell({
   if (isEmpty) {
     if (!showEmpty) return null;
     return (
-      <span className={cn("text-muted-foreground/60", className)}>
-        {emptyText ?? "--"}
+      <span className={cn("text-muted-foreground/40", className)}>
+        {emptyText ?? "-"}
       </span>
     );
   }

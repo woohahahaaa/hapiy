@@ -244,7 +244,7 @@ function StatsSection() {
 
   const successRate = stats && stats.totalRequests > 0
     ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
-    : '--'
+    : '-'
 
   return (
     <section className="mb-6">
