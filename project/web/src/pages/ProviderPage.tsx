@@ -111,7 +111,7 @@ export function ProviderPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, provider) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><AppIcon name="delete" /></Button>

@@ -287,7 +287,7 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) => {
         const isStream = row.kind === 'pair' ? row.pair.is_stream : false
-        return isStream ? <Badge variant="secondary">SSE</Badge> : null
+        return isStream ? <Badge variant="secondary">SSE</Badge> : <span className="text-muted-foreground/60">--</span>
       },
     },
     {

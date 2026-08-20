@@ -236,7 +236,7 @@ function RewritePage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
@@ -392,7 +392,7 @@ function HeartbeatPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
@@ -529,7 +529,7 @@ function ConcurrencyPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
@@ -683,7 +683,7 @@ function FailoverPage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
@@ -835,7 +835,7 @@ function RewriteResponsePage() {
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <div className="flex items-center gap-2 ms-auto">
+        <div className="inline-flex items-center gap-2">
           <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />

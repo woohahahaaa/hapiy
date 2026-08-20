@@ -155,7 +155,7 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
   { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 } },
-  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 } },
+  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, accessor: (row) => (row.stream ? 'SSE' : null) },
   {
     key: 'elapsedMs',
     label: '耗时',
