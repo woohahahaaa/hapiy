@@ -2,6 +2,7 @@ import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
+import { toast } from '@/components/ui/toast'
 
 interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
@@ -46,10 +47,16 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
 
       <div className={cn(simplified ? 'p-0' : 'divide-y divide-border')}>
         {models.map((m) => (
-          <div
+          <button
             key={m.id}
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(m.label).then(() => {
+                toast(`已复制模型名：${m.label}`)
+              })
+            }}
             className={cn(
-              'flex items-center gap-2 text-xs text-card-foreground',
+              'nodrag nopan flex w-full cursor-pointer items-center gap-2 text-left text-base text-card-foreground transition-colors hover:bg-muted/50',
               m.disabled && 'opacity-60'
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
@@ -67,7 +74,7 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
                 borderWidth: topologyConfig.handles.modelHub.source.borderWidth,
               }}
             />
-          </div>
+          </button>
         ))}
       </div>
 
