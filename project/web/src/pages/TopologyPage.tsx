@@ -845,6 +845,9 @@ export function TopologyPage() {
 
   useEffect(() => {
     setEdges(baseEdges)
+    // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
+    // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
+    modelRunRef.current.clear()
   }, [baseEdges, setEdges])
 
   // ── Flow light (request_started SSE) ──

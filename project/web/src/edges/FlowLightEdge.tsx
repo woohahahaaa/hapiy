@@ -19,8 +19,12 @@ export type FlowLightPayload = {
 // the far end (dashoffset 100 → 22 lands the dash exactly at the path end; 0
 // would wrap it back around to the start). A longer, fainter trailing dash
 // shares the same keyframes via CSS variables.
+// The bright head sits at the dash's downstream end (leading edge of the
+// sweep) via a leading empty dash segment, so the beam looks like a comet:
+// bright front, fading tail behind it upstream.
 const FLOW_HEAD_LEN = 22
 const FLOW_TAIL_LEN = 55
+const FLOW_HEAD_LEAD = FLOW_TAIL_LEN - FLOW_HEAD_LEN
 const FLOW_TAIL_OPACITY = 0.35
 const FLOW_GROW_FRACTION = 0.3
 
@@ -30,7 +34,7 @@ function safeId(edgeId: string): string {
 
 // Per-edge loop keyframes: zero-length at the window start, grow to full
 // length in place, slide to the path end, then vanish so the next edge takes
-// over. `--beam-len`/`--beam-on` let the head and tail dashes share the frame.
+// over. `--beam-dash`/`--beam-on` let the head and tail dashes share the frame.
 function buildKeyframes(name: string, light: FlowLightPayload): string {
   const start = Math.max(0, (light.phaseMs / light.cycleMs) * 100)
   const end = Math.min(100, ((light.phaseMs + light.durMs) / light.cycleMs) * 100)
@@ -41,10 +45,10 @@ function buildKeyframes(name: string, light: FlowLightPayload): string {
     `@keyframes ${name}{` +
     `0%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:0}` +
     `${s}%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:1}` +
-    `${g}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:100;opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:0}` +
-    `100%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:0}}`
+    `${g}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:var(--beam-on)}` +
+    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:var(--beam-on)}` +
+    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:0}` +
+    `100%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:22;opacity:0}}`
   )
 }
 
@@ -93,8 +97,8 @@ export function FlowLightEdge(props: EdgeProps) {
       }
     : undefined
 
-  const dashVars = (len: number, on: number): CSSProperties =>
-    ({ '--beam-len': String(len), '--beam-on': String(on) }) as CSSProperties
+  const dashVars = (dash: string, on: number): CSSProperties =>
+    ({ '--beam-dash': dash, '--beam-on': String(on) }) as CSSProperties
 
   return (
     <>
@@ -112,7 +116,7 @@ export function FlowLightEdge(props: EdgeProps) {
             strokeWidth={5}
             strokeLinecap="round"
             pathLength={100}
-            style={{ ...animStyle, ...dashVars(FLOW_TAIL_LEN, FLOW_TAIL_OPACITY) }}
+            style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${100 - FLOW_TAIL_LEN}`, FLOW_TAIL_OPACITY) }}
           />
           <path
             d={path}
@@ -121,7 +125,10 @@ export function FlowLightEdge(props: EdgeProps) {
             strokeWidth={5}
             strokeLinecap="round"
             pathLength={100}
-            style={{ ...animStyle, ...dashVars(FLOW_HEAD_LEN, 1) }}
+            style={{
+              ...animStyle,
+              ...dashVars(`${FLOW_HEAD_LEAD} ${FLOW_HEAD_LEN} ${FLOW_TAIL_LEN} 0`, 1),
+            }}
           />
         </g>
       )}
