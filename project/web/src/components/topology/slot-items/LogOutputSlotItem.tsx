@@ -49,7 +49,7 @@ export function LogOutputSlotItem({
           placeholder="请输入日志前缀"
         />
       </div>
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1.5">
         <span className="text-[10px] text-muted-foreground">记录内容</span>
         <div className="flex flex-col gap-1">
           <CheckField

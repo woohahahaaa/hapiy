@@ -10,14 +10,14 @@
       "shellMinWidth": 240
     },
     "modelHub": {
-      "paddingX": 12,
-      "paddingY": 9
+      "paddingX": 18,
+      "paddingY": 13.5
     }
   },
   "layout": {
     "nodeGap": 80,
     "rowGap": 80,
-    "modelHubGap": 20,
+    "modelHubGap": 40,
     "groupGap": 80,
     "marginX": 80,
     "marginY": 80,

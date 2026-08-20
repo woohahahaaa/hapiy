@@ -47,22 +47,27 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
 
       <div className={cn(simplified ? 'p-0' : 'divide-y divide-border')}>
         {models.map((m) => (
-          <button
+          <div
             key={m.id}
-            type="button"
-            onClick={() => {
-              void navigator.clipboard.writeText(m.label).then(() => {
-                toast(`已复制模型名：${m.label}`)
-              })
-            }}
             className={cn(
-              'nodrag nopan flex w-full cursor-pointer items-center gap-2 text-left text-base text-card-foreground transition-colors hover:bg-muted/50',
+              'flex items-center gap-2 text-base text-card-foreground',
               m.disabled && 'opacity-60'
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >
-            <span className="size-2 rounded-full" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
-            <span>{m.label}</span>
+            <span className="size-3 rounded-[2px]" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
+            <button
+              type="button"
+              title="点击复制模型名"
+              onClick={() => {
+                void navigator.clipboard.writeText(m.label).then(() => {
+                  toast(`已复制模型名：${m.label}`)
+                })
+              }}
+              className="nodrag nopan min-w-0 cursor-pointer truncate text-left transition-colors hover:underline"
+            >
+              {m.label}
+            </button>
             <Handle
               type="source"
               position={Position.Right}
@@ -74,7 +79,7 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
                 borderWidth: topologyConfig.handles.modelHub.source.borderWidth,
               }}
             />
-          </button>
+          </div>
         ))}
       </div>
 

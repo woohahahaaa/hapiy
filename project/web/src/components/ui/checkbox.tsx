@@ -2,7 +2,7 @@ import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
 import type { ComponentProps } from "react"
 
 import { cn } from "@/lib/utils"
-import { AppIcon } from "@/components/AppIcon"
+import { renderIcon } from "@/config/icons"
 
 function Checkbox({ className, ...props }: ComponentProps<typeof CheckboxPrimitive.Root>) {
   return (
@@ -18,7 +18,7 @@ function Checkbox({ className, ...props }: ComponentProps<typeof CheckboxPrimiti
         data-slot="checkbox-indicator"
         className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
       >
-        <AppIcon name="check" size={14} />
+        {renderIcon('check', { size: 11, strokeWidth: 5 })}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   )
