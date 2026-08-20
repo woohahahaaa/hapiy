@@ -377,6 +377,7 @@ export function TopologyPage() {
     startX: number; startY: number; currentX: number; currentY: number
   } | null>(null)
   const selModeRef = useRef(false)
+  selModeRef.current = selMode
 
   const handleSelStart = useCallback((clientX: number, clientY: number) => {
     if (!selModeRef.current) return
