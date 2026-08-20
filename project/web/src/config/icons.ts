@@ -1,5 +1,6 @@
 import {
   Add,
+  Magic,
   MagicWand,
   Thunderbolt,
   CloseOne,
@@ -92,6 +93,7 @@ export const iconStyle = {
 // keep tree-shaking working: only the icons referenced here end up in the bundle.
 const COMPONENTS: Readonly<Record<string, IconComponent>> = {
   Add,
+  Magic,
   MagicWand,
   Thunderbolt,
   CloseOne,

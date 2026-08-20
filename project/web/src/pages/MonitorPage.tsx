@@ -45,6 +45,8 @@ function formatActiveStage(row: ActiveRequest): string {
   switch (row.stage) {
     case 'queued':
       return `排队中 · 已等 ${elapsed}`
+    case 'connecting':
+      return `连接上游${row.provider ? ` ${row.provider}` : ''} · 已 ${elapsed}`
     case 'waiting_upstream':
       return `等待上游响应 · 已 ${elapsed}`
     case 'receiving_stream':

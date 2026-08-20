@@ -71,6 +71,10 @@ const edgeTypes = {
 const FLOW_PER_EDGE_MS = 340
 const FLOW_SYNC_INTERVAL_MS = 2000
 const FLOW_COLORS_SETTING_KEY = 'flow_light_colors'
+// Unified wire opacity: active wires render at 0.6, disabled wires at 0.2,
+// regardless of wire kind (model→entry or entry/slot↔slot).
+const WIRE_OPACITY_ACTIVE = 0.6
+const WIRE_OPACITY_INACTIVE = 0.2
 
 const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
@@ -822,7 +826,7 @@ export function TopologyPage() {
         target: w.target,
         type: 'flowLight',
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
       })
     }
     for (const link of modelNodes.modelLinks) {
@@ -834,7 +838,10 @@ export function TopologyPage() {
         sourceHandle: link.modelName,
         targetHandle: link.modelName,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: link.active ? 0.5 : 0.3 },
+        style: {
+          strokeWidth: topologyConfig.edge.strokeWidth,
+          opacity: link.active ? WIRE_OPACITY_ACTIVE : WIRE_OPACITY_INACTIVE,
+        },
       })
     }
     return edges
@@ -1134,7 +1141,7 @@ export function TopologyPage() {
         sourceHandle: connection.sourceHandle,
         targetHandle: connection.targetHandle,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
       }
       const next = [...edgesRef.current.filter((e) => e.source !== source), newEdge]
       setEdges(next)

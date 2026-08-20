@@ -42,7 +42,7 @@ export function MagicWandButton({
       title={isActive ? "退出自动列宽" : "自动列宽"}
       onClick={handleToggle}
     >
-      <AppIcon name="auto_fix_high" size={14} />
+      <AppIcon name="auto_fix_high" size={24} theme="outline" fill="#333" />
     </Button>
   );
 }
