@@ -55,6 +55,7 @@ interface FlatSlotNodeData {
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
   providerFlashes?: ReadonlyMap<string, ProviderFlashPayload>
+  flash?: ProviderFlashPayload
   onAddProvider?: () => void
   onSelectProvider?: (providerId: string, name: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
@@ -93,6 +94,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     children = [],
     providers = [],
     providerFlashes,
+    flash,
     onAddProvider,
     onSelectProvider,
     onToggleProvider,
@@ -287,6 +289,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               onChangeEntry,
               onDeleteEntry,
               entryDragProps(entry.index),
+              flash,
             ),
           )}
         </SlotContainer>
@@ -403,6 +406,7 @@ function renderItem(
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
+  flash?: ProviderFlashPayload,
 ) {
   const onDelete = () => onDeleteEntry?.(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -416,6 +420,7 @@ function renderItem(
             rules={rules.requestModify}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )
@@ -427,6 +432,7 @@ function renderItem(
             rules={rules.responseModify}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )
@@ -438,6 +444,7 @@ function renderItem(
             rules={rules.autoReply}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )
@@ -449,6 +456,7 @@ function renderItem(
             rules={rules.concurrency}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )
@@ -460,6 +468,7 @@ function renderItem(
             rules={rules.autoSwitch}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )
@@ -470,6 +479,7 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
+            flash={flash}
             {...drag}
           />
         )

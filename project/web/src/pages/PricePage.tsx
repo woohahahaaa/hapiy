@@ -133,9 +133,9 @@ export function PricePage() {
         <span className="text-right tabular-nums text-muted-foreground">
           {[
             row.inputPrice.toFixed(2),
-            row.outputPrice.toFixed(2),
             row.cacheWritePrice > 0 ? row.cacheWritePrice.toFixed(2) : <span key="w" className="text-muted-foreground/60">--</span>,
             row.cacheReadPrice > 0 ? row.cacheReadPrice.toFixed(2) : <span key="r" className="text-muted-foreground/60">--</span>,
+            row.outputPrice.toFixed(2),
           ].reduce<ReactNode[]>((acc, part, i) => {
             if (i > 0) acc.push(<span key={`s${i}`}> / </span>)
             acc.push(<span key={i}>{part}</span>)

@@ -1,12 +1,14 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
+import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
 
 interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
   simplified?: boolean
+  flash?: ProviderFlashPayload
 }
 
 interface ModelHubNodeProps {
@@ -17,6 +19,7 @@ interface ModelHubNodeProps {
 export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   const models = data.models || []
   const simplified = data.simplified === true
+  const flash = data.flash
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
 
@@ -28,14 +31,26 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   }, [id, models.length, updateNodeInternals])
 
   const pad = topologyConfig.render.modelHub
+  const kfName = flash ? flashKeyframeName(flash) : ''
+  const flashAnim: CSSProperties | undefined = flash
+    ? {
+        animationName: kfName,
+        animationDuration: `${flash.cycleMs}ms`,
+        animationTimingFunction: 'linear',
+        animationIterationCount: 'infinite',
+        animationFillMode: 'forwards',
+      }
+    : undefined
 
   return (
     <div
       className="rounded-lg border border-border bg-card text-card-foreground"
       style={{
         width: 'fit-content',
+        ...(flashAnim ?? {}),
       }}
     >
+      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
       {!simplified && (
         <div
           className="border-b border-border"

@@ -677,7 +677,7 @@ export function TopologyPage() {
         id: nodeId,
         type: 'modelHub',
         position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true },
+        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flash: providerFlashes.get(nodeId) },
       })
     }
     modelColorRef.current = colorMap
@@ -715,6 +715,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             weight: node.weight ?? 1,
             models: modelNodes.entryModels.get(node.id) ?? [],
+            flash: providerFlashes.get(node.id),
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
                 const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
@@ -790,6 +791,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             isProviderSlot: false,
             externallyDisabled: externallyDisabledSet.has(node.id),
+            flash: providerFlashes.get(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
@@ -865,7 +867,7 @@ export function TopologyPage() {
     // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
     // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
     modelRunRef.current.clear()
-    modelProviderRef.current.clear()
+    modelNodeIdsRef.current.clear()
     providerFlashesRef.current.clear()
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProviderFlashes(new Map())
@@ -880,9 +882,9 @@ export function TopologyPage() {
   canvasRef.current = canvas
   const flowRunIdRef = useRef(0)
   const modelRunRef = useRef<Map<string, number>>(new Map())
-  // Tracks the slotId each in-flight model's flash was scheduled on so
-  // clearLightForModel can drop the matching flash in the same sweep.
-  const modelProviderRef = useRef<Map<string, string>>(new Map())
+  // Tracks the node IDs each in-flight model's flash was scheduled on so
+  // clearLightForModel can drop the matching flashes in the same sweep.
+  const modelNodeIdsRef = useRef<Map<string, string[]>>(new Map())
 
   const setProviderFlash = useCallback(
     (slotId: string, payload: ProviderFlashPayload) => {
@@ -907,10 +909,10 @@ export function TopologyPage() {
       const runId = modelRunRef.current.get(model)
       if (runId === undefined) return
       modelRunRef.current.delete(model)
-      const slotId = modelProviderRef.current.get(model)
-      if (slotId) {
-        modelProviderRef.current.delete(model)
-        clearProviderFlash(slotId, runId)
+      const nodeIds = modelNodeIdsRef.current.get(model)
+      if (nodeIds) {
+        modelNodeIdsRef.current.delete(model)
+        for (const id of nodeIds) clearProviderFlash(id, runId)
       }
       setEdges((prev) =>
         prev.map((edge) => {
@@ -951,31 +953,33 @@ export function TopologyPage() {
           return { ...edge, data: { ...edge.data, light } }
         }),
       )
-      // Provider card border flash: find the provider child (by name) inside
-      // the chain's provider slot. Flash is keyed by the provider child id and
-      // starts when the beam enters the slot input (chain index), lasting
-      // FLOW_PER_EDGE_MS — ending as the beam starts leaving the slot output.
-      if (providerName && canvasRef.current) {
+      // Border flash for every node in the chain. Each node flashes when the
+      // beam enters it (chain index * FLOW_PER_EDGE_MS) for one edge duration.
+      const flashedIds: string[] = []
+      if (canvasRef.current) {
         const canvas = canvasRef.current
         for (let i = 0; i < chain.length; i++) {
-          const node = canvas.topLevel.find((n) => n.id === chain[i])
-          if (!node || !isProviderSlot(node)) continue
-          const children = canvas.providers.filter(
-            (p) => canvas.providerSlotOf.get(p.id) === node.id,
-          )
-          const matched = children.find((p) => p.name === providerName)
-          if (!matched) continue
-          modelProviderRef.current.set(model, matched.id)
-          setProviderFlash(matched.id, {
-            runId,
-            cycleMs,
-            phaseMs: i * FLOW_PER_EDGE_MS,
-            durMs: FLOW_PER_EDGE_MS,
-            color,
-          })
-          break
+          const nodeId = chain[i]
+          const node = canvas.topLevel.find((n) => n.id === nodeId)
+          if (!node) {
+            flashedIds.push(nodeId)
+            setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+            continue
+          }
+          if (isProviderSlot(node)) {
+            const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
+            const matched = providerName ? children.find((p) => p.name === providerName) : children[0]
+            if (matched) {
+              flashedIds.push(matched.id)
+              setProviderFlash(matched.id, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+            }
+            continue
+          }
+          flashedIds.push(nodeId)
+          setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
         }
       }
+      modelNodeIdsRef.current.set(model, flashedIds)
     },
     [setEdges, setProviderFlash],
   )

@@ -1,15 +1,17 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
 
 interface RequestEntryNodeData {
   label: string
   enabled: boolean
   weight: number
   models?: Array<{ id: string; label: string; active: boolean }>
+  flash?: ProviderFlashPayload
   onChangeEnabled: (enabled: boolean) => void
   onChangeWeight: (weight: number) => void
 }
@@ -64,12 +66,25 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
     onChangeWeight(Math.round(clamped * 100) / 100)
   }
 
+  const flash = data.flash
+  const kfName = flash ? flashKeyframeName(flash) : ''
+  const flashAnim: CSSProperties | undefined = flash
+    ? {
+        animationName: kfName,
+        animationDuration: `${flash.cycleMs}ms`,
+        animationTimingFunction: 'linear',
+        animationIterationCount: 'infinite',
+        animationFillMode: 'forwards',
+      }
+    : undefined
+
   return (
     <div
       ref={rootRef}
       className="rounded-lg border border-border bg-card text-card-foreground"
-      style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
+      style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth, ...(flashAnim ?? {}) }}
     >
+      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
       {models.map((m, i) => (
         <Handle
           key={m.id}
