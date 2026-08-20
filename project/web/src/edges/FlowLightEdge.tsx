@@ -1,4 +1,4 @@
-import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react'
 import type { CSSProperties } from 'react'
 
 // Light payload attached to an edge's `data.light` while a flow animation runs.
@@ -14,72 +14,50 @@ export type FlowLightPayload = {
   readonly color: string
 }
 
-// The light is a moving dash on the edge path (pathLength normalises it to 100
-// units). The dash grows from zero length at the edge start, then slides to
-// the far end: dashoffset animates 100 → FLOW_END_OFFSET. A positive
-// stroke-dashoffset pushes the pattern toward the path start, so decreasing
-// the offset moves the dash forward: at 100 the tail sits at [0,55] (path
-// start), at FLOW_END_OFFSET (= FLOW_TAIL_LEN = 55) it sits at [45,100] (path
-// end) — a full forward sweep that never wraps. A longer, fainter trailing
-// dash shares the same keyframes via CSS variables.
-// The head sits at the beam's downstream end (leading edge of the sweep), so
-// the fully opaque part leads the sweep and the fainter tail trails behind
-// upstream.
+// The light uses fixed dash patterns on a normalized pathLength of 100. The
+// opaque head enters at the source, then travels to the target while the faint
+// tail follows behind it outside the path at the beginning.
 const FLOW_HEAD_LEN = 22
 const FLOW_TAIL_LEN = 55
-const FLOW_HEAD_LEAD = FLOW_TAIL_LEN - FLOW_HEAD_LEN
-const FLOW_END_OFFSET = FLOW_TAIL_LEN
+const FLOW_PATTERN_LENGTH = 200
+const FLOW_PATTERN_GAP = FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN
+const FLOW_STROKE_WIDTH = 5
+const FLOW_OVERSHOOT = FLOW_STROKE_WIDTH * 2
+const FLOW_START_OFFSET = FLOW_TAIL_LEN
+const FLOW_END_OFFSET = -100
 const FLOW_TAIL_OPACITY = 0.35
-const FLOW_GROW_FRACTION = 0.3
 
 function safeId(edgeId: string): string {
   return edgeId.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-// Per-edge loop keyframes: the dash pattern is fixed for the whole cycle
-// (animating dasharray across lists of unequal length repeats the shorter
-// list, scattering extra dashes around the path) — only opacity and
-// stroke-dashoffset change. The beam appears at the start, slides to the
-// path end, then fades so the next edge takes over. `--beam-dash` and
-// `--beam-on` are set per-path so the head (opaque) and tail (faint)
-// share the same frames.
-// The head's tail (the round-cap dot at the dash tip) would otherwise rest on
-// the node edge when the beam arrives, which reads as a stray dot stacked on
-// every converging edge. Fade the head out before it reaches the end so the
-// dot disappears into the node.
-const HEAD_FADE_PATH = 95
+function extendAgainstHandle(x: number, y: number, position: Position): { x: number; y: number } {
+  switch (position) {
+    case Position.Left:
+      return { x: x + FLOW_OVERSHOOT, y }
+    case Position.Right:
+      return { x: x - FLOW_OVERSHOOT, y }
+    case Position.Top:
+      return { x, y: y + FLOW_OVERSHOOT }
+    case Position.Bottom:
+      return { x, y: y - FLOW_OVERSHOOT }
+  }
+}
 
 function buildKeyframes(name: string, light: FlowLightPayload): string {
   const start = Math.max(0, (light.phaseMs / light.cycleMs) * 100)
   const end = Math.min(100, ((light.phaseMs + light.durMs) / light.cycleMs) * 100)
-  const g = (start + (end - start) * FLOW_GROW_FRACTION).toFixed(2)
-  const e = end.toFixed(2)
-  // The first visible frame must be strictly after 0%, otherwise the loop
-  // wrap (100% → 0%) interpolates opacity 0→1 while the dash is still parked
-  // at the path end (offset FLOW_END_OFFSET), flashing a bright dot at the
-  // end right as the beam appears at the start.
-  const sVisible = Math.max(0.001, start).toFixed(3)
-  // Compute the animation % at which the head tip reaches HEAD_FADE_PATH on
-  // the path. tip path position = FLOW_TAIL_LEN - offset (mod 100), so
-  // tip == HEAD_FADE_PATH when offset == (FLOW_TAIL_LEN - HEAD_FADE_PATH) mod 100.
-  // offset animates linearly from 100 at g% to FLOW_END_OFFSET at e%.
-  const fadeOffset = ((FLOW_TAIL_LEN - HEAD_FADE_PATH) % 100 + 100) % 100
-  const fadeProgress = (100 - fadeOffset) / (100 - FLOW_END_OFFSET)
-  const headFade = (g + (e - g) * fadeProgress).toFixed(3)
+  const startHidden = Math.max(0, start - 0.001).toFixed(3)
+  const startVisible = Math.max(0.001, start).toFixed(3)
+  const endVisible = Math.max(start, end - 0.001).toFixed(3)
   return (
     `@keyframes ${name}{` +
-    `0%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:0}` +
-    `${sVisible}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:1}` +
-    `${g}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:var(--beam-on)}` +
-    `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}` +
-    `100%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}}` +
-    `@keyframes ${name}-fade{` +
-    `0%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:0}` +
-    `${sVisible}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:1}` +
-    `${g}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:var(--beam-on)}` +
-    `${headFade}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:var(--beam-on)}` +
-    `100%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}}`
+    `0%{stroke-dashoffset:${FLOW_START_OFFSET};opacity:0}` +
+    `${startHidden}%{stroke-dashoffset:${FLOW_START_OFFSET};opacity:0}` +
+    `${startVisible}%{stroke-dashoffset:${FLOW_START_OFFSET};opacity:var(--beam-on)}` +
+    `${endVisible}%{stroke-dashoffset:${FLOW_END_OFFSET};opacity:var(--beam-on)}` +
+    `${end.toFixed(3)}%{stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}` +
+    `100%{stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}}`
   )
 }
 
@@ -114,9 +92,19 @@ export function FlowLightEdge(props: EdgeProps) {
     targetPosition,
   })
 
+  const lightSource = extendAgainstHandle(sourceX, sourceY, sourcePosition)
+  const lightTarget = extendAgainstHandle(targetX, targetY, targetPosition)
+  const [lightPath] = getBezierPath({
+    sourceX: lightSource.x,
+    sourceY: lightSource.y,
+    sourcePosition,
+    targetX: lightTarget.x,
+    targetY: lightTarget.y,
+    targetPosition,
+  })
+
   const light = data?.light as FlowLightPayload | undefined
   const kfName = light ? `flow-light-slide-${light.runId}-${safeId(id)}` : ''
-  const kfFade = `${kfName}-fade`
   const css = light ? buildKeyframes(kfName, light) : ''
 
   const animStyle = light
@@ -130,7 +118,7 @@ export function FlowLightEdge(props: EdgeProps) {
     : undefined
 
   const dashVars = (dash: string, on: number): CSSProperties =>
-    ({ '--beam-dash': dash, '--beam-on': String(on) }) as CSSProperties
+    ({ strokeDasharray: dash, strokeDashoffset: FLOW_START_OFFSET, '--beam-on': String(on) }) as CSSProperties
 
   return (
     <>
@@ -142,25 +130,27 @@ export function FlowLightEdge(props: EdgeProps) {
         >
           <style>{css}</style>
           <path
-            d={path}
+            d={lightPath}
             fill="none"
             stroke={light.color}
-            strokeWidth={5}
-            strokeLinecap="round"
+            strokeWidth={FLOW_STROKE_WIDTH}
+            strokeLinecap="butt"
             pathLength={100}
-            style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${100 - FLOW_TAIL_LEN}`, FLOW_TAIL_OPACITY) }}
+            style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${FLOW_PATTERN_GAP}`, FLOW_TAIL_OPACITY) }}
           />
           <path
-            d={path}
+            d={lightPath}
             fill="none"
             stroke={light.color}
-            strokeWidth={5}
-            strokeLinecap="round"
+            strokeWidth={FLOW_STROKE_WIDTH}
+            strokeLinecap="butt"
             pathLength={100}
             style={{
               ...animStyle,
-              ...dashVars(`0 ${FLOW_HEAD_LEAD} ${FLOW_HEAD_LEN} ${100 - FLOW_HEAD_LEAD - FLOW_HEAD_LEN}`, 1),
-              animationName: kfFade,
+              ...dashVars(
+                `0 ${FLOW_TAIL_LEN - FLOW_HEAD_LEN} ${FLOW_HEAD_LEN} ${FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN}`,
+                1,
+              ),
             }}
           />
         </g>
