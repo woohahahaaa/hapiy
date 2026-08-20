@@ -68,7 +68,7 @@ const navigation: NavItem[] = [
   },
   {
     id: 'policy',
-    label: '请求配置',
+    label: '请求处理',
     icon: <AppIcon name="description" />,
     children: [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },

@@ -350,19 +350,22 @@ function ActiveRequestsSection() {
   const [loading, setLoading] = useState(true)
   const [, setTick] = useState(0)
   const mountedRef = useRef(true)
+  // Latest-poll-wins: drop stale snapshots so a slow response can't overwrite a fresher one.
+  const fetchSeqRef = useRef(0)
 
   const fetchActive = useCallback(async () => {
+    const seq = ++fetchSeqRef.current
     try {
       const data = await dashboardApi.getActiveRequests()
-      if (!mountedRef.current) return
+      if (!mountedRef.current || seq !== fetchSeqRef.current) return
       const sorted = [...data].sort((a, b) => (a.startTime < b.startTime ? 1 : a.startTime > b.startTime ? -1 : 0))
       setRequests(sorted)
       setError(null)
     } catch (err) {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || seq !== fetchSeqRef.current) return
       setError(err instanceof Error ? err.message : '获取活跃请求失败')
     } finally {
-      if (mountedRef.current) setLoading(false)
+      if (mountedRef.current && seq === fetchSeqRef.current) setLoading(false)
     }
   }, [])
 

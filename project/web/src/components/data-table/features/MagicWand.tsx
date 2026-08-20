@@ -107,7 +107,6 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
   return (
     <>
       <Dialog
-        modal={false}
         open={dialogOpen}
         onOpenChange={(open) => {
           if (!open) onDismiss?.();
@@ -115,7 +114,6 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
       >
         <DialogContent
           width="sm"
-          onPointerDownOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>宽度参考已选择</DialogTitle>
@@ -151,9 +149,8 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
             "whitespace-nowrap",
           )}
           style={{
-            left: cursorPos ? cursorPos.x : 0,
-            top: cursorPos ? cursorPos.y - TOOLTIP_OFFSET_PX : 0,
-            transform: "translate(-50%, -100%)",
+            left: cursorPos ? cursorPos.x + TOOLTIP_OFFSET_PX : 0,
+            top: cursorPos ? cursorPos.y + TOOLTIP_OFFSET_PX : 0,
           }}
         >
           {TOOLTIP_TEXT}

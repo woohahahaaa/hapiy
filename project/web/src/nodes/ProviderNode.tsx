@@ -79,7 +79,7 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
     <div
       ref={rootRef}
       className={cn(
-        'rounded-lg border border-border bg-card text-card-foreground shadow-sm',
+        'rounded-lg border border-border bg-card text-card-foreground',
         !active && 'opacity-60',
         (providerState === 'disabled' || providerState === 'auto-disabled') && 'opacity-60'
       )}

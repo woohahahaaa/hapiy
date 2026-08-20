@@ -67,7 +67,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
   return (
     <div
       ref={rootRef}
-      className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+      className="rounded-lg border border-border bg-card text-card-foreground"
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >
       {models.map((m, i) => (

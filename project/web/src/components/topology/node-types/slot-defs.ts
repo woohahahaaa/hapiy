@@ -51,7 +51,6 @@ export interface RecordConfigSlotDef {
   readonly defaults: {
     readonly recordRequest: boolean
     readonly recordResponse: boolean
-    readonly recordSystem: boolean
   }
 }
 
@@ -171,7 +170,6 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
       defaults: {
         recordRequest: true,
         recordResponse: true,
-        recordSystem: true,
       },
     },
     previewSlot: { enabled: false },

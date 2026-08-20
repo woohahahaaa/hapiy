@@ -17,7 +17,7 @@
   "layout": {
     "nodeGap": 80,
     "rowGap": 80,
-    "modelHubGap": 40,
+    "modelHubGap": 30,
     "groupGap": 80,
     "marginX": 80,
     "marginY": 80,

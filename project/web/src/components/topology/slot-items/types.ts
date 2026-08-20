@@ -69,7 +69,6 @@ export type LogOutputSlotEntry = {
   readonly prefix: string
   readonly recordRequest: boolean
   readonly recordResponse: boolean
-  readonly recordSystem: boolean
   readonly config: Readonly<Record<string, unknown>>
 }
 
@@ -163,7 +162,6 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
         prefix: '',
         recordRequest: true,
         recordResponse: true,
-        recordSystem: true,
         config: {},
       }
   }

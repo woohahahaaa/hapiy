@@ -30,7 +30,6 @@ export interface LogOutputNodeData {
     readonly prefix: string
     readonly record_request: boolean
     readonly record_response: boolean
-    readonly record_system: boolean
   }
 }
 

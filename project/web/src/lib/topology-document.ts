@@ -104,7 +104,6 @@ function parseNode(value: unknown): WorkflowNode {
           prefix: typeof cfg.prefix === 'string' ? cfg.prefix : '',
           record_request: typeof cfg.record_request === 'boolean' ? cfg.record_request : true,
           record_response: typeof cfg.record_response === 'boolean' ? cfg.record_response : true,
-          record_system: typeof cfg.record_system === 'boolean' ? cfg.record_system : true,
         },
       }
     }
@@ -157,7 +156,6 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
         prefix: ln.config.prefix,
         recordRequest: ln.config.record_request,
         recordResponse: ln.config.record_response,
-        recordSystem: ln.config.record_system,
       } as SlotEntry
     }
     default:
@@ -229,7 +227,6 @@ function entryToNode(entry: SlotEntry, _providerName: string): WorkflowNode | nu
           prefix: entry.prefix,
           record_request: entry.recordRequest,
           record_response: entry.recordResponse,
-          record_system: entry.recordSystem,
         },
       }
   }

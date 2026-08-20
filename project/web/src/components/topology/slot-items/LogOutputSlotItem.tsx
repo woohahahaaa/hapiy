@@ -34,23 +34,22 @@ export function LogOutputSlotItem({
       onDelete={onDelete}
       {...drag}
     >
-      <div className="flex flex-col gap-0.5">
-        <span className="text-[10px] text-muted-foreground">日志前缀</span>
-        <Input
-          size="sm"
-          className="text-[10px]"
-          value={localPrefix}
-          onChange={(e) => setLocalPrefix(e.target.value)}
-          onBlur={() => {
-            if (localPrefix !== entry.prefix) {
-              onChange({ ...entry, prefix: localPrefix })
-            }
-          }}
-          placeholder="请输入日志前缀"
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-[10px] text-muted-foreground">记录内容</span>
+      <div className="space-y-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] text-muted-foreground">日志前缀</span>
+          <Input
+            size="sm"
+            className="text-[10px]"
+            value={localPrefix}
+            onChange={(e) => setLocalPrefix(e.target.value)}
+            onBlur={() => {
+              if (localPrefix !== entry.prefix) {
+                onChange({ ...entry, prefix: localPrefix })
+              }
+            }}
+            placeholder="请输入日志前缀"
+          />
+        </div>
         <div className="flex flex-col gap-1">
           <CheckField
             label="记录请求"
@@ -61,11 +60,6 @@ export function LogOutputSlotItem({
             label="记录响应"
             checked={entry.recordResponse}
             onChange={(v) => onChange({ ...entry, recordResponse: v })}
-          />
-          <CheckField
-            label="记录系统"
-            checked={entry.recordSystem}
-            onChange={(v) => onChange({ ...entry, recordSystem: v })}
           />
         </div>
       </div>
@@ -88,7 +82,7 @@ function CheckField({
         checked={checked}
         onCheckedChange={(v) => onChange(v === true)}
       />
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
     </label>
   )
 }

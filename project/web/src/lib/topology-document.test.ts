@@ -13,7 +13,7 @@ describe('parseTopologyDocument', () => {
     const raw = [[
       { type: 'provider', name: 'OpenAI', provider_id: 'p-001' },
       { type: 'requestModify', name: '改写', rule_id: 'r-101', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '/logs/a', record_request: true, record_response: true, record_system: true, auto_close_minutes: 5 } },
+      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '/logs/a', record_request: true, record_response: true, auto_close_minutes: 5 } },
     ]]
 
     const workflows = parseTopologyDocument(raw)
@@ -59,7 +59,7 @@ describe('parseTopologyDocument', () => {
   it('logOutput has no order field', () => {
     const raw = [[
       { type: 'provider', name: 'P' },
-      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '', record_request: true, record_response: true, record_system: true, auto_close_minutes: 5 } },
+      { type: 'logOutput', name: 'log', enabled: true, config: { prefix: '', record_request: true, record_response: true, auto_close_minutes: 5 } },
     ]]
     const workflows = parseTopologyDocument(raw)
     expect(workflows[0][1]).not.toHaveProperty('order')
@@ -72,7 +72,7 @@ describe('slotMapsFromWorkflows', () => {
       { type: 'provider', name: 'P', provider_id: 'p-1' },
       { type: 'requestModify', name: 'b', rule_id: 'r-2', order: 2, enabled: true },
       { type: 'requestModify', name: 'a', rule_id: 'r-1', order: 1, enabled: true },
-      { type: 'logOutput', name: 'log', enabled: false, config: { prefix: '/logs/b', record_request: false, record_response: false, record_system: true, auto_close_minutes: 10 } },
+      { type: 'logOutput', name: 'log', enabled: false, config: { prefix: '/logs/b', record_request: false, record_response: false, auto_close_minutes: 10 } },
     ]])
 
     const maps = slotMapsFromWorkflows(workflows)
@@ -113,7 +113,6 @@ describe('workflowsFromSlotMaps', () => {
       id: 'log-1', slotType: 'logOutput', index: 1, enabled: false,
       prefix: '/logs/hapiy',
       recordRequest: false, recordResponse: false,
-      recordSystem: true,
       config: {},
     })
     const maps = new Map<string, WorkflowEntry>([
@@ -129,7 +128,6 @@ describe('workflowsFromSlotMaps', () => {
     expect(logNode.config.prefix).toBe('/logs/hapiy')
     expect(logNode.config.record_request).toBe(false)
     expect(logNode.config.record_response).toBe(false)
-    expect(logNode.config.record_system).toBe(true)
   })
 })
 
