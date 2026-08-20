@@ -1625,7 +1625,7 @@ export function TopologyPage() {
               disabled={!canUndo}
               title="撤销 (Ctrl/Cmd+Z)"
               aria-label="撤销"
-              className="disabled:opacity-100 disabled:text-muted-foreground/70"
+              className="disabled:opacity-60"
             >
               <AppIcon name="undo" />
             </Button>
@@ -1636,7 +1636,7 @@ export function TopologyPage() {
               disabled={!canRedo}
               title="重做 (Ctrl/Cmd+Shift+Z)"
               aria-label="重做"
-              className="disabled:opacity-100 disabled:text-muted-foreground/70"
+              className="disabled:opacity-60"
             >
               <AppIcon name="redo" />
             </Button>

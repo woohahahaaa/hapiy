@@ -41,13 +41,17 @@ function safeId(edgeId: string): string {
 function buildKeyframes(name: string, light: FlowLightPayload): string {
   const start = Math.max(0, (light.phaseMs / light.cycleMs) * 100)
   const end = Math.min(100, ((light.phaseMs + light.durMs) / light.cycleMs) * 100)
-  const s = start.toFixed(2)
   const g = (start + (end - start) * FLOW_GROW_FRACTION).toFixed(2)
   const e = end.toFixed(2)
+  // The first visible frame must be strictly after 0%, otherwise the loop
+  // wrap (100% → 0%) interpolates opacity 0→1 while the dash is still parked
+  // at the path end (offset FLOW_END_OFFSET), flashing a bright dot at the
+  // end right as the beam appears at the start.
+  const sVisible = Math.max(0.001, start).toFixed(3)
   return (
     `@keyframes ${name}{` +
     `0%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:0}` +
-    `${s}%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:1}` +
+    `${sVisible}%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:1}` +
     `${g}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:100;opacity:var(--beam-on)}` +
     `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:var(--beam-on)}` +
     `${e}%{stroke-dasharray:var(--beam-dash);stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}` +
