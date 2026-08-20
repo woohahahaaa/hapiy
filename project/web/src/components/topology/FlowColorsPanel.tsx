@@ -1,0 +1,100 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { AppIcon } from '@/components/AppIcon'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+
+type FlowColorsPanelProps = {
+  readonly colors: readonly string[]
+  readonly onChange: (colors: string[]) => void
+}
+
+/**
+ * Bottom-right toolbar button that opens the model-node colour palette dialog.
+ * Colours are assigned to model nodes round-robin; each model lamp and its
+ * light beam use the assigned colour. With an empty table the theme colour is
+ * used. Changes persist through the caller (backend setting).
+ */
+export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  const add = () => {
+    const value = draft.trim()
+    if (!value) return
+    onChange([...colors, value])
+    setDraft('')
+  }
+
+  const remove = (index: number) => {
+    onChange(colors.filter((_, i) => i !== index))
+  }
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={() => setOpen(true)}
+        title="模型节点色值"
+        aria-label="模型节点色值"
+      >
+        <AppIcon name="tune" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>模型节点色值</DialogTitle>
+            <DialogDescription>
+              为模型节点分配流光颜色，按顺序循环使用；未配置时使用主题色
+            </DialogDescription>
+          </DialogHeader>
+          {colors.length === 0 && (
+            <div className="mb-1 text-xs text-muted-foreground">未配置，使用主题色</div>
+          )}
+          <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
+            {colors.map((c, i) => (
+              <div key={`${i}-${c}`} className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted">
+                <span className="size-3.5 shrink-0 rounded-full border border-border" style={{ backgroundColor: c }} />
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-card-foreground">{c}</span>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => remove(i)}
+                  aria-label="删除色值"
+                >
+                  <AppIcon name="close" className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') add()
+              }}
+              placeholder="如 #ff5c8a"
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
+            />
+            <Button variant="outline" size="sm" onClick={add}>
+              添加
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}

@@ -26,8 +26,9 @@ import { ModelHubNode } from '@/nodes/ModelHubNode'
 import { FlatSlotNode } from '@/nodes/FlatSlotNode'
 import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
+import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { dashboardApi, apiBaseUrl, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
+import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
 import { FlowLightEdge, type FlowLightPayload } from '@/edges/FlowLightEdge'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
@@ -66,8 +67,10 @@ const edgeTypes = {
 
 // Flow-light animation timing (ms): each chain edge sweeps FLOW_PER_EDGE_MS;
 // one full chain cycle lasts edgeCount * FLOW_PER_EDGE_MS and loops while the
-// request is active.
+// request is active. FLOW_SYNC_INTERVAL_MS mirrors the activity page poll.
 const FLOW_PER_EDGE_MS = 340
+const FLOW_SYNC_INTERVAL_MS = 2000
+const FLOW_COLORS_SETTING_KEY = 'flow_light_colors'
 
 const defaultEdgeOptions = {
   animated: topologyConfig.edge.animated,
@@ -316,6 +319,19 @@ export function TopologyPage() {
     tpRef.current = next
     setTp(next)
   }, [])
+  const [flowColors, setFlowColors] = useState<readonly string[]>([])
+  const flowColorsRef = useRef<readonly string[]>([])
+  const modelColorRef = useRef<Map<string, string>>(new Map())
+  const applyFlowColors = useCallback((next: readonly string[]) => {
+    flowColorsRef.current = next
+    setFlowColors(next)
+  }, [])
+  const handleFlowColorsChange = useCallback((next: string[]) => {
+    applyFlowColors(next)
+    void dashboardApi.updateSetting(FLOW_COLORS_SETTING_KEY, JSON.stringify(next)).catch(() => {
+      // palette is kept in memory even if persistence fails
+    })
+  }, [applyFlowColors])
   const [dirty, setDirty] = useState(false)
   const dirtyRef = useRef(false)
   const markDirty = useCallback(() => {
@@ -638,16 +654,21 @@ export function TopologyPage() {
     const entryModels = new Map<string, Array<{ id: string; label: string; active: boolean }>>()
 
     const sortedModelNames = Array.from(globalModelActive.keys()).sort((a, b) => a.localeCompare(b))
-    for (const m of sortedModelNames) {
+    const palette = flowColors.length > 0 ? flowColors : null
+    const colorMap = new Map<string, string>()
+    for (const [i, m] of sortedModelNames.entries()) {
       const nodeId = `model-${m}`
       const active = globalModelActive.get(m) ?? false
+      const color = palette ? palette[i % palette.length] : 'var(--primary)'
+      colorMap.set(m, color)
       nodes.push({
         id: nodeId,
         type: 'modelHub',
         position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-        data: { models: [{ id: m, label: m, disabled: !active }], simplified: true },
+        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true },
       })
     }
+    modelColorRef.current = colorMap
 
     for (const entry of canvas.topLevel) {
       if (!isRequestEntry(entry)) continue
@@ -666,7 +687,7 @@ export function TopologyPage() {
 
     return { nodes, entryModels, modelLinks }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, reachableProvidersForEntry, layoutSnapshot])
+  }, [canvas, reachableProvidersForEntry, layoutSnapshot, flowColors])
 
   const topLevelNodes = useMemo(() => {
     if (!canvas) return [] as Node[]
@@ -811,7 +832,7 @@ export function TopologyPage() {
         sourceHandle: link.modelName,
         targetHandle: link.modelName,
         animated: topologyConfig.edge.animated,
-        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: link.active ? 1 : 0.6 },
+        style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: link.active ? 0.5 : 0.3 },
       })
     }
     return edges
@@ -834,8 +855,8 @@ export function TopologyPage() {
   const canvasRef = useRef<FlatCanvas | null>(null)
   canvasRef.current = canvas
   const flowRunIdRef = useRef(0)
-  const activeByModelRef = useRef<Map<string, Set<string>>>(new Map())
   const modelRunRef = useRef<Map<string, number>>(new Map())
+
   const clearLightForModel = useCallback(
     (model: string) => {
       const runId = modelRunRef.current.get(model)
@@ -862,6 +883,7 @@ export function TopologyPage() {
       modelRunRef.current.set(model, runId)
       const edgeCount = chain.length - 1
       const cycleMs = edgeCount * FLOW_PER_EDGE_MS
+      const color = modelColorRef.current.get(model) ?? 'var(--primary)'
       const lights = new Map<string, FlowLightPayload>()
       for (let i = 0; i < edgeCount; i++) {
         lights.set(wiringEdgeId(chain[i], chain[i + 1]), {
@@ -869,6 +891,7 @@ export function TopologyPage() {
           cycleMs,
           phaseMs: i * FLOW_PER_EDGE_MS,
           durMs: FLOW_PER_EDGE_MS,
+          color,
         })
       }
       setEdges((prev) =>
@@ -882,67 +905,41 @@ export function TopologyPage() {
     [setEdges],
   )
 
-  const handleRequestStarted = useCallback(
-    (event: MessageEvent) => {
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(event.data)
-      } catch {
-        return
-      }
-      if (typeof parsed !== 'object' || parsed === null) return
-      const record = parsed as Record<string, unknown>
-      if (typeof record.model !== 'string') return
-      const requestId = typeof record.request_id === 'string' ? record.request_id : null
-      const provider = typeof record.provider === 'string' ? record.provider : null
-
-      const active = activeByModelRef.current.get(record.model) ?? new Set<string>()
-      if (requestId) active.add(requestId)
-      activeByModelRef.current.set(record.model, active)
-      if (modelRunRef.current.has(record.model)) return
-
-      const chain = computeLightChain(record.model, provider, edgesRef.current, canvasRef.current)
-      if (!chain || chain.length < 2) return
+  // Same monitoring source as the activity page: poll the active-requests API
+  // and mirror it with flow lights. A model with at least one in-flight
+  // request (endTime null) gets a looping beam down its workflow chain; once
+  // no request for it remains, the beam is removed. Polling (not SSE events)
+  // keeps the topology in sync with the activity page even across page
+  // switches or dropped connections.
+  const syncFlowLights = useCallback(async () => {
+    let requests: readonly ActiveRequest[]
+    try {
+      requests = await dashboardApi.getActiveRequests()
+    } catch {
+      return
+    }
+    const activeModels = new Map<string, string | null>()
+    for (const req of requests) {
+      if (req.endTime === null) activeModels.set(req.model, req.provider ?? null)
+    }
+    for (const [model, provider] of activeModels) {
+      if (modelRunRef.current.has(model)) continue
+      const chain = computeLightChain(model, provider, edgesRef.current, canvasRef.current)
+      if (!chain || chain.length < 2) continue
       const chainWithBreak = applyInternalBreak(chain, provider, canvasRef.current, providerByName, duplicateProviderNames)
-      if (chainWithBreak.length < 2) return
-      applyLightToChain(record.model, chainWithBreak)
-    },
-    [providerByName, duplicateProviderNames, applyLightToChain],
-  )
-
-  const handleRequestFinished = useCallback(
-    (event: MessageEvent) => {
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(event.data)
-      } catch {
-        return
-      }
-      if (typeof parsed !== 'object' || parsed === null) return
-      const record = parsed as Record<string, unknown>
-      if (typeof record.model !== 'string') return
-      const requestId = typeof record.request_id === 'string' ? record.request_id : null
-      const active = activeByModelRef.current.get(record.model)
-      if (!active) return
-      if (requestId) active.delete(requestId)
-      if (active.size > 0) return
-      activeByModelRef.current.delete(record.model)
-      clearLightForModel(record.model)
-    },
-    [clearLightForModel],
-  )
+      if (chainWithBreak.length < 2) continue
+      applyLightToChain(model, chainWithBreak)
+    }
+    for (const model of [...modelRunRef.current.keys()]) {
+      if (!activeModels.has(model)) clearLightForModel(model)
+    }
+  }, [providerByName, duplicateProviderNames, applyLightToChain, clearLightForModel])
 
   useEffect(() => {
-    const es = new EventSource(`${apiBaseUrl}/v1/dashboard/events`, { withCredentials: true })
-    es.addEventListener('request_started', handleRequestStarted)
-    es.addEventListener('request_finished', handleRequestFinished)
-    return () => {
-      es.removeEventListener('request_started', handleRequestStarted)
-      es.removeEventListener('request_finished', handleRequestFinished)
-      es.close()
-    }
-  }, [handleRequestStarted, handleRequestFinished])
-
+    void syncFlowLights()
+    const timer = window.setInterval(() => void syncFlowLights(), FLOW_SYNC_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [syncFlowLights])
   const loadLayoutBestEffort = useCallback(async () => {
     try {
       const layout = await dashboardApi.getLayout()
@@ -958,9 +955,10 @@ export function TopologyPage() {
     setLoading(true)
     setError(null)
     try {
-      const [providers, flat] = await Promise.all([
+      const [providers, flat, settings] = await Promise.all([
         dashboardApi.listProviders({ limit: 1000, offset: 0 }),
         dashboardApi.getFlatTopology(),
+        dashboardApi.getSettings(),
       ])
       setProviders(providers.providers)
       historyRef.current = []
@@ -970,13 +968,24 @@ export function TopologyPage() {
       lastKnownVersionRef.current = flat.version ?? null
       dirtyRef.current = false
       setDirty(false)
+      const stored = settings.find((s) => s.key === FLOW_COLORS_SETTING_KEY)
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored.value)
+          if (Array.isArray(parsed) && parsed.every((c) => typeof c === 'string')) {
+            applyFlowColors(parsed)
+          }
+        } catch {
+          // malformed stored palette: fall back to theme colour
+        }
+      }
       await loadLayoutBestEffort()
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载数据失败')
     } finally {
       setLoading(false)
     }
-  }, [setTopology, syncHistory, loadLayoutBestEffort])
+  }, [setTopology, syncHistory, loadLayoutBestEffort, applyFlowColors])
 
   useEffect(() => {
     loadData()
@@ -1699,6 +1708,7 @@ export function TopologyPage() {
             <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
               <AppIcon name="auto_fix_high" />
             </Button>
+            <FlowColorsPanel colors={flowColors} onChange={handleFlowColorsChange} />
           </Panel>
         </ReactFlow>
         {selMode && (

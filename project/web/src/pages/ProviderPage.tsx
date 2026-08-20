@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/ui/checkbox'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'

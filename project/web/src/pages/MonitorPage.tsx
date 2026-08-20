@@ -3,7 +3,6 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 
 import { Button } from '@/components/ui/button'
-import { EmptyCell } from '@/components/ui/empty-cell'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -14,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
@@ -100,6 +99,17 @@ function formatElapsed(ms: number): string {
   return `${Math.floor(ms)}ms`
 }
 
+function formatDateTimeCell(value: unknown): { date: string; time: string } | null {
+  if (value === null || value === undefined || value === '') return null
+  const d = value instanceof Date ? value : new Date(value as string | number)
+  if (Number.isNaN(d.getTime())) return { date: String(value), time: '' }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+  }
+}
+
 const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   {
     key: 'status',
@@ -118,19 +128,31 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
       return row.stage === 'queued' ? 'bg-warning/30' : 'bg-primary/15'
     },
   },
-  { key: 'startTime', label: '开始时间', defaultWidth: { kind: 'pixel', value: 160 }, isTime: true },
+  {
+    key: 'startTime',
+    label: '开始时间',
+    defaultWidth: { kind: 'pixel', value: 160 },
+    defaultOverflow: 'wrap',
+    slot: {
+      line1: (row) => formatDateTimeCell(row.startTime)?.date ?? null,
+      line2: (row) => formatDateTimeCell(row.startTime)?.time ?? null,
+    },
+  },
   {
     key: 'endTime',
     label: '结束时间',
     defaultWidth: { kind: 'pixel', value: 160 },
-    isTime: true,
-    render: (v) => (v === null || v === undefined ? null : v),
+    defaultOverflow: 'wrap',
+    slot: {
+      line1: (row) => formatDateTimeCell(row.endTime)?.date ?? null,
+      line2: (row) => formatDateTimeCell(row.endTime)?.time ?? null,
+    },
   },
   { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
   { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
-  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, render: (v) => (v ? String(v) : <EmptyCell value={null} />) },
-  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, render: (v) => (v ? 'SSE' : <EmptyCell value={null} />) },
+  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 } },
+  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 } },
   {
     key: 'elapsedMs',
     label: '耗时',

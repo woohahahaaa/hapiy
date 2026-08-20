@@ -658,11 +658,11 @@ export function DataTable<T extends Record<string, unknown>>({
                     data-slot="table-row"
                     ref={setTrRef(rowIdx)}
                     onClick={
-                      onRowClick
-                        ? magicActive
-                          ? () => setPendingReference({ row, rowIdx })
-                          : () => onRowClick(row)
-                        : undefined
+                      magicActive
+                        ? () => setPendingReference({ row, rowIdx })
+                        : onRowClick
+                          ? () => onRowClick(row)
+                          : undefined
                     }
                     className={cn(
                       "border-b transition-colors data-[state=selected]:bg-muted",

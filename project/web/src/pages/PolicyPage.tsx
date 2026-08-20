@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 
 import { Switch } from '@/components/ui/switch'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
   Dialog,
   DialogContent,
@@ -377,7 +377,6 @@ function HeartbeatPage() {
       label: '回复内容',
       defaultWidth: { kind: 'percent', value: 20 },
       defaultOverflow: 'wrap',
-      render: (_, row) => <span className="text-xs max-w-[200px] truncate">{row.replyContent}</span>,
     },
     { key: 'timeout', label: '超时', defaultWidth: { kind: 'pixel', value: 80 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
     {

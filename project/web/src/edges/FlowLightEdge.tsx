@@ -1,55 +1,59 @@
 import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react'
+import type { CSSProperties } from 'react'
 
 // Light payload attached to an edge's `data.light` while a flow animation runs.
 // The whole chain loops on a shared `cycleMs` clock; each edge becomes visible
 // and sweeps during its own `phaseMs` window of length `durMs`, so the beam
 // relays down the chain and restarts from the model node once the cycle ends.
+// `color` is the model lamp colour the beam inherits.
 export type FlowLightPayload = {
   readonly runId: number
   readonly cycleMs: number
   readonly phaseMs: number
   readonly durMs: number
+  readonly color: string
 }
 
-// The light is a moving dash on the edge path: pathLength normalises the path
-// to 100 units so dash length / offset are path-length independent. The head
-// dash is solid primary; a longer, fainter tail dash trails behind it so the
-// light reads as a comet with a fading tail.
+// The light is a moving dash on the edge path (pathLength normalises it to 100
+// units). The dash grows from zero length at the edge start, then slides to
+// the far end (dashoffset 100 → 22 lands the dash exactly at the path end; 0
+// would wrap it back around to the start). A longer, fainter trailing dash
+// shares the same keyframes via CSS variables.
 const FLOW_HEAD_LEN = 22
 const FLOW_TAIL_LEN = 55
 const FLOW_TAIL_OPACITY = 0.35
+const FLOW_GROW_FRACTION = 0.3
 
 function safeId(edgeId: string): string {
   return edgeId.replace(/[^a-zA-Z0-9_-]/g, '_')
 }
 
-// Per-edge loop keyframes: the dash sits off-path before the window, sweeps
-// from start to end inside it, and fades out; repeats on the shared chain cycle.
+// Per-edge loop keyframes: zero-length at the window start, grow to full
+// length in place, slide to the path end, then vanish so the next edge takes
+// over. `--beam-len`/`--beam-on` let the head and tail dashes share the frame.
 function buildKeyframes(name: string, light: FlowLightPayload): string {
   const start = Math.max(0, (light.phaseMs / light.cycleMs) * 100)
   const end = Math.min(100, ((light.phaseMs + light.durMs) / light.cycleMs) * 100)
   const s = start.toFixed(2)
+  const g = (start + (end - start) * FLOW_GROW_FRACTION).toFixed(2)
   const e = end.toFixed(2)
-  // The dash sweeps 100→0 inside the window; at `e` it snaps to invisible so
-  // the next edge (whose path starts at this node) takes over immediately —
-  // the light reads as one continuous beam across nodes, no dwell at ends.
   return (
     `@keyframes ${name}{` +
-    `0%{stroke-dashoffset:100;opacity:0}` +
-    `${s}%{stroke-dashoffset:100;opacity:1}` +
-    `${e}%{stroke-dashoffset:0;opacity:1}` +
-    `${e}%{stroke-dashoffset:0;opacity:0}` +
-    `100%{stroke-dashoffset:0;opacity:0}}`
+    `0%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:0}` +
+    `${s}%{stroke-dasharray:0 100;stroke-dashoffset:100;opacity:1}` +
+    `${g}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:100;opacity:var(--beam-on)}` +
+    `${e}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:var(--beam-on)}` +
+    `${e}%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:0}` +
+    `100%{stroke-dasharray:var(--beam-len) calc(100 - var(--beam-len));stroke-dashoffset:22;opacity:0}}`
   )
 }
 
 /**
  * Default bezier edge that renders a flowing light beam while `data.light` is
- * set. The beam is a moving dash along the edge path (stroke-dashoffset
- * animation on a pathLength-normalised overlay path) with a fainter trailing
- * dash, so it needs no rotation or motion-path support. `phaseMs` offsets +
- * the shared `cycleMs` loop make the sweep relay down the chain and repeat for
- * the request's lifetime.
+ * set. The beam is a growing dash sliding along the edge path (stroke-dash
+ * animation on a pathLength-normalised overlay), coloured by the model lamp.
+ * `phaseMs` offsets + the shared `cycleMs` loop make the sweep relay down the
+ * chain and repeat for the request's lifetime.
  */
 export function FlowLightEdge(props: EdgeProps) {
   const {
@@ -81,8 +85,6 @@ export function FlowLightEdge(props: EdgeProps) {
 
   const animStyle = light
     ? {
-        strokeDasharray: `${FLOW_HEAD_LEN} ${100 - FLOW_HEAD_LEN}`,
-        strokeDashoffset: 100,
         animationName: kfName,
         animationDuration: `${light.cycleMs}ms`,
         animationTimingFunction: 'linear',
@@ -91,29 +93,35 @@ export function FlowLightEdge(props: EdgeProps) {
       }
     : undefined
 
+  const dashVars = (len: number, on: number): CSSProperties =>
+    ({ '--beam-len': String(len), '--beam-on': String(on) }) as CSSProperties
+
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
       {light && (
-        <g key={`beam-${light.runId}`} className="flow-light-beam">
+        <g
+          key={`beam-${light.runId}`}
+          style={{ filter: `drop-shadow(0 0 4px ${light.color})` }}
+        >
           <style>{css}</style>
           <path
             d={path}
             fill="none"
-            stroke="var(--primary)"
+            stroke={light.color}
             strokeWidth={5}
             strokeLinecap="round"
             pathLength={100}
-            style={{ ...animStyle, strokeDasharray: `${FLOW_TAIL_LEN} ${100 - FLOW_TAIL_LEN}`, opacity: FLOW_TAIL_OPACITY }}
+            style={{ ...animStyle, ...dashVars(FLOW_TAIL_LEN, FLOW_TAIL_OPACITY) }}
           />
           <path
             d={path}
             fill="none"
-            stroke="var(--primary)"
+            stroke={light.color}
             strokeWidth={5}
             strokeLinecap="round"
             pathLength={100}
-            style={animStyle}
+            style={{ ...animStyle, ...dashVars(FLOW_HEAD_LEN, 1) }}
           />
         </g>
       )}

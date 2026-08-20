@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import { EmptyCell } from '@/components/ui/empty-cell'
 import { Switch } from '@/components/ui/switch'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -261,11 +260,11 @@ export function ChannelAffinityPage() {
       key: 'keySources',
       label: '亲和字段',
       defaultWidth: { kind: 'percent', value: 25 },
-      render: (_, row) => {
+      accessor: (row) => {
         const joined = row.keySources
           .map((source) => source.type === 'request_header' ? source.key : source.path)
           .join(', ')
-        return <EmptyCell value={joined} />
+        return joined || null
       },
     },
     {

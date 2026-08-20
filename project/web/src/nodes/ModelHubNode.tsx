@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 
 interface ModelHubNodeData {
-  models?: Array<{ id: string; label: string; disabled?: boolean }>
+  models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
   simplified?: boolean
 }
 
@@ -54,7 +54,7 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >
-            <span className="size-2 rounded-full bg-primary" />
+            <span className="size-2 rounded-full" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
             <span>{m.label}</span>
             <Handle
               type="source"

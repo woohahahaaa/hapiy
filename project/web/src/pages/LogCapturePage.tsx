@@ -5,7 +5,6 @@ import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { EmptyCell } from '@/components/ui/empty-cell'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
@@ -15,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { DataTable, type ColumnDef } from '@/components/ui/DataTable'
+import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
   dashboardApi,
   type DateRange,
@@ -39,6 +38,17 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+function formatDateTimeCell(value: unknown): { date: string; time: string } | null {
+  if (value === null || value === undefined || value === '') return null
+  const d = value instanceof Date ? value : new Date(value as string | number)
+  if (Number.isNaN(d.getTime())) return { date: String(value), time: '' }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`,
+  }
 }
 
 export function LogCapturePage() {
@@ -219,41 +229,41 @@ export function LogCapturePage() {
       key: 'created_at',
       label: '时间',
       defaultWidth: { kind: 'pixel', value: 160 },
-      isTime: true,
-      render: (_, row) => (row.kind === 'pair' ? row.pair.created_at : row.file.created_at),
+      defaultOverflow: 'wrap',
+      slot: {
+        line1: (row) => formatDateTimeCell(row.kind === 'pair' ? row.pair.created_at : row.file.created_at)?.date ?? null,
+        line2: (row) => formatDateTimeCell(row.kind === 'pair' ? row.pair.created_at : row.file.created_at)?.time ?? null,
+      },
     },
     {
       key: 'prefix',
       label: '文件夹路径',
       defaultWidth: { kind: 'percent', value: 18 },
-      render: (_, row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
+      accessor: (row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
     },
     {
       key: 'token_name',
       label: '令牌',
       defaultWidth: { kind: 'percent', value: 10 },
-      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.token_name} /> : <EmptyCell value={null} />),
+      accessor: (row) => (row.kind === 'pair' ? row.pair.token_name : null),
     },
     {
       key: 'provider_name',
       label: '供应商',
       defaultWidth: { kind: 'percent', value: 12 },
-      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.provider_name} /> : <EmptyCell value={null} />),
+      accessor: (row) => (row.kind === 'pair' ? row.pair.provider_name : null),
     },
     {
       key: 'model_name',
       label: '模型',
       defaultWidth: { kind: 'percent', value: 12 },
-      render: (_, row) => (row.kind === 'pair' ? <EmptyCell value={row.pair.model_name} /> : <EmptyCell value={null} />),
+      accessor: (row) => (row.kind === 'pair' ? row.pair.model_name : null),
     },
     {
       key: 'source',
       label: '来源',
       defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => {
-        const source = row.kind === 'pair' ? row.pair.source : row.file.source
-        return <EmptyCell value={source} />
-      },
+      accessor: (row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
     },
     {
       key: 'type',
@@ -277,14 +287,14 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) => {
         const isStream = row.kind === 'pair' ? row.pair.is_stream : false
-        return isStream ? <Badge variant="secondary">SSE</Badge> : <EmptyCell value={null} />
+        return isStream ? <Badge variant="secondary">SSE</Badge> : null
       },
     },
     {
       key: 'name',
       label: '文件名/请求ID',
       defaultWidth: { kind: 'percent', value: 25 },
-      render: (_, row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),
+      accessor: (row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),
     },
     {
       key: 'size',
