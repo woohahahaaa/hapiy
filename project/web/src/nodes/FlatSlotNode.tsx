@@ -7,6 +7,7 @@ import { SlotItemCard } from '@/components/topology/slot-items/SlotItemCard'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import { cn } from '@/lib/utils'
+import type { ProviderFlashPayload } from '@/edges/FlowLightEdge'
 import type {
   RequestModifySlotEntry,
   ResponseModifySlotEntry,
@@ -53,6 +54,7 @@ interface FlatSlotNodeData {
   enabled?: boolean
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
+  providerFlashes?: ReadonlyMap<string, ProviderFlashPayload>
   onAddProvider?: () => void
   onSelectProvider?: (providerId: string, name: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
@@ -90,6 +92,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     externallyDisabled = false,
     children = [],
     providers = [],
+    providerFlashes,
     onAddProvider,
     onSelectProvider,
     onToggleProvider,
@@ -257,6 +260,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               child={child}
               providers={providers}
               takenLabels={takenLabels}
+              flash={providerFlashes?.get(child.id)}
               isDragging={dragIndex === i}
               isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
               onDragStart={() => setDragIndex(i)}
@@ -318,6 +322,7 @@ interface ProviderCardProps {
   child: FlatProviderChild
   providers: readonly string[]
   takenLabels: Set<string>
+  flash?: ProviderFlashPayload
   isDragging: boolean
   isDragOver: boolean
   onDragStart: () => void
@@ -328,7 +333,7 @@ interface ProviderCardProps {
   onDelete: () => void
 }
 
-function ProviderCard({ index, child, providers, takenLabels, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
+function ProviderCard({ index, child, providers, takenLabels, flash, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
   const filteredProviders = providers.filter((n) => n === child.label || !takenLabels.has(n))
   const state = child.autoDisabled ? 'auto-disabled' : child.providerStatus ? 'enabled' : 'disabled'
   return (
@@ -342,6 +347,7 @@ function ProviderCard({ index, child, providers, takenLabels, isDragging, isDrag
       onDrop={onDrop}
       isDragging={isDragging}
       isDragOver={isDragOver}
+      flash={flash}
       className={cn(
         state === 'disabled' && 'opacity-60',
         state === 'auto-disabled' && 'opacity-60',

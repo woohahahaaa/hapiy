@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react'
 import type { CSSProperties } from 'react'
 
@@ -7,6 +8,20 @@ import type { CSSProperties } from 'react'
 // relays down the chain and restarts from the model node once the cycle ends.
 // `color` is the model lamp colour the beam inherits.
 export type FlowLightPayload = {
+  readonly runId: number
+  readonly cycleMs: number
+  readonly phaseMs: number
+  readonly durMs: number
+  readonly color: string
+}
+
+// Provider slot border flash payload attached to a provider slot while its
+// active flow light passes through. `phaseMs` is the start of the chain edge
+// entering the slot (the beam arrives at the slot input); `durMs` equals
+// FLOW_PER_EDGE_MS so the flash lasts exactly the time the beam spends crossing
+// the slot node. The flash ends right as the beam starts flowing out of the
+// slot output.
+export type ProviderFlashPayload = {
   readonly runId: number
   readonly cycleMs: number
   readonly phaseMs: number
@@ -59,6 +74,34 @@ function buildKeyframes(name: string, light: FlowLightPayload): string {
     `${end.toFixed(3)}%{stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}` +
     `100%{stroke-dashoffset:${FLOW_END_OFFSET};opacity:0}}`
   )
+}
+
+// Provider flash keyframes animate `border-color` and `box-shadow` directly,
+// keeping them at resting values outside the flash window and ramping to the
+// provider colour at the midpoint.
+export function buildFlashKeyframes(name: string, flash: ProviderFlashPayload): string {
+  const start = Math.max(0, (flash.phaseMs / flash.cycleMs) * 100)
+  const end = Math.min(100, ((flash.phaseMs + flash.durMs) / flash.cycleMs) * 100)
+  const mid = (start + end) / 2
+  const startHidden = Math.max(0, start - 0.001).toFixed(3)
+  const startVisible = Math.max(0.001, start).toFixed(3)
+  const endVisible = Math.max(start, end - 0.001).toFixed(3)
+  const rest = 'border-color:var(--border);box-shadow:0 0 0 transparent'
+  const peak = `border-color:${flash.color};box-shadow:0 0 8px ${flash.color},inset 0 0 2px ${flash.color}`
+  return (
+    `@keyframes ${name}{` +
+    `0%{${rest}}` +
+    `${startHidden}%{${rest}}` +
+    `${startVisible}%{${rest}}` +
+    `${mid.toFixed(3)}%{${peak}}` +
+    `${endVisible}%{${rest}}` +
+    `${end.toFixed(3)}%{${rest}}` +
+    `100%{${rest}}}`
+  )
+}
+
+export function flashKeyframeName(flash: ProviderFlashPayload): string {
+  return `provider-flash-${flash.runId}-${flash.phaseMs}`
 }
 
 /**

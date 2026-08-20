@@ -29,7 +29,7 @@ import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
-import { FlowLightEdge, type FlowLightPayload } from '@/edges/FlowLightEdge'
+import { FlowLightEdge, type FlowLightPayload, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -625,6 +625,13 @@ export function TopologyPage() {
     [canvas, providerByName, duplicateProviderNames],
   )
 
+  // Per-slot flash state mirrors the flow light. Keyed by slotId and runId so
+  // the same slot flashing for two models updates in place and stale runs don't
+  // clobber an in-progress flash. Declared before topLevelNodes because it feeds
+  // the provider slot's node data.
+  const [providerFlashes, setProviderFlashes] = useState<ReadonlyMap<string, ProviderFlashPayload>>(new Map())
+  const providerFlashesRef = useRef<Map<string, ProviderFlashPayload>>(new Map())
+
   const modelNodes = useMemo(() => {
     const empty = {
       nodes: [] as Node[],
@@ -762,6 +769,7 @@ export function TopologyPage() {
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => p.name),
+            providerFlashes,
             onAddProvider: () => handleAddProvider(node.id),
             onSelectProvider: (providerId: string, name: string) => handleSelectProvider(providerId, name),
             onToggleProvider: (providerId: string, enabled: boolean) =>
@@ -804,7 +812,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, providerFlashes])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -857,6 +865,10 @@ export function TopologyPage() {
     // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
     // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
     modelRunRef.current.clear()
+    modelProviderRef.current.clear()
+    providerFlashesRef.current.clear()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProviderFlashes(new Map())
   }, [baseEdges, setEdges])
 
   // ── Flow light (request_started SSE) ──
@@ -868,12 +880,38 @@ export function TopologyPage() {
   canvasRef.current = canvas
   const flowRunIdRef = useRef(0)
   const modelRunRef = useRef<Map<string, number>>(new Map())
+  // Tracks the slotId each in-flight model's flash was scheduled on so
+  // clearLightForModel can drop the matching flash in the same sweep.
+  const modelProviderRef = useRef<Map<string, string>>(new Map())
+
+  const setProviderFlash = useCallback(
+    (slotId: string, payload: ProviderFlashPayload) => {
+      providerFlashesRef.current.set(slotId, payload)
+      setProviderFlashes(new Map(providerFlashesRef.current))
+    },
+    [setProviderFlashes],
+  )
+
+  const clearProviderFlash = useCallback(
+    (slotId: string, runId: number) => {
+      const current = providerFlashesRef.current.get(slotId)
+      if (!current || current.runId !== runId) return
+      providerFlashesRef.current.delete(slotId)
+      setProviderFlashes(new Map(providerFlashesRef.current))
+    },
+    [setProviderFlashes],
+  )
 
   const clearLightForModel = useCallback(
     (model: string) => {
       const runId = modelRunRef.current.get(model)
       if (runId === undefined) return
       modelRunRef.current.delete(model)
+      const slotId = modelProviderRef.current.get(model)
+      if (slotId) {
+        modelProviderRef.current.delete(model)
+        clearProviderFlash(slotId, runId)
+      }
       setEdges((prev) =>
         prev.map((edge) => {
           const light = edge.data?.light as FlowLightPayload | undefined
@@ -886,11 +924,11 @@ export function TopologyPage() {
         }),
       )
     },
-    [setEdges],
+    [setEdges, clearProviderFlash],
   )
 
   const applyLightToChain = useCallback(
-    (model: string, chain: string[]) => {
+    (model: string, chain: string[], providerName: string | null) => {
       const runId = (flowRunIdRef.current += 1)
       modelRunRef.current.set(model, runId)
       const edgeCount = chain.length - 1
@@ -913,8 +951,33 @@ export function TopologyPage() {
           return { ...edge, data: { ...edge.data, light } }
         }),
       )
+      // Provider card border flash: find the provider child (by name) inside
+      // the chain's provider slot. Flash is keyed by the provider child id and
+      // starts when the beam enters the slot input (chain index), lasting
+      // FLOW_PER_EDGE_MS — ending as the beam starts leaving the slot output.
+      if (providerName && canvasRef.current) {
+        const canvas = canvasRef.current
+        for (let i = 0; i < chain.length; i++) {
+          const node = canvas.topLevel.find((n) => n.id === chain[i])
+          if (!node || !isProviderSlot(node)) continue
+          const children = canvas.providers.filter(
+            (p) => canvas.providerSlotOf.get(p.id) === node.id,
+          )
+          const matched = children.find((p) => p.name === providerName)
+          if (!matched) continue
+          modelProviderRef.current.set(model, matched.id)
+          setProviderFlash(matched.id, {
+            runId,
+            cycleMs,
+            phaseMs: i * FLOW_PER_EDGE_MS,
+            durMs: FLOW_PER_EDGE_MS,
+            color,
+          })
+          break
+        }
+      }
     },
-    [setEdges],
+    [setEdges, setProviderFlash],
   )
 
   // Same monitoring source as the activity page: poll the active-requests API
@@ -940,7 +1003,7 @@ export function TopologyPage() {
       if (!chain || chain.length < 2) continue
       const chainWithBreak = applyInternalBreak(chain, provider, canvasRef.current, providerByName, duplicateProviderNames)
       if (chainWithBreak.length < 2) continue
-      applyLightToChain(model, chainWithBreak)
+      applyLightToChain(model, chainWithBreak, provider)
     }
     for (const model of [...modelRunRef.current.keys()]) {
       if (!activeModels.has(model)) clearLightForModel(model)

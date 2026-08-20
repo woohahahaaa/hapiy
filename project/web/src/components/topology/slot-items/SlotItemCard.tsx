@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { nodeRenderBounds } from '@/config/topology-config'
+import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
 
 interface SlotItemCardProps {
   index: number
@@ -18,6 +19,7 @@ interface SlotItemCardProps {
   isDragOver?: boolean
   enableControl?: ReactNode
   dimContentWhenDisabled?: boolean
+  flash?: ProviderFlashPayload
 }
 
 export function SlotItemCard({
@@ -34,7 +36,18 @@ export function SlotItemCard({
   isDragOver,
   enableControl,
   dimContentWhenDisabled = false,
+  flash,
 }: SlotItemCardProps) {
+  const kfName = flash ? flashKeyframeName(flash) : ''
+  const flashAnim: CSSProperties | undefined = flash
+    ? {
+        animationName: kfName,
+        animationDuration: `${flash.cycleMs}ms`,
+        animationTimingFunction: 'linear',
+        animationIterationCount: 'infinite',
+        animationFillMode: 'forwards',
+      }
+    : undefined
   return (
     <div
       onDragOver={(e) => {
@@ -59,8 +72,10 @@ export function SlotItemCard({
       style={{
         minWidth: nodeRenderBounds.minWidth,
         maxWidth: nodeRenderBounds.maxWidth,
+        ...(flashAnim ?? {}),
       }}
     >
+      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (
