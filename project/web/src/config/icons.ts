@@ -54,6 +54,7 @@ import {
   More,
   ParagraphBreak,
   TextWrapTruncation,
+  BackgroundColor,
 } from '@icon-park/react'
 import type { CSSProperties, ReactElement } from 'react'
 import iconConfig from './icons.json'
@@ -145,6 +146,7 @@ const COMPONENTS: Readonly<Record<string, IconComponent>> = {
   More,
   ParagraphBreak,
   TextWrapTruncation,
+  BackgroundColor,
 }
 
 // 语义化图标名 -> IconPark 组件名（可通过 `icons.json` 编辑）。

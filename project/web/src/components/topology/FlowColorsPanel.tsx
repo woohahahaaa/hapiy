@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -26,9 +25,14 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
   const [draft, setDraft] = useState('')
 
   const add = () => {
-    const value = draft.trim()
-    if (!value) return
-    onChange([...colors, value])
+    const tokens = draft.trim().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return
+    const existing = new Set(colors)
+    const valid = tokens
+      .filter((t) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(t))
+      .filter((t) => !existing.has(t))
+    if (valid.length === 0) return
+    onChange([...colors, ...valid])
     setDraft('')
   }
 
@@ -45,7 +49,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
         title="模型节点色值"
         aria-label="模型节点色值"
       >
-        <AppIcon name="tune" />
+        <AppIcon name="palette" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -81,18 +85,13 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') add()
               }}
-              placeholder="如 #ff5c8a"
+              placeholder="HEX 色值，空格分隔多个，如 #4ade80 #38bdf8"
               className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
             />
             <Button variant="outline" size="sm" onClick={add}>
               添加
             </Button>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              关闭
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

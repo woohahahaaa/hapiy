@@ -1613,10 +1613,34 @@ export function TopologyPage() {
         description="可视化编辑请求转发的拓扑结构"
         status={`请求入口：${activeEntries}/${totalEntries} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => setVersionsOpen(true)}>
-            <AppIcon name="history" data-icon="inline-start" />
-            历史版本
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="撤销 (Ctrl/Cmd+Z)"
+              aria-label="撤销"
+              className="disabled:opacity-100 disabled:text-muted-foreground/70"
+            >
+              <AppIcon name="undo" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title="重做 (Ctrl/Cmd+Shift+Z)"
+              aria-label="重做"
+              className="disabled:opacity-100 disabled:text-muted-foreground/70"
+            >
+              <AppIcon name="redo" />
+            </Button>
+            <Button variant="outline" size="default" onClick={() => setVersionsOpen(true)}>
+              <AppIcon name="history" data-icon="inline-start" />
+              历史版本
+            </Button>
+          </div>
         }
       />
       <div
@@ -1674,26 +1698,6 @@ export function TopologyPage() {
               aria-label="框选模式"
             >
               <AppIcon name="rect_select" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleUndo}
-              disabled={!canUndo}
-              title="撤销 (Ctrl/Cmd+Z)"
-              aria-label="撤销"
-            >
-              <AppIcon name="undo" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleRedo}
-              disabled={!canRedo}
-              title="重做 (Ctrl/Cmd+Shift+Z)"
-              aria-label="重做"
-            >
-              <AppIcon name="redo" />
             </Button>
             <Button
               variant="outline"
