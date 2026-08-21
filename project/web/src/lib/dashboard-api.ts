@@ -925,6 +925,8 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
     response_count: responseCount,
     has_rewrite: readBoolean(value.has_rewrite, 'pair.has_rewrite'),
     is_stream: value.is_stream === undefined ? false : readBoolean(value.is_stream, 'pair.is_stream'),
+    has_error: readBoolean(value.has_error, 'pair.has_error'),
+    is_incomplete: readBoolean(value.is_incomplete, 'pair.is_incomplete'),
   }
 }
 

@@ -365,7 +365,7 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 120 },
       render: (_, row) =>
         row.kind === 'pair' ? (
-          <Badge variant="default">
+          <Badge variant={row.pair.has_error ? 'destructive' : 'default'}>
             {row.pair.type_label}
             {row.pair.has_rewrite ? (
               <span className="text-amber-600 dark:text-amber-400"> ·修改过</span>
