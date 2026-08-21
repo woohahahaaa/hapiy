@@ -107,15 +107,113 @@ func TestSelectProvider_usesPreParsedModelSet(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	got, err := engine.SelectProvider("supported-model")
+	got, err := engine.SelectProvider("supported-model", "")
 	if err != nil {
 		t.Fatalf("select: %v", err)
 	}
 	if got.ID != provider.ID {
 		t.Fatalf("selected provider: want %s, got %s", provider.ID, got.ID)
 	}
-	if _, err := engine.SelectProvider("not-supported"); err == nil {
+	if _, err := engine.SelectProvider("not-supported", ""); err == nil {
 		t.Fatal("expected error for unsupported model")
+	}
+}
+
+func TestSelectProvider_filtersByAllowedPath(t *testing.T) {
+	engine, db := newTestEngine(t)
+
+	// Both providers support the same model. Only p-responses declares
+	// an endpoint restriction, so a /v1/chat/completions request must
+	// pick p-any and a /v1/responses request must pick p-responses.
+	restricted := model.Provider{
+		ID:        "p-responses",
+		Name:      "responses-only",
+		BaseURLs:  `["https://responses.example.com"]`,
+		Keys:      `["k"]`,
+		Models:    `[{"model":"minimax-m3"}]`,
+		Endpoints: `[{"name":"responses","pathSuffix":"/v1/responses"}]`,
+		Status:    true,
+	}
+	unrestricted := model.Provider{
+		ID:       "p-any",
+		Name:     "any-endpoint",
+		BaseURLs: `["https://any.example.com"]`,
+		Keys:     `["k"]`,
+		Models:   `[{"model":"minimax-m3"}]`,
+		Status:   true,
+	}
+	if err := db.Create(&restricted).Error; err != nil {
+		t.Fatalf("create restricted: %v", err)
+	}
+	if err := db.Create(&unrestricted).Error; err != nil {
+		t.Fatalf("create unrestricted: %v", err)
+	}
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	got, err := engine.SelectProvider("minimax-m3", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("select chat: %v", err)
+	}
+	if got.ID != unrestricted.ID {
+		t.Fatalf("chat completions should pick %s, got %s", unrestricted.ID, got.ID)
+	}
+
+	got, err = engine.SelectProvider("minimax-m3", "/v1/responses")
+	if err != nil {
+		t.Fatalf("select responses: %v", err)
+	}
+	if got.ID != restricted.ID {
+		t.Fatalf("responses should pick %s, got %s", restricted.ID, got.ID)
+	}
+
+	// Sanity: when every provider that matches the model disallows the
+	// path, the call must return ErrNoProvider rather than silently pick a
+	// mismatched upstream.
+	onlyRestricted := model.Provider{
+		ID:        "p-only",
+		Name:      "only-responses",
+		BaseURLs:  `["https://only.example.com"]`,
+		Keys:      `["k"]`,
+		Models:    `[{"model":"lone-model"}]`,
+		Endpoints: `[{"name":"responses","pathSuffix":"/v1/responses"}]`,
+		Status:    true,
+	}
+	if err := db.Create(&onlyRestricted).Error; err != nil {
+		t.Fatalf("create only-restricted: %v", err)
+	}
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if _, err := engine.SelectProvider("lone-model", "/v1/chat/completions"); err == nil {
+		t.Fatal("expected error when only provider disallows the path")
+	}
+}
+
+func TestLoadProviders_treatsMalformedEndpointsAsUnrestricted(t *testing.T) {
+	engine, db := newTestEngine(t)
+	provider := model.Provider{
+		ID:        "p-bad-ep",
+		Name:      "bad-ep",
+		BaseURLs:  `["https://a.example.com"]`,
+		Keys:      `["k"]`,
+		Models:    `[{"model":"m1"}]`,
+		Endpoints: `not json`,
+		Status:    true,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	got, err := engine.SelectProvider("m1", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("malformed endpoints must not block selection: %v", err)
+	}
+	if got.ID != provider.ID {
+		t.Fatalf("selected: want %s, got %s", provider.ID, got.ID)
 	}
 }
 

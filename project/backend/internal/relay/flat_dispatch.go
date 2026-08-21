@@ -18,7 +18,8 @@ var ErrNoProvider = errors.New("no provider available")
 
 // buildFlatProviderRefs builds ProviderRef values for every enabled provider
 // known to the engine, keyed by provider name. It reflects the provider's
-// Status and its supported model set.
+// Status, its supported model set, and the set of allowed endpoint paths
+// (empty set means "any path", matching ProviderRef.Paths semantics).
 func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
@@ -33,6 +34,7 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 			Enabled:  true, // provider node mini-switch is checked in the flat walk
 			Workflow: true,
 			Models:   plan.ModelSet,
+			Paths:    plan.AllowedPaths,
 		}
 	}
 	return refs
@@ -145,7 +147,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 		}
 	}
 
-	provider, err := e.SelectProvider(model)
+	provider, err := e.SelectProvider(model, path)
 	if err != nil {
 		return nil, err
 	}
@@ -198,6 +200,9 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 		return err
 	}
 	if err := decodeModelSet(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet); err != nil {
+		return err
+	}
+	if err := decodeEndpointSet(plan.Provider.ID, plan.Provider.Endpoints, &plan.AllowedPaths); err != nil {
 		return err
 	}
 

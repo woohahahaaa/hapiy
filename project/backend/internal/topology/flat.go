@@ -285,6 +285,10 @@ func BuildRequestPath(t *Topology, entryID, providerID string) []string {
 			cur = outgoing(t, cur)
 			continue
 		}
+		if node, ok := nodeByID(t, cur); ok && node.Kind == KindSlot && node.SlotType == "provider" {
+			cur = providerID
+			continue
+		}
 		cur = outgoing(t, cur)
 	}
 	return path

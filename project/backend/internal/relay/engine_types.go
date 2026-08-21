@@ -16,6 +16,8 @@ import (
 //   - BaseURLs / Keys: pre-parsed from the JSON strings on the model row.
 //   - ModelSet: pre-parsed from the Models JSON, allowing O(1) "supports
 //     this model?" lookups in SelectProvider.
+//   - AllowedPaths: pre-parsed from the Endpoints JSON; empty set means
+//     "any path allowed", matching the convention in topology.ProviderRef.
 //   - Compiled rewrite chains: validated []RewriteOp executed in order.
 //   - bound FailoverRules: ready for runtime resolution.
 type ExecutionPlan struct {
@@ -24,6 +26,7 @@ type ExecutionPlan struct {
 	BaseURLs             []string
 	Keys                 []string
 	ModelSet             map[string]struct{}
+	AllowedPaths         map[string]struct{}
 	RewriteRules         []*model.RewriteRule
 	CompiledRewrite      []CompiledRewriteChain
 	ResponseRewriteRules []*model.ResponseRewriteRule

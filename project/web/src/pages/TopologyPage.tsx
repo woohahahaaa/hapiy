@@ -30,7 +30,8 @@ import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
 import { FlowLightEdge } from '@/edges/FlowLightEdge'
-import { FlowHub, buildFlowSteps, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
+import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
+import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
 import { flowDebug } from '@/modules/flow-debug'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
@@ -142,7 +143,7 @@ function computeLightChain(
     for (const provider of ordered) {
       const slotId = canvas.providerSlotOf.get(provider.id)
       if (!slotId) continue
-      const matched = chains.find((chain) => chain.includes(slotId))
+      const matched = chains.find((chain) => chain.includes(provider.id)) ?? chains.find((chain) => chain.includes(slotId))
       if (matched) return matched
     }
   }
@@ -262,6 +263,7 @@ export function TopologyPage() {
   const [error, setError] = useState<string | null>(null)
   const [tp, setTp] = useState<FlatTopology | null>(null)
   const tpRef = useRef<FlatTopology | null>(null)
+  const beginFlowIsolationRef = useRef<() => void>(() => {})
   const setTopology = useCallback((next: FlatTopology) => {
     tpRef.current = next
     setTp(next)
@@ -411,6 +413,7 @@ export function TopologyPage() {
       const next: FlatTopology = { nodes, wires }
       if (sameFlatTopology(cur, next)) return
       commitHistory(cur)
+      beginFlowIsolationRef.current()
       setTopology(next)
       markDirty()
     },
@@ -431,6 +434,7 @@ export function TopologyPage() {
       const next: FlatTopology = { nodes: cur.nodes, wires }
       if (sameFlatTopology(cur, next)) return
       commitHistory(cur)
+      beginFlowIsolationRef.current()
       setTopology(next)
       markDirty()
     },
@@ -913,6 +917,10 @@ export function TopologyPage() {
   const flowHubRef = useRef<FlowHub | null>(null)
   const requestMetaRef = useRef(new Map<string, { model: string; provider: string | null }>())
   const runInfoRef = useRef(new Map<number, { requestId: string; loop: number }>())
+  const flowPollingPausedRef = useRef(false)
+  const flowEditBoundaryMsRef = useRef<number | null>(null)
+  const flowIsolationTimerRef = useRef<number | null>(null)
+  const flowSyncGenerationRef = useRef(0)
   // FLOW-DEBUG: mount/unmount the animation tracer. Remove these two lines
   // when done — the module itself stays in the repo.
   useEffect(() => {
@@ -920,7 +928,12 @@ export function TopologyPage() {
     return () => flowDebug.unmount()
   }, [])
   useEffect(() => {
-    const hub = new FlowHub({
+    // Use the shared FlowHub singleton so StrictMode double-mounts / route
+    // re-entries reuse one run pool and runId counter instead of scheduling
+    // duplicate runs for the same active request.
+    const hub = getFlowHub()
+    flowHubRef.current = hub
+    hub.setHandlers({
       onStep: (runId, step, color, meta) => {
         applyStepToLayers(runId, step, color, meta)
         runInfoRef.current.set(runId, { requestId: meta.requestId, loop: meta.loop })
@@ -939,9 +952,10 @@ export function TopologyPage() {
       },
       onRunEnd: (runId) => removeRunLayers(runId),
     })
-    flowHubRef.current = hub
     return () => {
       hub.stopAll()
+      hub.setHandlers({ onStep: () => {}, onRunEnd: () => {} })
+      if (flowIsolationTimerRef.current !== null) window.clearTimeout(flowIsolationTimerRef.current)
       if (flowHubRef.current === hub) flowHubRef.current = null
     }
     // applyStepToLayers / removeRunLayers only capture stable setters and
@@ -970,15 +984,19 @@ export function TopologyPage() {
   // run is started every poll cycle, so a request that stays active overlaps
   // its own runs naturally instead of waiting for the previous one to finish.
   const syncFlowLights = useCallback(async () => {
+    if (flowPollingPausedRef.current) return
+    const generation = flowSyncGenerationRef.current
     let requests: readonly ActiveRequest[]
     try {
       requests = await dashboardApi.getActiveRequests()
     } catch {
       return
     }
+    if (flowPollingPausedRef.current || generation !== flowSyncGenerationRef.current) return
     const activeRequestIds = new Set<string>()
     for (const request of requests) {
       if (request.endTime !== null) continue
+      if (!requestStartedAfterBoundary(request.startTime, flowEditBoundaryMsRef.current)) continue
       activeRequestIds.add(request.requestId)
       if ((flowHubRef.current?.activeRunCount(request.requestId) ?? 0) > 0) continue
       const path = resolveLayerPath(request)
@@ -1025,17 +1043,32 @@ export function TopologyPage() {
     syncFlowLightsRef.current = syncFlowLights
   }, [syncFlowLights])
 
+  const beginFlowIsolation = useCallback(() => {
+    flowSyncGenerationRef.current += 1
+    flowEditBoundaryMsRef.current = Date.now()
+    flowPollingPausedRef.current = true
+    if (flowIsolationTimerRef.current !== null) window.clearTimeout(flowIsolationTimerRef.current)
+    flowHubRef.current?.stopAll()
+    runStepsRef.current.clear()
+    runInfoRef.current.clear()
+    requestMetaRef.current.clear()
+    litNodeRef.current.clear()
+    litEdgeRef.current.clear()
+    rebuildLayers()
+    flowIsolationTimerRef.current = window.setTimeout(() => {
+      flowIsolationTimerRef.current = null
+      flowPollingPausedRef.current = false
+      void syncFlowLightsRef.current()
+    }, 2000)
+  }, [rebuildLayers])
+
+  beginFlowIsolationRef.current = beginFlowIsolation
+
   // baseEdges 重建后重放：清空 overlay 层，立即为仍活跃的请求启动新 run，
   // 让拓扑变化后（如 logOutput 开关）生效节点立即亮起。
   useEffect(() => {
     setEdges(baseEdges)
-    flowHubRef.current?.stopAll()
-    runStepsRef.current.clear()
-    litNodeRef.current.clear()
-    litEdgeRef.current.clear()
-    rebuildLayers()
-    void syncFlowLightsRef.current()
-  }, [baseEdges, setEdges, rebuildLayers])
+  }, [baseEdges, setEdges])
 
   useEffect(() => {
     void syncFlowLights()
@@ -1292,11 +1325,12 @@ export function TopologyPage() {
       const nextEdges = edgesRef.current.filter((e) => !removed.has(e.source) && !removed.has(e.target))
       const wires = rerouteWiresAroundRemoved(cur.wires, removedIds)
       commitHistory(cur)
+      beginFlowIsolation()
       setTopology({ nodes, wires })
       setEdges(nextEdges)
       markDirty()
     },
-    [setTopology, setEdges, markDirty, commitHistory],
+    [setTopology, setEdges, markDirty, commitHistory, beginFlowIsolation],
   )
 
   const handleDeleteNodes = useCallback(
@@ -1315,11 +1349,12 @@ export function TopologyPage() {
       const nextEdges = edgesRef.current.filter((e) => !removed.has(e.source) && !removed.has(e.target))
       const wires = rerouteWiresAroundRemoved(cur.wires, removedIds)
       commitHistory(cur)
+      beginFlowIsolation()
       setTopology({ nodes, wires })
       setEdges(nextEdges)
       markDirty()
     },
-    [setTopology, setEdges, markDirty, commitHistory],
+    [setTopology, setEdges, markDirty, commitHistory, beginFlowIsolation],
   )
 
   const [confirmDelete, setConfirmDelete] = useState<{ nodeCount: number; edgeCount: number } | null>(null)
@@ -1350,9 +1385,10 @@ export function TopologyPage() {
     const before = historyRef.current.pop()
     if (!before) return
     redoRef.current.push(cur)
+    beginFlowIsolation()
     setTopology(before)
     syncHistory()
-  }, [setTopology, syncHistory])
+  }, [setTopology, syncHistory, beginFlowIsolation])
 
   const handleRedo = useCallback(() => {
     const cur = tpRef.current
@@ -1360,9 +1396,10 @@ export function TopologyPage() {
     const next = redoRef.current.pop()
     if (!next) return
     historyRef.current.push(cur)
+    beginFlowIsolation()
     setTopology(next)
     syncHistory()
-  }, [setTopology, syncHistory])
+  }, [setTopology, syncHistory, beginFlowIsolation])
 
   const handleCopy = useCallback(() => {
     const cur = tpRef.current
@@ -1392,9 +1429,10 @@ export function TopologyPage() {
       layout[fresh] = { x: pos.x + 40, y: pos.y + 40 }
     }
     persistLayoutSnapshot(layout)
+    beginFlowIsolation()
     setTopology({ nodes: [...cur.nodes, ...result.nodes], wires: [...cur.wires, ...result.wires] })
     markDirty()
-  }, [commitHistory, setTopology, persistLayoutSnapshot, markDirty])
+  }, [commitHistory, setTopology, persistLayoutSnapshot, markDirty, beginFlowIsolation])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -1520,10 +1558,11 @@ export function TopologyPage() {
     const next: FlatTopology = { nodes: [...cur.nodes, node], wires: cur.wires }
     if (sameFlatTopology(cur, next)) return
     commitHistory(cur)
+    beginFlowIsolation()
     setTopology(next)
     markDirty()
     placeNewNodes([{ id, width: topologyConfig.fallbackNodeSize.width }])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
 
   const handleAddProviderSlot = useCallback(() => {
     const cur = tpRef.current
@@ -1643,6 +1682,7 @@ export function TopologyPage() {
       chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
     }
     commitHistory(cur)
+    beginFlowIsolation()
     setTopology({ nodes: newNodes, wires: [...cur.wires, ...chain] })
     markDirty()
     placeNewNodes([
@@ -1650,7 +1690,7 @@ export function TopologyPage() {
       { id: pslotId, width: topologyConfig.render.slot.shellMinWidth },
       ...slotIds.map((st) => ({ id: nodeIds.get(st)!, width: topologyConfig.render.slot.shellMinWidth })),
     ])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
 
   const handleAddButtonClick = useCallback(() => {
     const btn = addButtonRef.current

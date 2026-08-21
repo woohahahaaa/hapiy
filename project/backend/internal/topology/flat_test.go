@@ -40,6 +40,35 @@ func TestValidateTopologyRejectsUnknownWireSource(t *testing.T) {
 	}
 }
 
+func TestBuildRequestPathFollowsSelectedProviderAtProviderSlot(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "entry", Kind: KindRequestEntry, Enabled: true},
+			{ID: "provider-slot", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "provider-moreai", Kind: KindProvider, Name: "MoreAI-Anthropic", Enabled: true},
+			{ID: "provider-deepseek", Kind: KindProvider, Name: "deepseek", Enabled: true},
+			{ID: "request-modify", Kind: KindSlot, SlotType: "requestModify", Enabled: true},
+		},
+		Wires: []Wire{
+			{Source: "entry", Target: "provider-slot"},
+			{Source: "provider-slot", Target: "provider-moreai"},
+			{Source: "provider-moreai", Target: "request-modify"},
+			{Source: "provider-deepseek", Target: "request-modify"},
+		},
+	}
+
+	path := BuildRequestPath(tp, "entry", "provider-deepseek")
+	expected := []string{"entry", "provider-slot", "provider-deepseek", "request-modify"}
+	if len(path) != len(expected) {
+		t.Fatalf("path length = %d, want %d: %v", len(path), len(expected), path)
+	}
+	for i, got := range path {
+		if got != expected[i] {
+			t.Fatalf("path[%d] = %q, want %q: %v", i, got, expected[i], path)
+		}
+	}
+}
+
 func TestValidateTopologyRejectsMultipleOutputs(t *testing.T) {
 	tp := &Topology{
 		Nodes: []FlatNode{node("a", KindSlot), node("b", KindSlot), node("c", KindSlot)},

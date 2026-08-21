@@ -98,10 +98,12 @@ func (e *Engine) compilePlan(p *model.Provider) error {
 	return nil
 }
 
-// SelectProvider selects a provider for the given model using round-robin
-// with weight. The model membership check uses the pre-parsed ModelSet
-// populated during plan compilation — no per-request JSON unmarshalling.
-func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
+// SelectProvider selects a provider for the given model (and optional
+// endpoint path) using round-robin with weight. The model membership check
+// uses the pre-parsed ModelSet populated during plan compilation; the path
+// check uses AllowedPaths (empty set = any path). Both filters are O(1)
+// per plan so the loop stays cheap even with many providers.
+func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error) {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
 
@@ -113,9 +115,15 @@ func (e *Engine) SelectProvider(modelName string) (*model.Provider, error) {
 		if !plan.Provider.Status || !plan.Provider.WorkflowEnabled {
 			continue
 		}
-		if _, ok := plan.ModelSet[modelName]; ok {
-			candidates = append(candidates, plan.Provider)
+		if _, ok := plan.ModelSet[modelName]; !ok {
+			continue
 		}
+		if len(plan.AllowedPaths) > 0 {
+			if _, ok := plan.AllowedPaths[path]; !ok {
+				continue
+			}
+		}
+		candidates = append(candidates, plan.Provider)
 	}
 
 	if len(candidates) == 0 {

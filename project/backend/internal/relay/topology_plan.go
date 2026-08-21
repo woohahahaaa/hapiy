@@ -3,6 +3,8 @@ package relay
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
@@ -75,6 +77,9 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 		return err
 	}
 	if err := decodeModelSet(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet); err != nil {
+		return err
+	}
+	if err := decodeEndpointSet(plan.Provider.ID, plan.Provider.Endpoints, &plan.AllowedPaths); err != nil {
 		return err
 	}
 
@@ -199,6 +204,36 @@ func decodeModelSet(providerID, raw string, dst *map[string]struct{}) error {
 	for _, entry := range entries {
 		if name, ok := entry["model"].(string); ok && name != "" {
 			set[name] = struct{}{}
+		}
+	}
+	*dst = set
+	return nil
+}
+
+// decodeEndpointSet parses the provider Endpoints JSON array (each entry has
+// a "pathSuffix" string) into a set for O(1) membership tests. Unlike
+// decodeStringList/decodeModelSet it is intentionally lenient: malformed
+// JSON or unknown shapes collapse to an empty set, which the path filter
+// treats as "any path allowed" (the historic behaviour in handler/relay.go
+// before this pre-parse existed).
+func decodeEndpointSet(providerID, raw string, dst *map[string]struct{}) error {
+	set := map[string]struct{}{}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		*dst = set
+		return nil
+	}
+	var entries []map[string]interface{}
+	if err := json.Unmarshal([]byte(trimmed), &entries); err != nil {
+		log.Printf("relay: provider %s: invalid JSON in endpoints, treating as unrestricted: %v", providerID, err)
+		*dst = set
+		return nil
+	}
+	for _, entry := range entries {
+		if suffix, ok := entry["pathSuffix"].(string); ok {
+			if s := strings.TrimSpace(suffix); s != "" {
+				set[s] = struct{}{}
+			}
 		}
 	}
 	*dst = set

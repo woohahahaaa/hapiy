@@ -68,7 +68,6 @@ export type FlowHubOptions = {
   // Fired when a run has played its final step and is removed.
   readonly onRunEnd: (runId: number) => void
 }
-
 type FlowRun = {
   readonly requestId: string
   readonly color: string
@@ -87,8 +86,8 @@ type FlowRun = {
 // until the request is gone; then it is flagged graceful and stops after the
 // current pass finishes its final step.
 export class FlowHub {
-  private readonly onStep: FlowHubOptions['onStep']
-  private readonly onRunEnd: FlowHubOptions['onRunEnd']
+  private onStep: FlowHubOptions['onStep']
+  private onRunEnd: FlowHubOptions['onRunEnd']
   private readonly runs = new Map<number, FlowRun>()
   private nextRunId = 0
 
@@ -97,8 +96,20 @@ export class FlowHub {
     this.onRunEnd = options.onRunEnd
   }
 
+  // Replace the step/end callbacks without touching the run scheduler. Used by
+  // the module singleton so a page that mounts, unmounts, and mounts again can
+  // rebind its own handlers to the same run pool instead of creating a fresh
+  // FlowHub (which would restart runId and double-schedule the same requests).
+  setHandlers(options: FlowHubOptions): void {
+    this.onStep = options.onStep
+    this.onRunEnd = options.onRunEnd
+  }
+
   startRun(input: FlowRunInput): number {
     if (input.steps.length === 0) return 0
+    for (const [runId, run] of this.runs) {
+      if (run.requestId === input.requestId) return runId
+    }
     const runId = ++this.nextRunId
     const run: FlowRun = {
       requestId: input.requestId,
@@ -171,4 +182,16 @@ export class FlowHub {
     for (const run of this.runs.values()) if (run.requestId === requestId) count += 1
     return count
   }
+}
+
+// Module-level singleton so multiple mounts of TopologyPage (StrictMode
+// double-invocation, route re-entry) share one run pool and one runId counter.
+// Without it each mount creates its own FlowHub, restarting runId from 1 and
+// scheduling duplicate runs for the same active request (observed in logs as
+// one requestId appearing under several runIds at once).
+let hubSingleton: FlowHub | null = null
+
+export function getFlowHub(): FlowHub {
+  if (!hubSingleton) hubSingleton = new FlowHub({ onStep: () => {}, onRunEnd: () => {} })
+  return hubSingleton
 }

@@ -105,4 +105,28 @@ describe('FlowHub', () => {
     expect(steps).toBe(1)
   })
 
+  it('reuses the existing run for the same request', () => {
+    const hub = new FlowHub({ onStep: () => {}, onRunEnd: () => {} })
+    const steps = stepsOf(['model-kimi-k3', 'entry-1'])
+    const first = hub.startRun({ requestId: 'req-1', color: '#fff', steps })
+    const second = hub.startRun({ requestId: 'req-1', color: '#f00', steps })
+    expect(second).toBe(first)
+    expect(hub.activeRunCount('req-1')).toBe(1)
+    hub.stopRun(first)
+  })
+
+  it('stops every request immediately', async () => {
+    vi.useFakeTimers()
+    const fired: number[] = []
+    const hub = new FlowHub({ onStep: (runId) => void fired.push(runId), onRunEnd: () => {} })
+    hub.startRun({ requestId: 'req-1', color: '#fff', steps: stepsOf(['model-kimi-k3', 'entry-1']) })
+    hub.startRun({ requestId: 'req-2', color: '#f00', steps: stepsOf(['model-kimi-k3', 'entry-1']) })
+    hub.stopAll()
+    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 2)
+    expect(hub.activeRunCount('req-1')).toBe(0)
+    expect(hub.activeRunCount('req-2')).toBe(0)
+    expect(fired).toEqual([1, 2])
+    vi.useRealTimers()
+  })
+
 })
