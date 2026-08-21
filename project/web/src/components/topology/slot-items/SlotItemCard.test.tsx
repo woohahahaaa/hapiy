@@ -1,38 +1,31 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { SlotItemCard } from './SlotItemCard'
-import type { ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
-const FLASH: ProviderFlashPayload = {
-  runId: 5,
-  cycleMs: 680,
-  phaseMs: 340,
-  durMs: 340,
-  color: '#38bdf8',
-}
-
-function renderCard(props: { flash?: ProviderFlashPayload }): string {
+function renderCard(layers: FlowLayerOverlay[] | undefined): string {
   return renderToStaticMarkup(
-    <SlotItemCard index={1} enabled={true} onToggleEnabled={() => {}} flash={props.flash}>
+    <SlotItemCard index={1} enabled={true} onToggleEnabled={() => {}} flashLayers={layers}>
       <span>body</span>
     </SlotItemCard>,
   )
 }
 
 describe('SlotItemCard', () => {
-  it('emits no keyframe style tag and no animation when no flash prop is set', () => {
-    const markup = renderCard({})
-    expect(markup).not.toContain('@keyframes provider-flash')
-    expect(markup).not.toContain('animation-name:')
+  it('renders no glow ring when no layers are active', () => {
+    const markup = renderCard(undefined)
+    expect(markup).not.toContain('box-shadow:')
   })
 
-  it('renders a unique keyframe block and binds the animation when flash is set', () => {
-    const markup = renderCard({ flash: FLASH })
-    expect(markup).toContain('@keyframes provider-flash-5-340')
-    expect(markup).toContain('border-color:#38bdf8')
-    expect(markup).toContain('box-shadow:0 0 8px #38bdf8')
-    expect(markup).toContain('animation-name:provider-flash-5-340')
-    expect(markup).toContain('animation-duration:680ms')
-    expect(markup).toContain('animation-iteration-count:infinite')
+  it('renders one stacked glow ring per layer, keyed by runId', () => {
+    const layers: FlowLayerOverlay[] = [
+      { runId: 5, color: '#38bdf8' },
+      { runId: 9, color: '#f97316' },
+    ]
+    const markup = renderCard(layers)
+    expect(markup).toContain('box-shadow:0 0 8px 1px #38bdf8')
+    expect(markup).toContain('box-shadow:0 0 8px 1px #f97316')
+    expect(markup).toContain('border:1px solid #38bdf8')
+    expect(markup).toContain('border:1px solid #f97316')
   })
 })

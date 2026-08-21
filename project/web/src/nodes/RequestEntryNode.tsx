@@ -1,18 +1,17 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 interface RequestEntryNodeData {
   label: string
   enabled: boolean
   weight: number
   models?: Array<{ id: string; label: string; active: boolean }>
-  flash?: ProviderFlashPayload
-  flashes?: readonly ProviderFlashPayload[]
+  flashLayers?: readonly FlowLayerOverlay[]
   onChangeEnabled: (enabled: boolean) => void
   onChangeWeight: (weight: number) => void
 }
@@ -24,6 +23,7 @@ interface RequestEntryNodeProps {
 
 export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
   const { label, enabled, weight, onChangeEnabled, onChangeWeight, models = [] } = data
+  const flashLayers = data.flashLayers ?? []
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -67,26 +67,22 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
     onChangeWeight(Math.round(clamped * 100) / 100)
   }
 
-  const allFlashes = data.flashes && data.flashes.length > 0 ? data.flashes : data.flash ? [data.flash] : []
-  const flashAnim: CSSProperties | undefined =
-    allFlashes.length > 0
-      ? {
-          animationName: allFlashes.map((f) => flashKeyframeName(f)).join(', '),
-          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
-          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
-          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
-          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
-        }
-      : undefined
-
   return (
     <div
       ref={rootRef}
-      className="rounded-lg border border-border bg-card text-card-foreground"
-      style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth, ...(flashAnim ?? {}) }}
+      className="relative rounded-lg border border-border bg-card text-card-foreground"
+      style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >
-      {allFlashes.map((f) => (
-        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      {flashLayers.map((layer) => (
+        <span
+          key={layer.runId}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-lg transition-opacity duration-300"
+          style={{
+            boxShadow: `0 0 10px 2px ${layer.color}`,
+            border: `1px solid ${layer.color}`,
+          }}
+        />
       ))}
       {models.map((m, i) => (
         <Handle

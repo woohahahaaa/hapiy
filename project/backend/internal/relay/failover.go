@@ -156,10 +156,21 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 		}
 	}
 	key := pickIndex(plan.Keys, req.KeyIndex)
+	var resp *RelayResponse
+	var err error
 	if req.Stream {
-		return e.relayStreaming(ctx, upstreamURL, key, req)
+		resp, err = e.relayStreaming(ctx, upstreamURL, key, req)
+	} else {
+		resp, err = e.relayNonStreaming(ctx, upstreamURL, key, req)
 	}
-	return e.relayNonStreaming(ctx, upstreamURL, key, req)
+	if resp == nil && err != nil {
+		// Transport error before any HTTP response — synthesize a response
+		// carrying just the URL so the log row records what was attempted.
+		resp = &RelayResponse{UpstreamURL: upstreamURL}
+	} else if resp != nil {
+		resp.UpstreamURL = upstreamURL
+	}
+	return resp, err
 }
 
 // pickIndex returns items[idx], falling back to the first when idx is invalid.

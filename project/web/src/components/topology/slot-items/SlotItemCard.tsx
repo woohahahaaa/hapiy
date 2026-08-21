@@ -1,9 +1,9 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { nodeRenderBounds } from '@/config/topology-config'
-import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 interface SlotItemCardProps {
   index: number
@@ -19,8 +19,7 @@ interface SlotItemCardProps {
   isDragOver?: boolean
   enableControl?: ReactNode
   dimContentWhenDisabled?: boolean
-  flash?: ProviderFlashPayload
-  flashes?: readonly ProviderFlashPayload[]
+  flashLayers?: readonly FlowLayerOverlay[]
 }
 
 export function SlotItemCard({
@@ -37,23 +36,9 @@ export function SlotItemCard({
   isDragOver,
   enableControl,
   dimContentWhenDisabled = false,
-  flash,
-  flashes,
+  flashLayers,
 }: SlotItemCardProps) {
-const allFlashes = flashes && flashes.length > 0 ? flashes : flash ? [flash] : []
-  const kfNames = allFlashes.map((f) => flashKeyframeName(f))
-  const flashAnim: CSSProperties | undefined =
-    allFlashes.length > 0
-      ? {
-          animationName: kfNames.join(', '),
-          // 多层动画用相同的周期会强占同一种子节点,这里用 max(cycleMs) 统一
-          // 周期,让同节点多请求按各自 phase 错开,视觉上自然叠加
-          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
-          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
-          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
-          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
-        }
-      : undefined
+  const layers = flashLayers ?? []
   return (
     <div
       onDragOver={(e) => {
@@ -69,7 +54,7 @@ const allFlashes = flashes && flashes.length > 0 ? flashes : flash ? [flash] : [
         onDrop()
       }}
       className={cn(
-        'rounded-md border border-border bg-card text-card-foreground transition-opacity',
+        'relative rounded-md border border-border bg-card text-card-foreground transition-opacity',
         !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
         isDragOver && 'border-primary border-dashed',
@@ -78,11 +63,18 @@ const allFlashes = flashes && flashes.length > 0 ? flashes : flash ? [flash] : [
       style={{
         minWidth: nodeRenderBounds.minWidth,
         maxWidth: nodeRenderBounds.maxWidth,
-        ...(flashAnim ?? {}),
       }}
     >
-      {allFlashes.map((f) => (
-        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      {layers.map((layer) => (
+        <span
+          key={layer.runId}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-md transition-opacity duration-300"
+          style={{
+            boxShadow: `0 0 8px 1px ${layer.color}`,
+            border: `1px solid ${layer.color}`,
+          }}
+        />
       ))}
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>

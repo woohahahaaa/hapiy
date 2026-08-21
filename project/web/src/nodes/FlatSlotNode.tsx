@@ -7,7 +7,7 @@ import { SlotItemCard } from '@/components/topology/slot-items/SlotItemCard'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import { cn } from '@/lib/utils'
-import type { ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type {
   RequestModifySlotEntry,
   ResponseModifySlotEntry,
@@ -54,8 +54,8 @@ interface FlatSlotNodeData {
   enabled?: boolean
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
-  providerFlashes?: ReadonlyMap<string, readonly ProviderFlashPayload[]>
-  flashes?: readonly ProviderFlashPayload[]
+  providerFlashLayers?: ReadonlyMap<string, readonly FlowLayerOverlay[]>
+  flashLayers?: readonly FlowLayerOverlay[]
   onAddProvider?: () => void
   onSelectProvider?: (providerId: string, name: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
@@ -93,8 +93,8 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     externallyDisabled = false,
     children = [],
     providers = [],
-    providerFlashes,
-    flashes,
+    providerFlashLayers,
+    flashLayers,
     onAddProvider,
     onSelectProvider,
     onToggleProvider,
@@ -262,7 +262,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               child={child}
               providers={providers}
               takenLabels={takenLabels}
-              flashes={providerFlashes?.get(child.id)}
+              flashLayers={providerFlashLayers?.get(child.id)}
               isDragging={dragIndex === i}
               isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
               onDragStart={() => setDragIndex(i)}
@@ -289,7 +289,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
               onChangeEntry,
               onDeleteEntry,
               entryDragProps(entry.index),
-              flashes,
+              flashLayers,
             ),
           )}
         </SlotContainer>
@@ -325,7 +325,7 @@ interface ProviderCardProps {
   child: FlatProviderChild
   providers: readonly string[]
   takenLabels: Set<string>
-  flashes?: readonly ProviderFlashPayload[]
+  flashLayers?: readonly FlowLayerOverlay[]
   isDragging: boolean
   isDragOver: boolean
   onDragStart: () => void
@@ -336,7 +336,7 @@ interface ProviderCardProps {
   onDelete: () => void
 }
 
-function ProviderCard({ index, child, providers, takenLabels, flashes, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
+function ProviderCard({ index, child, providers, takenLabels, flashLayers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete }: ProviderCardProps) {
   const filteredProviders = providers.filter((n) => n === child.label || !takenLabels.has(n))
   const state = child.autoDisabled ? 'auto-disabled' : child.providerStatus ? 'enabled' : 'disabled'
   return (
@@ -350,7 +350,7 @@ function ProviderCard({ index, child, providers, takenLabels, flashes, isDraggin
       onDrop={onDrop}
       isDragging={isDragging}
       isDragOver={isDragOver}
-      flashes={flashes}
+      flashLayers={flashLayers}
       className={cn(
         state === 'disabled' && 'opacity-60',
         state === 'auto-disabled' && 'opacity-60',
@@ -406,7 +406,7 @@ function renderItem(
   onChangeEntry: ((next: SlotEntry) => void) | undefined,
   onDeleteEntry: ((index: number) => void) | undefined,
   drag: DragProps,
-  flashes?: readonly ProviderFlashPayload[],
+  flashLayers?: readonly FlowLayerOverlay[],
 ) {
   const onDelete = () => onDeleteEntry?.(entry.index)
   const change = onChangeEntry as (e: SlotEntry) => void
@@ -420,7 +420,7 @@ function renderItem(
             rules={rules.requestModify}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )
@@ -432,7 +432,7 @@ function renderItem(
             rules={rules.responseModify}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )
@@ -444,7 +444,7 @@ function renderItem(
             rules={rules.autoReply}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )
@@ -456,7 +456,7 @@ function renderItem(
             rules={rules.concurrency}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )
@@ -468,7 +468,7 @@ function renderItem(
             rules={rules.autoSwitch}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )
@@ -479,7 +479,7 @@ function renderItem(
             entry={entry}
             onChange={change}
             onDelete={onDelete}
-            flashes={flashes}
+            flashLayers={flashLayers}
             {...drag}
           />
         )

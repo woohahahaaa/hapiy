@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -213,197 +213,20 @@ function responseStageContentType(headers: Record<string, string> | null): strin
   return ''
 }
 
-// ── RawSseView splits raw SSE text into per-event blocks so chunks are
-// readable one by one instead of one escaped line. Each block is collapsed
-// by default and shows the data payload's `id` field as its title. Falls
-// back to a plain <pre> when the text has no `data:` lines (not an SSE body).
-function RawSseView({ text }: { readonly text: string }) {
-  const blocks = useMemo(() => {
-    if (!/data:/.test(text)) return null
-    const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-    return normalized.split('\n\n').filter((b) => b.trim() !== '')
-  }, [text])
-
-  if (blocks === null) {
-    return (
-      <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
-        {text}
-      </pre>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      {blocks.map((block, i) => (
-        <SseBlock key={i} index={i} block={block} />
-      ))}
-    </div>
-  )
-}
-
-// ── SseBlock: one SSE event — collapsed by default, title shows the data
-// payload's `id` (falling back to event type when absent).
-function SseBlock({ index, block }: { readonly index: number; readonly block: string }) {
-  const [open, setOpen] = useState(false)
-  const lines = block.split('\n')
-  const eventLine = lines.find((l) => l.startsWith('event:'))
-  const data = lines
-    .filter((l) => l.startsWith('data:'))
-    .map((l) => l.slice(5).replace(/^ /, ''))
-    .join('\n')
-  const eventType = eventLine ? eventLine.slice(6).trim() : 'data'
-  const isDone = data === '[DONE]'
-  const title = useMemo(() => {
-    if (isDone) return '[DONE]'
-    try {
-      const parsed = JSON.parse(data)
-      if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string') {
-        return parsed.id
-      }
-    } catch {
-      // fall through to event type
-    }
-    return eventType
-  }, [data, eventType, isDone])
-
-  return (
-    <div className="overflow-hidden rounded-md border border-border bg-muted/20">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border/60 bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted/50"
-      >
-        <span className="shrink-0">{open ? '▾' : '▸'}</span>
-        <span className="shrink-0">#{index + 1}</span>
-        <span className="truncate font-medium text-foreground/80">{title}</span>
-        <span className="ml-auto shrink-0">{isDone ? '0 B' : `${data.length} B`}</span>
-      </button>
-      {open && (
-        <div className="px-2 py-1.5">
-          <div className="mb-1 font-mono text-[10px] text-muted-foreground">event: {eventType}</div>
-          {isDone ? (
-            <div className="font-mono text-[10px] text-muted-foreground">[DONE]</div>
-          ) : data ? (
-            <JsonHighlight value={data} className="border-0 bg-transparent p-0" />
-          ) : (
-            <div className="font-mono text-[10px] text-muted-foreground">（无 data）</div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── ResponseStageBody renders a stage row's body with a 原始内容 / 整合 JSON
-// toggle. Toggle is hidden when the stage has no "raw" text or its
-// content-type is not SSE.
+// ── ResponseStageBody renders a stage row's body. SSE responses are shown
+// as plain text so the raw event stream stays inspectable without parsing.
 function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow }) {
-  const [mode, setMode] = useState<'raw' | 'merged'>('merged')
-  const [merged, setMerged] = useState<unknown>(undefined)
-  const [mergeLoading, setMergeLoading] = useState(false)
-  const [mergeError, setMergeError] = useState<string | null>(null)
   const rawText = responseStageRawText(stageRow.body)
   const contentType = responseStageContentType(stageRow.headers)
-  const canMerge = rawText !== null && contentType.toLowerCase().includes('text/event-stream')
-
-  const loadMerged = useCallback(() => {
-    const stageNode = findResponseNodeForStageRow(stageRow)
-    if (!stageNode) return
-    setMergeLoading(true)
-    setMergeError(null)
-    dashboardApi
-      .readLogCaptureMergedResponse(stageNode.requestId, {
-        stage: stageNode.stage,
-        index: stageNode.index,
-      })
-      .then((result) => setMerged(result.value))
-      .catch((err: unknown) =>
-        setMergeError(err instanceof Error ? err.message : '整合失败'),
-      )
-      .finally(() => setMergeLoading(false))
-  }, [stageRow])
-
-  // Eagerly fetch merged JSON on first render when the toggle is visible;
-  // this matches the default 'merged' mode and avoids an extra click.
-  // setState only happens in async callbacks, never synchronously in the
-  // effect body (loading state is implied by merged === undefined).
-  useEffect(() => {
-    if (!canMerge || merged !== undefined) return
-    const stageNode = findResponseNodeForStageRow(stageRow)
-    if (!stageNode) return
-    let cancelled = false
-    dashboardApi
-      .readLogCaptureMergedResponse(stageNode.requestId, {
-        stage: stageNode.stage,
-        index: stageNode.index,
-      })
-      .then((result) => {
-        if (!cancelled) setMerged(result.value)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setMergeError(err instanceof Error ? err.message : '整合失败')
-      })
-      .finally(() => {
-        if (!cancelled) setMergeLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [canMerge, merged, stageRow])
-
-  const switchTo = useCallback(
-    (next: 'raw' | 'merged') => {
-      setMode(next)
-      if (next === 'merged' && merged === undefined && canMerge) loadMerged()
-    },
-    [merged, canMerge, loadMerged],
-  )
-
-  if (!canMerge) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
-        <JsonHighlight value={stageRow.body} />
-      </div>
-    )
-  }
+  const isSSE = contentType.toLowerCase().includes('text/event-stream')
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant={mode === 'merged' ? 'default' : 'outline'}
-            disabled={mergeLoading}
-            onClick={() => switchTo('merged')}
-          >
-            {mergeLoading ? '整合中…' : '整合JSON'}
-          </Button>
-          <Button
-            size="sm"
-            variant={mode === 'raw' ? 'default' : 'outline'}
-            onClick={() => switchTo('raw')}
-          >
-            原始内容
-          </Button>
-        </div>
-      </div>
-      {mode === 'merged' ? (
-        mergeError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-            {mergeError}
-          </div>
-        ) : merged === undefined ? (
-          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            整合中…
-          </div>
-        ) : (
-          <JsonHighlight value={merged} />
-        )
-      ) : rawText !== null ? (
-        <RawSseView text={rawText} />
+      <div className="font-mono text-xs font-medium text-foreground">响应体</div>
+      {isSSE && rawText !== null ? (
+        <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+          {rawText}
+        </pre>
       ) : (
         <JsonHighlight value={stageRow.body} />
       )}
@@ -411,16 +234,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   )
 }
 
-// ── Module-level stage-row registry: ResponseStageBody needs the
-// (requestId, stage, index) triple to call readLogCaptureMergedResponse.
-// Each row is registered once during render and forgotten on unmount.
-const stageRowRegistry = new Map<
-  LogCaptureStageRow,
-  { readonly requestId: string; readonly stage: 'before' | 'after'; readonly index: number }
->()
-function findResponseNodeForStageRow(stageRow: LogCaptureStageRow) {
-  return stageRowRegistry.get(stageRow)
-}
+
 
 // ── Main export: dispatches on props.kind (exhaustive over the union) ──
 export function LogCapturePreviewDialog(props: LogCapturePreviewDialogProps) {
@@ -496,28 +310,6 @@ function PairDialog({ requestId, open, onClose }: {
       cancelled = true
     }
   }, [requestId, open, reloadKey])
-
-  // Register each response stage row in the module-level map so
-  // ResponseStageBody can resolve its merge-endpoint coords. Entries are
-  // removed on unmount or when the pair reloads.
-  useEffect(() => {
-    if (!pair) return
-    const registered: LogCaptureStageRow[] = []
-    for (let i = 0; i < pair.responses.length; i++) {
-      const node = pair.responses[i]
-      if (node.before) {
-        stageRowRegistry.set(node.before, { requestId, stage: 'before', index: i })
-        registered.push(node.before)
-      }
-      if (node.after) {
-        stageRowRegistry.set(node.after, { requestId, stage: 'after', index: i })
-        registered.push(node.after)
-      }
-    }
-    return () => {
-      for (const row of registered) stageRowRegistry.delete(row)
-    }
-  }, [pair, requestId])
 
   const typeLabel = pair ? computeTypeLabel(pair) : ''
 

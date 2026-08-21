@@ -375,23 +375,13 @@ function LogDetailFields({ log }: { log: UsageLog }) {
     <div className="space-y-4 text-xs">
       <FieldGroup title="基本信息">
         <DetailRow label="时间" value={timeText} />
-        <DetailRow label="用户" value={log.userId || '-'} />
         <DetailRow label="令牌" value={log.tokenName || '-'} />
         <DetailRow label="供应商" value={log.providerName || '-'} />
         <DetailRow label="模型" value={log.modelName || '-'} />
-        <DetailRow
-          label="上游 URL"
-          value={
-            log.upstreamUrl ? (
-              <span className="inline-flex items-start gap-2">
-                <span className="break-all font-mono">{log.upstreamUrl}</span>
-                <CopyButton value={log.upstreamUrl} />
-              </span>
-            ) : (
-              '-'
-            )
-          }
-        />
+        <div className="col-span-2 flex items-baseline gap-2">
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground">上游 URL</span>
+          <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
+        </div>
       </FieldGroup>
       <FieldGroup title="用量">
         <DetailRow
@@ -448,27 +438,6 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
       <span className="break-words text-foreground">{value}</span>
     </div>
-  )
-}
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false)
-  const onClick = useCallback(() => {
-    if (!value) return
-    void navigator.clipboard
-      .writeText(value)
-      .then(() => {
-        setCopied(true)
-        window.setTimeout(() => setCopied(false), 1200)
-      })
-      .catch(() => {
-        // clipboard unavailable (insecure context) — silently noop
-      })
-  }, [value])
-  return (
-    <Button size="sm" variant="outline" onClick={onClick} className="shrink-0">
-      {copied ? '已复制' : '复制'}
-    </Button>
   )
 }
 

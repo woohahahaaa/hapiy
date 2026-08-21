@@ -861,7 +861,7 @@ function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
   }
   const headers = value.headers
   let parsedHeaders: Record<string, string> | null
-  if (headers === null) {
+  if (headers === undefined || headers === null) {
     parsedHeaders = null
   } else if (isRecord(headers)) {
     parsedHeaders = headers as Record<string, string>

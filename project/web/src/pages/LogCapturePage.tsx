@@ -308,25 +308,6 @@ export function LogCapturePage() {
           <span className="text-muted-foreground">—</span>
         ),
     },
-    {
-      key: 'id',
-      label: '操作',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      defaultAlign: 'right',
-      showEmptyPlaceholder: false,
-      render: (_, row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation()
-            setPreview(row)
-          }}
-        >
-          查看
-        </Button>
-      ),
-    },
   ]
 
   return (
@@ -349,6 +330,7 @@ export function LogCapturePage() {
           limit={limit}
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
+          onRowClick={setPreview}
           emptyText="暂无抓取日志"
           onRetry={() => void fetchData()}
           filters={

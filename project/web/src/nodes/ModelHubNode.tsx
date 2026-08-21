@@ -1,15 +1,14 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
-import { buildFlashKeyframes, flashKeyframeName, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
   simplified?: boolean
-  flash?: ProviderFlashPayload
-  flashes?: readonly ProviderFlashPayload[]
+  flashLayers?: readonly FlowLayerOverlay[]
 }
 
 interface ModelHubNodeProps {
@@ -20,7 +19,7 @@ interface ModelHubNodeProps {
 export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   const models = data.models || []
   const simplified = data.simplified === true
-  const allFlashes = data.flashes && data.flashes.length > 0 ? data.flashes : data.flash ? [data.flash] : []
+  const flashLayers = data.flashLayers ?? []
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
 
@@ -32,27 +31,24 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   }, [id, models.length, updateNodeInternals])
 
   const pad = topologyConfig.render.modelHub
-  const flashAnim: CSSProperties | undefined =
-    allFlashes.length > 0
-      ? {
-          animationName: allFlashes.map((f) => flashKeyframeName(f)).join(', '),
-          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
-          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
-          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
-          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
-        }
-      : undefined
 
   return (
     <div
-      className="rounded-lg border border-border bg-card text-card-foreground"
+      className="relative rounded-lg border border-border bg-card text-card-foreground"
       style={{
         width: 'fit-content',
-        ...(flashAnim ?? {}),
       }}
     >
-      {allFlashes.map((f) => (
-        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      {flashLayers.map((layer) => (
+        <span
+          key={layer.runId}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-lg transition-opacity duration-300"
+          style={{
+            boxShadow: `0 0 10px 2px ${layer.color}`,
+            border: `1px solid ${layer.color}`,
+          }}
+        />
       ))}
       {!simplified && (
         <div

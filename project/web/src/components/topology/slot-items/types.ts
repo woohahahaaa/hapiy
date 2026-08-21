@@ -111,7 +111,7 @@ export const SLOT_LABELS: Record<SlotType, string> = {
   logOutput: '日志抓取',
 }
 
-import type { ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 // Drag-reorder props passed from the slot node down to each item card.
 export type SlotItemDragProps = {
@@ -120,7 +120,7 @@ export type SlotItemDragProps = {
   onDragStart?: () => void
   onDragOver?: () => void
   onDrop?: () => void
-  flashes?: readonly ProviderFlashPayload[]
+  flashLayers?: readonly FlowLayerOverlay[]
 }
 
 // Rule sources keyed by slotType (everything except logOutput binds to a rule).

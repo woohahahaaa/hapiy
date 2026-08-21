@@ -29,7 +29,8 @@ import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
-import { FlowLightEdge, type FlowLightPayload, type ProviderFlashPayload } from '@/edges/FlowLightEdge'
+import { FlowLightEdge } from '@/edges/FlowLightEdge'
+import { FlowHub, buildFlowSteps, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -65,10 +66,10 @@ const edgeTypes = {
   flowLight: FlowLightEdge,
 }
 
-// Flow-light animation timing (ms): each chain edge sweeps FLOW_PER_EDGE_MS;
-// one full chain cycle lasts edgeCount * FLOW_PER_EDGE_MS and loops while the
-// request is active. FLOW_SYNC_INTERVAL_MS mirrors the activity page poll.
-const FLOW_PER_EDGE_MS = 340
+// Flow-light animation timing (ms). Each run advances one step per
+// FLOW_STEP_MS; a fresh run starts per poll for every active request and runs
+// independently until its final step. FLOW_SYNC_INTERVAL_MS mirrors the
+// activity page poll.
 const FLOW_SYNC_INTERVAL_MS = 2000
 const FLOW_COLORS_SETTING_KEY = 'flow_light_colors'
 // Unified wire opacity: active wires render at 0.6, disabled wires at 0.2,
@@ -89,17 +90,6 @@ function canvasWiresFromEdges(edges: readonly Edge[]): FlatWire[] {
 
 function wiringEdgeId(source: string, target: string): string {
   return `${source}→${target}`
-}
-
-function visibleFlowPath(pathNodeIds: readonly string[], canvas: FlatCanvas | null): readonly string[] {
-  if (!canvas) return pathNodeIds
-  const providerIds = new Set(canvas.providers.map((provider) => provider.id))
-  return pathNodeIds.filter((nodeId, index) => {
-    if (index === 0 || !providerIds.has(nodeId)) return true
-    const previous = pathNodeIds[index - 1]
-    const previousNode = canvas.topLevel.find((node) => node.id === previous)
-    return !previousNode || !isProviderSlot(previousNode)
-  })
 }
 
 /**
@@ -577,18 +567,50 @@ export function TopologyPage() {
     [canvas, providerByName, duplicateProviderNames],
   )
 
-  // Per-request flow layers: nodeId -> flash layers (one per active request),
-  // so concurrent requests stack naturally instead of overwriting each other.
-  // Declared before topLevelNodes because it feeds node data.
-  const [providerFlashes, setProviderFlashState] = useState<ReadonlyMap<string, readonly ProviderFlashPayload[]>>(new Map())
-  const providerFlashesRef = useRef<Map<string, ProviderFlashPayload[]>>(new Map())
-  const setProviderFlashLayer = useCallback((nodeId: string, payload: ProviderFlashPayload) => {
-    const existing = providerFlashesRef.current.get(nodeId) ?? []
-    const next = existing.filter((flash) => flash.runId !== payload.runId)
-    next.push(payload)
-    providerFlashesRef.current.set(nodeId, next)
-    setProviderFlashState(new Map(providerFlashesRef.current))
-  }, [setProviderFlashState])
+  // Per-run overlay layers: nodeId -> stacked layers, edgeId -> stacked layers.
+  // The FlowHub fires onStep per run; the page records each run's current
+  // overlay and rebuilds these maps, so overlapping runs stack naturally
+  // instead of restarting keyframe animations. Declared before topLevelNodes
+  // because it feeds node data.
+  const [litNodeLayers, setLitNodeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
+  const [litEdgeLayers, setLitEdgeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
+  const litNodeRef = useRef(new Map<string, FlowLayerOverlay[]>())
+  const litEdgeRef = useRef(new Map<string, FlowLayerOverlay[]>())
+  const runStepsRef = useRef(new Map<number, { color: string; step: FlowStep }>())
+
+  const rebuildLayers = useCallback(() => {
+    setLitNodeLayers(new Map(litNodeRef.current))
+    setLitEdgeLayers(new Map(litEdgeRef.current))
+  }, [])
+
+  const applyStepToLayers = useCallback((runId: number, step: FlowStep, color: string) => {
+    runStepsRef.current.set(runId, { color, step })
+    if (step.kind === 'node') {
+      const existing = (litNodeRef.current.get(step.nodeId) ?? []).filter((layer) => layer.runId !== runId)
+      existing.push({ runId, color })
+      litNodeRef.current.set(step.nodeId, existing)
+    } else {
+      const existing = (litEdgeRef.current.get(step.edgeId) ?? []).filter((layer) => layer.runId !== runId)
+      existing.push({ runId, color })
+      litEdgeRef.current.set(step.edgeId, existing)
+    }
+    rebuildLayers()
+  }, [rebuildLayers])
+
+  const removeRunLayers = useCallback((runId: number) => {
+    runStepsRef.current.delete(runId)
+    for (const [nodeId, layers] of [...litNodeRef.current]) {
+      const kept = layers.filter((layer) => layer.runId !== runId)
+      if (kept.length === 0) litNodeRef.current.delete(nodeId)
+      else litNodeRef.current.set(nodeId, kept)
+    }
+    for (const [edgeId, layers] of [...litEdgeRef.current]) {
+      const kept = layers.filter((layer) => layer.runId !== runId)
+      if (kept.length === 0) litEdgeRef.current.delete(edgeId)
+      else litEdgeRef.current.set(edgeId, kept)
+    }
+    rebuildLayers()
+  }, [rebuildLayers])
 
   const modelNodes = useMemo(() => {
     const empty = {
@@ -635,7 +657,7 @@ export function TopologyPage() {
         id: nodeId,
         type: 'modelHub',
         position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flashes: providerFlashes.get(nodeId) },
+        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flashLayers: litNodeLayers.get(nodeId) },
       })
     }
     modelColorRef.current = colorMap
@@ -673,7 +695,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             weight: node.weight ?? 1,
             models: modelNodes.entryModels.get(node.id) ?? [],
-            flashes: providerFlashes.get(node.id),
+            flashLayers: litNodeLayers.get(node.id),
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
                 const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
@@ -728,7 +750,7 @@ export function TopologyPage() {
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => p.name),
-            providerFlashes,
+            providerFlashLayers: litNodeLayers,
             onAddProvider: () => handleAddProvider(node.id),
             onSelectProvider: (providerId: string, name: string) => handleSelectProvider(providerId, name),
             onToggleProvider: (providerId: string, enabled: boolean) =>
@@ -749,7 +771,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             isProviderSlot: false,
             externallyDisabled: externallyDisabledSet.has(node.id),
-            flashes: providerFlashes.get(node.id),
+            flashLayers: litNodeLayers.get(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
@@ -772,7 +794,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, providerFlashes])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, litNodeLayers])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -816,9 +838,25 @@ export function TopologyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas, modelNodes])
 
-  const [edges, setEdges, onEdgesChange] = useEdgesState(baseEdges)
+  // Merge live edge layers into the base edges so FlowLightEdge can render the
+  // stacked flow dots without touching the persisted edge document.
+  const displayEdges = useMemo<Edge[]>(
+    () =>
+      baseEdges.map((edge) => {
+        const layers = litEdgeLayers.get(edge.id)
+        if (!layers || layers.length === 0) return edge
+        return { ...edge, data: { ...edge.data, layers } }
+      }),
+    [baseEdges, litEdgeLayers],
+  )
+
+  const [edges, setEdges, onEdgesChange] = useEdgesState(displayEdges)
   const edgesRef = useRef(edges)
   edgesRef.current = edges
+
+  useEffect(() => {
+    setEdges(displayEdges)
+  }, [displayEdges, setEdges])
 
   // ── Flow light (request_started SSE) ──
   // The backend emits `request_started` when a queued request begins executing
@@ -827,113 +865,21 @@ export function TopologyPage() {
   // last request finishes the beam is removed.
   const canvasRef = useRef<FlatCanvas | null>(null)
   canvasRef.current = canvas
-  const flowRunIdRef = useRef(0)
-  // Per-request flow layers. Each in-flight request owns one layer; multiple
-  // concurrent requests on the same workflow stack their beams/flashes
-  // independently instead of overwriting each other. A layer that finished is
-  // kept as `draining` until its final node segment has fully played out.
-  type FlowLayer = {
-    requestId: string
-    model: string
-    runId: number
-    color: string
-    pathNodeIds: readonly string[]
-    cycleMs: number
-    staggerMs: number
-    draining: boolean
-    drainUntil: number
-  }
-  const flowLayersRef = useRef<Map<string, FlowLayer>>(new Map())
-  const firstSyncRef = useRef(true)
-
-  const projectLayer = useCallback(
-    (layer: FlowLayer) => {
-      const { pathNodeIds, runId, color, cycleMs, staggerMs } = layer
-      const nodeCount = pathNodeIds.length
-      if (nodeCount < 2) return
-      const visiblePath = visibleFlowPath(pathNodeIds, canvasRef.current)
-      const visibleIndex = new Map(visiblePath.map((nodeId, index) => [nodeId, index]))
-      const lights = new Map<string, FlowLightPayload>()
-      for (let i = 0; i < visiblePath.length - 1; i++) {
-        lights.set(wiringEdgeId(visiblePath[i], visiblePath[i + 1]), {
-          runId,
-          cycleMs,
-          phaseMs: i * FLOW_PER_EDGE_MS + staggerMs,
-          durMs: FLOW_PER_EDGE_MS,
-          color,
-        })
-      }
-      setEdges((prev) =>
-        prev.map((edge) => {
-          const light = lights.get(edge.id)
-          if (!light) return edge
-          const existing = (edge.data?.lights as FlowLightPayload[] | undefined) ?? []
-          const next = existing.filter((l) => l.runId !== runId)
-          next.push(light)
-          return { ...edge, data: { ...edge.data, lights: next } }
-        }),
-      )
-      // Border flash on every node the request traverses. The provider slot
-      // flashes its matched child; other slots flash when enabled.
-      if (canvasRef.current) {
-        const canvas = canvasRef.current
-        for (let i = 0; i < nodeCount; i++) {
-          const nodeId = pathNodeIds[i]
-          const node = canvas.topLevel.find((n) => n.id === nodeId)
-          const phaseIndex = visibleIndex.get(nodeId) ?? (i > 0 ? visibleIndex.get(pathNodeIds[i - 1]) ?? i : i)
-          if (!node) {
-            setProviderFlashLayer(nodeId, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
-            continue
-          }
-          if (isProviderSlot(node)) {
-            const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
-            const childId = pathNodeIds[i + 1]
-            const matched = children.find((p) => p.id === childId) ?? children[0]
-            if (matched) {
-              setProviderFlashLayer(matched.id, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
-            }
-            continue
-          }
-          // 非 provider slot(请求改写/日志抓取等)只在自身启用时点亮。
-          if (node.enabled === true) {
-            setProviderFlashLayer(nodeId, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
-          }
-        }
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callbacks, intentionally referenced
-    [setEdges, setProviderFlashLayer],
-  )
-
-  const removeLayer = useCallback(
-    (layer: FlowLayer) => {
-      flowLayersRef.current.delete(layer.requestId)
-      setEdges((prev) =>
-        prev.map((edge) => {
-          const lights = edge.data?.lights as FlowLightPayload[] | undefined
-          if (!lights || !lights.some((l) => l.runId === layer.runId)) return edge
-          const keep = lights.filter((l) => l.runId !== layer.runId)
-          const rest: Record<string, unknown> = {}
-          for (const [key, value] of Object.entries(edge.data ?? {})) {
-            if (key !== 'lights') rest[key] = value
-          }
-          return {
-            ...edge,
-            data: keep.length > 0 ? { ...rest, lights: keep } : Object.keys(rest).length > 0 ? rest : undefined,
-          }
-        }),
-      )
-      // Remove every flash layer this run owned: filter by runId per node.
-      for (const [nodeId, layers] of providerFlashesRef.current) {
-        const kept = layers.filter((f) => f.runId !== layer.runId)
-        if (kept.length === 0) providerFlashesRef.current.delete(nodeId)
-        else providerFlashesRef.current.set(nodeId, kept)
-      }
-      setProviderFlashState(new Map(providerFlashesRef.current))
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callbacks, intentionally referenced
-    [setEdges, setProviderFlashLayer],
-  )
+  const flowHubRef = useRef<FlowHub | null>(null)
+  useEffect(() => {
+    const hub = new FlowHub({
+      onStep: (runId, step, color) => applyStepToLayers(runId, step, color),
+      onRunEnd: (runId) => removeRunLayers(runId),
+    })
+    flowHubRef.current = hub
+    return () => {
+      hub.stopAll()
+      if (flowHubRef.current === hub) flowHubRef.current = null
+    }
+    // applyStepToLayers / removeRunLayers only capture stable setters and
+    // state-update helpers, so binding them once on mount is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Build the ordered node path a request traverses. Prefer the backend's
   // dispatch-time fact (request.pathNodeIds); fall back to the current
@@ -951,6 +897,10 @@ export function TopologyPage() {
     [],
   )
 
+  // Poll the active-requests API and spawn one serial run per active request.
+  // Each run starts at the model node and plays its steps in order; a fresh
+  // run is started every poll cycle, so a request that stays active overlaps
+  // its own runs naturally instead of waiting for the previous one to finish.
   const syncFlowLights = useCallback(async () => {
     let requests: readonly ActiveRequest[]
     try {
@@ -958,71 +908,33 @@ export function TopologyPage() {
     } catch {
       return
     }
-    const now = Date.now()
-    const activeIds = new Set<string>()
-    let staggerIndex = 0
     for (const request of requests) {
       if (request.endTime !== null) continue
-      activeIds.add(request.requestId)
-      const existing = flowLayersRef.current.get(request.requestId)
-      if (existing) {
-        // A request that was draining got back into the active set (rare);
-        // simply un-drain it.
-        if (existing.draining) {
-          existing.draining = false
-        }
-        projectLayer(existing)
-        continue
-      }
       const path = resolveLayerPath(request)
       if (!path) continue
-      const runId = (flowRunIdRef.current += 1)
-      const staggerMs = firstSyncRef.current ? staggerIndex++ * 500 : 0
-      const edgeCount = visibleFlowPath(path, canvasRef.current).length - 1
-      const layer: FlowLayer = {
-        requestId: request.requestId,
-        model: request.model,
-        runId,
-        color: modelColorRef.current.get(request.model) ?? 'var(--primary)',
-        pathNodeIds: path,
-        cycleMs: edgeCount * FLOW_PER_EDGE_MS,
-        staggerMs,
-        draining: false,
-        drainUntil: 0,
-      }
-      flowLayersRef.current.set(request.requestId, layer)
-      projectLayer(layer)
+      const steps = buildFlowSteps(path, canvasRef.current)
+      if (steps.length === 0) continue
+      const color = modelColorRef.current.get(request.model) ?? 'var(--primary)'
+      flowHubRef.current?.startRun({ requestId: request.requestId, color, steps })
     }
-    firstSyncRef.current = false
-    // Mark finished requests draining (keep current beam running out), then
-    // drop layers whose final segment completed.
-    for (const [requestId, layer] of [...flowLayersRef.current.entries()]) {
-      if (layer.draining) {
-        if (now >= layer.drainUntil) removeLayer(layer)
-        continue
-      }
-      if (activeIds.has(requestId)) continue
-      layer.draining = true
-      layer.drainUntil = now + layer.cycleMs + layer.staggerMs
-    }
-  }, [resolveLayerPath, projectLayer, removeLayer])
+  }, [resolveLayerPath])
 
   const syncFlowLightsRef = useRef(syncFlowLights)
   useEffect(() => {
     syncFlowLightsRef.current = syncFlowLights
   }, [syncFlowLights])
 
-  // baseEdges 重建会清掉 light 字段。这里保留 flowLayersRef 的既有层,
-  // 清空投影后立即重新同步,让活跃请求的流光/闪烁随新拓扑重放。
-  // 立即同步是为了避免短请求在 2 秒轮询窗口内结束,导致拓扑变化后
-  // 新生效的节点(如 logOutput)不亮。
+  // baseEdges 重建后重放：清空 overlay 层，立即为仍活跃的请求启动新 run，
+  // 让拓扑变化后（如 logOutput 开关）生效节点立即亮起。
   useEffect(() => {
     setEdges(baseEdges)
-    providerFlashesRef.current.clear()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProviderFlashState(new Map())
+    flowHubRef.current?.stopAll()
+    runStepsRef.current.clear()
+    litNodeRef.current.clear()
+    litEdgeRef.current.clear()
+    rebuildLayers()
     void syncFlowLightsRef.current()
-  }, [baseEdges, setEdges])
+  }, [baseEdges, setEdges, rebuildLayers])
 
   useEffect(() => {
     void syncFlowLights()
