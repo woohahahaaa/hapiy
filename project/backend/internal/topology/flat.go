@@ -34,7 +34,8 @@ const (
 type FlatNode struct {
 	ID            string          `json:"id"`
 	Kind          NodeKind        `json:"kind"`
-	Name          string          `json:"name,omitempty"`            // provider configured name for KindProvider
+	Name          string          `json:"name,omitempty"`            // provider configured name for KindProvider (binding fallback)
+	ProviderID    string          `json:"provider_id,omitempty"`     // for KindProvider: stable key of the provider record; survives renames
 	SlotType      string          `json:"slot_type,omitempty"`       // for KindSlot
 	Enabled       bool            `json:"enabled"`                   // request-entry master switch / provider mini-switch / logOutput slot master switch
 	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
@@ -60,12 +61,23 @@ type Topology struct {
 // ProviderRef is the minimal provider facts dispatch needs to decide whether a
 // provider node can serve a request.
 type ProviderRef struct {
+	ID       string // provider record ID (stable).
 	Name     string
 	Status   bool // Provider table status
 	Enabled  bool // provider node mini-switch in its slot
 	Workflow bool // master-switch activation (derived from its request entry)
 	Models   map[string]struct{}
 	Paths    map[string]struct{} // supported endpoint paths; empty set = any
+}
+
+// refKey returns the identifier a provider node binds to: its stored
+// provider_id when present (rename-safe), else its configured name. Lookups
+// must use the same key on both sides of the binding.
+func refKey(n FlatNode) string {
+	if n.ProviderID != "" {
+		return n.ProviderID
+	}
+	return n.Name
 }
 
 // Chain is one complete, runnable single-line pipeline starting at a provider.
@@ -196,12 +208,13 @@ func nodeByID(t *Topology, id string) (FlatNode, bool) {
 }
 
 // EligibleProvider is a provider node that can serve the request, tagged with
-// its entry weight.
+// its entry weight and its stable binding.
 type EligibleProvider struct {
-	Node   FlatNode
-	Name   string
-	Weight float64
-	Chain  []string
+	Node       FlatNode
+	Name       string
+	ProviderID string // stable provider record id; empty on legacy name-only bindings
+	Weight     float64
+	Chain      []string
 	// EntryID is the request entry whose workflow selected this provider,
 	// so callers can reconstruct the exact node path the request traverses.
 	EntryID string
@@ -256,11 +269,12 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 				}
 				seen[key] = true
 				result = append(result, EligibleProvider{
-					Node:    selected,
-					Name:    selected.Name,
-					Weight:  entry.Weight,
-					Chain:   chain,
-					EntryID: entry.ID,
+					Node:       selected,
+					Name:       selected.Name,
+					ProviderID: selected.ProviderID,
+					Weight:     entry.Weight,
+					Chain:      chain,
+					EntryID:    entry.ID,
 				})
 				break
 			}
@@ -314,10 +328,10 @@ func BuildRequestPath(t *Topology, entryID, providerID string) []string {
 }
 
 // providerEligible reports whether the provider node can serve the request:
-// its configured provider must be present and Status-enabled, the node's own
+// its bound provider must be present and Status-enabled, the node's own
 // mini-switch must be on, and it must support the model (and path).
 func providerEligible(refs map[string]ProviderRef, node FlatNode, model, path string) bool {
-	ref, ok := refs[node.Name]
+	ref, ok := refs[refKey(node)]
 	if !ok || !ref.Status || !node.Enabled || !ref.Enabled || !ref.Workflow {
 		return false
 	}
@@ -428,10 +442,11 @@ func FindDuplicateActivations(t *Topology) []DuplicateActivation {
 				break
 			}
 			if node.Kind == KindProvider {
-				if prior, exists := entryProvider[node.Name]; exists && prior != entry.ID {
+				key := refKey(node)
+				if prior, exists := entryProvider[key]; exists && prior != entry.ID {
 					conflicts[node.Name] = append(conflicts[node.Name], entry.ID)
 				} else if !exists {
-					entryProvider[node.Name] = entry.ID
+					entryProvider[key] = entry.ID
 				}
 				break
 			}

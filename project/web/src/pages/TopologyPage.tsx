@@ -393,6 +393,12 @@ export function TopologyPage() {
     return map
   }, [providers])
 
+  const providerById = useMemo(() => {
+    const map = new Map<string, Provider>()
+    for (const p of providers ?? []) map.set(p.id, p)
+    return map
+  }, [providers])
+
   const updateTopologyNodes = useCallback(
     (updater: (nodes: readonly FlatNode[]) => readonly FlatNode[]) => {
       const cur = tpRef.current
@@ -765,10 +771,10 @@ export function TopologyPage() {
         const children = canvas.providers
           .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
           .map((p) => {
-            const provider = p.name ? providerByName.get(p.name) : undefined
+            const provider = p.providerId ? providerById.get(p.providerId) : p.name ? providerByName.get(p.name) : undefined
             return {
               id: p.id,
-              label: p.name,
+              label: provider?.name ?? p.name ?? '',
               baseURLCount: provider?.baseUrls.length ?? 0,
               keyCount: provider?.keys.length ?? 0,
               modelCount: provider?.models.length ?? 0,
@@ -1645,10 +1651,12 @@ export function TopologyPage() {
         }
       }
       updateTopologyNodes((list) =>
-        list.map((n) => (n.id === providerId ? { ...n, name, enabled: n.enabled && defaultEnabled } : n)),
+        list.map((n) =>
+          n.id === providerId ? { ...n, name, providerId: providerByName.get(name)?.id ?? n.providerId, enabled: n.enabled && defaultEnabled } : n,
+        ),
       )
     },
-    [updateTopologyNodes],
+    [updateTopologyNodes, providerByName],
   )
 
   const handleReorderProvider = useCallback(
@@ -1839,6 +1847,8 @@ export function TopologyPage() {
           deleteKeyCode={null}
           proOptions={{ hideAttribution: true }}
           fitView
+          minZoom={0.01}
+          maxZoom={64}
           zoomOnDoubleClick={false}
           panOnDrag={true}
           selectionOnDrag={false}

@@ -23,12 +23,13 @@ var ErrNoProvider = errors.New("no provider available")
 func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
-	refs := make(map[string]topology.ProviderRef, len(e.plans))
+	refs := make(map[string]topology.ProviderRef, len(e.plans)*2)
 	for _, plan := range e.plans {
 		if plan == nil || plan.Provider == nil {
 			continue
 		}
-		refs[plan.Provider.Name] = topology.ProviderRef{
+		ref := topology.ProviderRef{
+			ID:       plan.Provider.ID,
 			Name:     plan.Provider.Name,
 			Status:   plan.Provider.Status,
 			Enabled:  true, // provider node mini-switch is checked in the flat walk
@@ -36,6 +37,11 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 			Models:   plan.ModelSet,
 			Paths:    plan.AllowedPaths,
 		}
+		// Bound by ID and by name: nodes carry the stable provider_id and
+		// fall back to the legacy name-only binding. refKey() picks the same
+		// key the node stores.
+		refs[ref.ID] = ref
+		refs[ref.Name] = ref
 	}
 	return refs
 }
@@ -111,7 +117,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 	if affinityReq != nil && e.Affinity() != nil {
 		match := e.Affinity().Lookup(affinityReq)
 		if match.Matched {
-			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, nil)
+			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, match.Triple.ProviderName, nil)
 			if err == nil {
 				return &DispatchResult{
 					Plan:          plan,
@@ -137,7 +143,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 			return nil, err
 		}
 		if eligible != nil {
-			provider, plan, err := e.buildPlanForProvider(eligible.Name, eligible.Chain)
+			provider, plan, err := e.buildPlanForProvider(eligible.ProviderID, eligible.Name, eligible.Chain)
 			if err != nil {
 				return nil, err
 			}
@@ -163,11 +169,23 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 }
 
 // buildPlanForProvider builds (or reuses) an execution plan for a provider.
-// When chain is non-nil the plan is restricted to those slot types.
-func (e *Engine) buildPlanForProvider(name string, chain []string) (*model.Provider, *ExecutionPlan, error) {
-	provider, err := e.getProviderByName(name)
-	if err != nil {
-		return nil, nil, err
+// When chain is non-nil the plan is restricted to those slot types. The
+// provider is resolved by stable ID when available, falling back to the
+// legacy name binding.
+func (e *Engine) buildPlanForProvider(providerID, name string, chain []string) (*model.Provider, *ExecutionPlan, error) {
+	var provider *model.Provider
+	var err error
+	if providerID != "" {
+		provider, err = e.getProviderByID(providerID)
+		if err != nil {
+			provider = nil
+		}
+	}
+	if provider == nil {
+		provider, err = e.getProviderByName(name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("provider %q (id %q) not found", name, providerID)
+		}
 	}
 	plan := &ExecutionPlan{ID: provider.ID, Provider: provider}
 	if chain != nil {
@@ -178,6 +196,18 @@ func (e *Engine) buildPlanForProvider(name string, chain []string) (*model.Provi
 		return nil, nil, err
 	}
 	return provider, plan, nil
+}
+
+// getProviderByID looks up a provider by its stable record ID.
+func (e *Engine) getProviderByID(id string) (*model.Provider, error) {
+	e.providersMu.RLock()
+	defer e.providersMu.RUnlock()
+	for _, p := range e.providers {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+	return nil, fmt.Errorf("provider %q not found", id)
 }
 
 // getProviderByName looks up a provider by its configured Name.

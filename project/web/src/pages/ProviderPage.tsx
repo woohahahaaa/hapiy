@@ -29,7 +29,7 @@ const emptyProvider: ProviderInput = {
 // Prices in 单独设置价格 mode are strings that must start with "$", "¥" or
 // "￥"; the prefix also selects the billing currency for the model.
 const PRICE_PREFIX = /^[$¥￥]/
-const PRICE_ERROR_TEXT = '必须用美元或人民币符号开头'
+const PRICE_ERROR_TEXT = '必须以 $ 或 ¥ 开头'
 const PRICE_FIELDS: ReadonlyArray<{ readonly key: keyof ModelPrices; readonly placeholder: string }> = [
   { key: 'input', placeholder: '输入' },
   { key: 'cacheWrite', placeholder: '缓存写入' },
@@ -186,10 +186,17 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [isFetching, setIsFetching] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
   const [priceError, setPriceError] = useState(false)
+  const [priceErrorPos, setPriceErrorPos] = useState<{ left: number; top: number } | null>(null)
   const priceErrorTimer = useRef<number | null>(null)
+  const listRef = useRef<HTMLDivElement | null>(null)
 
-  // Floating tooltip near the model list, auto-dismissed after ~4 seconds.
-  const showPriceError = () => {
+  // Floating tooltip near the offending input, auto-dismissed after ~4 seconds.
+  const showPriceError = (anchor?: HTMLElement | null) => {
+    if (anchor && listRef.current) {
+      const anchorRect = anchor.getBoundingClientRect()
+      const listRect = listRef.current.getBoundingClientRect()
+      setPriceErrorPos({ left: anchorRect.left - listRect.left, top: anchorRect.top - listRect.top })
+    }
     setPriceError(true)
     if (priceErrorTimer.current !== null) window.clearTimeout(priceErrorTimer.current)
     priceErrorTimer.current = window.setTimeout(() => setPriceError(false), 4000)
@@ -326,9 +333,9 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       <Field>
         <FieldLabel>模型</FieldLabel>
         <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型名称" className="w-48" />
+              <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型名称" className="min-w-0 flex-1" />
               <Button type="button" variant="outline" size="sm" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, { ...newModel, model: newModel.model.trim() }] })); setNewModel({ model: '', endpoints: [], rate: '1', prices: null }) }}>
                 <AppIcon name="add" data-icon="inline-start" />添加模型
               </Button>
@@ -343,9 +350,10 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               </Button>
             </div>
           </div>
-          <div className="relative flex flex-col gap-2">
+          <div ref={listRef} className="relative flex flex-col gap-2">
             {priceError && (
-              <div role="alert" className="pointer-events-none absolute -top-3 right-16 z-10 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0">
+              <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
+                style={priceErrorPos ? { left: priceErrorPos.left + 4, top: priceErrorPos.top - 8 } : undefined}>
                 {PRICE_ERROR_TEXT}
               </div>
             )}
@@ -360,7 +368,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               return (
                 <div key={model.model} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
                   <Input value={model.model} onChange={(event) => updateModel(model.model, { model: event.target.value })} className="w-full" />
-                  <ModelPriceCell model={model} onPatch={(patch) => updateModel(model.model, patch)} onInvalid={() => showPriceError()} />
+                  <ModelPriceCell model={model} onPatch={(patch) => updateModel(model.model, patch)} onInvalid={(anchor) => showPriceError(anchor)} />
                   <Select
                     value={endpointValue}
                     onValueChange={(value) => updateModel(model.model, { endpoints: value === '__all__' ? [] : [value] })}
@@ -386,7 +394,15 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
         <Button disabled={isSaving || !form.name.trim()} onClick={() => {
-          for (const item of form.models) {
+          const sanitizedModels = form.models.map((item) => {
+            if (!item.prices) return item
+            const prices = { ...item.prices }
+            for (const { key } of PRICE_FIELDS) {
+              prices[key] = prices[key].replace(/\s+/g, '')
+            }
+            return { ...item, prices }
+          })
+          for (const item of sanitizedModels) {
             if (item.prices && PRICE_FIELDS.some(({ key }) => {
               const value = item.prices![key].trim()
               return value !== '' && !PRICE_PREFIX.test(value)
@@ -395,7 +411,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               return
             }
           }
-          onSave({ ...form, name: form.name.trim() })
+          onSave({ ...form, models: sanitizedModels, name: form.name.trim() })
         }}>{isSaving ? '保存中...' : '保存'}</Button>
       </div>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
@@ -434,7 +450,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
 type ModelPriceCellProps = {
   readonly model: ProviderModel
   readonly onPatch: (patch: Partial<ProviderModel>) => void
-  readonly onInvalid: () => void
+  readonly onInvalid: (anchor: HTMLElement | null) => void
 }
 
 // Price cell: a dropdown switching between 设置倍率 (rate multiplier input)
@@ -456,14 +472,14 @@ function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
     const next = PRICE_PREFIX.test(raw) ? raw.replace(/\s+/g, '') : raw
     onPatch({ prices: { ...prices, [key]: next } })
   }
-  const handlePriceBlur = () => {
+  const handlePriceBlur = (anchor: HTMLElement | null) => {
     const prices = model.prices
     if (!prices) return
     if (PRICE_FIELDS.some(({ key }) => {
       const value = prices[key].trim()
       return value !== '' && !PRICE_PREFIX.test(value)
     })) {
-      onInvalid()
+      onInvalid(anchor)
     }
   }
 
@@ -477,24 +493,24 @@ function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
         </SelectContent>
       </Select>
       {usePrices ? (
-        <>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {PRICE_FIELDS.map(({ key, placeholder }) => (
             <Input
               key={key}
               value={model.prices?.[key] ?? ''}
               onChange={(event) => handlePriceChange(key, event.target.value)}
-              onBlur={handlePriceBlur}
-              className="w-20 px-2 text-xs"
+              onBlur={(event) => handlePriceBlur(event.currentTarget)}
+              className="min-w-0 flex-1 px-2 text-xs"
               placeholder={placeholder}
               title="以 $ 或 ¥ 开头"
             />
           ))}
-        </>
+        </div>
       ) : (
         <Input
           value={model.rate}
           onChange={(event) => onPatch({ rate: event.target.value })}
-          className="w-20 px-2 text-xs"
+          className="min-w-0 flex-1 px-2 text-xs"
           placeholder="1"
           title="倍率，支持分数，如 1/2"
         />

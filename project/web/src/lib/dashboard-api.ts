@@ -342,6 +342,7 @@ export type FlatNode = {
   readonly id: string
   readonly kind: FlatNodeKind
   readonly name?: string
+  readonly providerId?: string
   readonly slotType?: string
   readonly enabled: boolean
   readonly weight?: number
@@ -380,6 +381,7 @@ function parseFlatNode(value: unknown): FlatNode {
     id: readString(value.id, 'node.id'),
     kind,
     name: typeof value.name === 'string' ? value.name : undefined,
+    providerId: typeof value.provider_id === 'string' ? value.provider_id : undefined,
     slotType: typeof value.slot_type === 'string' ? value.slot_type : undefined,
     enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
     weight: typeof value.weight === 'number' ? value.weight : undefined,
@@ -413,6 +415,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     id: node.id,
     kind: node.kind,
     ...(node.name !== undefined ? { name: node.name } : {}),
+    ...(node.providerId !== undefined ? { provider_id: node.providerId } : {}),
     ...(node.slotType !== undefined ? { slot_type: node.slotType } : {}),
     enabled: node.enabled,
     ...(node.weight !== undefined ? { weight: node.weight } : {}),

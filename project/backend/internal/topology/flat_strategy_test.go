@@ -102,3 +102,64 @@ func TestFindEligibleProvidersStrategySkipsIneligibleChild(t *testing.T) {
 		t.Fatalf("expected only deepseek-a, got %+v", got)
 	}
 }
+
+func TestFindEligibleProvidersMatchesByProviderIDOnRename(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "re", Kind: KindRequestEntry, Enabled: true, Weight: 1},
+			{ID: "ps", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "prov-a", Kind: KindProvider, Name: "deepseek-old-name", ProviderID: "p-123", Enabled: true},
+			{ID: "rm", Kind: KindSlot, SlotType: "requestModify", Enabled: true},
+		},
+		Wires: []Wire{
+			{Source: "re", Target: "ps"},
+			{Source: "ps", Target: "prov-a"},
+			{Source: "prov-a", Target: "rm"},
+		},
+	}
+	// The provider was renamed: refs are keyed by the NEW name, but the node
+	// binds by provider_id, so it must still resolve.
+	refs := map[string]ProviderRef{
+		"deepseek": {ID: "p-123", Name: "deepseek", Status: true, Enabled: true, Workflow: true,
+			Models: map[string]struct{}{"deepseek-chat": {}}},
+		"p-123": {ID: "p-123", Name: "deepseek", Status: true, Enabled: true, Workflow: true,
+			Models: map[string]struct{}{"deepseek-chat": {}}},
+	}
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 eligible provider, got %d", len(got))
+	}
+	if got[0].ProviderID != "p-123" {
+		t.Fatalf("expected bound provider id p-123, got %q", got[0].ProviderID)
+	}
+}
+
+func TestProviderEligibleLegacyNameOnlyBindingStillMatches(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "re", Kind: KindRequestEntry, Enabled: true, Weight: 1},
+			{ID: "ps", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "prov-a", Kind: KindProvider, Name: "deepseek", Enabled: true},
+			{ID: "rm", Kind: KindSlot, SlotType: "requestModify", Enabled: true},
+		},
+		Wires: []Wire{
+			{Source: "re", Target: "ps"},
+			{Source: "ps", Target: "prov-a"},
+			{Source: "prov-a", Target: "rm"},
+		},
+	}
+	refs := map[string]ProviderRef{
+		"deepseek": {ID: "p-123", Name: "deepseek", Status: true, Enabled: true, Workflow: true,
+			Models: map[string]struct{}{"deepseek-chat": {}}},
+	}
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "deepseek" {
+		t.Fatalf("legacy name binding failed: %+v", got)
+	}
+}
