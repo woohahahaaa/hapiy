@@ -1,42 +1,8 @@
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import fs from "node:fs"
-import { defineConfig, type Plugin } from "vite"
-
-// FLOW-DEBUG: dev-only endpoint appending animation lifecycle lines to .debug/flow.log
-// (gitignored). Removed together with the flow-log module after diagnosis.
-function flowLogMiddleware(): Plugin {
-  return {
-    name: "flow-log-middleware",
-    apply: "serve",
-    configureServer(server) {
-      server.middlewares.use("/__flow-log", (req, res) => {
-        if (req.method !== "POST") {
-          res.writeHead(405)
-          res.end()
-          return
-        }
-        let body = ""
-        req.on("data", (chunk: Buffer) => void (body += chunk.toString()))
-        req.on("end", () => {
-          try {
-            const { line } = JSON.parse(body) as { line: string }
-            if (typeof line !== "string") throw new Error("bad line")
-            const dir = path.resolve(__dirname, ".debug")
-            fs.mkdirSync(dir, { recursive: true })
-            fs.appendFileSync(path.join(dir, "flow.log"), `${line}\n`)
-            res.writeHead(204)
-          } catch {
-            res.writeHead(400)
-          } finally {
-            res.end()
-          }
-        })
-      })
-    },
-  }
-}
+import { defineConfig } from "vite"
+import { flowLogMiddleware } from "./flow-log-middleware"
 
 // https://vite.dev/config/
 export default defineConfig({

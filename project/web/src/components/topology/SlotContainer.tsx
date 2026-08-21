@@ -26,7 +26,7 @@ export function SlotContainer({
   return (
     <div
       className={cn(
-        'border-2 border-dashed border-border rounded-lg p-4 relative',
+        'border-2 border-dashed border-border rounded-lg p-4 relative bg-background',
         externallyDisabled && 'opacity-50 pointer-events-none',
         className,
       )}
