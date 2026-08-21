@@ -112,6 +112,7 @@ export type UsageLog = {
   readonly queueWaitMs: number
   readonly status: 'success' | 'failed'
   readonly errorMessage: string
+  readonly upstreamUrl: string
 }
 
 export type LogListParams = {
@@ -148,14 +149,15 @@ export type ActiveRequest = {
   readonly userId: string
   readonly provider: string
   readonly source: string
-  readonly startTime: string
   readonly stream: boolean
+  readonly startTime: string
   readonly elapsedMs: number
   readonly endTime: string | null
   readonly outcome: string
   readonly stage: string
   readonly chunkCount: number
   readonly bytesReceived: number
+  readonly pathNodeIds: readonly string[]
 }
 
 export type ActiveRequestConfig = {
@@ -830,6 +832,7 @@ function parseLog(value: unknown): UsageLog {
     queueWaitMs: parseStageMs(value.queue_wait_ms),
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
+    upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
   }
 }
 
@@ -1014,6 +1017,7 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     stage: readString(value.stage ?? '', 'active.stage'),
     chunkCount: readNumber(value.chunk_count ?? 0, 'active.chunk_count'),
     bytesReceived: readNumber(value.bytes_received ?? 0, 'active.bytes_received'),
+    pathNodeIds: readStringArray(value.path_node_ids ?? [], 'active.path_node_ids'),
   }
 }
 
@@ -1744,7 +1748,18 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async refreshExchangeRate(): Promise<number> {
     const body = await request('/exchange-rate/refresh', { method: 'POST' })
-    const rate = isRecord(body) && isRecord(body.data) ? readNumber(body.data.rate, 'exchange-rate.rate', 0) : 0
+    const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
+    if (rate <= 0) {
+      throw new DashboardApiError('服务端返回的汇率格式无效', null)
+    }
+    return rate
+  },
+  async testExchangeRate(url: string, field: string): Promise<number> {
+    const body = await request('/exchange-rate/test', {
+      method: 'POST',
+      body: JSON.stringify({ url, field }),
+    })
+    const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
     if (rate <= 0) {
       throw new DashboardApiError('服务端返回的汇率格式无效', null)
     }

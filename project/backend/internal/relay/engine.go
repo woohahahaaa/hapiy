@@ -190,6 +190,10 @@ type RelayResponse struct {
 	// QueueWaitMs is the time spent waiting for a concurrency slot before
 	// the upstream request is issued; -1 when no concurrency rule applies.
 	QueueWaitMs int
+	// UpstreamURL is the full URL (provider base URL + request path) that
+	// was actually issued to the upstream provider; empty when the relay
+	// never reached the upstream call.
+	UpstreamURL string
 }
 
 // StreamRewriteTotalMs returns the cumulative streaming rewrite time, or
@@ -321,7 +325,9 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 				}
 			}
 		}
-		return nil, err
+		// Propagate resp so the caller can still read fields like
+		// UpstreamURL even when the relay failed end-to-end.
+		return resp, err
 	}
 	resp.RequestRewriteMs = reqRewriteMs
 	resp.QueueWaitMs = queueWaitMs

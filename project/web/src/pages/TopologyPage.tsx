@@ -91,6 +91,17 @@ function wiringEdgeId(source: string, target: string): string {
   return `${source}→${target}`
 }
 
+function visibleFlowPath(pathNodeIds: readonly string[], canvas: FlatCanvas | null): readonly string[] {
+  if (!canvas) return pathNodeIds
+  const providerIds = new Set(canvas.providers.map((provider) => provider.id))
+  return pathNodeIds.filter((nodeId, index) => {
+    if (index === 0 || !providerIds.has(nodeId)) return true
+    const previous = pathNodeIds[index - 1]
+    const previousNode = canvas.topLevel.find((node) => node.id === previous)
+    return !previousNode || !isProviderSlot(previousNode)
+  })
+}
+
 /**
  * Ordered node-id chain a request for `model` travels, starting at the
  * `model-{model}` hub node and ending at the workflow's last node. Every chain
@@ -145,72 +156,6 @@ function computeLightChain(
     }
   }
   return chains[0] ?? null
-}
-
-/**
- * A provider child is unusable when its own canvas toggle is off or the
- * registered provider is disabled/auto-disabled/non-workflow/duplicated.
- */
-function providerUnavailable(
-  node: FlatNode,
-  providerByName: Map<string, Provider>,
-  duplicateProviderNames: Set<string>,
-): boolean {
-  if (node.enabled !== true) return true
-  if (node.name && duplicateProviderNames.has(node.name)) return true
-  const provider = node.name ? providerByName.get(node.name) : undefined
-  if (!provider) return true
-  if (provider.status === false || provider.workflowEnabled === false || provider.autoDisabled === true) return true
-  return false
-}
-
-/**
- * Truncate a flow-light chain at the first internal break point so the light
- * stops instead of travelling past it. Rules: a closed request entry stops the
- * light right after the model hub; a provider slot whose inspected provider(s)
- * are all unusable stops it at the slot itself. Backend-side failures (upstream
- * errors, disconnects) are invisible here and never truncate.
- */
-function applyInternalBreak(
-  chain: string[],
-  providerName: string | null,
-  canvas: FlatCanvas | null,
-  providerByName: Map<string, Provider>,
-  duplicateProviderNames: Set<string>,
-): string[] {
-  if (!canvas || chain.length < 2) return chain
-
-  const entry = canvas.topLevel.find((n) => n.id === chain[1] && isRequestEntry(n))
-  if (entry && entry.enabled !== true) return chain.slice(0, 2)
-
-  let slotId: string | null = null
-  let namedProvider: FlatNode | null = null
-  if (providerName) {
-    // 同名 provider 可能有多个(如不同插槽各有一个 deepseek)。请求实际
-    // 只会走 enabled 的那个,先匹配 enabled 的,避免误判为不可用而截断。
-    const candidates = canvas.providers.filter((p) => p.name === providerName)
-    const ordered = [...candidates].sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1))
-    for (const p of ordered) {
-      const sid = canvas.providerSlotOf.get(p.id)
-      if (sid && chain.includes(sid)) {
-        slotId = sid
-        namedProvider = p
-        break
-      }
-    }
-  }
-  if (slotId === null) {
-    slotId = chain.find((nodeId) => canvas.providers.some((p) => canvas.providerSlotOf.get(p.id) === nodeId)) ?? null
-  }
-  if (slotId === null) return chain
-  const breakIndex = chain.indexOf(slotId)
-  if (breakIndex < 0) return chain
-
-  const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === slotId)
-  const blocked = namedProvider
-    ? providerUnavailable(namedProvider, providerByName, duplicateProviderNames)
-    : children.length > 0 && children.every((p) => providerUnavailable(p, providerByName, duplicateProviderNames))
-  return blocked ? chain.slice(0, breakIndex + 1) : chain
 }
 
 function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: string): boolean {
@@ -632,12 +577,18 @@ export function TopologyPage() {
     [canvas, providerByName, duplicateProviderNames],
   )
 
-  // Per-slot flash state mirrors the flow light. Keyed by slotId and runId so
-  // the same slot flashing for two models updates in place and stale runs don't
-  // clobber an in-progress flash. Declared before topLevelNodes because it feeds
-  // the provider slot's node data.
-  const [providerFlashes, setProviderFlashes] = useState<ReadonlyMap<string, ProviderFlashPayload>>(new Map())
-  const providerFlashesRef = useRef<Map<string, ProviderFlashPayload>>(new Map())
+  // Per-request flow layers: nodeId -> flash layers (one per active request),
+  // so concurrent requests stack naturally instead of overwriting each other.
+  // Declared before topLevelNodes because it feeds node data.
+  const [providerFlashes, setProviderFlashState] = useState<ReadonlyMap<string, readonly ProviderFlashPayload[]>>(new Map())
+  const providerFlashesRef = useRef<Map<string, ProviderFlashPayload[]>>(new Map())
+  const setProviderFlashLayer = useCallback((nodeId: string, payload: ProviderFlashPayload) => {
+    const existing = providerFlashesRef.current.get(nodeId) ?? []
+    const next = existing.filter((flash) => flash.runId !== payload.runId)
+    next.push(payload)
+    providerFlashesRef.current.set(nodeId, next)
+    setProviderFlashState(new Map(providerFlashesRef.current))
+  }, [setProviderFlashState])
 
   const modelNodes = useMemo(() => {
     const empty = {
@@ -684,7 +635,7 @@ export function TopologyPage() {
         id: nodeId,
         type: 'modelHub',
         position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flash: providerFlashes.get(nodeId) },
+        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flashes: providerFlashes.get(nodeId) },
       })
     }
     modelColorRef.current = colorMap
@@ -722,7 +673,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             weight: node.weight ?? 1,
             models: modelNodes.entryModels.get(node.id) ?? [],
-            flash: providerFlashes.get(node.id),
+            flashes: providerFlashes.get(node.id),
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
                 const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
@@ -798,7 +749,7 @@ export function TopologyPage() {
             enabled: node.enabled,
             isProviderSlot: false,
             externallyDisabled: externallyDisabledSet.has(node.id),
-            flash: providerFlashes.get(node.id),
+            flashes: providerFlashes.get(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
@@ -869,17 +820,6 @@ export function TopologyPage() {
   const edgesRef = useRef(edges)
   edgesRef.current = edges
 
-  useEffect(() => {
-    setEdges(baseEdges)
-    // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
-    // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
-    modelRunRef.current.clear()
-    modelNodeIdsRef.current.clear()
-    providerFlashesRef.current.clear()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProviderFlashes(new Map())
-  }, [baseEdges, setEdges])
-
   // ── Flow light (request_started SSE) ──
   // The backend emits `request_started` when a queued request begins executing
   // and `request_finished` when it ends. While at least one request for a model
@@ -888,67 +828,37 @@ export function TopologyPage() {
   const canvasRef = useRef<FlatCanvas | null>(null)
   canvasRef.current = canvas
   const flowRunIdRef = useRef(0)
-  const modelRunRef = useRef<Map<string, number>>(new Map())
-  // Tracks the node IDs each in-flight model's flash was scheduled on so
-  // clearLightForModel can drop the matching flashes in the same sweep.
-  const modelNodeIdsRef = useRef<Map<string, string[]>>(new Map())
+  // Per-request flow layers. Each in-flight request owns one layer; multiple
+  // concurrent requests on the same workflow stack their beams/flashes
+  // independently instead of overwriting each other. A layer that finished is
+  // kept as `draining` until its final node segment has fully played out.
+  type FlowLayer = {
+    requestId: string
+    model: string
+    runId: number
+    color: string
+    pathNodeIds: readonly string[]
+    cycleMs: number
+    staggerMs: number
+    draining: boolean
+    drainUntil: number
+  }
+  const flowLayersRef = useRef<Map<string, FlowLayer>>(new Map())
+  const firstSyncRef = useRef(true)
 
-  const setProviderFlash = useCallback(
-    (slotId: string, payload: ProviderFlashPayload) => {
-      providerFlashesRef.current.set(slotId, payload)
-      setProviderFlashes(new Map(providerFlashesRef.current))
-    },
-    [setProviderFlashes],
-  )
-
-  const clearProviderFlash = useCallback(
-    (slotId: string, runId: number) => {
-      const current = providerFlashesRef.current.get(slotId)
-      if (!current || current.runId !== runId) return
-      providerFlashesRef.current.delete(slotId)
-      setProviderFlashes(new Map(providerFlashesRef.current))
-    },
-    [setProviderFlashes],
-  )
-
-  const clearLightForModel = useCallback(
-    (model: string) => {
-      const runId = modelRunRef.current.get(model)
-      if (runId === undefined) return
-      modelRunRef.current.delete(model)
-      const nodeIds = modelNodeIdsRef.current.get(model)
-      if (nodeIds) {
-        modelNodeIdsRef.current.delete(model)
-        for (const id of nodeIds) clearProviderFlash(id, runId)
-      }
-      setEdges((prev) =>
-        prev.map((edge) => {
-          const light = edge.data?.light as FlowLightPayload | undefined
-          if (!light || light.runId !== runId) return edge
-          const rest: Record<string, unknown> = {}
-          for (const [key, value] of Object.entries(edge.data ?? {})) {
-            if (key !== 'light') rest[key] = value
-          }
-          return { ...edge, data: Object.keys(rest).length > 0 ? rest : undefined }
-        }),
-      )
-    },
-    [setEdges, clearProviderFlash],
-  )
-
-  const applyLightToChain = useCallback(
-    (model: string, chain: string[], providerName: string | null) => {
-      const runId = (flowRunIdRef.current += 1)
-      modelRunRef.current.set(model, runId)
-      const edgeCount = chain.length - 1
-      const cycleMs = edgeCount * FLOW_PER_EDGE_MS
-      const color = modelColorRef.current.get(model) ?? 'var(--primary)'
+  const projectLayer = useCallback(
+    (layer: FlowLayer) => {
+      const { pathNodeIds, runId, color, cycleMs, staggerMs } = layer
+      const nodeCount = pathNodeIds.length
+      if (nodeCount < 2) return
+      const visiblePath = visibleFlowPath(pathNodeIds, canvasRef.current)
+      const visibleIndex = new Map(visiblePath.map((nodeId, index) => [nodeId, index]))
       const lights = new Map<string, FlowLightPayload>()
-      for (let i = 0; i < edgeCount; i++) {
-        lights.set(wiringEdgeId(chain[i], chain[i + 1]), {
+      for (let i = 0; i < visiblePath.length - 1; i++) {
+        lights.set(wiringEdgeId(visiblePath[i], visiblePath[i + 1]), {
           runId,
           cycleMs,
-          phaseMs: i * FLOW_PER_EDGE_MS,
+          phaseMs: i * FLOW_PER_EDGE_MS + staggerMs,
           durMs: FLOW_PER_EDGE_MS,
           color,
         })
@@ -957,50 +867,90 @@ export function TopologyPage() {
         prev.map((edge) => {
           const light = lights.get(edge.id)
           if (!light) return edge
-          return { ...edge, data: { ...edge.data, light } }
+          const existing = (edge.data?.lights as FlowLightPayload[] | undefined) ?? []
+          const next = existing.filter((l) => l.runId !== runId)
+          next.push(light)
+          return { ...edge, data: { ...edge.data, lights: next } }
         }),
       )
-      // Border flash for every node in the chain. Each node flashes when the
-      // beam enters it (chain index * FLOW_PER_EDGE_MS) for one edge duration.
-      const flashedIds: string[] = []
+      // Border flash on every node the request traverses. The provider slot
+      // flashes its matched child; other slots flash when enabled.
       if (canvasRef.current) {
         const canvas = canvasRef.current
-        for (let i = 0; i < chain.length; i++) {
-          const nodeId = chain[i]
+        for (let i = 0; i < nodeCount; i++) {
+          const nodeId = pathNodeIds[i]
           const node = canvas.topLevel.find((n) => n.id === nodeId)
+          const phaseIndex = visibleIndex.get(nodeId) ?? (i > 0 ? visibleIndex.get(pathNodeIds[i - 1]) ?? i : i)
           if (!node) {
-            flashedIds.push(nodeId)
-            setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+            setProviderFlashLayer(nodeId, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
             continue
           }
           if (isProviderSlot(node)) {
             const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
-            const matched = providerName ? children.find((p) => p.name === providerName) : children[0]
+            const childId = pathNodeIds[i + 1]
+            const matched = children.find((p) => p.id === childId) ?? children[0]
             if (matched) {
-              flashedIds.push(matched.id)
-              setProviderFlash(matched.id, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+              setProviderFlashLayer(matched.id, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
             }
             continue
           }
-          // 非 provider slot(请求改写/日志抓取等)只在自身启用时点亮,
-          // 与"生效的节点才点亮"的语义一致:总开关关闭的插槽内部节点不闪。
+          // 非 provider slot(请求改写/日志抓取等)只在自身启用时点亮。
           if (node.enabled === true) {
-            flashedIds.push(nodeId)
-            setProviderFlash(nodeId, { runId, cycleMs, phaseMs: i * FLOW_PER_EDGE_MS, durMs: FLOW_PER_EDGE_MS, color })
+            setProviderFlashLayer(nodeId, { runId, cycleMs, phaseMs: phaseIndex * FLOW_PER_EDGE_MS + staggerMs, durMs: FLOW_PER_EDGE_MS, color })
           }
         }
       }
-      modelNodeIdsRef.current.set(model, flashedIds)
     },
-    [setEdges, setProviderFlash],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callbacks, intentionally referenced
+    [setEdges, setProviderFlashLayer],
   )
 
-  // Same monitoring source as the activity page: poll the active-requests API
-  // and mirror it with flow lights. A model with at least one in-flight
-  // request (endTime null) gets a looping beam down its workflow chain; once
-  // no request for it remains, the beam is removed. Polling (not SSE events)
-  // keeps the topology in sync with the activity page even across page
-  // switches or dropped connections.
+  const removeLayer = useCallback(
+    (layer: FlowLayer) => {
+      flowLayersRef.current.delete(layer.requestId)
+      setEdges((prev) =>
+        prev.map((edge) => {
+          const lights = edge.data?.lights as FlowLightPayload[] | undefined
+          if (!lights || !lights.some((l) => l.runId === layer.runId)) return edge
+          const keep = lights.filter((l) => l.runId !== layer.runId)
+          const rest: Record<string, unknown> = {}
+          for (const [key, value] of Object.entries(edge.data ?? {})) {
+            if (key !== 'lights') rest[key] = value
+          }
+          return {
+            ...edge,
+            data: keep.length > 0 ? { ...rest, lights: keep } : Object.keys(rest).length > 0 ? rest : undefined,
+          }
+        }),
+      )
+      // Remove every flash layer this run owned: filter by runId per node.
+      for (const [nodeId, layers] of providerFlashesRef.current) {
+        const kept = layers.filter((f) => f.runId !== layer.runId)
+        if (kept.length === 0) providerFlashesRef.current.delete(nodeId)
+        else providerFlashesRef.current.set(nodeId, kept)
+      }
+      setProviderFlashState(new Map(providerFlashesRef.current))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable callbacks, intentionally referenced
+    [setEdges, setProviderFlashLayer],
+  )
+
+  // Build the ordered node path a request traverses. Prefer the backend's
+  // dispatch-time fact (request.pathNodeIds); fall back to the current
+  // topology derivation when the fact is missing (affinity/standalone path).
+  const resolveLayerPath = useCallback(
+    (request: ActiveRequest): readonly string[] | null => {
+      if (request.pathNodeIds.length > 0) {
+        const modelId = `model-${request.model}`
+        return [modelId, ...request.pathNodeIds]
+      }
+      const chain = computeLightChain(request.model, request.provider || null, edgesRef.current, canvasRef.current)
+      if (!chain || chain.length < 2) return null
+      return chain
+    },
+    [],
+  )
+
   const syncFlowLights = useCallback(async () => {
     let requests: readonly ActiveRequest[]
     try {
@@ -1008,36 +958,71 @@ export function TopologyPage() {
     } catch {
       return
     }
-    const activeModels = new Map<string, string | null>()
-    for (const req of requests) {
-      if (req.endTime === null) activeModels.set(req.model, req.provider ?? null)
+    const now = Date.now()
+    const activeIds = new Set<string>()
+    let staggerIndex = 0
+    for (const request of requests) {
+      if (request.endTime !== null) continue
+      activeIds.add(request.requestId)
+      const existing = flowLayersRef.current.get(request.requestId)
+      if (existing) {
+        // A request that was draining got back into the active set (rare);
+        // simply un-drain it.
+        if (existing.draining) {
+          existing.draining = false
+        }
+        projectLayer(existing)
+        continue
+      }
+      const path = resolveLayerPath(request)
+      if (!path) continue
+      const runId = (flowRunIdRef.current += 1)
+      const staggerMs = firstSyncRef.current ? staggerIndex++ * 500 : 0
+      const edgeCount = visibleFlowPath(path, canvasRef.current).length - 1
+      const layer: FlowLayer = {
+        requestId: request.requestId,
+        model: request.model,
+        runId,
+        color: modelColorRef.current.get(request.model) ?? 'var(--primary)',
+        pathNodeIds: path,
+        cycleMs: edgeCount * FLOW_PER_EDGE_MS,
+        staggerMs,
+        draining: false,
+        drainUntil: 0,
+      }
+      flowLayersRef.current.set(request.requestId, layer)
+      projectLayer(layer)
     }
-    for (const [model, provider] of activeModels) {
-      if (modelRunRef.current.has(model)) continue
-      const chain = computeLightChain(model, provider, edgesRef.current, canvasRef.current)
-      if (!chain || chain.length < 2) continue
-      const chainWithBreak = applyInternalBreak(chain, provider, canvasRef.current, providerByName, duplicateProviderNames)
-      if (chainWithBreak.length < 2) continue
-      applyLightToChain(model, chainWithBreak, provider)
+    firstSyncRef.current = false
+    // Mark finished requests draining (keep current beam running out), then
+    // drop layers whose final segment completed.
+    for (const [requestId, layer] of [...flowLayersRef.current.entries()]) {
+      if (layer.draining) {
+        if (now >= layer.drainUntil) removeLayer(layer)
+        continue
+      }
+      if (activeIds.has(requestId)) continue
+      layer.draining = true
+      layer.drainUntil = now + layer.cycleMs + layer.staggerMs
     }
-    for (const model of [...modelRunRef.current.keys()]) {
-      if (!activeModels.has(model)) clearLightForModel(model)
-    }
-  }, [providerByName, duplicateProviderNames, applyLightToChain, clearLightForModel])
+  }, [resolveLayerPath, projectLayer, removeLayer])
 
-  // baseEdges 重建会清掉 light 字段,这里同步清空 runId 记录,
-  // 否则 modelRunRef 会阻止轮询重放流光(刷新前已活跃的请求会永久丢失)。
-  // 清空后立即重新同步流光,不等下一个轮询周期:短请求可能在 2 秒
-  // 轮询窗口内结束,导致拓扑变化后新生效的节点(如 logOutput)不亮。
+  const syncFlowLightsRef = useRef(syncFlowLights)
+  useEffect(() => {
+    syncFlowLightsRef.current = syncFlowLights
+  }, [syncFlowLights])
+
+  // baseEdges 重建会清掉 light 字段。这里保留 flowLayersRef 的既有层,
+  // 清空投影后立即重新同步,让活跃请求的流光/闪烁随新拓扑重放。
+  // 立即同步是为了避免短请求在 2 秒轮询窗口内结束,导致拓扑变化后
+  // 新生效的节点(如 logOutput)不亮。
   useEffect(() => {
     setEdges(baseEdges)
-    modelRunRef.current.clear()
-    modelNodeIdsRef.current.clear()
     providerFlashesRef.current.clear()
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProviderFlashes(new Map())
-    void syncFlowLights()
-  }, [baseEdges, setEdges, syncFlowLights])
+    setProviderFlashState(new Map())
+    void syncFlowLightsRef.current()
+  }, [baseEdges, setEdges])
 
   useEffect(() => {
     void syncFlowLights()

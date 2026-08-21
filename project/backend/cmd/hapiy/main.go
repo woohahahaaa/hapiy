@@ -181,6 +181,7 @@ func main() {
 			dashboardAuthed.GET("/settings/base-url-paths", handler.ListBaseUrlPaths(db))
 			dashboardAuthed.PUT("/settings/base-url-paths", handler.ReplaceBaseUrlPaths(db))
 			dashboardAuthed.POST("/exchange-rate/refresh", handler.RefreshExchangeRate(db))
+			dashboardAuthed.POST("/exchange-rate/test", handler.TestExchangeRate())
 
 			dashboardAuthed.GET("/topology", handler.TopologyGet(db))
 			dashboardAuthed.PUT("/topology", handler.TopologyPut(db, engine))

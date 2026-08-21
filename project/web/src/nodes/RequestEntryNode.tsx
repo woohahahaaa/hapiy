@@ -12,6 +12,7 @@ interface RequestEntryNodeData {
   weight: number
   models?: Array<{ id: string; label: string; active: boolean }>
   flash?: ProviderFlashPayload
+  flashes?: readonly ProviderFlashPayload[]
   onChangeEnabled: (enabled: boolean) => void
   onChangeWeight: (weight: number) => void
 }
@@ -66,17 +67,17 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
     onChangeWeight(Math.round(clamped * 100) / 100)
   }
 
-  const flash = data.flash
-  const kfName = flash ? flashKeyframeName(flash) : ''
-  const flashAnim: CSSProperties | undefined = flash
-    ? {
-        animationName: kfName,
-        animationDuration: `${flash.cycleMs}ms`,
-        animationTimingFunction: 'linear',
-        animationIterationCount: 'infinite',
-        animationFillMode: 'forwards',
-      }
-    : undefined
+  const allFlashes = data.flashes && data.flashes.length > 0 ? data.flashes : data.flash ? [data.flash] : []
+  const flashAnim: CSSProperties | undefined =
+    allFlashes.length > 0
+      ? {
+          animationName: allFlashes.map((f) => flashKeyframeName(f)).join(', '),
+          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
+          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
+          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
+          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
+        }
+      : undefined
 
   return (
     <div
@@ -84,7 +85,9 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
       className="rounded-lg border border-border bg-card text-card-foreground"
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth, ...(flashAnim ?? {}) }}
     >
-      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
+      {allFlashes.map((f) => (
+        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      ))}
       {models.map((m, i) => (
         <Handle
           key={m.id}

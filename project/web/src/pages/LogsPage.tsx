@@ -160,7 +160,12 @@ export function LogsPage() {
     { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
     { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
-    { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 } },
+    {
+      key: 'source',
+      label: '来源',
+      defaultWidth: { kind: 'percent', value: 8 },
+      accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null),
+    },
     {
       key: 'promptTokens',
       label: 'Tokens',
@@ -210,12 +215,12 @@ export function LogsPage() {
         return (
           <div className="leading-tight tabular-nums">
             <div className="text-foreground">{(log.useTime / 1000).toFixed(1)}s</div>
-            <div className="flex flex-wrap justify-end gap-x-2">
-              {fmt(log.queueWaitMs, '排队')}
-              {fmt(log.requestRewriteMs, '请求改写')}
-              {fmt(log.connectMs, '连接')}
-              {fmt(log.firstByteMs, '首字')}
-              {fmt(log.responseRewriteMs, '响应改写')}
+            <div>
+              {fmt(log.queueWaitMs, '排队')}{' '}
+              {fmt(log.requestRewriteMs, '请求改写')}{' '}
+              {fmt(log.connectMs, '连接')}{' '}
+              {fmt(log.firstByteMs, '首字')}{' '}
+              {fmt(log.responseRewriteMs, '响应改写')}{' '}
               {fmt(log.streamRewriteMs, '流式改写')}
             </div>
           </div>
@@ -374,6 +379,19 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow label="令牌" value={log.tokenName || '-'} />
         <DetailRow label="供应商" value={log.providerName || '-'} />
         <DetailRow label="模型" value={log.modelName || '-'} />
+        <DetailRow
+          label="上游 URL"
+          value={
+            log.upstreamUrl ? (
+              <span className="inline-flex items-start gap-2">
+                <span className="break-all font-mono">{log.upstreamUrl}</span>
+                <CopyButton value={log.upstreamUrl} />
+              </span>
+            ) : (
+              '-'
+            )
+          }
+        />
       </FieldGroup>
       <FieldGroup title="用量">
         <DetailRow
@@ -430,6 +448,27 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
       <span className="break-words text-foreground">{value}</span>
     </div>
+  )
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false)
+  const onClick = useCallback(() => {
+    if (!value) return
+    void navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1200)
+      })
+      .catch(() => {
+        // clipboard unavailable (insecure context) — silently noop
+      })
+  }, [value])
+  return (
+    <Button size="sm" variant="outline" onClick={onClick} className="shrink-0">
+      {copied ? '已复制' : '复制'}
+    </Button>
   )
 }
 

@@ -166,12 +166,18 @@ export function PricePage() {
       defaultOverflow: 'wrap',
       render: (_, row) => {
         const label = (text: string) => <span className="text-muted-foreground/40">{text}</span>
+        const price = (usd: number) =>
+          usd > 0 ? (
+            <span>{formatPrice(usd)}</span>
+          ) : (
+            <span className="text-muted-foreground/40">-</span>
+          )
         return (
-          <div className="flex flex-col gap-0.5 text-xs tabular-nums">
-            <div>{label('输入')} {formatPrice(row.inputPrice)}</div>
-            <div>{label('缓存写入')} {row.cacheWritePrice > 0 ? formatPrice(row.cacheWritePrice) : <span className="text-muted-foreground/40">-</span>}</div>
-            <div>{label('缓存读取')} {row.cacheReadPrice > 0 ? formatPrice(row.cacheReadPrice) : <span className="text-muted-foreground/40">-</span>}</div>
-            <div>{label('输出')} {formatPrice(row.outputPrice)}</div>
+          <div className="text-xs tabular-nums">
+            {label('输入')} {price(row.inputPrice)}{' '}
+            {label('缓存写入')} {price(row.cacheWritePrice)}{' '}
+            {label('缓存读取')} {price(row.cacheReadPrice)}{' '}
+            {label('输出')} {price(row.outputPrice)}
           </div>
         )
       },

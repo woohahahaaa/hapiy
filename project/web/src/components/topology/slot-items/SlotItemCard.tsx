@@ -20,6 +20,7 @@ interface SlotItemCardProps {
   enableControl?: ReactNode
   dimContentWhenDisabled?: boolean
   flash?: ProviderFlashPayload
+  flashes?: readonly ProviderFlashPayload[]
 }
 
 export function SlotItemCard({
@@ -37,17 +38,22 @@ export function SlotItemCard({
   enableControl,
   dimContentWhenDisabled = false,
   flash,
+  flashes,
 }: SlotItemCardProps) {
-  const kfName = flash ? flashKeyframeName(flash) : ''
-  const flashAnim: CSSProperties | undefined = flash
-    ? {
-        animationName: kfName,
-        animationDuration: `${flash.cycleMs}ms`,
-        animationTimingFunction: 'linear',
-        animationIterationCount: 'infinite',
-        animationFillMode: 'forwards',
-      }
-    : undefined
+const allFlashes = flashes && flashes.length > 0 ? flashes : flash ? [flash] : []
+  const kfNames = allFlashes.map((f) => flashKeyframeName(f))
+  const flashAnim: CSSProperties | undefined =
+    allFlashes.length > 0
+      ? {
+          animationName: kfNames.join(', '),
+          // 多层动画用相同的周期会强占同一种子节点,这里用 max(cycleMs) 统一
+          // 周期,让同节点多请求按各自 phase 错开,视觉上自然叠加
+          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
+          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
+          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
+          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
+        }
+      : undefined
   return (
     <div
       onDragOver={(e) => {
@@ -75,7 +81,9 @@ export function SlotItemCard({
         ...(flashAnim ?? {}),
       }}
     >
-      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
+      {allFlashes.map((f) => (
+        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      ))}
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (

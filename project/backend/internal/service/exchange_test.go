@@ -29,7 +29,7 @@ func TestFetchRateFromAPI_ratesShape(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rate, err := FetchRateFromAPI(server.URL)
+	rate, err := FetchRateFromAPI(server.URL, "")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestFetchRateFromAPI_conversionRatesShape(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rate, err := FetchRateFromAPI(server.URL)
+	rate, err := FetchRateFromAPI(server.URL, "")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestFetchRateFromAPI_dataShape(t *testing.T) {
 	}))
 	defer server.Close()
 
-	rate, err := FetchRateFromAPI(server.URL)
+	rate, err := FetchRateFromAPI(server.URL, "")
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -74,8 +74,38 @@ func TestFetchRateFromAPI_missingCNY(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := FetchRateFromAPI(server.URL); err == nil {
+	if _, err := FetchRateFromAPI(server.URL, ""); err == nil {
 		t.Fatal("expected error when CNY missing")
+	}
+}
+
+func TestFetchRateFromAPI_fieldPath(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"result":"success","rates":{"USD":1,"CNY":7.3456}}`))
+	}))
+	defer server.Close()
+
+	rate, err := FetchRateFromAPI(server.URL, "rates.CNY")
+	if err != nil {
+		t.Fatalf("fetch with field path: %v", err)
+	}
+	if math.Abs(rate-7.3456) > 0.0000001 {
+		t.Fatalf("rate: want 7.3456, got %v", rate)
+	}
+}
+
+func TestFetchRateFromAPI_fieldPathMissFallsBack(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"rates":{"USD":1,"CNY":7.11}}`))
+	}))
+	defer server.Close()
+
+	rate, err := FetchRateFromAPI(server.URL, "data.rate")
+	if err != nil {
+		t.Fatalf("fetch with missing field path: %v", err)
+	}
+	if math.Abs(rate-7.11) > 0.0000001 {
+		t.Fatalf("rate: want fallback 7.11, got %v", rate)
 	}
 }
 

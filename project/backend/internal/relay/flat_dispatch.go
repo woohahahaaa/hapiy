@@ -91,6 +91,10 @@ type DispatchResult struct {
 	// AffinityMatch, when non-nil, means the provider was chosen via channel
 	// affinity; the handler records the successful recall on request success.
 	AffinityMatch *affinity.MatchResult
+	// PathNodeIDs is the exact node path the request traverses
+	// (entry -> provider -> slots), captured at dispatch time. Empty when
+	// the request was served outside the flat-topology walk (affinity recall).
+	PathNodeIDs []string
 }
 
 // Dispatch selects a provider for a request and builds its execution plan. It
@@ -136,6 +140,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				Provider:     provider,
 				KeyIndex:     -1,
 				BaseURLIndex: -1,
+				PathNodeIDs:  topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID),
 			}, nil
 		}
 	}

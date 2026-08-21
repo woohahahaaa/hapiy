@@ -146,58 +146,53 @@ export function FlowLightEdge(props: EdgeProps) {
     targetPosition,
   })
 
-  const light = data?.light as FlowLightPayload | undefined
-  const kfName = light ? `flow-light-slide-${light.runId}-${safeId(id)}` : ''
-  const css = light ? buildKeyframes(kfName, light) : ''
-
-  const animStyle = light
-    ? {
-        animationName: kfName,
-        animationDuration: `${light.cycleMs}ms`,
-        animationTimingFunction: 'linear',
-        animationIterationCount: 'infinite',
-        animationFillMode: 'forwards',
-      }
-    : undefined
-
+  const raw = data?.lights as FlowLightPayload[] | undefined
+  const lights = raw ?? (data?.light ? [data.light as FlowLightPayload] : [])
   const dashVars = (dash: string, on: number): CSSProperties =>
     ({ strokeDasharray: dash, strokeDashoffset: FLOW_START_OFFSET, '--beam-on': String(on) }) as CSSProperties
-
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
-      {light && (
-        <g
-          key={`beam-${light.runId}`}
-          style={{ filter: `drop-shadow(0 0 4px ${light.color})` }}
-        >
-          <style>{css}</style>
-          <path
-            d={lightPath}
-            fill="none"
-            stroke={light.color}
-            strokeWidth={FLOW_STROKE_WIDTH}
-            strokeLinecap="butt"
-            pathLength={100}
-            style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${FLOW_PATTERN_GAP}`, FLOW_TAIL_OPACITY) }}
-          />
-          <path
-            d={lightPath}
-            fill="none"
-            stroke={light.color}
-            strokeWidth={FLOW_STROKE_WIDTH}
-            strokeLinecap="butt"
-            pathLength={100}
-            style={{
-              ...animStyle,
-              ...dashVars(
-                `0 ${FLOW_TAIL_LEN - FLOW_HEAD_LEN} ${FLOW_HEAD_LEN} ${FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN}`,
-                1,
-              ),
-            }}
-          />
-        </g>
-      )}
+      {lights.map((light) => {
+        const kfName = `flow-light-slide-${light.runId}-${safeId(id)}`
+        const css = buildKeyframes(kfName, light)
+        const animStyle: CSSProperties = {
+          animationName: kfName,
+          animationDuration: `${light.cycleMs}ms`,
+          animationTimingFunction: 'linear',
+          animationIterationCount: 'infinite',
+          animationFillMode: 'forwards',
+        }
+        return (
+          <g key={`beam-${light.runId}`} style={{ filter: `drop-shadow(0 0 4px ${light.color})` }}>
+            <style>{css}</style>
+            <path
+              d={lightPath}
+              fill="none"
+              stroke={light.color}
+              strokeWidth={FLOW_STROKE_WIDTH}
+              strokeLinecap="butt"
+              pathLength={100}
+              style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${FLOW_PATTERN_GAP}`, FLOW_TAIL_OPACITY) }}
+            />
+            <path
+              d={lightPath}
+              fill="none"
+              stroke={light.color}
+              strokeWidth={FLOW_STROKE_WIDTH}
+              strokeLinecap="butt"
+              pathLength={100}
+              style={{
+                ...animStyle,
+                ...dashVars(
+                  `0 ${FLOW_TAIL_LEN - FLOW_HEAD_LEN} ${FLOW_HEAD_LEN} ${FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN}`,
+                  1,
+                ),
+              }}
+            />
+          </g>
+        )
+      })}
     </>
   )
 }

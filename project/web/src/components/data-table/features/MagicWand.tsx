@@ -36,13 +36,14 @@ export function MagicWandButton({
 
   return (
     <Button
-      variant={isActive ? "secondary" : "ghost"}
+      variant={isActive ? "secondary" : "outline"}
       size="icon-sm"
+      className="border border-border"
       aria-label={isActive ? "退出自动列宽" : "自动列宽"}
       title={isActive ? "退出自动列宽" : "自动列宽"}
       onClick={handleToggle}
     >
-      <AppIcon name="auto_fix_high" size={24} theme="outline" fill="#333" />
+      <AppIcon name="auto_fix_high" size={24} theme="outline" fill="currentColor" />
     </Button>
   );
 }

@@ -120,7 +120,7 @@ export type SlotItemDragProps = {
   onDragStart?: () => void
   onDragOver?: () => void
   onDrop?: () => void
-  flash?: ProviderFlashPayload
+  flashes?: readonly ProviderFlashPayload[]
 }
 
 // Rule sources keyed by slotType (everything except logOutput binds to a rule).

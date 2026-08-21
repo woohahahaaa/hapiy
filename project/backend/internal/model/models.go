@@ -112,6 +112,8 @@ type Log struct {
 	// QueueWaitMs is the time spent waiting for a concurrency slot before
 	// the upstream request was issued; nil when no concurrency rule applies.
 	QueueWaitMs      *int      `json:"queue_wait_ms,omitempty"`
+	// UpstreamURL is the full URL (base URL + path) actually issued to the upstream; empty when the request never reached upstream.
+	UpstreamURL      string    `json:"upstream_url,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 }
 

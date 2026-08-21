@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -19,6 +20,7 @@ const (
 	SettingBillingCurrency   = "billing_currency"
 	SettingExchangeRate      = "exchange_rate_usd_cny"
 	SettingExchangeAPIURL    = "exchange_rate_api_url"
+	SettingExchangeField     = "exchange_rate_field"
 	SettingExchangeAuto      = "exchange_rate_auto_refresh"
 	SettingExchangeUpdatedAt = "exchange_rate_updated_at"
 )
@@ -27,6 +29,7 @@ var defaultSettingsBilling = map[string]string{
 	SettingBillingCurrency: "CNY",
 	SettingExchangeRate:    "7.2",
 	SettingExchangeAPIURL:  "https://open.er-api.com/v6/latest/USD",
+	SettingExchangeField:   "rates.CNY",
 	SettingExchangeAuto:    "true",
 }
 
@@ -80,10 +83,11 @@ func SaveExchangeRate(db *gorm.DB, rate float64) error {
 }
 
 // FetchRateFromAPI requests a public exchange-rate endpoint and extracts the
-// USD→CNY rate. The response shape varies across providers, so the payload is
-// scanned recursively for the first numeric "CNY" field (e.g. rates.CNY,
-// conversion_rates.CNY or data.CNY).
-func FetchRateFromAPI(apiURL string) (float64, error) {
+// USD→CNY rate. When fieldPath is non-empty it is walked as a dot-separated
+// JSON path first (e.g. "rates.CNY"); if that misses, the payload is scanned
+// recursively for the first numeric "CNY" field (rates.CNY,
+// conversion_rates.CNY or data.CNY) as a fallback.
+func FetchRateFromAPI(apiURL, fieldPath string) (float64, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -111,11 +115,34 @@ func FetchRateFromAPI(apiURL string) (float64, error) {
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return 0, errors.New("汇率接口返回的不是有效 JSON")
 	}
+	if fieldPath != "" {
+		if rate, ok := findByFieldPath(payload, fieldPath); ok {
+			return rate, nil
+		}
+	}
 	rate, ok := findCNY(payload)
 	if !ok {
 		return 0, errors.New("汇率接口响应中未找到 CNY 汇率字段")
 	}
 	return rate, nil
+}
+
+// findByFieldPath walks a dot-separated path (e.g. "rates.CNY") into a JSON
+// payload and returns the numeric value at that location.
+func findByFieldPath(node any, path string) (float64, bool) {
+	parts := strings.Split(path, ".")
+	var cur any = node
+	for _, p := range parts {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return 0, false
+		}
+		cur, ok = m[strings.TrimSpace(p)]
+		if !ok {
+			return 0, false
+		}
+	}
+	return toPositiveFloat(cur)
 }
 
 func findCNY(node any) (float64, bool) {
@@ -159,7 +186,8 @@ func RefreshExchangeRate(db *gorm.DB) (float64, error) {
 	if err != nil || apiURL == "" {
 		return 0, errors.New("未配置汇率接口地址")
 	}
-	rate, err := FetchRateFromAPI(apiURL)
+	fieldPath, _ := GetSetting(db, SettingExchangeField)
+	rate, err := FetchRateFromAPI(apiURL, fieldPath)
 	if err != nil {
 		return 0, err
 	}

@@ -60,6 +60,7 @@ type ActiveRequest struct {
 	Stage         string     `json:"stage"`
 	ChunkCount    int64      `json:"chunk_count"`
 	BytesReceived int64      `json:"bytes_received"`
+	PathNodeIds   []string   `json:"path_node_ids"`
 }
 
 var globalMetrics = NewMetrics()

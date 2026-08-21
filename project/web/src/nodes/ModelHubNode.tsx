@@ -9,6 +9,7 @@ interface ModelHubNodeData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
   simplified?: boolean
   flash?: ProviderFlashPayload
+  flashes?: readonly ProviderFlashPayload[]
 }
 
 interface ModelHubNodeProps {
@@ -19,7 +20,7 @@ interface ModelHubNodeProps {
 export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   const models = data.models || []
   const simplified = data.simplified === true
-  const flash = data.flash
+  const allFlashes = data.flashes && data.flashes.length > 0 ? data.flashes : data.flash ? [data.flash] : []
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
 
@@ -31,16 +32,16 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
   }, [id, models.length, updateNodeInternals])
 
   const pad = topologyConfig.render.modelHub
-  const kfName = flash ? flashKeyframeName(flash) : ''
-  const flashAnim: CSSProperties | undefined = flash
-    ? {
-        animationName: kfName,
-        animationDuration: `${flash.cycleMs}ms`,
-        animationTimingFunction: 'linear',
-        animationIterationCount: 'infinite',
-        animationFillMode: 'forwards',
-      }
-    : undefined
+  const flashAnim: CSSProperties | undefined =
+    allFlashes.length > 0
+      ? {
+          animationName: allFlashes.map((f) => flashKeyframeName(f)).join(', '),
+          animationDuration: allFlashes.map((f) => `${f.cycleMs}ms`).join(', '),
+          animationTimingFunction: allFlashes.map(() => 'linear').join(', '),
+          animationIterationCount: allFlashes.map(() => 'infinite').join(', '),
+          animationFillMode: allFlashes.map(() => 'forwards').join(', '),
+        }
+      : undefined
 
   return (
     <div
@@ -50,7 +51,9 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
         ...(flashAnim ?? {}),
       }}
     >
-      {flash && <style>{buildFlashKeyframes(kfName, flash)}</style>}
+      {allFlashes.map((f) => (
+        <style key={flashKeyframeName(f)}>{buildFlashKeyframes(flashKeyframeName(f), f)}</style>
+      ))}
       {!simplified && (
         <div
           className="border-b border-border"

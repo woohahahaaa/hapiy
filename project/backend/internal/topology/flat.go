@@ -188,6 +188,9 @@ type EligibleProvider struct {
 	Name   string
 	Weight float64
 	Chain  []string
+	// EntryID is the request entry whose workflow selected this provider,
+	// so callers can reconstruct the exact node path the request traverses.
+	EntryID string
 }
 
 // FindEligibleProviders walks the active request entries and returns every
@@ -234,10 +237,11 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 				}
 				seen[key] = true
 				result = append(result, EligibleProvider{
-					Node:   selected,
-					Name:   selected.Name,
-					Weight: entry.Weight,
-					Chain:  chain,
+					Node:    selected,
+					Name:    selected.Name,
+					Weight:  entry.Weight,
+					Chain:   chain,
+					EntryID: entry.ID,
 				})
 				break
 			}
@@ -259,6 +263,31 @@ func providerSupports(ref ProviderRef, model, path string) bool {
 		}
 	}
 	return true
+}
+
+// BuildRequestPath walks the single-output wire chain starting at a request
+// entry and returns every node ID it passes through, including the provider
+// child and each slot node. This is the exact node path a dispatched request
+// traverses (request entry -> provider entries -> slots), used by the
+// dashboard to light the flow path without re-deriving it from the live
+// topology, which may change after the request starts.
+func BuildRequestPath(t *Topology, entryID, providerID string) []string {
+	if t == nil || entryID == "" || providerID == "" {
+		return nil
+	}
+	path := make([]string, 0, 8)
+	seen := map[string]bool{}
+	cur := entryID
+	for cur != "" && !seen[cur] {
+		seen[cur] = true
+		path = append(path, cur)
+		if cur == providerID {
+			cur = outgoing(t, cur)
+			continue
+		}
+		cur = outgoing(t, cur)
+	}
+	return path
 }
 
 // providerEligible reports whether the provider node can serve the request:

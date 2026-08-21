@@ -28,6 +28,7 @@ const BILLING_CURRENCY_KEY = 'billing_currency'
 const EXCHANGE_RATE_KEY = 'exchange_rate_usd_cny'
 const EXCHANGE_API_URL_KEY = 'exchange_rate_api_url'
 const EXCHANGE_AUTO_KEY = 'exchange_rate_auto_refresh'
+const EXCHANGE_FIELD_KEY = 'exchange_rate_field'
 
 type LoadState =
   | { readonly kind: 'loading' }
@@ -53,10 +54,15 @@ export function GeneralSettings() {
   const [currency, setCurrency] = useState<BillingCurrency>('CNY')
   const [rate, setRate] = useState('7.2')
   const [apiUrl, setApiUrl] = useState('https://open.er-api.com/v6/latest/USD')
+  const [fieldPath, setFieldPath] = useState('rates.CNY')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [savingBilling, setSavingBilling] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<
+    { readonly kind: 'success'; readonly rate: number } | { readonly kind: 'error'; readonly message: string } | null
+  >(null)
 
   const load = useCallback(() => {
     dashboardApi
@@ -66,6 +72,7 @@ export function GeneralSettings() {
         setCurrency(settingsValue(settings, BILLING_CURRENCY_KEY) === 'USD' ? 'USD' : 'CNY')
         setRate(settingsValue(settings, EXCHANGE_RATE_KEY) || '7.2')
         setApiUrl(settingsValue(settings, EXCHANGE_API_URL_KEY) || 'https://open.er-api.com/v6/latest/USD')
+        setFieldPath(settingsValue(settings, EXCHANGE_FIELD_KEY) || 'rates.CNY')
         setAutoRefresh(settingsValue(settings, EXCHANGE_AUTO_KEY) !== 'false')
         setState({ kind: 'ready' })
       })
@@ -117,29 +124,64 @@ export function GeneralSettings() {
   }
 
   const handleOpenExchangeDialog = () => {
+    setTestResult(null)
     setSettingsOpen(true)
+  }
+
+  const handleTestExchange = async () => {
+    const url = apiUrl.trim()
+    if (!/^https?:\/\//.test(url)) {
+      setTestResult({ kind: 'error', message: '接口地址必须以 http:// 或 https:// 开头' })
+      return
+    }
+    const field = fieldPath.trim()
+    if (!field) {
+      setTestResult({ kind: 'error', message: '请填写人民币汇率字段路径' })
+      return
+    }
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const rate = await dashboardApi.testExchangeRate(url, field)
+      setTestResult({ kind: 'success', rate })
+    } catch (err) {
+      setTestResult({ kind: 'error', message: toErrorMessage(err) })
+    } finally {
+      setTesting(false)
+    }
   }
 
   const handleSaveExchangeConfig = async () => {
     const url = apiUrl.trim()
     if (!/^https?:\/\//.test(url)) {
-      toast.error('接口地址必须以 http:// 或 https:// 开头')
+      setTestResult({ kind: 'error', message: '接口地址必须以 http:// 或 https:// 开头' })
+      return
+    }
+    const field = fieldPath.trim()
+    if (!field) {
+      setTestResult({ kind: 'error', message: '请填写人民币汇率字段路径' })
       return
     }
     setRefreshing(true)
+    setTestResult(null)
     try {
       await dashboardApi.updateSetting(EXCHANGE_API_URL_KEY, url)
+      await dashboardApi.updateSetting(EXCHANGE_FIELD_KEY, field)
       await dashboardApi.updateSetting(EXCHANGE_AUTO_KEY, autoRefresh ? 'true' : 'false')
       try {
         const newRate = await dashboardApi.refreshExchangeRate()
         setRate(String(newRate))
         toast(`已刷新汇率：1 美元 = ${newRate} 人民币`)
       } catch (err) {
-        toast.error(`接口配置已保存，但刷新失败：${toErrorMessage(err)}`)
+        const message = toErrorMessage(err)
+        setTestResult({ kind: 'error', message: `接口配置已保存，但刷新失败：${message}` })
+        toast.error(`接口配置已保存，但刷新失败：${message}`)
       }
       setSettingsOpen(false)
     } catch (err) {
-      toast.error(toErrorMessage(err))
+      const message = toErrorMessage(err)
+      setTestResult({ kind: 'error', message })
+      toast.error(message)
     } finally {
       setRefreshing(false)
     }
@@ -265,17 +307,20 @@ export function GeneralSettings() {
                     <AppIcon name="refresh" data-icon="inline-start" className={refreshing ? 'animate-spin' : ''} />
                     刷新
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={handleOpenExchangeDialog}
+                    disabled={refreshing}
+                    title="汇率接口设置"
+                    aria-label="汇率接口设置"
+                  >
+                    <AppIcon name="settings" size={14} />
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  点击「刷新」可在线获取最新汇率，或点击
-                  <button
-                    type="button"
-                    className="mx-1 text-foreground underline underline-offset-2"
-                    onClick={handleOpenExchangeDialog}
-                  >
-                    接口设置
-                  </button>
-                  配置汇率来源接口与自动刷新。
+                  点击「刷新」可在线获取最新汇率；点击右侧的齿轮按钮可配置汇率来源接口地址、人民币汇率字段与自动刷新。
                 </p>
               </div>
 
@@ -294,19 +339,32 @@ export function GeneralSettings() {
         <DialogContent width="sm">
           <DialogHeader>
             <DialogTitle>汇率接口设置</DialogTitle>
-            <DialogDescription>配置在线获取人民币兑美元汇率的接口</DialogDescription>
+            <DialogDescription>
+              配置在线获取人民币兑美元汇率的接口：通过 GET 方法请求接口地址，从返回的 JSON 中读取人民币汇率字段。
+            </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="grid gap-1.5 text-sm">
-              <span className="text-xs text-muted-foreground">
-                这是一个通过 GET 方法可以请求到的地址，返回的 JSON 中需包含人民币汇率字段（例如 rates.CNY 或 conversion_rates.CNY）。
-              </span>
               <span>接口地址</span>
               <Input
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
                 placeholder="https://open.er-api.com/v6/latest/USD"
               />
+              <p className="text-xs text-muted-foreground">
+                这是一个通过 GET 方法可以请求到的地址，返回的 JSON 中需包含人民币汇率字段。
+              </p>
+            </div>
+            <div className="grid gap-1.5 text-sm">
+              <span>人民币/美元汇率字段</span>
+              <Input
+                value={fieldPath}
+                onChange={(e) => setFieldPath(e.target.value)}
+                placeholder="rates.CNY 或 conversion_rates.CNY"
+              />
+              <p className="text-xs text-muted-foreground">
+                返回 JSON 中人民币兑美元汇率所在的字段路径，支持点号分隔，例如 rates.CNY。
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
               <Checkbox
@@ -318,6 +376,26 @@ export function GeneralSettings() {
             <p className="text-xs text-muted-foreground">
               勾选后每天自动从接口获取最新汇率；若某次自动刷新失败，会在半小时后自动重试。
             </p>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleTestExchange()}
+                disabled={testing || refreshing}
+              >
+                {testing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                测试接口
+              </Button>
+              {testResult?.kind === 'success' && (
+                <p role="status" className="text-xs text-emerald-600">
+                  连接成功：1 美元 = {testResult.rate} 人民币
+                </p>
+              )}
+              {testResult?.kind === 'error' && (
+                <p role="alert" className="text-xs text-destructive">{testResult.message}</p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSettingsOpen(false)} disabled={refreshing}>

@@ -156,7 +156,7 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
   { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
-  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 } },
+  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null) },
   { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, accessor: (row) => (row.stream ? 'SSE' : null) },
   {
     key: 'elapsedMs',

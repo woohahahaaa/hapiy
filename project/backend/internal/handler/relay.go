@@ -104,7 +104,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		})
 		if err != nil {
 			engine.RecordDispatchRejection(&relayReq, err)
-			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq)
+			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
 					"message": fmt.Sprintf("no provider available for model: %s", relayReq.Model),
@@ -117,15 +117,16 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.KeyIndex = dispatchResult.KeyIndex
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 		common.Global().TrackActiveRequest(common.ActiveRequest{
-			RequestID: relayReq.RequestID,
-			Model:     relayReq.Model,
-			TokenName: getString(tokenName),
-			UserID:    getString(userID),
-			Provider:  provider.Name,
-			Source:    service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
-			Stream:    relayReq.Stream,
-			StartTime: startTime,
-			Stage:     "queued",
+			RequestID:   relayReq.RequestID,
+			Model:       relayReq.Model,
+			TokenName:   getString(tokenName),
+			UserID:      getString(userID),
+			Provider:    provider.Name,
+			Source:      service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			Stream:      relayReq.Stream,
+			StartTime:   startTime,
+			Stage:       "queued",
+			PathNodeIds: dispatchResult.PathNodeIDs,
 		})
 
 		// Endpoint whitelist: an empty endpoints array means unrestricted; a
@@ -155,7 +156,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 			if !matched {
 				err := fmt.Errorf("endpoint not allowed: %s (allowed: %s)", relayReq.Path, strings.Join(allowed, ", "))
-				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
+				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "")
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error": gin.H{
 						"message": err.Error(),
@@ -198,7 +199,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 					"request_id": requestID,
 				})
 			}
-			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq)
+			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, upstreamURLFromResp(resp))
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -278,6 +279,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			ResponseRewriteMs: intPtr(resp.ResponseRewriteMs),
 			StreamRewriteMs:   intPtr(resp.StreamRewriteTotalMs()),
 			QueueWaitMs:       intPtr(resp.QueueWaitMs),
+			UpstreamURL:       resp.UpstreamURL,
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
@@ -466,7 +468,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 	return firstByteMs, clientDisconnected
 }
 
-func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest) {
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL string) {
 	useTime := int(time.Since(startTime).Milliseconds())
 	service.Logs().Write(&model.Log{
 		UserID:       getString(userID),
@@ -479,6 +481,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		RequestID:    c.GetString("request_id"),
 		ErrorMessage: err.Error(),
 		UseTime:      useTime,
+		UpstreamURL:  upstreamURL,
 	})
 	outcome := "upstream_error"
 	if errors.Is(err, relay.ErrConcurrencyRejected) {
@@ -498,4 +501,14 @@ func getString(v interface{}) string {
 		return s
 	}
 	return ""
+}
+
+// upstreamURLFromResp returns the upstream URL the relay attempted,
+// or "" when the engine returned no response (e.g. parse/concurrency
+// failures that never reached the upstream call).
+func upstreamURLFromResp(resp *relay.RelayResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return resp.UpstreamURL
 }

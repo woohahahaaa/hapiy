@@ -142,24 +142,8 @@ export function BaseUrlSettings() {
               />
             </label>
             <div className="grid gap-1.5 text-sm">
-              <span>拼接预览</span>
-              <code className="rounded-md border border-border bg-muted px-3 py-2 text-xs font-mono">
-                {baseUrl}
-              </code>
-            </div>
-            <div className="grid gap-1.5 text-sm">
-              <span>标记来源</span>
-              <p className="text-xs text-muted-foreground">
-                在 BaseURL 后追加 <code>__来源名</code> 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。
-                下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
-              </p>
+              <span>最终 BaseURL</span>
               <div className="flex items-center gap-2">
-                <Input
-                  value="无来源"
-                  readOnly
-                  disabled
-                  className="w-36 shrink-0"
-                />
                 <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                   {baseUrl}
                 </code>
@@ -173,6 +157,14 @@ export function BaseUrlSettings() {
                   <AppIcon name="content_copy" size={14} /> 复制
                 </Button>
               </div>
+            </div>
+            <div className="grid gap-1.5 text-sm">
+              <span>标记来源</span>
+              <p className="text-xs text-muted-foreground">
+                在 BaseURL 后追加 <code>__来源名</code> 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。
+                也可以不使用来源标记，直接以「最终 BaseURL」作为接入地址，系统同样会正常转发。
+                下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
+              </p>
               {paths.map((p, index) => {
                 const name = p.trim()
                 return (
