@@ -75,7 +75,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
     >
       {flashLayers.map((layer) => (
         <span
-          key={layer.runId}
+          key={`${layer.runId}-${layer.loop}`}
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-lg transition-opacity duration-300"
           style={{

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
+import { AppIcon } from '@/components/AppIcon'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,11 +25,15 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, type DateRange, type UsageLog } from '@/lib/dashboard-api'
 
+// Cap auto-load at this many rows so a huge total doesn't keep paginating forever.
+const AUTO_LOAD_CAP = 500
+
 export function LogsPage() {
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [nextOffset, setNextOffset] = useState(0)
+  const [initialLoading, setInitialLoading] = useState(false)
+  const [backgroundLoading, setBackgroundLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modelFilter, setModelFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -39,31 +44,56 @@ export function LogsPage() {
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true)
+  const filterArgs = useMemo(
+    () => ({
+      model: modelFilter !== 'all' ? modelFilter : undefined,
+      status: statusFilter !== 'all' ? statusFilter : undefined,
+      token: searchText || undefined,
+      from: dateRange.from,
+      to: dateRange.to,
+    }),
+    [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to],
+  )
+
+  // Initial fetch clears the table and blocks it via initialLoading; reruns on filter/limit change.
+  const fetchFirstPage = useCallback(async () => {
+    setInitialLoading(true)
     setError(null)
     try {
-      const result = await dashboardApi.listLogs({
-        model: modelFilter !== 'all' ? modelFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        token: searchText || undefined,
-        from: dateRange.from,
-        to: dateRange.to,
-        limit,
-        offset,
-      })
+      const result = await dashboardApi.listLogs({ ...filterArgs, limit, offset: 0 })
       if (!mountedRef.current) return
       setLogs(result.logs)
       setTotal(result.total)
+      setNextOffset(result.logs.length)
     } catch (err) {
       if (!mountedRef.current) return
       setError(err instanceof Error ? err.message : '加载失败')
     } finally {
       if (mountedRef.current) {
-        setLoading(false)
+        setInitialLoading(false)
       }
     }
-  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, limit, offset])
+  }, [filterArgs, limit])
+
+  // Background fetch appends to existing rows; doesn't block the table. Stops on error.
+  const fetchMore = useCallback(async () => {
+    if (backgroundLoading) return
+    setBackgroundLoading(true)
+    try {
+      const result = await dashboardApi.listLogs({ ...filterArgs, limit, offset: nextOffset })
+      if (!mountedRef.current) return
+      setLogs((prev) => [...prev, ...result.logs])
+      setTotal(result.total)
+      setNextOffset((prev) => prev + result.logs.length)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      if (mountedRef.current) {
+        setBackgroundLoading(false)
+      }
+    }
+  }, [filterArgs, limit, nextOffset, backgroundLoading])
 
   useEffect(() => {
     mountedRef.current = true
@@ -73,13 +103,22 @@ export function LogsPage() {
   }, [])
 
   useEffect(() => {
-    void fetchLogs()
-  }, [fetchLogs])
+    void fetchFirstPage()
+  }, [fetchFirstPage])
+
+  // Auto-load more pages until the table is full or we hit a cap.
+  useEffect(() => {
+    if (initialLoading) return
+    if (backgroundLoading) return
+    if (logs.length >= total) return
+    if (total === 0) return
+    if (logs.length >= AUTO_LOAD_CAP) return
+    void fetchMore()
+  }, [initialLoading, backgroundLoading, logs.length, total, fetchMore])
 
   const handleFilterChange = useCallback(
     (setter: (v: string) => void, value: string | null) => {
       setter(value ?? 'all')
-      setOffset(0)
     },
     [],
   )
@@ -95,22 +134,17 @@ export function LogsPage() {
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
       setClearDialogOpen(false)
       toast(`已清空 ${deleted} 条记录`)
-      if (offset > 0) {
-        setOffset(0)
-      } else {
-        void fetchLogs()
-      }
+      void fetchFirstPage()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, offset, fetchLogs])
+  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchFirstPage])
 
   const handleResetFilters = useCallback(() => {
     setSearchText('')
     setModelFilter('all')
     setStatusFilter('all')
     setDateRange({})
-    setOffset(0)
   }, [])
 
   const handleClearAll = useCallback(async () => {
@@ -119,7 +153,7 @@ export function LogsPage() {
       setClearDialogOpen(false)
       setLogs([])
       setTotal(0)
-      setOffset(0)
+      setNextOffset(0)
       toast(`已清空全部 ${deleted} 条记录`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
@@ -255,26 +289,25 @@ export function LogsPage() {
           columns={columns}
           data={logs}
           total={total}
-          loading={loading}
+          loading={initialLoading}
           error={error}
-          offset={offset}
+          offset={0}
           limit={limit}
+          showPagination={false}
           onLimitChange={setLimit}
-          onOffsetChange={setOffset}
-          onRetry={fetchLogs}
+          onRetry={fetchFirstPage}
           onRowClick={setSelectedLog}
           filters={
             <>
               <DateRangeFilter
                 value={dateRange}
-                onChange={(range) => { setDateRange(range); setOffset(0) }}
+                onChange={(range) => { setDateRange(range) }}
               />
               <Input
                 placeholder="搜索令牌..."
                 value={searchText}
                 onChange={(e) => {
                   setSearchText(e.target.value)
-                  setOffset(0)
                 }}
                 className="w-56"
               />
@@ -329,6 +362,26 @@ export function LogsPage() {
             </>
           }
         />
+
+        <div className="px-6 pb-2 text-xs text-muted-foreground">
+          {backgroundLoading ? (
+            <span className="inline-flex items-center gap-1.5">
+              <AppIcon name="progress_activity" size={12} className="animate-spin" />
+              正在加载更多…
+              <span className="text-muted-foreground/60">
+                （{logs.length}/{total}）
+              </span>
+            </span>
+          ) : !initialLoading && logs.length < total && logs.length >= AUTO_LOAD_CAP ? (
+            <span>
+              已加载 {logs.length}/{total} 条，请缩小筛选范围查看更多
+            </span>
+          ) : !initialLoading && logs.length > 0 ? (
+            <span>
+              共 {total} 条，已显示 {logs.length}
+            </span>
+          ) : null}
+        </div>
         </div>
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>

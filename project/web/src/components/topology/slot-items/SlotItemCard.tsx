@@ -67,7 +67,7 @@ export function SlotItemCard({
     >
       {layers.map((layer) => (
         <span
-          key={layer.runId}
+          key={`${layer.runId}-${layer.loop}`}
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 rounded-md transition-opacity duration-300"
           style={{

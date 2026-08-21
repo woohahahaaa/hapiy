@@ -190,8 +190,8 @@ func TestListPairs_request_only(t *testing.T) {
 		t.Fatalf("total = %d, want 1", total)
 	}
 	s := summaries[0]
-	if s.TypeLabel != "请求" {
-		t.Fatalf("TypeLabel = %q, want 请求", s.TypeLabel)
+	if s.TypeLabel != "请求+不完整" {
+		t.Fatalf("TypeLabel = %q, want 请求+不完整", s.TypeLabel)
 	}
 	if s.HasResponse {
 		t.Fatalf("HasResponse = true, want false")
@@ -204,6 +204,9 @@ func TestListPairs_request_only(t *testing.T) {
 	}
 	if !s.HasRequest {
 		t.Fatalf("HasRequest = false, want true")
+	}
+	if !s.IsIncomplete {
+		t.Fatalf("IsIncomplete = false, want true")
 	}
 }
 

@@ -31,6 +31,7 @@ import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
 import { FlowLightEdge } from '@/edges/FlowLightEdge'
 import { FlowHub, buildFlowSteps, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
+import { flowDebug } from '@/modules/flow-debug'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -576,28 +577,60 @@ export function TopologyPage() {
   const [litEdgeLayers, setLitEdgeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
   const litNodeRef = useRef(new Map<string, FlowLayerOverlay[]>())
   const litEdgeRef = useRef(new Map<string, FlowLayerOverlay[]>())
-  const runStepsRef = useRef(new Map<number, { color: string; step: FlowStep }>())
+  const runStepsRef = useRef(
+    new Map<number, { color: string; step: FlowStep; requestId: string; loop: number; stepIndex: number; stepTotal: number }>(),
+  )
 
   const rebuildLayers = useCallback(() => {
     setLitNodeLayers(new Map(litNodeRef.current))
     setLitEdgeLayers(new Map(litEdgeRef.current))
   }, [])
 
-  const applyStepToLayers = useCallback((runId: number, step: FlowStep, color: string) => {
-    runStepsRef.current.set(runId, { color, step })
-    if (step.kind === 'node') {
-      const existing = (litNodeRef.current.get(step.nodeId) ?? []).filter((layer) => layer.runId !== runId)
-      existing.push({ runId, color })
-      litNodeRef.current.set(step.nodeId, existing)
-    } else {
-      const existing = (litEdgeRef.current.get(step.edgeId) ?? []).filter((layer) => layer.runId !== runId)
-      existing.push({ runId, color })
-      litEdgeRef.current.set(step.edgeId, existing)
-    }
-    rebuildLayers()
-  }, [rebuildLayers])
+  const applyStepToLayers = useCallback(
+    (runId: number, step: FlowStep, color: string, meta: { requestId: string; loop: number; stepIndex: number; stepTotal: number }) => {
+      runStepsRef.current.set(runId, { color, step, requestId: meta.requestId, loop: meta.loop, stepIndex: meta.stepIndex, stepTotal: meta.stepTotal })
+      // Clear this run's layers from every previously lit element so the run
+      // lights exactly one element at a time — the chain relays step by step
+      // instead of accumulating lit nodes/edges behind it.
+      for (const [nodeId, layers] of [...litNodeRef.current]) {
+        const kept = layers.filter((layer) => layer.runId !== runId)
+        if (kept.length === 0) litNodeRef.current.delete(nodeId)
+        else litNodeRef.current.set(nodeId, kept)
+      }
+      for (const [edgeId, layers] of [...litEdgeRef.current]) {
+        const kept = layers.filter((layer) => layer.runId !== runId)
+        if (kept.length === 0) litEdgeRef.current.delete(edgeId)
+        else litEdgeRef.current.set(edgeId, kept)
+      }
+      if (step.kind === 'node') {
+        const existing = litNodeRef.current.get(step.nodeId) ?? []
+        existing.push({ runId, color, loop: meta.loop })
+        litNodeRef.current.set(step.nodeId, existing)
+      } else {
+        const existing = litEdgeRef.current.get(step.edgeId) ?? []
+        existing.push({ runId, color, loop: meta.loop })
+        litEdgeRef.current.set(step.edgeId, existing)
+      }
+      rebuildLayers()
+    },
+    [rebuildLayers],
+  )
 
   const removeRunLayers = useCallback((runId: number) => {
+    const meta = runStepsRef.current.get(runId)
+    if (meta && meta.requestId) {
+      const rm = requestMetaRef.current.get(meta.requestId)
+      flowDebug.emit({
+        requestId: meta.requestId,
+        model: rm?.model ?? meta.requestId,
+        provider: rm?.provider ?? null,
+        runId,
+        loop: meta.loop,
+        stepIndex: meta.stepIndex,
+        stepTotal: meta.stepTotal,
+        action: 'end',
+      })
+    }
     runStepsRef.current.delete(runId)
     for (const [nodeId, layers] of [...litNodeRef.current]) {
       const kept = layers.filter((layer) => layer.runId !== runId)
@@ -866,9 +899,32 @@ export function TopologyPage() {
   const canvasRef = useRef<FlatCanvas | null>(null)
   canvasRef.current = canvas
   const flowHubRef = useRef<FlowHub | null>(null)
+  const requestMetaRef = useRef(new Map<string, { model: string; provider: string | null }>())
+  const runInfoRef = useRef(new Map<number, { requestId: string; loop: number }>())
+  // FLOW-DEBUG: mount/unmount the animation tracer. Remove these two lines
+  // when done — the module itself stays in the repo.
+  useEffect(() => {
+    flowDebug.mount()
+    return () => flowDebug.unmount()
+  }, [])
   useEffect(() => {
     const hub = new FlowHub({
-      onStep: (runId, step, color) => applyStepToLayers(runId, step, color),
+      onStep: (runId, step, color, meta) => {
+        applyStepToLayers(runId, step, color, meta)
+        runInfoRef.current.set(runId, { requestId: meta.requestId, loop: meta.loop })
+        const rm = requestMetaRef.current.get(meta.requestId)
+        flowDebug.emit({
+          requestId: meta.requestId,
+          model: rm?.model ?? meta.requestId,
+          provider: rm?.provider ?? null,
+          runId,
+          loop: meta.loop,
+          stepIndex: meta.stepIndex,
+          stepTotal: meta.stepTotal,
+          step: step.kind === 'node' ? { kind: 'node', id: step.nodeId } : { kind: 'edge', id: step.edgeId },
+          action: 'step',
+        })
+      },
       onRunEnd: (runId) => removeRunLayers(runId),
     })
     flowHubRef.current = hub
@@ -908,14 +964,47 @@ export function TopologyPage() {
     } catch {
       return
     }
+    const activeRequestIds = new Set<string>()
     for (const request of requests) {
       if (request.endTime !== null) continue
+      activeRequestIds.add(request.requestId)
+      if ((flowHubRef.current?.activeRunCount(request.requestId) ?? 0) > 0) continue
       const path = resolveLayerPath(request)
       if (!path) continue
       const steps = buildFlowSteps(path, canvasRef.current)
       if (steps.length === 0) continue
       const color = modelColorRef.current.get(request.model) ?? 'var(--primary)'
-      flowHubRef.current?.startRun({ requestId: request.requestId, color, steps })
+      requestMetaRef.current.set(request.requestId, { model: request.model, provider: request.provider ?? null })
+      const runId = flowHubRef.current?.startRun({ requestId: request.requestId, color, steps }) ?? 0
+      if (runId > 0) {
+        flowDebug.emit({
+          requestId: request.requestId,
+          model: request.model,
+          provider: request.provider ?? null,
+          runId,
+          loop: 0,
+          stepIndex: 0,
+          stepTotal: steps.length,
+          action: 'start',
+        })
+      }
+    }
+    // Requests that disappeared finish their current pass before being removed.
+    const flagged = flowHubRef.current?.stopFinishedRequests(activeRequestIds) ?? []
+    for (const runId of flagged) {
+      const meta = runStepsRef.current.get(runId)
+      if (!meta) continue
+      const rm = requestMetaRef.current.get(meta.requestId)
+      flowDebug.emit({
+        requestId: meta.requestId,
+        model: rm?.model ?? meta.requestId,
+        provider: rm?.provider ?? null,
+        runId,
+        loop: meta.loop,
+        stepIndex: meta.stepIndex,
+        stepTotal: meta.stepTotal,
+        action: 'graceful',
+      })
     }
   }, [resolveLayerPath])
 

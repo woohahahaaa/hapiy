@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
+import { AppIcon } from '@/components/AppIcon'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,9 @@ type CaptureRow =
   | { kind: 'system'; file: LogCaptureFile }
 
 type CaptureCategory = '请求' | '响应' | '系统'
+
+// Cap auto-load per list (pairs, system files) so a huge total doesn't keep paginating forever.
+const AUTO_LOAD_CAP = 500
 
 const TYPE_OPTIONS: readonly { value: CaptureCategory; label: string }[] = [
   { value: '请求', label: '请求' },
@@ -56,9 +60,11 @@ export function LogCapturePage() {
   const [pairTotal, setPairTotal] = useState(0)
   const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
   const [systemTotal, setSystemTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
+  const [pairNextOffset, setPairNextOffset] = useState(0)
+  const [systemNextOffset, setSystemNextOffset] = useState(0)
   const [limit, setLimit] = useState(20)
-  const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(false)
+  const [backgroundLoading, setBackgroundLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange>({})
@@ -72,47 +78,63 @@ export function LogCapturePage() {
   const mountedRef = useRef(true)
 
   const total = pairTotal + systemTotal
+  const loadedCount = pairs.length + systemFiles.length
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    const shouldFetchPairs =
+  const shouldFetchPairs = useCallback(
+    () =>
       selectedTypes.length === 0 ||
       selectedTypes.includes('请求') ||
-      selectedTypes.includes('响应')
-    const shouldFetchSystem =
-      selectedTypes.length === 0 || selectedTypes.includes('系统')
-    const pairTypeQuery =
+      selectedTypes.includes('响应'),
+    [selectedTypes],
+  )
+  const shouldFetchSystem = useCallback(
+    () => selectedTypes.length === 0 || selectedTypes.includes('系统'),
+    [selectedTypes],
+  )
+  const pairTypeQuery = useMemo(
+    () =>
       (['请求', '响应'] as const)
         .filter((t) => selectedTypes.includes(t))
         .map((t) => (t === '请求' ? 'request' : 'response'))
-        .join(',') || undefined
+        .join(',') || undefined,
+    [selectedTypes],
+  )
 
-    const pairTask: Promise<void> = shouldFetchPairs
+  // Initial fetch clears the table and blocks it via initialLoading.
+  const fetchFirstPage = useCallback(async () => {
+    setInitialLoading(true)
+    setError(null)
+
+    const fetchPairs = shouldFetchPairs()
+    const fetchSystem = shouldFetchSystem()
+    const pairType = pairTypeQuery
+
+    const pairTask: Promise<void> = fetchPairs
       ? dashboardApi
           .listLogCapturePairs({
             prefix: prefix || undefined,
-            type: pairTypeQuery,
+            type: pairType,
             from: dateRange.from,
             to: dateRange.to,
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
             limit,
-            offset,
+            offset: 0,
           })
           .then((result) => {
             if (!mountedRef.current) return
             setPairs(result.pairs)
             setPairTotal(result.total)
+            setPairNextOffset(result.pairs.length)
           })
       : Promise.resolve().then(() => {
           if (!mountedRef.current) return
           setPairs([])
           setPairTotal(0)
+          setPairNextOffset(0)
         })
 
-    const systemTask: Promise<void> = shouldFetchSystem
+    const systemTask: Promise<void> = fetchSystem
       ? dashboardApi
           .listLogCaptureFiles({
             prefix: prefix || undefined,
@@ -122,17 +144,19 @@ export function LogCapturePage() {
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
             limit,
-            offset,
+            offset: 0,
           })
           .then((result) => {
             if (!mountedRef.current) return
             setSystemFiles(result.files)
             setSystemTotal(result.total)
+            setSystemNextOffset(result.files.length)
           })
       : Promise.resolve().then(() => {
           if (!mountedRef.current) return
           setSystemFiles([])
           setSystemTotal(0)
+          setSystemNextOffset(0)
         })
 
     const settled = await Promise.allSettled([pairTask, systemTask])
@@ -146,9 +170,68 @@ export function LogCapturePage() {
       }
     }
     if (mountedRef.current) {
-      setLoading(false)
+      setInitialLoading(false)
     }
-  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, offset, limit])
+  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, limit, shouldFetchPairs, shouldFetchSystem, pairTypeQuery])
+
+  // Background fetches append to existing lists; don't block the table.
+  const fetchMorePairs = useCallback(async () => {
+    if (backgroundLoading) return
+    if (!shouldFetchPairs()) return
+    setBackgroundLoading(true)
+    try {
+      const result = await dashboardApi.listLogCapturePairs({
+        prefix: prefix || undefined,
+        type: pairTypeQuery,
+        from: dateRange.from,
+        to: dateRange.to,
+        headerKey: headerKey || undefined,
+        headerValue: headerValue || undefined,
+        limit,
+        offset: pairNextOffset,
+      })
+      if (!mountedRef.current) return
+      setPairs((prev) => [...prev, ...result.pairs])
+      setPairTotal(result.total)
+      setPairNextOffset((prev) => prev + result.pairs.length)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      if (mountedRef.current) {
+        setBackgroundLoading(false)
+      }
+    }
+  }, [backgroundLoading, shouldFetchPairs, prefix, pairTypeQuery, dateRange.from, dateRange.to, headerKey, headerValue, limit, pairNextOffset])
+
+  const fetchMoreSystemFiles = useCallback(async () => {
+    if (backgroundLoading) return
+    if (!shouldFetchSystem()) return
+    setBackgroundLoading(true)
+    try {
+      const result = await dashboardApi.listLogCaptureFiles({
+        prefix: prefix || undefined,
+        type: 'system',
+        from: dateRange.from,
+        to: dateRange.to,
+        headerKey: headerKey || undefined,
+        headerValue: headerValue || undefined,
+        limit,
+        offset: systemNextOffset,
+      })
+      if (!mountedRef.current) return
+      setSystemFiles((prev) => [...prev, ...result.files])
+      setSystemTotal(result.total)
+      setSystemNextOffset((prev) => prev + result.files.length)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(err instanceof Error ? err.message : '加载失败')
+    } finally {
+      if (mountedRef.current) {
+        setBackgroundLoading(false)
+      }
+    }
+  }, [backgroundLoading, shouldFetchSystem, prefix, dateRange.from, dateRange.to, headerKey, headerValue, limit, systemNextOffset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -159,14 +242,26 @@ export function LogCapturePage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchData()
-  }, [fetchData])
+    void fetchFirstPage()
+  }, [fetchFirstPage])
+
+  // Auto-load more pages until both lists are full or hit the per-list cap.
+  useEffect(() => {
+    if (initialLoading || backgroundLoading) return
+    if (total === 0) return
+    const pairHasMore = shouldFetchPairs() && pairs.length < pairTotal && pairs.length < AUTO_LOAD_CAP
+    const sysHasMore = shouldFetchSystem() && systemFiles.length < systemTotal && systemFiles.length < AUTO_LOAD_CAP
+    if (pairHasMore) {
+      void fetchMorePairs()
+    } else if (sysHasMore) {
+      void fetchMoreSystemFiles()
+    }
+  }, [initialLoading, backgroundLoading, total, pairTotal, systemTotal, pairs.length, systemFiles.length, shouldFetchPairs, shouldFetchSystem, fetchMorePairs, fetchMoreSystemFiles])
 
   const toggleType = useCallback((value: CaptureCategory) => {
     setSelectedTypes((prev) =>
       prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value],
     )
-    setOffset(0)
   }, [])
 
   const handleResetFilters = useCallback(() => {
@@ -175,7 +270,6 @@ export function LogCapturePage() {
     setPrefix('')
     setHeaderKey('')
     setHeaderValue('')
-    setOffset(0)
   }, [])
 
   const handleClear = useCallback(
@@ -199,7 +293,7 @@ export function LogCapturePage() {
             : {}),
         })
         setClearOpen(false)
-        void fetchData()
+        void fetchFirstPage()
       } catch (err) {
         if (mountedRef.current) {
           setError(err instanceof Error ? err.message : '清空失败')
@@ -209,7 +303,7 @@ export function LogCapturePage() {
         setClearing(false)
       }
     },
-    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchData],
+    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchFirstPage],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -287,7 +381,7 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) => {
         const isStream = row.kind === 'pair' ? row.pair.is_stream : false
-        return isStream ? <Badge variant="secondary">SSE</Badge> : <span className="text-muted-foreground/60">--</span>
+        return isStream ? 'SSE' : <span className="text-muted-foreground/60">--</span>
       },
     },
     {
@@ -324,22 +418,21 @@ export function LogCapturePage() {
           columns={columns}
           data={rows}
           total={total}
-          loading={loading}
+          loading={initialLoading}
           error={error}
-          offset={offset}
+          offset={0}
           limit={limit}
-          onOffsetChange={setOffset}
+          showPagination={false}
           onLimitChange={setLimit}
           onRowClick={setPreview}
           emptyText="暂无抓取日志"
-          onRetry={() => void fetchData()}
+          onRetry={() => void fetchFirstPage()}
           filters={
             <>
               <DateRangeFilter
                 value={dateRange}
                 onChange={(range) => {
                   setDateRange(range)
-                  setOffset(0)
                 }}
               />
               <div className="flex items-center gap-3">
@@ -358,7 +451,6 @@ export function LogCapturePage() {
                 value={prefix}
                 onChange={(e) => {
                   setPrefix(e.target.value)
-                  setOffset(0)
                 }}
                 className="w-48"
               />
@@ -367,7 +459,6 @@ export function LogCapturePage() {
                 value={headerKey}
                 onChange={(e) => {
                   setHeaderKey(e.target.value)
-                  setOffset(0)
                 }}
                 className="w-48"
               />
@@ -376,7 +467,6 @@ export function LogCapturePage() {
                 value={headerValue}
                 onChange={(e) => {
                   setHeaderValue(e.target.value)
-                  setOffset(0)
                 }}
                 className="w-48"
               />
@@ -399,6 +489,26 @@ export function LogCapturePage() {
             </Button>
           }
         />
+
+        <div className="px-6 pb-2 text-xs text-muted-foreground">
+          {backgroundLoading ? (
+            <span className="inline-flex items-center gap-1.5">
+              <AppIcon name="progress_activity" size={12} className="animate-spin" />
+              正在加载更多…
+              <span className="text-muted-foreground/60">
+                （{loadedCount}/{total}）
+              </span>
+            </span>
+          ) : !initialLoading && (pairs.length < pairTotal || systemFiles.length < systemTotal) && (pairs.length >= AUTO_LOAD_CAP || systemFiles.length >= AUTO_LOAD_CAP) ? (
+            <span>
+              已加载 {loadedCount}/{total} 条，请缩小筛选范围查看更多
+            </span>
+          ) : !initialLoading && loadedCount > 0 ? (
+            <span>
+              共 {total} 条，已显示 {loadedCount}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {preview?.kind === 'pair' && (

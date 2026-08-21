@@ -52,6 +52,8 @@ type LogCapturePairSummary struct {
 	ResponseCount int     `json:"response_count"`
 	HasRewrite   bool      `json:"has_rewrite"`
 	IsStream     bool      `json:"is_stream"`
+	HasError     bool      `json:"has_error"`
+	IsIncomplete bool      `json:"is_incomplete"`
 }
 
 // LogCaptureTiming is the per-request stage timing breakdown surfaced on
@@ -275,7 +277,6 @@ func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary 
 	s.HasRequest = hasRequest
 	s.HasResponse = hasResponse
 	s.ResponseCount = responseCount
-	s.TypeLabel = typeLabel(hasRequest, hasResponse, responseCount)
 
 	// HasRewrite = the request node shows a body change, or any response
 	// node shows a body change. We reuse the same body-comparison the full
@@ -295,6 +296,16 @@ func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary 
 	}
 	s.HasRewrite = reqModified || rspModified
 	s.IsStream = responseIsStream(rows)
+
+	// HasError = any captured row carries an error string or any response
+	// surfaced a 4xx/5xx status (after preferred, before fallback).
+	s.HasError = pairHasError(rows, rspBefore, rspAfter)
+
+	// IsIncomplete = a request was sent but no matching response was fully
+	// captured (no response rows at all, or response_before without after).
+	s.IsIncomplete = pairIsIncomplete(hasRequest, rspBefore, rspAfter)
+
+	s.TypeLabel = typeLabel(hasRequest, hasResponse, responseCount, s.HasError, s.IsIncomplete)
 	return s
 }
 
@@ -485,21 +496,72 @@ func isModified(before, after *LogCaptureStageRow) bool {
 }
 
 // typeLabel renders the Chinese label for a pair's shape:
-//   - response-only            → "响应"
-//   - request-only (0 responses) → "请求"
-//   - request + 1 response     → "请求+响应"
-//   - request + N>1 responses → "请求+响应×N"
-func typeLabel(hasRequest, hasResponse bool, responseCount int) string {
+//   - response-only               → "响应"
+//   - request-only (0 responses)  → "请求"
+//   - request + 1 response        → "请求+响应"
+//   - request + N>1 responses     → "请求+响应×N"
+// hasError / isIncomplete append suffixes (+报错, +不完整) so a glance at the
+// list flags broken captures without opening the detail.
+func typeLabel(hasRequest, hasResponse bool, responseCount int, hasError, isIncomplete bool) string {
+	var base string
 	switch {
 	case !hasRequest && hasResponse:
-		return "响应"
+		base = "响应"
 	case hasRequest && responseCount == 0:
-		return "请求"
+		base = "请求"
 	case responseCount == 1:
-		return "请求+响应"
+		base = "请求+响应"
 	default:
-		return "请求+响应×" + strconv.Itoa(responseCount)
+		base = "请求+响应×" + strconv.Itoa(responseCount)
 	}
+	if hasError {
+		base += "+报错"
+	}
+	if isIncomplete {
+		base += "+不完整"
+	}
+	return base
+}
+
+// pairHasError reports whether any captured row carries an error string or
+// any response surfaced a 4xx/5xx status. Response status is read from the
+// after row when present, otherwise the before row.
+func pairHasError(rows []model.LogCapture, rspBefore, rspAfter []model.LogCapture) bool {
+	for _, r := range rows {
+		if r.Error != "" {
+			return true
+		}
+	}
+	for i := 0; i < len(rspAfter) || i < len(rspBefore); i++ {
+		var status int
+		if i < len(rspAfter) {
+			status = rspAfter[i].ResponseStatus
+		} else {
+			status = rspBefore[i].ResponseStatus
+		}
+		if status >= 400 {
+			return true
+		}
+	}
+	return false
+}
+
+// pairIsIncomplete reports whether a request was sent but no full response
+// was captured: no response rows at all, or response_before without a
+// matching response_after (stream dropped mid-flight).
+func pairIsIncomplete(hasRequest bool, rspBefore, rspAfter []model.LogCapture) bool {
+	if !hasRequest {
+		return false
+	}
+	if len(rspAfter) == 0 && len(rspBefore) == 0 {
+		return true
+	}
+	for i := 0; i < len(rspBefore); i++ {
+		if i >= len(rspAfter) {
+			return true
+		}
+	}
+	return false
 }
 
 // first returns the first element of a slice or nil. Used for the request

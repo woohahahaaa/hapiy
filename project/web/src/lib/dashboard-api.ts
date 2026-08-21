@@ -220,7 +220,7 @@ export type LogCaptureResponseNode = {
 
 export type LogCapturePairSummary = {
   readonly request_id: string
-  readonly type_label: string // 后端计算: "请求" | "响应" | "请求+响应" | "请求+响应×N" — 不校验枚举
+  readonly type_label: string // 后端计算: "请求" | "响应" | "请求+响应" | "请求+响应×N"，可拼接 "+报错" / "+不完整" — 不校验枚举
   readonly prefix: string
   readonly source: string
   readonly provider_id: string
@@ -233,6 +233,8 @@ export type LogCapturePairSummary = {
   readonly response_count: number
   readonly has_rewrite: boolean
   readonly is_stream: boolean
+  readonly has_error: boolean
+  readonly is_incomplete: boolean
 }
 
 export type LogCapturePairFull = {

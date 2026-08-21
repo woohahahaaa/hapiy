@@ -47,59 +47,52 @@ describe('buildFlowSteps', () => {
 })
 
 describe('FlowHub', () => {
-  it('plays steps strictly in order with one step per FLOW_STEP_MS', async () => {
+  it('loops a run back to step 0 after the final step', async () => {
     vi.useFakeTimers()
     const fired: FlowStep[] = []
     const hub = new FlowHub({ onStep: (_id, step) => void fired.push(step), onRunEnd: () => {} })
     hub.startRun({ requestId: 'req-1', color: '#fff', steps: stepsOf(['model-kimi-k3', 'entry-1', 'requestModify-1']) })
     expect(fired).toEqual([{ kind: 'node', nodeId: 'model-kimi-k3' }])
-    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS)
-    expect(fired[1]).toEqual({ kind: 'edge', edgeId: 'model-kimi-k3→entry-1' })
-    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS)
-    expect(fired[2]).toEqual({ kind: 'node', nodeId: 'entry-1' })
-    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 4)
-    expect(fired.map((s) => s.kind)).toEqual(['node', 'edge', 'node', 'edge', 'node'])
+    // 5 steps per pass: one pass then wrap back to the first step.
+    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 5)
+    expect(fired).toHaveLength(6)
+    expect(fired[5]).toEqual({ kind: 'node', nodeId: 'model-kimi-k3' })
   })
 
-  it('removes a run after its final step', async () => {
+  it('stops after the current pass when the request disappears', async () => {
     vi.useFakeTimers()
+    const fired: FlowStep[] = []
     const ended: number[] = []
-    const hub = new FlowHub({ onStep: () => {}, onRunEnd: (id) => ended.push(id) })
+    const hub = new FlowHub({ onStep: (_id, step) => void fired.push(step), onRunEnd: (id) => ended.push(id) })
     const runId = hub.startRun({
       requestId: 'req-1',
       color: '#fff',
       steps: stepsOf(['model-kimi-k3', 'entry-1', 'requestModify-1']),
     })
-    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 5)
+    // Advance partway into the first pass (2 steps), then request disappears.
+    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 2)
+    hub.stopFinishedRequests(new Set())
+    expect(ended).toEqual([])
+    // Remaining steps of the current pass: 3 more (steps 2,3,4) then it ends.
+    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 3)
+    expect(fired.map((s) => s.kind)).toEqual(['node', 'edge', 'node', 'edge', 'node'])
     expect(ended).toEqual([runId])
   })
 
-  it('runs from the same request overlap independently', async () => {
+  it('keeps looping while the request stays active', async () => {
     vi.useFakeTimers()
-    const fired: Array<{ runId: number; step: FlowStep }> = []
-    const hub = new FlowHub({
-      onStep: (runId, step) => void fired.push({ runId, step }),
-      onRunEnd: () => {},
-    })
-    const steps = stepsOf(['model-kimi-k3', 'entry-1', 'requestModify-1'])
-    const a = hub.startRun({ requestId: 'req-1', color: '#f00', steps })
-    const b = hub.startRun({ requestId: 'req-1', color: '#0f0', steps })
-    expect(hub.activeRunCount('req-1')).toBe(2)
-    expect(
-      fired.filter((f) => f.step.kind === 'node' && f.step.nodeId === 'model-kimi-k3').length,
-    ).toBe(2)
-    expect(a).not.toBe(b)
-    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS)
-    expect(fired.filter((f) => f.step.kind === 'edge').length).toBe(2)
+    const fired: FlowStep[] = []
+    const hub = new FlowHub({ onStep: (_id, step) => void fired.push(step), onRunEnd: () => {} })
+    hub.startRun({ requestId: 'req-1', color: '#fff', steps: stepsOf(['model-kimi-k3', 'entry-1', 'requestModify-1']) })
+    hub.stopFinishedRequests(new Set(['req-1']))
+    await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 5)
+    expect(fired).toHaveLength(6)
   })
 
-  it('stopRun halts the run and does not fire further steps', async () => {
+  it('stopRun halts a run immediately', async () => {
     vi.useFakeTimers()
     let steps = 0
-    const hub = new FlowHub({
-      onStep: () => void (steps += 1),
-      onRunEnd: () => {},
-    })
+    const hub = new FlowHub({ onStep: () => void (steps += 1), onRunEnd: () => {} })
     const runId = hub.startRun({
       requestId: 'req-1',
       color: '#fff',
@@ -111,4 +104,5 @@ describe('FlowHub', () => {
     await vi.advanceTimersByTimeAsync(FLOW_STEP_MS * 3)
     expect(steps).toBe(1)
   })
+
 })

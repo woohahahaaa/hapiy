@@ -26,22 +26,24 @@ function renderEdge(layers: FlowLayerOverlay[] | undefined): string {
 }
 
 describe('FlowLightEdge', () => {
-  it('renders no light dots without layers', () => {
+  it('renders no beam without layers', () => {
     const markup = renderEdge(undefined)
-    expect(markup).not.toContain('animateMotion')
-    expect(markup).not.toContain('circle')
+    expect(markup).not.toContain('@keyframes flow-light-slide')
   })
 
-  it('renders one moving dot per layer, keyed by runId', () => {
+  it('renders one head+tail beam per layer, keyed by runId+loop', () => {
     const layers: FlowLayerOverlay[] = [
-      { runId: 1, color: '#38bdf8' },
-      { runId: 2, color: '#f97316' },
+      { runId: 1, color: '#38bdf8', loop: 0 },
+      { runId: 2, color: '#f97316', loop: 1 },
     ]
     const markup = renderEdge(layers)
-    expect(markup.match(/<circle/g)).toHaveLength(2)
-    expect(markup.match(/<animateMotion/g)).toHaveLength(2)
-    expect(markup).toContain('fill="#38bdf8"')
-    expect(markup).toContain('fill="#f97316"')
-    expect(markup).toContain('dur="340ms"')
+    expect(markup).toContain('@keyframes flow-light-slide-1-model-to-entry')
+    expect(markup).toContain('@keyframes flow-light-slide-2-model-to-entry')
+    expect(markup).toContain('stroke-dasharray:55 145')
+    expect(markup).toContain('stroke-dasharray:0 33 22 145')
+    expect(markup.match(/stroke-linecap="butt"/g)).toHaveLength(4)
+    expect(markup).toContain('stroke="#38bdf8"')
+    expect(markup).toContain('stroke="#f97316"')
+    expect(markup).toContain('animation-duration:340ms')
   })
 })

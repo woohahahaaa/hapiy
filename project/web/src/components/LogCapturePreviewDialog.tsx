@@ -74,14 +74,25 @@ function circledNumber(n: number): string {
   return CIRCLED_NUMBERS[n - 1]
 }
 
-// ── Type label recomputed from pair shape (LogCapturePairFull has no type_label field) ──
+// ── Type label recomputed from pair shape (LogCapturePairFull has no type_label field).
+// Counts only response nodes that actually have a stage row, matching what's
+// rendered below (the backend can produce empty entries from failover retries).
+// Suffixes (+报错 / +不完整) mirror the backend's label so the dialog header
+// matches the list view.
 function computeTypeLabel(pair: LogCapturePairFull): string {
   const hasRequest = !!pair.request
-  const n = pair.responses.length
-  if (!hasRequest && n > 0) return '响应'
-  if (hasRequest && n === 0) return '请求'
-  if (n === 1) return '请求+响应'
-  return `请求+响应×${n}`
+  const live = pair.responses.filter((r) => r.before || r.after)
+  const n = live.length
+  let base: string
+  if (!hasRequest && n > 0) base = '响应'
+  else if (hasRequest && n === 0) base = '请求'
+  else if (n === 1) base = '请求+响应'
+  else base = `请求+响应×${n}`
+  const hasError = pair.error !== '' || live.some((r) => r.status >= 400)
+  const isIncomplete = hasRequest && live.some((r) => r.before && !r.after)
+  if (hasError) base += '+报错'
+  if (isIncomplete) base += '+不完整'
+  return base
 }
 
 // ── Inline hand-rolled collapsible Node (not exported) ──
@@ -355,7 +366,13 @@ function PairDialog({ requestId, open, onClose }: {
                   )}
                   {pair.responses.length > 0 && (
                     <Node label={<span>响应</span>}>
-                      {pair.responses.map((resp, i) => (
+                      {pair.responses.map((resp, i) => {
+                        // Skip nodes that have neither before nor after; they
+                        // come from a failover attempt that didn't log any
+                        // stage rows and would render as an empty expandable
+                        // block.
+                        if (!resp.before && !resp.after) return null
+                        return (
                         <Node
                           key={i}
                           label={
@@ -368,7 +385,8 @@ function PairDialog({ requestId, open, onClose }: {
                         >
                           <ResponseNodeBody resp={resp} />
                         </Node>
-                      ))}
+                        )
+                      })}
                     </Node>
                   )}
                 </>
