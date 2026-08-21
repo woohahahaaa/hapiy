@@ -690,7 +690,7 @@ export function TopologyPage() {
         id: nodeId,
         type: 'modelHub',
         position: layoutSnapshot[nodeId] ?? { x: 20, y: 20 },
-        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true, flashLayers: litNodeLayers.get(nodeId) },
+        data: { models: [{ id: m, label: m, color, disabled: !active }], simplified: true },
       })
     }
     modelColorRef.current = colorMap
@@ -728,7 +728,6 @@ export function TopologyPage() {
             enabled: node.enabled,
             weight: node.weight ?? 1,
             models: modelNodes.entryModels.get(node.id) ?? [],
-            flashLayers: litNodeLayers.get(node.id),
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
                 const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
@@ -783,7 +782,6 @@ export function TopologyPage() {
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => p.name),
-            providerFlashLayers: litNodeLayers,
             onAddProvider: () => handleAddProvider(node.id),
             onSelectProvider: (providerId: string, name: string) => handleSelectProvider(providerId, name),
             onToggleProvider: (providerId: string, enabled: boolean) =>
@@ -804,7 +802,6 @@ export function TopologyPage() {
             enabled: node.enabled,
             isProviderSlot: false,
             externallyDisabled: externallyDisabledSet.has(node.id),
-            flashLayers: litNodeLayers.get(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
@@ -827,7 +824,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, litNodeLayers])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -838,6 +835,21 @@ export function TopologyPage() {
   useEffect(() => {
     setNodes(baseNodes)
   }, [baseNodes, setNodes])
+
+  useEffect(() => {
+    setNodes((current) =>
+      current.map((node) => {
+        if (node.type === 'modelHub' || node.type === 'requestEntry' || node.type === 'slot') {
+          const data = node.data as Record<string, unknown>
+          const nextData = node.type === 'slot' && data.isProviderSlot
+            ? { ...data, providerFlashLayers: litNodeLayers }
+            : { ...data, flashLayers: litNodeLayers.get(node.id) }
+          return { ...node, data: nextData }
+        }
+        return node
+      }),
+    )
+  }, [litNodeLayers, setNodes])
 
   const baseEdges = useMemo<Edge[]>(() => {
     if (!canvas) return []

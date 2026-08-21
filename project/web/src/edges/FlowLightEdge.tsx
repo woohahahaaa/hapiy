@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react'
-import type { CSSProperties } from 'react'
+import { memo, type CSSProperties } from 'react'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { FLOW_STEP_MS } from '@/modules/flow-hub'
 
@@ -49,6 +49,20 @@ function buildSweepKeyframes(name: string): string {
   )
 }
 
+type StaticBaseEdgeProps = Pick<EdgeProps, 'id' | 'path' | 'markerEnd' | 'style' | 'interactionWidth'>
+
+const StaticBaseEdge = memo(
+  function StaticBaseEdge(props: StaticBaseEdgeProps) {
+    return <BaseEdge {...props} />
+  },
+  (previous, next) =>
+    previous.id === next.id &&
+    previous.path === next.path &&
+    previous.markerEnd === next.markerEnd &&
+    previous.style === next.style &&
+    previous.interactionWidth === next.interactionWidth,
+)
+
 export function FlowLightEdge(props: EdgeProps) {
   const {
     id,
@@ -88,7 +102,7 @@ export function FlowLightEdge(props: EdgeProps) {
 
   return (
     <>
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
+      <StaticBaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
       {layers.map((layer) => {
         const kfName = `flow-light-slide-${layer.runId}-${safeId(id)}`
         const css = buildSweepKeyframes(kfName)
