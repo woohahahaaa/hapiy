@@ -8,6 +8,7 @@ import {
   type Node,
   type Edge,
   type Connection,
+  type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AppIcon } from '@/components/AppIcon'
@@ -28,11 +29,11 @@ import { RequestEntryNode } from '@/nodes/RequestEntryNode'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider } from '@/lib/dashboard-api'
+import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderStrategy } from '@/lib/dashboard-api'
 import { FlowLightEdge } from '@/edges/FlowLightEdge'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
-import { flowDebug } from '@/modules/flow-debug'
+// import { flowDebug } from '@/modules/flow-debug' // FLOW-DEBUG: disabled — re-enable by uncommenting this import and the flowDebug.* call sites below
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -623,17 +624,18 @@ export function TopologyPage() {
   const removeRunLayers = useCallback((runId: number) => {
     const meta = runStepsRef.current.get(runId)
     if (meta && meta.requestId) {
-      const rm = requestMetaRef.current.get(meta.requestId)
-      flowDebug.emit({
-        requestId: meta.requestId,
-        model: rm?.model ?? meta.requestId,
-        provider: rm?.provider ?? null,
-        runId,
-        loop: meta.loop,
-        stepIndex: meta.stepIndex,
-        stepTotal: meta.stepTotal,
-        action: 'end',
-      })
+      // FLOW-DEBUG: disabled
+      // const rm = requestMetaRef.current.get(meta.requestId)
+      // flowDebug.emit({
+      //   requestId: meta.requestId,
+      //   model: rm?.model ?? meta.requestId,
+      //   provider: rm?.provider ?? null,
+      //   runId,
+      //   loop: meta.loop,
+      //   stepIndex: meta.stepIndex,
+      //   stepTotal: meta.stepTotal,
+      //   action: 'end',
+      // })
     }
     runStepsRef.current.delete(runId)
     for (const [nodeId, layers] of [...litNodeRef.current]) {
@@ -792,6 +794,8 @@ export function TopologyPage() {
               updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n))),
             onDeleteProvider: (providerId: string) => handleDeleteNode(providerId),
             onReorderProvider: (from: number, to: number) => handleReorderProvider(node.id, from, to),
+            strategy: node.strategy ?? 'sequential',
+            onCycleStrategy: () => handleCycleProviderStrategy(node.id, node.strategy ?? 'sequential'),
           },
         })
       } else {
@@ -915,18 +919,19 @@ export function TopologyPage() {
   const canvasRef = useRef<FlatCanvas | null>(null)
   canvasRef.current = canvas
   const flowHubRef = useRef<FlowHub | null>(null)
+  const rfInstanceRef = useRef<ReactFlowInstance | null>(null)
   const requestMetaRef = useRef(new Map<string, { model: string; provider: string | null }>())
   const runInfoRef = useRef(new Map<number, { requestId: string; loop: number }>())
   const flowPollingPausedRef = useRef(false)
   const flowEditBoundaryMsRef = useRef<number | null>(null)
   const flowIsolationTimerRef = useRef<number | null>(null)
   const flowSyncGenerationRef = useRef(0)
-  // FLOW-DEBUG: mount/unmount the animation tracer. Remove these two lines
-  // when done — the module itself stays in the repo.
-  useEffect(() => {
-    flowDebug.mount()
-    return () => flowDebug.unmount()
-  }, [])
+  // FLOW-DEBUG: mount/unmount the animation tracer. Disabled — re-enable by
+  // uncommenting this block and the flowDebug import + call sites.
+  // useEffect(() => {
+  //   flowDebug.mount()
+  //   return () => flowDebug.unmount()
+  // }, [])
   useEffect(() => {
     // Use the shared FlowHub singleton so StrictMode double-mounts / route
     // re-entries reuse one run pool and runId counter instead of scheduling
@@ -937,18 +942,19 @@ export function TopologyPage() {
       onStep: (runId, step, color, meta) => {
         applyStepToLayers(runId, step, color, meta)
         runInfoRef.current.set(runId, { requestId: meta.requestId, loop: meta.loop })
-        const rm = requestMetaRef.current.get(meta.requestId)
-        flowDebug.emit({
-          requestId: meta.requestId,
-          model: rm?.model ?? meta.requestId,
-          provider: rm?.provider ?? null,
-          runId,
-          loop: meta.loop,
-          stepIndex: meta.stepIndex,
-          stepTotal: meta.stepTotal,
-          step: step.kind === 'node' ? { kind: 'node', id: step.nodeId } : { kind: 'edge', id: step.edgeId },
-          action: 'step',
-        })
+        // FLOW-DEBUG: disabled
+        // const rm = requestMetaRef.current.get(meta.requestId)
+        // flowDebug.emit({
+        //   requestId: meta.requestId,
+        //   model: rm?.model ?? meta.requestId,
+        //   provider: rm?.provider ?? null,
+        //   runId,
+        //   loop: meta.loop,
+        //   stepIndex: meta.stepIndex,
+        //   stepTotal: meta.stepTotal,
+        //   step: step.kind === 'node' ? { kind: 'node', id: step.nodeId } : { kind: 'edge', id: step.edgeId },
+        //   action: 'step',
+        // })
       },
       onRunEnd: (runId) => removeRunLayers(runId),
     })
@@ -1006,35 +1012,37 @@ export function TopologyPage() {
       const color = modelColorRef.current.get(request.model) ?? 'var(--primary)'
       requestMetaRef.current.set(request.requestId, { model: request.model, provider: request.provider ?? null })
       const runId = flowHubRef.current?.startRun({ requestId: request.requestId, color, steps }) ?? 0
-      if (runId > 0) {
-        flowDebug.emit({
-          requestId: request.requestId,
-          model: request.model,
-          provider: request.provider ?? null,
-          runId,
-          loop: 0,
-          stepIndex: 0,
-          stepTotal: steps.length,
-          action: 'start',
-        })
-      }
+      // FLOW-DEBUG: disabled
+      // if (runId > 0) {
+      //   flowDebug.emit({
+      //     requestId: request.requestId,
+      //     model: request.model,
+      //     provider: request.provider ?? null,
+      //     runId,
+      //     loop: 0,
+      //     stepIndex: 0,
+      //     stepTotal: steps.length,
+      //     action: 'start',
+      //   })
+      // }
     }
     // Requests that disappeared finish their current pass before being removed.
     const flagged = flowHubRef.current?.stopFinishedRequests(activeRequestIds) ?? []
     for (const runId of flagged) {
       const meta = runStepsRef.current.get(runId)
       if (!meta) continue
-      const rm = requestMetaRef.current.get(meta.requestId)
-      flowDebug.emit({
-        requestId: meta.requestId,
-        model: rm?.model ?? meta.requestId,
-        provider: rm?.provider ?? null,
-        runId,
-        loop: meta.loop,
-        stepIndex: meta.stepIndex,
-        stepTotal: meta.stepTotal,
-        action: 'graceful',
-      })
+      // FLOW-DEBUG: disabled
+      // const rm = requestMetaRef.current.get(meta.requestId)
+      // flowDebug.emit({
+      //   requestId: meta.requestId,
+      //   model: rm?.model ?? meta.requestId,
+      //   provider: rm?.provider ?? null,
+      //   runId,
+      //   loop: meta.loop,
+      //   stepIndex: meta.stepIndex,
+      //   stepTotal: meta.stepTotal,
+      //   action: 'graceful',
+      // })
     }
   }, [resolveLayerPath])
 
@@ -1517,6 +1525,14 @@ export function TopologyPage() {
     setNodes(baseNodes.map((n) => (next[n.id] ? { ...n, position: next[n.id] } : n)))
   }, [canvas, sizesRef, baseNodes, setNodes, persistLayoutSnapshot])
 
+  // Fit every node into the visible canvas as large as possible without
+  // overflowing: fitView scales the node bounding box to the viewport, so
+  // padding 0 + an effectively unbounded maxZoom yields the largest layout
+  // that still fits entirely inside the page.
+  const handleFitAll = useCallback(() => {
+    rfInstanceRef.current?.fitView({ padding: 0.05, minZoom: 0.01, maxZoom: 64, duration: 300 })
+  }, [])
+
   // New nodes have no layout-snapshot record, so without an explicit position
   // they all fall back to the same hardcoded default and stack on top of each
   // other. Place each fresh node in a new row below every existing node,
@@ -1649,6 +1665,14 @@ export function TopologyPage() {
         children.splice(toIndex, 0, moved)
         return [...list.slice(0, groupStart + 1), ...children, ...list.slice(groupEnd + 1)]
       })
+    },
+    [updateTopologyNodes],
+  )
+
+  const handleCycleProviderStrategy = useCallback(
+    (slotId: string, current: ProviderStrategy) => {
+      const next: ProviderStrategy = current === 'sequential' ? 'random' : current === 'random' ? 'roundRobin' : 'sequential'
+      updateTopologyNodes((list) => list.map((n) => (n.id === slotId ? { ...n, strategy: next } : n)))
     },
     [updateTopologyNodes],
   )
@@ -1804,6 +1828,9 @@ export function TopologyPage() {
           onConnect={handleConnect}
           onReconnect={handleReconnect}
           onSelectionChange={handleSelectionChange}
+          onInit={(instance) => {
+            rfInstanceRef.current = instance
+          }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={defaultEdgeOptions}
@@ -1853,6 +1880,9 @@ export function TopologyPage() {
             </Button>
             <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
               <AppIcon name="auto_fix_high" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={handleFitAll} title="最大化显示全部节点">
+              <AppIcon name="fullscreen" />
             </Button>
             <FlowColorsPanel colors={flowColors} onChange={handleFlowColorsChange} />
           </Panel>

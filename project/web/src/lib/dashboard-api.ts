@@ -34,10 +34,23 @@ export type ProviderEndpoint = {
   readonly pathSuffix: string
 }
 
+// ModelPrices are per-model explicit prices in units of per 1M tokens. Each
+// amount is a string that must start with a "$" or "¥" currency symbol; the
+// symbol also determines the billing currency for this model (overriding the
+// global billing currency). null/absent on ProviderModel.prices means the
+// rate-multiplier mode is in effect.
+export type ModelPrices = {
+  readonly input: string
+  readonly cacheWrite: string
+  readonly cacheRead: string
+  readonly output: string
+}
+
 export type ProviderModel = {
   readonly model: string
   readonly endpoints: readonly string[]
   readonly rate: string
+  readonly prices: ModelPrices | null
 }
 
 export type Provider = {
@@ -323,6 +336,8 @@ export type CurrentUser = {
 // ── Flat topology (canvas node/wire model) ──
 export type FlatNodeKind = 'requestEntry' | 'provider' | 'slot'
 
+export type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
+
 export type FlatNode = {
   readonly id: string
   readonly kind: FlatNodeKind
@@ -332,6 +347,7 @@ export type FlatNode = {
   readonly weight?: number
   readonly entries?: readonly SlotEntry[]
   readonly logDeadlineAt?: number | null
+  readonly strategy?: ProviderStrategy
 }
 
 export type FlatWire = {
@@ -369,7 +385,12 @@ function parseFlatNode(value: unknown): FlatNode {
     weight: typeof value.weight === 'number' ? value.weight : undefined,
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
     logDeadlineAt: typeof value.log_deadline_at === 'number' ? value.log_deadline_at : null,
+    strategy: isProviderStrategy(value.strategy) ? value.strategy : undefined,
   }
+}
+
+function isProviderStrategy(value: unknown): value is ProviderStrategy {
+  return value === 'sequential' || value === 'random' || value === 'roundRobin'
 }
 
 function parseFlatWire(value: unknown): FlatWire {
@@ -397,6 +418,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     ...(node.weight !== undefined ? { weight: node.weight } : {}),
     ...(node.entries !== undefined ? { entries: node.entries } : {}),
     ...(node.logDeadlineAt !== undefined ? { log_deadline_at: node.logDeadlineAt } : {}),
+    ...(node.strategy !== undefined ? { strategy: node.strategy } : {}),
   }
 }
 
@@ -630,6 +652,18 @@ function parseEndpoint(value: unknown): ProviderEndpoint {
   }
 }
 
+function parseModelPrices(value: unknown): ModelPrices {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 models.prices 格式无效', null)
+  }
+  return {
+    input: readString(value.input ?? '', 'models.prices.input'),
+    cacheWrite: readString(value.cacheWrite ?? value.cache_write ?? '', 'models.prices.cacheWrite'),
+    cacheRead: readString(value.cacheRead ?? value.cache_read ?? '', 'models.prices.cacheRead'),
+    output: readString(value.output ?? '', 'models.prices.output'),
+  }
+}
+
 function parseModel(value: unknown): ProviderModel {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的 models 格式无效', null)
@@ -641,6 +675,7 @@ function parseModel(value: unknown): ProviderModel {
     model: readString(value.model, 'models.model'),
     endpoints: readStringArray(value.endpoints ?? [], 'models.endpoints'),
     rate: readString(value.rate ?? legacyRate ?? '1', 'models.rate'),
+    prices: value.prices === null || value.prices === undefined ? null : parseModelPrices(value.prices),
   }
 }
 

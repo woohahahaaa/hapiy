@@ -29,25 +29,34 @@ export type FlowRunInput = {
 // parent slot for edge construction but still get their own node step.
 export function buildFlowSteps(pathNodeIds: readonly string[], canvas: FlatCanvas | null): readonly FlowStep[] {
   if (!canvas || pathNodeIds.length < 2) return []
-  const steps: FlowStep[] = []
   const providerIds = new Set(canvas.providers.map((provider) => provider.id))
   const isChild = (id: string | undefined): id is string => id !== undefined && providerIds.has(id)
+  const topLevelById = new Map(canvas.topLevel.map((node) => [node.id, node]))
+  const slotNodeActive = (nodeId: string): boolean => {
+    const node = topLevelById.get(nodeId)
+    if (!node || node.kind !== 'slot') return true
+    // A logOutput slot is only ON when it is actually capturing: enabled AND a
+    // future deadline. The master switch alone (enabled=true with no deadline,
+    // or an expired one) means the hook is inactive — do not light it up,
+    // mirroring LogOutputSlotHeader.capturing.
+    if (node.slotType === 'logOutput') {
+      return node.enabled === true &&
+        node.logDeadlineAt !== null && node.logDeadlineAt !== undefined &&
+        node.logDeadlineAt > Date.now()
+    }
+    return node.enabled === true || node.enabled === undefined
+  }
+
+  const steps: FlowStep[] = []
+  let lastVisible: string | undefined
   for (let i = 0; i < pathNodeIds.length; i++) {
     const nodeId = pathNodeIds[i]
     if (nodeId === undefined) continue
-    steps.push({ kind: 'node', nodeId })
-    if (isChild(nodeId)) continue
-    // Emit each following provider child as a node step right after its parent
-    // slot lights, then connect the slot straight to the next visible node.
-    let j = i + 1
-    while (j < pathNodeIds.length && isChild(pathNodeIds[j])) {
-      const child = pathNodeIds[j]
-      if (child !== undefined) steps.push({ kind: 'node', nodeId: child })
-      j += 1
+    if (lastVisible && !isChild(nodeId)) {
+      steps.push({ kind: 'edge', edgeId: `${lastVisible}→${nodeId}` })
     }
-    const next = pathNodeIds[j]
-    if (next !== undefined) steps.push({ kind: 'edge', edgeId: `${nodeId}→${next}` })
-    i = j - 1
+    if (slotNodeActive(nodeId)) steps.push({ kind: 'node', nodeId })
+    if (!isChild(nodeId)) lastVisible = nodeId
   }
   return steps
 }

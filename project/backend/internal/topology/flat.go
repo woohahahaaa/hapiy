@@ -3,7 +3,9 @@ package topology
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sort"
+	"sync"
 )
 
 // NodeKind is the flat topology node type. A "request entry" carries the
@@ -18,6 +20,14 @@ const (
 	KindSlot         NodeKind = "slot"
 )
 
+// Provider slot child-picking strategies. Strategy lives on the provider slot
+// node and decides which of its eligible provider children serves a request.
+const (
+	StrategySequential = "sequential" // first eligible child in display order (default)
+	StrategyRandom     = "random"     // uniform random among eligible children
+	StrategyRoundRobin = "roundRobin" // rotate one eligible child per request
+)
+
 // Node is one element of the flat topology. IDs are unique strings. A provider
 // node carries the provider's configured name (resolved against the Provider
 // table at plan time). A request-entry node carries the master switch and weight.
@@ -30,6 +40,7 @@ type FlatNode struct {
 	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
 	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
 	LogDeadlineAt *int64          `json:"log_deadline_at,omitempty"` // logOutput slot-level deadline, Unix epoch ms
+	Strategy      string          `json:"strategy,omitempty"`        // provider slot child-picking strategy: sequential|random|roundRobin
 }
 
 // Wire is one directed connection in the flat topology.
@@ -92,6 +103,9 @@ func ValidateTopology(t *Topology) error {
 			if n.Weight < 0 || n.Weight > 1 {
 				return fmt.Errorf("request entry %q weight must be in [0,1], got %v", n.ID, n.Weight)
 			}
+		}
+		if n.Strategy != "" && !validStrategy(n.Strategy) {
+			return fmt.Errorf("node %q has unknown strategy %q", n.ID, n.Strategy)
 		}
 		nodes[n.ID] = n
 	}
@@ -220,12 +234,17 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 				break
 			}
 			if node.Kind == KindProvider {
-				selected := node
-				if !providerEligible(refs, node, model, path) {
-					// 按顺序 fallback: the slot may hold several providers;
-					// when the wired one can't serve the request, try the
-					// remaining children in order.
-					selected = nextEligibleSibling(t, refs, node, model, path)
+				slotID, pickable := slotRunFor(t, refs, node, model, path)
+				var selected FlatNode
+				if len(pickable) > 0 {
+					switch slotStrategy(t, slotID) {
+					case StrategyRandom:
+						selected = pickable[rand.Intn(len(pickable))]
+					case StrategyRoundRobin:
+						selected = pickable[roundRobinIndex(slotID, len(pickable))]
+					default:
+						selected = pickable[0]
+					}
 				}
 				if selected.ID == "" {
 					break
@@ -305,13 +324,20 @@ func providerEligible(refs map[string]ProviderRef, node FlatNode, model, path st
 	return providerSupports(ref, model, path)
 }
 
-// nextEligibleSibling implements the provider slot's sequential ("按顺序")
-// selection. When the provider the walk landed on cannot serve the request, it
-// returns the first later child of the same provider slot that can. Slot
-// children are the providers adjacent to the slot in the node list, in array
-// (display) order; disabled or model-mismatched children are skipped. Returns
-// an empty FlatNode when no sibling qualifies.
-func nextEligibleSibling(t *Topology, refs map[string]ProviderRef, node FlatNode, model, path string) FlatNode {
+func validStrategy(s string) bool {
+	switch s {
+	case StrategySequential, StrategyRandom, StrategyRoundRobin:
+		return true
+	}
+	return false
+}
+
+// slotRunFor returns the containing provider slot's ID ("" when node is not
+// inside a provider slot) and every eligible provider child of that slot in
+// display order, starting at the wire-landed node. The array adjacency and
+// stop rules mirror the old sequential fallback: children are the providers
+// listed directly after the slot until a non-provider node appears.
+func slotRunFor(t *Topology, refs map[string]ProviderRef, node FlatNode, model, path string) (string, []FlatNode) {
 	idx := -1
 	slotID := ""
 	for i, n := range t.Nodes {
@@ -326,8 +352,12 @@ func nextEligibleSibling(t *Topology, refs map[string]ProviderRef, node FlatNode
 			slotID = ""
 		}
 	}
-	if idx < 0 || slotID == "" {
-		return FlatNode{}
+	if idx < 0 {
+		return "", nil
+	}
+	pickable := make([]FlatNode, 0, 2)
+	if providerEligible(refs, node, model, path) {
+		pickable = append(pickable, node)
 	}
 	for i := idx + 1; i < len(t.Nodes); i++ {
 		n := t.Nodes[i]
@@ -335,10 +365,42 @@ func nextEligibleSibling(t *Topology, refs map[string]ProviderRef, node FlatNode
 			break
 		}
 		if providerEligible(refs, n, model, path) {
-			return n
+			pickable = append(pickable, n)
 		}
 	}
-	return FlatNode{}
+	return slotID, pickable
+}
+
+func slotStrategy(t *Topology, slotID string) string {
+	if slotID == "" {
+		return ""
+	}
+	for _, n := range t.Nodes {
+		if n.ID == slotID && n.Kind == KindSlot {
+			return n.Strategy
+		}
+	}
+	return ""
+}
+
+var (
+	rrMu   sync.Mutex
+	rrNext = map[string]int{}
+)
+
+func roundRobinIndex(slotID string, n int) int {
+	rrMu.Lock()
+	defer rrMu.Unlock()
+	i := rrNext[slotID] % n
+	rrNext[slotID]++
+	return i
+}
+
+// ResetRoundRobinForTest clears the per-slot round-robin cursors.
+func ResetRoundRobinForTest() {
+	rrMu.Lock()
+	defer rrMu.Unlock()
+	rrNext = map[string]int{}
 }
 
 // DuplicateActivation is one provider that is reachable from more than one

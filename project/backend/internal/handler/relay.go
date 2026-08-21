@@ -286,12 +286,14 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logEntry.CompletionTokens = resp.Usage.CompletionTokens
 			logEntry.PromptCacheMissTokens = resp.Usage.CacheWriteTokens
 			logEntry.PromptCacheHitTokens = resp.Usage.CacheReadTokens
-			logEntry.Quota = computeQuota(db, quotaRequest{
+			logEntry.Quota, logEntry.Currency = computeQuota(db, quotaRequest{
 				provider:  provider,
 				modelName: relayReq.Model,
 				usage:     resp.Usage,
 			})
-			logEntry.Currency = service.GetBillingCurrency(db)
+			if logEntry.Currency == "" {
+				logEntry.Currency = service.GetBillingCurrency(db)
+			}
 		}
 
 		service.Logs().Write(&logEntry)

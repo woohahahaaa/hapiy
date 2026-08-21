@@ -11,7 +11,7 @@ const canvas = {
     { id: 'entry-1', kind: 'requestEntry' },
     { id: 'pslot-1', kind: 'slot', slotType: 'provider' },
     { id: 'requestModify-1', kind: 'slot', slotType: 'requestModify' },
-    { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput' },
+    { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: Date.now() + 60_000 },
   ],
   providers: [{ id: 'prov-a' }, { id: 'prov-b' }],
   providerSlotOf: new Map([
@@ -20,7 +20,7 @@ const canvas = {
   ]),
 } as never
 
-function stepsOf(path: string[]): FlowStep[] {
+function stepsOf(path: string[]): readonly FlowStep[] {
   return buildFlowSteps(path, canvas)
 }
 
@@ -43,6 +43,87 @@ describe('buildFlowSteps', () => {
 
   it('returns empty for short paths', () => {
     expect(stepsOf(['model-kimi-k3'])).toEqual([])
+  })
+
+  it('keeps the incoming edge while skipping a disabled logOutput slot', () => {
+    const inactiveCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: false, logDeadlineAt: null },
+      ],
+      providers: [],
+      providerSlotOf: new Map(),
+    } as never
+    const steps = buildFlowSteps(['model-kimi-k3', 'entry-1', 'logOutput-1'], inactiveCanvas)
+    expect(steps).toEqual([
+      { kind: 'node', nodeId: 'model-kimi-k3' },
+      { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
+      { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
+    ])
+  })
+
+  it('skips a logOutput slot that is enabled but has no capture deadline', () => {
+    // The master switch is on but the log hook never started capturing: under
+    // the global rule the slot is inactive, so it must not light up.
+    const openButIdleCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: null },
+      ],
+      providers: [],
+      providerSlotOf: new Map(),
+    } as never
+    const steps = buildFlowSteps(['model-kimi-k3', 'entry-1', 'logOutput-1'], openButIdleCanvas)
+    expect(steps).toEqual([
+      { kind: 'node', nodeId: 'model-kimi-k3' },
+      { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
+      { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
+    ])
+  })
+
+  it('skips a logOutput slot whose capture deadline has expired', () => {
+    const expiredCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: 0 },
+      ],
+      providers: [],
+      providerSlotOf: new Map(),
+    } as never
+    const steps = buildFlowSteps(['model-kimi-k3', 'entry-1', 'logOutput-1'], expiredCanvas)
+    expect(steps).toEqual([
+      { kind: 'node', nodeId: 'model-kimi-k3' },
+      { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
+      { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
+    ])
+  })
+
+  it('lights up a logOutput slot currently capturing (enabled with a future deadline)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(1_000_000)
+    const activeCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: 2_000_000 },
+      ],
+      providers: [],
+      providerSlotOf: new Map(),
+    } as never
+    const steps = buildFlowSteps(['model-kimi-k3', 'entry-1', 'logOutput-1'], activeCanvas)
+    expect(steps).toEqual([
+      { kind: 'node', nodeId: 'model-kimi-k3' },
+      { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
+      { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
+      { kind: 'node', nodeId: 'logOutput-1' },
+    ])
   })
 })
 

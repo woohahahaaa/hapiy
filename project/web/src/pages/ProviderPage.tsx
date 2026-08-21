@@ -11,7 +11,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel, FetchedModel } from '@/lib/dashboard-api'
+import type { Provider, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel } from '@/lib/dashboard-api'
 
 type ProviderFormProps = {
   readonly provider: Provider | null
@@ -25,6 +25,17 @@ type ProviderFormProps = {
 const emptyProvider: ProviderInput = {
   name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
 }
+
+// Prices in 单独设置价格 mode are strings that must start with "$", "¥" or
+// "￥"; the prefix also selects the billing currency for the model.
+const PRICE_PREFIX = /^[$¥￥]/
+const PRICE_ERROR_TEXT = '必须用美元或人民币符号开头'
+const PRICE_FIELDS: ReadonlyArray<{ readonly key: keyof ModelPrices; readonly placeholder: string }> = [
+  { key: 'input', placeholder: '输入' },
+  { key: 'cacheWrite', placeholder: '缓存写入' },
+  { key: 'cacheRead', placeholder: '缓存读取' },
+  { key: 'output', placeholder: '输出' },
+]
 
 function toErrorMessage(error: unknown): string {
   return error instanceof DashboardApiError ? error.message : '发生意外错误，请重试'
@@ -165,7 +176,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ pathSuffix: '' })
   const [endpointError, setEndpointError] = useState<string | null>(null)
   const endpointInputRef = useRef<HTMLInputElement | null>(null)
-  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], rate: '1' })
+  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], rate: '1', prices: null })
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
   const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
@@ -174,6 +185,21 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isFetching, setIsFetching] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
+  const [priceError, setPriceError] = useState(false)
+  const priceErrorTimer = useRef<number | null>(null)
+
+  // Floating tooltip near the model list, auto-dismissed after ~4 seconds.
+  const showPriceError = () => {
+    setPriceError(true)
+    if (priceErrorTimer.current !== null) window.clearTimeout(priceErrorTimer.current)
+    priceErrorTimer.current = window.setTimeout(() => setPriceError(false), 4000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (priceErrorTimer.current !== null) window.clearTimeout(priceErrorTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -236,7 +262,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   }
 
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
-    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1' }))
+    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1', prices: null }))
     if (replace) {
       setForm((current) => ({ ...current, models: additions }))
     } else {
@@ -300,27 +326,41 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       <Field>
         <FieldLabel>模型</FieldLabel>
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
-              {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
-              从上游获取模型
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
-              <AppIcon name="settings" />
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型名称" className="w-48" />
+              <Button type="button" variant="outline" size="sm" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, { ...newModel, model: newModel.model.trim() }] })); setNewModel({ model: '', endpoints: [], rate: '1', prices: null }) }}>
+                <AppIcon name="add" data-icon="inline-start" />添加模型
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
+                {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+                从上游获取模型
+              </Button>
+              <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
+                <AppIcon name="settings" />
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <div className="grid grid-cols-[minmax(0,1fr)_14rem_5rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
+          <div className="relative flex flex-col gap-2">
+            {priceError && (
+              <div role="alert" className="pointer-events-none absolute -top-3 right-16 z-10 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0">
+                {PRICE_ERROR_TEXT}
+              </div>
+            )}
+            <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
               <span>模型名称</span>
+              <span>价格</span>
               <span>Endpoint</span>
-              <span>价格倍率</span>
               <span />
             </div>
             {[...form.models].sort((a, b) => a.model.localeCompare(b.model)).map((model) => {
               const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__all__'
               return (
-                <div key={model.model} className="grid grid-cols-[minmax(0,1fr)_14rem_5rem_2rem] items-center gap-2">
-                  <Input value={model.model} onChange={(event) => updateModel(model.model, { model: event.target.value })} className="flex-1" />
+                <div key={model.model} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
+                  <Input value={model.model} onChange={(event) => updateModel(model.model, { model: event.target.value })} className="w-full" />
+                  <ModelPriceCell model={model} onPatch={(patch) => updateModel(model.model, patch)} onInvalid={() => showPriceError()} />
                   <Select
                     value={endpointValue}
                     onValueChange={(value) => updateModel(model.model, { endpoints: value === '__all__' ? [] : [value] })}
@@ -333,21 +373,10 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                       ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    value={model.rate}
-                    onChange={(event) => updateModel(model.model, { rate: event.target.value })}
-                    className="w-full"
-                    placeholder="1"
-                    title="倍率，支持分数，如 1/2"
-                  />
                   <Button type="button" variant="ghost" size="icon" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item.model !== model.model) }))}><AppIcon name="delete" /></Button>
                 </div>
               )
             })}
-          </div>
-          <div className="flex gap-2">
-            <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型 ID" className="flex-1" />
-            <Button type="button" variant="outline" size="icon" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, { ...newModel, model: newModel.model.trim() }] })); setNewModel({ model: '', endpoints: [], rate: '1' }) }}><AppIcon name="add" /></Button>
           </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>
@@ -356,7 +385,18 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
-        <Button disabled={isSaving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{isSaving ? '保存中...' : '保存'}</Button>
+        <Button disabled={isSaving || !form.name.trim()} onClick={() => {
+          for (const item of form.models) {
+            if (item.prices && PRICE_FIELDS.some(({ key }) => {
+              const value = item.prices![key].trim()
+              return value !== '' && !PRICE_PREFIX.test(value)
+            })) {
+              showPriceError()
+              return
+            }
+          }
+          onSave({ ...form, name: form.name.trim() })
+        }}>{isSaving ? '保存中...' : '保存'}</Button>
       </div>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
         <DialogContent className="max-w-sm">
@@ -388,6 +428,78 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         />
       )}
     </FieldGroup>
+  )
+}
+
+type ModelPriceCellProps = {
+  readonly model: ProviderModel
+  readonly onPatch: (patch: Partial<ProviderModel>) => void
+  readonly onInvalid: () => void
+}
+
+// Price cell: a dropdown switching between 设置倍率 (rate multiplier input)
+// and 单独设置价格 (four per-1M-token price inputs). When typing in prices
+// mode, whitespace is stripped automatically once the value starts with a
+// currency symbol; a non-empty value without a symbol is rejected on blur and
+// on save via the outer floating tooltip.
+function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
+  const usePrices = model.prices !== null
+  const setMode = (next: 'rate' | 'prices') => {
+    if (next === 'prices') {
+      onPatch({ prices: { input: '', cacheWrite: '', cacheRead: '', output: '' } })
+    } else {
+      onPatch({ prices: null })
+    }
+  }
+  const handlePriceChange = (key: keyof ModelPrices, raw: string) => {
+    const prices = model.prices ?? { input: '', cacheWrite: '', cacheRead: '', output: '' }
+    const next = PRICE_PREFIX.test(raw) ? raw.replace(/\s+/g, '') : raw
+    onPatch({ prices: { ...prices, [key]: next } })
+  }
+  const handlePriceBlur = () => {
+    const prices = model.prices
+    if (!prices) return
+    if (PRICE_FIELDS.some(({ key }) => {
+      const value = prices[key].trim()
+      return value !== '' && !PRICE_PREFIX.test(value)
+    })) {
+      onInvalid()
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Select value={usePrices ? 'prices' : 'rate'} onValueChange={(value) => setMode(value as 'rate' | 'prices')}>
+        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="rate">设置倍率</SelectItem>
+          <SelectItem value="prices">单独设置价格</SelectItem>
+        </SelectContent>
+      </Select>
+      {usePrices ? (
+        <>
+          {PRICE_FIELDS.map(({ key, placeholder }) => (
+            <Input
+              key={key}
+              value={model.prices?.[key] ?? ''}
+              onChange={(event) => handlePriceChange(key, event.target.value)}
+              onBlur={handlePriceBlur}
+              className="w-20 px-2 text-xs"
+              placeholder={placeholder}
+              title="以 $ 或 ¥ 开头"
+            />
+          ))}
+        </>
+      ) : (
+        <Input
+          value={model.rate}
+          onChange={(event) => onPatch({ rate: event.target.value })}
+          className="w-20 px-2 text-xs"
+          placeholder="1"
+          title="倍率，支持分数，如 1/2"
+        />
+      )}
+    </div>
   )
 }
 

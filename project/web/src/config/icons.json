@@ -62,6 +62,7 @@
   "more_horiz": "More",
   "paragraph_break": "ParagraphBreak",
   "wrap_truncation": "TextWrapTruncation",
-  "palette": "BackgroundColor"
+  "palette": "BackgroundColor",
+  "fullscreen": "FullScreen"
  }
 }

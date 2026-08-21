@@ -73,11 +73,15 @@ func weightedPick(eligible []topology.EligibleProvider) topology.EligibleProvide
 	if total <= 0 {
 		return eligible[0]
 	}
+	// roll is in [0,1); compare against the cumulative fraction cum/total so
+	// equal weights yield an equal (uniform) chance. The <= is deliberate:
+	// roll can never reach 1.0, so the last provider's boundary (cum==total)
+	// is only hit by floating-point rounding, which still picks it.
 	roll := rand.Float64()
 	cum := 0.0
 	for _, p := range eligible {
 		cum += p.Weight
-		if roll <= cum {
+		if roll*total <= cum {
 			return p
 		}
 	}

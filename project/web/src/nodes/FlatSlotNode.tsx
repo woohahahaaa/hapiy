@@ -1,5 +1,5 @@
 import { Handle, Position } from '@xyflow/react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SlotContainer } from '@/components/topology/SlotContainer'
 import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
@@ -46,6 +46,8 @@ export interface FlatProviderChild {
   readonly autoDisabled: boolean
 }
 
+type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
+
 interface FlatSlotNodeData {
   title: string
   slotType: string
@@ -54,6 +56,8 @@ interface FlatSlotNodeData {
   enabled?: boolean
   children?: readonly FlatProviderChild[]
   providers?: readonly string[]
+  strategy?: ProviderStrategy
+  onCycleStrategy?: () => void
   providerFlashLayers?: ReadonlyMap<string, readonly FlowLayerOverlay[]>
   flashLayers?: readonly FlowLayerOverlay[]
   onAddProvider?: () => void
@@ -93,6 +97,8 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     externallyDisabled = false,
     children = [],
     providers = [],
+    strategy: strategyProp,
+    onCycleStrategy,
     providerFlashLayers,
     flashLayers,
     onAddProvider,
@@ -166,15 +172,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
     },
   })
 
-  const [providerStrategy, setProviderStrategy] = useState<'sequential' | 'random' | 'roundRobin'>('sequential')
-  const strategyCycle = useCallback(() => {
-    setProviderStrategy((s) => {
-      if (s === 'sequential') return 'random'
-      if (s === 'random') return 'roundRobin'
-      return 'sequential'
-    })
-  }, [])
-
+  const strategy = strategyProp ?? 'sequential'
   const strategyLabel = {
     sequential: '按顺序',
     random: '随机',
@@ -188,10 +186,10 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       <span>{title}</span>
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); strategyCycle() }}
+        onClick={(e) => { e.stopPropagation(); onCycleStrategy?.() }}
         className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
       >
-        {strategyLabel[providerStrategy]}
+        {strategyLabel[strategy]}
         <AppIcon name="refresh" size={10} />
       </button>
     </div>

@@ -46,4 +46,27 @@ describe('FlowLightEdge', () => {
     expect(markup).toContain('stroke="#f97316"')
     expect(markup).toContain('animation-duration:340ms')
   })
+
+  it('renders the beam for an edge ID with an arrow (disabled slot incoming edge)', () => {
+    const props = {
+      id: 'entry-1→logOutput-1',
+      source: 'entry-1',
+      target: 'logOutput-1',
+      sourceX: 0,
+      sourceY: 0,
+      targetX: 100,
+      targetY: 0,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
+      selected: false,
+      deletable: true,
+      selectable: true,
+      draggable: false,
+      data: { layers: [{ runId: 7, color: '#38bdf8', loop: 0 }] as FlowLayerOverlay[] },
+    } as EdgeProps
+
+    const markup = renderToStaticMarkup(<FlowLightEdge {...props} />)
+    expect(markup).toContain('@keyframes flow-light-slide-7-entry-1_logOutput-1')
+    expect(markup).toContain('stroke="#38bdf8"')
+  })
 })
