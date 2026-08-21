@@ -3,7 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { nodeRenderBounds } from '@/config/topology-config'
-import type { FlowLayerOverlay } from '@/modules/flow-hub'
+import { FLOW_STEP_MS, type FlowLayerOverlay } from '@/modules/flow-hub'
 
 interface SlotItemCardProps {
   index: number
@@ -65,17 +65,25 @@ export function SlotItemCard({
         maxWidth: nodeRenderBounds.maxWidth,
       }}
     >
-      {layers.map((layer) => (
-        <span
-          key={`${layer.runId}-${layer.loop}`}
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-md transition-opacity duration-300"
-          style={{
-            boxShadow: `0 0 8px 1px ${layer.color}`,
-            border: `1px solid ${layer.color}`,
-          }}
-        />
-      ))}
+      {layers.map((layer) => {
+        const kfName = `flash-pulse-${layer.runId}-${layer.loop}`
+        return (
+          <span
+            key={kfName}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-md border"
+            style={{
+              animationName: kfName,
+              animationDuration: `${FLOW_STEP_MS}ms`,
+              animationIterationCount: '1',
+              animationFillMode: 'both',
+              animationTimingFunction: 'linear',
+            }}
+          >
+            <style>{`@keyframes ${kfName}{0%{border-color:var(--border);box-shadow:0 0 0 transparent}50%{border-color:${layer.color};box-shadow:0 0 8px ${layer.color},inset 0 0 2px ${layer.color}}100%{border-color:var(--border);box-shadow:0 0 0 transparent}}`}</style>
+          </span>
+        )
+      })}
       <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (
