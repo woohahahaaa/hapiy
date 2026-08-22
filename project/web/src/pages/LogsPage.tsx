@@ -238,27 +238,28 @@ export function LogsPage() {
       label: '耗时',
       defaultWidth: { kind: 'percent', value: 13 },
       defaultAlign: 'right',
-      render: (_, row) => {
-        const log = row as UsageLog
-        const fmt = (val: number, label: string) => (
-          <span key={label} className="whitespace-nowrap">
-            <span className="text-muted-foreground/40">{label}: </span>
-            <span className="text-foreground">{val >= 0 ? `${val}ms` : '-'}</span>
-          </span>
-        )
-        return (
-          <div className="leading-tight tabular-nums">
-            <div className="text-foreground">{(log.useTime / 1000).toFixed(1)}s</div>
-            <div>
-              {fmt(log.queueWaitMs, '排队')}{' '}
-              {fmt(log.requestRewriteMs, '请求改写')}{' '}
-              {fmt(log.connectMs, '连接')}{' '}
-              {fmt(log.firstByteMs, '首字')}{' '}
-              {fmt(log.responseRewriteMs, '响应改写')}{' '}
-              {fmt(log.streamRewriteMs, '流式改写')}
-            </div>
-          </div>
-        )
+      defaultOverflow: 'wrap',
+      slot: {
+        line1: (row) => `${(row.useTime / 1000).toFixed(1)}s`,
+        line2: (row) => {
+          const fmt = (val: number, label: string) =>
+            val >= 0
+              ? `<#ffffff66>${label}: </#ffffff66><#fafafa>${val}ms</#fafafa>`
+              : `<#ffffff66>${label}: </#ffffff66><#fafafa>-</#fafafa>`
+          return [
+            fmt(row.queueWaitMs, '排队'),
+            ' ',
+            fmt(row.requestRewriteMs, '请求改写'),
+            ' ',
+            fmt(row.connectMs, '连接'),
+            ' ',
+            fmt(row.firstByteMs, '首字'),
+            ' ',
+            fmt(row.responseRewriteMs, '响应改写'),
+            ' ',
+            fmt(row.streamRewriteMs, '流式改写'),
+          ].join('')
+        },
       },
     },
     {

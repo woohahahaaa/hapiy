@@ -184,6 +184,22 @@ cd project/backend && FORCE_REBUILD=1 ./scripts/backend.sh
 
 ---
 
+## 💾 数据库备份
+
+用户要求备份数据库时，**统一执行**：
+
+```bash
+cd project/backend && ./scripts/backup-db.sh          # 备份（先做 sqlite 完整性校验）
+./scripts/backup-db.sh --list                          # 查看已有备份
+```
+
+- 只备份 `project/backend/hapiy.db`（项目唯一的真实库），写入仓库根 `.backup/`，自动保留最近 15 份。
+- **不要手动 `cp` 自由发挥**，尤其不要复制根目录那些 0 字节 / 测试用途的 `.db` 文件（如 `one-api.db` 早已废弃）。
+
+> *When the user asks for a DB backup, run scripts/backup-db.sh — never ad-hoc cp. Only backend/hapiy.db is the real database.*
+
+---
+
 ## 📦 依赖
 
 | 组件 | 需要的工具 |
