@@ -1691,7 +1691,7 @@ export function TopologyPage() {
     const suffix = crypto.randomUUID().slice(0, 8)
     const entryId = `entry-${suffix}`
     const pslotId = `pslot-${suffix}`
-    const slotIds: RewriteSlotType[] = ['requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput']
+    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'logOutput']
     const nodeIds = new Map<RewriteSlotType, string>()
     for (const st of slotIds) nodeIds.set(st, `${st}-${suffix}`)
 
@@ -1708,7 +1708,7 @@ export function TopologyPage() {
     ]
     const chain: FlatWire[] = [
       { source: entryId, target: pslotId },
-      { source: pslotId, target: nodeIds.get('requestModify')! },
+      { source: pslotId, target: nodeIds.get(slotIds[0])! },
     ]
     for (let i = 0; i < slotIds.length - 1; i++) {
       chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
