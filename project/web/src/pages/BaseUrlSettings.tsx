@@ -100,9 +100,9 @@ export function BaseUrlSettings() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <AppIcon name="link" size={16} /> BaseURL 配置
-        </CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AppIcon name="link" size={16} /> BaseURL
+          </CardTitle>
         <CardDescription>配置系统的对外 BaseURL，用于 Agent 软件接入</CardDescription>
       </CardHeader>
       <CardContent>
