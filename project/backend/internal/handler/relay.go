@@ -116,6 +116,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		provider := dispatchResult.Provider
 		relayReq.KeyIndex = dispatchResult.KeyIndex
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
+		relayReq.TopologyOrigin = dispatchResult.Origin
 		common.Global().TrackActiveRequest(common.ActiveRequest{
 			RequestID:   relayReq.RequestID,
 			Model:       relayReq.Model,

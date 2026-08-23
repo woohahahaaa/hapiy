@@ -4,19 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 // Rule type constants
 const (
-	RuleTypeRewrite     = "rewrite"
-	RuleTypeHeartbeat   = "heartbeat"
-	RuleTypeConcurrency = "concurrency"
-	RuleTypeFailover          = "failover"
-	RuleTypeRewriteResponse   = "rewrite-response"
+	RuleTypeRewrite         = "rewrite"
+	RuleTypeHeartbeat       = "heartbeat"
+	RuleTypeConcurrency     = "concurrency"
+	RuleTypeFailover        = "failover"
+	RuleTypeRewriteResponse = "rewrite-response"
 )
 
 func ListRules(db *gorm.DB) gin.HandlerFunc {
@@ -126,6 +126,10 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
+			if err := r.ValidateActions(); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 			rule = &r
 		case RuleTypeRewriteResponse:
 			var r model.ResponseRewriteRule
@@ -196,6 +200,10 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 			if err := c.ShouldBindJSON(&r); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := r.ValidateActions(); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}

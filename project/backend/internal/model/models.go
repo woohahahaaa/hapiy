@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,7 +33,7 @@ type Provider struct {
 	BaseURLs        string    `gorm:"type:text" json:"base_urls"` // JSON array
 	Keys            string    `gorm:"type:text" json:"keys"`      // JSON array
 	Endpoints       string    `gorm:"type:text" json:"endpoints"` // JSON array
-	Models          string    `gorm:"type:text" json:"models"` // JSON array
+	Models          string    `gorm:"type:text" json:"models"`    // JSON array
 	Status          bool      `gorm:"default:true" json:"status"`
 	AutoDisabled    bool      `gorm:"default:false" json:"auto_disabled"`
 	WorkflowEnabled bool      `gorm:"default:true" json:"workflow_enabled"`
@@ -74,47 +75,47 @@ func (t *Token) BeforeCreate(tx *gorm.DB) error {
 
 // Log model (usage log)
 type Log struct {
-	ID               string    `gorm:"primaryKey;type:uuid" json:"id"`
-	UserID           string    `json:"user_id"`
-	TokenName        string    `json:"token_name"`
-	ProviderName     string    `json:"provider_name"`
-	ModelName        string    `json:"model_name"`
-	Source           string    `json:"source"`
-	PromptTokens     int       `json:"prompt_tokens"`
-	CompletionTokens int       `json:"completion_tokens"`
+	ID               string `gorm:"primaryKey;type:uuid" json:"id"`
+	UserID           string `json:"user_id"`
+	TokenName        string `json:"token_name"`
+	ProviderName     string `json:"provider_name"`
+	ModelName        string `json:"model_name"`
+	Source           string `json:"source"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
 	// Miss = written to cache; Hit = served from cache.
-	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
-	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
-	IsStream         bool      `json:"is_stream"`
-	Quota            float64   `json:"quota"`
+	PromptCacheMissTokens int     `json:"prompt_cache_miss_tokens"`
+	PromptCacheHitTokens  int     `json:"prompt_cache_hit_tokens"`
+	IsStream              bool    `json:"is_stream"`
+	Quota                 float64 `json:"quota"`
 	// Currency is the billing currency this quota was computed in ("USD" or
 	// "CNY"). Historical records keep the currency they were written with;
 	// switching the global billing currency only affects new records.
-	Currency         string    `json:"currency"`
-	UseTime          int       `json:"use_time"` // milliseconds
-	Status           string    `json:"status"`   // success / failed
-	IP               string    `json:"ip"`
-	RequestID        string    `json:"request_id"`
-	ErrorMessage     string    `json:"error_message"`
+	Currency     string `json:"currency"`
+	UseTime      int    `json:"use_time"` // milliseconds
+	Status       string `json:"status"`   // success / failed
+	IP           string `json:"ip"`
+	RequestID    string `json:"request_id"`
+	ErrorMessage string `json:"error_message"`
 	// Stage timings in milliseconds; nil means the stage does not apply.
 	// ConnectMs: time from issuing the upstream request until its response
 	// headers arrive. FirstByteMs: time from response headers until the first
 	// body byte is read (streaming only). RequestRewriteMs / ResponseRewriteMs:
 	// elapsed time of each rewrite pass (response rewrite only runs for
 	// non-streaming responses).
-	ConnectMs        *int      `json:"connect_ms,omitempty"`
-	FirstByteMs      *int      `json:"first_byte_ms,omitempty"`
-	RequestRewriteMs *int      `json:"request_rewrite_ms,omitempty"`
-	ResponseRewriteMs *int     `json:"response_rewrite_ms,omitempty"`
+	ConnectMs         *int `json:"connect_ms,omitempty"`
+	FirstByteMs       *int `json:"first_byte_ms,omitempty"`
+	RequestRewriteMs  *int `json:"request_rewrite_ms,omitempty"`
+	ResponseRewriteMs *int `json:"response_rewrite_ms,omitempty"`
 	// StreamRewriteMs is the cumulative time spent rewriting individual
 	// SSE events for streaming responses; nil when no streaming rewrite.
-	StreamRewriteMs *int      `json:"stream_rewrite_ms,omitempty"`
+	StreamRewriteMs *int `json:"stream_rewrite_ms,omitempty"`
 	// QueueWaitMs is the time spent waiting for a concurrency slot before
 	// the upstream request was issued; nil when no concurrency rule applies.
-	QueueWaitMs      *int      `json:"queue_wait_ms,omitempty"`
+	QueueWaitMs *int `json:"queue_wait_ms,omitempty"`
 	// UpstreamURL is the full URL (base URL + path) actually issued to the upstream; empty when the request never reached upstream.
-	UpstreamURL      string    `json:"upstream_url,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	UpstreamURL string    `json:"upstream_url,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func (l *Log) BeforeCreate(tx *gorm.DB) error {
@@ -190,17 +191,98 @@ func (r *ConcurrencyRule) BeforeCreate(tx *gorm.DB) error {
 
 // FailoverRule model
 type FailoverRule struct {
-	ID              string `gorm:"primaryKey;type:uuid" json:"id"`
-	Name            string `gorm:"not null" json:"name"`
-	PrimaryProvider string `json:"primary_provider"`
-	FallbackProvider string `json:"fallback_provider"`
-	Condition       string `gorm:"default:'timeout'" json:"condition"`
-	Status          bool   `gorm:"not null" json:"status"`
+	ID               string           `gorm:"primaryKey;type:uuid" json:"id"`
+	Name             string           `gorm:"not null" json:"name"`
+	PrimaryProvider  string           `json:"primary_provider"`
+	FallbackProvider string           `json:"fallback_provider"`
+	Condition        string           `gorm:"default:'timeout'" json:"condition"`
+	Status           bool             `gorm:"not null" json:"status"`
+	Keywords         []string         `gorm:"serializer:json;type:text" json:"keywords"`
+	Actions          []FailoverAction `gorm:"serializer:json;type:text" json:"actions"`
+}
+
+type FailoverAction struct {
+	Dimension        string `json:"dimension"`
+	RetryCount       int    `json:"retry_count"`
+	AutomaticPolling bool   `json:"automatic_polling"`
+	AutoDisable      bool   `json:"auto_disable"`
+}
+
+const (
+	FailoverDimensionBaseURL  = "base_url"
+	FailoverDimensionKey      = "key"
+	FailoverDimensionProvider = "provider"
+)
+
+// Normalize applies compatibility defaults to rows created before the richer
+// failover payload existed. The action sequence is fixed and persisted in this
+// order so runtime behavior remains deterministic.
+func (r *FailoverRule) Normalize() {
+	if len(r.Actions) == 0 {
+		r.Actions = []FailoverAction{
+			{Dimension: FailoverDimensionBaseURL, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
+			{Dimension: FailoverDimensionKey, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
+			{Dimension: FailoverDimensionProvider, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
+		}
+	}
+}
+
+func (r *FailoverRule) ValidateActions() error {
+	if len(r.Actions) != 3 {
+		return fmt.Errorf("failover actions must contain exactly three dimensions")
+	}
+	seen := make(map[string]bool, len(r.Actions))
+	for _, action := range r.Actions {
+		if action.RetryCount <= 0 {
+			return fmt.Errorf("failover action %q retry_count must be positive", action.Dimension)
+		}
+		switch action.Dimension {
+		case FailoverDimensionBaseURL, FailoverDimensionKey, FailoverDimensionProvider:
+		default:
+			return fmt.Errorf("invalid failover action dimension %q", action.Dimension)
+		}
+		if seen[action.Dimension] {
+			return fmt.Errorf("duplicate failover action dimension %q", action.Dimension)
+		}
+		seen[action.Dimension] = true
+	}
+	return nil
 }
 
 func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
 	if r.ID == "" {
 		r.ID = uuid.New().String()
+	}
+	r.Normalize()
+	return nil
+}
+
+func (r *FailoverRule) BeforeSave(tx *gorm.DB) error {
+	r.Normalize()
+	return nil
+}
+
+func (r *FailoverRule) AfterFind(tx *gorm.DB) error {
+	r.Normalize()
+	return nil
+}
+
+// ProviderDisableState is the persisted, global automatic-disable state for
+// a provider, a single base URL, or a single API key. Provider BaseURLs and
+// Keys deliberately remain their legacy JSON arrays.
+type ProviderDisableState struct {
+	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
+	ProviderID string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"provider_id"`
+	Dimension  string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"dimension"`
+	Value      string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"value"`
+	Disabled   bool      `gorm:"not null;default:false" json:"disabled"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (s *ProviderDisableState) BeforeCreate(tx *gorm.DB) error {
+	if s.ID == "" {
+		s.ID = uuid.New().String()
 	}
 	return nil
 }
@@ -234,8 +316,8 @@ type PriceConfig struct {
 	MaxToken        int       `gorm:"default:0" json:"max_token"`
 	SupportedTypes  string    `gorm:"type:text" json:"supported_types"` // JSON array
 	Aliases         string    `gorm:"type:text" json:"aliases"`         // JSON array
-	Endpoints       string    `gorm:"type:text" json:"endpoints"`        // JSON array
-	ThinkingLevels  string    `gorm:"type:text" json:"thinking_levels"`  // JSON array
+	Endpoints       string    `gorm:"type:text" json:"endpoints"`       // JSON array
+	ThinkingLevels  string    `gorm:"type:text" json:"thinking_levels"` // JSON array
 	Rate            string    `gorm:"type:text" json:"rate"`            // JSON array of PriceRule
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
@@ -300,11 +382,11 @@ type TopologyNode struct {
 	Type         string    `gorm:"not null;index" json:"type"` // modelHub | provider | slot
 	ParentID     *string   `gorm:"index" json:"parent_id"`     // for slot nodes: the provider id
 	SlotType     *string   `json:"slot_type"`                  // requestModify / responseModify / autoReply / concurrency / autoSwitch / logOutput
-	ProviderID   *string   `gorm:"index" json:"provider_id"`  // for slot nodes: the parent provider id
+	ProviderID   *string   `gorm:"index" json:"provider_id"`   // for slot nodes: the parent provider id
 	ModelHubID   *string   `json:"model_hub_id"`               // future use
 	Name         string    `gorm:"not null" json:"name"`
-	ProviderName *string   `json:"provider_name"`              // backend provider name when type=provider
-	Payload      string    `gorm:"type:text" json:"payload"`   // free-form per-type JSON blob
+	ProviderName *string   `json:"provider_name"`            // backend provider name when type=provider
+	Payload      string    `gorm:"type:text" json:"payload"` // free-form per-type JSON blob
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

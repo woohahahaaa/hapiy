@@ -27,6 +27,8 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 		&model.HeartbeatRule{},
 		&model.ConcurrencyRule{},
 		&model.FailoverRule{},
+		&model.ProviderDisableState{},
+		&model.Setting{},
 		&model.TopologyState{},
 		&model.TopologySlotAssignment{},
 	); err != nil {
@@ -254,11 +256,11 @@ func TestRelayRequest_runs_selected_response_and_log_stages_in_pipeline_order(t 
 	}))
 	defer server.Close()
 	plan := &ExecutionPlan{
-		Provider:              &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
-		BaseURLs:              []string{server.URL},
-		Keys:                  []string{"key"},
-		ResponseRewriteRules:  []*model.ResponseRewriteRule{&responseRule},
-		LogOutputs:            []LogOutputAssignment{{ID: "log", Order: 1, Enabled: true, Config: `{}`}},
+		Provider:                 &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
+		BaseURLs:                 []string{server.URL},
+		Keys:                     []string{"key"},
+		ResponseRewriteRules:     []*model.ResponseRewriteRule{&responseRule},
+		LogOutputs:               []LogOutputAssignment{{ID: "log", Order: 1, Enabled: true, Config: `{}`}},
 		CompiledResponseRewrites: []CompiledRewriteChain{},
 	}
 	events := make([]topologyStageEvent, 0, 6)

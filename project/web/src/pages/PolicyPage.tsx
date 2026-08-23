@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ import { dashboardApi,
   type HeartbeatRule,
   type ConcurrencyRule,
   type FailoverRule,
+  type FailoverAction,
   type ResponseRewriteRule,
   type RuleType,
 } from '@/lib/dashboard-api'
@@ -638,13 +639,29 @@ function ConcurrencyForm({ rule, onSave, onCancel, saving }: { rule: Concurrency
 
 function FailoverPage() {
   const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<FailoverRule>('failover')
+  const [searchParams, setSearchParams] = useSearchParams()
   const [editing, setEditing] = useState<FailoverRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+
+  const clearEditQuery = useCallback(() => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('edit')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId) return
+    const rule = rules.find((candidate) => candidate.id === editId)
+    if (!rule) return
+    setEditing(rule)
+    setIsOpen(true)
+  }, [rules, searchParams])
 
   const handleToggle = async (id: string) => {
     const rule = rules.find((r) => r.id === id)
     if (!rule || mutating) return
-    await update(id, { name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: !rule.status })
+    await update(id, { ...rule, status: !rule.status })
   }
 
   const handleDelete = async (id: string) => {
@@ -654,22 +671,18 @@ function FailoverPage() {
 
   const handleSave = async (rule: FailoverRule) => {
     if (editing) {
-      const result = await update(rule.id, { name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: rule.status })
-      if (result) { setEditing(null); setIsOpen(false) }
+      const result = await update(rule.id, rule)
+      if (result) { setEditing(null); setIsOpen(false); clearEditQuery() }
     } else {
-      const result = await create({ name: rule.name, primaryProvider: rule.primaryProvider, fallbackProvider: rule.fallbackProvider, condition: rule.condition, status: rule.status })
+      const result = await create(rule)
       if (result) { setIsOpen(false) }
     }
   }
 
-  const conditionLabel = (c: FailoverRule['condition']) =>
-    c === 'timeout' ? '超时' : c === 'error' ? '错误' : '限流'
-
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'primaryProvider', label: '主供应商', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.primaryProvider}</span> },
-    { key: 'fallbackProvider', label: '备选', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.fallbackProvider}</span> },
-    { key: 'condition', label: '触发条件', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{conditionLabel(row.condition)}</span> },
+    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs text-muted-foreground">{row.keywords.join('、') || '未设置'}</span> },
+    { key: 'actions', label: '故障转移', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.actions.map((action) => failoverActionLabel(action.dimension)).join(' → ')}</span> },
     {
       key: 'status',
       label: '状态',
@@ -728,22 +741,68 @@ function FailoverPage() {
         />
       </div>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditing(null); clearEditQuery() } }}>
+          <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
+          <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); clearEditQuery() }} saving={mutating} />
         </DialogContent>
 </Dialog>
     </div>
   )
 }
 
+const FAILOVER_ACTIONS: readonly FailoverAction[] = [
+  { dimension: 'base_url', retryCount: 3, automaticPolling: true, autoDisable: true },
+  { dimension: 'key', retryCount: 3, automaticPolling: true, autoDisable: true },
+  { dimension: 'provider', retryCount: 3, automaticPolling: true, autoDisable: true },
+]
+
+function failoverActionLabel(dimension: FailoverAction['dimension']): string {
+  if (dimension === 'base_url') return 'Base URL'
+  if (dimension === 'key') return 'Key'
+  return '供应商'
+}
+
+function failoverActionsForForm(actions: readonly FailoverAction[]): readonly FailoverAction[] {
+  const byDimension = new Map(actions.map((action) => [action.dimension, action]))
+  return [
+    ...actions.filter((action) => FAILOVER_ACTIONS.some((fixed) => fixed.dimension === action.dimension)),
+    ...FAILOVER_ACTIONS.filter((fallback) => !byDimension.has(fallback.dimension)),
+  ]
+}
+
 function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void; saving: boolean }) {
   const [form, setForm] = useState<FailoverRule>(
-    rule || { id: '', name: '', primaryProvider: '', fallbackProvider: '', condition: 'timeout', status: true }
+    rule ? { ...rule, actions: failoverActionsForForm(rule.actions) } : {
+      id: '', name: '', primaryProvider: '', fallbackProvider: '', condition: 'error', status: true, keywords: [], actions: FAILOVER_ACTIONS,
+    },
   )
+  const [keywords, setKeywords] = useState(() => form.keywords.join('\n'))
+  const [draggedDimension, setDraggedDimension] = useState<FailoverAction['dimension'] | null>(null)
+
+  const updateAction = (dimension: FailoverAction['dimension'], patch: Partial<FailoverAction>) => {
+    setForm((current) => ({
+      ...current,
+      actions: current.actions.map((action) => action.dimension === dimension ? { ...action, ...patch } : action),
+    }))
+  }
+
+  const moveAction = (target: FailoverAction['dimension']) => {
+    if (draggedDimension === null || draggedDimension === target) return
+    setForm((current) => {
+      const from = current.actions.findIndex((action) => action.dimension === draggedDimension)
+      const to = current.actions.findIndex((action) => action.dimension === target)
+      if (from < 0 || to < 0) return current
+      const actions = [...current.actions]
+      const [moved] = actions.splice(from, 1)
+      if (!moved) return current
+      actions.splice(to, 0, moved)
+      return { ...current, actions }
+    })
+    setDraggedDimension(null)
+  }
 
   return (
     <FieldGroup>
@@ -752,34 +811,29 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         <Input id="failover-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
       <Field>
-        <FieldLabel htmlFor="failover-primary">主供应商</FieldLabel>
-        <Input id="failover-primary" value={form.primaryProvider} onChange={(e) => setForm((p) => ({ ...p, primaryProvider: e.target.value }))} placeholder="OpenAI" />
+        <FieldLabel htmlFor="failover-keywords">触发关键词</FieldLabel>
+        <Textarea id="failover-keywords" value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder={'一行一个关键字 / 错误码\n429\nrate_limit_exceeded'} rows={4} />
+        <p className="text-xs text-muted-foreground">普通字符匹配，任一行匹配即触发。</p>
       </Field>
       <Field>
-        <FieldLabel htmlFor="failover-fallback">备选供应商</FieldLabel>
-        <Input id="failover-fallback" value={form.fallbackProvider} onChange={(e) => setForm((p) => ({ ...p, fallbackProvider: e.target.value }))} placeholder="Anthropic" />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="failover-condition">触发条件</FieldLabel>
-        <Select
-          value={form.condition}
-          onValueChange={(value) => setForm((p) => ({ ...p, condition: value as typeof p.condition }))}
-        >
-          <SelectTrigger id="failover-condition" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="timeout">超时</SelectItem>
-              <SelectItem value="error">错误</SelectItem>
-              <SelectItem value="rate_limit">限流</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <FieldLabel>故障转移</FieldLabel>
+        <p className="text-xs text-muted-foreground">Base URL、Key、供应商固定三项，可拖动调整执行顺序。</p>
+        <div className="space-y-2">
+          {form.actions.map((action, index) => (
+            <div key={action.dimension} onDragOver={(event) => event.preventDefault()} onDrop={() => moveAction(action.dimension)} className={cn('flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/30 p-3', draggedDimension === action.dimension && 'opacity-50')}>
+              <button type="button" draggable onDragStart={() => setDraggedDimension(action.dimension)} onDragEnd={() => setDraggedDimension(null)} className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing" aria-label={`拖动${failoverActionLabel(action.dimension)}调整顺序`} title="拖动调整顺序"><AppIcon name="drag_handle" size={16} /></button>
+              <span className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">{index + 1}</span>
+              <span className="min-w-24 text-xs font-medium">{failoverActionLabel(action.dimension)}</span>
+              <label className="flex items-center gap-2 text-sm">重试次数 <Input type="number" min={1} className="w-20" value={action.retryCount} onChange={(event) => updateAction(action.dimension, { retryCount: Math.max(1, Number(event.target.value) || 1) })} /></label>
+              <label className="flex items-center gap-2 text-sm">自动轮询 <Switch checked={action.automaticPolling} onCheckedChange={(automaticPolling) => updateAction(action.dimension, { automaticPolling })} /></label>
+              <label className="flex items-center gap-2 text-sm">自动禁用 <Switch checked={action.autoDisable} onCheckedChange={(autoDisable) => updateAction(action.dimension, { autoDisable })} /></label>
+            </div>
+          ))}
+        </div>
       </Field>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
+        <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim(), keywords: keywords.split('\n').map((keyword) => keyword.trim()).filter(Boolean) })}>{saving ? '保存中...' : '保存'}</Button>
       </DialogFooter>
     </FieldGroup>
   )
@@ -907,5 +961,3 @@ function RewriteResponsePage() {
     </div>
   )
 }
-
-

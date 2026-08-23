@@ -129,6 +129,7 @@ func main() {
 			// Providers
 			dashboardAuthed.GET("/providers", handler.ListProviders(db))
 			dashboardAuthed.POST("/providers", handler.CreateProvider(db, engine))
+			dashboardAuthed.GET("/providers/disable-status", handler.ListProviderDisableStatus(db))
 			dashboardAuthed.GET("/providers/:id", handler.GetProvider(db))
 			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
@@ -149,12 +150,12 @@ func main() {
 			dashboardAuthed.GET("/logs", handler.ListLogs(db))
 			dashboardAuthed.POST("/logs/clear", handler.ClearLogs(db))
 			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
-		dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db))
-		dashboardAuthed.GET("/logs/capture/pairs", handler.ListLogCapturePairs(db))
-		dashboardAuthed.GET("/logs/capture/pairs/:request_id", handler.ReadLogCapturePair(db))
-		dashboardAuthed.GET("/logs/capture/pairs/:request_id/merged-response", handler.ReadLogCaptureMergedResponse(db))
-		dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db))
-		dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db))
+			dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db))
+			dashboardAuthed.GET("/logs/capture/pairs", handler.ListLogCapturePairs(db))
+			dashboardAuthed.GET("/logs/capture/pairs/:request_id", handler.ReadLogCapturePair(db))
+			dashboardAuthed.GET("/logs/capture/pairs/:request_id/merged-response", handler.ReadLogCaptureMergedResponse(db))
+			dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db))
+			dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db))
 
 			// Users
 			dashboardAuthed.GET("/users/me", handler.GetCurrentUser(db))

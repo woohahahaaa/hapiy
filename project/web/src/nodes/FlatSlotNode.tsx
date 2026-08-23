@@ -280,7 +280,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
           externallyDisabled={externallyDisabled}
           dimChildren={isLogOutputSlot && !data.enabled}
         >
-          {entries.map((entry) =>
+          {[...entries].sort((left, right) => left.index - right.index).map((entry) =>
             renderItem(
               entry,
               slotRules,

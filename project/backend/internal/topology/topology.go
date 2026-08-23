@@ -9,6 +9,12 @@ import (
 // ConfigRowID is the single TopologyConfig row key shared by handler and relay.
 const ConfigRowID = "topology-main"
 
+type RequestOrigin struct {
+	EntryID        string
+	ProviderSlotID string
+	ProviderID     string
+}
+
 // Node is one node of a workflow in the canonical topology document.
 type Node struct {
 	Type       string          `json:"type"`

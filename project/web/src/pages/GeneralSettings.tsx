@@ -63,6 +63,11 @@ export function GeneralSettings() {
   const [testResult, setTestResult] = useState<
     { readonly kind: 'success'; readonly rate: number } | { readonly kind: 'error'; readonly message: string } | null
   >(null)
+  const [recoveryMinutes, setRecoveryMinutes] = useState('')
+
+  const showUnavailable = () => {
+    toast('暂未开发')
+  }
 
   const load = useCallback(() => {
     dashboardApi
@@ -252,6 +257,24 @@ export function GeneralSettings() {
               </div>
             </form>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <AppIcon name="refresh" size={16} /> 恢复自动禁用的供应商、BaseURL、Key
+          </CardTitle>
+          <CardDescription>恢复时间间隔设置。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
+              时间间隔（分钟）
+              <Input id="automatic-disable-recovery-minutes" className="w-40" type="number" min={0} value={recoveryMinutes} onChange={(event) => setRecoveryMinutes(event.target.value)} />
+            </label>
+            <Button type="button" onClick={showUnavailable}>保存</Button>
+          </div>
         </CardContent>
       </Card>
 

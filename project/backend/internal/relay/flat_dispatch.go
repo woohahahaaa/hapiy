@@ -32,8 +32,9 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 			ID:       plan.Provider.ID,
 			Name:     plan.Provider.Name,
 			Status:   plan.Provider.Status,
+			Disabled: e.providerDisabled(plan.Provider),
 			Enabled:  true, // provider node mini-switch is checked in the flat walk
-			Workflow: true,
+			Workflow: plan.Provider.WorkflowEnabled,
 			Models:   plan.ModelSet,
 			Paths:    plan.AllowedPaths,
 		}
@@ -44,6 +45,10 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 		refs[ref.Name] = ref
 	}
 	return refs
+}
+
+func (e *Engine) providerDisabled(provider *model.Provider) bool {
+	return provider.AutoDisabled || e.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID)
 }
 
 // SelectByFlatTopology chooses a provider for a request using the flat topology
@@ -107,6 +112,7 @@ type DispatchResult struct {
 	// (entry -> provider -> slots), captured at dispatch time. Empty when
 	// the request was served outside the flat-topology walk (affinity recall).
 	PathNodeIDs []string
+	Origin      *topology.RequestOrigin
 }
 
 // Dispatch selects a provider for a request and builds its execution plan. It
@@ -118,7 +124,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 		match := e.Affinity().Lookup(affinityReq)
 		if match.Matched {
 			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, match.Triple.ProviderName, nil)
-			if err == nil {
+			if err == nil && !e.providerDisabled(provider) {
 				return &DispatchResult{
 					Plan:          plan,
 					Provider:      provider,
@@ -153,6 +159,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				KeyIndex:     -1,
 				BaseURLIndex: -1,
 				PathNodeIDs:  topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID),
+				Origin:       &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
 			}, nil
 		}
 	}
@@ -166,6 +173,23 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 		return nil, err
 	}
 	return &DispatchResult{Plan: plan, Provider: provider, KeyIndex: -1, BaseURLIndex: -1}, nil
+}
+
+func providerSlotID(tp *topology.Topology, entryID string) string {
+	if tp == nil {
+		return ""
+	}
+	for _, wire := range tp.Wires {
+		if wire.Source != entryID {
+			continue
+		}
+		for _, node := range tp.Nodes {
+			if node.ID == wire.Target && node.Kind == topology.KindSlot && node.SlotType == "provider" {
+				return node.ID
+			}
+		}
+	}
+	return ""
 }
 
 // buildPlanForProvider builds (or reuses) an execution plan for a provider.

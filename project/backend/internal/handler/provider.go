@@ -3,11 +3,23 @@ package handler
 import (
 	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+type providerDisableStatus struct {
+	ProviderID string          `json:"provider_id"`
+	Provider   bool            `json:"provider"`
+	BaseURLs   map[string]bool `json:"base_urls"`
+	Keys       map[string]bool `json:"keys"`
+}
+
+type resetProviderDisableRequest struct {
+	Dimension string `json:"dimension" binding:"required,oneof=provider base_url key"`
+	Value     string `json:"value"`
+}
 
 // Provider handlers
 
@@ -156,5 +168,76 @@ func ToggleWorkflow(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		engine.LoadProviders()
 
 		c.JSON(http.StatusOK, gin.H{"data": provider})
+	}
+}
+
+func ListProviderDisableStatus(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var providers []model.Provider
+		if err := db.Order("id asc").Find(&providers).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		var states []model.ProviderDisableState
+		if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		byProvider := make(map[string][]model.ProviderDisableState)
+		for _, state := range states {
+			byProvider[state.ProviderID] = append(byProvider[state.ProviderID], state)
+		}
+		data := make([]providerDisableStatus, 0, len(providers))
+		for _, provider := range providers {
+			status := providerDisableStatus{ProviderID: provider.ID, Provider: provider.AutoDisabled, BaseURLs: map[string]bool{}, Keys: map[string]bool{}}
+			for _, state := range byProvider[provider.ID] {
+				switch state.Dimension {
+				case model.FailoverDimensionProvider:
+					status.Provider = true
+				case model.FailoverDimensionBaseURL:
+					status.BaseURLs[state.Value] = true
+				case model.FailoverDimensionKey:
+					status.Keys[state.Value] = true
+				}
+			}
+			data = append(data, status)
+		}
+		c.JSON(http.StatusOK, gin.H{"data": data})
+	}
+}
+
+func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var provider model.Provider
+		if err := db.First(&provider, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			return
+		}
+		var req resetProviderDisableRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if req.Dimension == model.FailoverDimensionProvider {
+			req.Value = provider.ID
+		}
+		if req.Value == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "value is required for base_url and key"})
+			return
+		}
+		if err := db.Model(&model.ProviderDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).Update("disabled", false).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if req.Dimension == model.FailoverDimensionProvider && provider.AutoDisabled {
+			provider.AutoDisabled = false
+			if err := db.Save(&provider).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		engine.LoadProviders()
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": provider.ID, "dimension": req.Dimension, "value": req.Value}})
 	}
 }

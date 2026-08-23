@@ -35,12 +35,11 @@ export function LoginPage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center bg-background p-6">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-10">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="font-hapiy-logo text-7xl leading-none tracking-tight text-foreground">
+      <form onSubmit={handleSubmit} className="flex w-full max-w-xs flex-col gap-6">
+        <div className="flex justify-center">
+          <span className="font-hapiy-logo text-5xl leading-none tracking-tight text-foreground">
             hapiy
           </span>
-          <p className="text-xs text-muted-foreground">登录以管理供应商、规则与价格配置</p>
         </div>
 
         <FieldGroup>
@@ -52,7 +51,7 @@ export function LoginPage() {
               autoComplete="username"
               onChange={(e) => setUsername(e.target.value)}
               disabled={submitting}
-              className="rounded-none border-0 border-b border-border/60 bg-transparent px-0 text-sm shadow-none focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="rounded-none"
             />
           </Field>
           <Field>
@@ -64,13 +63,13 @@ export function LoginPage() {
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
-              className="rounded-none border-0 border-b border-border/60 bg-transparent px-0 text-sm shadow-none focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="rounded-none"
             />
           </Field>
         </FieldGroup>
 
         {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         )}

@@ -67,6 +67,15 @@ export type Provider = {
 
 export type ProviderInput = Omit<Provider, 'id'>
 
+export type ProviderDisableStatus = {
+  readonly providerId: string
+  readonly provider: boolean
+  readonly baseUrls: Readonly<Record<string, boolean>>
+  readonly keys: Readonly<Record<string, boolean>>
+}
+
+export type ProviderDisableDimension = 'provider' | 'base_url' | 'key'
+
 export type ProviderListParams = {
   readonly limit: number
   readonly offset: number
@@ -816,6 +825,29 @@ function parseProvider(value: unknown): Provider {
   }
 }
 
+function parseDisabledValues(value: unknown, field: string): Readonly<Record<string, boolean>> {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+  }
+  const values: Record<string, boolean> = {}
+  for (const [key, disabled] of Object.entries(value)) {
+    values[key] = readBoolean(disabled, `${field}.${key}`)
+  }
+  return values
+}
+
+function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的自动禁用状态格式无效', null)
+  }
+  return {
+    providerId: readString(value.provider_id, 'disable_status.provider_id'),
+    provider: readBoolean(value.provider, 'disable_status.provider'),
+    baseUrls: parseDisabledValues(value.base_urls, 'disable_status.base_urls'),
+    keys: parseDisabledValues(value.keys, 'disable_status.keys'),
+  }
+}
+
 function parseToken(value: unknown): Token {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的令牌格式无效', null)
@@ -1225,6 +1257,15 @@ export type FailoverRule = {
   readonly fallbackProvider: string
   readonly condition: 'timeout' | 'error' | 'rate_limit'
   readonly status: boolean
+  readonly keywords: readonly string[]
+  readonly actions: readonly FailoverAction[]
+}
+
+export type FailoverAction = {
+  readonly dimension: 'base_url' | 'key' | 'provider'
+  readonly retryCount: number
+  readonly automaticPolling: boolean
+  readonly autoDisable: boolean
 }
 
 export type ResponseRewriteRule = {
@@ -1295,6 +1336,22 @@ function parseFailoverRule(value: unknown): FailoverRule {
     fallbackProvider: readString(value.fallback_provider, 'rule.fallback_provider'),
     condition,
     status: readBoolean(value.status, 'rule.status'),
+    keywords: readStringArray(value.keywords, 'rule.keywords'),
+    actions: readObjectArray(value.actions, 'rule.actions', parseFailoverAction),
+  }
+}
+
+function parseFailoverAction(value: unknown): FailoverAction {
+  if (!isRecord(value)) throw new DashboardApiError('服务端返回的故障转移动作格式无效', null)
+  const dimension = readString(value.dimension, 'rule.actions.dimension')
+  if (dimension !== 'base_url' && dimension !== 'key' && dimension !== 'provider') {
+    throw new DashboardApiError('服务端返回的故障转移动作维度无效', null)
+  }
+  return {
+    dimension,
+    retryCount: readNumber(value.retry_count, 'rule.actions.retry_count', 3),
+    automaticPolling: readBoolean(value.automatic_polling, 'rule.actions.automatic_polling'),
+    autoDisable: readBoolean(value.auto_disable, 'rule.actions.auto_disable'),
   }
 }
 
@@ -1338,6 +1395,13 @@ const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
   fallback_provider: (rule as FailoverRule).fallbackProvider ?? '',
   condition: (rule as FailoverRule).condition ?? 'timeout',
   status: rule.status,
+  keywords: (rule as FailoverRule).keywords ?? [],
+  actions: ((rule as FailoverRule).actions ?? []).map((action) => ({
+    dimension: action.dimension,
+    retry_count: action.retryCount,
+    automatic_polling: action.automaticPolling,
+    auto_disable: action.autoDisable,
+  })) ?? [],
 })
 
 const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
@@ -1476,6 +1540,22 @@ export const dashboardApi = {
   },
   async toggleWorkflow(id: string): Promise<Provider> {
     return parseProvider(await request(`/providers/${encodeURIComponent(id)}/workflow-toggle`, { method: 'POST' }))
+  },
+  async listProviderDisableStatuses(): Promise<readonly ProviderDisableStatus[]> {
+    const body = await requestFull('/providers/disable-status')
+    if (!Array.isArray(body.data)) {
+      throw new DashboardApiError('服务端返回的自动禁用状态列表格式无效', null)
+    }
+    return body.data.map(parseProviderDisableStatus)
+  },
+  async resetProviderDisableStatus(
+    id: string,
+    input: { readonly dimension: ProviderDisableDimension; readonly value: string },
+  ): Promise<void> {
+    await request(`/providers/${encodeURIComponent(id)}/disable-status/reset`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
   },
 
   // ── Tokens ──

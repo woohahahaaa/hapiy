@@ -64,6 +64,7 @@ type ProviderRef struct {
 	ID       string // provider record ID (stable).
 	Name     string
 	Status   bool // Provider table status
+	Disabled bool
 	Enabled  bool // provider node mini-switch in its slot
 	Workflow bool // master-switch activation (derived from its request entry)
 	Models   map[string]struct{}
@@ -327,12 +328,59 @@ func BuildRequestPath(t *Topology, entryID, providerID string) []string {
 	return path
 }
 
+func FindProviderSlotAlternatives(t *Topology, refs map[string]ProviderRef, model, path, entryID, providerID string) []EligibleProvider {
+	if t == nil || entryID == "" || providerID == "" {
+		return nil
+	}
+	cur := outgoing(t, entryID)
+	visited := map[string]bool{entryID: true}
+	for cur != "" && !visited[cur] {
+		visited[cur] = true
+		node, ok := nodeByID(t, cur)
+		if !ok {
+			return nil
+		}
+		if node.Kind == KindSlot && node.SlotType == "provider" {
+			result := make([]EligibleProvider, 0)
+			for _, child := range providerChildren(t, node.ID) {
+				if !providerEligible(refs, child, model, path) {
+					continue
+				}
+				result = append(result, EligibleProvider{Node: child, Name: child.Name, ProviderID: child.ProviderID, Chain: collectChain(t, child), EntryID: entryID})
+			}
+			return result
+		}
+		if node.Kind == KindProvider && node.ID == providerID {
+			return nil
+		}
+		cur = outgoing(t, cur)
+	}
+	return nil
+}
+
+func providerChildren(t *Topology, slotID string) []FlatNode {
+	children := make([]FlatNode, 0)
+	for index, node := range t.Nodes {
+		if node.ID != slotID {
+			continue
+		}
+		for _, child := range t.Nodes[index+1:] {
+			if child.Kind != KindProvider {
+				break
+			}
+			children = append(children, child)
+		}
+		break
+	}
+	return children
+}
+
 // providerEligible reports whether the provider node can serve the request:
 // its bound provider must be present and Status-enabled, the node's own
 // mini-switch must be on, and it must support the model (and path).
 func providerEligible(refs map[string]ProviderRef, node FlatNode, model, path string) bool {
 	ref, ok := refs[refKey(node)]
-	if !ok || !ref.Status || !node.Enabled || !ref.Enabled || !ref.Workflow {
+	if !ok || !ref.Status || ref.Disabled || !node.Enabled || !ref.Enabled || !ref.Workflow {
 		return false
 	}
 	return providerSupports(ref, model, path)

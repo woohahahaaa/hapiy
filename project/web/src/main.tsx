@@ -20,7 +20,7 @@ const iconProviderValue: IIconConfig = {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider>
+    <ThemeProvider defaultTheme="dark">
       <IconProvider value={iconProviderValue}>
         <App />
       </IconProvider>

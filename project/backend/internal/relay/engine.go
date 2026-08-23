@@ -107,12 +107,12 @@ func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error)
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
 
-	var candidates []*model.Provider
+	var fallback *model.Provider
 	for _, plan := range e.plans {
 		if plan.Provider == nil {
 			continue
 		}
-		if !plan.Provider.Status || !plan.Provider.WorkflowEnabled {
+		if !plan.Provider.Status || plan.Provider.AutoDisabled || !plan.Provider.WorkflowEnabled || e.isDisabled(plan.Provider.ID, model.FailoverDimensionProvider, plan.Provider.ID) {
 			continue
 		}
 		if _, ok := plan.ModelSet[modelName]; !ok {
@@ -122,16 +122,19 @@ func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error)
 			if _, ok := plan.AllowedPaths[path]; !ok {
 				continue
 			}
+			return plan.Provider, nil
 		}
-		candidates = append(candidates, plan.Provider)
+		if fallback == nil {
+			fallback = plan.Provider
+		}
 	}
 
-	if len(candidates) == 0 {
+	if fallback == nil {
 		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, modelName)
 	}
 
 	// Simple round-robin (TODO: implement weighted selection)
-	return candidates[0], nil
+	return fallback, nil
 }
 
 // RelayRequest represents an incoming request from the handler.
@@ -163,8 +166,9 @@ type RelayRequest struct {
 	SourceMark string `json:"-"`
 	// KeyIndex and BaseURLIndex select which key/baseURL to use (-1 = rotate
 	// from the first available).
-	KeyIndex     int `json:"-"`
-	BaseURLIndex int `json:"-"`
+	KeyIndex       int                     `json:"-"`
+	BaseURLIndex   int                     `json:"-"`
+	TopologyOrigin *topology.RequestOrigin `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
 	// caller surface live progress on the monitoring page without polling the
