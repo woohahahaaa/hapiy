@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/url"
 	"strings"
 
@@ -88,11 +89,9 @@ func (e *Engine) resolveFallbackPlan(name string) *ExecutionPlan {
 
 // relayWithFailover sends the request to upstream with automatic failover.
 // On the first attempt, attempts the current plan. If the upstream
-// outcome matches a failover rule's Condition and a fallback provider is
-// resolvable, retries ONCE against the fallback's first base URL + key.
-// Strict retry-once policy: no looping, no third try. If no fallback
-// applies or no fallback provider is resolvable, returns the original
-// error.
+// outcome matches a failover rule, the rule's single action decides
+// which dimension to rotate on and whether to auto-disable the
+// originating entity. Each rule fires exactly one rotation.
 func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	resp, err := e.performUpstreamCall(ctx, plan, req)
 	if err == nil {
@@ -102,23 +101,26 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if !matched {
 		return resp, err
 	}
-	for _, action := range rule.Actions {
-		if err := e.applyFailoverAction(plan, req, action); err != nil {
-			return resp, err
+	dimension, retryCount, autoDisable := rule.SingleAction()
+	if dimension == "" {
+		return resp, err
+	}
+	if autoDisable {
+		if applyErr := e.applyFailoverAction(plan, req, dimension); applyErr != nil {
+			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 		}
-		switch action.Dimension {
-		case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
-			if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, action.Dimension, action.RetryCount); rotated != nil {
-				return rotated, nil
-			}
-		case model.FailoverDimensionProvider:
-			fallbackPlan := e.resolveFallbackPlan(rule.FallbackProvider)
-			if rule.FallbackProvider == "" {
-				fallbackPlan = e.resolveTopologyFallbackPlan(req, plan)
-			}
-			if fallbackPlan == nil {
-				continue
-			}
+	}
+	switch dimension {
+	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
+		if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, retryCount); rotated != nil {
+			return rotated, nil
+		}
+	case model.FailoverDimensionProvider:
+		fallbackPlan := e.resolveFallbackPlan(rule.FallbackProvider)
+		if rule.FallbackProvider == "" {
+			fallbackPlan = e.resolveTopologyFallbackPlan(req, plan)
+		}
+		if fallbackPlan != nil {
 			if resp != nil && resp.Body != nil {
 				_, _ = io.Copy(io.Discard, resp.Body)
 				_ = resp.Body.Close()
@@ -161,15 +163,12 @@ func matchingFailoverRule(outcome upstreamOutcome, rules []*model.FailoverRule) 
 	return nil, false
 }
 
-func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, action model.FailoverAction) error {
+func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dimension string) error {
 	if plan.Provider == nil || e.db == nil {
 		return nil
 	}
-	if !action.AutoDisable {
-		return nil
-	}
 	value := ""
-	switch action.Dimension {
+	switch dimension {
 	case model.FailoverDimensionBaseURL:
 		value = pickIndex(plan.BaseURLs, req.BaseURLIndex)
 	case model.FailoverDimensionKey:
@@ -180,11 +179,11 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, act
 	if value == "" {
 		return nil
 	}
-	state := model.ProviderDisableState{ProviderID: plan.Provider.ID, Dimension: action.Dimension, Value: value, Disabled: true}
+	state := model.ProviderDisableState{ProviderID: plan.Provider.ID, Dimension: dimension, Value: value, Disabled: true}
 	if err := e.db.Where(model.ProviderDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).Assign(state).FirstOrCreate(&state).Error; err != nil {
 		return err
 	}
-	if action.Dimension == model.FailoverDimensionProvider {
+	if dimension == model.FailoverDimensionProvider {
 		if err := e.db.Model(&model.Provider{}).Where("id = ?", plan.Provider.ID).Update("auto_disabled", true).Error; err != nil {
 			return err
 		}

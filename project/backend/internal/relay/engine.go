@@ -394,6 +394,8 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		e.logDebug(plan, req, resp)
 	}
 
+	e.recordFallbackChannel(req, plan.Provider.ID, req.BaseURLIndex, req.KeyIndex)
+
 	return resp, nil
 }
 

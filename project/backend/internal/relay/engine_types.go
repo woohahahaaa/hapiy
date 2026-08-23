@@ -113,6 +113,9 @@ type Engine struct {
 
 	affinityMu sync.RWMutex
 	affinity   *affinity.RuleCompiledSet
+
+	fallbackMu     sync.RWMutex
+	fallbackConfig *affinity.FallbackSetting
 }
 
 func NewEngine(db *gorm.DB) *Engine {
@@ -123,6 +126,7 @@ func NewEngine(db *gorm.DB) *Engine {
 		stopCh:    make(chan struct{}),
 	}
 	e.ReloadAffinity()
+	e.ReloadFallbackAffinity()
 	return e
 }
 
@@ -149,4 +153,32 @@ func (e *Engine) ReloadAffinity() {
 	e.affinityMu.Lock()
 	e.affinity = compiled
 	e.affinityMu.Unlock()
+}
+
+// ReloadFallbackAffinity swaps in the current fallback setting.
+func (e *Engine) ReloadFallbackAffinity() {
+	var setting *affinity.FallbackSetting
+	if e.db != nil {
+		s, err := affinity.NewFallbackStore(e.db).Load()
+		if err != nil {
+			log.Printf("relay: failed to load fallback affinity: %v", err)
+			s = &affinity.FallbackSetting{}
+		}
+		setting = s
+	} else {
+		setting = &affinity.FallbackSetting{}
+	}
+	e.fallbackMu.Lock()
+	e.fallbackConfig = setting
+	e.fallbackMu.Unlock()
+}
+
+// fallbackSetting returns the current fallback setting (safe copy).
+func (e *Engine) fallbackSetting() *affinity.FallbackSetting {
+	e.fallbackMu.RLock()
+	defer e.fallbackMu.RUnlock()
+	if e.fallbackConfig == nil {
+		return &affinity.FallbackSetting{}
+	}
+	return e.fallbackConfig
 }

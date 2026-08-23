@@ -42,6 +42,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&Setting{},
 		&BaseUrlPath{},
 		&TableConfig{},
+		&RequestChannelHistory{},
 	)
 }
 

@@ -753,56 +753,37 @@ function FailoverPage() {
   )
 }
 
-const FAILOVER_ACTIONS: readonly FailoverAction[] = [
-  { dimension: 'base_url', retryCount: 3, automaticPolling: true, autoDisable: true },
-  { dimension: 'key', retryCount: 3, automaticPolling: true, autoDisable: true },
-  { dimension: 'provider', retryCount: 3, automaticPolling: true, autoDisable: true },
-]
+const FAILOVER_DIMENSIONS = [
+  { value: 'base_url', label: 'Base URL' },
+  { value: 'key', label: 'Key' },
+  { value: 'provider', label: '供应商' },
+] as const
 
-function failoverActionLabel(dimension: FailoverAction['dimension']): string {
+function failoverDimensionLabel(dimension: FailoverRule['dimension']): string {
   if (dimension === 'base_url') return 'Base URL'
   if (dimension === 'key') return 'Key'
-  return '供应商'
-}
-
-function failoverActionsForForm(actions: readonly FailoverAction[]): readonly FailoverAction[] {
-  const byDimension = new Map(actions.map((action) => [action.dimension, action]))
-  return [
-    ...actions.filter((action) => FAILOVER_ACTIONS.some((fixed) => fixed.dimension === action.dimension)),
-    ...FAILOVER_ACTIONS.filter((fallback) => !byDimension.has(fallback.dimension)),
-  ]
+  if (dimension === 'provider') return '供应商'
+  return '未选择'
 }
 
 function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void; saving: boolean }) {
-  const [form, setForm] = useState<FailoverRule>(
-    rule ? { ...rule, actions: failoverActionsForForm(rule.actions) } : {
-      id: '', name: '', primaryProvider: '', fallbackProvider: '', condition: 'error', status: true, keywords: [], actions: FAILOVER_ACTIONS,
-    },
-  )
-  const [keywords, setKeywords] = useState(() => form.keywords.join('\n'))
-  const [draggedDimension, setDraggedDimension] = useState<FailoverAction['dimension'] | null>(null)
-
-  const updateAction = (dimension: FailoverAction['dimension'], patch: Partial<FailoverAction>) => {
-    setForm((current) => ({
-      ...current,
-      actions: current.actions.map((action) => action.dimension === dimension ? { ...action, ...patch } : action),
-    }))
+  const initial: FailoverRule = rule ?? {
+    id: '',
+    name: '',
+    primaryProvider: '',
+    fallbackProvider: '',
+    condition: 'error',
+    status: true,
+    keywords: [],
+    actions: [],
+    dimension: 'base_url',
+    retryCount: 3,
+    autoDisable: true,
+    matchPatterns: [],
+    ttfbSeconds: 0,
   }
-
-  const moveAction = (target: FailoverAction['dimension']) => {
-    if (draggedDimension === null || draggedDimension === target) return
-    setForm((current) => {
-      const from = current.actions.findIndex((action) => action.dimension === draggedDimension)
-      const to = current.actions.findIndex((action) => action.dimension === target)
-      if (from < 0 || to < 0) return current
-      const actions = [...current.actions]
-      const [moved] = actions.splice(from, 1)
-      if (!moved) return current
-      actions.splice(to, 0, moved)
-      return { ...current, actions }
-    })
-    setDraggedDimension(null)
-  }
+  const [form, setForm] = useState<FailoverRule>(initial)
+  const [matchPatterns, setMatchPatterns] = useState(() => (rule?.matchPatterns ?? []).join('\n'))
 
   return (
     <FieldGroup>
@@ -810,30 +791,62 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         <FieldLabel htmlFor="failover-name">名称</FieldLabel>
         <Input id="failover-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
+
       <Field>
-        <FieldLabel htmlFor="failover-keywords">触发关键词</FieldLabel>
-        <Textarea id="failover-keywords" value={keywords} onChange={(event) => setKeywords(event.target.value)} placeholder={'一行一个关键字 / 错误码\n429\nrate_limit_exceeded'} rows={4} />
-        <p className="text-xs text-muted-foreground">普通字符匹配，任一行匹配即触发。</p>
+        <FieldLabel htmlFor="failover-dimension">轮询维度</FieldLabel>
+        <Select value={form.dimension || 'base_url'} onValueChange={(value) => setForm((p) => ({ ...p, dimension: value as FailoverRule['dimension'] }))}>
+          <SelectTrigger id="failover-dimension" className="w-52">
+            <SelectValue placeholder="选择轮询维度" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {FAILOVER_DIMENSIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">每个规则只选一个维度。同一请求失败时，只走这一条规则的轮询。</p>
       </Field>
+
       <Field>
-        <FieldLabel>故障转移</FieldLabel>
-        <p className="text-xs text-muted-foreground">Base URL、Key、供应商固定三项，可拖动调整执行顺序。</p>
-        <div className="space-y-2">
-          {form.actions.map((action, index) => (
-            <div key={action.dimension} onDragOver={(event) => event.preventDefault()} onDrop={() => moveAction(action.dimension)} className={cn('flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/30 p-3', draggedDimension === action.dimension && 'opacity-50')}>
-              <button type="button" draggable onDragStart={() => setDraggedDimension(action.dimension)} onDragEnd={() => setDraggedDimension(null)} className="cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing" aria-label={`拖动${failoverActionLabel(action.dimension)}调整顺序`} title="拖动调整顺序"><AppIcon name="drag_handle" size={16} /></button>
-              <span className="flex size-5 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">{index + 1}</span>
-              <span className="min-w-24 text-xs font-medium">{failoverActionLabel(action.dimension)}</span>
-              <label className="flex items-center gap-2 text-sm">重试次数 <Input type="number" min={1} className="w-20" value={action.retryCount} onChange={(event) => updateAction(action.dimension, { retryCount: Math.max(1, Number(event.target.value) || 1) })} /></label>
-              <label className="flex items-center gap-2 text-sm">自动轮询 <Switch checked={action.automaticPolling} onCheckedChange={(automaticPolling) => updateAction(action.dimension, { automaticPolling })} /></label>
-              <label className="flex items-center gap-2 text-sm">自动禁用 <Switch checked={action.autoDisable} onCheckedChange={(autoDisable) => updateAction(action.dimension, { autoDisable })} /></label>
-            </div>
-          ))}
-        </div>
+        <FieldLabel htmlFor="failover-retry">重试次数</FieldLabel>
+        <Input id="failover-retry" type="number" min={0} className="w-40" value={form.retryCount} onChange={(event) => setForm((p) => ({ ...p, retryCount: Math.max(0, Number(event.target.value) || 0) }))} />
       </Field>
+
+      <Field>
+        <FieldLabel htmlFor="failover-patterns">触发匹配字段</FieldLabel>
+        <Textarea id="failover-patterns" value={matchPatterns} onChange={(event) => setMatchPatterns(event.target.value)} placeholder={'一行一个文本或错误码\n429\nrate_limit_exceeded\ninsufficient_quota'} rows={4} />
+        <p className="text-xs text-muted-foreground">普通字符匹配，任一行匹配即触发轮询。</p>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="failover-ttfb">首字超时（秒）</FieldLabel>
+        <Input id="failover-ttfb" type="number" min={0} className="w-40" value={form.ttfbSeconds} onChange={(event) => setForm((p) => ({ ...p, ttfbSeconds: Math.max(0, Number(event.target.value) || 0) }))} placeholder="0" />
+        <p className="text-xs text-muted-foreground">填 0 表示不启用此条件；填大于 0 表示首字响应超过 N 秒也会触发轮询（与匹配字段 OR 关系）。</p>
+      </Field>
+
+      <Field>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch checked={form.autoDisable} onCheckedChange={(autoDisable) => setForm((p) => ({ ...p, autoDisable }))} />
+          自动禁用（轮询用尽后将出问题的 Key/BaseURL/供应商标记为禁用）
+        </label>
+      </Field>
+
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim(), keywords: keywords.split('\n').map((keyword) => keyword.trim()).filter(Boolean) })}>{saving ? '保存中...' : '保存'}</Button>
+        <Button
+          disabled={saving || !form.name.trim() || !form.dimension}
+          onClick={() =>
+            onSave({
+              ...form,
+              name: form.name.trim(),
+              matchPatterns: matchPatterns.split('\n').map((s) => s.trim()).filter(Boolean),
+            })
+          }
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
       </DialogFooter>
     </FieldGroup>
   )

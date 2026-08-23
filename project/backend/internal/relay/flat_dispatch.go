@@ -116,10 +116,23 @@ type DispatchResult struct {
 }
 
 // Dispatch selects a provider for a request and builds its execution plan. It
-// consults channel affinity first (when enabled and a rule matches), then falls
-// back to flat-topology weighted selection. The returned plan is restricted to
-// the provider's reachable slot types in the wiring.
+// consults the fallback channel affinity first (last-used channel for the
+// request's session_id+model), then configured affinity rules, then the
+// flat-topology weighted selection. The returned plan is restricted to the
+// provider's reachable slot types in the wiring.
 func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*DispatchResult, error) {
+	if affinityReq != nil {
+		if fallback := e.lookupFallbackAffinity(affinityReq); fallback.matched {
+			if provider, plan, err := e.buildPlanForProvider(fallback.providerID, fallback.providerName, nil); err == nil {
+				return &DispatchResult{
+					Plan:         plan,
+					Provider:     provider,
+					KeyIndex:     fallback.keyIndex,
+					BaseURLIndex: fallback.baseURLIndex,
+				}, nil
+			}
+		}
+	}
 	if affinityReq != nil && e.Affinity() != nil {
 		match := e.Affinity().Lookup(affinityReq)
 		if match.Matched {

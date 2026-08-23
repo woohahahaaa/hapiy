@@ -496,6 +496,19 @@ export type ChannelAffinitySetting = {
 
 export type ChannelAffinitySettingInput = ChannelAffinitySetting
 
+export type ChannelAffinityFallback = {
+  readonly enabled: boolean
+  readonly sessionIdFields: readonly string[]
+  readonly modelFields: readonly string[]
+}
+
+export type ChannelAffinityPayload = {
+  readonly setting: ChannelAffinitySetting
+  readonly fallback: ChannelAffinityFallback
+}
+
+export type ChannelAffinityPayloadInput = ChannelAffinityPayload
+
 // ── Per-table column display config ──
 export type ColumnWidthConfig =
   | { readonly kind: 'percent'; readonly value: number }
@@ -739,6 +752,27 @@ function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
     enabled: readBoolean(value.enabled, 'affinity.enabled'),
     defaultTtlSeconds: readNumber(value.default_ttl_seconds, 'affinity.default_ttl_seconds', 1800),
     rules: readObjectArray(value.rules, 'affinity.rules', parseChannelAffinityRule),
+  }
+}
+
+function parseChannelAffinityFallback(value: unknown): ChannelAffinityFallback {
+  if (!isRecord(value)) {
+    return { enabled: false, sessionIdFields: [], modelFields: [] }
+  }
+  return {
+    enabled: readBoolean(value.enabled, 'affinity.fallback.enabled'),
+    sessionIdFields: readStringArray(value.session_id_fields, 'affinity.fallback.session_id_fields'),
+    modelFields: readStringArray(value.model_fields, 'affinity.fallback.model_fields'),
+  }
+}
+
+function parseChannelAffinityPayload(value: unknown): ChannelAffinityPayload {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的渠道亲和配置格式无效', null)
+  }
+  return {
+    setting: parseChannelAffinity(value.setting),
+    fallback: parseChannelAffinityFallback(value.fallback),
   }
 }
 
@@ -1259,6 +1293,11 @@ export type FailoverRule = {
   readonly status: boolean
   readonly keywords: readonly string[]
   readonly actions: readonly FailoverAction[]
+  readonly dimension: '' | 'base_url' | 'key' | 'provider'
+  readonly retryCount: number
+  readonly autoDisable: boolean
+  readonly matchPatterns: readonly string[]
+  readonly ttfbSeconds: number
 }
 
 export type FailoverAction = {
@@ -1329,6 +1368,9 @@ function parseFailoverRule(value: unknown): FailoverRule {
   if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
   const rawCondition = readString(value.condition, 'rule.condition')
   const condition = rawCondition === 'timeout' || rawCondition === 'error' || rawCondition === 'rate_limit' ? rawCondition : 'timeout'
+  const rawDimension = readString(value.dimension, 'rule.dimension')
+  const dimension: FailoverRule['dimension'] =
+    rawDimension === 'base_url' || rawDimension === 'key' || rawDimension === 'provider' ? rawDimension : ''
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
@@ -1338,6 +1380,11 @@ function parseFailoverRule(value: unknown): FailoverRule {
     status: readBoolean(value.status, 'rule.status'),
     keywords: readStringArray(value.keywords, 'rule.keywords'),
     actions: readObjectArray(value.actions, 'rule.actions', parseFailoverAction),
+    dimension,
+    retryCount: readNumber(value.retry_count, 'rule.retry_count', 3),
+    autoDisable: readBoolean(value.auto_disable, 'rule.auto_disable'),
+    matchPatterns: readStringArray(value.match_patterns, 'rule.match_patterns'),
+    ttfbSeconds: readNumber(value.ttfb_seconds, 'rule.ttfb_seconds', 0),
   }
 }
 
@@ -1402,6 +1449,11 @@ const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
     automatic_polling: action.automaticPolling,
     auto_disable: action.autoDisable,
   })) ?? [],
+  dimension: (rule as FailoverRule).dimension ?? '',
+  retry_count: (rule as FailoverRule).retryCount ?? 3,
+  auto_disable: (rule as FailoverRule).autoDisable ?? true,
+  match_patterns: (rule as FailoverRule).matchPatterns ?? [],
+  ttfb_seconds: (rule as FailoverRule).ttfbSeconds ?? 0,
 })
 
 const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
@@ -1925,16 +1977,23 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return parseTopologyDocument(body)
   },
 
-  async getChannelAffinity(): Promise<ChannelAffinitySetting> {
+  async getChannelAffinity(): Promise<ChannelAffinityPayload> {
     const body = await request('/channel-affinity')
-    return parseChannelAffinity(body)
+    return parseChannelAffinityPayload(body)
   },
-  async saveChannelAffinity(input: ChannelAffinitySettingInput): Promise<ChannelAffinitySetting> {
+  async saveChannelAffinity(input: ChannelAffinityPayloadInput): Promise<ChannelAffinityPayload> {
     const body = await request('/channel-affinity', {
       method: 'PUT',
-      body: JSON.stringify(serializeChannelAffinity(input)),
+      body: JSON.stringify({
+        setting: serializeChannelAffinity(input.setting),
+        fallback: {
+          enabled: input.fallback.enabled,
+          session_id_fields: input.fallback.sessionIdFields,
+          model_fields: input.fallback.modelFields,
+        },
+      }),
     })
-    return parseChannelAffinity(body)
+    return parseChannelAffinityPayload(body)
   },
 
   async getTableConfig(id: string): Promise<TableConfig | null> {

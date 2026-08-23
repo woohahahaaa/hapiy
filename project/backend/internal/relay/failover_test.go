@@ -163,10 +163,9 @@ func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDi
 	}
 	engine := NewEngine(db)
 	plan := &ExecutionPlan{Provider: &provider, BaseURLs: []string{"https://upstream.example"}, Keys: []string{"key"}}
-	rule := &model.FailoverRule{Actions: []model.FailoverAction{{Dimension: model.FailoverDimensionProvider, RetryCount: 1, AutoDisable: true}}}
 
 	// When
-	err := engine.applyFailoverAction(plan, &RelayRequest{BaseURLIndex: 0, KeyIndex: 0}, rule.Actions[0])
+	err := engine.applyFailoverAction(plan, &RelayRequest{BaseURLIndex: 0, KeyIndex: 0}, model.FailoverDimensionProvider)
 
 	// Then
 	if err != nil {
@@ -206,7 +205,7 @@ func TestRelayWithFailover_retriesOnceOnError(t *testing.T) {
 		BaseURLs: []string{primary.URL},
 		Keys:     []string{"k"},
 		FailoverRules: []*model.FailoverRule{
-			{Condition: "error", FallbackProvider: "fallback"},
+			{Condition: "error", Dimension: model.FailoverDimensionProvider, FallbackProvider: "fallback"},
 		},
 	}
 	fallbackPlan := &ExecutionPlan{
@@ -266,7 +265,7 @@ func TestRelayWithFailover_emptyFallbackUsesSameProviderSlotOrder(t *testing.T) 
 		t.Fatalf("create topology: %v", err)
 	}
 	engine := NewEngine(db)
-	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"key"}, FailoverRules: []*model.FailoverRule{{Condition: "error", Actions: []model.FailoverAction{{Dimension: model.FailoverDimensionProvider}}}}}
+	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"key"}, FailoverRules: []*model.FailoverRule{{Condition: "error", Dimension: model.FailoverDimensionProvider}}}
 	alternatePlan := &ExecutionPlan{ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"key"}}
 	engine.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": alternatePlan}
 	engine.providers = map[string]*model.Provider{"primary": primaryProvider, "alternate": alternateProvider}
@@ -306,7 +305,7 @@ func TestRelayWithFailover_doesNotLoopOnFallbackError(t *testing.T) {
 		BaseURLs: []string{primary.URL},
 		Keys:     []string{"k"},
 		FailoverRules: []*model.FailoverRule{
-			{Condition: "error", FallbackProvider: "fallback"},
+			{Condition: "error", Dimension: model.FailoverDimensionProvider, FallbackProvider: "fallback"},
 		},
 	}
 	fallbackPlan := &ExecutionPlan{

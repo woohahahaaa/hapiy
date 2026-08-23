@@ -18,8 +18,9 @@ import {
   dashboardApi,
   DashboardApiError,
   type ChannelAffinitySetting,
-  type ChannelAffinitySettingInput,
+  type ChannelAffinityPayload,
   type ChannelAffinityRule,
+  type ChannelAffinityFallback,
   type ChannelAffinityKeySource,
 } from '@/lib/dashboard-api'
 
@@ -169,10 +170,125 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
   )
 }
 
+function FallbackForm({ fallback, onSave, onCancel, saving }: {
+  readonly fallback: ChannelAffinityFallback
+  readonly onSave: (next: ChannelAffinityFallback) => void | Promise<void>
+  readonly onCancel: () => void
+  readonly saving: boolean
+}) {
+  const [enabled, setEnabled] = useState(fallback.enabled)
+  const [sessionInput, setSessionInput] = useState('')
+  const [modelInput, setModelInput] = useState('')
+  const [sessionFields, setSessionFields] = useState<string[]>([...fallback.sessionIdFields])
+  const [modelFields, setModelFields] = useState<string[]>([...fallback.modelFields])
+
+  const addSession = () => {
+    const trimmed = sessionInput.trim()
+    if (!trimmed || sessionFields.includes(trimmed)) return
+    setSessionFields((current) => [...current, trimmed])
+    setSessionInput('')
+  }
+  const addModel = () => {
+    const trimmed = modelInput.trim()
+    if (!trimmed || modelFields.includes(trimmed)) return
+    setModelFields((current) => [...current, trimmed])
+    setModelInput('')
+  }
+
+  return (
+    <FieldGroup>
+      <Field>
+        <label className="flex items-center gap-2 text-sm">
+          <Switch
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
+          开启（关闭时不读取兜底字段，正常走亲和性规则 / 拓扑选择）
+        </label>
+      </Field>
+
+      {enabled && (
+        <>
+          <Field>
+            <FieldLabel>Session ID 字段（每行一个）</FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                value={sessionInput}
+                onChange={(event) => setSessionInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addSession() } }}
+                placeholder="如：X-Session-Id、session-id"
+              />
+              <Button type="button" variant="outline" onClick={addSession}>添加</Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {sessionFields.map((item) => (
+                <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                  {item}
+                  <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setSessionFields((current) => current.filter((m) => m !== item))}>×</button>
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">从请求头（同名字段，大小写不敏感）或请求体（gjson 路径）中提取 session ID，第一个有值的生效。</p>
+          </Field>
+
+          <Field>
+            <FieldLabel>模型名字段（每行一个）</FieldLabel>
+            <div className="flex gap-2">
+              <Input
+                value={modelInput}
+                onChange={(event) => setModelInput(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addModel() } }}
+                placeholder="如：model、llm_model"
+              />
+              <Button type="button" variant="outline" onClick={addModel}>添加</Button>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {modelFields.map((item) => (
+                <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                  {item}
+                  <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setModelFields((current) => current.filter((m) => m !== item))}>×</button>
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">留空时直接用请求的 model 字段。</p>
+          </Field>
+        </>
+      )}
+
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button
+          disabled={saving}
+          onClick={async () => {
+            await onSave({
+              enabled,
+              sessionIdFields: sessionFields,
+              modelFields,
+            })
+          }}
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </DialogFooter>
+    </FieldGroup>
+  )
+}
+
+const EMPTY_FALLBACK: ChannelAffinityFallback = {
+  enabled: false,
+  sessionIdFields: [],
+  modelFields: [],
+}
+
+function emptySetting(): ChannelAffinitySetting {
+  return { enabled: false, defaultTtlSeconds: 1800, rules: [] }
+}
+
 export function ChannelAffinityPage() {
-  const [setting, setSetting] = useState<ChannelAffinitySetting | null>(null)
+  const [payload, setPayload] = useState<ChannelAffinityPayload | null>(null)
   const [editing, setEditing] = useState<ChannelAffinityRule | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isFallbackOpen, setIsFallbackOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -183,7 +299,7 @@ export function ChannelAffinityPage() {
     setIsLoading(true)
     setError(null)
     try {
-      setSetting(await dashboardApi.getChannelAffinity())
+      setPayload(await dashboardApi.getChannelAffinity())
     } catch (loadError) {
       setError(loadError instanceof DashboardApiError ? loadError.message : '加载渠道亲和性配置失败')
     } finally {
@@ -193,12 +309,12 @@ export function ChannelAffinityPage() {
 
   useEffect(() => { void load() }, [])
 
-  const save = async (next: ChannelAffinitySettingInput) => {
+  const save = async (next: ChannelAffinityPayload) => {
     setIsSaving(true)
     setError(null)
     try {
       const saved = await dashboardApi.saveChannelAffinity(next)
-      setSetting(saved)
+      setPayload(saved)
       return true
     } catch (saveError) {
       setError(saveError instanceof DashboardApiError ? saveError.message : '保存渠道亲和性配置失败')
@@ -209,12 +325,12 @@ export function ChannelAffinityPage() {
   }
 
   const handleSaveRule = async (rule: ChannelAffinityRule) => {
-    if (!setting) return
-    const exists = setting.rules.some((item) => item.name === rule.name)
+    if (!payload) return
+    const exists = payload.setting.rules.some((item) => item.name === rule.name)
     const rules = exists
-      ? setting.rules.map((item) => (item.name === rule.name ? rule : item))
-      : [...setting.rules, rule]
-    const ok = await save({ enabled: true, defaultTtlSeconds: setting.defaultTtlSeconds, rules })
+      ? payload.setting.rules.map((item) => (item.name === rule.name ? rule : item))
+      : [...payload.setting.rules, rule]
+    const ok = await save({ ...payload, setting: { ...payload.setting, enabled: true, rules } })
     if (ok) {
       setEditing(null)
       setIsDialogOpen(false)
@@ -222,19 +338,29 @@ export function ChannelAffinityPage() {
   }
 
   const handleDeleteRule = async (name: string) => {
-    if (!setting) return
+    if (!payload) return
     await save({
-      enabled: true,
-      defaultTtlSeconds: setting.defaultTtlSeconds,
-      rules: setting.rules.filter((item) => item.name !== name),
+      ...payload,
+      setting: {
+        ...payload.setting,
+        enabled: true,
+        rules: payload.setting.rules.filter((item) => item.name !== name),
+      },
     })
   }
 
-  const current = setting ?? { enabled: false, defaultTtlSeconds: 1800, rules: [] }
-  const total = current.rules.length
+  const handleSaveFallback = async (next: ChannelAffinityFallback) => {
+    if (!payload) return
+    const ok = await save({ ...payload, fallback: next })
+    if (ok) setIsFallbackOpen(false)
+  }
+
+  const setting = payload?.setting ?? emptySetting()
+  const fallback = payload?.fallback ?? EMPTY_FALLBACK
+  const total = setting.rules.length
   const pagedRules = useMemo(
-    () => current.rules.slice(offset, offset + limit),
-    [current.rules, offset, limit],
+    () => setting.rules.slice(offset, offset + limit),
+    [setting.rules, offset, limit],
   )
 
   const columns: ColumnDef<ChannelAffinityRule>[] = [
@@ -272,7 +398,7 @@ export function ChannelAffinityPage() {
       label: 'TTL（秒）',
       defaultWidth: { kind: 'pixel', value: 100 },
       defaultAlign: 'right',
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.ttlSeconds ?? current.defaultTtlSeconds}</span>,
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.ttlSeconds ?? setting.defaultTtlSeconds}</span>,
     },
     {
       key: 'enabled',
@@ -303,6 +429,15 @@ export function ChannelAffinityPage() {
         description="请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道"
         status={`${total} 条规则`}
       />
+      <div className="flex flex-wrap items-center gap-2 px-6 pt-2">
+        <Button
+          variant="outline"
+          onClick={() => setIsFallbackOpen(true)}
+          disabled={isSaving || isLoading}
+        >
+          兜底渠道亲和性匹配：{fallback.enabled ? '开启' : '关闭'}
+        </Button>
+      </div>
       <div className="p-6">
         <DataTable
           id="channel-affinity"
@@ -329,6 +464,13 @@ export function ChannelAffinityPage() {
         <DialogContent width="md">
           <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
           <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} saving={isSaving} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isFallbackOpen} onOpenChange={setIsFallbackOpen}>
+        <DialogContent width="md">
+          <DialogHeader><DialogTitle>兜底渠道亲和性匹配</DialogTitle></DialogHeader>
+          <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} onCancel={() => setIsFallbackOpen(false)} saving={isSaving} />
         </DialogContent>
       </Dialog>
     </div>

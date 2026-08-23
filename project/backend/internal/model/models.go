@@ -199,6 +199,14 @@ type FailoverRule struct {
 	Status           bool             `gorm:"not null" json:"status"`
 	Keywords         []string         `gorm:"serializer:json;type:text" json:"keywords"`
 	Actions          []FailoverAction `gorm:"serializer:json;type:text" json:"actions"`
+
+	// Single-action fields. When Dimension is set, runtime prefers these
+	// over the legacy Actions array.
+	Dimension     string   `gorm:"default:''" json:"dimension"`
+	RetryCount    int      `gorm:"default:0" json:"retry_count"`
+	AutoDisable   bool     `gorm:"default:true" json:"auto_disable"`
+	MatchPatterns []string `gorm:"serializer:json;type:text" json:"match_patterns"`
+	TTFBSeconds   int      `gorm:"default:0" json:"ttfb_seconds"`
 }
 
 type FailoverAction struct {
@@ -214,10 +222,29 @@ const (
 	FailoverDimensionProvider = "provider"
 )
 
+// SingleAction returns the rule's effective single action, falling back
+// to the first legacy Actions entry when the new fields are unset.
+func (r *FailoverRule) SingleAction() (string, int, bool) {
+	if r.Dimension != "" {
+		retry := r.RetryCount
+		if retry <= 0 {
+			retry = 3
+		}
+		return r.Dimension, retry, r.AutoDisable
+	}
+	if len(r.Actions) == 0 {
+		return "", 0, false
+	}
+	return r.Actions[0].Dimension, r.Actions[0].RetryCount, r.Actions[0].AutoDisable
+}
+
 // Normalize applies compatibility defaults to rows created before the richer
 // failover payload existed. The action sequence is fixed and persisted in this
 // order so runtime behavior remains deterministic.
 func (r *FailoverRule) Normalize() {
+	if r.Dimension != "" {
+		return
+	}
 	if len(r.Actions) == 0 {
 		r.Actions = []FailoverAction{
 			{Dimension: FailoverDimensionBaseURL, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
@@ -227,24 +254,28 @@ func (r *FailoverRule) Normalize() {
 	}
 }
 
-func (r *FailoverRule) ValidateActions() error {
-	if len(r.Actions) != 3 {
-		return fmt.Errorf("failover actions must contain exactly three dimensions")
+// Validate enforces the single-action contract: either Dimension is set
+// or at most one legacy Actions entry exists.
+func (r *FailoverRule) Validate() error {
+	if r.Dimension == "" && len(r.Actions) == 0 {
+		return fmt.Errorf("failover rule must specify dimension or actions")
 	}
-	seen := make(map[string]bool, len(r.Actions))
-	for _, action := range r.Actions {
-		if action.RetryCount <= 0 {
-			return fmt.Errorf("failover action %q retry_count must be positive", action.Dimension)
-		}
-		switch action.Dimension {
+	if r.Dimension != "" {
+		switch r.Dimension {
 		case FailoverDimensionBaseURL, FailoverDimensionKey, FailoverDimensionProvider:
 		default:
-			return fmt.Errorf("invalid failover action dimension %q", action.Dimension)
+			return fmt.Errorf("invalid failover dimension %q", r.Dimension)
 		}
-		if seen[action.Dimension] {
-			return fmt.Errorf("duplicate failover action dimension %q", action.Dimension)
+		if r.RetryCount < 0 {
+			return fmt.Errorf("failover retry_count must be non-negative")
 		}
-		seen[action.Dimension] = true
+		if r.TTFBSeconds < 0 {
+			return fmt.Errorf("failover ttfb_seconds must be non-negative")
+		}
+		return nil
+	}
+	if len(r.Actions) > 1 {
+		return fmt.Errorf("failover rule must contain exactly one action (got %d)", len(r.Actions))
 	}
 	return nil
 }
@@ -296,6 +327,30 @@ type TopologyConfig struct {
 	Flat      string    `gorm:"type:text" json:"flat"`  // JSON flat topology (nodes + wires)
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// RequestChannelHistory remembers which channel was last used for a
+// (session_id, model) pair, used by the fallback channel affinity feature.
+type RequestChannelHistory struct {
+	ID            string    `gorm:"primaryKey;type:uuid" json:"id"`
+	SessionID     string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"session_id"`
+	Model         string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"model"`
+	ProviderID    string    `gorm:"not null" json:"provider_id"`
+	KeyIndex      int       `gorm:"default:-1" json:"key_index"`
+	BaseURLIndex  int       `gorm:"default:-1" json:"base_url_index"`
+	LastUsedAt    time.Time `gorm:"index" json:"last_used_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (h *RequestChannelHistory) BeforeCreate(tx *gorm.DB) error {
+	if h.ID == "" {
+		h.ID = uuid.New().String()
+	}
+	if h.LastUsedAt.IsZero() {
+		h.LastUsedAt = time.Now()
+	}
+	return nil
 }
 
 // PriceRule is a JSON sub-struct stored inside PriceConfig.Rules (not a table).

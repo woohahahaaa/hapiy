@@ -55,19 +55,53 @@ func TestFailoverRuleActions_roundTripPreservesClientOrderAndPerRowSettings(t *t
 	}
 }
 
-func TestFailoverRuleValidateActions_rejectsDuplicateDimension(t *testing.T) {
-	// Given
+func TestFailoverRuleValidate_rejectsMultipleLegacyActions(t *testing.T) {
 	rule := FailoverRule{Actions: []FailoverAction{
-		{Dimension: FailoverDimensionBaseURL, RetryCount: 3},
 		{Dimension: FailoverDimensionBaseURL, RetryCount: 3},
 		{Dimension: FailoverDimensionProvider, RetryCount: 3},
 	}}
+	if err := rule.Validate(); err == nil {
+		t.Fatal("expected multiple-action validation failure")
+	}
+}
 
-	// When
-	err := rule.ValidateActions()
+func TestFailoverRuleValidate_acceptsSingleDimension(t *testing.T) {
+	rule := FailoverRule{Dimension: FailoverDimensionKey, RetryCount: 3, TTFBSeconds: 5}
+	if err := rule.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
-	// Then
-	if err == nil {
-		t.Fatal("expected duplicate dimension validation failure")
+func TestFailoverRuleValidate_rejectsInvalidDimension(t *testing.T) {
+	rule := FailoverRule{Dimension: "garbage", RetryCount: 3}
+	if err := rule.Validate(); err == nil {
+		t.Fatal("expected invalid dimension validation failure")
+	}
+}
+
+func TestFailoverRuleSingleAction_prefersNewFields(t *testing.T) {
+	rule := FailoverRule{
+		Dimension:   FailoverDimensionKey,
+		RetryCount:  5,
+		AutoDisable: true,
+		Actions: []FailoverAction{
+			{Dimension: FailoverDimensionBaseURL, RetryCount: 1, AutoDisable: false},
+		},
+	}
+	dim, retry, autoDisable := rule.SingleAction()
+	if dim != FailoverDimensionKey || retry != 5 || !autoDisable {
+		t.Fatalf("SingleAction should prefer new fields, got dim=%q retry=%d auto=%v", dim, retry, autoDisable)
+	}
+}
+
+func TestFailoverRuleSingleAction_fallsBackToLegacy(t *testing.T) {
+	rule := FailoverRule{
+		Actions: []FailoverAction{
+			{Dimension: FailoverDimensionProvider, RetryCount: 4, AutoDisable: false},
+		},
+	}
+	dim, retry, autoDisable := rule.SingleAction()
+	if dim != FailoverDimensionProvider || retry != 4 || autoDisable {
+		t.Fatalf("SingleAction should fall back to legacy, got dim=%q retry=%d auto=%v", dim, retry, autoDisable)
 	}
 }

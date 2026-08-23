@@ -82,6 +82,10 @@ func main() {
 	// failure when auto refresh is enabled.
 	service.StartExchangeRateScheduler(db)
 
+	// Auto-recovery scheduler: re-enables disabled providers/BaseURLs/keys
+	// whose probe returns upstream-OK (and TTFB within threshold, if set).
+	service.StartRecoveryScheduler(db)
+
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
 	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
 	defer stopTopologyArchive()
@@ -228,6 +232,25 @@ func main() {
 			relayGroup.POST("/audio/speech", handler.Relay(db, engine))
 			relayGroup.POST("/audio/transcriptions", handler.Relay(db, engine))
 		}
+
+		// Own model list: serves at the path configured by `own_model_list_endpoint`.
+		v1.GET("/*any", middleware.TokenAuth(db), func(c *gin.Context) {
+			endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+				return
+			}
+			expected := strings.TrimSpace(endpoint)
+			if expected == "" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
+				return
+			}
+			if c.Request.URL.Path != expected {
+				c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
+				return
+			}
+			handler.OwnModelList(db)(c)
+		})
 	}
 
 	// Production mode: serve the built frontend from the same Go origin so
