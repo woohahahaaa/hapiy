@@ -268,14 +268,11 @@ function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
   ]
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
-      <div className="mb-2 flex items-center gap-3">
-        <h4 className="shrink-0 font-medium text-muted-foreground">耗时</h4>
-        <div className="h-px flex-1 bg-border" />
-      </div>
+      <div className="mb-2 h-px bg-border" />
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         {rows.map(([label, val]) => (
           <div key={label} className="flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{label}</span>
             <span className="break-words text-foreground">{fmtMs(val)}</span>
           </div>
         ))}

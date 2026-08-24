@@ -432,19 +432,20 @@ function LogDetailFields({ log }: { log: UsageLog }) {
     : `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`
   return (
     <div className="space-y-4 text-xs">
-      <FieldGroup title="基本信息">
-        <DetailRow label="时间" value={timeText} />
-        <DetailRow label="令牌" value={log.tokenName || '-'} />
-        <DetailRow label="供应商" value={log.providerName || '-'} />
-        <DetailRow label="模型" value={log.modelName || '-'} />
-        <DetailRow label="来源" value={log.source || '-'} />
+      <FieldGroup>
+        <DetailRow className="col-span-2" label="时间" value={timeText} />
+        <DetailRow className="col-span-2" label="令牌" value={log.tokenName || '-'} />
+        <DetailRow className="col-span-2" label="供应商" value={log.providerName || '-'} />
+        <DetailRow className="col-span-2" label="模型" value={log.modelName || '-'} />
+        <DetailRow className="col-span-2" label="来源" value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
-          <span className="shrink-0 min-w-[4rem] text-muted-foreground">上游 URL</span>
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 URL</span>
           <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
         </div>
       </FieldGroup>
-      <FieldGroup title="用量">
+      <FieldGroup>
         <DetailRow
+          className="col-span-2"
           label="Tokens"
           value={
             <span>
@@ -455,11 +456,12 @@ function LogDetailFields({ log }: { log: UsageLog }) {
             </span>
           }
         />
-        <DetailRow label="流式" value={log.isStream ? 'SSE' : '-'} />
-        <DetailRow label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
+        <DetailRow className="col-span-2" label="流式" value={log.isStream ? 'SSE' : '-'} />
+        <DetailRow className="col-span-2" label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
       </FieldGroup>
-      <FieldGroup title="耗时">
+      <FieldGroup>
         <DetailRow
+          className="col-span-2"
           label="耗时"
           value={
             <span className="space-y-1">
@@ -473,11 +475,11 @@ function LogDetailFields({ log }: { log: UsageLog }) {
           }
         />
       </FieldGroup>
-      <FieldGroup title="状态">
-        <DetailRow label="状态" value={log.status === 'success' ? '成功' : '失败'} />
+      <FieldGroup>
+        <DetailRow className="col-span-2" label="状态" value={log.status === 'success' ? '成功' : '失败'} />
         {log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground">报错原因</span>
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">报错原因</span>
             <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
           </div>
         )}
@@ -486,22 +488,19 @@ function LogDetailFields({ log }: { log: UsageLog }) {
   )
 }
 
-function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+function FieldGroup({ children }: { children: ReactNode }) {
   return (
     <section>
-      <div className="mb-2 flex items-center gap-3">
-        <h4 className="shrink-0 font-medium text-muted-foreground">{title}</h4>
-        <div className="h-px flex-1 bg-border" />
-      </div>
+      <div className="mb-3 h-px bg-border" />
       <div className="grid grid-cols-2 gap-x-6 gap-y-2">{children}</div>
     </section>
   )
 }
 
-function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+function DetailRow({ label, value, className = '' }: { label: string; value: ReactNode; className?: string }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="shrink-0 min-w-[4rem] text-muted-foreground">{label}</span>
+    <div className={`flex items-baseline gap-2 ${className}`}>
+      <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{label}</span>
       <span className="break-words text-foreground">{value}</span>
     </div>
   )
