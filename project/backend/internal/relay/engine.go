@@ -182,8 +182,9 @@ type RelayResponse struct {
 	Headers    map[string]string
 	Body       io.ReadCloser
 	Usage      *UsageInfo
-	// FirstByteAt is the moment the upstream response headers arrived; the
-	// handler uses it to measure time-to-first-byte for streaming responses.
+	// FirstByteAt is the moment the upstream request was issued (right before
+	// Do); the handler uses it as the TTFB baseline and measures
+	// time-to-first-byte as FirstByteAt -> first body byte read.
 	FirstByteAt time.Time
 	// Stage timings in milliseconds; -1 means the stage did not apply.
 	ConnectMs         int
@@ -697,7 +698,7 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 		Body:        resp.Body,
 		Usage:       nil,
 		ConnectMs:   connectMs,
-		FirstByteAt: time.Now(),
+		FirstByteAt: connectStart,
 	}, nil
 }
 
@@ -736,7 +737,7 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 		Headers:     flattenHeaders(resp.Header),
 		Body:        resp.Body,
 		ConnectMs:   connectMs,
-		FirstByteAt: time.Now(),
+		FirstByteAt: connectStart,
 	}, nil
 }
 

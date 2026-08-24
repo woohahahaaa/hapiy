@@ -89,6 +89,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Model:     relayReq.Model,
 			TokenName: getString(tokenName),
 			UserID:    getString(userID),
+			Source:    service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			Stream:    relayReq.Stream,
 			StartTime: startTime,
 			Stage:     "queued",
@@ -107,7 +108,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
-					"message": fmt.Sprintf("no provider available for model: %s", relayReq.Model),
+					"message": fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、自动禁用状态、拓扑接线。", relayReq.Model),
 					"type":    "service_unavailable",
 				},
 			})
@@ -245,7 +246,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			firstByteMs, clientDisconnected = handleStreamingResponse(c, resp, requestID)
 		} else {
 			common.Global().UpdateActiveRequestProgress(requestID, "receiving", 0, 0)
-			handleNonStreamingResponse(c, resp)
+			firstByteMs = handleNonStreamingResponse(c, resp)
 		}
 
 		// Backfill stream timings on log capture rows when the request has
@@ -395,15 +396,16 @@ func extractUsageInfo(body []byte, contentType string) *relay.UsageInfo {
 	}
 }
 
-func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) {
+func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 	defer resp.Body.Close()
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read response"})
-		return
+		return -1
 	}
 	resp.Usage = extractUsageInfo(bodyBytes, resp.Headers["content-type"])
 	c.Data(resp.StatusCode, "application/json", bodyBytes)
+	return int(time.Since(resp.FirstByteAt).Milliseconds())
 }
 
 // handleStreamingResponse forwards the SSE body and returns the elapsed

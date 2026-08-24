@@ -28,6 +28,13 @@ import { dashboardApi, type DateRange, type UsageLog } from '@/lib/dashboard-api
 // Cap auto-load at this many rows so a huge total doesn't keep paginating forever.
 const AUTO_LOAD_CAP = 500
 
+// Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
+function fmtSeconds(val: number): string {
+  if (val < 0) return '-'
+  if (val === 0) return '0s'
+  return `${Math.max(0.1, val / 1000).toFixed(1)}s`
+}
+
 export function LogsPage() {
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
@@ -242,10 +249,10 @@ export function LogsPage() {
       slot: {
         line1: (row) => `${(row.useTime / 1000).toFixed(1)}s`,
         line2: (row) => {
-          const fmt = (val: number, label: string) =>
-            val >= 0
-              ? `<#ffffff66>${label}: </#ffffff66><#fafafa>${val}ms</#fafafa>`
-              : `<#ffffff66>${label}: </#ffffff66><#fafafa>-</#fafafa>`
+          const fmt = (val: number, label: string, error = false) => {
+            const color = error ? 'dc2626' : 'fafafa'
+            return `<#ffffff66>${label}: </#ffffff66><#${color}>${fmtSeconds(val)}</#${color}>`
+          }
           return [
             fmt(row.queueWaitMs, '排队'),
             ' ',
@@ -253,7 +260,7 @@ export function LogsPage() {
             ' ',
             fmt(row.connectMs, '连接'),
             ' ',
-            fmt(row.firstByteMs, '首字'),
+            fmt(row.firstByteMs, '首字', row.firstByteMs > 20000),
             ' ',
             fmt(row.responseRewriteMs, '响应改写'),
             ' ',
@@ -419,7 +426,6 @@ export function LogsPage() {
 }
 
 function LogDetailFields({ log }: { log: UsageLog }) {
-  const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '-')
   const date = new Date(log.createdAt)
   const timeText = Number.isNaN(date.getTime())
     ? log.createdAt
@@ -431,6 +437,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow label="令牌" value={log.tokenName || '-'} />
         <DetailRow label="供应商" value={log.providerName || '-'} />
         <DetailRow label="模型" value={log.modelName || '-'} />
+        <DetailRow label="来源" value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground">上游 URL</span>
           <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
@@ -452,13 +459,19 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
       </FieldGroup>
       <FieldGroup title="耗时">
-        <DetailRow label="耗时" value={`${(log.useTime / 1000).toFixed(1)}s`} />
-        <DetailRow label="排队" value={fmtMs(log.queueWaitMs)} />
-        <DetailRow label="请求改写" value={fmtMs(log.requestRewriteMs)} />
-        <DetailRow label="连接" value={fmtMs(log.connectMs)} />
-        <DetailRow label="首字" value={fmtMs(log.firstByteMs)} />
-        <DetailRow label="响应改写" value={fmtMs(log.responseRewriteMs)} />
-        <DetailRow label="流式改写" value={fmtMs(log.streamRewriteMs)} />
+        <DetailRow
+          label="耗时"
+          value={
+            <span className="space-y-1">
+              <span className="block">{`${(log.useTime / 1000).toFixed(1)}s`}</span>
+              <span className="block text-muted-foreground/60">
+                排队 {fmtSeconds(log.queueWaitMs)} · 请求改写 {fmtSeconds(log.requestRewriteMs)} · 连接{' '}
+                {fmtSeconds(log.connectMs)} · 首字 {fmtSeconds(log.firstByteMs)} · 响应改写{' '}
+                {fmtSeconds(log.responseRewriteMs)} · 流式改写 {fmtSeconds(log.streamRewriteMs)}
+              </span>
+            </span>
+          }
+        />
       </FieldGroup>
       <FieldGroup title="状态">
         <DetailRow label="状态" value={log.status === 'success' ? '成功' : '失败'} />

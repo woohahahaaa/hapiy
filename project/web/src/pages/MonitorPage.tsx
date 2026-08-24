@@ -65,11 +65,11 @@ function formatOutcome(outcome: string): string {
     case 'upstream_error':
       return '上游报错'
     case 'failed':
-      return '失败'
+      return '无可用供应商'
     case 'queued_rejected':
-      return '排队拒绝'
+      return '并发超限'
     case 'invalid_request':
-      return '请求无效'
+      return '解析错误'
     default:
       return '已结束'
   }
