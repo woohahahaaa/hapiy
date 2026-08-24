@@ -48,11 +48,11 @@ function RewriteRulePreview({ script }: { script: string }) {
   const actionCount = form.blocks.reduce((sum, b) => sum + b.actions.filter(isActionValid).length, 0)
 
   if (ruleCount === 0 || actionCount === 0) {
-    return <span className="text-xs text-muted-foreground">无操作</span>
+    return <span className="text-xs">无操作</span>
   }
 
   return (
-    <span className="text-xs text-muted-foreground">
+    <span className="text-xs">
       {ruleCount} 规则 · {actionCount} 执行
     </span>
   )
@@ -627,7 +627,7 @@ function FailoverPage() {
 
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs text-muted-foreground">{(row.keywords ?? []).join('、') || '未设置'}</span> },
+    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs">{(row.keywords ?? []).join('、') || '未设置'}</span> },
     { key: 'actions', label: '自动禁用', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
     {
       key: 'id',

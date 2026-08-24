@@ -98,6 +98,10 @@ type Log struct {
 	// reused on this request: empty when no affinity rule matched, otherwise
 	// "none" / "partial" / "full" (see relay.AffinityReuse*).
 	AffinityReuse string `json:"affinity_reuse"`
+	// AffinityReuseParts is a comma-separated list of the channel dimensions
+	// that were reused ("provider","baseurl","key"); empty when nothing was
+	// reused or no affinity rule matched.
+	AffinityReuseParts string `json:"affinity_reuse_parts"`
 	IP            string `json:"ip"`
 	RequestID     string `json:"request_id"`
 	ErrorMessage  string `json:"error_message"`
@@ -373,8 +377,8 @@ type RequestChannelHistory struct {
 	SessionID     string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"session_id"`
 	Model         string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"model"`
 	ProviderID    string    `gorm:"not null" json:"provider_id"`
-	KeyIndex      int       `gorm:"default:-1" json:"key_index"`
-	BaseURLIndex  int       `gorm:"default:-1" json:"base_url_index"`
+	KeyIndex      int       `json:"key_index"`
+	BaseURLIndex  int       `json:"base_url_index"`
 	LastUsedAt    time.Time `gorm:"index" json:"last_used_at"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`

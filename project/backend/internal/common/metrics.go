@@ -55,6 +55,7 @@ type ActiveRequest struct {
 	Stream        bool       `json:"stream"`
 	StartTime     time.Time  `json:"start_time"`
 	ElapsedMs     int64      `json:"elapsed_ms"`
+	FirstByteMs   *int64     `json:"first_byte_ms,omitempty"`
 	EndTime       *time.Time `json:"end_time"`
 	Outcome       string     `json:"outcome"`
 	Stage         string     `json:"stage"`
@@ -119,6 +120,26 @@ func (m *Metrics) UpdateActiveRequestProgress(requestID, stage string, chunks, b
 	req.Stage = stage
 	req.ChunkCount = chunks
 	req.BytesReceived = bytesReceived
+	m.activeEntries.Store(requestID, &req)
+}
+
+// UpdateActiveRequestFirstByte records the first-byte latency (ms) for an
+// in-flight request entry once the first upstream body byte is received.
+// Negative values (first byte never arrived) are ignored.
+func (m *Metrics) UpdateActiveRequestFirstByte(requestID string, firstByteMs int64) {
+	if requestID == "" || firstByteMs < 0 {
+		return
+	}
+	v, ok := m.activeEntries.Load(requestID)
+	if !ok {
+		return
+	}
+	req := *v.(*ActiveRequest)
+	if req.EndTime != nil {
+		return
+	}
+	ms := firstByteMs
+	req.FirstByteMs = &ms
 	m.activeEntries.Store(requestID, &req)
 }
 

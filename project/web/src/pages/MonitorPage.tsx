@@ -85,7 +85,7 @@ function formatOutcomeClass(outcome: string): string {
     case 'invalid_request':
       return 'text-destructive'
     default:
-      return 'text-muted-foreground'
+      return ''
   }
 }
 
@@ -94,14 +94,10 @@ function formatLatency(ms: number): string {
   return `${ms}ms`
 }
 
-function formatElapsed(ms: number): string {
-  if (ms >= 60000) {
-    const m = Math.floor(ms / 60000)
-    const s = Math.floor((ms % 60000) / 1000)
-    return `${m}m ${s}s`
-  }
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms)}ms`
+function fmtSeconds(val: number): string {
+  if (val < 0) return '-'
+  if (val === 0) return '0s'
+  return `${Math.max(0.1, val / 1000).toFixed(1)}s`
 }
 
 function formatDateTimeCell(value: unknown): { date: string; time: string } | null {
@@ -144,16 +140,8 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
     },
   },
   {
-    key: 'endTime',
-    label: '结束时间',
-    defaultWidth: { kind: 'pixel', value: 160 },
-    defaultOverflow: 'wrap',
-    slot: {
-      line1: (row) => formatDateTimeCell(row.endTime)?.date ?? null,
-      line2: (row) => formatDateTimeCell(row.endTime)?.time ?? null,
-    },
+    key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 },
   },
-  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
   { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
   { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
   { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null) },
@@ -161,9 +149,17 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
   {
     key: 'elapsedMs',
     label: '耗时',
-    defaultWidth: { kind: 'pixel', value: 100 },
+    defaultWidth: { kind: 'percent', value: 13 },
     defaultAlign: 'right',
-    render: (v) => formatElapsed(v as number),
+    defaultOverflow: 'wrap',
+    accessor: (row) => {
+      const total = fmtSeconds(row.elapsedMs)
+      const firstByte = row.firstByteMs != null ? fmtSeconds(row.firstByteMs) : '-'
+      const fbColored = row.firstByteMs != null && row.firstByteMs > 20000
+        ? `<#dc2626>${firstByte}</#dc2626>`
+        : firstByte
+      return `${total}（首字:${fbColored}）`
+    },
   },
 ]
 

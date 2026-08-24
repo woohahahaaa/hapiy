@@ -57,19 +57,35 @@ export function DateRangeFilter({
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <Input
-        type="date"
-        value={value.from ?? ''}
-        onChange={(e) => onChange({ ...value, from: e.target.value || undefined })}
-        className="w-36"
-      />
+      <div className="relative">
+        <Input
+          type="date"
+          placeholder="开始"
+          value={value.from ?? ''}
+          onChange={(e) => onChange({ ...value, from: e.target.value || undefined })}
+          className="peer w-36"
+        />
+        {!value.from && (
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground peer-placeholder-shown:hidden">
+            开始
+          </span>
+        )}
+      </div>
       <span className="text-xs text-muted-foreground">至</span>
-      <Input
-        type="date"
-        value={value.to ?? ''}
-        onChange={(e) => onChange({ ...value, to: e.target.value || undefined })}
-        className="w-36"
-      />
+      <div className="relative">
+        <Input
+          type="date"
+          placeholder="结束"
+          value={value.to ?? ''}
+          onChange={(e) => onChange({ ...value, to: e.target.value || undefined })}
+          className="peer w-36"
+        />
+        {!value.to && (
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground peer-placeholder-shown:hidden">
+            结束
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-1 ml-1">
         {QUICK_OPTIONS.map((opt) => (
           <Button

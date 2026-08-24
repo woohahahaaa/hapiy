@@ -125,6 +125,10 @@ type DispatchResult struct {
 	// empty when no affinity rule matched, otherwise one of the
 	// AffinityReuse* constants.
 	AffinityReuse string
+	// AffinityReuseParts lists which dimensions of the last channel were
+	// reused ("provider", "baseurl", "key"); empty when AffinityReuse is
+	// empty or the request created a fresh channel.
+	AffinityReuseParts []string
 	// PathNodeIDs is the exact node path the request traverses
 	// (entry -> provider -> slots), captured at dispatch time. Empty when
 	// the request was served outside the flat-topology walk (affinity recall).
@@ -253,6 +257,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 				BaseURLIndex:  hint.baseURLIndex,
 				AffinityReuse: reuse,
 			}
+			result.AffinityReuseParts = e.reuseParts(hint, result)
 			return result, true
 		}
 	}
@@ -263,13 +268,15 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 		for _, c := range candidates {
 			for bi, u := range c.plan.BaseURLs {
 				if u == baseURL {
-					return &DispatchResult{
+					result := &DispatchResult{
 						Plan:          c.plan,
 						Provider:      c.provider,
 						KeyIndex:      hint.keyIndex,
 						BaseURLIndex:  bi,
 						AffinityReuse: AffinityReusePartial,
-					}, true
+					}
+					result.AffinityReuseParts = e.reuseParts(hint, result)
+					return result, true
 				}
 			}
 		}
@@ -281,19 +288,45 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 		for _, c := range candidates {
 			for ki, k := range c.plan.Keys {
 				if k == key {
-					return &DispatchResult{
+					result := &DispatchResult{
 						Plan:          c.plan,
 						Provider:      c.provider,
 						KeyIndex:      ki,
 						BaseURLIndex:  hint.baseURLIndex,
 						AffinityReuse: AffinityReusePartial,
-					}, true
+					}
+					result.AffinityReuseParts = e.reuseParts(hint, result)
+					return result, true
 				}
 			}
 		}
 	}
 
 	return nil, false
+}
+
+// reuseParts computes which dimensions of the hinted channel the final result
+// actually reused, by comparing the hint's values against the selected plan.
+func (e *Engine) reuseParts(hint channelHint, result *DispatchResult) []string {
+	var parts []string
+	if result.Provider != nil &&
+		((hint.providerID != "" && hint.providerID == result.Provider.ID) ||
+			(hint.providerName != "" && hint.providerName == result.Provider.Name)) {
+		parts = append(parts, "provider")
+	}
+	if result.Plan != nil {
+		if url := e.hintBaseURL(hint); url != "" &&
+			result.BaseURLIndex >= 0 && result.BaseURLIndex < len(result.Plan.BaseURLs) &&
+			result.Plan.BaseURLs[result.BaseURLIndex] == url {
+			parts = append(parts, "baseurl")
+		}
+		if key := e.hintKey(hint); key != "" &&
+			result.KeyIndex >= 0 && result.KeyIndex < len(result.Plan.Keys) &&
+			result.Plan.Keys[result.KeyIndex] == key {
+			parts = append(parts, "key")
+		}
+	}
+	return parts
 }
 
 // eligibleAffinityCandidates builds the current eligible provider set for a

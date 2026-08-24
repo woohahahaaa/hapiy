@@ -87,6 +87,20 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value string, req *Re
 		return
 	}
 	bodyJSON := compactBody(req.Body)
+	// Apply the configured recovery rewrite to the recorded body BEFORE
+	// compaction, so the stored payload already reflects the user's
+	// field delete/replace rules (smaller rows; the replay then uses the
+	// stored body as-is).
+	if h := e.recoveryHandler(); h != nil {
+		if raw, err := json.Marshal(req.Body); err == nil {
+			if rewritten, ok := applyRecoveryHandler(raw, h); ok {
+				var next map[string]interface{}
+				if json.Unmarshal(rewritten, &next) == nil {
+					bodyJSON = compactBody(next)
+				}
+			}
+		}
+	}
 
 	now := time.Now()
 	row := model.DisabledRecord{
@@ -98,6 +112,10 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value string, req *Re
 		ErrorMessage:   errMsg,
 		DisabledAt:     now,
 		RetryCount:     0,
+		// A re-disable must reopen the row: FirstOrCreate reuses any
+		// existing (provider, dimension, value) row, and a stale
+		// resolved_at would silently hide it from the pending table.
+		ResolvedAt: nil,
 	}
 	if dbErr := e.db.Where(
 		model.DisabledRecord{ProviderID: providerID, Dimension: dimension, Value: value},
@@ -143,10 +161,20 @@ func (e *Engine) pickReplayChannel(plan *ExecutionPlan) (string, string, bool) {
 // sends it against a healthy (baseURL, key) on the same provider.
 // Returns true when the upstream responded with a usable 2xx; the
 // cascade then clears the provider/baseURL disable state on the
-// same record's provider.
+// same record's provider. Records that lost their request body (e.g.
+// backfilled rows) honor the configured cooldown: they are skipped
+// until TimeoutHours have elapsed since the disable.
 func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	if e.db == nil || record == nil {
 		return false
+	}
+	// Body-less records only replay after the cooldown has elapsed.
+	if record.RequestBody == "" && record.RequestHeaders == "" {
+		if h := e.recoveryHandler(); h != nil && h.TimeoutHours > 0 {
+			if record.DisabledAt.IsZero() || time.Since(record.DisabledAt) < time.Duration(h.TimeoutHours)*time.Hour {
+				return false
+			}
+		}
 	}
 	provider, err := e.GetProvider(record.ProviderID)
 	if err != nil || provider == nil {
@@ -187,11 +215,12 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	if !probe.Success {
 		return false
 	}
-	resolvedAt := time.Now()
-	if resolveErr := e.db.Model(&model.DisabledRecord{}).
-		Where("id = ?", record.ID).
-		Update("resolved_at", resolvedAt).Error; resolveErr != nil {
-		log.Printf("relay: mark disabled-record resolved: %v", resolveErr)
+	// Recovery succeeded: drop the row entirely instead of marking it
+	// resolved, so the table only ever holds pending records. A stale
+	// resolved_at would otherwise hide a later re-disable of the same
+	// entity (saveDisabledRecord reuses the row via FirstOrCreate).
+	if resolveErr := e.db.Where("id = ?", record.ID).Delete(&model.DisabledRecord{}).Error; resolveErr != nil {
+		log.Printf("relay: drop resolved disabled-record: %v", resolveErr)
 	}
 	e.resolveCascade(provider, baseURL)
 	return true
@@ -199,7 +228,10 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 
 // replayProbe sends the recorded request (compact body + headers) to
 // (baseURL, key) with a fresh chat completions call and reports whether
-// the upstream returned 2xx with a usable body.
+// the upstream returned 2xx with a usable body. When a recovery request
+// handler is configured, the recorded body is rewritten first (long user
+// payloads become a short token); otherwise a minimal self-built payload
+// is used.
 func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.DisabledRecord) service.ProbeResult {
 	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
 	if modelName == "" {
@@ -214,6 +246,13 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return service.ProbeResult{}
+	}
+	// The recorded body is stored post-rewrite + post-compaction, so replay
+	// it as-is when it parses; the self-built payload is only a fallback.
+	if record != nil && record.RequestBody != "" {
+		if json.Valid([]byte(record.RequestBody)) {
+			raw = []byte(record.RequestBody)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -238,14 +277,21 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 	start := time.Now()
 	resp, err := service.DefaultClient().Do(req)
 	if err != nil {
-		return service.ProbeResult{TTFB: time.Since(start)}
+		return service.ProbeResult{TTFB: time.Since(start), ErrorMessage: err.Error()}
 	}
 	defer resp.Body.Close()
 	rec := &ttfbRecorder{r: resp.Body, start: start}
 	body, _ := io.ReadAll(rec)
 	ttfb := rec.ttfb()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return service.ProbeResult{TTFB: ttfb}
+		// Surface the upstream's real error payload (e.g. OpenAI's
+		// {"error":{"message":...}}) so the dashboard shows what the
+		// upstream actually said instead of a generic message.
+		msg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		if excerpt := probeErrorExcerpt(body); excerpt != "" {
+			msg += ": " + excerpt
+		}
+		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 	var parsed struct {
 		Choices []json.RawMessage `json:"choices"`
@@ -282,36 +328,76 @@ func (f *ttfbRecorder) ttfb() time.Duration {
 	return f.stamp.Sub(f.start)
 }
 
-// resolveCascade clears disable states for the same (provider, baseURL)
-// and the provider itself when a probe succeeds. Sibling DisabledRecord
-// rows are marked resolved so they stop showing up in the table.
+// probeErrorExcerpt extracts a short human-readable error from an upstream
+// error body. It prefers OpenAI-style {"error":{"message":"..."}} and
+// Anthropic-style {"error":{"message":"..."}}; falls back to a raw snippet.
+func probeErrorExcerpt(body []byte) string {
+	const max = 300
+	var parsed struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &parsed) == nil {
+		msg := strings.TrimSpace(parsed.Error.Message)
+		if parsed.Error.Type != "" {
+			msg = parsed.Error.Type + ": " + msg
+		}
+		if msg != "" {
+			if len(msg) > max {
+				msg = msg[:max] + "…"
+			}
+			return msg
+		}
+	}
+	snippet := strings.TrimSpace(string(body))
+	if snippet == "" {
+		return ""
+	}
+	if len(snippet) > max {
+		snippet = snippet[:max] + "…"
+	}
+	return snippet
+}
+
+// resolveCascade clears disable states for the provider that just proved
+// healthy: every dimension of that provider (provider/base_url/key), the
+// provider's auto_disabled flag, and any base_url-dimension disable that
+// shares the same baseURL value (other providers reusing the endpoint).
+// Open DisabledRecord rows matching the provider or the baseURL are
+// dropped so no redundant replay probes run for them.
 func (e *Engine) resolveCascade(provider *model.Provider, baseURL string) {
 	if e.db == nil || provider == nil {
 		return
 	}
+	// Clear every disable dimension of this provider.
 	if err := e.db.Model(&model.ProviderDisableState{}).
-		Where("provider_id = ? AND dimension = ? AND value = ?",
-			provider.ID, model.FailoverDimensionBaseURL, baseURL).
+		Where("provider_id = ?", provider.ID).
 		Update("disabled", false).Error; err != nil {
-		log.Printf("relay: cascade clear baseURL: %v", err)
+		log.Printf("relay: cascade clear provider disables: %v", err)
 	}
-	if err := e.db.Model(&model.ProviderDisableState{}).
-		Where("provider_id = ? AND dimension = ? AND value = ?",
-			provider.ID, model.FailoverDimensionProvider, provider.ID).
-		Update("disabled", false).Error; err != nil {
-		log.Printf("relay: cascade clear provider: %v", err)
+	// Clear base_url-dimension disables on OTHER providers that reuse the
+	// same baseURL value (the endpoint itself is healthy).
+	if baseURL != "" {
+		if err := e.db.Model(&model.ProviderDisableState{}).
+			Where("dimension = ? AND value = ?", model.FailoverDimensionBaseURL, baseURL).
+			Update("disabled", false).Error; err != nil {
+			log.Printf("relay: cascade clear shared baseURL: %v", err)
+		}
 	}
 	if err := e.db.Model(&model.Provider{}).
 		Where("id = ?", provider.ID).
 		Update("auto_disabled", false).Error; err != nil {
 		log.Printf("relay: cascade clear provider.AutoDisabled: %v", err)
 	}
-	now := time.Now()
-	if err := e.db.Model(&model.DisabledRecord{}).
-		Where("provider_id = ? AND resolved_at IS NULL AND (dimension = ? OR dimension = ?)",
-			provider.ID, model.FailoverDimensionBaseURL, model.FailoverDimensionProvider).
-		Update("resolved_at", now).Error; err != nil {
-		log.Printf("relay: cascade resolve records: %v", err)
+	// Drop open records for this provider or for the recovered baseURL so
+	// the scheduler never replays them again.
+	query := e.db.Where("resolved_at IS NULL")
+	query = query.Where("provider_id = ? OR (dimension = ? AND value = ?)",
+		provider.ID, model.FailoverDimensionBaseURL, baseURL)
+	if err := query.Delete(&model.DisabledRecord{}).Error; err != nil {
+		log.Printf("relay: cascade drop records: %v", err)
 	}
 }
 

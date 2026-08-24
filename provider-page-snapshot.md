@@ -1,0 +1,51 @@
+- generic [ref=e2]:
+  - generic [ref=e15]:
+    - generic [ref=e18]:
+      - generic [ref=e20]:
+        - generic [ref=e21]: hapiy
+        - generic [ref=e22]:
+          - button "切换到浅色主题" [ref=e23]:
+            - generic [ref=e26]: 切换主题
+          - button "Toggle Sidebar" [ref=e27]
+      - generic [ref=e32]:
+        - generic [ref=e33]: 导航
+        - list [ref=e35]:
+          - listitem [ref=e36]:
+            - link "转发拓扑" [ref=e37] [cursor=pointer]:
+              - /url: /
+          - listitem [ref=e46]:
+            - button "监控" [ref=e47]
+            - list [ref=e59]
+          - listitem [ref=e69]:
+            - button "LLM配置" [ref=e70]
+            - list [ref=e83]
+          - listitem [ref=e96]:
+            - button "请求处理" [ref=e97]
+            - list [ref=e108]
+          - listitem [ref=e124]:
+            - button "系统设置" [ref=e125]
+            - list [ref=e136]
+          - listitem [ref=e149]:
+            - link "个人资料" [ref=e150] [cursor=pointer]:
+              - /url: /profile
+      - paragraph [ref=e158]: hapiy v0.1.0
+      - button "Toggle Sidebar" [ref=e159]
+    - main [ref=e160]:
+      - generic [ref=e161]:
+        - generic [ref=e162]:
+          - generic [ref=e165]:
+            - heading "供应商" [level=1] [ref=e166]
+            - paragraph [ref=e167]
+          - separator [ref=e169]
+        - generic [ref=e171]:
+          - generic [ref=e172]:
+            - button "添加供应商" [ref=e174]
+            - button "列设置" [ref=e178]
+          - table [ref=e182]:
+            - rowgroup [ref=e183]
+            - rowgroup [ref=e193]
+          - generic [ref=e416]:
+            - generic [ref=e417]
+            - generic [ref=e421]: 第 1 页，共 7 条
+            - generic [ref=e422]
+  - region "Notifications alt+T"

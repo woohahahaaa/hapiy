@@ -107,7 +107,7 @@ export function ModelHubNode({ data, id }: ModelHubNodeProps) {
 
       {!simplified && (
         <div
-          className="border-t border-border text-[10px] text-muted-foreground"
+          className="border-t border-border text-[10px]"
           style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
         >
           {models.length} models

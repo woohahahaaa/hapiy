@@ -165,13 +165,13 @@ export function PricePage() {
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
       render: (_, row) => {
-        const label = (text: string) => <span className="text-muted-foreground/40">{text}</span>
-        const price = (usd: number) =>
-          usd > 0 ? (
-            <span>{formatPrice(usd)}</span>
-          ) : (
-            <span className="text-muted-foreground/40">-</span>
-          )
+        const label = (text: string) => <span className="text-muted-foreground">{text}</span>
+const price = (usd: number) =>
+            usd > 0 ? (
+              <span>{formatPrice(usd)}</span>
+            ) : (
+              <span>-</span>
+            )
         return (
           <div className="text-xs tabular-nums">
             {label('输入')} {price(row.inputPrice)}{' '}

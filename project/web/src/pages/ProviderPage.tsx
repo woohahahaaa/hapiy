@@ -21,7 +21,7 @@ type ProviderFormProps = {
   readonly useKey: boolean
   readonly onUseKeyChange: (next: boolean) => void
   readonly disableStatus: ProviderDisableStatus | null
-  readonly onResetDisableStatus: (input: { readonly dimension: 'base_url' | 'key'; readonly value: string }) => void
+  readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
 }
 
 const emptyProvider: ProviderInput = {
@@ -101,26 +101,23 @@ export function ProviderPage() {
     }
   }
 
-  const handleResetDisableStatus = async (
-    provider: Provider,
-    input: { readonly dimension: 'base_url' | 'key'; readonly value: string },
-  ) => {
-    const reset = await runMutation(() => dashboardApi.resetProviderDisableStatus(provider.id, input))
+  const handleResetDisableDimension = async (provider: Provider, dimension: 'provider' | 'base_url' | 'key') => {
+    const reset = await runMutation(() => dashboardApi.resetProviderDisableDimension(provider.id, dimension))
     if (reset) toast('已恢复自动禁用状态')
   }
 
   const columns: ColumnDef<Provider>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, provider) => <span className="font-medium">{provider.name}</span> },
-    { key: 'baseUrls', label: 'Base URLs', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.baseUrls.length} URLs</span> },
-    { key: 'keys', label: 'Keys', defaultWidth: { kind: 'pixel', value: 100 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.keys.length} Keys</span> },
-    { key: 'endpoints', label: 'Endpoints', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs text-muted-foreground">{provider.endpoints.length} Endpoints</span> },
+    { key: 'baseUrls', label: 'Base URLs', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs">{provider.baseUrls.length} URLs</span> },
+    { key: 'keys', label: 'Keys', defaultWidth: { kind: 'pixel', value: 100 }, render: (_, provider) => <span className="text-xs">{provider.keys.length} Keys</span> },
+    { key: 'endpoints', label: 'Endpoints', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs">{provider.endpoints.length} Endpoints</span> },
     {
       key: 'models',
       label: '模型',
       defaultWidth: { kind: 'pixel', value: 240 },
       render: (_, provider) => (
         <div className="flex flex-wrap gap-1">
-          {provider.models.map((model) => <span key={model.model} className="text-xs text-muted-foreground">{model.model}</span>)}
+          {provider.models.map((model) => <span key={model.model} className="text-xs">{model.model}</span>)}
         </div>
       ),
     },
@@ -145,11 +142,11 @@ export function ProviderPage() {
         )
         return (
           <div className="text-xs">
-            <span className="text-muted-foreground/40">供应商</span>{' '}
+            <span className="text-muted-foreground">供应商</span>{' '}
             {word(providerDisabled)}{' '}
-            <span className="text-muted-foreground/40">Base URL</span>{' '}
+            <span className="text-muted-foreground">Base URL</span>{' '}
             {word(urlDisabled)}{' '}
-            <span className="text-muted-foreground/40">Key</span>{' '}
+            <span className="text-muted-foreground">Key</span>{' '}
             {word(keyDisabled)}
           </div>
         )
@@ -203,7 +200,7 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent width="md">
             <DialogHeader><DialogTitle>{editing ? '编辑供应商' : '添加供应商'}</DialogTitle></DialogHeader>
-            <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableStatus={(input) => { if (editing) void handleResetDisableStatus(editing, input) }} />
+            <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
           </DialogContent>
         </Dialog>
       </div>
@@ -211,7 +208,7 @@ export function ProviderPage() {
   )
 }
 
-function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableStatus }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
   const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ pathSuffix: '' })
   const [endpointError, setEndpointError] = useState<string | null>(null)
@@ -330,8 +327,51 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
         </Field>
       </div>
-      <ProviderValueList label="Base URLs" placeholder="https://api.openai.com/v1" values={form.baseUrls} disabledValues={disableStatus?.baseUrls ?? {}} resetDimension="base_url" onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} onResetDisableStatus={onResetDisableStatus} />
-      <ProviderValueList label="API Keys" placeholder="sk-xxx" values={form.keys} disabledValues={disableStatus?.keys ?? {}} resetDimension="key" onChange={(keys) => setForm((current) => ({ ...current, keys }))} onResetDisableStatus={onResetDisableStatus} />
+      {disableStatus && (() => {
+        const rows = [
+          {
+            label: 'Provider',
+            count: disableStatus.provider ? 1 : 0,
+            dimension: 'provider' as const,
+          },
+          {
+            label: 'Base URL',
+            count: Object.values(disableStatus.baseUrls).filter(Boolean).length,
+            dimension: 'base_url' as const,
+          },
+          {
+            label: 'Key',
+            count: Object.values(disableStatus.keys).filter(Boolean).length,
+            dimension: 'key' as const,
+          },
+        ].filter((row) => row.count > 0)
+        if (rows.length === 0) return null
+        return (
+          <div className="rounded-none border border-border bg-muted p-3">
+            <div className="mb-2 text-xs font-medium">自动禁用</div>
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
+              {rows.map((row) => (
+                <div key={row.dimension} className="flex items-center gap-2">
+                  <span className="text-muted-foreground">
+                    {row.label} 禁用 {row.count} 个
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onResetDisableDimension(row.dimension)}
+                  >
+                    <AppIcon name="refresh" data-icon="inline-start" />
+                    恢复
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+      <ProviderValueList label="Base URLs" placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} />
+      <ProviderValueList label="API Keys" placeholder="sk-xxx" values={form.keys} onChange={(keys) => setForm((current) => ({ ...current, keys }))} />
       <Field>
         <FieldLabel>Endpoints</FieldLabel>
         <div className="flex flex-col gap-2">
@@ -485,13 +525,10 @@ type ProviderValueListProps = {
   readonly label: string
   readonly placeholder: string
   readonly values: readonly string[]
-  readonly disabledValues: Readonly<Record<string, boolean>>
-  readonly resetDimension: 'base_url' | 'key'
   readonly onChange: (values: readonly string[]) => void
-  readonly onResetDisableStatus: (input: { readonly dimension: 'base_url' | 'key'; readonly value: string }) => void
 }
 
-function ProviderValueList({ label, placeholder, values, disabledValues, resetDimension, onChange, onResetDisableStatus }: ProviderValueListProps) {
+function ProviderValueList({ label, placeholder, values, onChange }: ProviderValueListProps) {
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
   const add = () => {
@@ -505,11 +542,10 @@ function ProviderValueList({ label, placeholder, values, disabledValues, resetDi
     <Field>
       <FieldLabel>{label}</FieldLabel>
       <div className="space-y-2">
-        <div className="flex gap-2"><Input ref={inputRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={placeholder} /><Button type="button" variant="outline" size="sm" onClick={add}>{resetDimension === 'base_url' ? '添加 Base URL' : '添加 Key'}</Button></div>
-        {values.map((value) => {
-          const disabled = disabledValues[value] === true
-          return <div key={value} className="flex items-center gap-2"><Input value={value} onChange={(event) => onChange(values.map((item) => item === value ? event.target.value : item))} />{disabled && <><span className="shrink-0 text-xs text-destructive">自动禁用</span><Button type="button" variant="outline" size="sm" className="text-destructive" onClick={() => onResetDisableStatus({ dimension: resetDimension, value })}>恢复</Button></>}<Button type="button" variant="ghost" size="icon" onClick={() => onChange(values.filter((item) => item !== value))} aria-label={`删除${label}`}><AppIcon name="delete" /></Button></div>
-        })}
+        <div className="flex gap-2"><Input ref={inputRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={placeholder} /><Button type="button" variant="outline" size="sm" onClick={add}>{label === 'Base URLs' ? '添加 Base URL' : '添加 Key'}</Button></div>
+        {values.map((value) => (
+          <div key={value} className="flex items-center gap-2"><Input value={value} onChange={(event) => onChange(values.map((item) => item === value ? event.target.value : item))} /><Button type="button" variant="ghost" size="icon" onClick={() => onChange(values.filter((item) => item !== value))} aria-label={`删除${label}`}><AppIcon name="delete" /></Button></div>
+        ))}
       </div>
     </Field>
   )

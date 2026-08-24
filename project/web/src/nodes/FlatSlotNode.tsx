@@ -187,7 +187,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onCycleStrategy?.() }}
-        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
       >
         {strategyLabel[strategy]}
         <AppIcon name="refresh" size={10} />
@@ -198,7 +198,7 @@ export function FlatSlotNode({ data }: FlatSlotNodeProps) {
       <span>{title}</span>
       <button
         type="button"
-        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
         onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
       >
         测试
@@ -378,7 +378,7 @@ function ProviderCard({ index, child, providers, takenLabels, flashLayers, isDra
               {state === 'disabled' ? '禁用' : '自动禁用'}
             </span>
           ) : (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <span>{child.baseURLCount} URL{child.baseURLCount !== 1 ? 's' : ''}</span>
               <span>{child.keyCount} Key{child.keyCount !== 1 ? 's' : ''}</span>
               <span>{child.modelCount} 模型</span>
@@ -548,7 +548,7 @@ function LogOutputSlotHeader({
   const remainingSeconds = Math.floor((remaining % 60000) / 1000)
 
   const buttonClass =
-    'nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground'
+    'nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground'
 
   return (
     <>
@@ -556,7 +556,7 @@ function LogOutputSlotHeader({
         <span>{title}</span>
         <div className="flex items-center gap-2">
           {capturing && (
-            <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+            <span className="whitespace-nowrap text-[10px]">
               剩余 {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒
             </span>
           )}
@@ -611,7 +611,7 @@ function TimeField({
 }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-[10px]">{label}</span>
       <Input
         type="number"
         min={0}

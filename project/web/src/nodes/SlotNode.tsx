@@ -85,7 +85,7 @@ export function SlotNode({ data }: SlotNodeProps) {
       <span>{title}</span>
       <button
         type="button"
-        className="nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        className="nodrag nopan inline-flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
         onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
       >
         测试

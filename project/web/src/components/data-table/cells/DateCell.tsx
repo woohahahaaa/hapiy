@@ -59,7 +59,6 @@ export function DateCell({
         <div
           className={cn(
             lineClass,
-            "text-muted-foreground",
             className,
           )}
         >

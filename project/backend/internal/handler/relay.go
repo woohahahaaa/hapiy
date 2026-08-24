@@ -239,6 +239,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// AffinityReuse covers both the rule path (AffinityMatch) and the
 		// fallback last-used-channel path; empty when no affinity matched.
 		affinityReuse := dispatchResult.AffinityReuse
+		affinityReuseParts := strings.Join(dispatchResult.AffinityReuseParts, ",")
 
 		// Forward the response first so use_time spans the full transfer for
 		// streaming requests; the log row is written after the stream ends.
@@ -250,6 +251,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		} else {
 			common.Global().UpdateActiveRequestProgress(requestID, "receiving", 0, 0)
 			firstByteMs = handleNonStreamingResponse(c, resp)
+			common.Global().UpdateActiveRequestFirstByte(requestID, int64(firstByteMs))
 		}
 
 		// Backfill stream timings on log capture rows when the request has
@@ -276,6 +278,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			IsStream:          relayReq.Stream,
 			Status:            "success",
 			AffinityReuse:     affinityReuse,
+			AffinityReuseParts: affinityReuseParts,
 			IP:                c.ClientIP(),
 			RequestID:         c.GetString("request_id"),
 			UseTime:           useTime,
@@ -445,6 +448,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 		if n > 0 {
 			if firstByteMs < 0 {
 				firstByteMs = int(time.Since(resp.FirstByteAt).Milliseconds())
+				common.Global().UpdateActiveRequestFirstByte(requestID, int64(firstByteMs))
 			}
 			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
 				clientDisconnected = true

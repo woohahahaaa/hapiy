@@ -155,6 +155,7 @@ export type UsageLog = {
   readonly errorMessage: string
   readonly upstreamUrl: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full'
+  readonly affinityReuseParts: readonly string[]
 }
 
 export type LogListParams = {
@@ -194,6 +195,7 @@ export type ActiveRequest = {
   readonly stream: boolean
   readonly startTime: string
   readonly elapsedMs: number
+  readonly firstByteMs: number | null
   readonly endTime: string | null
   readonly outcome: string
   readonly stage: string
@@ -970,6 +972,9 @@ function parseLog(value: unknown): UsageLog {
     errorMessage: readString(value.error_message, 'log.error_message'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
     affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',
+    affinityReuseParts: typeof value.affinity_reuse_parts === 'string' && value.affinity_reuse_parts !== ''
+      ? value.affinity_reuse_parts.split(',').map((s) => s.trim()).filter(Boolean)
+      : [],
   }
 }
 
@@ -1151,6 +1156,7 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     startTime: readString(value.start_time, 'active.start_time'),
     stream: readBoolean(value.stream, 'active.stream'),
     elapsedMs: readNumber(value.elapsed_ms, 'active.elapsed_ms'),
+    firstByteMs: value.first_byte_ms == null ? null : readNumber(value.first_byte_ms, 'active.first_byte_ms'),
     endTime: value.end_time == null || value.end_time === '' ? null : readString(value.end_time, 'active.end_time'),
     outcome: readString(value.outcome ?? '', 'active.outcome'),
     stage: readString(value.stage ?? '', 'active.stage'),
@@ -1640,6 +1646,18 @@ export const dashboardApi = {
       body: JSON.stringify(input),
     })
   },
+  async resetAllProviderDisableStatus(dimension: ProviderDisableDimension): Promise<void> {
+    await request('/providers/disable-status/reset-all', {
+      method: 'POST',
+      body: JSON.stringify({ dimension }),
+    })
+  },
+  async resetProviderDisableDimension(id: string, dimension: ProviderDisableDimension): Promise<void> {
+    await request(`/providers/${encodeURIComponent(id)}/disable-status/reset-dimension`, {
+      method: 'POST',
+      body: JSON.stringify({ dimension }),
+    })
+  },
 
   // ── Disabled records ──
   async listDisabledRecords(): Promise<readonly DisabledRecord[]> {
@@ -1655,6 +1673,10 @@ export const dashboardApi = {
       record: parseDisabledRecord(body.data),
       resolved: readBoolean(body.resolved, 'replay.resolved'),
     }
+  },
+  async restoreDisabledRecordDirectly(id: string): Promise<{ readonly resolved: boolean }> {
+    const body = await requestFull(`/disabled-records/${encodeURIComponent(id)}/restore-direct`, { method: 'POST' })
+    return { resolved: readBoolean(body.resolved, 'restore.resolved') }
   },
 
   // ── Tokens ──

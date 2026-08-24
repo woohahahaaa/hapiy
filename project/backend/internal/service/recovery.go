@@ -27,6 +27,9 @@ const (
 type ProbeResult struct {
 	Success bool
 	TTFB    time.Duration
+	// ErrorMessage carries the upstream's real feedback when the probe
+	// failed: transport error text or "HTTP <status>: <body excerpt>".
+	ErrorMessage string
 }
 
 // ChannelProbe tests one (baseURL, key, model) triple by sending a minimal

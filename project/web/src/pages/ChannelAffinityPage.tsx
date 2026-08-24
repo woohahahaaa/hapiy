@@ -286,20 +286,20 @@ export function ChannelAffinityPage() {
       key: 'sessionIdFields',
       label: 'Session 字段',
       defaultWidth: { kind: 'pixel', value: 200 },
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.sessionIdFields.join(', ') || '—'}</span>,
+      render: (_, row) => <span className="text-xs">{row.sessionIdFields.join(', ') || '—'}</span>,
     },
     {
       key: 'modelFields',
       label: 'Model 字段',
       defaultWidth: { kind: 'pixel', value: 200 },
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelFields.join(', ') || '—'}</span>,
+      render: (_, row) => <span className="text-xs">{row.modelFields.join(', ') || '—'}</span>,
     },
     {
       key: 'ttlSeconds',
       label: 'TTL（秒）',
       defaultWidth: { kind: 'pixel', value: 100 },
       defaultAlign: 'right',
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.ttlSeconds ?? setting.defaultTtlSeconds}</span>,
+      render: (_, row) => <span className="text-xs">{row.ttlSeconds ?? setting.defaultTtlSeconds}</span>,
     },
     {
       key: 'enabled',

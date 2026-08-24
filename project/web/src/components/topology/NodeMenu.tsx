@@ -33,7 +33,7 @@ export function NodeMenu({ x, y, mode, providers, onSelect, onClose }: NodeMenuP
         style={positionStyle}
         role="menu"
       >
-        <div className="border-b border-border px-2 pb-2 mb-1 text-xs font-medium text-muted-foreground">
+        <div className="border-b border-border px-2 pb-2 mb-1 text-xs font-medium">
           从 provider 创建工作流
         </div>
         {providers.map((p) => (
@@ -47,7 +47,7 @@ export function NodeMenu({ x, y, mode, providers, onSelect, onClose }: NodeMenuP
           </button>
         ))}
         {providers.length === 0 && (
-          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+          <div className="px-2 py-1.5 text-sm">
             没有可选的供应商
           </div>
         )}

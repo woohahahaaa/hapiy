@@ -1773,7 +1773,7 @@ export function TopologyPage() {
     return (
       <div className="flex h-screen flex-col">
         <PageHeader title="转发拓扑" description="可视化编辑请求转发的拓扑结构" />
-        <div className="flex flex-1 items-center justify-center gap-3 text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center gap-3">
           <AppIcon name="progress_activity" size={20} className="animate-spin" />
           <span className="text-sm">加载拓扑数据…</span>
         </div>
@@ -1788,7 +1788,7 @@ export function TopologyPage() {
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
             <AppIcon name="warning" size={40} className="text-destructive" />
-            <p className="max-w-md text-sm text-muted-foreground">{error}</p>
+            <p className="max-w-md text-sm">{error}</p>
             <Button variant="outline" onClick={loadData}>
               <AppIcon name="refresh" data-icon="inline-start" />
               重试

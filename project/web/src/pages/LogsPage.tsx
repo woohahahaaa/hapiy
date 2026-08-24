@@ -211,12 +211,12 @@ export function LogsPage() {
       key: 'affinityReuse',
       label: '渠道亲和性',
       defaultWidth: { kind: 'percent', value: 8 },
-      render: (_, row) => {
+      accessor: (row) => {
         const log = row as UsageLog
-        if (log.affinityReuse === '') return <span className="text-muted-foreground/40">-</span>
-        if (log.affinityReuse === 'full') return <span className="text-success">完整复用</span>
-        if (log.affinityReuse === 'partial') return <span className="text-warning">部分复用</span>
-        return <span className="text-muted-foreground">未复用</span>
+        if (log.affinityReuse === '') return null
+        if (log.affinityReuse === 'full') return '<#16a34a>复用渠道</#16a34a>'
+        if (log.affinityReuse === 'partial') return '<#d97706>部分复用</#d97706>'
+        return '<#9ca3af>创建渠道</#9ca3af>'
       },
     },
     {
@@ -231,10 +231,10 @@ export function LogsPage() {
         const log = row as UsageLog
         return (
           <div className="text-xs">
-            <span className="text-muted-foreground/40">输入</span> {log.promptTokens}{' '}
-            <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens}{' '}
-            <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}{' '}
-            <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
+            <span className="text-muted-foreground">输入</span> {log.promptTokens}{' '}
+            <span className="text-muted-foreground">缓存写入</span> {log.promptCacheMissTokens}{' '}
+            <span className="text-muted-foreground">缓存读取</span> {log.promptCacheHitTokens}{' '}
+            <span className="text-muted-foreground">输出</span> {log.completionTokens}
           </div>
         )
       },
@@ -258,27 +258,12 @@ export function LogsPage() {
       defaultWidth: { kind: 'percent', value: 13 },
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
-      slot: {
-        line1: (row) => `${(row.useTime / 1000).toFixed(1)}s`,
-        line2: (row) => {
-          const fmt = (val: number, label: string, error = false) => {
-            const color = error ? 'dc2626' : 'fafafa'
-            return `<#ffffff66>${label}: </#ffffff66><#${color}>${fmtSeconds(val)}</#${color}>`
-          }
-          return [
-            fmt(row.queueWaitMs, '排队'),
-            ' ',
-            fmt(row.requestRewriteMs, '请求改写'),
-            ' ',
-            fmt(row.connectMs, '连接'),
-            ' ',
-            fmt(row.firstByteMs, '首字', row.firstByteMs > 20000),
-            ' ',
-            fmt(row.responseRewriteMs, '响应改写'),
-            ' ',
-            fmt(row.streamRewriteMs, '流式改写'),
-          ].join('')
-        },
+      accessor: (row) => {
+        const total = fmtSeconds(row.useTime)
+        const firstByte = fmtSeconds(row.firstByteMs)
+        // 首字超过 20 秒标红
+        const fbColored = row.firstByteMs > 20000 ? `<#dc2626>${firstByte}</#dc2626>` : firstByte
+        return `${total}（首字:${fbColored}）`
       },
     },
     {
@@ -489,6 +474,29 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         />
       </FieldGroup>
       <FieldGroup>
+        <DetailRow
+          className="col-span-2"
+          label="渠道亲和性"
+          value={
+            log.affinityReuse === ''
+              ? '-'
+              : (() => {
+                  const labels: Record<string, string> = {
+                    none: '创建渠道',
+                    partial: '部分复用',
+                    full: '复用渠道',
+                  }
+                  const state = labels[log.affinityReuse] ?? log.affinityReuse
+                  const partLabels: Record<string, string> = {
+                    provider: 'Provider',
+                    baseurl: 'Base URL',
+                    key: 'Key',
+                  }
+                  const parts = log.affinityReuseParts.map((p) => partLabels[p] ?? p).join('、')
+                  return parts ? `${state}（复用：${parts}）` : state
+                })()
+          }
+        />
         <DetailRow className="col-span-2" label="状态" value={log.status === 'success' ? '成功' : '失败'} />
         {log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">

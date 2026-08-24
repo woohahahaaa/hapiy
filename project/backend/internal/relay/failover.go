@@ -263,6 +263,11 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 	if keyIndex < 0 {
 		return nil, errors.New("no enabled API key configured")
 	}
+	// Write back the resolved indices so the caller (recordFallbackChannel)
+	// records the channel that was actually used instead of the -1 "rotate"
+	// placeholder carried by normal weighted selection.
+	req.BaseURLIndex = baseURLIndex
+	req.KeyIndex = keyIndex
 	upstreamURL := plan.BaseURLs[baseURLIndex]
 	// Append the request path (e.g. "/v1/chat/completions") to the base URL.
 	// When the base URL already contains a path segment (e.g. "/v1"), only

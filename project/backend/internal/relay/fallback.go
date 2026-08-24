@@ -8,6 +8,7 @@ import (
 
 	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/model"
+	"gorm.io/gorm/clause"
 )
 
 // fallbackLookupResult is what the engine returns when the fallback affinity
@@ -117,9 +118,14 @@ func (e *Engine) recordFallbackChannel(req *RelayRequest, providerID string, key
 		BaseURLIndex: baseURLIndex,
 		LastUsedAt:   now,
 	}
-	if err := e.db.Where("session_id = ? AND model = ?", sessionID, modelName).
-		Assign(row).
-		FirstOrCreate(&row).Error; err != nil {
+	// Upsert on the (session_id, model) unique index with explicit column
+	// assignments. Assign(struct) + FirstOrCreate silently drops index 0
+	// (the zero value), so the DB DEFAULT -1 was stored instead; explicit
+	// assignment columns always include zero values.
+	if err := e.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "session_id"}, {Name: "model"}},
+		DoUpdates: clause.AssignmentColumns([]string{"provider_id", "key_index", "base_url_index", "last_used_at"}),
+	}).Create(&row).Error; err != nil {
 		log.Printf("relay: record fallback history: %v", err)
 	}
 }

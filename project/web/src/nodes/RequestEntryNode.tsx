@@ -150,7 +150,7 @@ export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
 
       <div className={cn('flex flex-col gap-1 p-3', !enabled && 'opacity-50')}>
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">权重</span>
+          <span className="text-[10px]">权重</span>
           <Input
             type="number"
             size="sm"

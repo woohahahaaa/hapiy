@@ -3,6 +3,22 @@ import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
@@ -14,8 +30,76 @@ import {
 
 const RECOVERY_INTERVAL_KEY = 'automatic_disable_recovery_minutes'
 const RECOVERY_TTFB_KEY = 'recovery_ttfb_seconds'
+const RECOVERY_HANDLER_KEY = 'recovery_request_handler'
 const DISABLED_RECORDS_PAGE_SIZE = 50
-const ERROR_MESSAGE_MAX = 60
+
+// DEFAULT_HANDLER_OPS 是系统兜底的恢复方法，字段路径基于 OpenAI /
+// Anthropic 官方 API 文档确认：
+// - Chat Completions：系统提示在 messages 里 role==system/developer（无顶层 system）
+// - Responses：顶层 instructions
+// - Anthropic：顶层 system（string 或数组）
+// 对话上下文统一替换叶子字段（content / text），多模态 base64 块直接删除，
+// 工具定义（tools）删除。替换叶子字段保留数组骨架，重放时语义损失最小。
+const DEFAULT_HANDLER_OPS: readonly RecoveryOp[] = [
+  // 对话上下文（三类格式共有的超大字段）
+  { path: 'messages.#.content', action: 'replace', value: '你好' },
+  { path: 'input.#.content', action: 'replace', value: '你好' },
+  { path: 'messages.#.content.#(type=="text").text', action: 'replace', value: '你好' },
+  { path: 'input.#.content.#(type=="input_text").text', action: 'replace', value: '你好' },
+  // 多模态 base64 大块：直接删除
+  { path: 'messages.#.content.#(type=="image_url").image_url.url', action: 'delete', value: '' },
+  { path: 'messages.#.content.#(type=="input_audio").input_audio.data', action: 'delete', value: '' },
+  { path: 'messages.#.content.#(type=="file").file.file_data', action: 'delete', value: '' },
+  { path: 'input.#.content.#(type=="input_image").image_url', action: 'delete', value: '' },
+  { path: 'input.#.content.#(type=="input_file").file_data', action: 'delete', value: '' },
+  { path: 'messages.#.content.#(type=="image").source.data', action: 'delete', value: '' },
+  { path: 'messages.#.content.#(type=="document").source.data', action: 'delete', value: '' },
+  // 系统提示（按三种格式的实际位置）
+  { path: 'messages.#(role=="system").content', action: 'replace', value: '你好' },
+  { path: 'messages.#(role=="developer").content', action: 'replace', value: '你好' },
+  { path: 'instructions', action: 'replace', value: '你好' },
+  { path: 'system', action: 'replace', value: '你好' },
+  { path: 'system.#.text', action: 'replace', value: '你好' },
+  // 工具定义（体积集中在 JSON Schema）
+  { path: 'tools', action: 'delete', value: '' },
+  { path: 'functions', action: 'delete', value: '' },
+]
+const DEFAULT_TIMEOUT_HOURS = 2
+
+type RecoveryOp = {
+  path: string
+  action: 'delete' | 'replace'
+  value: string
+}
+
+type RecoveryRequestHandler = {
+  ops: readonly RecoveryOp[]
+  timeoutHours: number
+}
+
+function emptyOp(): RecoveryOp {
+  return { path: '', action: 'replace', value: '你好' }
+}
+
+function parseHandler(json: string | undefined): RecoveryRequestHandler {
+  if (!json) return { ops: [], timeoutHours: 0 }
+  try {
+    const parsed = JSON.parse(json) as { ops?: Array<Partial<RecoveryOp>>; timeout_hours?: number }
+    const ops = (parsed.ops ?? []).filter(
+      (op): op is RecoveryOp =>
+        typeof op.path === 'string' &&
+        (op.action === 'delete' || op.action === 'replace') &&
+        typeof op.value === 'string',
+    )
+    const timeoutHours =
+      typeof parsed.timeout_hours === 'number' && Number.isFinite(parsed.timeout_hours) && parsed.timeout_hours >= 0
+        ? parsed.timeout_hours
+        : 0
+    return { ops, timeoutHours }
+  } catch {
+    return { ops: [], timeoutHours: 0 }
+  }
+}
 
 const DIMENSION_LABEL: Record<DisabledRecordDimension, string> = {
   key: 'Key',
@@ -49,20 +133,19 @@ function formatDateTime(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text
-  return `${text.slice(0, max)}…`
-}
-
 export function RecoverySettings() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [recoveryMinutes, setRecoveryMinutes] = useState('')
   const [recoveryTTFB, setRecoveryTTFB] = useState('')
   const [savingInterval, setSavingInterval] = useState(false)
-  const [savingTTFB, setSavingTTFB] = useState(false)
   const [recordsState, setRecordsState] = useState<RecordsState>({ kind: 'loading' })
   const [replayingId, setReplayingId] = useState<string | null>(null)
   const [recordsOffset, setRecordsOffset] = useState(0)
+  const [handler, setHandler] = useState<RecoveryRequestHandler>({ ops: [], timeoutHours: 0 })
+  const [handlerDialogOpen, setHandlerDialogOpen] = useState(false)
+  const [savingHandler, setSavingHandler] = useState(false)
+  const [previewRecord, setPreviewRecord] = useState<DisabledRecord | null>(null)
+  const [providerNameById, setProviderNameById] = useState<ReadonlyMap<string, string>>(new Map())
 
   const load = useCallback(() => {
     dashboardApi
@@ -70,6 +153,7 @@ export function RecoverySettings() {
       .then((settings) => {
         setRecoveryMinutes(settingsValue(settings, RECOVERY_INTERVAL_KEY))
         setRecoveryTTFB(settingsValue(settings, RECOVERY_TTFB_KEY))
+        setHandler(parseHandler(settingsValue(settings, RECOVERY_HANDLER_KEY)))
         setState({ kind: 'ready' })
       })
       .catch((err) => {
@@ -77,6 +161,21 @@ export function RecoverySettings() {
           err instanceof DashboardApiError ? err.message : '获取设置失败'
         setState({ kind: 'error', message })
       })
+  }, [])
+
+  const saveHandler = useCallback(async (next: RecoveryRequestHandler) => {
+    setSavingHandler(true)
+    try {
+      await dashboardApi.updateSetting(RECOVERY_HANDLER_KEY, JSON.stringify(next))
+      setHandler(next)
+      toast('已保存')
+      return true
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+      return false
+    } finally {
+      setSavingHandler(false)
+    }
   }, [])
 
   const loadRecords = useCallback(() => {
@@ -91,6 +190,11 @@ export function RecoverySettings() {
           err instanceof DashboardApiError ? err.message : '获取待恢复记录失败'
         setRecordsState({ kind: 'error', message })
       })
+    dashboardApi.listProviders({ limit: 1000, offset: 0 }).then(({ providers }) => {
+      setProviderNameById(new Map(providers.map((p) => [p.id, p.name])))
+    }).catch(() => {
+      // 供应商名字映射失败不影响表格主体展示
+    })
   }, [])
 
   useEffect(() => {
@@ -109,13 +213,21 @@ export function RecoverySettings() {
   const handleSaveInterval = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const minutes = Number(recoveryMinutes)
+    const seconds = recoveryTTFB.trim() === '' ? null : Number(recoveryTTFB)
     if (!Number.isFinite(minutes) || minutes < 0) {
       toast.error('时间间隔必须是非负数字')
       return
     }
+    if (seconds !== null && (!Number.isFinite(seconds) || seconds < 0)) {
+      toast.error('首字超时必须是非负数字')
+      return
+    }
     setSavingInterval(true)
     try {
-      await dashboardApi.updateSetting(RECOVERY_INTERVAL_KEY, String(minutes))
+      await Promise.all([
+        dashboardApi.updateSetting(RECOVERY_INTERVAL_KEY, String(minutes)),
+        dashboardApi.updateSetting(RECOVERY_TTFB_KEY, seconds === null ? '' : String(seconds)),
+      ])
       toast('已保存')
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -124,39 +236,18 @@ export function RecoverySettings() {
     }
   }
 
-  const handleSaveTTFB = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const seconds = Number(recoveryTTFB)
-    if (!Number.isFinite(seconds) || seconds < 0) {
-      toast.error('首字超时必须是非负数字')
-      return
-    }
-    setSavingTTFB(true)
-    try {
-      await dashboardApi.updateSetting(RECOVERY_TTFB_KEY, String(seconds))
-      toast('已保存')
-    } catch (err) {
-      toast.error(toErrorMessage(err))
-    } finally {
-      setSavingTTFB(false)
-    }
-  }
-
-  const handleReplay = async (id: string) => {
+  const handleRestoreDirect = async (id: string) => {
     setReplayingId(id)
     try {
-      const { record, resolved } = await dashboardApi.replayDisabledRecord(id)
-      setRecordsState((current) => {
-        if (current.kind !== 'ready') return current
-        if (resolved || record.resolvedAt !== null) {
-          return { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
-        }
-        return {
-          kind: 'ready',
-          records: current.records.map((r) => (r.id === id ? record : r)),
-        }
-      })
-      toast(resolved ? '已恢复' : '重放未恢复，可再次尝试')
+      const { resolved } = await dashboardApi.restoreDisabledRecordDirectly(id)
+      if (resolved) {
+        setRecordsState((current) =>
+          current.kind === 'ready'
+            ? { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
+            : current,
+        )
+        toast('已直接恢复')
+      }
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -185,6 +276,7 @@ export function RecoverySettings() {
       key: 'providerId',
       label: '供应商',
       defaultWidth: { kind: 'pixel', value: 160 },
+      accessor: (row) => providerNameById.get(row.providerId) ?? row.providerId,
     },
     {
       key: 'dimension',
@@ -197,43 +289,48 @@ export function RecoverySettings() {
       label: '值',
       defaultWidth: { kind: 'percent', value: 20 },
       defaultOverflow: 'ellipsis',
+      accessor: (row) => {
+        // provider 维度的 value 就是 provider ID 本身，直接显示名字即可
+        if (row.dimension === 'provider') {
+          return providerNameById.get(row.value) ?? null
+        }
+        return row.value
+      },
     },
     {
       key: 'retryCount',
-      label: '重试次数',
+      label: '测试上游次数',
       defaultWidth: { kind: 'pixel', value: 100 },
       defaultAlign: 'right',
     },
     {
-      key: 'errorMessage',
-      label: '触发原因',
-      defaultWidth: { kind: 'percent', value: 25 },
-      defaultOverflow: 'ellipsis',
-      accessor: (row) => (row.errorMessage ? truncate(row.errorMessage, ERROR_MESSAGE_MAX) : null),
-    },
-    {
       key: 'actions',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 120 },
+      defaultWidth: { kind: 'pixel', value: 200 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={replayingId !== null}
-          onClick={() => void handleReplay(row.id)}
-        >
-          {replayingId === row.id ? (
-            <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
-          ) : (
-            <AppIcon name="refresh" data-icon="inline-start" />
-          )}
-          重试
-        </Button>
+        <div className="inline-flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={replayingId !== null}
+            onClick={() => setPreviewRecord(row)}
+          >
+            测试上游
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={replayingId !== null}
+            onClick={() => void handleRestoreDirect(row.id)}
+          >
+            直接恢复
+          </Button>
+        </div>
       ),
     },
-  ], [replayingId])
+  ], [replayingId, providerNameById])
 
   return (
     <div className="flex flex-col gap-6">
@@ -262,8 +359,8 @@ export function RecoverySettings() {
           )}
 
           {state.kind === 'ready' && (
-            <div className="flex flex-col gap-5">
-              <form className="flex flex-col gap-3" onSubmit={handleSaveInterval}>
+            <form className="flex flex-col gap-4" onSubmit={handleSaveInterval}>
+              <div className="flex flex-wrap items-end gap-4">
                 <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
                   自动恢复轮询间隔（分钟）
                   <Input
@@ -277,18 +374,6 @@ export function RecoverySettings() {
                     placeholder="1440"
                   />
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  0 = 关闭；建议 ≥ 60；默认 60。
-                </p>
-                <div className="flex items-center gap-3">
-                  <Button type="submit" disabled={savingInterval}>
-                    {savingInterval && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                    保存
-                  </Button>
-                </div>
-              </form>
-
-              <form className="flex flex-col gap-3" onSubmit={handleSaveTTFB}>
                 <label className="grid gap-1.5 text-sm" htmlFor="recovery-ttfb-seconds">
                   限制最低首字速度（秒）
                   <Input
@@ -298,21 +383,19 @@ export function RecoverySettings() {
                     min={0}
                     value={recoveryTTFB}
                     onChange={(event) => setRecoveryTTFB(event.target.value)}
-                    disabled={savingTTFB}
+                    disabled={savingInterval}
                     placeholder="留空"
                   />
                 </label>
-                <p className="text-xs text-muted-foreground">
-                  留空只判断响应正常；填了则要求首字在 N 秒内。
-                </p>
-                <div className="flex items-center gap-3">
-                  <Button type="submit" disabled={savingTTFB}>
-                    {savingTTFB && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                    保存
-                  </Button>
-                </div>
-              </form>
-            </div>
+                <Button type="submit" disabled={savingInterval}>
+                  {savingInterval && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                  保存
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。首字限时：留空只判断响应正常；填了则要求首字在 N 秒内。
+              </p>
+            </form>
           )}
         </CardContent>
       </Card>
@@ -322,7 +405,7 @@ export function RecoverySettings() {
           <CardTitle className="flex items-center gap-2 text-base">
             <AppIcon name="history" size={16} /> 待恢复记录（{recordsCount} 条）
           </CardTitle>
-          <CardDescription>上游仍异常、可手动重放的禁用记录；恢复后会从列表移除。</CardDescription>
+          <CardDescription>上游仍异常、可手动测试上游的禁用记录；恢复后会从列表移除。</CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -338,23 +421,318 @@ export function RecoverySettings() {
             emptyText="暂无待恢复记录"
             onRetry={() => void loadRecords()}
             actions={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void loadRecords()}
-                disabled={recordsLoading}
-              >
-                {recordsLoading ? (
-                  <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
-                ) : (
-                  <AppIcon name="refresh" data-icon="inline-start" />
-                )}
-                刷新
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHandlerDialogOpen(true)}
+                  title="被禁用的瞬间保存请求，按 JSON 处理方法简化后再存储"
+                >
+                  <AppIcon name="settings" data-icon="inline-start" />
+                  测试方法
+                  {handler.ops.length > 0 && (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">
+                      {handler.ops.length}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadRecords()}
+                  disabled={recordsLoading}
+                >
+                  {recordsLoading ? (
+                    <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <AppIcon name="refresh" data-icon="inline-start" />
+                  )}
+                  刷新
+                </Button>
+              </>
             }
+          />
+
+          <RecoveryHandlerDialog
+            open={handlerDialogOpen}
+            onOpenChange={setHandlerDialogOpen}
+            handler={handler}
+            saving={savingHandler}
+            onSave={saveHandler}
+          />
+          <RequestPreviewDialog
+            record={previewRecord}
+            onClose={() => setPreviewRecord(null)}
+            onResolved={(id) => {
+              setRecordsState((current) =>
+                current.kind === 'ready'
+                  ? { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
+                  : current,
+              )
+            }}
           />
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function RecoveryHandlerDialog({
+  open,
+  onOpenChange,
+  handler,
+  saving,
+  onSave,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  handler: RecoveryRequestHandler
+  saving: boolean
+  onSave: (next: RecoveryRequestHandler) => Promise<boolean>
+}) {
+  const [draft, setDraft] = useState<RecoveryRequestHandler>(handler)
+
+  useEffect(() => {
+    if (open) setDraft(handler)
+  }, [open, handler])
+
+  const handleSave = async () => {
+    const cleaned: RecoveryRequestHandler = {
+      ops: draft.ops
+        .filter((op) => op.path.trim() !== '')
+        .map((op) => ({ ...op, path: op.path.trim() })),
+      timeoutHours: draft.timeoutHours,
+    }
+    const ok = await onSave(cleaned)
+    if (ok) onOpenChange(false)
+  }
+
+  const updateOp = (i: number, next: RecoveryOp) => {
+    setDraft((p) => ({ ...p, ops: p.ops.map((op, oi) => (oi === i ? next : op)) }))
+  }
+  const removeOp = (i: number) => {
+    setDraft((p) => ({ ...p, ops: p.ops.filter((_, oi) => oi !== i) }))
+  }
+  const addOp = () => {
+    setDraft((p) => ({ ...p, ops: [...p.ops, emptyOp()] }))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>测试方法</DialogTitle>
+        </DialogHeader>
+        <FieldGroup>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              禁用瞬间保存请求，按下列 JSON 规则简化；字段不存在时自动跳过。
+            </p>
+            {draft.ops.length === 0 ? (
+              <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                暂无规则，点击「添加规则」开始配置
+              </div>
+            ) : (
+              draft.ops.map((op, i) => (
+                <div key={i} className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-2">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">
+                        {i + 1}
+                      </span>
+                      <Input
+                        className="h-7 min-w-0 flex-1 font-mono text-xs"
+                        value={op.path}
+                        onChange={(e) => updateOp(i, { ...op, path: e.target.value })}
+                        placeholder="gjson 路径，如 messages.0.content"
+                      />
+                      <Select
+                        value={op.action}
+                        onValueChange={(v) => updateOp(i, { ...op, action: v as 'delete' | 'replace' })}
+                      >
+                        <SelectTrigger className="h-7 w-[88px] shrink-0" size="sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="replace">替换</SelectItem>
+                            <SelectItem value="delete">删除</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {op.action === 'replace' && (
+                      <div className="flex items-center gap-2 pl-[24px]">
+                        <span className="shrink-0 text-xs text-muted-foreground/60">替换为</span>
+                        <Input
+                          className="h-7 min-w-0 flex-1 font-mono text-xs"
+                          value={op.value}
+                          onChange={(e) => updateOp(i, { ...op, value: e.target.value })}
+                          placeholder="你好"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeOp(i)}
+                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`删除规则 ${i + 1}`}
+                  >
+                    <AppIcon name="close" size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={addOp}
+            >
+              <AppIcon name="add" data-icon="inline-start" /> 添加规则
+            </Button>
+
+            <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+              <label className="grid gap-1.5 text-sm">
+                缺失请求体的记录，超时自动恢复（小时）
+                <Input
+                  className="w-40"
+                  type="number"
+                  min={0}
+                  value={draft.timeoutHours === 0 ? '' : String(draft.timeoutHours)}
+                  onChange={(e) => {
+                    const v = Number(e.target.value)
+                    setDraft((p) => ({ ...p, timeoutHours: Number.isFinite(v) && v >= 0 ? v : 0 }))
+                  }}
+                  placeholder="0 = 立即测试上游"
+                />
+              </label>
+              <p className="text-xs text-muted-foreground">
+                查漏补缺等无请求体的记录，会在禁用满该时长后自动尝试恢复；0 表示不等待。
+              </p>
+            </div>
+          </div>
+        </FieldGroup>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => setDraft({ ops: [...DEFAULT_HANDLER_OPS], timeoutHours: DEFAULT_TIMEOUT_HOURS })}
+          >
+            <AppIcon name="refresh" data-icon="inline-start" />
+            恢复默认
+          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            取消
+          </Button>
+          <Button onClick={() => void handleSave()} disabled={saving}>
+            {saving ? '保存中...' : '保存'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function formatJson(text: string): string {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+
+function RequestPreviewDialog({
+  record,
+  onClose,
+  onResolved,
+}: {
+  record: DisabledRecord | null
+  onClose: () => void
+  onResolved: (id: string) => void
+}) {
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState<{ kind: 'success' } | { kind: 'error'; message: string } | null>(null)
+
+  const handleTest = async () => {
+    if (!record || testing) return
+    setTesting(true)
+    setResult(null)
+    try {
+      const { record: updated, resolved } = await dashboardApi.replayDisabledRecord(record.id)
+      if (resolved) {
+        setResult({ kind: 'success' })
+        onResolved(record.id)
+      } else {
+        setResult({ kind: 'error', message: updated.errorMessage || '上游未通过' })
+      }
+    } catch (err) {
+      setResult({ kind: 'error', message: toErrorMessage(err) })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const errorMessage = record?.errorMessage
+
+  return (
+    <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>测试上游</DialogTitle>
+        </DialogHeader>
+        {record && (
+          <div className="flex flex-col gap-3 text-xs">
+            {errorMessage && !result && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                <div className="mb-1 font-medium text-destructive">触发原因</div>
+                <div className="whitespace-pre-wrap break-words text-destructive/90">{errorMessage}</div>
+              </div>
+            )}
+            {result?.kind === 'success' && (
+              <div className="rounded-md border border-success/30 bg-success/5 p-3 font-medium text-success">
+                上游测试通过，已恢复
+              </div>
+            )}
+            {result?.kind === 'error' && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                <div className="mb-1 font-medium text-destructive">上游报错</div>
+                <div className="whitespace-pre-wrap break-words text-destructive/90">{result.message}</div>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={testing}
+                onClick={() => void handleTest()}
+              >
+                {testing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                开始测试
+              </Button>
+              {testing && <span className="text-muted-foreground">正在测试…</span>}
+            </div>
+            <div>
+              <div className="mb-1 font-medium text-muted-foreground">请求头</div>
+              <pre className="max-h-48 overflow-auto rounded-md bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
+                {record.requestHeaders ? formatJson(record.requestHeaders) : '-'}
+              </pre>
+            </div>
+            <div>
+              <div className="mb-1 font-medium text-muted-foreground">请求体预览</div>
+              <pre className="max-h-96 overflow-auto rounded-md bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
+                {record.requestBody ? formatJson(record.requestBody) : '-'}
+              </pre>
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            关闭
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

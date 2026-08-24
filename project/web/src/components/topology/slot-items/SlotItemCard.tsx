@@ -93,13 +93,13 @@ export function SlotItemCard({
                 e.stopPropagation()
                 onDragStart()
               }}
-              className="nodrag nopan cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing"
+              className="nodrag nopan cursor-grab active:cursor-grabbing"
               aria-label="拖动排序"
             >
               <AppIcon name="drag_handle" size={14} />
             </span>
           )}
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px]">
             {index}
           </span>
         </div>
@@ -117,7 +117,7 @@ export function SlotItemCard({
               type="button"
               onClick={onDelete}
               className={cn(
-                'nodrag nopan rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive',
+                'nodrag nopan rounded p-0.5 transition-colors hover:bg-destructive/10 hover:text-destructive',
                 dimContentWhenDisabled && !enabled && 'opacity-50',
               )}
               aria-label="删除"

@@ -381,7 +381,7 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) => {
         const isStream = row.kind === 'pair' ? row.pair.is_stream : false
-        return isStream ? 'SSE' : <span className="text-muted-foreground/60">--</span>
+        return isStream ? 'SSE' : <span>--</span>
       },
     },
     {
@@ -399,7 +399,7 @@ export function LogCapturePage() {
         row.kind === 'system' ? (
           formatSize(row.file.size)
         ) : (
-          <span className="text-muted-foreground">—</span>
+          <span>—</span>
         ),
     },
   ]

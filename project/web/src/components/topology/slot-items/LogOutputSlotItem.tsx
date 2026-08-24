@@ -36,7 +36,7 @@ export function LogOutputSlotItem({
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] text-muted-foreground">日志前缀</span>
+          <span className="text-[10px]">日志前缀</span>
           <Input
             size="sm"
             className="text-[10px]"
@@ -82,7 +82,7 @@ function CheckField({
         checked={checked}
         onCheckedChange={(v) => onChange(v === true)}
       />
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs">{label}</span>
     </label>
   )
 }

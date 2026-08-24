@@ -60,7 +60,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
             </DialogDescription>
           </DialogHeader>
           {colors.length === 0 && (
-            <div className="mb-1 text-xs text-muted-foreground">未配置，使用主题色</div>
+            <div className="mb-1 text-xs">未配置，使用主题色</div>
           )}
           <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
             {colors.map((c, i) => (
@@ -69,7 +69,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-card-foreground">{c}</span>
                 <button
                   type="button"
-                  className="text-muted-foreground hover:text-destructive"
+                  className="hover:text-destructive"
                   onClick={() => remove(i)}
                   aria-label="删除色值"
                 >

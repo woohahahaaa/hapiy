@@ -32,7 +32,7 @@ export function SlotContainer({
       )}
       style={style}
     >
-      <div className="mb-3 min-w-0 truncate text-sm font-medium text-muted-foreground">
+      <div className="mb-3 min-w-0 truncate text-sm font-medium">
         {title}
       </div>
 
@@ -43,7 +43,7 @@ export function SlotContainer({
             <button
               type="button"
               onClick={onAddNode}
-              className="mt-2 flex w-full items-center justify-center rounded-md border border-dashed border-border py-1 text-xs text-muted-foreground hover:bg-muted/50 transition-colors"
+              className="mt-2 flex w-full items-center justify-center rounded-md border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
             >
               <AppIcon name="add" size={12} className="mr-1" />
               添加
@@ -55,7 +55,7 @@ export function SlotContainer({
           <button
             type="button"
             onClick={onAddNode}
-            className="flex items-center justify-center w-12 h-12 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 transition-colors cursor-pointer mx-auto"
+            className="flex items-center justify-center w-12 h-12 rounded-full bg-muted hover:bg-muted/80 transition-colors cursor-pointer mx-auto"
           >
             <AppIcon name="add" size={24} />
           </button>

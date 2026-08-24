@@ -164,14 +164,14 @@ export function ProviderNode({ data, id }: ProviderNodeProps) {
             {providerState === 'disabled' ? '禁用' : '自动禁用'}
           </span>
         ) : (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span className="text-xs">
               {baseURLCount} URLs
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs">
               {keyCount} Keys
             </span>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs">
               {modelCount} Models
             </span>
           </div>

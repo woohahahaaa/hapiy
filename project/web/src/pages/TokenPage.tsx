@@ -133,7 +133,7 @@ export function TokenPage() {
       defaultWidth: { kind: 'pixel', value: 220 },
       render: (_, row) =>
         row.quota === null ? (
-          <span className="text-xs text-muted-foreground">无限制</span>
+          <span className="text-xs">无限制</span>
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-xs">¥{row.usedQuota} / ¥{row.quota}</span>
