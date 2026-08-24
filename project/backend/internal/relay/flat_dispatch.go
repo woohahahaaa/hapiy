@@ -108,6 +108,9 @@ type DispatchResult struct {
 	// AffinityMatch, when non-nil, means the provider was chosen via channel
 	// affinity; the handler records the successful recall on request success.
 	AffinityMatch *affinity.MatchResult
+	// AffinityHit is set when the provider was chosen via the fallback
+	// last-used-channel path, which has no MatchResult to surface.
+	AffinityHit bool
 	// PathNodeIDs is the exact node path the request traverses
 	// (entry -> provider -> slots), captured at dispatch time. Empty when
 	// the request was served outside the flat-topology walk (affinity recall).
@@ -129,6 +132,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 					Provider:     provider,
 					KeyIndex:     fallback.keyIndex,
 					BaseURLIndex: fallback.baseURLIndex,
+					AffinityHit:  true,
 				}, nil
 			}
 		}

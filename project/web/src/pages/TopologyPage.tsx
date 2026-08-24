@@ -284,6 +284,7 @@ export function TopologyPage() {
   }, [applyFlowColors])
   const [dirty, setDirty] = useState(false)
   const dirtyRef = useRef(false)
+  const persistRetryRef = useRef<number | null>(null)
   const markDirty = useCallback(() => {
     dirtyRef.current = true
     setDirty(true)
@@ -1146,10 +1147,22 @@ export function TopologyPage() {
     try {
       const saved = await dashboardApi.saveFlatTopology(cur)
       lastKnownVersionRef.current = saved.version ?? null
+      if (tpRef.current !== cur) {
+        // 保存期间又有改动：保持 dirty 并立即再存一次最新拓扑，避免把
+        // 新改动误清掉。
+        void persistTopology()
+        return
+      }
       dirtyRef.current = false
       setDirty(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '拓扑保存失败')
+      toast.error(err instanceof Error ? err.message : '拓扑保存失败，稍后自动重试')
+      // 失败后 1 秒自动重试，直到成功，避免改动静默丢失。
+      if (persistRetryRef.current !== null) window.clearTimeout(persistRetryRef.current)
+      persistRetryRef.current = window.setTimeout(() => {
+        persistRetryRef.current = null
+        void persistTopology()
+      }, 1000)
     }
   }, [])
 
@@ -1168,9 +1181,15 @@ export function TopologyPage() {
     if (!dirty) return
     const timer = setTimeout(() => {
       void persistTopology()
-    }, 800)
+    }, 400)
     return () => clearTimeout(timer)
   }, [dirty, persistTopology])
+
+  useEffect(() => {
+    return () => {
+      if (persistRetryRef.current !== null) window.clearTimeout(persistRetryRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     if (!dirty) return

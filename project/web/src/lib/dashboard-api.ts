@@ -130,6 +130,7 @@ export type TokenListResult = {
 
 export type UsageLog = {
   readonly id: string
+  readonly requestId: string
   readonly createdAt: string
   readonly userId: string
   readonly tokenName: string
@@ -153,6 +154,7 @@ export type UsageLog = {
   readonly status: 'success' | 'failed'
   readonly errorMessage: string
   readonly upstreamUrl: string
+  readonly affinityHit: boolean
 }
 
 export type LogListParams = {
@@ -943,6 +945,7 @@ function parseLog(value: unknown): UsageLog {
   }
   return {
     id: readString(value.id, 'log.id'),
+    requestId: readString(value.request_id, 'log.request_id'),
     createdAt: readString(value.created_at, 'log.created_at'),
     userId: readString(value.user_id, 'log.user_id'),
     tokenName: readString(value.token_name, 'log.token_name'),
@@ -966,6 +969,7 @@ function parseLog(value: unknown): UsageLog {
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
+    affinityHit: value.affinity_hit === true,
   }
 }
 

@@ -114,15 +114,9 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
   readonly onCancel: () => void
   readonly saving: boolean
 }) {
-  const [enabled, setEnabled] = useState(true)
-  const [sessionFields, setSessionFields] = useState<string[]>(() => {
-    const seeded = fallback.sessionIdFields.length > 0 ? fallback.sessionIdFields : ['X-Session-Id']
-    return Array.from(new Set(seeded))
-  })
-  const [modelFields, setModelFields] = useState<string[]>(() => {
-    const seeded = fallback.modelFields.length > 0 ? fallback.modelFields : ['model']
-    return Array.from(new Set(seeded))
-  })
+  const [enabled, setEnabled] = useState(fallback.enabled)
+  const [sessionFields, setSessionFields] = useState<string[]>(() => Array.from(new Set(fallback.sessionIdFields)))
+  const [modelFields, setModelFields] = useState<string[]>(() => Array.from(new Set(fallback.modelFields)))
 
   return (
     <FieldGroup>

@@ -208,6 +208,12 @@ export function LogsPage() {
       accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null),
     },
     {
+      key: 'affinityHit',
+      label: '渠道亲和性',
+      defaultWidth: { kind: 'percent', value: 8 },
+      accessor: (row) => (row.affinityHit ? '命中' : null),
+    },
+    {
       key: 'promptTokens',
       label: 'Tokens',
       defaultWidth: { kind: 'percent', value: 22 },
@@ -416,7 +422,7 @@ export function LogsPage() {
       <Dialog open={selectedLog !== null} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
         <DialogContent width="sm">
           <DialogHeader>
-            <DialogTitle>请求详情</DialogTitle>
+            <DialogTitle>请求记录 {selectedLog?.id ?? ''}</DialogTitle>
           </DialogHeader>
           {selectedLog && <LogDetailFields log={selectedLog} />}
         </DialogContent>
@@ -433,6 +439,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
   return (
     <div className="space-y-4 text-xs">
       <FieldGroup>
+        <DetailRow className="col-span-2" label="请求 id" value={log.requestId || '-'} />
         <DetailRow className="col-span-2" label="时间" value={timeText} />
         <DetailRow className="col-span-2" label="令牌" value={log.tokenName || '-'} />
         <DetailRow className="col-span-2" label="供应商" value={log.providerName || '-'} />
