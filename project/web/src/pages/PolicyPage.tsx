@@ -174,18 +174,6 @@ function useRulesApi<T>(type: RuleType) {
 
 // ── Empty / Error / Loading helpers ──
 
-function RuleStatusBadge({ active }: { active: boolean }) {
-  return <span className={active ? 'text-success' : 'text-destructive'}>{active ? '启用' : '禁用'}</span>
-}
-
-function RuleToggleButton({ active, disabled, onClick }: { active: boolean; disabled: boolean; onClick: () => void }) {
-  return (
-    <Button variant="outline" size="sm" disabled={disabled} onClick={onClick}>
-      {active ? '禁用' : '启用'}
-    </Button>
-  )
-}
-
 
 // ── Rewrite ──
 
@@ -194,12 +182,6 @@ function RewritePage() {
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
-
-  const handleToggle = async (id: string) => {
-    const rule = rules.find((r) => r.id === id)
-    if (!rule || mutating) return
-    await update(id, { name: rule.name, script: rule.script, status: !rule.status })
-  }
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -225,12 +207,6 @@ function RewritePage() {
       render: (_, row) => <RewriteRulePreview script={row.script} />,
     },
     {
-      key: 'status',
-      label: '状态',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <RuleStatusBadge active={row.status} />,
-    },
-    {
       key: 'id',
       label: '操作',
       defaultWidth: { kind: 'pixel', value: 140 },
@@ -238,11 +214,10 @@ function RewritePage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -349,11 +324,6 @@ function HeartbeatPage() {
   const [editing, setEditing] = useState<HeartbeatRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
 
-  const handleToggle = async (id: string) => {
-    const rule = rules.find((r) => r.id === id)
-    if (!rule || mutating) return
-    await update(id, { name: rule.name, matchCondition: rule.matchCondition, replyContent: rule.replyContent, timeout: rule.timeout, status: !rule.status })
-  }
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -381,12 +351,6 @@ function HeartbeatPage() {
     },
     { key: 'timeout', label: '超时', defaultWidth: { kind: 'pixel', value: 80 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
     {
-      key: 'status',
-      label: '状态',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <RuleStatusBadge active={row.status} />,
-    },
-    {
       key: 'id',
       label: '操作',
       defaultWidth: { kind: 'pixel', value: 140 },
@@ -394,11 +358,10 @@ function HeartbeatPage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -488,11 +451,6 @@ function ConcurrencyPage() {
   const [editing, setEditing] = useState<ConcurrencyRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
 
-  const handleToggle = async (id: string) => {
-    const rule = rules.find((r) => r.id === id)
-    if (!rule || mutating) return
-    await update(id, { name: rule.name, scope: rule.scope, maxConcurrent: rule.maxConcurrent, queueEnabled: rule.queueEnabled, status: !rule.status })
-  }
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -518,12 +476,6 @@ function ConcurrencyPage() {
     { key: 'maxConcurrent', label: '最大并发', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.maxConcurrent}</span> },
     { key: 'queueEnabled', label: '排队', defaultWidth: { kind: 'pixel', value: 80 }, render: (_, row) => <span className="text-xs">{row.queueEnabled ? '是' : '否'}</span> },
     {
-      key: 'status',
-      label: '状态',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <RuleStatusBadge active={row.status} />,
-    },
-    {
       key: 'id',
       label: '操作',
       defaultWidth: { kind: 'pixel', value: 140 },
@@ -531,11 +483,10 @@ function ConcurrencyPage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -658,11 +609,6 @@ function FailoverPage() {
     setIsOpen(true)
   }, [rules, searchParams])
 
-  const handleToggle = async (id: string) => {
-    const rule = rules.find((r) => r.id === id)
-    if (!rule || mutating) return
-    await update(id, { ...rule, status: !rule.status })
-  }
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -682,13 +628,7 @@ function FailoverPage() {
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
     { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs text-muted-foreground">{(row.keywords ?? []).join('、') || '未设置'}</span> },
-    { key: 'actions', label: '故障转移', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{(row.actions ?? []).map((action) => failoverActionLabel(action.dimension)).join(' → ')}</span> },
-    {
-      key: 'status',
-      label: '状态',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <RuleStatusBadge active={row.status} />,
-    },
+    { key: 'actions', label: '自动禁用', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
     {
       key: 'id',
       label: '操作',
@@ -697,11 +637,10 @@ function FailoverPage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -712,7 +651,7 @@ function FailoverPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="故障转移"
+        title="自动禁用"
         description="主供应商失败时自动切换到备选供应商"
         status={`${total} 条规则`}
       />
@@ -728,7 +667,7 @@ function FailoverPage() {
           limit={limit}
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
-          emptyText='暂无故障转移规则，点击"添加规则"创建第一条'
+          emptyText='暂无自动禁用规则，点击"添加规则"创建第一条'
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
@@ -794,24 +733,26 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
 
       <Field>
         <FieldLabel htmlFor="failover-dimension">轮询维度</FieldLabel>
-        <Select value={form.dimension || 'base_url'} onValueChange={(value) => setForm((p) => ({ ...p, dimension: value as FailoverRule['dimension'] }))}>
-          <SelectTrigger id="failover-dimension" className="w-52">
-            <SelectValue placeholder="选择轮询维度" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {FAILOVER_DIMENSIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-4">
+          <Select value={form.dimension || 'base_url'} onValueChange={(value) => setForm((p) => ({ ...p, dimension: value as FailoverRule['dimension'] }))}>
+            <SelectTrigger id="failover-dimension" className="w-52">
+              <SelectValue placeholder="选择轮询维度" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {FAILOVER_DIMENSIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
         <p className="text-xs text-muted-foreground">每个规则只选一个维度。同一请求失败时，只走这一条规则的轮询。</p>
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="failover-retry">重试次数</FieldLabel>
-        <Input id="failover-retry" type="number" min={0} className="w-40" value={form.retryCount} onChange={(event) => setForm((p) => ({ ...p, retryCount: Math.max(0, Number(event.target.value) || 0) }))} />
+        <p className="text-xs text-muted-foreground">
+          自动禁用：轮询用尽后将出问题的
+          {form.dimension === 'key' ? 'Key' : form.dimension === 'provider' ? '供应商' : 'BaseURL'}
+          标记为禁用。
+        </p>
       </Field>
 
       <Field>
@@ -827,10 +768,8 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
       </Field>
 
       <Field>
-        <label className="flex items-center gap-2 text-sm">
-          <Switch checked={form.autoDisable} onCheckedChange={(autoDisable) => setForm((p) => ({ ...p, autoDisable }))} />
-          自动禁用（轮询用尽后将出问题的 Key/BaseURL/供应商标记为禁用）
-        </label>
+        <FieldLabel htmlFor="failover-retry">重试次数</FieldLabel>
+        <Input id="failover-retry" type="number" min={0} className="w-40" value={form.retryCount} onChange={(event) => setForm((p) => ({ ...p, retryCount: Math.max(0, Number(event.target.value) || 0) }))} />
       </Field>
 
       <DialogFooter>
@@ -841,6 +780,7 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
             onSave({
               ...form,
               name: form.name.trim(),
+              autoDisable: true,
               matchPatterns: matchPatterns.split('\n').map((s) => s.trim()).filter(Boolean),
             })
           }
@@ -860,11 +800,6 @@ function RewriteResponsePage() {
   const [isOpen, setIsOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
 
-  const handleToggle = async (id: string) => {
-    const rule = rules.find((r) => r.id === id)
-    if (!rule || mutating) return
-    await update(id, { name: rule.name, script: rule.script, status: !rule.status })
-  }
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -890,12 +825,6 @@ function RewriteResponsePage() {
       render: (_, row) => <RewriteRulePreview script={row.script} />,
     },
     {
-      key: 'status',
-      label: '状态',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <RuleStatusBadge active={row.status} />,
-    },
-    {
       key: 'id',
       label: '操作',
       defaultWidth: { kind: 'pixel', value: 140 },
@@ -903,11 +832,10 @@ function RewriteResponsePage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <RuleToggleButton active={row.status} disabled={mutating} onClick={() => handleToggle(row.id)} />
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
             <AppIcon name="delete" />
           </Button>
         </div>

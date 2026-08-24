@@ -28,7 +28,7 @@ export function AutoSwitchSlotItem({
       {...drag}
     >
       {rule && (
-        <Link to={`/policy/failover?edit=${encodeURIComponent(rule.id)}`} className="-m-1 block rounded-sm p-1 text-sm font-medium hover:text-primary" aria-label={`编辑故障转移规则 ${rule.name}`}>{rule.name}</Link>
+        <Link to={`/policy/failover?edit=${encodeURIComponent(rule.id)}`} className="-m-1 block rounded-sm p-1 text-sm font-medium hover:text-primary" aria-label={`编辑自动禁用规则 ${rule.name}`}>{rule.name}</Link>
       )}
       {!rule && <RuleSelect value={entry.ruleId} options={rules.map((candidate) => ({ id: candidate.id, label: candidate.name }))} placeholder="选择规则" onChange={(id) => onChange({ ...entry, ruleId: id })} />}
     </SlotItemCard>

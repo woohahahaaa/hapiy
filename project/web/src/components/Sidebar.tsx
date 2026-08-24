@@ -61,8 +61,9 @@ const navigation: NavItem[] = [
     label: 'LLM配置',
     icon: <AppIcon name="layers" />,
     children: [
-      { id: 'provider', label: '供应商', href: '/provider' },
       { id: 'token', label: '令牌管理', href: '/token' },
+      { id: 'provider', label: '供应商', href: '/provider' },
+      { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
       { id: 'price', label: '模型信息', href: '/model' },
     ],
   },
@@ -75,14 +76,8 @@ const navigation: NavItem[] = [
       { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
       { id: 'heartbeat', label: '心跳回复', href: '/policy/heartbeat' },
       { id: 'concurrency', label: '并发控制', href: '/policy/concurrency' },
-      { id: 'failover', label: '故障转移', href: '/policy/failover' },
+      { id: 'failover', label: '自动禁用', href: '/policy/failover' },
     ],
-  },
-  {
-    id: 'channel-affinity',
-    label: '渠道亲和性',
-    icon: <AppIcon name="call_split" />,
-    href: '/channel-affinity',
   },
   {
     id: 'settings',
@@ -90,7 +85,7 @@ const navigation: NavItem[] = [
     icon: <AppIcon name="settings" />,
     children: [
       { id: 'base-url', label: 'BaseURL', href: '/settings/base-url' },
-      { id: 'general', label: '查询Model列表', href: '/settings/general' },
+      { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'recovery', label: '自动恢复', href: '/settings/recovery' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
     ],

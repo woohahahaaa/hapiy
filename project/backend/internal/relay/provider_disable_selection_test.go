@@ -89,7 +89,7 @@ func TestDispatch_affinityFallsBackWhenRecalledProviderIsLegacyAutoDisabled(t *t
 		t.Fatalf("save affinity rules: %v", err)
 	}
 	engine.ReloadAffinity()
-	engine.Affinity().Record("by-user", "alice", "", "m1", affinity.Triple{ProviderName: "disabled", KeyIndex: -1, BaseURLIndex: -1}, 60)
+	engine.Affinity().Record("by-user", "alice", "m1", affinity.Triple{ProviderName: "disabled", KeyIndex: -1, BaseURLIndex: -1}, 60)
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load providers: %v", err)
 	}

@@ -27,16 +27,13 @@ type AffinitySetting struct {
 	Rules             []Rule `json:"rules"`
 }
 
-// Rule matches requests whose session id / user id / model can be
-// read from the configured field lists. ModelNames locks the rule to
-// a specific set of model names (an empty list matches any model).
+// Rule matches requests whose session id / model can be read from
+// the configured field lists.
 type Rule struct {
 	Name           string   `json:"name"`
 	Enabled        bool     `json:"enabled"`
 	SessionIDFields []string `json:"session_id_fields"`
-	UserIDFields    []string `json:"user_id_fields"`
 	ModelFields     []string `json:"model_fields"`
-	ModelNames      []string `json:"model_names"`
 	TTLSeconds     int      `json:"ttl_seconds,omitempty"`
 }
 
@@ -50,11 +47,9 @@ type Triple struct {
 // compiledRule is the in-memory form. Sets are precomputed so request-
 // time matching is O(1) per field.
 type compiledRule struct {
-	rule          Rule
-	sessionIDSet  map[string]struct{}
-	userIDSet     map[string]struct{}
-	modelSet      map[string]struct{}
-	modelNamesSet map[string]struct{}
+	rule         Rule
+	sessionIDSet map[string]struct{}
+	modelSet     map[string]struct{}
 }
 
 type Store struct{ db *gorm.DB }
@@ -103,11 +98,9 @@ func (s *Store) Save(setting *AffinitySetting) error {
 
 func compileRule(r Rule) compiledRule {
 	return compiledRule{
-		rule:          r,
-		sessionIDSet:  stringSet(r.SessionIDFields),
-		userIDSet:     stringSet(r.UserIDFields),
-		modelSet:      stringSet(r.ModelFields),
-		modelNamesSet: stringSet(r.ModelNames),
+		rule:         r,
+		sessionIDSet: stringSet(r.SessionIDFields),
+		modelSet:     stringSet(r.ModelFields),
 	}
 }
 
@@ -160,7 +153,7 @@ func (cs *RuleCompiledSet) cacheGet(key string) (Triple, bool) {
 
 // Record stores a successful affinity routing so the next matching
 // request can recall it.
-func (cs *RuleCompiledSet) Record(ruleName, sessionID, userID, modelName string, t Triple, ttlSeconds int) string {
+func (cs *RuleCompiledSet) Record(ruleName, sessionID, modelName string, t Triple, ttlSeconds int) string {
 	if cs == nil || cs.cache == nil {
 		return ""
 	}
@@ -168,7 +161,7 @@ func (cs *RuleCompiledSet) Record(ruleName, sessionID, userID, modelName string,
 	if ttl <= 0 {
 		ttl = cs.DefaultTTL
 	}
-	key := buildCacheKey(ruleName, sessionID, userID, modelName)
+	key := buildCacheKey(ruleName, sessionID, modelName)
 	cs.cache.Set(key, t, time.Duration(ttl)*time.Second)
 	return key
 }

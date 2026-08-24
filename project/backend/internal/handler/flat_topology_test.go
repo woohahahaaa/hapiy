@@ -205,3 +205,64 @@ func TestDeriveFlatAssignments_emits_log_output_with_nil_rule(t *testing.T) {
 		t.Errorf("config: want %s, got %s", logCfg, rows[0].Config)
 	}
 }
+
+func TestDeriveFlatAssignments_binds_upstream_autoSwitch_to_each_provider_child(t *testing.T) {
+	db := newTopologyTestDB(t)
+	for _, p := range []model.Provider{
+		{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true},
+		{ID: "p-b", Name: "B", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true},
+	} {
+		if err := db.Create(&p).Error; err != nil {
+			t.Fatalf("create provider: %v", err)
+		}
+	}
+	rule := model.FailoverRule{ID: "fo-a", Name: "f", Status: true, Dimension: model.FailoverDimensionProvider}
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatalf("create failover rule: %v", err)
+	}
+
+	// Wiring mirrors the reported bug: entry → autoSwitch → provider-slot,
+	// with two providers listed after the provider slot.
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "e1", Kind: topology.KindRequestEntry, Enabled: true, Weight: 1},
+			{
+				ID: "as1", Kind: topology.KindSlot, SlotType: "autoSwitch", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"r1","slotType":"autoSwitch","index":1,"ruleId":"fo-a","enabled":true,"config":{}}]`),
+			},
+			{ID: "ps1", Kind: topology.KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "pa1", Kind: topology.KindProvider, Name: "A", Enabled: true},
+			{ID: "pa2", Kind: topology.KindProvider, Name: "B", Enabled: true},
+		},
+		Wires: []topology.Wire{
+			{Source: "e1", Target: "as1"},
+			{Source: "as1", Target: "ps1"},
+			{Source: "ps1", Target: "pa1"},
+			{Source: "pa1", Target: "pa2"},
+		},
+	}
+
+	rows, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	var autoSwitchRows []model.TopologySlotAssignment
+	for _, row := range rows {
+		if row.SlotType == "autoSwitch" {
+			autoSwitchRows = append(autoSwitchRows, row)
+		}
+	}
+	if len(autoSwitchRows) != 2 {
+		t.Fatalf("autoSwitch rows: want 2 (both providers), got %d (%v)", len(autoSwitchRows), rows)
+	}
+	byProvider := map[string]string{}
+	for _, row := range autoSwitchRows {
+		byProvider[row.ProviderID] = *row.RuleID
+	}
+	if byProvider["p-a"] != "fo-a" {
+		t.Errorf("provider A rule: want fo-a, got %q", byProvider["p-a"])
+	}
+	if byProvider["p-b"] != "fo-a" {
+		t.Errorf("provider B rule: want fo-a, got %q", byProvider["p-b"])
+	}
+}

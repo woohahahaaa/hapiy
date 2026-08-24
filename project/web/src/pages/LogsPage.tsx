@@ -272,7 +272,6 @@ export function LogsPage() {
           row.status === 'success'
             ? '<#16a34a>成功</#16a34a>'
             : '<#dc2626>失败</#dc2626>',
-        line2: (row) => row.errorMessage ?? null,
       },
     },
   ]

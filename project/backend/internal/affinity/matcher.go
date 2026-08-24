@@ -29,10 +29,9 @@ func headerValue(headers map[string]string, name string) string {
 	return ""
 }
 
-// readField tries each candidate field name in order: first as a
-// request header (case-insensitive), then as a gjson path into the
-// body. Returns the first non-empty trimmed value.
-func readField(req *Request, fields []string) string {
+// readHeaderField reads the first non-empty value from request
+// headers (case-insensitive). The body is never consulted.
+func readHeaderField(req *Request, fields []string) string {
 	for _, name := range fields {
 		if name == "" {
 			continue
@@ -40,13 +39,26 @@ func readField(req *Request, fields []string) string {
 		if v := headerValue(req.Headers, name); v != "" {
 			return strings.TrimSpace(v)
 		}
-		if len(req.Body) > 0 {
-			res := gjson.GetBytes(req.Body, name)
-			if res.Exists() {
-				if s := strings.TrimSpace(res.String()); s != "" {
-					return s
-				}
-			}
+	}
+	return ""
+}
+
+// readBodyField reads the first non-empty value from the request body
+// using gjson paths. Headers are never consulted.
+func readBodyField(req *Request, fields []string) string {
+	if len(req.Body) == 0 {
+		return ""
+	}
+	for _, name := range fields {
+		if name == "" {
+			continue
+		}
+		res := gjson.GetBytes(req.Body, name)
+		if !res.Exists() {
+			continue
+		}
+		if s := strings.TrimSpace(res.String()); s != "" {
+			return s
 		}
 	}
 	return ""
@@ -54,19 +66,17 @@ func readField(req *Request, fields []string) string {
 
 // MatchResult carries the outcome of an affinity lookup.
 type MatchResult struct {
-	Matched     bool
-	CacheKey    string
-	Triple      Triple
-	RuleName    string
-	SessionID   string
-	UserID      string
-	ModelName   string
+	Matched   bool
+	CacheKey  string
+	Triple    Triple
+	RuleName  string
+	SessionID string
+	ModelName string
 }
 
 // Lookup runs channel affinity: iterate enabled rules, extract the
-// session id / user id / model from their configured field lists, and
-// recall a cached triple when one applies. The model also has to match
-// the rule's explicit ModelNames list.
+// session id / model from their configured field lists, and recall a
+// cached triple when one applies.
 func (cs *RuleCompiledSet) Lookup(req *Request) MatchResult {
 	if cs == nil || !cs.Enabled {
 		return MatchResult{}
@@ -74,40 +84,34 @@ func (cs *RuleCompiledSet) Lookup(req *Request) MatchResult {
 	for _, cr := range cs.rules {
 		r := cr.rule
 
-		sessionID := readField(req, r.SessionIDFields)
+		sessionID := readHeaderField(req, r.SessionIDFields)
 		if sessionID == "" {
 			continue
 		}
 		modelName := req.Model
 		if modelName == "" {
-			modelName = readField(req, r.ModelFields)
+			modelName = readBodyField(req, r.ModelFields)
 		}
 		if modelName == "" {
 			continue
 		}
-		if len(cr.modelNamesSet) > 0 {
-			if _, ok := cr.modelNamesSet[modelName]; !ok {
-				continue
-			}
-		}
-		userID := readField(req, r.UserIDFields)
 
 		ttl := r.TTLSeconds
 		if ttl <= 0 {
 			ttl = cs.DefaultTTL
 		}
-		key := buildCacheKey(r.Name, sessionID, userID, modelName)
+		key := buildCacheKey(r.Name, sessionID, modelName)
 		t, found := cs.cacheGet(key)
 		if !found {
 			return MatchResult{
 				Matched: false, CacheKey: key, RuleName: r.Name,
-				SessionID: sessionID, UserID: userID, ModelName: modelName,
+				SessionID: sessionID, ModelName: modelName,
 			}
 		}
 		_ = ttl
 		return MatchResult{
 			Matched: true, CacheKey: key, Triple: t, RuleName: r.Name,
-			SessionID: sessionID, UserID: userID, ModelName: modelName,
+			SessionID: sessionID, ModelName: modelName,
 		}
 	}
 	return MatchResult{}

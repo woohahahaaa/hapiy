@@ -131,3 +131,85 @@ func TestCreateRule_rejectsDuplicateName(t *testing.T) {
 		t.Fatalf("duplicate name: want 400, got %d: %s", rec2.Code, rec2.Body.String())
 	}
 }
+
+// Regression: the failover branch of UpdateRule must bind the request body
+// before validating and saving, otherwise PUT silently re-persists the
+// unchanged row and edits appear to have no effect.
+func TestUpdateRule_appliesPayloadChanges(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&model.FailoverRule{}); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	router := gin.New()
+	router.POST("/rules/:type", CreateRule(db))
+	router.PUT("/rules/:type/:id", UpdateRule(db))
+
+	createBody := []byte(`{"name":"rule-a","keywords":["quota"],"status":true,"dimension":"base_url","retry_count":3,"auto_disable":true,"match_patterns":["429"],"ttfb_seconds":0}`)
+	req := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Data model.FailoverRule `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Data.ID == "" {
+		t.Fatal("created rule has empty id")
+	}
+
+	updateBody := []byte(`{"name":"rule-a-renamed","keywords":["quota","retry"],"status":false,"dimension":"key","retry_count":5,"auto_disable":false,"match_patterns":["rate_limit","401"],"ttfb_seconds":7}`)
+	req2 := httptest.NewRequest(http.MethodPut, "/rules/failover/"+created.Data.ID, bytes.NewReader(updateBody))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("update: want 200, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var updated struct {
+		Data model.FailoverRule `json:"data"`
+	}
+	if err := json.Unmarshal(rec2.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode update response: %v", err)
+	}
+	if updated.Data.Name != "rule-a-renamed" {
+		t.Fatalf("expected renamed name, got %q", updated.Data.Name)
+	}
+	if updated.Data.Dimension != model.FailoverDimensionKey {
+		t.Fatalf("expected dimension key, got %q", updated.Data.Dimension)
+	}
+	if updated.Data.RetryCount != 5 {
+		t.Fatalf("expected retry_count 5, got %d", updated.Data.RetryCount)
+	}
+	if updated.Data.AutoDisable {
+		t.Fatalf("expected auto_disable false")
+	}
+	if updated.Data.Status {
+		t.Fatalf("expected status false")
+	}
+	if updated.Data.TTFBSeconds != 7 {
+		t.Fatalf("expected ttfb_seconds 7, got %d", updated.Data.TTFBSeconds)
+	}
+
+	// Verify persistence, not just the response body.
+	var persisted model.FailoverRule
+	if err := db.First(&persisted, "id = ?", created.Data.ID).Error; err != nil {
+		t.Fatalf("reload persisted rule: %v", err)
+	}
+	if persisted.Name != "rule-a-renamed" ||
+		persisted.Dimension != model.FailoverDimensionKey ||
+		persisted.RetryCount != 5 ||
+		persisted.AutoDisable ||
+		persisted.Status ||
+		persisted.TTFBSeconds != 7 {
+		t.Fatalf("persisted rule not updated: %+v", persisted)
+	}
+}

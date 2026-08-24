@@ -144,10 +144,10 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   autoSwitch: {
-    label: '故障转移',
+    label: '自动禁用',
     slotOrder: 5,
     headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'failover', placeholder: '选择故障转移规则' },
+    ruleBindingSlot: { enabled: true, ruleKind: 'failover', placeholder: '选择自动禁用规则' },
     orderSlot: { enabled: true },
     logConfigSlot: { enabled: false },
     recordConfigSlot: { enabled: false },

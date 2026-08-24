@@ -160,6 +160,9 @@ func deriveFlatAssignments(db *gorm.DB, tp *topology.Topology) ([]model.Topology
 	nextOrder := map[string]int{}
 
 	var rows []model.TopologySlotAssignment
+	if err := deriveUpstreamAutoSwitchRows(db, tp, &rows, nextOrder); err != nil {
+		return nil, err
+	}
 	for _, n := range tp.Nodes {
 		if n.Kind != topology.KindProvider {
 			continue
@@ -290,6 +293,100 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			Config:     "{}",
 		})
 	}
+}
+
+// deriveUpstreamAutoSwitchRows binds autoSwitch rules for the
+// `entry → autoSwitch → provider-slot → provider` wiring. deriveFlatAssignments
+// only walks OUTGOING wires from each provider, so an autoSwitch slot placed
+// before the provider slot is never visited and its rule never reaches the
+// plan. Duplicate (provider, rule) pairs are suppressed.
+func deriveUpstreamAutoSwitchRows(db *gorm.DB, tp *topology.Topology, rows *[]model.TopologySlotAssignment, nextOrder map[string]int) error {
+	nodesByID := make(map[string]topology.FlatNode, len(tp.Nodes))
+	for _, n := range tp.Nodes {
+		nodesByID[n.ID] = n
+	}
+	childrenBySlot := providerChildrenBySlot(tp)
+	seen := map[string]bool{}
+
+	for _, n := range tp.Nodes {
+		if n.Kind != topology.KindRequestEntry || !n.Enabled || n.Weight <= 0 {
+			continue
+		}
+		autoSwitches := []topology.FlatNode{}
+		cur := n.ID
+		visited := map[string]bool{n.ID: true}
+		for {
+			next := flatOutgoing(tp, cur)
+			if next == "" || visited[next] {
+				break
+			}
+			visited[next] = true
+			node, ok := nodesByID[next]
+			if !ok {
+				break
+			}
+			switch {
+			case node.Kind == topology.KindSlot && node.SlotType == "autoSwitch":
+				autoSwitches = append(autoSwitches, node)
+			case node.Kind == topology.KindSlot && node.SlotType == "provider":
+				for _, as := range autoSwitches {
+					for _, child := range childrenBySlot[node.ID] {
+						var provider model.Provider
+						if err := db.Where("name = ?", child.Name).First(&provider).Error; err != nil {
+							continue
+						}
+						if !provider.Status || !provider.WorkflowEnabled || !child.Enabled {
+							continue
+						}
+						for _, entry := range decodeSlotEntries(as) {
+							if entry.RuleID == nil || *entry.RuleID == "" {
+								continue
+							}
+							key := provider.ID + "\x00" + *entry.RuleID
+							if seen[key] {
+								continue
+							}
+							seen[key] = true
+						}
+						collectSlotEntries(db, rows, as, provider.ID, child.Enabled, nextOrder)
+					}
+				}
+			}
+			cur = next
+		}
+	}
+	return nil
+}
+
+// providerChildrenBySlot groups providers by the nearest preceding provider slot.
+func providerChildrenBySlot(tp *topology.Topology) map[string][]topology.FlatNode {
+	result := map[string][]topology.FlatNode{}
+	var slotID string
+	for _, n := range tp.Nodes {
+		if n.Kind == topology.KindSlot && n.SlotType == "provider" {
+			slotID = n.ID
+			result[slotID] = []topology.FlatNode{}
+			continue
+		}
+		if n.Kind == topology.KindProvider && slotID != "" {
+			result[slotID] = append(result[slotID], n)
+			continue
+		}
+		slotID = ""
+	}
+	return result
+}
+
+// decodeSlotEntries parses a slot node's Entries JSON; malformed → nil.
+func decodeSlotEntries(slot topology.FlatNode) []flatSlotEntry {
+	var entries []flatSlotEntry
+	if len(slot.Entries) == 0 || string(slot.Entries) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(slot.Entries, &entries); err != nil {
+		return nil
+	}
+	return entries
 }
 
 // validateFlatRuleExists returns nil iff the given rule exists with

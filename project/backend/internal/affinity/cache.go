@@ -67,18 +67,15 @@ func fingerprint(s string) string {
 }
 
 // buildCacheKey composes the cache key from the rule name plus
-// fingerprints of session id, user id, and model name. Any field
-// left empty is omitted from the key.
-func buildCacheKey(ruleName, sessionID, userID, modelName string) string {
-	parts := make([]string, 0, 4)
+// fingerprints of session id and model name. Any field left empty
+// is omitted from the key.
+func buildCacheKey(ruleName, sessionID, modelName string) string {
+	parts := make([]string, 0, 3)
 	if ruleName != "" {
 		parts = append(parts, ruleName)
 	}
 	if sessionID != "" {
 		parts = append(parts, fingerprint(sessionID))
-	}
-	if userID != "" {
-		parts = append(parts, fingerprint(userID))
 	}
 	if modelName != "" {
 		parts = append(parts, modelName)

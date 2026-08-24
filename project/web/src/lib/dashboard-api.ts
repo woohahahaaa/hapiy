@@ -496,9 +496,7 @@ export type ChannelAffinityRule = {
   readonly name: string
   readonly enabled: boolean
   readonly sessionIdFields: readonly string[]
-  readonly userIdFields: readonly string[]
   readonly modelFields: readonly string[]
-  readonly modelNames: readonly string[]
   readonly ttlSeconds?: number
 }
 
@@ -737,9 +735,7 @@ function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
     name: readString(value.name, 'affinity_rule.name'),
     enabled: readBoolean(value.enabled, 'affinity_rule.enabled'),
     sessionIdFields: readStringArray(value.session_id_fields, 'affinity_rule.session_id_fields'),
-    userIdFields: readStringArray(value.user_id_fields, 'affinity_rule.user_id_fields'),
     modelFields: readStringArray(value.model_fields, 'affinity_rule.model_fields'),
-    modelNames: readStringArray(value.model_names, 'affinity_rule.model_names'),
     ...(typeof value.ttl_seconds === 'number' && Number.isFinite(value.ttl_seconds) ? { ttlSeconds: value.ttl_seconds } : {}),
   }
 }
@@ -834,9 +830,7 @@ function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecor
       name: rule.name,
       enabled: rule.enabled,
       session_id_fields: rule.sessionIdFields,
-      user_id_fields: rule.userIdFields,
       model_fields: rule.modelFields,
-      model_names: rule.modelNames,
       ...(rule.ttlSeconds !== undefined ? { ttl_seconds: rule.ttlSeconds } : {}),
     })),
   }
@@ -1422,10 +1416,10 @@ function parseFailoverRule(value: unknown): FailoverRule {
 }
 
 function parseFailoverAction(value: unknown): FailoverAction {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的故障转移动作格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError('服务端返回的自动禁用动作格式无效', null)
   const dimension = readString(value.dimension, 'rule.actions.dimension')
   if (dimension !== 'base_url' && dimension !== 'key' && dimension !== 'provider') {
-    throw new DashboardApiError('服务端返回的故障转移动作维度无效', null)
+    throw new DashboardApiError('服务端返回的自动禁用动作维度无效', null)
   }
   return {
     dimension,

@@ -36,17 +36,19 @@ func NewFallbackStore(db *gorm.DB) *FallbackStore {
 }
 
 // Load returns the current fallback setting (defaults when unset/invalid).
+// The unset default is enabled=true so the feature is on out of the box;
+// existing saved data is respected.
 func (s *FallbackStore) Load() (*FallbackSetting, error) {
 	raw, err := service.GetSetting(s.db, FallbackSettingKey)
 	if err != nil {
 		return nil, err
 	}
 	if raw == "" {
-		return &FallbackSetting{Enabled: false, SessionIDFields: []string{}, ModelFields: []string{}}, nil
+		return &FallbackSetting{Enabled: true, SessionIDFields: []string{}, ModelFields: []string{}}, nil
 	}
 	var setting FallbackSetting
 	if err := json.Unmarshal([]byte(raw), &setting); err != nil {
-		return &FallbackSetting{Enabled: false, SessionIDFields: []string{}, ModelFields: []string{}}, fmt.Errorf("decode fallback setting: %w", err)
+		return &FallbackSetting{Enabled: true, SessionIDFields: []string{}, ModelFields: []string{}}, fmt.Errorf("decode fallback setting: %w", err)
 	}
 	if setting.SessionIDFields == nil {
 		setting.SessionIDFields = []string{}
@@ -77,11 +79,9 @@ func (s *FallbackStore) Save(setting *FallbackSetting) error {
 		FirstOrCreate(&model.Setting{Key: FallbackSettingKey}).Error
 }
 
-// ExtractField reads the first non-empty value from the request using the
-// given list of field names. Each name is checked first as a request
-// header (case-insensitive), then as a gjson path into the request body.
-// Returns "" if no field yields a value.
-func ExtractField(req *Request, fields []string) string {
+// ExtractHeaderField reads the first non-empty value from request
+// headers (case-insensitive). The body is never consulted.
+func ExtractHeaderField(req *Request, fields []string) string {
 	for _, name := range fields {
 		if name == "" {
 			continue
@@ -89,13 +89,26 @@ func ExtractField(req *Request, fields []string) string {
 		if v := headerValue(req.Headers, name); v != "" {
 			return v
 		}
-		if len(req.Body) > 0 {
-			res := gjson.GetBytes(req.Body, name)
-			if res.Exists() {
-				if s := res.String(); s != "" {
-					return s
-				}
-			}
+	}
+	return ""
+}
+
+// ExtractBodyField reads the first non-empty value from the request
+// body via gjson paths. Headers are never consulted.
+func ExtractBodyField(req *Request, fields []string) string {
+	if len(req.Body) == 0 {
+		return ""
+	}
+	for _, name := range fields {
+		if name == "" {
+			continue
+		}
+		res := gjson.GetBytes(req.Body, name)
+		if !res.Exists() {
+			continue
+		}
+		if s := res.String(); s != "" {
+			return s
 		}
 	}
 	return ""

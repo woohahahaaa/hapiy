@@ -37,13 +37,13 @@ func (e *Engine) lookupFallbackAffinity(req *affinity.Request) fallbackLookupRes
 	if req == nil {
 		return fallbackLookupResult{}
 	}
-	sessionID := affinity.ExtractField(req, setting.SessionIDFields)
+	sessionID := affinity.ExtractHeaderField(req, setting.SessionIDFields)
 	if sessionID == "" {
 		return fallbackLookupResult{}
 	}
 	modelName := req.Model
 	if modelName == "" {
-		modelName = affinity.ExtractField(req, setting.ModelFields)
+		modelName = affinity.ExtractBodyField(req, setting.ModelFields)
 	}
 	if modelName == "" {
 		return fallbackLookupResult{}
@@ -101,13 +101,13 @@ func (e *Engine) recordFallbackChannel(req *RelayRequest, providerID string, key
 		Headers: req.Headers,
 		Body:    affinityBodyBytes(req.Body),
 	}
-	sessionID := affinity.ExtractField(affReq, setting.SessionIDFields)
+	sessionID := affinity.ExtractHeaderField(affReq, setting.SessionIDFields)
 	if sessionID == "" {
 		return
 	}
 	modelName := req.Model
 	if modelName == "" {
-		modelName = affinity.ExtractField(affReq, setting.ModelFields)
+		modelName = affinity.ExtractBodyField(affReq, setting.ModelFields)
 	}
 	if modelName == "" || providerID == "" {
 		return

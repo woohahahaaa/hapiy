@@ -293,7 +293,7 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 		return fmt.Errorf("load topology assignments: %w", err)
 	}
 	for _, assignment := range assignments {
-		if !wanted[assignment.SlotType] {
+		if assignment.SlotType != "autoSwitch" && !wanted[assignment.SlotType] {
 			continue
 		}
 		if err := e.populateAssignment(db, plan, assignment); err != nil {
