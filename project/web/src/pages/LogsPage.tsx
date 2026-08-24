@@ -208,10 +208,16 @@ export function LogsPage() {
       accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null),
     },
     {
-      key: 'affinityHit',
+      key: 'affinityReuse',
       label: '渠道亲和性',
       defaultWidth: { kind: 'percent', value: 8 },
-      accessor: (row) => (row.affinityHit ? '命中' : null),
+      render: (_, row) => {
+        const log = row as UsageLog
+        if (log.affinityReuse === '') return <span className="text-muted-foreground/40">-</span>
+        if (log.affinityReuse === 'full') return <span className="text-success">完整复用</span>
+        if (log.affinityReuse === 'partial') return <span className="text-warning">部分复用</span>
+        return <span className="text-muted-foreground">未复用</span>
+      },
     },
     {
       key: 'promptTokens',

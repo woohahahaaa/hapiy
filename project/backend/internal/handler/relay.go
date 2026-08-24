@@ -236,9 +236,9 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				BaseURLIndex: relayReq.BaseURLIndex,
 			}, 0)
 		}
-		// AffinityHit also covers the fallback last-used-channel path, which
-		// has AffinityMatch == nil but is still channel-affinity selection.
-		affinityHit := dispatchResult.AffinityHit || dispatchResult.AffinityMatch != nil
+		// AffinityReuse covers both the rule path (AffinityMatch) and the
+		// fallback last-used-channel path; empty when no affinity matched.
+		affinityReuse := dispatchResult.AffinityReuse
 
 		// Forward the response first so use_time spans the full transfer for
 		// streaming requests; the log row is written after the stream ends.
@@ -275,7 +275,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Source:            service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			IsStream:          relayReq.Stream,
 			Status:            "success",
-			AffinityHit:      affinityHit,
+			AffinityReuse:     affinityReuse,
 			IP:                c.ClientIP(),
 			RequestID:         c.GetString("request_id"),
 			UseTime:           useTime,

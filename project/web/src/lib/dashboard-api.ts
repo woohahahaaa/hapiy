@@ -154,7 +154,7 @@ export type UsageLog = {
   readonly status: 'success' | 'failed'
   readonly errorMessage: string
   readonly upstreamUrl: string
-  readonly affinityHit: boolean
+  readonly affinityReuse: '' | 'none' | 'partial' | 'full'
 }
 
 export type LogListParams = {
@@ -969,7 +969,7 @@ function parseLog(value: unknown): UsageLog {
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
-    affinityHit: value.affinity_hit === true,
+    affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',
   }
 }
 

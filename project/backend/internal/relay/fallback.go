@@ -27,8 +27,10 @@ type fallbackLookupResult struct {
 // It returns matched=true only when (1) the fallback feature is enabled,
 // (2) both the session ID and model can be extracted from the request,
 // (3) a history row exists for that pair, and (4) the stored provider
-// is still usable (enabled, not auto-disabled). The caller MUST verify
-// the key/baseURL indices are still in range before consuming them.
+// is still usable (enabled, not auto-disabled). Key/baseURL indices are
+// NOT range-checked here: an out-of-range index is deliberately allowed
+// through so the caller can fall back to the first enabled key/baseURL
+// (or match by value) instead of discarding the affinity outright.
 func (e *Engine) lookupFallbackAffinity(req *affinity.Request) fallbackLookupResult {
 	setting := e.fallbackSetting()
 	if setting == nil || !setting.Enabled {
@@ -67,12 +69,6 @@ func (e *Engine) lookupFallbackAffinity(req *affinity.Request) fallbackLookupRes
 	}
 	plan, err := e.GetPlan(provider.ID)
 	if err != nil || plan == nil {
-		return fallbackLookupResult{}
-	}
-	if row.KeyIndex >= len(plan.Keys) {
-		return fallbackLookupResult{}
-	}
-	if row.BaseURLIndex >= len(plan.BaseURLs) {
 		return fallbackLookupResult{}
 	}
 	return fallbackLookupResult{

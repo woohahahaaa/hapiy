@@ -99,6 +99,19 @@ func weightedPick(eligible []topology.EligibleProvider) topology.EligibleProvide
 	return eligible[len(eligible)-1]
 }
 
+// Channel-reuse states recorded per request after a channel-affinity match.
+const (
+	// AffinityReuseNone: an affinity rule matched but nothing of the last
+	// channel could be reused — the request fell through to normal selection.
+	AffinityReuseNone = "none"
+	// AffinityReusePartial: part of the last channel (provider, baseURL or
+	// key) was reused, but not the exact same provider+baseURL+key triple.
+	AffinityReusePartial = "partial"
+	// AffinityReuseFull: the exact last provider+baseURL+key triple was
+	// reused as-is.
+	AffinityReuseFull = "full"
+)
+
 // DispatchResult is the outcome of selecting a provider for a request.
 type DispatchResult struct {
 	Plan         *ExecutionPlan
@@ -108,9 +121,10 @@ type DispatchResult struct {
 	// AffinityMatch, when non-nil, means the provider was chosen via channel
 	// affinity; the handler records the successful recall on request success.
 	AffinityMatch *affinity.MatchResult
-	// AffinityHit is set when the provider was chosen via the fallback
-	// last-used-channel path, which has no MatchResult to surface.
-	AffinityHit bool
+	// AffinityReuse records how much of the last channel was reused:
+	// empty when no affinity rule matched, otherwise one of the
+	// AffinityReuse* constants.
+	AffinityReuse string
 	// PathNodeIDs is the exact node path the request traverses
 	// (entry -> provider -> slots), captured at dispatch time. Empty when
 	// the request was served outside the flat-topology walk (affinity recall).
@@ -118,38 +132,55 @@ type DispatchResult struct {
 	Origin      *topology.RequestOrigin
 }
 
+// channelHint is the (provider, key, baseURL) tuple a channel-affinity
+// match (fallback history or affinity rule) wants to reuse.
+type channelHint struct {
+	providerID   string
+	providerName string
+	keyIndex     int
+	baseURLIndex int
+}
+
+// affinityCandidate is a provider that can currently serve this request.
+type affinityCandidate struct {
+	provider *model.Provider
+	plan     *ExecutionPlan
+}
+
 // Dispatch selects a provider for a request and builds its execution plan. It
 // consults the fallback channel affinity first (last-used channel for the
 // request's session_id+model), then configured affinity rules, then the
-// flat-topology weighted selection. The returned plan is restricted to the
-// provider's reachable slot types in the wiring.
+// flat-topology weighted selection. A channel-affinity hit is only honored
+// when it is still inside the current eligible set; otherwise it degrades by
+// priority (provider -> baseURL -> key) before falling through to normal
+// selection. The returned plan is restricted to the provider's reachable
+// slot types in the wiring.
 func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*DispatchResult, error) {
 	if affinityReq != nil {
 		if fallback := e.lookupFallbackAffinity(affinityReq); fallback.matched {
-			if provider, plan, err := e.buildPlanForProvider(fallback.providerID, fallback.providerName, nil); err == nil {
-				return &DispatchResult{
-					Plan:         plan,
-					Provider:     provider,
-					KeyIndex:     fallback.keyIndex,
-					BaseURLIndex: fallback.baseURLIndex,
-					AffinityHit:  true,
-				}, nil
+			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
+				providerID:   fallback.providerID,
+				providerName: fallback.providerName,
+				keyIndex:     fallback.keyIndex,
+				baseURLIndex: fallback.baseURLIndex,
+			}); used {
+				return result, nil
 			}
 		}
 	}
 	if affinityReq != nil && e.Affinity() != nil {
 		match := e.Affinity().Lookup(affinityReq)
 		if match.Matched {
-			provider, plan, err := e.buildPlanForProvider(match.Triple.ProviderName, match.Triple.ProviderName, nil)
-			if err == nil && !e.providerDisabled(provider) {
-				return &DispatchResult{
-					Plan:          plan,
-					Provider:      provider,
-					KeyIndex:      match.Triple.KeyIndex,
-					BaseURLIndex:  match.Triple.BaseURLIndex,
-					AffinityMatch: &match,
-				}, nil
+			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
+				providerName: match.Triple.ProviderName,
+				keyIndex:     match.Triple.KeyIndex,
+				baseURLIndex: match.Triple.BaseURLIndex,
+			}); used {
+				result.AffinityMatch = &match
+				return result, nil
 			}
+			// The recalled channel is no longer usable: drop the stale
+			// affinity entry so the next request does not recall it again.
 			e.Affinity().Delete(match.CacheKey)
 		}
 	}
@@ -190,6 +221,169 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 		return nil, err
 	}
 	return &DispatchResult{Plan: plan, Provider: provider, KeyIndex: -1, BaseURLIndex: -1}, nil
+}
+
+// dispatchWithChannelHint resolves a channel-affinity hint against the set of
+// providers currently eligible for this request. Priority: the hinted provider
+// itself -> any eligible provider carrying the hinted baseURL -> any eligible
+// provider carrying the hinted key. Returns used=false when nothing matches,
+// so the caller falls through to normal selection.
+func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (*DispatchResult, bool) {
+	candidates := e.eligibleAffinityCandidates(model, path)
+	if len(candidates) == 0 {
+		return nil, false
+	}
+
+	// 1) The hinted provider is still eligible: use it. Full reuse only when
+	// the hinted key and baseURL indices are both still valid on this plan;
+	// otherwise it is a partial reuse and the relay layer falls back to the
+	// first enabled key/baseURL.
+	for _, c := range candidates {
+		if (hint.providerID != "" && c.provider.ID == hint.providerID) ||
+			(hint.providerName != "" && c.provider.Name == hint.providerName) {
+			reuse := AffinityReusePartial
+			if hint.keyIndex >= 0 && hint.keyIndex < len(c.plan.Keys) &&
+				hint.baseURLIndex >= 0 && hint.baseURLIndex < len(c.plan.BaseURLs) {
+				reuse = AffinityReuseFull
+			}
+			result := &DispatchResult{
+				Plan:          c.plan,
+				Provider:      c.provider,
+				KeyIndex:      hint.keyIndex,
+				BaseURLIndex:  hint.baseURLIndex,
+				AffinityReuse: reuse,
+			}
+			return result, true
+		}
+	}
+
+	// 2) The hinted baseURL exists on another eligible provider: partial reuse.
+	baseURL := e.hintBaseURL(hint)
+	if baseURL != "" {
+		for _, c := range candidates {
+			for bi, u := range c.plan.BaseURLs {
+				if u == baseURL {
+					return &DispatchResult{
+						Plan:          c.plan,
+						Provider:      c.provider,
+						KeyIndex:      hint.keyIndex,
+						BaseURLIndex:  bi,
+						AffinityReuse: AffinityReusePartial,
+					}, true
+				}
+			}
+		}
+	}
+
+	// 3) The hinted key exists on another eligible provider: partial reuse.
+	key := e.hintKey(hint)
+	if key != "" {
+		for _, c := range candidates {
+			for ki, k := range c.plan.Keys {
+				if k == key {
+					return &DispatchResult{
+						Plan:          c.plan,
+						Provider:      c.provider,
+						KeyIndex:      ki,
+						BaseURLIndex:  hint.baseURLIndex,
+						AffinityReuse: AffinityReusePartial,
+					}, true
+				}
+			}
+		}
+	}
+
+	return nil, false
+}
+
+// eligibleAffinityCandidates builds the current eligible provider set for a
+// request: the flat-topology walk when a topology exists (it filters model,
+// endpoints, node switches and slot strategy), otherwise every usable
+// provider that supports the model/path. This is the "可选集合" the affinity
+// hint is validated against.
+func (e *Engine) eligibleAffinityCandidates(modelName, path string) []affinityCandidate {
+	if tp, err := topology.NewStore(e.db).Load(); err == nil && tp != nil && len(tp.Nodes) > 0 {
+		refs := e.buildFlatProviderRefs()
+		if eligible, err := topology.FindEligibleProviders(tp, refs, modelName, path); err == nil {
+			candidates := make([]affinityCandidate, 0, len(eligible))
+			for _, el := range eligible {
+				provider, plan, err := e.buildPlanForProvider(el.ProviderID, el.Name, el.Chain)
+				if err != nil {
+					continue
+				}
+				candidates = append(candidates, affinityCandidate{provider: provider, plan: plan})
+			}
+			return candidates
+		}
+	}
+
+	e.providersMu.RLock()
+	providers := make([]*model.Provider, 0, len(e.providers))
+	for _, p := range e.providers {
+		providers = append(providers, p)
+	}
+	e.providersMu.RUnlock()
+
+	candidates := make([]affinityCandidate, 0, len(providers))
+	for _, p := range providers {
+		if !p.Status || !p.WorkflowEnabled || e.providerDisabled(p) {
+			continue
+		}
+		provider, plan, err := e.buildPlanForProvider(p.ID, p.Name, nil)
+		if err != nil {
+			continue
+		}
+		if !affinityPlanSupports(plan, modelName, path) {
+			continue
+		}
+		candidates = append(candidates, affinityCandidate{provider: provider, plan: plan})
+	}
+	return candidates
+}
+
+// affinityPlanSupports reports whether a compiled plan can serve the request
+// model and path (mirrors the flat-topology providerSupports check).
+func affinityPlanSupports(plan *ExecutionPlan, model, path string) bool {
+	if len(plan.ModelSet) > 0 {
+		if _, ok := plan.ModelSet[model]; !ok {
+			return false
+		}
+	}
+	if len(plan.AllowedPaths) > 0 {
+		if _, ok := plan.AllowedPaths[path]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// hintBaseURL returns the baseURL value the hint's baseURLIndex refers to on
+// the hinted provider, or "" when the provider/plan/index is unavailable.
+func (e *Engine) hintBaseURL(hint channelHint) string {
+	plan := e.hintPlan(hint)
+	if plan == nil || hint.baseURLIndex < 0 || hint.baseURLIndex >= len(plan.BaseURLs) {
+		return ""
+	}
+	return plan.BaseURLs[hint.baseURLIndex]
+}
+
+// hintKey returns the key value the hint's keyIndex refers to on the hinted
+// provider, or "" when the provider/plan/index is unavailable.
+func (e *Engine) hintKey(hint channelHint) string {
+	plan := e.hintPlan(hint)
+	if plan == nil || hint.keyIndex < 0 || hint.keyIndex >= len(plan.Keys) {
+		return ""
+	}
+	return plan.Keys[hint.keyIndex]
+}
+
+// hintPlan resolves the hinted provider's execution plan by ID or name.
+func (e *Engine) hintPlan(hint channelHint) *ExecutionPlan {
+	_, plan, err := e.buildPlanForProvider(hint.providerID, hint.providerName, nil)
+	if err != nil || plan == nil {
+		return nil
+	}
+	return plan
 }
 
 func providerSlotID(tp *topology.Topology, entryID string) string {

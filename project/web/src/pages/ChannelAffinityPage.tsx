@@ -57,8 +57,17 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
 }) {
   const [form, setForm] = useState<ChannelAffinityRule>(rule ?? emptyRule())
 
-  const updateList = (key: FieldListKey, text: string) => {
-    setForm((current) => ({ ...current, [key]: parseList(text) }))
+  // Keep raw textarea text (newlines included) so Enter works live; cleanup
+  // (trim/dedup) happens only when saving.
+  const [sessionText, setSessionText] = useState(rule?.sessionIdFields.join('\n') ?? '')
+  const [modelText, setModelText] = useState(rule?.modelFields.join('\n') ?? '')
+
+  const handleSave = async () => {
+    await onSave({
+      ...form,
+      sessionIdFields: parseList(sessionText),
+      modelFields: parseList(modelText),
+    })
   }
 
   return (
@@ -72,8 +81,8 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
         <FieldLabel>Session ID 请求头（每行一个，大小写不敏感）</FieldLabel>
         <Textarea
           rows={3}
-          value={form.sessionIdFields.join('\n')}
-          onChange={(event) => updateList('sessionIdFields', event.target.value)}
+          value={sessionText}
+          onChange={(event) => setSessionText(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">只在请求头里查找（不读 body），第一个有值的生效。</p>
         <p className="text-xs text-muted-foreground">常见字段名：X-Session-Id、X-Conversation-Id、x-litellm-session-id、X-Request-Id、X-Client-Session-Id、X-Claude-Code-Session-Id</p>
@@ -83,8 +92,8 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
         <FieldLabel>Model 字段（gjson 路径，每行一个）</FieldLabel>
         <Textarea
           rows={3}
-          value={form.modelFields.join('\n')}
-          onChange={(event) => updateList('modelFields', event.target.value)}
+          value={modelText}
+          onChange={(event) => setModelText(event.target.value)}
         />
         <p className="text-xs text-muted-foreground">在请求体里按 gjson 路径查找模型名；留空时直接用请求的 model 字段（OpenAI 标准）。</p>
         <p className="text-xs text-muted-foreground">常见路径：model</p>
@@ -98,8 +107,8 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button
-          disabled={saving || !form.name.trim() || form.sessionIdFields.length === 0}
-          onClick={async () => { await onSave(form) }}
+          disabled={saving || !form.name.trim() || parseList(sessionText).length === 0}
+          onClick={() => void handleSave()}
         >
           {saving ? '保存中...' : '保存'}
         </Button>
@@ -115,8 +124,10 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
   readonly saving: boolean
 }) {
   const [enabled, setEnabled] = useState(fallback.enabled)
-  const [sessionFields, setSessionFields] = useState<string[]>(() => Array.from(new Set(fallback.sessionIdFields)))
-  const [modelFields, setModelFields] = useState<string[]>(() => Array.from(new Set(fallback.modelFields)))
+  // Keep raw textarea text (newlines included) so Enter works live; cleanup
+  // happens only when saving.
+  const [sessionText, setSessionText] = useState(fallback.sessionIdFields.join('\n') ?? '')
+  const [modelText, setModelText] = useState(fallback.modelFields.join('\n') ?? '')
 
   return (
     <FieldGroup>
@@ -136,8 +147,8 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
             <FieldLabel>Session ID 请求头（每行一个，大小写不敏感）</FieldLabel>
             <Textarea
               rows={3}
-              value={sessionFields.join('\n')}
-              onChange={(event) => setSessionFields(Array.from(new Set(event.target.value.split('\n').map((s) => s.trim()).filter(Boolean))))}
+              value={sessionText}
+              onChange={(event) => setSessionText(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">只在请求头里查找（不读 body），第一个有值的生效。</p>
             <p className="text-xs text-muted-foreground">常见字段名：X-Session-Id、X-Conversation-Id、x-litellm-session-id、X-Request-Id、X-Client-Session-Id、X-Claude-Code-Session-Id</p>
@@ -147,8 +158,8 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
             <FieldLabel>Model 字段（gjson 路径，每行一个）</FieldLabel>
             <Textarea
               rows={3}
-              value={modelFields.join('\n')}
-              onChange={(event) => setModelFields(Array.from(new Set(event.target.value.split('\n').map((s) => s.trim()).filter(Boolean))))}
+              value={modelText}
+              onChange={(event) => setModelText(event.target.value)}
             />
             <p className="text-xs text-muted-foreground">在请求体里按 gjson 路径查找模型名；留空时直接用请求的 model 字段（OpenAI 标准）。</p>
             <p className="text-xs text-muted-foreground">常见路径：model</p>
@@ -163,8 +174,8 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
           onClick={async () => {
             await onSave({
               enabled,
-              sessionIdFields: sessionFields,
-              modelFields: modelFields,
+              sessionIdFields: parseList(sessionText),
+              modelFields: parseList(modelText),
             })
           }}
         >

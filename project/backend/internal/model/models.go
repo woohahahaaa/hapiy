@@ -94,13 +94,13 @@ type Log struct {
 	Currency     string `json:"currency"`
 	UseTime      int    `json:"use_time"` // milliseconds
 	Status       string `json:"status"` // success / failed
-	// AffinityHit reports whether the provider was chosen via channel affinity
-	// (fallback last-used channel or configured affinity rule), as opposed to plain
-	// flat-topology weighted selection. Backfilled on the success path only.
-	AffinityHit  bool   `json:"affinity_hit"`   // success / failed
-	IP           string `json:"ip"`
-	RequestID    string `json:"request_id"`
-	ErrorMessage string `json:"error_message"`
+	// AffinityReuse records how much of the last channel-affinity channel was
+	// reused on this request: empty when no affinity rule matched, otherwise
+	// "none" / "partial" / "full" (see relay.AffinityReuse*).
+	AffinityReuse string `json:"affinity_reuse"`
+	IP            string `json:"ip"`
+	RequestID     string `json:"request_id"`
+	ErrorMessage  string `json:"error_message"`
 	// Stage timings in milliseconds; nil means the stage does not apply.
 	// ConnectMs: time from issuing the upstream request until its response
 	// headers arrive. FirstByteMs: time from response headers until the first
