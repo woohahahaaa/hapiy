@@ -12,7 +12,7 @@ import (
 var defaultSettings = map[string]string{
 	"default_model_list_endpoint":        "/v1/models",
 	"own_model_list_endpoint":            "/models",
-	"automatic_disable_recovery_minutes": "1440",
+	"automatic_disable_recovery_minutes": "60",
 	"recovery_ttfb_seconds":              "0",
 }
 

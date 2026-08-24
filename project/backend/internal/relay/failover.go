@@ -188,6 +188,7 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 			return err
 		}
 	}
+	e.saveDisabledRecord(plan.Provider.ID, dimension, value, req, "")
 	return nil
 }
 

@@ -434,12 +434,12 @@ func TestReadRecoveryTTFB(t *testing.T) {
 
 func TestReadRecoveryInterval(t *testing.T) {
 	db := newRecoveryTestDB(t)
-	if got := readRecoveryInterval(db); got != 1440 {
-		t.Fatalf("unset (defaults to 1440) got %d, want 1440", got)
-	}
-	upsertSetting(t, db, SettingRecoveryInterval, "60")
 	if got := readRecoveryInterval(db); got != 60 {
-		t.Fatalf("explicit 60 got %d, want 60", got)
+		t.Fatalf("unset (defaults to 60) got %d, want 60", got)
+	}
+	upsertSetting(t, db, SettingRecoveryInterval, "120")
+	if got := readRecoveryInterval(db); got != 120 {
+		t.Fatalf("explicit 120 got %d, want 120", got)
 	}
 	upsertSetting(t, db, SettingRecoveryInterval, "0")
 	if got := readRecoveryInterval(db); got != 0 {

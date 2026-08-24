@@ -10,16 +10,15 @@ func TestLookupNoRules(t *testing.T) {
 	}
 }
 
-func TestLookupModelPathAndHeader(t *testing.T) {
+func TestLookupMatchByHeaderFields(t *testing.T) {
 	cs := CompileRules(&AffinitySetting{
-		Enabled:          true,
+		Enabled:           true,
 		DefaultTTLSeconds: 30,
 		Rules: []Rule{{
-			Name:       "r1",
-			Enabled:    true,
-			ModelRegex: []string{"gpt-.*"},
-			PathRegex:  []string{"/v1/chat/completions"},
-			KeySources: []KeySource{{Type: SourceRequestHeader, Key: "X-Session-Id"}},
+			Name:            "r1",
+			Enabled:         true,
+			SessionIDFields: []string{"X-Session-Id"},
+			ModelNames:      []string{"gpt-4"},
 		}},
 	})
 
@@ -28,7 +27,6 @@ func TestLookupModelPathAndHeader(t *testing.T) {
 		Path:    "/v1/chat/completions",
 		Headers: map[string]string{"x-session-id": "abc"},
 	}
-	// First lookup: no recall yet.
 	res := cs.Lookup(req)
 	if res.Matched {
 		t.Fatalf("expected miss before Record")
@@ -36,9 +34,11 @@ func TestLookupModelPathAndHeader(t *testing.T) {
 	if res.CacheKey == "" {
 		t.Fatalf("expected a cache key on miss")
 	}
+	if res.SessionID != "abc" {
+		t.Fatalf("expected SessionID=abc, got %q", res.SessionID)
+	}
 
-	// Record a successful triple and recall it.
-	cs.Record("r1", false, "gpt-4", "abc", Triple{ProviderName: "p1", KeyIndex: 2, BaseURLIndex: 0}, 30)
+	cs.Record("r1", "abc", "", "gpt-4", Triple{ProviderName: "p1", KeyIndex: 2, BaseURLIndex: 0}, 30)
 	res = cs.Lookup(req)
 	if !res.Matched {
 		t.Fatalf("expected hit after Record")
@@ -48,31 +48,55 @@ func TestLookupModelPathAndHeader(t *testing.T) {
 	}
 }
 
-func TestLookupModelScoped(t *testing.T) {
+func TestLookupModelNameFilter(t *testing.T) {
 	cs := CompileRules(&AffinitySetting{
 		Enabled:           true,
 		DefaultTTLSeconds: 30,
 		Rules: []Rule{{
-			Name:             "r",
-			Enabled:          true,
-			ModelRegex:       []string{".*"},
-			KeySources:       []KeySource{{Type: SourceGJSON, Path: "session.id"}},
-			IncludeModelName: true,
+			Name:            "r",
+			Enabled:         true,
+			SessionIDFields: []string{"X-Session-Id"},
+			ModelNames:      []string{"gpt-4"},
+		}},
+	})
+	req := &Request{
+		Model:   "gpt-4",
+		Headers: map[string]string{"X-Session-Id": "abc"},
+	}
+	cs.Record("r", "abc", "", "gpt-4", Triple{ProviderName: "p1", KeyIndex: 0, BaseURLIndex: 0}, 30)
+
+	if res := cs.Lookup(&Request{Model: "claude-3", Headers: map[string]string{"X-Session-Id": "abc"}}); res.Matched {
+		t.Fatalf("expected miss because model is not in ModelNames")
+	}
+	if res := cs.Lookup(req); !res.Matched {
+		t.Fatalf("expected hit for model in ModelNames")
+	}
+}
+
+func TestLookupReadFromBody(t *testing.T) {
+	cs := CompileRules(&AffinitySetting{
+		Enabled:           true,
+		DefaultTTLSeconds: 30,
+		Rules: []Rule{{
+			Name:            "r",
+			Enabled:         true,
+			SessionIDFields: []string{"X-Session-Id", "session.id"},
 		}},
 	})
 	req := &Request{
 		Model: "gpt-4",
-		Body:  []byte(`{"session":{"id":"s1"}}`),
+		Body:  []byte(`{"session":{"id":"s-from-body"}}`),
 	}
-	cs.Record("r", true, "gpt-4", "s1", Triple{ProviderName: "p1", KeyIndex: 0, BaseURLIndex: 0}, 30)
-
-	// Same session, different model -> should NOT match the gpt-4 recall.
-	other := &Request{Model: "claude-3", Body: []byte(`{"session":{"id":"s1"}}`)}
-	if res := cs.Lookup(other); res.Matched {
-		t.Fatalf("expected cross-model miss when IncludeModelName is set")
+	res := cs.Lookup(req)
+	if res.Matched {
+		t.Fatalf("expected miss before Record")
 	}
+	if res.SessionID != "s-from-body" {
+		t.Fatalf("expected SessionID=s-from-body, got %q", res.SessionID)
+	}
+	cs.Record("r", "s-from-body", "", "gpt-4", Triple{ProviderName: "p1"}, 30)
 	if res := cs.Lookup(req); !res.Matched {
-		t.Fatalf("expected hit for same model")
+		t.Fatalf("expected hit after Record")
 	}
 }
 
@@ -80,10 +104,9 @@ func TestLookupRuleDisabled(t *testing.T) {
 	cs := CompileRules(&AffinitySetting{
 		Enabled: true,
 		Rules: []Rule{{
-			Name:       "off",
-			Enabled:    false,
-			ModelRegex: []string{".*"},
-			KeySources: []KeySource{{Type: SourceRequestHeader, Key: "X"}},
+			Name:            "off",
+			Enabled:         false,
+			SessionIDFields: []string{"X"},
 		}},
 	})
 	res := cs.Lookup(&Request{Model: "gpt", Headers: map[string]string{"X": "v"}})
@@ -96,13 +119,41 @@ func TestGlobalDisabled(t *testing.T) {
 	cs := CompileRules(&AffinitySetting{
 		Enabled: false,
 		Rules: []Rule{{
-			Name:       "r",
-			Enabled:    true,
-			ModelRegex: []string{".*"},
-			KeySources: []KeySource{{Type: SourceRequestHeader, Key: "X"}},
+			Name:            "r",
+			Enabled:         true,
+			SessionIDFields: []string{"X"},
 		}},
 	})
 	if res := cs.Lookup(&Request{Model: "gpt", Headers: map[string]string{"X": "v"}}); res.Matched {
 		t.Fatalf("global disabled must block matching")
+	}
+}
+
+func TestLookupUserIDField(t *testing.T) {
+	cs := CompileRules(&AffinitySetting{
+		Enabled:           true,
+		DefaultTTLSeconds: 30,
+		Rules: []Rule{{
+			Name:            "r",
+			Enabled:         true,
+			SessionIDFields: []string{"X-Session-Id"},
+			UserIDFields:    []string{"X-User-Id"},
+		}},
+	})
+	req := &Request{
+		Model:   "gpt-4",
+		Headers: map[string]string{"X-Session-Id": "s1", "X-User-Id": "u1"},
+	}
+	cs.Record("r", "s1", "u1", "gpt-4", Triple{ProviderName: "p1"}, 30)
+
+	res := cs.Lookup(&Request{
+		Model:   "gpt-4",
+		Headers: map[string]string{"X-Session-Id": "s1", "X-User-Id": "u2"},
+	})
+	if res.Matched {
+		t.Fatalf("expected miss because user id changed")
+	}
+	if res := cs.Lookup(req); !res.Matched {
+		t.Fatalf("expected hit for matching tuple")
 	}
 }

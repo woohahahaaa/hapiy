@@ -111,9 +111,14 @@ func (f *firstByteRecorder) firstByteLatency(start time.Time) time.Duration {
 
 // RecoveryOptions configures one recovery cycle. TTFBThreshold == 0 means
 // "don't check TTFB" — the upstream-success check alone is sufficient.
+// RecordReplay, when set, runs first: every open DisabledRecord is
+// replayed (the recorded request context is sent against a healthy
+// partner) and successful rows are marked resolved. Harness-based
+// recovery then handles anything still left.
 type RecoveryOptions struct {
 	TTFBThreshold time.Duration
 	Probe         func(baseURL, key, model string) ProbeResult
+	RecordReplay  func() (resolved int, total int)
 }
 
 // StartRecoveryScheduler runs auto-recovery cycles in the background. The
@@ -122,6 +127,14 @@ type RecoveryOptions struct {
 // disables the scheduler (it still re-checks the setting hourly so a later
 // enable is picked up without a process restart).
 func StartRecoveryScheduler(db *gorm.DB) {
+	StartRecoverySchedulerWithRecordReplay(db, nil, nil)
+}
+
+// StartRecoverySchedulerWithRecordReplay is the same as
+// StartRecoveryScheduler but also invokes recordReplay (if non-nil)
+// at the start of every cycle so recorded disable contexts get
+// replayed before the harness-based pass runs.
+func StartRecoverySchedulerWithRecordReplay(db *gorm.DB, _ any, recordReplay func() (resolved, total int)) {
 	go func() {
 		for {
 			interval := readRecoveryInterval(db)
@@ -132,6 +145,7 @@ func StartRecoveryScheduler(db *gorm.DB) {
 			opts := RecoveryOptions{
 				TTFBThreshold: readRecoveryTTFB(db),
 				Probe:         ChannelProbe,
+				RecordReplay:  recordReplay,
 			}
 			RunRecoveryCycle(db, opts)
 			time.Sleep(time.Duration(interval) * time.Minute)
@@ -163,11 +177,16 @@ func readRecoveryTTFB(db *gorm.DB) time.Duration {
 	return time.Duration(n) * time.Second
 }
 
-// RunRecoveryCycle executes one auto-recovery pass. It scans every
-// disabled entity across every provider, probes it against a
-// known-healthy harness, and clears the disable flag on success. Failure
-// leaves the entity disabled so the next cycle can retry.
+// RunRecoveryCycle executes one auto-recovery pass. If a RecordReplay
+// callback is supplied it runs first so disabled entities that have a
+// recorded request context get the most accurate test (replaying the
+// same request that triggered the disable). Whatever's still disabled
+// afterwards falls through to the harness-based pass below.
 func RunRecoveryCycle(db *gorm.DB, opts RecoveryOptions) {
+	if opts.RecordReplay != nil {
+		opts.RecordReplay()
+	}
+
 	var states []model.ProviderDisableState
 	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
 		log.Printf("recovery: load disabled states: %v", err)

@@ -76,6 +76,24 @@ export type ProviderDisableStatus = {
 
 export type ProviderDisableDimension = 'provider' | 'base_url' | 'key'
 
+export type DisabledRecordDimension = 'key' | 'base_url' | 'provider'
+
+export type DisabledRecord = {
+  readonly id: string
+  readonly providerId: string
+  readonly dimension: DisabledRecordDimension
+  readonly value: string
+  readonly requestHeaders: string
+  readonly requestBody: string
+  readonly errorMessage: string
+  readonly disabledAt: string
+  readonly lastRetryAt: string | null
+  readonly retryCount: number
+  readonly resolvedAt: string | null
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export type ProviderListParams = {
   readonly limit: number
   readonly offset: number
@@ -474,17 +492,13 @@ function parseDuplicateActivation(value: unknown): DuplicateActivation {
 }
 
 // ── Channel affinity ──
-export type ChannelAffinityKeySource =
-  | { readonly type: 'request_header'; readonly key: string }
-  | { readonly type: 'gjson'; readonly path: string }
-
 export type ChannelAffinityRule = {
   readonly name: string
   readonly enabled: boolean
-  readonly modelRegex: readonly string[]
-  readonly pathRegex: readonly string[]
-  readonly keySources: readonly ChannelAffinityKeySource[]
-  readonly includeModelName: boolean
+  readonly sessionIdFields: readonly string[]
+  readonly userIdFields: readonly string[]
+  readonly modelFields: readonly string[]
+  readonly modelNames: readonly string[]
   readonly ttlSeconds?: number
 }
 
@@ -715,20 +729,6 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
   return parsed.map(parseItem)
 }
 
-function parseKeySource(value: unknown): ChannelAffinityKeySource {
-  if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 key source 格式无效', null)
-  }
-  const type = readString(value.type, 'key_source.type')
-  if (type === 'request_header') {
-    return { type: 'request_header', key: readString(value.key, 'key_source.key') }
-  }
-  if (type === 'gjson') {
-    return { type: 'gjson', path: readString(value.path, 'key_source.path') }
-  }
-  throw new DashboardApiError(`服务端返回的 key source 类型无效: ${type}`, null)
-}
-
 function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的亲和规则格式无效', null)
@@ -736,10 +736,10 @@ function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
   return {
     name: readString(value.name, 'affinity_rule.name'),
     enabled: readBoolean(value.enabled, 'affinity_rule.enabled'),
-    modelRegex: readStringArray(value.model_regex, 'affinity_rule.model_regex'),
-    pathRegex: readStringArray(value.path_regex, 'affinity_rule.path_regex'),
-    keySources: readObjectArray(value.key_sources, 'affinity_rule.key_sources', parseKeySource),
-    includeModelName: readBoolean(value.include_model_name, 'affinity_rule.include_model_name'),
+    sessionIdFields: readStringArray(value.session_id_fields, 'affinity_rule.session_id_fields'),
+    userIdFields: readStringArray(value.user_id_fields, 'affinity_rule.user_id_fields'),
+    modelFields: readStringArray(value.model_fields, 'affinity_rule.model_fields'),
+    modelNames: readStringArray(value.model_names, 'affinity_rule.model_names'),
     ...(typeof value.ttl_seconds === 'number' && Number.isFinite(value.ttl_seconds) ? { ttlSeconds: value.ttl_seconds } : {}),
   }
 }
@@ -833,10 +833,10 @@ function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecor
     rules: input.rules.map((rule) => ({
       name: rule.name,
       enabled: rule.enabled,
-      model_regex: rule.modelRegex,
-      path_regex: rule.pathRegex,
-      key_sources: rule.keySources,
-      include_model_name: rule.includeModelName,
+      session_id_fields: rule.sessionIdFields,
+      user_id_fields: rule.userIdFields,
+      model_fields: rule.modelFields,
+      model_names: rule.modelNames,
       ...(rule.ttlSeconds !== undefined ? { ttl_seconds: rule.ttlSeconds } : {}),
     })),
   }
@@ -856,6 +856,39 @@ function parseProvider(value: unknown): Provider {
     status: readBoolean(value.status, 'provider.status'),
     autoDisabled: readBoolean(value.auto_disabled, 'provider.auto_disabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
+  }
+}
+
+function isDisabledRecordDimension(value: unknown): value is DisabledRecordDimension {
+  return value === 'key' || value === 'base_url' || value === 'provider'
+}
+
+function parseDisabledRecord(value: unknown): DisabledRecord {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的禁用记录格式无效', null)
+  }
+  const dimension = readString(value.dimension, 'disabled_record.dimension')
+  if (!isDisabledRecordDimension(dimension)) {
+    throw new DashboardApiError(`服务端返回的禁用维度无效: ${dimension}`, null)
+  }
+  return {
+    id: readString(value.id, 'disabled_record.id'),
+    providerId: readString(value.provider_id, 'disabled_record.provider_id'),
+    dimension,
+    value: readString(value.value, 'disabled_record.value'),
+    requestHeaders: readString(value.request_headers ?? '', 'disabled_record.request_headers'),
+    requestBody: readString(value.request_body ?? '', 'disabled_record.request_body'),
+    errorMessage: readString(value.error_message, 'disabled_record.error_message'),
+    disabledAt: readString(value.disabled_at, 'disabled_record.disabled_at'),
+    lastRetryAt: value.last_retry_at == null || value.last_retry_at === ''
+      ? null
+      : readString(value.last_retry_at, 'disabled_record.last_retry_at'),
+    retryCount: readNumber(value.retry_count, 'disabled_record.retry_count', 0),
+    resolvedAt: value.resolved_at == null || value.resolved_at === ''
+      ? null
+      : readString(value.resolved_at, 'disabled_record.resolved_at'),
+    createdAt: readString(value.created_at, 'disabled_record.created_at'),
+    updatedAt: readString(value.updated_at, 'disabled_record.updated_at'),
   }
 }
 
@@ -1608,6 +1641,22 @@ export const dashboardApi = {
       method: 'POST',
       body: JSON.stringify(input),
     })
+  },
+
+  // ── Disabled records ──
+  async listDisabledRecords(): Promise<readonly DisabledRecord[]> {
+    const data = await request('/disabled-records')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的禁用记录列表格式无效', null)
+    }
+    return data.map(parseDisabledRecord)
+  },
+  async replayDisabledRecord(id: string): Promise<{ readonly record: DisabledRecord; readonly resolved: boolean }> {
+    const body = await requestFull(`/disabled-records/${encodeURIComponent(id)}/replay`, { method: 'POST' })
+    return {
+      record: parseDisabledRecord(body.data),
+      resolved: readBoolean(body.resolved, 'replay.resolved'),
+    }
   },
 
   // ── Tokens ──

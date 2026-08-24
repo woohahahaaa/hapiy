@@ -91,7 +91,7 @@ const navigation: NavItem[] = [
     children: [
       { id: 'base-url', label: 'BaseURL', href: '/settings/base-url' },
       { id: 'general', label: '查询Model列表', href: '/settings/general' },
-      { id: 'recovery', label: '恢复自动禁用', href: '/settings/recovery' },
+      { id: 'recovery', label: '自动恢复', href: '/settings/recovery' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
     ],
   },

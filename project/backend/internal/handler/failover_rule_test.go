@@ -99,3 +99,35 @@ func TestCreateRule_rejectsInvalidDimension(t *testing.T) {
 		t.Fatalf("status: want %d, got %d", http.StatusBadRequest, recorder.Code)
 	}
 }
+
+func TestCreateRule_rejectsDuplicateName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&model.FailoverRule{}); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	router := gin.New()
+	router.POST("/rules/:type", CreateRule(db))
+	router.PUT("/rules/:type/:id", UpdateRule(db))
+
+	first := []byte(`{"name":"dup","status":true,"dimension":"base_url","retry_count":3,"auto_disable":true}`)
+	req1 := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(first))
+	req1.Header.Set("Content-Type", "application/json")
+	rec1 := httptest.NewRecorder()
+	router.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusCreated {
+		t.Fatalf("first create: want 201, got %d: %s", rec1.Code, rec1.Body.String())
+	}
+
+	second := []byte(`{"name":"dup","status":true,"dimension":"key","retry_count":3,"auto_disable":true}`)
+	req2 := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(second))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate name: want 400, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+}

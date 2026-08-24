@@ -288,6 +288,39 @@ func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// DisabledRecord captures the request that triggered an auto-disable so
+// auto-recovery can replay it later. The unique index on
+// (provider_id, dimension, value) dedupes repeated disables on the same
+// entity: a second disable updates the row instead of inserting a new one.
+// For key/base_url dimensions, the row carries the ProviderID so the
+// recovery cascade can find sibling records that share the same
+// provider or base URL.
+type DisabledRecord struct {
+	ID                string    `gorm:"primaryKey;type:uuid" json:"id"`
+	ProviderID        string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
+	Dimension         string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
+	Value             string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
+	RequestHeaders    string    `gorm:"type:text" json:"request_headers"`
+	RequestBody       string    `gorm:"type:text" json:"request_body"`
+	ErrorMessage      string    `gorm:"type:text" json:"error_message"`
+	DisabledAt        time.Time `gorm:"index" json:"disabled_at"`
+	LastRetryAt       *time.Time `json:"last_retry_at"`
+	RetryCount        int        `json:"retry_count"`
+	ResolvedAt        *time.Time `json:"resolved_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+func (r *DisabledRecord) BeforeCreate(tx *gorm.DB) error {
+	if r.ID == "" {
+		r.ID = uuid.New().String()
+	}
+	if r.DisabledAt.IsZero() {
+		r.DisabledAt = time.Now()
+	}
+	return nil
+}
+
 func (r *FailoverRule) BeforeSave(tx *gorm.DB) error {
 	r.Normalize()
 	return nil

@@ -6,8 +6,9 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// Request is the minimal view of an incoming relay request that affinity needs
-// to match rules and read field values. Headers are matched case-insensitively.
+// Request is the minimal view of an incoming relay request that affinity
+// needs to match rules and read field values. Headers are matched
+// case-insensitively.
 type Request struct {
 	Model   string
 	Path    string
@@ -28,86 +29,86 @@ func headerValue(headers map[string]string, name string) string {
 	return ""
 }
 
-// extractValue reads an affinity value from one KeySource.
-func extractValue(req *Request, src KeySource) string {
-	switch src.Type {
-	case SourceRequestHeader:
-		if src.Key == "" {
-			return ""
+// readField tries each candidate field name in order: first as a
+// request header (case-insensitive), then as a gjson path into the
+// body. Returns the first non-empty trimmed value.
+func readField(req *Request, fields []string) string {
+	for _, name := range fields {
+		if name == "" {
+			continue
 		}
-		return strings.TrimSpace(headerValue(req.Headers, src.Key))
-	case SourceGJSON:
-		if src.Path == "" || len(req.Body) == 0 {
-			return ""
+		if v := headerValue(req.Headers, name); v != "" {
+			return strings.TrimSpace(v)
 		}
-		res := gjson.GetBytes(req.Body, src.Path)
-		if !res.Exists() {
-			return ""
+		if len(req.Body) > 0 {
+			res := gjson.GetBytes(req.Body, name)
+			if res.Exists() {
+				if s := strings.TrimSpace(res.String()); s != "" {
+					return s
+				}
+			}
 		}
-		return strings.TrimSpace(res.String())
-	default:
-		return ""
 	}
+	return ""
 }
 
 // MatchResult carries the outcome of an affinity lookup.
 type MatchResult struct {
-	// Matched is true when a rule applied and a cached triple was recalled.
-	Matched bool
-	// CacheKey is the composed cache key (used to delete/refresh on failure).
-	CacheKey string
-	// Triple is the recalled provider/key/baseURL when Matched is true.
-	Triple Triple
-	// RuleName identifies which rule matched (for logging / cache admin).
-	RuleName string
-	// RuleIncludeModel mirrors the rule's IncludeModelName for recording.
-	RuleIncludeModel bool
-	// AffinityValue is the extracted field value (needed to record a new recall).
-	AffinityValue string
+	Matched     bool
+	CacheKey    string
+	Triple      Triple
+	RuleName    string
+	SessionID   string
+	UserID      string
+	ModelName   string
 }
 
-// Lookup runs channel affinity: find the first applicable enabled rule, read the
-// affinity value, and recall a cached triple if present.
+// Lookup runs channel affinity: iterate enabled rules, extract the
+// session id / user id / model from their configured field lists, and
+// recall a cached triple when one applies. The model also has to match
+// the rule's explicit ModelNames list.
 func (cs *RuleCompiledSet) Lookup(req *Request) MatchResult {
 	if cs == nil || !cs.Enabled {
 		return MatchResult{}
 	}
 	for _, cr := range cs.rules {
 		r := cr.rule
-		// Model match: if the rule lists model regexes, one must match.
-		if len(cr.modelRe) > 0 && !matchAny(cr.modelRe, req.Model) {
+
+		sessionID := readField(req, r.SessionIDFields)
+		if sessionID == "" {
 			continue
 		}
-		// Path match: only when the rule declares path regexes.
-		if len(cr.pathRe) > 0 && !matchAny(cr.pathRe, req.Path) {
+		modelName := req.Model
+		if modelName == "" {
+			modelName = readField(req, r.ModelFields)
+		}
+		if modelName == "" {
 			continue
 		}
-		// Read the affinity value from the first source that yields one.
-		var value string
-		for _, src := range r.KeySources {
-			value = extractValue(req, src)
-			if value != "" {
-				break
+		if len(cr.modelNamesSet) > 0 {
+			if _, ok := cr.modelNamesSet[modelName]; !ok {
+				continue
 			}
 		}
-		if value == "" {
-			continue
-		}
-		if cr.valueRe != nil && !cr.valueRe.MatchString(value) {
-			continue
-		}
+		userID := readField(req, r.UserIDFields)
 
 		ttl := r.TTLSeconds
 		if ttl <= 0 {
 			ttl = cs.DefaultTTL
 		}
-		key := buildCacheKey(r.Name, r.IncludeModelName, req.Model, value)
+		key := buildCacheKey(r.Name, sessionID, userID, modelName)
 		t, found := cs.cacheGet(key)
 		if !found {
-			return MatchResult{Matched: false, CacheKey: key, RuleName: r.Name, RuleIncludeModel: r.IncludeModelName, AffinityValue: value}
+			return MatchResult{
+				Matched: false, CacheKey: key, RuleName: r.Name,
+				SessionID: sessionID, UserID: userID, ModelName: modelName,
+			}
 		}
 		_ = ttl
-		return MatchResult{Matched: true, CacheKey: key, Triple: t, RuleName: r.Name, RuleIncludeModel: r.IncludeModelName, AffinityValue: value}
+		return MatchResult{
+			Matched: true, CacheKey: key, Triple: t, RuleName: r.Name,
+			SessionID: sessionID, UserID: userID, ModelName: modelName,
+		}
 	}
 	return MatchResult{}
 }

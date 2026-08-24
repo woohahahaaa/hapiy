@@ -681,8 +681,8 @@ function FailoverPage() {
 
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs text-muted-foreground">{row.keywords.join('、') || '未设置'}</span> },
-    { key: 'actions', label: '故障转移', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.actions.map((action) => failoverActionLabel(action.dimension)).join(' → ')}</span> },
+    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs text-muted-foreground">{(row.keywords ?? []).join('、') || '未设置'}</span> },
+    { key: 'actions', label: '故障转移', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{(row.actions ?? []).map((action) => failoverActionLabel(action.dimension)).join(' → ')}</span> },
     {
       key: 'status',
       label: '状态',

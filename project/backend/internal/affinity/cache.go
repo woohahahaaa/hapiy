@@ -66,17 +66,22 @@ func fingerprint(s string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-// buildCacheKey composes the cache key from the rule name, optional model, and
-// the affinity value fingerprint. Including the model scope (when the rule
-// wants it) prevents cross-model hits.
-func buildCacheKey(ruleName string, includeModel bool, modelName string, affinityValue string) string {
-	parts := make([]string, 0, 3)
+// buildCacheKey composes the cache key from the rule name plus
+// fingerprints of session id, user id, and model name. Any field
+// left empty is omitted from the key.
+func buildCacheKey(ruleName, sessionID, userID, modelName string) string {
+	parts := make([]string, 0, 4)
 	if ruleName != "" {
 		parts = append(parts, ruleName)
 	}
-	if includeModel && modelName != "" {
+	if sessionID != "" {
+		parts = append(parts, fingerprint(sessionID))
+	}
+	if userID != "" {
+		parts = append(parts, fingerprint(userID))
+	}
+	if modelName != "" {
 		parts = append(parts, modelName)
 	}
-	parts = append(parts, fingerprint(affinityValue))
 	return strings.Join(parts, ":")
 }

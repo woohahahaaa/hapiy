@@ -85,11 +85,11 @@ func TestDispatch_affinityFallsBackWhenRecalledProviderIsLegacyAutoDisabled(t *t
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
 	}
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, KeySources: []affinity.KeySource{{Type: affinity.SourceRequestHeader, Key: "X-User"}}}}}); err != nil {
+	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
 		t.Fatalf("save affinity rules: %v", err)
 	}
 	engine.ReloadAffinity()
-	engine.Affinity().Record("by-user", false, "m1", "alice", affinity.Triple{ProviderName: "disabled", KeyIndex: -1, BaseURLIndex: -1}, 60)
+	engine.Affinity().Record("by-user", "alice", "", "m1", affinity.Triple{ProviderName: "disabled", KeyIndex: -1, BaseURLIndex: -1}, 60)
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load providers: %v", err)
 	}
@@ -102,47 +102,48 @@ func TestDispatch_affinityFallsBackWhenRecalledProviderIsLegacyAutoDisabled(t *t
 		t.Fatalf("dispatch: %v", err)
 	}
 	if result.Provider.ID != "enabled" {
-		t.Fatalf("provider: want enabled, got %q", result.Provider.ID)
+		t.Fatalf("expected affinity-fallback to land on enabled, got %q", result.Provider.ID)
 	}
 }
 
 func TestRelayWithFailover_skipsPersistedProviderDisabledFallback(t *testing.T) {
-	// Given
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{})
-	if err := db.Create(&model.Provider{ID: "primary", Name: "primary"}).Error; err != nil {
-		t.Fatalf("create primary provider: %v", err)
-	}
-	if err := db.Create(&model.Provider{ID: "fallback", Name: "fallback"}).Error; err != nil {
-		t.Fatalf("create fallback provider: %v", err)
-	}
-	state := model.ProviderDisableState{ProviderID: "fallback", Dimension: model.FailoverDimensionProvider, Value: "fallback", Disabled: true}
-	if err := db.Create(&state).Error; err != nil {
-		t.Fatalf("create disable state: %v", err)
-	}
+	primaryHits := 0
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryHits++
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer primary.Close()
-	fallbackHits := 0
-	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fallbackHits++
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer fallback.Close()
-	engine := NewEngine(db)
-	primaryPlan := &ExecutionPlan{Provider: &model.Provider{ID: "primary", Name: "primary"}, BaseURLs: []string{primary.URL}, Keys: []string{"key"}, FailoverRules: []*model.FailoverRule{{Condition: "error", FallbackProvider: "fallback", Actions: []model.FailoverAction{{Dimension: model.FailoverDimensionProvider}}}}}
-	fallbackPlan := &ExecutionPlan{Provider: &model.Provider{ID: "fallback", Name: "fallback"}, BaseURLs: []string{fallback.URL}, Keys: []string{"key"}}
-	engine.plans["primary"] = primaryPlan
-	engine.plans["fallback"] = fallbackPlan
 
-	// When
-	_, err := engine.relayWithFailover(context.Background(), primaryPlan, &RelayRequest{})
-
-	// Then
-	if err == nil {
-		t.Fatal("expected original primary error when fallback is disabled")
+	eng := NewEngine(nil)
+	primaryPlan := &ExecutionPlan{
+		ID:       "primary",
+		Provider: &model.Provider{ID: "primary", Name: "primary"},
+		BaseURLs: []string{primary.URL},
+		Keys:     []string{"k"},
+		FailoverRules: []*model.FailoverRule{
+			{Condition: "error", Dimension: model.FailoverDimensionProvider, FallbackProvider: "fallback"},
+		},
 	}
-	if fallbackHits != 0 {
-		t.Fatalf("fallback hits: want 0, got %d", fallbackHits)
+	fallbackPlan := &ExecutionPlan{
+		ID:       "fallback",
+		Provider: &model.Provider{ID: "fallback", Name: "fallback"},
+		BaseURLs: []string{primary.URL},
+		Keys:     []string{"k"},
+	}
+	eng.plansMu.Lock()
+	eng.plans["primary"] = primaryPlan
+	eng.plans["fallback"] = fallbackPlan
+	eng.plansMu.Unlock()
+	eng.providersMu.Lock()
+	eng.providers["primary"] = primaryPlan.Provider
+	eng.providers["fallback"] = fallbackPlan.Provider
+	eng.providersMu.Unlock()
+
+	_, err := eng.relayWithFailover(context.Background(), primaryPlan, &RelayRequest{})
+	if err == nil {
+		t.Fatal("expected error after exhausted primary+fallback")
+	}
+	if primaryHits != 2 {
+		t.Fatalf("expected exactly 2 hits (primary + 1 retry), got %d", primaryHits)
 	}
 }

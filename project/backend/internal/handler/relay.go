@@ -229,7 +229,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		if dispatchResult.AffinityMatch != nil {
 			match := dispatchResult.AffinityMatch
-			engine.Affinity().Record(match.RuleName, match.RuleIncludeModel, relayReq.Model, match.AffinityValue, affinity.Triple{
+			engine.Affinity().Record(match.RuleName, match.SessionID, match.UserID, match.ModelName, affinity.Triple{
 				ProviderName: provider.Name,
 				KeyIndex:     relayReq.KeyIndex,
 				BaseURLIndex: relayReq.BaseURLIndex,

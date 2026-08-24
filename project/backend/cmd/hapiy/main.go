@@ -84,7 +84,20 @@ func main() {
 
 	// Auto-recovery scheduler: re-enables disabled providers/BaseURLs/keys
 	// whose probe returns upstream-OK (and TTFB within threshold, if set).
-	service.StartRecoveryScheduler(db)
+	service.StartRecoverySchedulerWithRecordReplay(db, engine, func() (int, int) {
+		var rows []model.DisabledRecord
+		if err := db.Where("resolved_at IS NULL").Find(&rows).Error; err != nil {
+			log.Printf("auto-recovery: load disabled records: %v", err)
+			return 0, 0
+		}
+		resolved := 0
+		for i := range rows {
+			if engine.ReplayDisabledRecord(&rows[i]) {
+				resolved++
+			}
+		}
+		return resolved, len(rows)
+	})
 
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
 	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
@@ -98,6 +111,37 @@ func main() {
 
 	// Create Gin router
 	r := gin.Default()
+
+	// Own model list fallback: catch any GET /v1/<path> that didn't match a
+	// registered route, and serve the aggregated model list when the path
+	// equals the configured `own_model_list_endpoint`. Gin doesn't allow
+	// catch-all wildcards alongside sub-groups, so we hook NoRoute and
+	// scope it to /v1/ ourselves.
+	r.NoRoute(func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet || !strings.HasPrefix(c.Request.URL.Path, "/v1/") {
+			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+		endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+			return
+		}
+		expected := strings.TrimSpace(endpoint)
+		if expected == "" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
+			return
+		}
+		if c.Request.URL.Path != expected {
+			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
+			return
+		}
+		middleware.TokenAuth(db)(c)
+		if c.IsAborted() {
+			return
+		}
+		handler.OwnModelList(db)(c)
+	})
 
 	sessions := middleware.NewSessionStore()
 
@@ -134,6 +178,8 @@ func main() {
 			dashboardAuthed.GET("/providers", handler.ListProviders(db))
 			dashboardAuthed.POST("/providers", handler.CreateProvider(db, engine))
 			dashboardAuthed.GET("/providers/disable-status", handler.ListProviderDisableStatus(db))
+			dashboardAuthed.GET("/disabled-records", handler.ListDisabledRecords(db, engine))
+			dashboardAuthed.POST("/disabled-records/:id/replay", handler.ReplayDisabledRecord(db, engine))
 			dashboardAuthed.GET("/providers/:id", handler.GetProvider(db))
 			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
@@ -232,25 +278,6 @@ func main() {
 			relayGroup.POST("/audio/speech", handler.Relay(db, engine))
 			relayGroup.POST("/audio/transcriptions", handler.Relay(db, engine))
 		}
-
-		// Own model list: serves at the path configured by `own_model_list_endpoint`.
-		v1.GET("/*any", middleware.TokenAuth(db), func(c *gin.Context) {
-			endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
-				return
-			}
-			expected := strings.TrimSpace(endpoint)
-			if expected == "" {
-				c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
-				return
-			}
-			if c.Request.URL.Path != expected {
-				c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
-				return
-			}
-			handler.OwnModelList(db)(c)
-		})
 	}
 
 	// Production mode: serve the built frontend from the same Go origin so

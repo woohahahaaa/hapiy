@@ -28,13 +28,15 @@ function emptyRule(): ChannelAffinityRule {
   return {
     name: '',
     enabled: true,
-    modelRegex: [],
-    pathRegex: [],
-    keySources: [],
-    includeModelName: true,
+    sessionIdFields: [],
+    userIdFields: [],
+    modelFields: [],
+    modelNames: [],
     ttlSeconds: 1800,
   }
 }
+
+type FieldListKey = 'sessionIdFields' | 'userIdFields' | 'modelFields' | 'modelNames'
 
 function RuleForm({ rule, onSave, onCancel, saving }: {
   readonly rule: ChannelAffinityRule | null
@@ -43,33 +45,25 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
   readonly saving: boolean
 }) {
   const [form, setForm] = useState<ChannelAffinityRule>(rule ?? emptyRule())
-  const [modelInput, setModelInput] = useState('')
-  const [pathInput, setPathInput] = useState('')
-  const [sourceType, setSourceType] = useState<ChannelAffinityKeySource['type']>('request_header')
-  const [sourceKey, setSourceKey] = useState('')
-  const [sourcePath, setSourcePath] = useState('')
+  const [drafts, setDrafts] = useState<Record<FieldListKey, string>>({
+    sessionIdFields: '',
+    userIdFields: '',
+    modelFields: '',
+    modelNames: '',
+  })
 
-  const addModel = () => {
-    const trimmed = modelInput.trim()
+  const addField = (key: FieldListKey) => {
+    const trimmed = drafts[key].trim()
     if (!trimmed) return
-    setForm((current) => ({ ...current, modelRegex: [...current.modelRegex, trimmed] }))
-    setModelInput('')
+    setForm((current) => {
+      if (current[key].includes(trimmed)) return current
+      return { ...current, [key]: [...current[key], trimmed] }
+    })
+    setDrafts((current) => ({ ...current, [key]: '' }))
   }
-  const addPath = () => {
-    const trimmed = pathInput.trim()
-    if (!trimmed) return
-    setForm((current) => ({ ...current, pathRegex: [...current.pathRegex, trimmed] }))
-    setPathInput('')
-  }
-  const addSource = () => {
-    const isGjson = sourceType === 'gjson'
-    const source: ChannelAffinityKeySource = isGjson
-      ? { type: 'gjson', path: sourcePath.trim() }
-      : { type: 'request_header', key: sourceKey.trim() }
-    if (isGjson ? !sourcePath.trim() : !sourceKey.trim()) return
-    setForm((current) => ({ ...current, keySources: [...current.keySources, source] }))
-    setSourceKey('')
-    setSourcePath('')
+
+  const removeField = (key: FieldListKey, value: string) => {
+    setForm((current) => ({ ...current, [key]: current[key].filter((item) => item !== value) }))
   }
 
   return (
@@ -88,79 +82,98 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
       </div>
 
       <Field>
-        <FieldLabel>模型匹配（正则，每行一条）</FieldLabel>
+        <FieldLabel>Session ID 字段（每行一个，先 header 后 body 路径）</FieldLabel>
         <div className="flex gap-2">
-          <Input value={modelInput} onChange={(event) => setModelInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addModel() } }} placeholder="如：deepseek.* 或 gpt-.*" />
-          <Button type="button" variant="outline" onClick={addModel}>添加</Button>
+          <Input
+            value={drafts.sessionIdFields}
+            onChange={(event) => setDrafts((current) => ({ ...current, sessionIdFields: event.target.value }))}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addField('sessionIdFields') } }}
+            placeholder="如：X-Session-Id、session-id"
+          />
+          <Button type="button" variant="outline" onClick={() => addField('sessionIdFields')}>添加</Button>
         </div>
         <div className="mt-2 flex flex-wrap gap-1">
-          {form.modelRegex.map((item) => (
+          {form.sessionIdFields.map((item) => (
             <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
               {item}
-              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, modelRegex: current.modelRegex.filter((m) => m !== item) }))}>×</button>
+              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => removeField('sessionIdFields', item)}>×</button>
             </span>
           ))}
         </div>
       </Field>
 
       <Field>
-        <FieldLabel>Endpoint 匹配（正则，每行一条；留空 = 不区分）</FieldLabel>
+        <FieldLabel>User ID 字段（每行一个）</FieldLabel>
         <div className="flex gap-2">
-          <Input value={pathInput} onChange={(event) => setPathInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addPath() } }} placeholder="如：/v1/chat/completions" />
-          <Button type="button" variant="outline" onClick={addPath}>添加</Button>
+          <Input
+            value={drafts.userIdFields}
+            onChange={(event) => setDrafts((current) => ({ ...current, userIdFields: event.target.value }))}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addField('userIdFields') } }}
+            placeholder="如：X-User-Id、user.id"
+          />
+          <Button type="button" variant="outline" onClick={() => addField('userIdFields')}>添加</Button>
         </div>
         <div className="mt-2 flex flex-wrap gap-1">
-          {form.pathRegex.map((item) => (
+          {form.userIdFields.map((item) => (
             <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
               {item}
-              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, pathRegex: current.pathRegex.filter((p) => p !== item) }))}>×</button>
+              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => removeField('userIdFields', item)}>×</button>
             </span>
           ))}
         </div>
       </Field>
 
       <Field>
-        <FieldLabel>亲和字段来源（从请求中读取会话标识，可添加多个，第一个有值的生效）</FieldLabel>
+        <FieldLabel>Model 字段（每行一个，留空则用请求的 model 字段）</FieldLabel>
         <div className="flex gap-2">
-          <Select value={sourceType} onValueChange={(value) => setSourceType(value as ChannelAffinityKeySource['type'])}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="request_header">请求头</SelectItem>
-              <SelectItem value="gjson">请求体路径</SelectItem>
-            </SelectContent>
-          </Select>
-          {sourceType === 'request_header'
-            ? <Input value={sourceKey} onChange={(event) => setSourceKey(event.target.value)} placeholder="如：X-Session-Id" />
-            : <Input value={sourcePath} onChange={(event) => setSourcePath(event.target.value)} placeholder="如：session.id" />}
-          <Button type="button" variant="outline" onClick={addSource}>添加</Button>
+          <Input
+            value={drafts.modelFields}
+            onChange={(event) => setDrafts((current) => ({ ...current, modelFields: event.target.value }))}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addField('modelFields') } }}
+            placeholder="如：model、llm_model"
+          />
+          <Button type="button" variant="outline" onClick={() => addField('modelFields')}>添加</Button>
         </div>
         <div className="mt-2 flex flex-wrap gap-1">
-          {form.keySources.map((source, index) => (
-            <span key={index} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
-              {source.type === 'request_header' ? `Header: ${source.key}` : `Body: ${source.path}`}
-              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => setForm((current) => ({ ...current, keySources: current.keySources.filter((_, i) => i !== index) }))}>×</button>
+          {form.modelFields.map((item) => (
+            <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+              {item}
+              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => removeField('modelFields', item)}>×</button>
             </span>
           ))}
         </div>
       </Field>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field>
-          <FieldLabel htmlFor="aff-ttl">缓存有效期（秒）</FieldLabel>
-          <Input id="aff-ttl" type="number" min={1} value={form.ttlSeconds ?? 1800} onChange={(event) => setForm((current) => ({ ...current, ttlSeconds: Number(event.target.value) || 1800 }))} />
-        </Field>
-        <div className="flex items-end pb-1">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={form.includeModelName} onCheckedChange={(includeModelName) => setForm((current) => ({ ...current, includeModelName }))} />
-            按模型区分缓存
-          </label>
+      <Field>
+        <FieldLabel>适用模型名称（每行一个，留空匹配所有）</FieldLabel>
+        <div className="flex gap-2">
+          <Input
+            value={drafts.modelNames}
+            onChange={(event) => setDrafts((current) => ({ ...current, modelNames: event.target.value }))}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addField('modelNames') } }}
+            placeholder="如：gpt-4、claude-3-opus"
+          />
+          <Button type="button" variant="outline" onClick={() => addField('modelNames')}>添加</Button>
         </div>
-      </div>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {form.modelNames.map((item) => (
+            <span key={item} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+              {item}
+              <button type="button" className="ml-1 text-destructive/70 hover:text-destructive" onClick={() => removeField('modelNames', item)}>×</button>
+            </span>
+          ))}
+        </div>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="aff-ttl">缓存有效期（秒）</FieldLabel>
+        <Input id="aff-ttl" type="number" min={1} value={form.ttlSeconds ?? 1800} onChange={(event) => setForm((current) => ({ ...current, ttlSeconds: Number(event.target.value) || 1800 }))} />
+      </Field>
 
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button
-          disabled={saving || !form.name.trim() || form.keySources.length === 0}
+          disabled={saving || !form.name.trim() || form.sessionIdFields.length === 0}
           onClick={async () => { await onSave(form) }}
         >
           {saving ? '保存中...' : '保存'}
@@ -371,27 +384,28 @@ export function ChannelAffinityPage() {
       render: (_, row) => <span className="font-medium">{row.name}</span>,
     },
     {
-      key: 'modelRegex',
-      label: '模型',
-      defaultWidth: { kind: 'pixel', value: 200 },
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelRegex.join(', ') || '全部'}</span>,
+      key: 'sessionIdFields',
+      label: 'Session 字段',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.sessionIdFields.join(', ') || '—'}</span>,
     },
     {
-      key: 'pathRegex',
-      label: 'Endpoint',
+      key: 'userIdFields',
+      label: 'User 字段',
       defaultWidth: { kind: 'pixel', value: 160 },
-      render: (_, row) => <span className="text-xs text-muted-foreground">{row.pathRegex.join(', ') || '不区分'}</span>,
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.userIdFields.join(', ') || '—'}</span>,
     },
     {
-      key: 'keySources',
-      label: '亲和字段',
+      key: 'modelFields',
+      label: 'Model 字段',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelFields.join(', ') || '—'}</span>,
+    },
+    {
+      key: 'modelNames',
+      label: '适用模型',
       defaultWidth: { kind: 'percent', value: 25 },
-      accessor: (row) => {
-        const joined = row.keySources
-          .map((source) => source.type === 'request_header' ? source.key : source.path)
-          .join(', ')
-        return joined || null
-      },
+      render: (_, row) => <span className="text-xs text-muted-foreground">{row.modelNames.join(', ') || '全部'}</span>,
     },
     {
       key: 'ttlSeconds',
