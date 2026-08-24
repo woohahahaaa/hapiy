@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -204,12 +205,18 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	}
 	probe := e.replayProbe(baseURL, key, modelName, record)
 	now := time.Now()
+	updates := map[string]interface{}{
+		"last_retry_at": &now,
+		"retry_count":   record.RetryCount + 1,
+	}
+	if !probe.Success && probe.ErrorMessage != "" {
+		// Persist the upstream's real feedback so the dashboard can show
+		// what the upstream actually said on the latest attempt.
+		updates["error_message"] = recordErrorMessage(errors.New(probe.ErrorMessage))
+	}
 	if updateErr := e.db.Model(&model.DisabledRecord{}).
 		Where("id = ?", record.ID).
-		Updates(map[string]interface{}{
-			"last_retry_at": &now,
-			"retry_count":   record.RetryCount + 1,
-		}).Error; updateErr != nil {
+		Updates(updates).Error; updateErr != nil {
 		log.Printf("relay: update disabled-record retry: %v", updateErr)
 	}
 	if !probe.Success {

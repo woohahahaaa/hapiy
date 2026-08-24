@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
-import { AppIcon } from '@/components/AppIcon'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,9 +24,6 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, type DateRange, type UsageLog } from '@/lib/dashboard-api'
 
-// Cap auto-load at this many rows so a huge total doesn't keep paginating forever.
-const AUTO_LOAD_CAP = 500
-
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
 function fmtSeconds(val: number): string {
   if (val < 0) return '-'
@@ -38,15 +34,14 @@ function fmtSeconds(val: number): string {
 export function LogsPage() {
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
-  const [nextOffset, setNextOffset] = useState(0)
   const [initialLoading, setInitialLoading] = useState(false)
-  const [backgroundLoading, setBackgroundLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modelFilter, setModelFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
   const [dateRange, setDateRange] = useState<DateRange>({})
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(50)
+  const [offset, setOffset] = useState(0)
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
@@ -62,16 +57,14 @@ export function LogsPage() {
     [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to],
   )
 
-  // Initial fetch clears the table and blocks it via initialLoading; reruns on filter/limit change.
-  const fetchFirstPage = useCallback(async () => {
+  const fetchPage = useCallback(async () => {
     setInitialLoading(true)
     setError(null)
     try {
-      const result = await dashboardApi.listLogs({ ...filterArgs, limit, offset: 0 })
+      const result = await dashboardApi.listLogs({ ...filterArgs, limit, offset })
       if (!mountedRef.current) return
       setLogs(result.logs)
       setTotal(result.total)
-      setNextOffset(result.logs.length)
     } catch (err) {
       if (!mountedRef.current) return
       setError(err instanceof Error ? err.message : '加载失败')
@@ -80,27 +73,7 @@ export function LogsPage() {
         setInitialLoading(false)
       }
     }
-  }, [filterArgs, limit])
-
-  // Background fetch appends to existing rows; doesn't block the table. Stops on error.
-  const fetchMore = useCallback(async () => {
-    if (backgroundLoading) return
-    setBackgroundLoading(true)
-    try {
-      const result = await dashboardApi.listLogs({ ...filterArgs, limit, offset: nextOffset })
-      if (!mountedRef.current) return
-      setLogs((prev) => [...prev, ...result.logs])
-      setTotal(result.total)
-      setNextOffset((prev) => prev + result.logs.length)
-    } catch (err) {
-      if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      if (mountedRef.current) {
-        setBackgroundLoading(false)
-      }
-    }
-  }, [filterArgs, limit, nextOffset, backgroundLoading])
+  }, [filterArgs, limit, offset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -110,18 +83,8 @@ export function LogsPage() {
   }, [])
 
   useEffect(() => {
-    void fetchFirstPage()
-  }, [fetchFirstPage])
-
-  // Auto-load more pages until the table is full or we hit a cap.
-  useEffect(() => {
-    if (initialLoading) return
-    if (backgroundLoading) return
-    if (logs.length >= total) return
-    if (total === 0) return
-    if (logs.length >= AUTO_LOAD_CAP) return
-    void fetchMore()
-  }, [initialLoading, backgroundLoading, logs.length, total, fetchMore])
+    void fetchPage()
+  }, [fetchPage])
 
   const handleFilterChange = useCallback(
     (setter: (v: string) => void, value: string | null) => {
@@ -141,11 +104,11 @@ export function LogsPage() {
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
       setClearDialogOpen(false)
       toast(`已清空 ${deleted} 条记录`)
-      void fetchFirstPage()
+      void fetchPage()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchFirstPage])
+  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchPage])
 
   const handleResetFilters = useCallback(() => {
     setSearchText('')
@@ -295,11 +258,11 @@ export function LogsPage() {
           total={total}
           loading={initialLoading}
           error={error}
-          offset={0}
+          offset={offset}
           limit={limit}
-          showPagination={false}
+          onOffsetChange={setOffset}
           onLimitChange={setLimit}
-          onRetry={fetchFirstPage}
+          onRetry={fetchPage}
           onRowClick={setSelectedLog}
           filters={
             <>
@@ -366,27 +329,7 @@ export function LogsPage() {
             </>
           }
         />
-
-        <div className="px-6 pb-2 text-xs text-muted-foreground">
-          {backgroundLoading ? (
-            <span className="inline-flex items-center gap-1.5">
-              <AppIcon name="progress_activity" size={12} className="animate-spin" />
-              正在加载更多…
-              <span className="text-muted-foreground/60">
-                （{logs.length}/{total}）
-              </span>
-            </span>
-          ) : !initialLoading && logs.length < total && logs.length >= AUTO_LOAD_CAP ? (
-            <span>
-              已加载 {logs.length}/{total} 条，请缩小筛选范围查看更多
-            </span>
-          ) : !initialLoading && logs.length > 0 ? (
-            <span>
-              共 {total} 条，已显示 {logs.length}
-            </span>
-          ) : null}
-        </div>
-        </div>
+      </div>
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DialogContent width="sm">

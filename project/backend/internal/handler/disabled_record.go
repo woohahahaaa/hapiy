@@ -31,17 +31,22 @@ func ListDisabledRecords(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 }
 
 // backfillMissingDisabledRecords reconciles provider_disable_states with
-// disabled_records: any state that is disabled but has no matching record
-// gets one created (so the pending table always reflects reality even if
-// the original disable predates record-keeping or the record was cleaned
-// up). The captured request body is best-effort recovered from the latest
-// log_captures row for that provider; when nothing is found the record is
-// stored with an empty body and the replay falls back to a default probe.
+// disabled_records in both directions:
+//   - states that are disabled but have no record get one created (so the
+//     pending table always reflects reality even if the original disable
+//     predates record-keeping or the record was cleaned up). The captured
+//     request body is best-effort recovered from the latest log_captures
+//     row for that provider; when nothing is found the record is stored
+//     with an empty body and the replay falls back to a default probe.
+//   - records whose underlying disable state is gone (manually restored
+//     elsewhere, e.g. the provider editor) are dropped so the pending
+//     table never shows items that are no longer disabled.
 func backfillMissingDisabledRecords(db *gorm.DB) {
 	var states []model.ProviderDisableState
 	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
 		return
 	}
+	// States with a pending state but no record -> create one.
 	for _, st := range states {
 		var count int64
 		if err := db.Model(&model.DisabledRecord{}).
@@ -77,6 +82,25 @@ func backfillMissingDisabledRecords(db *gorm.DB) {
 		}
 		if err := db.Create(&row).Error; err != nil {
 			log.Printf("backfill disabled record %s/%s/%s: %v", st.ProviderID, st.Dimension, st.Value, err)
+		}
+	}
+	// Records whose disable state is no longer active -> drop them.
+	var records []model.DisabledRecord
+	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
+		return
+	}
+	for _, rec := range records {
+		var stateCount int64
+		if err := db.Model(&model.ProviderDisableState{}).
+			Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?",
+				rec.ProviderID, rec.Dimension, rec.Value, true).
+			Count(&stateCount).Error; err != nil {
+			continue
+		}
+		if stateCount == 0 {
+			if err := db.Delete(&model.DisabledRecord{}, "id = ?", rec.ID).Error; err != nil {
+				log.Printf("backfill drop stale record %s: %v", rec.ID, err)
+			}
 		}
 	}
 }

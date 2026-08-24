@@ -431,7 +431,7 @@ export function RecoverySettings() {
                   <AppIcon name="settings" data-icon="inline-start" />
                   测试方法
                   {handler.ops.length > 0 && (
-                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs text-primary">
+                    <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[11px] leading-4 text-primary">
                       {handler.ops.length}
                     </span>
                   )}
@@ -537,7 +537,7 @@ function RecoveryHandlerDialog({
                 <div key={i} className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-2">
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">
+                      <span className="mr-2 inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">
                         {i + 1}
                       </span>
                       <Input
@@ -584,15 +584,25 @@ function RecoveryHandlerDialog({
                 </div>
               ))
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={addOp}
-            >
-              <AppIcon name="add" data-icon="inline-start" /> 添加规则
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addOp}
+              >
+                <AppIcon name="add" data-icon="inline-start" /> 添加规则
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setDraft({ ops: [...DEFAULT_HANDLER_OPS], timeoutHours: DEFAULT_TIMEOUT_HOURS })}
+              >
+                <AppIcon name="refresh" data-icon="inline-start" />
+                恢复默认
+              </Button>
+            </div>
 
             <div className="flex flex-col gap-1.5 border-t border-border pt-3">
               <label className="grid gap-1.5 text-sm">
@@ -616,14 +626,6 @@ function RecoveryHandlerDialog({
           </div>
         </FieldGroup>
         <DialogFooter>
-          <Button
-            variant="outline"
-            disabled={saving}
-            onClick={() => setDraft({ ops: [...DEFAULT_HANDLER_OPS], timeoutHours: DEFAULT_TIMEOUT_HOURS })}
-          >
-            <AppIcon name="refresh" data-icon="inline-start" />
-            恢复默认
-          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             取消
           </Button>
@@ -715,13 +717,13 @@ function RequestPreviewDialog({
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">请求头</div>
-              <pre className="max-h-48 overflow-auto rounded-md bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-48 overflow-auto rounded-md border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestHeaders ? formatJson(record.requestHeaders) : '-'}
               </pre>
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">请求体预览</div>
-              <pre className="max-h-96 overflow-auto rounded-md bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-96 overflow-auto rounded-md border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestBody ? formatJson(record.requestBody) : '-'}
               </pre>
             </div>

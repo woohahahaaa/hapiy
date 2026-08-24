@@ -29,9 +29,6 @@ type CaptureRow =
 
 type CaptureCategory = '请求' | '响应' | '系统'
 
-// Cap auto-load per list (pairs, system files) so a huge total doesn't keep paginating forever.
-const AUTO_LOAD_CAP = 500
-
 const TYPE_OPTIONS: readonly { value: CaptureCategory; label: string }[] = [
   { value: '请求', label: '请求' },
   { value: '响应', label: '响应' },
@@ -60,11 +57,9 @@ export function LogCapturePage() {
   const [pairTotal, setPairTotal] = useState(0)
   const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
   const [systemTotal, setSystemTotal] = useState(0)
-  const [pairNextOffset, setPairNextOffset] = useState(0)
-  const [systemNextOffset, setSystemNextOffset] = useState(0)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(10)
+  const [offset, setOffset] = useState(0)
   const [initialLoading, setInitialLoading] = useState(false)
-  const [backgroundLoading, setBackgroundLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange>({})
@@ -78,7 +73,6 @@ export function LogCapturePage() {
   const mountedRef = useRef(true)
 
   const total = pairTotal + systemTotal
-  const loadedCount = pairs.length + systemFiles.length
 
   const shouldFetchPairs = useCallback(
     () =>
@@ -101,7 +95,7 @@ export function LogCapturePage() {
   )
 
   // Initial fetch clears the table and blocks it via initialLoading.
-  const fetchFirstPage = useCallback(async () => {
+  const fetchPage = useCallback(async () => {
     setInitialLoading(true)
     setError(null)
 
@@ -119,19 +113,17 @@ export function LogCapturePage() {
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
             limit,
-            offset: 0,
+            offset,
           })
           .then((result) => {
             if (!mountedRef.current) return
             setPairs(result.pairs)
             setPairTotal(result.total)
-            setPairNextOffset(result.pairs.length)
           })
       : Promise.resolve().then(() => {
           if (!mountedRef.current) return
           setPairs([])
           setPairTotal(0)
-          setPairNextOffset(0)
         })
 
     const systemTask: Promise<void> = fetchSystem
@@ -144,19 +136,17 @@ export function LogCapturePage() {
             headerKey: headerKey || undefined,
             headerValue: headerValue || undefined,
             limit,
-            offset: 0,
+            offset,
           })
           .then((result) => {
             if (!mountedRef.current) return
             setSystemFiles(result.files)
             setSystemTotal(result.total)
-            setSystemNextOffset(result.files.length)
           })
       : Promise.resolve().then(() => {
           if (!mountedRef.current) return
           setSystemFiles([])
           setSystemTotal(0)
-          setSystemNextOffset(0)
         })
 
     const settled = await Promise.allSettled([pairTask, systemTask])
@@ -172,66 +162,7 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setInitialLoading(false)
     }
-  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, limit, shouldFetchPairs, shouldFetchSystem, pairTypeQuery])
-
-  // Background fetches append to existing lists; don't block the table.
-  const fetchMorePairs = useCallback(async () => {
-    if (backgroundLoading) return
-    if (!shouldFetchPairs()) return
-    setBackgroundLoading(true)
-    try {
-      const result = await dashboardApi.listLogCapturePairs({
-        prefix: prefix || undefined,
-        type: pairTypeQuery,
-        from: dateRange.from,
-        to: dateRange.to,
-        headerKey: headerKey || undefined,
-        headerValue: headerValue || undefined,
-        limit,
-        offset: pairNextOffset,
-      })
-      if (!mountedRef.current) return
-      setPairs((prev) => [...prev, ...result.pairs])
-      setPairTotal(result.total)
-      setPairNextOffset((prev) => prev + result.pairs.length)
-    } catch (err) {
-      if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      if (mountedRef.current) {
-        setBackgroundLoading(false)
-      }
-    }
-  }, [backgroundLoading, shouldFetchPairs, prefix, pairTypeQuery, dateRange.from, dateRange.to, headerKey, headerValue, limit, pairNextOffset])
-
-  const fetchMoreSystemFiles = useCallback(async () => {
-    if (backgroundLoading) return
-    if (!shouldFetchSystem()) return
-    setBackgroundLoading(true)
-    try {
-      const result = await dashboardApi.listLogCaptureFiles({
-        prefix: prefix || undefined,
-        type: 'system',
-        from: dateRange.from,
-        to: dateRange.to,
-        headerKey: headerKey || undefined,
-        headerValue: headerValue || undefined,
-        limit,
-        offset: systemNextOffset,
-      })
-      if (!mountedRef.current) return
-      setSystemFiles((prev) => [...prev, ...result.files])
-      setSystemTotal(result.total)
-      setSystemNextOffset((prev) => prev + result.files.length)
-    } catch (err) {
-      if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '加载失败')
-    } finally {
-      if (mountedRef.current) {
-        setBackgroundLoading(false)
-      }
-    }
-  }, [backgroundLoading, shouldFetchSystem, prefix, dateRange.from, dateRange.to, headerKey, headerValue, limit, systemNextOffset])
+  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, limit, offset, shouldFetchPairs, shouldFetchSystem, pairTypeQuery])
 
   useEffect(() => {
     mountedRef.current = true
@@ -241,22 +172,8 @@ export function LogCapturePage() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchFirstPage()
-  }, [fetchFirstPage])
-
-  // Auto-load more pages until both lists are full or hit the per-list cap.
-  useEffect(() => {
-    if (initialLoading || backgroundLoading) return
-    if (total === 0) return
-    const pairHasMore = shouldFetchPairs() && pairs.length < pairTotal && pairs.length < AUTO_LOAD_CAP
-    const sysHasMore = shouldFetchSystem() && systemFiles.length < systemTotal && systemFiles.length < AUTO_LOAD_CAP
-    if (pairHasMore) {
-      void fetchMorePairs()
-    } else if (sysHasMore) {
-      void fetchMoreSystemFiles()
-    }
-  }, [initialLoading, backgroundLoading, total, pairTotal, systemTotal, pairs.length, systemFiles.length, shouldFetchPairs, shouldFetchSystem, fetchMorePairs, fetchMoreSystemFiles])
+    void fetchPage()
+  }, [fetchPage])
 
   const toggleType = useCallback((value: CaptureCategory) => {
     setSelectedTypes((prev) =>
@@ -293,7 +210,7 @@ export function LogCapturePage() {
             : {}),
         })
         setClearOpen(false)
-        void fetchFirstPage()
+void fetchPage()
       } catch (err) {
         if (mountedRef.current) {
           setError(err instanceof Error ? err.message : '清空失败')
@@ -303,7 +220,8 @@ export function LogCapturePage() {
         setClearing(false)
       }
     },
-    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchFirstPage],
+
+    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchPage],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -420,13 +338,13 @@ export function LogCapturePage() {
           total={total}
           loading={initialLoading}
           error={error}
-          offset={0}
+          offset={offset}
           limit={limit}
-          showPagination={false}
+          onOffsetChange={setOffset}
           onLimitChange={setLimit}
           onRowClick={setPreview}
           emptyText="暂无抓取日志"
-          onRetry={() => void fetchFirstPage()}
+          onRetry={() => void fetchPage()}
           filters={
             <>
               <DateRangeFilter
@@ -489,26 +407,6 @@ export function LogCapturePage() {
             </Button>
           }
         />
-
-        <div className="px-6 pb-2 text-xs text-muted-foreground">
-          {backgroundLoading ? (
-            <span className="inline-flex items-center gap-1.5">
-              <AppIcon name="progress_activity" size={12} className="animate-spin" />
-              正在加载更多…
-              <span className="text-muted-foreground/60">
-                （{loadedCount}/{total}）
-              </span>
-            </span>
-          ) : !initialLoading && (pairs.length < pairTotal || systemFiles.length < systemTotal) && (pairs.length >= AUTO_LOAD_CAP || systemFiles.length >= AUTO_LOAD_CAP) ? (
-            <span>
-              已加载 {loadedCount}/{total} 条，请缩小筛选范围查看更多
-            </span>
-          ) : !initialLoading && loadedCount > 0 ? (
-            <span>
-              共 {total} 条，已显示 {loadedCount}
-            </span>
-          ) : null}
-        </div>
       </div>
 
       {preview?.kind === 'pair' && (

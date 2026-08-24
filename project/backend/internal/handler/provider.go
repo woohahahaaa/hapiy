@@ -237,6 +237,14 @@ func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFu
 				return
 			}
 		}
+		// Manual restore only clears the exact restored entity: drop the
+		// matching pending record so it stops showing in the recovery list.
+		if err := db.Where("provider_id = ? AND dimension = ? AND value = ?",
+			provider.ID, req.Dimension, req.Value).
+			Delete(&model.DisabledRecord{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": provider.ID, "dimension": req.Dimension, "value": req.Value}})
 	}
@@ -271,6 +279,13 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+		}
+		// Manual dimension restore drops every pending record of this
+		// provider+dimension (they no longer represent an active disable).
+		if err := db.Where("provider_id = ? AND dimension = ?", id, req.Dimension).
+			Delete(&model.DisabledRecord{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension}})
