@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildFlowSteps, FlowHub, FLOW_STEP_MS, type FlowStep } from './flow-hub'
+import { buildFlowSteps, FlowHub, FLOW_STEP_MS, type FlowStep, type FlowFlashState } from './flow-hub'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -22,6 +22,11 @@ const canvas = {
 
 function stepsOf(path: string[]): readonly FlowStep[] {
   return buildFlowSteps(path, canvas)
+}
+
+const enabledState: FlowFlashState = {
+  providersById: new Map(),
+  externallyDisabledSlotIds: new Set(),
 }
 
 describe('buildFlowSteps', () => {
@@ -60,7 +65,6 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
-      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
     ])
   })
 
@@ -81,7 +85,6 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
-      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
     ])
   })
 
@@ -100,7 +103,6 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
-      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
     ])
   })
 
@@ -124,6 +126,64 @@ describe('buildFlowSteps', () => {
       { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
       { kind: 'node', nodeId: 'logOutput-1' },
     ])
+  })
+
+  it('keeps the stable provider child target after provider reorder', () => {
+    const reorderedCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'pslot-1', kind: 'slot', slotType: 'provider' },
+      ],
+      providers: [{ id: 'prov-b' }, { id: 'prov-a' }],
+      providerSlotOf: new Map([
+        ['prov-a', 'pslot-1'],
+        ['prov-b', 'pslot-1'],
+      ]),
+    } as never
+    expect(buildFlowSteps(['model-kimi-k3', 'entry-1', 'pslot-1', 'prov-a'], reorderedCanvas, enabledState))
+      .toContainEqual({ kind: 'node', nodeId: 'prov-a' })
+  })
+
+  it('suppresses a provider child when its backing provider is auto-disabled', () => {
+    const state: FlowFlashState = {
+      providersById: new Map([['provider-record-a', { status: true, autoDisabled: true, workflowEnabled: true }]]),
+      externallyDisabledSlotIds: new Set(),
+    }
+    const providerCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry' },
+        { id: 'pslot-1', kind: 'slot', slotType: 'provider' },
+      ],
+      providers: [{ id: 'prov-a', providerId: 'provider-record-a' }],
+      providerSlotOf: new Map([['prov-a', 'pslot-1']]),
+    } as never
+    expect(buildFlowSteps(['model-kimi-k3', 'entry-1', 'pslot-1', 'prov-a'], providerCanvas, state))
+      .not.toContainEqual({ kind: 'node', nodeId: 'prov-a' })
+  })
+
+  it('suppresses locally disabled entries, slots, and provider children', () => {
+    const localCanvas = {
+      topLevel: [
+        { id: 'model-kimi-k3', kind: 'modelHub' },
+        { id: 'entry-1', kind: 'requestEntry', enabled: false },
+        { id: 'pslot-1', kind: 'slot', slotType: 'provider', enabled: false },
+        { id: 'requestModify-1', kind: 'slot', slotType: 'requestModify', enabled: true },
+      ],
+      providers: [{ id: 'prov-a', enabled: false }],
+      providerSlotOf: new Map([['prov-a', 'pslot-1']]),
+    } as never
+    const state: FlowFlashState = {
+      providersById: new Map(),
+      externallyDisabledSlotIds: new Set(['requestModify-1']),
+    }
+    const steps = buildFlowSteps(
+      ['model-kimi-k3', 'entry-1', 'pslot-1', 'prov-a', 'requestModify-1'],
+      localCanvas,
+      state,
+    )
+    expect(steps).toEqual([{ kind: 'node', nodeId: 'model-kimi-k3' }])
   })
 })
 

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -105,6 +106,16 @@ func backfillMissingDisabledRecords(db *gorm.DB) {
 	}
 }
 
+// providerDisplayName resolves the provider's display name for event
+// logging; returns "" when the provider no longer exists.
+func providerDisplayName(db *gorm.DB, providerID string) string {
+	var p model.Provider
+	if err := db.First(&p, "id = ?", providerID).Error; err != nil {
+		return ""
+	}
+	return p.Name
+}
+
 // ReplayDisabledRecord triggers a manual replay of a recorded disable
 // event. On success the underlying disable is cleared (with cascade),
 // and the response includes whether the replay resolved the row.
@@ -123,6 +134,9 @@ func ReplayDisabledRecord(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		resolved := engine.ReplayDisabledRecord(&record)
 		// Re-read the row so the client sees the updated retry_count / resolved_at.
 		_ = db.First(&record, "id = ?", id).Error
+		if resolved {
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
+		}
 		c.JSON(http.StatusOK, gin.H{"data": record, "resolved": resolved})
 	}
 }
@@ -152,9 +166,13 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 				return
 			}
 		}
-		if err := db.Delete(&model.DisabledRecord{}, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		result := db.Delete(&model.DisabledRecord{}, "id = ?", id)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 			return
+		}
+		if result.RowsAffected > 0 {
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "resolved": true}})

@@ -132,6 +132,56 @@ func LogRelayFailure(in LogRelayFailureInput) {
 	})
 }
 
+// Channel/management event sources written into the usage-logs table by
+// the "使用记录" feature. Source carries the Chinese event type label.
+const (
+	LogSourceChannelDisabled        = "自动禁用"
+	LogSourceChannelRecoveredAuto   = "自动恢复"
+	LogSourceChannelRecoveredManual = "手动恢复"
+	LogSourceSystemAdmin            = "系统管理"
+)
+
+// DimensionLabel maps a failover dimension key to its display label.
+// Unknown dimensions are returned verbatim.
+func DimensionLabel(dimension string) string {
+	switch dimension {
+	case "provider":
+		return "供应商"
+	case "base_url":
+		return "BaseURL"
+	case "key":
+		return "Key"
+	}
+	return dimension
+}
+
+// ChannelEventMessage builds the event description for a channel
+// disable/recover event. The provider dimension (or an empty value) is
+// described by the label alone; otherwise the value is appended, e.g.
+// "Key：sk-xxx".
+func ChannelEventMessage(dimension, value string) string {
+	label := DimensionLabel(dimension)
+	if dimension == "provider" || value == "" {
+		return label
+	}
+	return label + "：" + value
+}
+
+// LogEvent queues a channel/management event row for batched insertion.
+// No-op when the log writer is not yet initialised, so callers can fire
+// it unconditionally without guarding for boot order.
+func LogEvent(source, providerName, message string) {
+	if globalLogWriter == nil {
+		return
+	}
+	globalLogWriter.Write(&model.Log{
+		Source:       source,
+		ProviderName: providerName,
+		ErrorMessage: message,
+		Status:       "",
+	})
+}
+
 // ExtractModelFromRequestBody reads c.Request.Body to extract the JSON
 // "model" field, then replaces the body with a fresh reader so the
 // downstream handler can re-read the same bytes. Returns "" on any

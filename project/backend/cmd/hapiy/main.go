@@ -94,6 +94,12 @@ func main() {
 		for i := range rows {
 			if engine.ReplayDisabledRecord(&rows[i]) {
 				resolved++
+				var p model.Provider
+				providerName := ""
+				if err := db.First(&p, "id = ?", rows[i].ProviderID).Error; err == nil {
+					providerName = p.Name
+				}
+				service.LogEvent(service.LogSourceChannelRecoveredAuto, providerName, service.ChannelEventMessage(rows[i].Dimension, rows[i].Value))
 			}
 		}
 		return resolved, len(rows)
@@ -173,6 +179,8 @@ func main() {
 		dashboard.POST("/users/logout", handler.Logout(db, sessions))
 		dashboardAuthed := dashboard.Group("")
 		dashboardAuthed.Use(middleware.AuthRequired(db, sessions))
+		dashboardAuthed.Use(handler.AuditSystemAdmin(db))
+		dashboard.Use(handler.AuditSystemAdmin(db))
 		{
 			// Providers
 			dashboardAuthed.GET("/providers", handler.ListProviders(db))

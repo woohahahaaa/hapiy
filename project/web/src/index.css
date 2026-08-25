@@ -124,7 +124,7 @@
   --warning: oklch(0.769 0.188 70.08);
   --warning-foreground: oklch(0.205 0 0);
   --border: oklch(0.786 0.001 0);
-  --input: oklch(0.922 0 0);
+  --input: oklch(0.8 0.001 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -243,4 +243,14 @@
 .react-flow__node.dim {
   opacity: 0.6;
   transition: opacity 200ms;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px color-mix(in oklab, var(--input) 30%, transparent) inset !important;
+  box-shadow: 0 0 0 1000px color-mix(in oklab, var(--input) 30%, transparent) inset !important;
+  -webkit-text-fill-color: var(--foreground) !important;
+  caret-color: var(--foreground);
 }

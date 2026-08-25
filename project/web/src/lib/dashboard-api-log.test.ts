@@ -11,6 +11,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 function baseLog(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 'log-1',
+    request_id: 'r-1',
     created_at: '2026-01-01T00:00:00Z',
     user_id: 'u-1',
     token_name: 'token-1',

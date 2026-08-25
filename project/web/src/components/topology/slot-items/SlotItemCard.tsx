@@ -65,7 +65,7 @@ export function SlotItemCard({
         maxWidth: nodeRenderBounds.maxWidth,
       }}
     >
-      {layers.map((layer) => {
+      {enabled && layers.map((layer) => {
         const kfName = `flash-pulse-${layer.runId}-${layer.loop}`
         return (
           <span

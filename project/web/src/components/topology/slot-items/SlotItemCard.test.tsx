@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { SlotItemCard } from './SlotItemCard'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
-function renderCard(layers: FlowLayerOverlay[] | undefined): string {
+function renderCard(layers: FlowLayerOverlay[] | undefined, enabled = true): string {
   return renderToStaticMarkup(
-    <SlotItemCard index={1} enabled={true} onToggleEnabled={() => {}} flashLayers={layers}>
+    <SlotItemCard index={1} enabled={enabled} onToggleEnabled={() => {}} flashLayers={layers}>
       <span>body</span>
     </SlotItemCard>,
   )
@@ -28,5 +28,10 @@ describe('SlotItemCard', () => {
     expect(markup).toContain('0 0 8px #38bdf8,inset 0 0 2px #38bdf8')
     expect(markup).toContain('0 0 8px #f97316,inset 0 0 2px #f97316')
     expect(markup).toContain('animation-duration:340ms')
+  })
+
+  it('renders no flash markup when disabled despite supplied layers', () => {
+    const markup = renderCard([{ runId: 5, color: '#38bdf8', loop: 0 }], false)
+    expect(markup).not.toContain('flash-pulse-')
   })
 })

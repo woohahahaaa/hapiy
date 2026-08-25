@@ -1,5 +1,17 @@
 import type { FlatCanvas } from '@/lib/flat-topology'
 
+export type FlowProviderState = {
+  readonly status: boolean
+  readonly autoDisabled: boolean
+  readonly workflowEnabled: boolean
+}
+
+export type FlowFlashState = {
+  readonly providersById: ReadonlyMap<string, FlowProviderState>
+  readonly externallyDisabledSlotIds: ReadonlySet<string>
+  readonly providersByName?: ReadonlyMap<string, FlowProviderState>
+}
+
 export const FLOW_STEP_MS = 340
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -27,14 +39,21 @@ export type FlowRunInput = {
 // Build the ordered animation steps for one request. The node path comes from
 // the backend (request.path_node_ids); provider children are folded into their
 // parent slot for edge construction but still get their own node step.
-export function buildFlowSteps(pathNodeIds: readonly string[], canvas: FlatCanvas | null): readonly FlowStep[] {
+export function buildFlowSteps(
+  pathNodeIds: readonly string[],
+  canvas: FlatCanvas | null,
+  state?: FlowFlashState,
+): readonly FlowStep[] {
   if (!canvas || pathNodeIds.length < 2) return []
   const providerIds = new Set(canvas.providers.map((provider) => provider.id))
   const isChild = (id: string | undefined): id is string => id !== undefined && providerIds.has(id)
   const topLevelById = new Map(canvas.topLevel.map((node) => [node.id, node]))
-  const slotNodeActive = (nodeId: string): boolean => {
+  const nodeActive = (nodeId: string): boolean => {
     const node = topLevelById.get(nodeId)
-    if (!node || node.kind !== 'slot') return true
+    if (!node) return true
+    if (node.enabled === false) return false
+    if (node.kind !== 'slot') return true
+    if (state?.externallyDisabledSlotIds.has(nodeId)) return false
     // A logOutput slot is only ON when it is actually capturing: enabled AND a
     // future deadline. The master switch alone (enabled=true with no deadline,
     // or an expired one) means the hook is inactive — do not light it up,
@@ -44,7 +63,17 @@ export function buildFlowSteps(pathNodeIds: readonly string[], canvas: FlatCanva
         node.logDeadlineAt !== null && node.logDeadlineAt !== undefined &&
         node.logDeadlineAt > Date.now()
     }
-    return node.enabled === true || node.enabled === undefined
+    return true
+  }
+  const providerActive = (nodeId: string): boolean => {
+    const child = canvas.providers.find((provider) => provider.id === nodeId)
+    if (!child || child.enabled === false) return false
+    const provider = child.providerId
+      ? state?.providersById.get(child.providerId)
+      : child.name
+        ? state?.providersByName?.get(child.name)
+        : undefined
+    return provider === undefined || (provider.status && !provider.autoDisabled && provider.workflowEnabled)
   }
 
   const steps: FlowStep[] = []
@@ -52,10 +81,15 @@ export function buildFlowSteps(pathNodeIds: readonly string[], canvas: FlatCanva
   for (let i = 0; i < pathNodeIds.length; i++) {
     const nodeId = pathNodeIds[i]
     if (nodeId === undefined) continue
+    const active = isChild(nodeId) ? providerActive(nodeId) : nodeActive(nodeId)
+    if (!active) {
+      if (!isChild(nodeId)) lastVisible = undefined
+      continue
+    }
     if (lastVisible && !isChild(nodeId)) {
       steps.push({ kind: 'edge', edgeId: `${lastVisible}→${nodeId}` })
     }
-    if (slotNodeActive(nodeId)) steps.push({ kind: 'node', nodeId })
+    steps.push({ kind: 'node', nodeId })
     if (!isChild(nodeId)) lastVisible = nodeId
   }
   return steps

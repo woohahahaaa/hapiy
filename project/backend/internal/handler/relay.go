@@ -124,6 +124,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			TokenName:   getString(tokenName),
 			UserID:      getString(userID),
 			Provider:    provider.Name,
+			ProviderID:  provider.ID,
 			Source:      service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			Stream:      relayReq.Stream,
 			StartTime:   startTime,

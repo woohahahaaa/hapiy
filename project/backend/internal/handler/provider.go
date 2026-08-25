@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -266,10 +267,11 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Model(&model.ProviderDisableState{}).
+		stateResult := db.Model(&model.ProviderDisableState{}).
 			Where("provider_id = ? AND dimension = ?", id, req.Dimension).
-			Update("disabled", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			Update("disabled", false)
+		if stateResult.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
 			return
 		}
 		if req.Dimension == model.FailoverDimensionProvider {
@@ -282,10 +284,14 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 		}
 		// Manual dimension restore drops every pending record of this
 		// provider+dimension (they no longer represent an active disable).
-		if err := db.Where("provider_id = ? AND dimension = ?", id, req.Dimension).
-			Delete(&model.DisabledRecord{}).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		delResult := db.Where("provider_id = ? AND dimension = ?", id, req.Dimension).
+			Delete(&model.DisabledRecord{})
+		if delResult.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": delResult.Error.Error()})
 			return
+		}
+		if stateResult.RowsAffected > 0 || delResult.RowsAffected > 0 {
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, ""))
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension}})
@@ -307,11 +313,15 @@ func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Model(&model.ProviderDisableState{}).
+		stateResult := db.Model(&model.ProviderDisableState{}).
 			Where("dimension = ?", req.Dimension).
-			Update("disabled", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			Update("disabled", false)
+		if stateResult.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
 			return
+		}
+		if stateResult.RowsAffected > 0 {
+			service.LogEvent(service.LogSourceChannelRecoveredManual, "", "重置全部 "+service.DimensionLabel(req.Dimension)+" 禁用状态")
 		}
 		if req.Dimension == model.FailoverDimensionProvider {
 			if err := db.Model(&model.Provider{}).

@@ -151,7 +151,7 @@ export type UsageLog = {
   readonly responseRewriteMs: number
   readonly streamRewriteMs: number
   readonly queueWaitMs: number
-  readonly status: 'success' | 'failed'
+  readonly status: 'success' | 'failed' | ''
   readonly errorMessage: string
   readonly upstreamUrl: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full'
@@ -191,6 +191,7 @@ export type ActiveRequest = {
   readonly tokenName: string
   readonly userId: string
   readonly provider: string
+  readonly providerId: string
   readonly source: string
   readonly stream: boolean
   readonly startTime: string
@@ -942,7 +943,7 @@ function parseLog(value: unknown): UsageLog {
     throw new DashboardApiError('服务端返回的日志格式无效', null)
   }
   const status = readString(value.status, 'log.status')
-  if (status !== 'success' && status !== 'failed') {
+  if (status !== 'success' && status !== 'failed' && status !== '') {
     throw new DashboardApiError(`无效的日志状态: ${status}`, null)
   }
   return {
@@ -1152,6 +1153,7 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     tokenName: readString(value.token_name, 'active.token_name'),
     userId: readString(value.user_id, 'active.user_id'),
     provider: readString(value.provider ?? '', 'active.provider'),
+    providerId: readString(value.provider_id ?? '', 'active.provider_id'),
     source: readString(value.source ?? '', 'active.source'),
     startTime: readString(value.start_time, 'active.start_time'),
     stream: readBoolean(value.stream, 'active.stream'),

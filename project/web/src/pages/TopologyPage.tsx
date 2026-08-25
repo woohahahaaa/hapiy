@@ -99,13 +99,15 @@ function wiringEdgeId(source: string, target: string): string {
  * Ordered node-id chain a request for `model` travels, starting at the
  * `model-{model}` hub node and ending at the workflow's last node. Every chain
  * the hub fans out to is collected by DFS (a model hub may wire to several
- * entries; other nodes have at most one outgoing edge). When `providerName` is
- * given, prefer the chain whose provider slot hosts that provider. Returns null
- * when the model node is not wired into the current canvas.
+ * entries; other nodes have at most one outgoing edge). When `providerId` is
+ * given, prefer the chain whose provider slot hosts that provider, matched by
+ * the stable provider record ID only — never by name (names are mutable and
+ * can repeat). Returns null when the model node is not wired into the current
+ * canvas.
  */
 function computeLightChain(
   model: string,
-  providerName: string | null,
+  providerId: string | null,
   edges: readonly Edge[],
   canvas: FlatCanvas | null,
 ): string[] | null {
@@ -135,17 +137,14 @@ function computeLightChain(
   }
   visit(modelId)
 
-  if (providerName && canvas) {
-    // 同名 provider 可能有多个(如不同插槽各有一个 deepseek)。请求实际
-    // 只会走 enabled 的那个,所以优先匹配 enabled 的 provider,避免匹配到
-    // 已停用的同名节点导致 chain 选错插槽。
-    const candidates = canvas.providers.filter((p) => p.name === providerName)
-    const ordered = [...candidates].sort((a, b) => (a.enabled === b.enabled ? 0 : a.enabled ? -1 : 1))
-    for (const provider of ordered) {
+  if (providerId && canvas) {
+    const provider = canvas.providers.find((p) => p.providerId === providerId)
+    if (provider) {
       const slotId = canvas.providerSlotOf.get(provider.id)
-      if (!slotId) continue
-      const matched = chains.find((chain) => chain.includes(provider.id)) ?? chains.find((chain) => chain.includes(slotId))
-      if (matched) return matched
+      if (slotId) {
+        const matched = chains.find((chain) => chain.includes(provider.id)) ?? chains.find((chain) => chain.includes(slotId))
+        if (matched) return matched
+      }
     }
   }
   return chains[0] ?? null
@@ -985,7 +984,7 @@ export function TopologyPage() {
         const modelId = `model-${request.model}`
         return [modelId, ...request.pathNodeIds]
       }
-      const chain = computeLightChain(request.model, request.provider || null, edgesRef.current, canvasRef.current)
+      const chain = computeLightChain(request.model, request.providerId || null, edgesRef.current, canvasRef.current)
       if (!chain || chain.length < 2) return null
       return chain
     },
@@ -1014,11 +1013,15 @@ export function TopologyPage() {
       if ((flowHubRef.current?.activeRunCount(request.requestId) ?? 0) > 0) continue
       const path = resolveLayerPath(request)
       if (!path) continue
-      const steps = buildFlowSteps(path, canvasRef.current)
+      const steps = buildFlowSteps(path, canvasRef.current, {
+        providersById: providerById,
+        providersByName: providerByName,
+        externallyDisabledSlotIds: externallyDisabledSet,
+      })
       if (steps.length === 0) continue
       const color = modelColorRef.current.get(request.model) ?? 'var(--primary)'
       requestMetaRef.current.set(request.requestId, { model: request.model, provider: request.provider ?? null })
-      const runId = flowHubRef.current?.startRun({ requestId: request.requestId, color, steps }) ?? 0
+      flowHubRef.current?.startRun({ requestId: request.requestId, color, steps })
       // FLOW-DEBUG: disabled
       // if (runId > 0) {
       //   flowDebug.emit({
@@ -1051,7 +1054,7 @@ export function TopologyPage() {
       //   action: 'graceful',
       // })
     }
-  }, [resolveLayerPath])
+  }, [resolveLayerPath, providerById, providerByName, externallyDisabledSet])
 
   const syncFlowLightsRef = useRef(syncFlowLights)
   useEffect(() => {

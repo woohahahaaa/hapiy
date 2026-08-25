@@ -51,6 +51,7 @@ type ActiveRequest struct {
 	TokenName     string     `json:"token_name"`
 	UserID        string     `json:"user_id"`
 	Provider      string     `json:"provider"`
+	ProviderID    string     `json:"provider_id"`
 	Source        string     `json:"source"`
 	Stream        bool       `json:"stream"`
 	StartTime     time.Time  `json:"start_time"`

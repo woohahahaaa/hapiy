@@ -31,6 +31,20 @@ function fmtSeconds(val: number): string {
   return `${Math.max(0.1, val / 1000).toFixed(1)}s`
 }
 
+// Event records (自动禁用/自动恢复/手动恢复/系统管理) carry an empty status.
+function isEventLog(row: UsageLog): boolean {
+  return row.status === ''
+}
+
+// Event-type label → color (hex) so the "来源" column tints each event
+// type distinctly, matching the visual language of the status badges.
+const EVENT_SOURCE_COLORS: Record<string, string> = {
+  自动禁用: 'dc2626',
+  自动恢复: '16a34a',
+  手动恢复: '2563eb',
+  系统管理: '9ca3af',
+}
+
 export function LogsPage() {
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
@@ -130,7 +144,7 @@ export function LogsPage() {
   }, [])
 
   const models = useMemo(() => {
-    const fromLogs = [...new Set(logs.map((l) => l.modelName))]
+    const fromLogs = [...new Set(logs.filter((l) => l.modelName !== '').map((l) => l.modelName))]
     if (modelFilter !== 'all' && !fromLogs.includes(modelFilter)) {
       fromLogs.push(modelFilter)
     }
@@ -160,15 +174,22 @@ export function LogsPage() {
         line2: (row) => formatDateTimeCell(row)?.time ?? null,
       },
     },
-    { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
-    { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
-    { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
     {
       key: 'source',
       label: '来源',
       defaultWidth: { kind: 'percent', value: 8 },
-      accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null),
+      accessor: (row) => {
+        if (row.source) {
+          const colored = EVENT_SOURCE_COLORS[row.source]
+          if (colored) return `<#${colored}>${row.source}</#${colored}>`
+          return row.source.replace(/^__/, '')
+        }
+        return null
+      },
     },
+    { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
     {
       key: 'affinityReuse',
       label: '渠道亲和性',
@@ -191,6 +212,7 @@ export function LogsPage() {
         `输入 ${row.promptTokens} · 缓存写入 ${row.promptCacheMissTokens} · 缓存读取 ${row.promptCacheHitTokens} · 输出 ${row.completionTokens}`,
       render: (_, row) => {
         const log = row as UsageLog
+        if (isEventLog(log)) return <span className="text-muted-foreground/40">-</span>
         return (
           <div className="text-xs">
             <span className="text-muted-foreground">输入</span> {log.promptTokens}{' '}
@@ -221,6 +243,7 @@ export function LogsPage() {
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
       accessor: (row) => {
+        if (isEventLog(row)) return null
         const total = fmtSeconds(row.useTime)
         const firstByte = fmtSeconds(row.firstByteMs)
         // 首字超过 20 秒标红
@@ -237,7 +260,9 @@ export function LogsPage() {
         line1: (row) =>
           row.status === 'success'
             ? '<#16a34a>成功</#16a34a>'
-            : '<#dc2626>失败</#dc2626>',
+            : row.status === 'failed'
+              ? '<#dc2626>失败</#dc2626>'
+              : null,
       },
     },
   ]
@@ -388,32 +413,36 @@ function LogDetailFields({ log }: { log: UsageLog }) {
           className="col-span-2"
           label="Tokens"
           value={
-            <span>
-              <span className="text-muted-foreground/40">输入</span> {log.promptTokens}（
-              <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens} /{' '}
-              <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
-              <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
-            </span>
+            isEventLog(log) ? '-' : (
+              <span>
+                <span className="text-muted-foreground/40">输入</span> {log.promptTokens}（
+                <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens} /{' '}
+                <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
+                <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
+              </span>
+            )
           }
         />
         <DetailRow className="col-span-2" label="流式" value={log.isStream ? 'SSE' : '-'} />
         <DetailRow className="col-span-2" label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
       </FieldGroup>
       <FieldGroup>
-        <DetailRow
-          className="col-span-2"
-          label="耗时"
-          value={
-            <span className="space-y-1">
-              <span className="block">{`${(log.useTime / 1000).toFixed(1)}s`}</span>
-              <span className="block text-muted-foreground/60">
-                排队 {fmtSeconds(log.queueWaitMs)} · 请求改写 {fmtSeconds(log.requestRewriteMs)} · 连接{' '}
-                {fmtSeconds(log.connectMs)} · 首字 {fmtSeconds(log.firstByteMs)} · 响应改写{' '}
-                {fmtSeconds(log.responseRewriteMs)} · 流式改写 {fmtSeconds(log.streamRewriteMs)}
+        {isEventLog(log) ? <DetailRow className="col-span-2" label="耗时" value="-" /> : (
+          <DetailRow
+            className="col-span-2"
+            label="耗时"
+            value={
+              <span className="space-y-1">
+                <span className="block">{`${(log.useTime / 1000).toFixed(1)}s`}</span>
+                <span className="block text-muted-foreground/60">
+                  排队 {fmtSeconds(log.queueWaitMs)} · 请求改写 {fmtSeconds(log.requestRewriteMs)} · 连接{' '}
+                  {fmtSeconds(log.connectMs)} · 首字 {fmtSeconds(log.firstByteMs)} · 响应改写{' '}
+                  {fmtSeconds(log.responseRewriteMs)} · 流式改写 {fmtSeconds(log.streamRewriteMs)}
+                </span>
               </span>
-            </span>
-          }
-        />
+            }
+          />
+        )}
       </FieldGroup>
       <FieldGroup>
         <DetailRow
@@ -439,7 +468,11 @@ function LogDetailFields({ log }: { log: UsageLog }) {
                 })()
           }
         />
-        <DetailRow className="col-span-2" label="状态" value={log.status === 'success' ? '成功' : '失败'} />
+        <DetailRow
+          className="col-span-2"
+          label="状态"
+          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : '-'}
+        />
         {log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">报错原因</span>

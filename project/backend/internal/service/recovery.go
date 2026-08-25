@@ -271,7 +271,7 @@ func runProviderRecovery(
 	if harnessBaseURL != "" {
 		for _, k := range disabledKeys {
 			if passProbe(probe(harnessBaseURL, k, probeModel), ttfbThreshold) {
-				clearDisable(db, provider.ID, model.FailoverDimensionKey, k)
+				clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionKey, k)
 			}
 		}
 	}
@@ -279,7 +279,7 @@ func runProviderRecovery(
 	if harnessKey != "" {
 		for _, u := range disabledBaseURLs {
 			if passProbe(probe(u, harnessKey, probeModel), ttfbThreshold) {
-				clearDisable(db, provider.ID, model.FailoverDimensionBaseURL, u)
+				clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionBaseURL, u)
 			}
 		}
 	}
@@ -294,17 +294,23 @@ func runProviderRecovery(
 			k = keys[0]
 		}
 		if u != "" && k != "" && passProbe(probe(u, k, probeModel), ttfbThreshold) {
-			clearDisable(db, provider.ID, model.FailoverDimensionProvider, provider.ID)
+			clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionProvider, provider.ID)
 		}
 	}
 }
 
-func clearDisable(db *gorm.DB, providerID, dimension, value string) {
-	if err := db.Model(&model.ProviderDisableState{}).
+func clearDisable(db *gorm.DB, providerID, providerName, dimension, value string) {
+	result := db.Model(&model.ProviderDisableState{}).
 		Where("provider_id = ? AND dimension = ? AND value = ?", providerID, dimension, value).
-		Update("disabled", false).Error; err != nil {
-		log.Printf("recovery: clear %s/%s/%s: %v", providerID, dimension, value, err)
+		Update("disabled", false)
+	if result.Error != nil {
+		log.Printf("recovery: clear %s/%s/%s: %v", providerID, dimension, value, result.Error)
 		return
+	}
+	// Only record a recovery event when a row was actually flipped, so a
+	// no-op clear never produces a phantom "自动恢复" log entry.
+	if result.RowsAffected > 0 {
+		LogEvent(LogSourceChannelRecoveredAuto, providerName, ChannelEventMessage(dimension, value))
 	}
 	if dimension == model.FailoverDimensionProvider {
 		if err := db.Model(&model.Provider{}).

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/topology"
 )
 
@@ -189,6 +190,7 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 		}
 	}
 	e.saveDisabledRecord(plan.Provider.ID, dimension, value, req, "")
+	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value))
 	return nil
 }
 

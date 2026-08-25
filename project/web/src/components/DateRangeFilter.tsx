@@ -60,13 +60,12 @@ export function DateRangeFilter({
       <div className="relative">
         <Input
           type="date"
-          placeholder="开始"
           value={value.from ?? ''}
           onChange={(e) => onChange({ ...value, from: e.target.value || undefined })}
-          className="peer w-36"
+          className={cn('w-36', !value.from && '[&::-webkit-datetime-edit]:text-transparent')}
         />
         {!value.from && (
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground peer-placeholder-shown:hidden">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
             开始
           </span>
         )}
@@ -75,13 +74,12 @@ export function DateRangeFilter({
       <div className="relative">
         <Input
           type="date"
-          placeholder="结束"
           value={value.to ?? ''}
           onChange={(e) => onChange({ ...value, to: e.target.value || undefined })}
-          className="peer w-36"
+          className={cn('w-36', !value.to && '[&::-webkit-datetime-edit]:text-transparent')}
         />
         {!value.to && (
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground peer-placeholder-shown:hidden">
+          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
             结束
           </span>
         )}
