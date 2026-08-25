@@ -26,6 +26,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&ProviderDisableState{},
 		&Token{},
 		&Log{},
+		&UsageCounter{},
 		&RewriteRule{},
 		&ResponseRewriteRule{},
 		&HeartbeatRule{},

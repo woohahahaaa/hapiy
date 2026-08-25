@@ -133,6 +133,25 @@ func (l *Log) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// UsageCounter holds lifetime-aggregated usage stats, incremented each
+// time a log row is flushed. Single row (id=1) in usage_counters. Fully
+// decoupled from the logs table — clearing logs does not reset this;
+// clearing this does not delete log rows. Historical aggregates from the
+// logs table are NOT migrated: counters start fresh so subsequent totals
+// stay in lockstep with the logs that produced them.
+type UsageCounter struct {
+	ID              uint      `gorm:"primaryKey" json:"-"`
+	TotalRequests   int64     `json:"total_requests"`
+	SuccessCount    int64     `json:"success_count"`
+	FailedCount     int64     `json:"failed_count"`
+	TotalTokens     int64     `json:"total_tokens"`
+	TotalCost       float64   `json:"total_cost"`
+	CacheHitTokens  int64     `json:"cache_hit_tokens"`
+	CacheMissTokens int64     `json:"cache_miss_tokens"`
+	TotalUseTimeMs  int64     `json:"total_use_time_ms"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
 // RewriteRule model
 type RewriteRule struct {
 	ID     string `gorm:"primaryKey;type:uuid" json:"id"`

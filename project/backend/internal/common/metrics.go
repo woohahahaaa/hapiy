@@ -63,6 +63,7 @@ type ActiveRequest struct {
 	ChunkCount    int64      `json:"chunk_count"`
 	BytesReceived int64      `json:"bytes_received"`
 	PathNodeIds   []string   `json:"path_node_ids"`
+	AffinityReuse string     `json:"affinity_reuse"`
 }
 
 var globalMetrics = NewMetrics()

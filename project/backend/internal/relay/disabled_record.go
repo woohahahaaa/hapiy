@@ -303,11 +303,19 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 	var parsed struct {
 		Choices []json.RawMessage `json:"choices"`
 	}
-	if json.Unmarshal(body, &parsed) != nil {
-		return service.ProbeResult{TTFB: ttfb}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		msg := probeErrorExcerpt(body)
+		if msg == "" {
+			msg = "上游响应体不是合法 JSON"
+		}
+		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 	if len(parsed.Choices) == 0 {
-		return service.ProbeResult{TTFB: ttfb}
+		msg := probeErrorExcerpt(body)
+		if msg == "" {
+			msg = "上游响应缺少 choices 字段"
+		}
+		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 	return service.ProbeResult{Success: true, TTFB: ttfb}
 }

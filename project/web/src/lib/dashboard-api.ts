@@ -186,6 +186,9 @@ export type LogStats = {
   readonly failedCount: number
   readonly totalTokens: number
   readonly averageLatency: number
+  readonly totalCost: number
+  readonly cacheHitRate: number
+  readonly throughput: number
   readonly models: readonly ModelStat[]
 }
 
@@ -207,6 +210,7 @@ export type ActiveRequest = {
   readonly chunkCount: number
   readonly bytesReceived: number
   readonly pathNodeIds: readonly string[]
+  readonly affinityReuse: string
 }
 
 export type ActiveRequestConfig = {
@@ -1143,6 +1147,9 @@ function parseLogStats(value: unknown): LogStats {
     failedCount: readNumber(value.failed_count, 'stat.failed_count'),
     totalTokens: readNumber(value.total_tokens, 'stat.total_tokens'),
     averageLatency: readNumber(value.average_latency, 'stat.average_latency'),
+    totalCost: readNumber(value.total_cost, 'stat.total_cost'),
+    cacheHitRate: readNumber(value.cache_hit_rate, 'stat.cache_hit_rate'),
+    throughput: readNumber(value.throughput, 'stat.throughput'),
     models: readObjectArray(value.models, 'stat.models', parseModelStat),
   }
 }
@@ -1169,6 +1176,7 @@ function parseActiveRequest(value: unknown): ActiveRequest {
     chunkCount: readNumber(value.chunk_count ?? 0, 'active.chunk_count'),
     bytesReceived: readNumber(value.bytes_received ?? 0, 'active.bytes_received'),
     pathNodeIds: readStringArray(value.path_node_ids ?? [], 'active.path_node_ids'),
+    affinityReuse: readString(value.affinity_reuse ?? '', 'active.affinity_reuse'),
   }
 }
 
@@ -1746,6 +1754,10 @@ export const dashboardApi = {
       body: JSON.stringify(input),
     })
     return readNumber(body.deleted, 'deleted', 0)
+  },
+
+  async clearUsage(): Promise<void> {
+    await requestFull('/usage/clear', { method: 'POST' })
   },
 
   async listLogCaptureFiles(params: LogCaptureListParams): Promise<LogCaptureListResult> {

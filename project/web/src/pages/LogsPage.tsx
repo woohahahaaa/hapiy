@@ -227,6 +227,7 @@ export function LogsPage() {
         if (log.affinityReuse === '') return null
         if (log.affinityReuse === 'full') return '<#16a34a>复用渠道</#16a34a>'
         if (log.affinityReuse === 'partial') return '<#d97706>部分复用</#d97706>'
+        if (log.affinityReuse === 'new') return '<#0ea5e9>新渠道</#0ea5e9>'
         return '<#9ca3af>创建渠道</#9ca3af>'
       },
     },

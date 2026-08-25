@@ -211,6 +211,7 @@ func main() {
 			dashboardAuthed.GET("/logs", handler.ListLogs(db))
 			dashboardAuthed.POST("/logs/clear", handler.ClearLogs(db))
 			dashboardAuthed.GET("/logs/stats", handler.GetLogStats(db))
+			dashboardAuthed.POST("/usage/clear", handler.ClearUsage(db))
 			dashboardAuthed.GET("/logs/capture", handler.ListLogFiles(db))
 			dashboardAuthed.GET("/logs/capture/pairs", handler.ListLogCapturePairs(db))
 			dashboardAuthed.GET("/logs/capture/pairs/:request_id", handler.ReadLogCapturePair(db))

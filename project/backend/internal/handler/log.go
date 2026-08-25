@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -84,77 +85,61 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// GetLogStats returns lifetime-cumulative usage stats read from the
+// usage_counters table. Range / from / to query params are parsed for
+// backward compatibility but ignored — the counter is decoupled from
+// the logs table and represents all-time totals since the last reset.
 func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		var since *time.Time
-		switch c.Query("range") {
-		case "1d":
-			t := time.Now().Add(-24 * time.Hour)
-			since = &t
-		case "7d":
-			t := time.Now().Add(-7 * 24 * time.Hour)
-			since = &t
-		case "30d":
-			t := time.Now().Add(-30 * 24 * time.Hour)
-			since = &t
+		// Range/from/to are silently accepted but no longer applied — the
+		// counter is lifetime-cumulative.
+		_ = c.Query("range")
+		_ = c.Query("from")
+		_ = c.Query("to")
+
+		var counter model.UsageCounter
+		err := db.First(&counter, "id = ?", 1).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
-		var until *time.Time
-		if to := c.Query("to"); to != "" {
-			if t, err := time.Parse(time.RFC3339, to); err == nil {
-				until = &t
-			}
+		var avgLatency float64
+		if counter.SuccessCount > 0 {
+			avgLatency = float64(counter.TotalUseTimeMs) / float64(counter.SuccessCount)
 		}
-		if from := c.Query("from"); from != "" {
-			if t, err := time.Parse(time.RFC3339, from); err == nil {
-				since = &t
-			}
+		var cacheHitRate float64
+		if denom := counter.CacheHitTokens + counter.CacheMissTokens; denom > 0 {
+			cacheHitRate = float64(counter.CacheHitTokens) / float64(denom)
 		}
-
-		applyRange := func(q *gorm.DB) *gorm.DB {
-			if since != nil {
-				q = q.Where("created_at >= ?", *since)
-			}
-			if until != nil {
-				q = q.Where("created_at <= ?", *until)
-			}
-			return q
+		var throughput float64
+		if counter.TotalUseTimeMs > 0 {
+			throughput = float64(counter.TotalTokens) * 1000.0 / float64(counter.TotalUseTimeMs)
 		}
-
-		var stats struct {
-			TotalRequests  int64   `json:"total_requests"`
-			SuccessCount   int64   `json:"success_count"`
-			FailedCount    int64   `json:"failed_count"`
-			TotalTokens    int64   `json:"total_tokens"`
-			AverageLatency float64 `json:"average_latency"`
-		}
-
-		applyRange(db.Model(&model.Log{})).Count(&stats.TotalRequests)
-		applyRange(db.Model(&model.Log{})).Where("status = ?", "success").Count(&stats.SuccessCount)
-		applyRange(db.Model(&model.Log{})).Where("status = ?", "failed").Count(&stats.FailedCount)
-		applyRange(db.Model(&model.Log{})).Where("status = ?", "success").
-			Select("SUM(prompt_tokens + completion_tokens)").
-			Scan(&stats.TotalTokens)
-		applyRange(db.Model(&model.Log{})).Select("AVG(use_time)").Scan(&stats.AverageLatency)
-
-		var modelStats []struct {
-			Model  string `json:"model"`
-			Count  int64  `json:"count"`
-			Tokens int64  `json:"tokens"`
-		}
-		applyRange(db.Model(&model.Log{})).
-			Select("model_name as model, COUNT(*) as count, SUM(prompt_tokens + completion_tokens) as tokens").
-			Group("model_name").
-			Scan(&modelStats)
 
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
-			"total_requests":  stats.TotalRequests,
-			"success_count":   stats.SuccessCount,
-			"failed_count":    stats.FailedCount,
-			"total_tokens":    stats.TotalTokens,
-			"average_latency": stats.AverageLatency,
-			"models":          modelStats,
+			"total_requests":  counter.TotalRequests,
+			"success_count":   counter.SuccessCount,
+			"failed_count":    counter.FailedCount,
+			"total_tokens":    counter.TotalTokens,
+			"average_latency": avgLatency,
+			"total_cost":      counter.TotalCost,
+			"cache_hit_rate":  cacheHitRate,
+			"throughput":      throughput,
+			"models":          []struct{}{},
 		}})
+	}
+}
+
+// ClearUsage resets the lifetime usage counter to zero. The logs table
+// is NOT touched — the two stores are intentionally independent.
+func ClearUsage(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := db.Exec("DELETE FROM usage_counters WHERE id = ?", 1).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"deleted": true})
 	}
 }
 

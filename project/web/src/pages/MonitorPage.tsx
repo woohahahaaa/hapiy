@@ -135,8 +135,20 @@ const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
     defaultWidth: { kind: 'pixel', value: 160 },
     defaultOverflow: 'wrap',
     slot: {
-      line1: (row) => formatDateTimeCell(row.startTime)?.date ?? null,
-      line2: (row) => formatDateTimeCell(row.startTime)?.time ?? null,
+      line1: (row) => formatDateTimeCell(row.startTime)?.time ?? null,
+    },
+  },
+  {
+    key: 'affinityReuse',
+    label: '渠道亲和性',
+    defaultWidth: { kind: 'percent', value: 8 },
+    accessor: (row) => {
+      const a = (row as ActiveRequest).affinityReuse ?? ''
+      if (a === '') return null
+      if (a === 'full') return '<#16a34a>复用渠道</#16a34a>'
+      if (a === 'partial') return '<#d97706>部分复用</#d97706>'
+      if (a === 'new') return '<#0ea5e9>新渠道</#0ea5e9>'
+      return '<#9ca3af>创建渠道</#9ca3af>'
     },
   },
   {
@@ -208,6 +220,9 @@ function StatsSection() {
   const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [clearArmed, setClearArmed] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const mountedRef = useRef(true)
 
   const fetchStats = useCallback(async (r: DateRange) => {
@@ -238,21 +253,66 @@ function StatsSection() {
     void fetchStats(dateRange)
   }, [dateRange, fetchStats])
 
+  // The backend counter is now lifetime-cumulative; from/to no longer
+  // scope the values, but we still render the filter to keep the UI
+  // layout stable while users transition to the new behavior.
   const successRate = stats && stats.totalRequests > 0
     ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
     : '-'
+
+  const totalCost = stats?.totalCost ?? 0
+  const throughput = stats?.throughput ?? 0
+  const cacheHitRate = stats?.cacheHitRate ?? 0
+  const cacheActivity = stats && (stats.successCount > 0 || stats.totalRequests > 0)
+
+  const handleClearUsage = useCallback(async () => {
+    if (clearing) return
+    if (!clearArmed) {
+      setClearArmed(true)
+      return
+    }
+    setClearing(true)
+    try {
+      await dashboardApi.clearUsage()
+      toast('用量已清空')
+      setClearOpen(false)
+      setClearArmed(false)
+      void fetchStats(dateRange)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '清空失败')
+    } finally {
+      setClearing(false)
+    }
+  }, [clearing, clearArmed, fetchStats, dateRange])
+
+  const closeClearDialog = useCallback((open: boolean) => {
+    if (clearing) return
+    setClearOpen(open)
+    if (!open) setClearArmed(false)
+  }, [clearing])
 
   return (
     <section className="mb-6">
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-sm font-medium">统计</h3>
-        <DateRangeFilter value={dateRange} onChange={setDateRange} />
+        <div className="flex items-center gap-2">
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setClearOpen(true)}
+            title="清空累计用量统计（不影响请求记录）"
+          >
+            <AppIcon name="delete" data-icon="inline-start" />
+            清空用量
+          </Button>
+        </div>
       </div>
 
       {/* Loading state: first load only */}
       {loading && !stats ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, i) => <MetricSkeleton key={i} />)}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-9">
+          {Array.from({ length: 9 }).map((_, i) => <MetricSkeleton key={i} />)}
         </div>
       ) : error && !stats ? (
         <div className="flex items-center justify-center py-8">
@@ -267,7 +327,7 @@ function StatsSection() {
         </div>
       ) : stats ? (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-9">
             <MetricCard
               icon={<AppIcon name="hashtag" />}
               label="总请求"
@@ -298,6 +358,21 @@ function StatsSection() {
               label="成功率"
               value={successRate}
             />
+            <MetricCard
+              icon={<AppIcon name="sell" />}
+              label="花费"
+              value={`¥${totalCost.toFixed(2)}`}
+            />
+            <MetricCard
+              icon={<AppIcon name="bolt" />}
+              label="吞吐量"
+              value={throughput > 0 ? `${throughput.toFixed(2)} tokens/s` : '-'}
+            />
+            <MetricCard
+              icon={<AppIcon name="refresh" />}
+              label="缓存命中率"
+              value={cacheActivity && cacheHitRate > 0 ? `${(cacheHitRate * 100).toFixed(1)}%` : '-'}
+            />
           </div>
         </>
       ) : null}
@@ -308,6 +383,30 @@ function StatsSection() {
           <span className="text-xs text-destructive">{error}</span>
         </div>
       )}
+
+      <Dialog open={clearOpen} onOpenChange={closeClearDialog}>
+        <DialogContent width="sm">
+          <DialogHeader>
+            <DialogTitle>清空用量</DialogTitle>
+            <DialogDescription>
+              将把所有累计用量统计清零（不影响请求记录）。此操作不可恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => closeClearDialog(false)} disabled={clearing}>
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={clearing}
+              onClick={() => void handleClearUsage()}
+            >
+              {clearing ? '清空中…' : (clearArmed ? '再次点击确认 (不可恢复)' : '确认清空')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

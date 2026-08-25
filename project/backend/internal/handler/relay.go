@@ -119,6 +119,10 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 		relayReq.TopologyOrigin = dispatchResult.Origin
 		relayReq.EntryID = dispatchResult.EntryID
+		affinityReuse := dispatchResult.AffinityReuse
+		if dispatchResult.AffinityMatch != nil && affinityReuse == "" {
+			affinityReuse = "new"
+		}
 		common.Global().TrackActiveRequest(common.ActiveRequest{
 			RequestID:   relayReq.RequestID,
 			Model:       relayReq.Model,
@@ -131,6 +135,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			StartTime:   startTime,
 			Stage:       "queued",
 			PathNodeIds: dispatchResult.PathNodeIDs,
+			AffinityReuse: affinityReuse,
 		})
 
 		// Endpoint whitelist: an empty endpoints array means unrestricted; a
@@ -239,9 +244,6 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				EntryID:      dispatchResult.EntryID,
 			}, 0)
 		}
-		// AffinityReuse covers both the rule path (AffinityMatch) and the
-		// fallback last-used-channel path; empty when no affinity matched.
-		affinityReuse := dispatchResult.AffinityReuse
 		affinityReuseParts := strings.Join(dispatchResult.AffinityReuseParts, ",")
 
 		// Forward the response first so use_time spans the full transfer for

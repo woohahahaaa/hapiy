@@ -72,7 +72,12 @@ func (w *LogWriter) loop() {
 	}
 }
 
-// Flush writes all pending logs to the database in one batch.
+// Flush writes all pending logs to the database in one batch, then
+// atomically upserts the same flush's aggregates into usage_counters.
+// Aggregates are computed from the in-memory batch — no extra DB
+// reads. Historical log data is NOT back-filled; the counter
+// intentionally reflects only what this writer has flushed since the
+// last counter reset (counters and logs are decoupled).
 func (w *LogWriter) Flush() {
 	w.mu.Lock()
 	if len(w.pending) == 0 {
@@ -87,6 +92,62 @@ func (w *LogWriter) Flush() {
 	if err := w.db.CreateInBatches(batch, 100).Error; err != nil {
 		// On failure, log to stdout as fallback; do not re-queue to avoid infinite growth
 		println("logwriter: batch insert failed:", err.Error())
+		return
+	}
+
+	// Aggregate the same batch in memory. Channel/management event rows
+	// (Status == "") are excluded from usage stats.
+	var (
+		reqCount    int64
+		succCount   int64
+		failCount   int64
+		totalTokens int64
+		totalCost   float64
+		cacheHit    int64
+		cacheMiss   int64
+		totalMs     int64
+	)
+	for _, l := range batch {
+		switch l.Status {
+		case "":
+			// Event row — skip.
+			continue
+		case "success":
+			succCount++
+			totalTokens += int64(l.PromptTokens + l.CompletionTokens)
+			cacheHit += int64(l.PromptCacheHitTokens)
+			cacheMiss += int64(l.PromptCacheMissTokens)
+			totalMs += int64(l.UseTime)
+			totalCost += l.Quota
+		case "failed":
+			failCount++
+		}
+		reqCount++
+	}
+
+	if reqCount == 0 {
+		return
+	}
+
+	// SQLite UPSERT into row id=1. Counter only advances after the log
+	// batch insert succeeds, keeping the two stores in sync.
+	err := w.db.Exec(`
+		INSERT INTO usage_counters
+			(id, total_requests, success_count, failed_count, total_tokens, total_cost, cache_hit_tokens, cache_miss_tokens, total_use_time_ms, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			total_requests    = total_requests    + excluded.total_requests,
+			success_count     = success_count     + excluded.success_count,
+			failed_count      = failed_count      + excluded.failed_count,
+			total_tokens      = total_tokens      + excluded.total_tokens,
+			total_cost        = total_cost        + excluded.total_cost,
+			cache_hit_tokens  = cache_hit_tokens  + excluded.cache_hit_tokens,
+			cache_miss_tokens = cache_miss_tokens + excluded.cache_miss_tokens,
+			total_use_time_ms = total_use_time_ms + excluded.total_use_time_ms,
+			updated_at        = excluded.updated_at
+	`, reqCount, succCount, failCount, totalTokens, totalCost, cacheHit, cacheMiss, totalMs, time.Now()).Error
+	if err != nil {
+		println("logwriter: usage counter upsert failed:", err.Error())
 	}
 }
 
