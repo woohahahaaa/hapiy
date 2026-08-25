@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { FLOW_STEP_MS, type FlowLayerOverlay } from '@/modules/flow-hub'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
+import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
 
 interface NodeExecutorEntryData {
   label: string
@@ -75,27 +76,9 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         !enabled && 'opacity-60',
       )}
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
-    >
-      {flashLayers.map((layer) => {
-        const kfName = `flash-pulse-${layer.runId}-${layer.loop}`
-        return (
-          <span
-            key={kfName}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-lg border"
-            style={{
-              animationName: kfName,
-              animationDuration: `${FLOW_STEP_MS}ms`,
-              animationIterationCount: '1',
-              animationFillMode: 'both',
-              animationTimingFunction: 'linear',
-            }}
-          >
-            <style>{`@keyframes ${kfName}{0%{border-color:var(--border);box-shadow:0 0 0 transparent}50%{border-color:${layer.color};box-shadow:0 0 8px ${layer.color},inset 0 0 2px ${layer.color}}100%{border-color:var(--border);box-shadow:0 0 0 transparent}}`}</style>
-          </span>
-        )
-      })}
-      {models.map((m, i) => (
+    >{flashLayers.map((layer) => (
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
+      ))}      {models.map((m, i) => (
         <Handle
           key={m.id}
           type="target"

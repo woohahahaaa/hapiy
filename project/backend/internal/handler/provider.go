@@ -62,6 +62,16 @@ func CreateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
+		var count int64
+		if err := db.Model(&model.Provider{}).Where("name = ?", provider.Name).Count(&count).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "供应商名称已存在"})
+			return
+		}
+
 		if err := db.Create(&provider).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -84,6 +94,16 @@ func UpdateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		if err := c.ShouldBindJSON(&provider); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var count int64
+		if err := db.Model(&model.Provider{}).Where("name = ?", provider.Name).Where("id <> ?", id).Count(&count).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "供应商名称已存在"})
 			return
 		}
 

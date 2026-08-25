@@ -3,6 +3,7 @@ import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react
 import { memo, type CSSProperties } from 'react'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { FLOW_STEP_MS } from '@/modules/flow-hub'
+import { edgeFlowKeyframeName } from '@/components/node/flash-layer'
 
 // The edge renders the beam as a moving dash: an opaque head (FLOW_HEAD_LEN)
 // followed by a faint tail (FLOW_TAIL_LEN at FLOW_TAIL_OPACITY). Each active
@@ -63,7 +64,7 @@ const StaticBaseEdge = memo(
     previous.interactionWidth === next.interactionWidth,
 )
 
-export function FlowLightEdge(props: EdgeProps) {
+export function NodeEdge(props: EdgeProps) {
   const {
     id,
     sourceX,
@@ -104,7 +105,7 @@ export function FlowLightEdge(props: EdgeProps) {
     <>
       <StaticBaseEdge id={id} path={path} markerEnd={markerEnd} style={style} interactionWidth={interactionWidth} />
       {layers.map((layer) => {
-        const kfName = `flow-light-slide-${layer.runId}-${safeId(id)}`
+        const kfName = edgeFlowKeyframeName(layer.runId, id)
         const css = buildSweepKeyframes(kfName)
         const animStyle: CSSProperties = {
           animationName: kfName,

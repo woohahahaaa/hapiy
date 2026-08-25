@@ -52,6 +52,15 @@ func CreateToken(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		var count int64
+		if err := db.Model(&model.Token{}).Where("name = ?", token.Name).Count(&count).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "令牌名称已存在"})
+			return
+		}
 
 		// Generate key if not provided
 		if token.Key == "" {
@@ -78,6 +87,16 @@ func UpdateToken(db *gorm.DB) gin.HandlerFunc {
 
 		if err := c.ShouldBindJSON(&token); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		var count int64
+		if err := db.Model(&model.Token{}).Where("name = ?", token.Name).Where("id <> ?", id).Count(&count).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if count > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "令牌名称已存在"})
 			return
 		}
 

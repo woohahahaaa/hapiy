@@ -233,6 +233,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 // selection.
 func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (*DispatchResult, bool) {
 	candidates := e.eligibleAffinityCandidates(model, path)
+	tp, _ := topology.NewStore(e.db).Load()
 	if len(candidates) == 0 {
 		return nil, false
 	}
@@ -268,6 +269,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 				BaseURLIndex:  hint.baseURLIndex,
 				EntryID:       c.entryID,
 				AffinityReuse: reuse,
+				PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
 			}
 			result.AffinityReuseParts = e.reuseParts(hint, result)
 			return result, true
@@ -287,6 +289,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 						BaseURLIndex:  bi,
 						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
+						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
 					return result, true
@@ -308,6 +311,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 						BaseURLIndex:  hint.baseURLIndex,
 						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
+						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
 					return result, true
@@ -546,5 +550,23 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 		}
 	}
 	plan.DebugEnabled = false
+	return nil
+}
+
+// affinityRequestPath builds the exact node path an affinity-reused request
+// traverses: it is served through the same request entry and provider node in
+// the topology, so its path is just as well-defined as a regular dispatch.
+func affinityRequestPath(tp *topology.Topology, entryID string, provider *model.Provider) []string {
+	if tp == nil || entryID == "" || provider == nil {
+		return nil
+	}
+	for _, n := range tp.Nodes {
+		if n.Kind != topology.KindProvider {
+			continue
+		}
+		if (n.ProviderID != "" && n.ProviderID == provider.ID) || n.Name == provider.Name {
+			return topology.BuildRequestPath(tp, entryID, n.ID)
+		}
+	}
 	return nil
 }

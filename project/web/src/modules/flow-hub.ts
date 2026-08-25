@@ -43,6 +43,7 @@ export function buildFlowSteps(
   pathNodeIds: readonly string[],
   canvas: FlatCanvas | null,
   state?: FlowFlashState,
+  debug?: (message: string) => void,
 ): readonly FlowStep[] {
   if (!canvas || pathNodeIds.length < 2) return []
   const providerIds = new Set(canvas.providers.map((provider) => provider.id))
@@ -51,20 +52,42 @@ export function buildFlowSteps(
   const nodeActive = (nodeId: string): boolean => {
     const node = topLevelById.get(nodeId)
     if (!node) return true
-    if (node.enabled === false) return false
+    if (node.enabled === false) {
+      debug?.(`跳过 ${nodeId}: 节点开关已关闭`)
+      return false
+    }
     if (node.kind !== 'slot') return true
-    if (state?.externallyDisabledSlotIds.has(nodeId)) return false
-    return node.deadlineAt === undefined || node.deadlineAt === null || node.deadlineAt > Date.now()
+    if (state?.externallyDisabledSlotIds.has(nodeId)) {
+      debug?.(`跳过 ${nodeId}: 外部禁用`)
+      return false
+    }
+    const deadlineOk = node.deadlineAt === undefined || node.deadlineAt === null || node.deadlineAt > Date.now()
+    if (!deadlineOk) debug?.(`跳过 ${nodeId}: 倒计时已过期`)
+    return deadlineOk
   }
   const providerActive = (nodeId: string): boolean => {
     const child = canvas.providers.find((provider) => provider.id === nodeId)
-    if (!child || child.enabled === false) return false
+    if (!child) {
+      debug?.(`跳过 ${nodeId}: 拓扑中不存在该节点`)
+      return false
+    }
+    if (child.enabled === false) {
+      debug?.(`跳过 ${nodeId}: 节点开关已关闭`)
+      return false
+    }
     const provider = child.providerId
       ? state?.providersById.get(child.providerId)
       : child.name
         ? state?.providersByName?.get(child.name)
         : undefined
-    return provider === undefined || (provider.status && !provider.autoDisabled && provider.workflowEnabled)
+    if (provider === undefined) {
+      debug?.(`跳过 ${nodeId}: 供应商记录未匹配（${child.name ?? child.id}）`)
+      return false
+    }
+    debug?.(
+      `校验 ${nodeId} -> ${provider.name ?? child.name}: status=${provider.status} autoDisabled=${provider.autoDisabled} workflow=${provider.workflowEnabled}`,
+    )
+    return provider.status && !provider.autoDisabled && provider.workflowEnabled
   }
 
   const steps: FlowStep[] = []

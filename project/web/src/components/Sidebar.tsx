@@ -88,6 +88,7 @@ const navigation: NavItem[] = [
       { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'recovery', label: '自动恢复', href: '/settings/recovery' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
+      { id: 'debug', label: 'Debug', href: '/settings/debug' },
     ],
   },
   {

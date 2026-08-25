@@ -14,6 +14,7 @@ import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
 import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { RecoverySettingsPage } from '@/pages/RecoverySettingsPage'
 import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
+import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AuthGate } from '@/components/AuthGate'
 import { Toaster } from '@/components/ui/toast'
@@ -43,6 +44,7 @@ function App() {
                   <Route path="/settings/general" element={<GeneralSettingsPage />} />
                   <Route path="/settings/recovery" element={<RecoverySettingsPage />} />
                   <Route path="/settings/billing" element={<BillingSettingsPage />} />
+                  <Route path="/settings/debug" element={<DebugSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

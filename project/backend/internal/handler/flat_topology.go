@@ -52,6 +52,7 @@ func SaveFlatTopology(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		var assignments []model.TopologySlotAssignment
 		err := db.Transaction(func(tx *gorm.DB) error {
+			backfillProviderIDs(tx, &tp)
 			if err := topology.NewStore(tx).Save(&tp); err != nil {
 				return err
 			}
@@ -426,4 +427,23 @@ func slotDeadlineConfig(slot topology.FlatNode) string {
 		return "{}"
 	}
 	return string(packed)
+}
+
+// backfillProviderIDs fills the stable provider record ID into provider nodes
+// that only carry a name snapshot (legacy topologies). ID-based lookups
+// downstream (affinity paths, flash steps) then work without name matching.
+func backfillProviderIDs(db *gorm.DB, tp *topology.Topology) {
+	if tp == nil {
+		return
+	}
+	for i := range tp.Nodes {
+		n := &tp.Nodes[i]
+		if n.Kind != topology.KindProvider || n.ProviderID != "" {
+			continue
+		}
+		var provider model.Provider
+		if err := db.Where("name = ?", n.Name).First(&provider).Error; err == nil {
+			n.ProviderID = provider.ID
+		}
+	}
 }

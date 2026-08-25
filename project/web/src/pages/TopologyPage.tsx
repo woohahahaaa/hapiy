@@ -30,8 +30,9 @@ import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { ExecutorDebug } from '@/components/node/executor-debug'
+import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/DebugSettings'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderStrategy } from '@/lib/dashboard-api'
-import { FlowLightEdge } from '@/edges/FlowLightEdge'
+import { NodeEdge } from '@/components/node/edge'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
 // import { flowDebug } from '@/modules/flow-debug' // FLOW-DEBUG: disabled — re-enable by uncommenting this import and the flowDebug.* call sites below
@@ -67,7 +68,7 @@ const nodeTypes = {
 }
 
 const edgeTypes = {
-  flowLight: FlowLightEdge,
+  flowLight: NodeEdge,
 }
 
 // Flow-light animation timing (ms). Each run advances one step per
@@ -75,6 +76,7 @@ const edgeTypes = {
 // independently until its final step. FLOW_SYNC_INTERVAL_MS mirrors the
 // activity page poll.
 const FLOW_SYNC_INTERVAL_MS = 2000
+const PROVIDER_REFRESH_MS = 15000
 const FLOW_COLORS_SETTING_KEY = 'flow_light_colors'
 // Unified wire opacity: active wires render at 0.6, disabled wires at 0.2,
 // regardless of wire kind (model→entry or entry/slot↔slot).
@@ -140,13 +142,11 @@ function computeLightChain(
 
   if (providerId && canvas) {
     const provider = canvas.providers.find((p) => p.providerId === providerId)
-    if (provider) {
-      const slotId = canvas.providerSlotOf.get(provider.id)
-      if (slotId) {
-        const matched = chains.find((chain) => chain.includes(provider.id)) ?? chains.find((chain) => chain.includes(slotId))
-        if (matched) return matched
-      }
-    }
+    if (!provider) return null
+    const slotId = canvas.providerSlotOf.get(provider.id)
+    if (!slotId) return null
+    const matched = chains.find((chain) => chain.includes(provider.id)) ?? chains.find((chain) => chain.includes(slotId))
+    return matched ?? null
   }
   return chains[0] ?? null
 }
@@ -587,6 +587,12 @@ export function TopologyPage() {
   // because it feeds node data.
   const [selectedDebugIds, setSelectedDebugIds] = useState<string[]>([])
   const [selectedExecutor, setSelectedExecutor] = useState<{ slotId: string; token: string } | null>(null)
+  const [flowLightDebug, setFlowLightDebug] = useState(false)
+  const flowLightDebugRef = useRef(false)
+  flowLightDebugRef.current = flowLightDebug
+  const [nodeInfoDebug, setNodeInfoDebug] = useState(false)
+  const nodeInfoDebugRef = useRef(false)
+  nodeInfoDebugRef.current = nodeInfoDebug
 
   const handleSelectExecutor = useCallback((slotId: string, token: string | null) => {
     rfInstanceRef.current?.setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)))
@@ -921,7 +927,7 @@ export function TopologyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas, modelNodes])
 
-  // Merge live edge layers into the base edges so FlowLightEdge can render the
+  // Merge live edge layers into the base edges so NodeEdge can render the
   // stacked flow dots without touching the persisted edge document.
   const displayEdges = useMemo<Edge[]>(
     () =>
@@ -972,6 +978,14 @@ export function TopologyPage() {
       onStep: (runId, step, color, meta) => {
         applyStepToLayers(runId, step, color, meta)
         runInfoRef.current.set(runId, { requestId: meta.requestId, loop: meta.loop })
+        if (flowLightDebugRef.current) {
+          console.log(
+            '[流光Debug] run#', runId,
+            'step ', meta.stepIndex + 1, '/', meta.stepTotal,
+            'loop#', meta.loop,
+            step.kind === 'node' ? '激活节点 ' + step.nodeId : '激活连线 ' + step.edgeId,
+          )
+        }
         // FLOW-DEBUG: disabled
         // const rm = requestMetaRef.current.get(meta.requestId)
         // flowDebug.emit({
@@ -1021,6 +1035,7 @@ export function TopologyPage() {
   // its own runs naturally instead of waiting for the previous one to finish.
   const syncFlowLights = useCallback(async () => {
     if (flowPollingPausedRef.current) return
+    if (providers === null) return
     const generation = flowSyncGenerationRef.current
     let requests: readonly ActiveRequest[]
     try {
@@ -1037,14 +1052,28 @@ export function TopologyPage() {
       if ((flowHubRef.current?.activeRunCount(request.requestId) ?? 0) > 0) continue
       const path = resolveLayerPath(request)
       if (!path) continue
-      const steps = buildFlowSteps(path, canvasRef.current, {
-        providersById: providerById,
-        providersByName: providerByName,
-        externallyDisabledSlotIds: externallyDisabledSet,
-      })
+      const steps = buildFlowSteps(
+        path,
+        canvasRef.current,
+        {
+          providersById: providerById,
+          providersByName: providerByName,
+          externallyDisabledSlotIds: externallyDisabledSet,
+        },
+        flowLightDebugRef.current ? (message) => console.log('[流光Debug]', message) : undefined,
+      )
       if (steps.length === 0) continue
       const color = modelColorRef.current.get(request.model) ?? 'var(--primary)'
       requestMetaRef.current.set(request.requestId, { model: request.model, provider: request.provider ?? null })
+      if (flowLightDebugRef.current) {
+        console.log(
+          '[流光Debug] 请求', request.requestId,
+          'model=', request.model,
+          'provider=', request.provider ?? '-',
+          '路径来源=', request.pathNodeIds.length > 0 ? '请求事实' : '前端推导',
+          'path=', path.join('→'),
+        )
+      }
       flowHubRef.current?.startRun({ requestId: request.requestId, color, steps })
       // FLOW-DEBUG: disabled
       // if (runId > 0) {
@@ -1145,6 +1174,8 @@ export function TopologyPage() {
       lastKnownVersionRef.current = flat.version ?? null
       dirtyRef.current = false
       setDirty(false)
+      setFlowLightDebug(settings.find((s) => s.key === DEBUG_FLOW_LIGHTS_KEY)?.value === 'true')
+      setNodeInfoDebug(settings.find((s) => s.key === DEBUG_NODE_INFO_KEY)?.value === 'true')
       const stored = settings.find((s) => s.key === FLOW_COLORS_SETTING_KEY)
       if (stored) {
         try {
@@ -1167,6 +1198,16 @@ export function TopologyPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void dashboardApi
+        .listProviders({ limit: 1000, offset: 0 })
+        .then((res) => setProviders(res.providers))
+        .catch(() => {})
+    }, PROVIDER_REFRESH_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const persistTopology = useCallback(async () => {
     const cur = tpRef.current
@@ -1987,6 +2028,7 @@ export function TopologyPage() {
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}
+        {nodeInfoDebug && (
         <ExecutorDebug
           topology={tp}
           providers={providers}
@@ -2000,6 +2042,7 @@ export function TopologyPage() {
                 : null
           }
         />
+        )}
         <TopologyVersionsModal
           open={versionsOpen}
           onClose={() => setVersionsOpen(false)}

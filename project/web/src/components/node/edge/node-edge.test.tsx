@@ -1,7 +1,7 @@
 import { Position, type EdgeProps } from '@xyflow/react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { FlowLightEdge } from './FlowLightEdge'
+import { NodeEdge } from './index'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 function renderEdge(layers: FlowLayerOverlay[] | undefined): string {
@@ -22,13 +22,13 @@ function renderEdge(layers: FlowLayerOverlay[] | undefined): string {
     data: layers ? { layers } : undefined,
   } as EdgeProps
 
-  return renderToStaticMarkup(<FlowLightEdge {...props} />)
+  return renderToStaticMarkup(<NodeEdge {...props} />)
 }
 
-describe('FlowLightEdge', () => {
+describe('NodeEdge', () => {
   it('renders no beam without layers', () => {
     const markup = renderEdge(undefined)
-    expect(markup).not.toContain('@keyframes flow-light-slide')
+    expect(markup).not.toContain('@keyframes node-edge-flow')
   })
 
   it('renders one head+tail beam per layer, keyed by runId+loop', () => {
@@ -37,8 +37,8 @@ describe('FlowLightEdge', () => {
       { runId: 2, color: '#f97316', loop: 1 },
     ]
     const markup = renderEdge(layers)
-    expect(markup).toContain('@keyframes flow-light-slide-1-model-to-entry')
-    expect(markup).toContain('@keyframes flow-light-slide-2-model-to-entry')
+    expect(markup).toContain('@keyframes node-edge-flow-1-model-to-entry')
+    expect(markup).toContain('@keyframes node-edge-flow-2-model-to-entry')
     expect(markup).toContain('stroke-dasharray:55 145')
     expect(markup).toContain('stroke-dasharray:0 33 22 145')
     expect(markup.match(/stroke-linecap="butt"/g)).toHaveLength(4)
@@ -65,8 +65,8 @@ describe('FlowLightEdge', () => {
       data: { layers: [{ runId: 7, color: '#38bdf8', loop: 0 }] as FlowLayerOverlay[] },
     } as EdgeProps
 
-    const markup = renderToStaticMarkup(<FlowLightEdge {...props} />)
-    expect(markup).toContain('@keyframes flow-light-slide-7-entry-1_logOutput-1')
+    const markup = renderToStaticMarkup(<NodeEdge {...props} />)
+    expect(markup).toContain('@keyframes node-edge-flow-7-entry-1_logOutput-1')
     expect(markup).toContain('stroke="#38bdf8"')
   })
 })

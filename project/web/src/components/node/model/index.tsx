@@ -3,7 +3,8 @@ import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
-import { FLOW_STEP_MS, type FlowLayerOverlay } from '@/modules/flow-hub'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
+import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
 
 interface NodeModelData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
@@ -38,27 +39,9 @@ export function NodeModel({ data, id }: NodeModelProps) {
       style={{
         width: 'fit-content',
       }}
-    >
-      {flashLayers.map((layer) => {
-        const kfName = `flash-pulse-${layer.runId}-${layer.loop}`
-        return (
-          <span
-            key={kfName}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-lg border"
-            style={{
-              animationName: kfName,
-              animationDuration: `${FLOW_STEP_MS}ms`,
-              animationIterationCount: '1',
-              animationFillMode: 'both',
-              animationTimingFunction: 'linear',
-            }}
-          >
-            <style>{`@keyframes ${kfName}{0%{border-color:var(--border);box-shadow:0 0 0 transparent}50%{border-color:${layer.color};box-shadow:0 0 8px ${layer.color},inset 0 0 2px ${layer.color}}100%{border-color:var(--border);box-shadow:0 0 0 transparent}}`}</style>
-          </span>
-        )
-      })}
-      {!simplified && (
+    >{flashLayers.map((layer) => (
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
+      ))}      {!simplified && (
         <div
           className="border-b border-border"
           style={{ padding: `${pad.paddingY + 2}px ${pad.paddingX}px` }}

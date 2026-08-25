@@ -13,7 +13,7 @@ const canvas = {
     { id: 'requestModify-1', kind: 'slot', slotType: 'requestModify' },
     { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, deadlineAt: Date.now() + 60_000 },
   ],
-  providers: [{ id: 'prov-a' }, { id: 'prov-b' }],
+  providers: [{ id: 'prov-a', name: 'a' }, { id: 'prov-b', name: 'b' }],
   providerSlotOf: new Map([
     ['prov-a', 'pslot-1'],
     ['prov-b', 'pslot-1'],
@@ -21,11 +21,15 @@ const canvas = {
 } as never
 
 function stepsOf(path: string[]): readonly FlowStep[] {
-  return buildFlowSteps(path, canvas)
+  return buildFlowSteps(path, canvas, enabledState)
 }
 
 const enabledState: FlowFlashState = {
   providersById: new Map(),
+  providersByName: new Map([
+    ['a', { status: true, autoDisabled: false, workflowEnabled: true }],
+    ['b', { status: true, autoDisabled: false, workflowEnabled: true }],
+  ]),
   externallyDisabledSlotIds: new Set(),
 }
 
@@ -136,13 +140,18 @@ describe('buildFlowSteps', () => {
         { id: 'entry-1', kind: 'requestEntry' },
         { id: 'pslot-1', kind: 'slot', slotType: 'provider' },
       ],
-      providers: [{ id: 'prov-b' }, { id: 'prov-a' }],
+      providers: [{ id: 'prov-b', name: 'b' }, { id: 'prov-a', name: 'a' }],
       providerSlotOf: new Map([
         ['prov-a', 'pslot-1'],
         ['prov-b', 'pslot-1'],
       ]),
     } as never
-    expect(buildFlowSteps(['model-kimi-k3', 'entry-1', 'pslot-1', 'prov-a'], reorderedCanvas, enabledState))
+    const namedState: FlowFlashState = {
+      providersById: new Map(),
+      providersByName: new Map([['a', { status: true, autoDisabled: false, workflowEnabled: true }]]),
+      externallyDisabledSlotIds: new Set(),
+    }
+    expect(buildFlowSteps(['model-kimi-k3', 'entry-1', 'pslot-1', 'prov-a'], reorderedCanvas, namedState))
       .toContainEqual({ kind: 'node', nodeId: 'prov-a' })
   })
 
