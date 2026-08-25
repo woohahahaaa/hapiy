@@ -160,6 +160,8 @@ export type UsageLog = {
 
 export type LogListParams = {
   readonly model?: string
+  readonly provider?: string
+  readonly type?: string
   readonly status?: string
   readonly token?: string
   readonly from?: string
@@ -167,6 +169,8 @@ export type LogListParams = {
   readonly limit: number
   readonly offset: number
 }
+
+export type LogTypeFilter = '' | 'request' | 'channel_disabled' | 'channel_recovered_auto' | 'channel_recovered_manual' | 'system_admin'
 
 export type StatsRange = 'all' | '30d' | '7d' | '1d'
 
@@ -1718,6 +1722,8 @@ export const dashboardApi = {
     qp.set('limit', String(params.limit))
     qp.set('offset', String(params.offset))
     if (params.model) qp.set('model', params.model)
+    if (params.provider) qp.set('provider', params.provider)
+    if (params.type) qp.set('type', params.type)
     if (params.status) qp.set('status', params.status)
     if (params.token) qp.set('token', params.token)
     if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)

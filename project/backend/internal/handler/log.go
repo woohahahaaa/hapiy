@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -18,8 +19,30 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 		if modelName := c.Query("model"); modelName != "" {
 			query = query.Where("model_name = ?", modelName)
 		}
+		if providerName := c.Query("provider"); providerName != "" {
+			query = query.Where("provider_name = ?", providerName)
+		}
 		if status := c.Query("status"); status != "" {
 			query = query.Where("status = ?", status)
+		}
+		if logType := c.Query("type"); logType != "" {
+			switch logType {
+			case "channel_disabled":
+				query = query.Where("source = ?", service.LogSourceChannelDisabled)
+			case "channel_recovered_auto":
+				query = query.Where("source = ?", service.LogSourceChannelRecoveredAuto)
+			case "channel_recovered_manual":
+				query = query.Where("source = ?", service.LogSourceChannelRecoveredManual)
+			case "system_admin":
+				query = query.Where("source = ?", service.LogSourceSystemAdmin)
+			case "request":
+				query = query.Where("source NOT IN ?", []string{
+					service.LogSourceChannelDisabled,
+					service.LogSourceChannelRecoveredAuto,
+					service.LogSourceChannelRecoveredManual,
+					service.LogSourceSystemAdmin,
+				})
+			}
 		}
 		if tokenName := c.Query("token"); tokenName != "" {
 			query = query.Where("token_name = ?", tokenName)

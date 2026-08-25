@@ -51,6 +51,8 @@ export function LogsPage() {
   const [initialLoading, setInitialLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [modelFilter, setModelFilter] = useState('all')
+  const [providerFilter, setProviderFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState<LogTypeFilter>('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
   const [dateRange, setDateRange] = useState<DateRange>({})
@@ -59,16 +61,20 @@ export function LogsPage() {
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
+  const [modelOptions, setModelOptions] = useState<readonly string[]>([])
+  const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
 
   const filterArgs = useMemo(
     () => ({
       model: modelFilter !== 'all' ? modelFilter : undefined,
+      provider: providerFilter !== 'all' ? providerFilter : undefined,
+      type: typeFilter || undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
       token: searchText || undefined,
       from: dateRange.from,
       to: dateRange.to,
     }),
-    [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to],
+    [modelFilter, providerFilter, typeFilter, statusFilter, searchText, dateRange.from, dateRange.to],
   )
 
   const fetchPage = useCallback(async () => {
@@ -111,6 +117,8 @@ export function LogsPage() {
     try {
       const filters: Record<string, unknown> = {}
       if (modelFilter !== 'all') filters.model = modelFilter
+      if (providerFilter !== 'all') filters.provider = providerFilter
+      if (typeFilter) filters.type = typeFilter
       if (statusFilter !== 'all') filters.status = statusFilter
       if (searchText) filters.token = searchText
       if (dateRange.from) filters.from = dateRange.from
@@ -122,11 +130,13 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchPage])
+  }, [modelFilter, providerFilter, typeFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchPage])
 
   const handleResetFilters = useCallback(() => {
     setSearchText('')
     setModelFilter('all')
+    setProviderFilter('all')
+    setTypeFilter('')
     setStatusFilter('all')
     setDateRange({})
   }, [])
@@ -143,13 +153,31 @@ export function LogsPage() {
     }
   }, [])
 
-  const models = useMemo(() => {
-    const fromLogs = [...new Set(logs.filter((l) => l.modelName !== '').map((l) => l.modelName))]
-    if (modelFilter !== 'all' && !fromLogs.includes(modelFilter)) {
-      fromLogs.push(modelFilter)
+  // Load the full provider/model option pools once so filters stay stable
+  // across pagination (previously the model list came from the current page).
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const [providers, prices] = await Promise.all([
+          dashboardApi.listProviders({ limit: 500, offset: 0 }),
+          dashboardApi.listPrices({ limit: 2000, offset: 0 }),
+        ])
+        if (!alive) return
+        setProviderOptions(
+          [...new Set(providers.providers.map((p) => p.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+        setModelOptions(
+          [...new Set(prices.prices.map((m) => m.model).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+      } catch {
+        // Non-fatal: filters still work with whatever options we have.
+      }
+    })()
+    return () => {
+      alive = false
     }
-    return fromLogs
-  }, [logs, modelFilter])
+  }, [])
 
   function formatDateTimeCell(row: UsageLog): { date: string; time: string } | null {
     const v = row.createdAt
@@ -257,12 +285,12 @@ export function LogsPage() {
       defaultWidth: { kind: 'percent', value: 25 },
       defaultOverflow: 'wrap',
       slot: {
-        line1: (row) =>
-          row.status === 'success'
-            ? '<#16a34a>成功</#16a34a>'
-            : row.status === 'failed'
-              ? '<#dc2626>失败</#dc2626>'
-              : null,
+        line1: (row) => {
+          if (row.status === 'success') return '<#16a34a>成功</#16a34a>'
+          if (row.status === 'failed') return '<#dc2626>失败</#dc2626>'
+          const action = row.errorMessage || row.source
+          return action ? `<#9ca3af>${action}</#9ca3af>` : null
+        },
       },
     },
   ]
@@ -294,6 +322,24 @@ export function LogsPage() {
                 value={dateRange}
                 onChange={(range) => { setDateRange(range) }}
               />
+              <Select
+                value={typeFilter}
+                onValueChange={(value) => setTypeFilter(value as LogTypeFilter)}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="类型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="">全部类型</SelectItem>
+                    <SelectItem value="request">请求</SelectItem>
+                    <SelectItem value="channel_disabled">自动禁用</SelectItem>
+                    <SelectItem value="channel_recovered_auto">自动恢复</SelectItem>
+                    <SelectItem value="channel_recovered_manual">手动恢复</SelectItem>
+                    <SelectItem value="system_admin">系统管理</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <Input
                 placeholder="搜索令牌..."
                 value={searchText}
@@ -302,6 +348,22 @@ export function LogsPage() {
                 }}
                 className="w-56"
               />
+              <Select
+                value={providerFilter}
+                onValueChange={(value) => handleFilterChange(setProviderFilter, value)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="供应商" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部供应商</SelectItem>
+                    {providerOptions.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <Select
                 value={modelFilter}
                 onValueChange={(value) => handleFilterChange(setModelFilter, value)}
@@ -312,7 +374,7 @@ export function LogsPage() {
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="all">全部模型</SelectItem>
-                    {models.map((m) => (
+                    {modelOptions.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
                   </SelectGroup>
@@ -340,9 +402,6 @@ export function LogsPage() {
           }
           actions={
             <>
-              <Button variant="outline" size="sm">
-                导出
-              </Button>
               <Button
                 variant="destructive"
                 size="sm"
@@ -380,7 +439,7 @@ export function LogsPage() {
       <Dialog open={selectedLog !== null} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
         <DialogContent width="sm">
           <DialogHeader>
-            <DialogTitle>请求记录 {selectedLog?.id ?? ''}</DialogTitle>
+            <DialogTitle>记录详情 {selectedLog?.id ?? ''}</DialogTitle>
           </DialogHeader>
           {selectedLog && <LogDetailFields log={selectedLog} />}
         </DialogContent>
@@ -471,11 +530,11 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow
           className="col-span-2"
           label="状态"
-          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : '-'}
+          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : (log.errorMessage || log.source || '-')}
         />
-        {log.errorMessage && (
+        {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">报错原因</span>
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">详细信息</span>
             <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
           </div>
         )}
