@@ -587,6 +587,11 @@ export function TopologyPage() {
   // because it feeds node data.
   const [selectedDebugIds, setSelectedDebugIds] = useState<string[]>([])
   const [selectedExecutor, setSelectedExecutor] = useState<{ slotId: string; token: string } | null>(null)
+
+  const handleSelectExecutor = useCallback((slotId: string, token: string | null) => {
+    rfInstanceRef.current?.setNodes((nds) => nds.map((n) => (n.selected ? { ...n, selected: false } : n)))
+    setSelectedExecutor(token ? { slotId, token } : null)
+  }, [])
   const [litNodeLayers, setLitNodeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
   const [litEdgeLayers, setLitEdgeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
   const litNodeRef = useRef(new Map<string, FlowLayerOverlay[]>())
@@ -807,8 +812,7 @@ export function TopologyPage() {
             onCycleStrategy: () => handleCycleProviderStrategy(node.id, node.strategy ?? 'sequential'),
             enabled: node.enabled,
             onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
-            onSelectExecutor: (token: string | null) => setSelectedExecutor(token ? { slotId: node.id, token } : null),
-            selectedExecutorToken: selectedExecutor?.slotId === node.id ? selectedExecutor.token : null,
+            onSelectExecutor: (token: string | null) => handleSelectExecutor(node.id, token),
           },
         })
       } else {
@@ -832,8 +836,7 @@ export function TopologyPage() {
             onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
             onSetDeadline: (deadlineAt: number | null) => handleSetSlotDeadline(node.id, deadlineAt),
             onStartCapture: (deadlineAt: number) => handleStartSlotCapture(node.id, deadlineAt),
-            onSelectExecutor: (token: string | null) => setSelectedExecutor(token ? { slotId: node.id, token } : null),
-            selectedExecutorToken: selectedExecutor?.slotId === node.id ? selectedExecutor.token : null,
+            onSelectExecutor: (token: string | null) => handleSelectExecutor(node.id, token),
             onAutoCloseEntry: () => {
               void persistTopology()
             },
@@ -843,7 +846,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, selectedExecutor])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -869,6 +872,22 @@ export function TopologyPage() {
       }),
     )
   }, [litNodeLayers, setNodes])
+
+  useEffect(() => {
+    setNodes((current) =>
+      current.map((node) => {
+        if (node.type !== 'slot') return node
+        const data = node.data as Record<string, unknown>
+        return {
+          ...node,
+          data: {
+            ...data,
+            selectedExecutorToken: selectedExecutor?.slotId === node.id ? selectedExecutor.token : null,
+          },
+        }
+      }),
+    )
+  }, [selectedExecutor, setNodes])
 
   const baseEdges = useMemo<Edge[]>(() => {
     if (!canvas) return []

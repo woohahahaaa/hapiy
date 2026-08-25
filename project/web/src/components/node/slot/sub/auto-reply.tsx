@@ -1,4 +1,5 @@
 import { SlotContainer } from '@/components/node/slot/slot-container'
+import { slotNodeActive } from '@/components/node/effectiveness'
 import { topologyConfig } from '@/config/topology-config'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
@@ -38,6 +39,7 @@ export function NodeSlotAutoReply({
   onSelectExecutor,
   selectedExecutorToken,
 }: NodeSlotAutoReplyProps) {
+    const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
     <SlotContainer
       title={
@@ -53,6 +55,7 @@ export function NodeSlotAutoReply({
       onAddNode={onAddEntry}
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
+      active={active}
       onExecutorPick={onSelectExecutor}
     >
       {[...entries].sort((left, right) => left.index - right.index).map((entry) => (

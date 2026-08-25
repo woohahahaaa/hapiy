@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { SlotContainer } from '@/components/node/slot/slot-container'
+import { slotNodeActive } from '@/components/node/effectiveness'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
@@ -67,13 +68,15 @@ export function NodeSlotRequestModify({
       </div>
     </div>
   )
+  const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
     <>
-      <SlotContainer
+    <SlotContainer
         title={titleBadge}
         onAddNode={onAddEntry}
         style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
         externallyDisabled={externallyDisabled}
+        active={active}
       onExecutorPick={onSelectExecutor}
       >
         {[...entries].sort((left, right) => left.index - right.index).map((entry) => (

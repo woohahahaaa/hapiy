@@ -70,7 +70,10 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   return (
     <div
       ref={rootRef}
-      className="relative rounded-lg border border-border bg-card text-card-foreground"
+      className={cn(
+        'relative rounded-lg border border-border bg-card text-card-foreground',
+        !enabled && 'opacity-60',
+      )}
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >
       {flashLayers.map((layer) => {
@@ -131,7 +134,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
       />
 
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className={cn('flex min-w-0 items-center gap-1.5', !enabled && 'opacity-50')}>
+        <span className={cn('flex min-w-0 items-center gap-1.5')}>
           <span
             aria-hidden="true"
             className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-primary' : 'bg-muted-foreground/50')}
@@ -148,7 +151,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         />
       </div>
 
-      <div className={cn('flex flex-col gap-1 p-3', !enabled && 'opacity-50')}>
+      <div className={cn('flex flex-col gap-1 p-3')}>
         <div className="flex flex-col gap-0.5">
           <span className="text-[10px]">权重</span>
           <Input

@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import { cn } from '@/lib/utils'
+import { providerCardActive } from '@/components/node/effectiveness'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 export interface FlatProviderChild {
@@ -54,8 +55,7 @@ export function NodeExecutorProvider({ index, child, providers, takenLabels, fla
       picked={picked}
       onPickToken={onPickToken}
       className={cn(
-        state === 'disabled' && 'opacity-60',
-        state === 'auto-disabled' && 'opacity-60',
+        !providerCardActive(child) && 'opacity-60',
       )}
     >
       <div className="space-y-1.5">

@@ -1,4 +1,5 @@
 import { SlotContainer } from '@/components/node/slot/slot-container'
+import { slotNodeActive } from '@/components/node/effectiveness'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import { topologyConfig } from '@/config/topology-config'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
@@ -56,13 +57,14 @@ export function NodeSlotLogOutput({
       />
     </div>
   )
+    const active = slotNodeActive(enabled, deadlineAt, externallyDisabled ?? false)
   return (
     <SlotContainer
       title={titleBadge}
       onAddNode={onAddEntry}
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
-      dimChildren={!enabled}
+      active={active}
       onExecutorPick={onSelectExecutor}
     >
       {[...entries].sort((left, right) => left.index - right.index).map((entry) => (

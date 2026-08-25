@@ -9,8 +9,8 @@ interface SlotContainerProps {
   className?: string
   style?: CSSProperties
   externallyDisabled?: boolean
-  dimChildren?: boolean
   onExecutorPick?: (token: string) => void
+  active?: boolean
 }
 
 export function SlotContainer({
@@ -20,8 +20,8 @@ export function SlotContainer({
   className,
   style,
   externallyDisabled = false,
-  dimChildren = false,
   onExecutorPick,
+  active = true,
 }: SlotContainerProps) {
   const hasNodes = Boolean(children)
 
@@ -38,7 +38,8 @@ export function SlotContainer({
       }}
       className={cn(
         'border-2 border-dashed border-border rounded-lg p-4 relative bg-background',
-        externallyDisabled && 'opacity-50 pointer-events-none',
+        !active && 'opacity-60',
+        externallyDisabled && 'pointer-events-none',
         className,
       )}
       style={style}
@@ -49,7 +50,7 @@ export function SlotContainer({
 
       {hasNodes ? (
         <>
-          <div className={cn('flex flex-col items-stretch gap-2', dimChildren && 'opacity-60')}>{children}</div>
+          <div className="flex flex-col items-stretch gap-2">{children}</div>
           {onAddNode && (
             <button
               type="button"
