@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { FLOW_STEP_MS, type FlowLayerOverlay } from '@/modules/flow-hub'
 
-interface RequestEntryNodeData {
+interface NodeExecutorEntryData {
   label: string
   enabled: boolean
   weight: number
@@ -16,12 +16,12 @@ interface RequestEntryNodeData {
   onChangeWeight: (weight: number) => void
 }
 
-interface RequestEntryNodeProps {
-  data: RequestEntryNodeData
+interface NodeExecutorEntryProps {
+  data: NodeExecutorData
   id: string
 }
 
-export function RequestEntryNode({ data, id }: RequestEntryNodeProps) {
+export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   const { label, enabled, weight, onChangeEnabled, onChangeWeight, models = [] } = data
   const flashLayers = data.flashLayers ?? []
   const updateNodeInternals = useUpdateNodeInternals()

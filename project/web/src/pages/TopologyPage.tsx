@@ -23,9 +23,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PageHeader } from '@/components/PageHeader'
-import { ModelHubNode } from '@/nodes/ModelHubNode'
-import { FlatSlotNode } from '@/nodes/FlatSlotNode'
-import { RequestEntryNode } from '@/nodes/RequestEntryNode'
+import { NodeModel } from '@/components/node/model'
+import { NodeSlot } from '@/components/node/slot'
+import { NodeExecutor } from '@/components/node/executor'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
@@ -60,9 +60,9 @@ import {
 } from '@/lib/flat-topology'
 
 const nodeTypes = {
-  modelHub: ModelHubNode,
-  slot: FlatSlotNode,
-  requestEntry: RequestEntryNode,
+  modelHub: NodeModel,
+  slot: NodeSlot,
+  requestEntry: NodeExecutor,
 }
 
 const edgeTypes = {

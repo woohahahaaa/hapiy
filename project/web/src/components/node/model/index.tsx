@@ -5,18 +5,18 @@ import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
 import { FLOW_STEP_MS, type FlowLayerOverlay } from '@/modules/flow-hub'
 
-interface ModelHubNodeData {
+interface NodeModelData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
   simplified?: boolean
   flashLayers?: readonly FlowLayerOverlay[]
 }
 
-interface ModelHubNodeProps {
-  data: ModelHubNodeData
+interface NodeModelProps {
+  data: NodeModelData
   id: string
 }
 
-export function ModelHubNode({ data, id }: ModelHubNodeProps) {
+export function NodeModel({ data, id }: NodeModelProps) {
   const models = data.models || []
   const simplified = data.simplified === true
   const flashLayers = data.flashLayers ?? []

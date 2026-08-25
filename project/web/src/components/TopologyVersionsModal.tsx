@@ -6,9 +6,9 @@ import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { ModelHubNode } from '@/nodes/ModelHubNode'
-import { FlatSlotNode } from '@/nodes/FlatSlotNode'
-import { RequestEntryNode } from '@/nodes/RequestEntryNode'
+import { NodeModel } from '@/components/node/model'
+import { NodeSlot } from '@/components/node/slot'
+import { NodeExecutor } from '@/components/node/executor'
 import { dashboardApi, type Provider, type FlatTopology } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
@@ -18,9 +18,9 @@ import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
 import { cn } from '@/lib/utils'
 
 const nodeTypes = {
-  modelHub: ModelHubNode,
-  slot: FlatSlotNode,
-  requestEntry: RequestEntryNode,
+  modelHub: NodeModel,
+  slot: NodeSlot,
+  requestEntry: NodeExecutor,
 }
 
 type PreviewTarget = { kind: 'current' } | { kind: 'version'; id: string }
