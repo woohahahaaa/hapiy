@@ -58,7 +58,7 @@ export function PricePage() {
   const [editing, setEditing] = useState<EditingPrice>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(50)
   const [currency, setCurrency] = useState<'USD' | 'CNY'>('CNY')
   const [rate, setRate] = useState(7.2)
 

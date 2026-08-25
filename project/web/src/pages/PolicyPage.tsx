@@ -103,7 +103,7 @@ function useRulesApi<T>(type: RuleType) {
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
   const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(50)
   const [total, setTotal] = useState(0)
 
   const fetch = useCallback(async (specificOffset?: number, specificLimit?: number) => {

@@ -123,7 +123,6 @@ export function LogsPage() {
       setClearDialogOpen(false)
       setLogs([])
       setTotal(0)
-      setNextOffset(0)
       toast(`已清空全部 ${deleted} 条记录`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')

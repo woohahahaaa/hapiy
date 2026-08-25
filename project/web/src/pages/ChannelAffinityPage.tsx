@@ -205,7 +205,7 @@ export function ChannelAffinityPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(50)
 
   const load = async () => {
     setIsLoading(true)

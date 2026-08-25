@@ -38,7 +38,7 @@ export function TokenPage() {
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(20)
+  const [limit, setLimit] = useState(50)
   const [editing, setEditing] = useState<Token | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [pendingKey, setPendingKey] = useState<string | null>(null)

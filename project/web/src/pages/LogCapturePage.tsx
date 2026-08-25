@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
-import { AppIcon } from '@/components/AppIcon'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -210,7 +209,7 @@ export function LogCapturePage() {
             : {}),
         })
         setClearOpen(false)
-void fetchPage()
+        void fetchPage()
       } catch (err) {
         if (mountedRef.current) {
           setError(err instanceof Error ? err.message : '清空失败')
