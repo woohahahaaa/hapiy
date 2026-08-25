@@ -20,6 +20,9 @@ interface SlotItemCardProps {
   enableControl?: ReactNode
   dimContentWhenDisabled?: boolean
   flashLayers?: readonly FlowLayerOverlay[]
+  token?: string
+  picked?: boolean
+  onPickToken?: (token: string) => void
 }
 
 export function SlotItemCard({
@@ -37,10 +40,16 @@ export function SlotItemCard({
   enableControl,
   dimContentWhenDisabled = false,
   flashLayers,
+  token,
+  picked = false,
+  onPickToken,
 }: SlotItemCardProps) {
   const layers = flashLayers ?? []
   return (
     <div
+      data-executor={token}
+      data-picked={picked || undefined}
+      onClick={token && onPickToken ? (e) => { e.stopPropagation(); onPickToken(token) } : undefined}
       onDragOver={(e) => {
         if (!onDragOver) return
         e.preventDefault()
@@ -58,6 +67,7 @@ export function SlotItemCard({
         !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
         isDragOver && 'border-primary border-dashed',
+        picked && 'ring-2 ring-primary',
         className,
       )}
       style={{

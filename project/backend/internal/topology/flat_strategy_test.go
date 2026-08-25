@@ -46,48 +46,44 @@ func TestValidateTopologyRejectsUnknownStrategy(t *testing.T) {
 	}
 }
 
-func TestFindEligibleProvidersSequentialDefaultPicksFirst(t *testing.T) {
+func TestFindEligibleProvidersSequentialReturnsAllInOrder(t *testing.T) {
 	tp := dualSlotTopology("")
 	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "deepseek-a" {
-		t.Fatalf("sequential default: expected deepseek-a, got %+v", got)
+	if len(got) != 2 || got[0].Name != "deepseek-a" || got[1].Name != "deepseek-b" {
+		t.Fatalf("sequential: expected both children in display order, got %+v", got)
+	}
+	for _, p := range got {
+		if p.Strategy != "" || p.SlotID != "ps" {
+			t.Fatalf("expected slot metadata (strategy %q slot %q) on %s", p.Strategy, p.SlotID, p.Name)
+		}
 	}
 }
 
-func TestFindEligibleProvidersStrategyRandomUsesBoth(t *testing.T) {
+func TestFindEligibleProvidersRandomReturnsAll(t *testing.T) {
 	tp := dualSlotTopology(StrategyRandom)
-	seen := map[string]int{}
-	const n = 200
-	for i := 0; i < n; i++ {
-		got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(got) != 1 {
-			t.Fatalf("expected 1 eligible, got %d", len(got))
-		}
-		seen[got[0].Name]++
+	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if seen["deepseek-a"] == 0 || seen["deepseek-b"] == 0 {
-		t.Fatalf("random strategy never picked one child: %v", seen)
+	if len(got) != 2 {
+		t.Fatalf("random strategy: expected both children eligible, got %d", len(got))
+	}
+	if got[0].Strategy != StrategyRandom || got[0].SlotID != "ps" {
+		t.Fatalf("expected strategy random on candidate, got %q", got[0].Strategy)
 	}
 }
 
-func TestFindEligibleProvidersStrategyRoundRobinAlternates(t *testing.T) {
+func TestFindEligibleProvidersRoundRobinReturnsAll(t *testing.T) {
 	tp := dualSlotTopology(StrategyRoundRobin)
-	ResetRoundRobinForTest()
-	want := []string{"deepseek-a", "deepseek-b", "deepseek-a", "deepseek-b"}
-	for i, name := range want {
-		got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got[0].Name != name {
-			t.Fatalf("round robin pick %d = %q, want %q", i, got[0].Name, name)
-		}
+	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("round robin strategy: expected both children eligible, got %d", len(got))
 	}
 }
 

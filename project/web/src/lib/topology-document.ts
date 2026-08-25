@@ -4,8 +4,8 @@ import {
   type SlotEntry,
   type SlotEntryMap,
   type SlotType,
-} from '@/components/topology/slot-items/types'
-import type { Workflow, WorkflowNode } from '@/components/topology/node-types/node-data'
+} from '@/components/node/slot/items/types'
+import type { Workflow, WorkflowNode } from '@/components/node/slot/defs/node-data'
 
 // ── Wire format types ──
 //
@@ -19,7 +19,7 @@ import type { Workflow, WorkflowNode } from '@/components/topology/node-types/no
 // Execution order = slot-type major order (SLOT_ORDER) → order field minor order.
 // Array position within a workflow does NOT affect execution.
 
-export type { Workflow, WorkflowNode } from '@/components/topology/node-types/node-data'
+export type { Workflow, WorkflowNode } from '@/components/node/slot/defs/node-data'
 
 export interface WorkflowEntry {
   readonly providerId: string

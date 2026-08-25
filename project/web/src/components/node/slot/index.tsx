@@ -1,6 +1,6 @@
 import { Handle, Position } from '@xyflow/react'
 import { useState } from 'react'
-import { SlotErrorBox } from '@/components/topology/SlotErrorBox'
+import { SlotErrorBox } from '@/components/node/slot/slot-error-box'
 import { topologyConfig } from '@/config/topology-config'
 import type {
   RequestModifySlotEntry,
@@ -13,8 +13,8 @@ import type {
   SlotRuleMap,
   SlotType,
   SlotItemDragProps,
-} from '@/components/topology/slot-items'
-import { makeEmptyEntry } from '@/components/topology/slot-items'
+} from '@/components/node/slot/items'
+import { makeEmptyEntry } from '@/components/node/slot/items'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type { FlatProviderChild } from '@/components/node/executor/sub/provider'
 import { NodeSlotProvider, type ProviderStrategy } from './sub/provider'
@@ -50,10 +50,12 @@ export interface NodeSlotData {
   onDeleteEntry?: (index: number) => void
   onReorderEntries?: (fromIndex: number, toIndex: number) => void
   onAutoCloseEntry?: () => void
-  logDeadlineAt?: number | null
-  onToggleLog?: (enabled: boolean) => void
-  onSetLogDeadline?: (deadlineAt: number | null) => void
+  deadlineAt?: number | null
+  onToggleEnabled?: (enabled: boolean) => void
+  onSetDeadline?: (deadlineAt: number | null) => void
   onStartCapture?: (deadlineAt: number) => void
+  onSelectExecutor?: (token: string | null) => void
+  selectedExecutorToken?: string | null
 }
 
 interface NodeSlotProps {
@@ -95,10 +97,12 @@ export function NodeSlot({ data }: NodeSlotProps) {
     onDeleteEntry,
     onReorderEntries,
     onAutoCloseEntry,
-    logDeadlineAt,
-    onToggleLog,
-    onSetLogDeadline,
+    deadlineAt,
+    onToggleEnabled,
+    onSetDeadline,
     onStartCapture,
+    onSelectExecutor,
+    selectedExecutorToken,
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
@@ -139,6 +143,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   const body = isProviderSlot ? (
     <NodeSlotProvider
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       children={children}
       providers={providers}
       takenLabels={takenLabels}
@@ -159,6 +167,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   ) : slotType === 'requestModify' ? (
     <NodeSlotRequestModify
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       entries={entries as RequestModifySlotEntry[]}
       rules={slotRules.requestModify}
       flashLayers={flashLayers}
@@ -171,6 +183,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   ) : slotType === 'responseModify' ? (
     <NodeSlotResponseModify
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       entries={entries as ResponseModifySlotEntry[]}
       rules={slotRules.responseModify}
       flashLayers={flashLayers}
@@ -183,6 +199,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   ) : slotType === 'autoReply' ? (
     <NodeSlotAutoReply
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       entries={entries as AutoReplySlotEntry[]}
       rules={slotRules.autoReply}
       flashLayers={flashLayers}
@@ -195,6 +215,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   ) : slotType === 'concurrency' ? (
     <NodeSlotConcurrency
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       entries={entries as ConcurrencySlotEntry[]}
       rules={slotRules.concurrency}
       flashLayers={flashLayers}
@@ -207,6 +231,10 @@ export function NodeSlot({ data }: NodeSlotProps) {
   ) : slotType === 'autoSwitch' ? (
     <NodeSlotAutoSwitch
       title={title}
+      enabled={data.enabled ?? true}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
+      onToggleEnabled={onToggleEnabled}
       entries={entries as AutoSwitchSlotEntry[]}
       rules={slotRules.autoSwitch}
       flashLayers={flashLayers}
@@ -220,6 +248,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
     <NodeSlotLogOutput
       title={title}
       enabled={data.enabled ?? false}
+      onSelectExecutor={onSelectExecutor}
+      selectedExecutorToken={selectedExecutorToken}
       entries={entries as LogOutputSlotEntry[]}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
@@ -227,9 +257,9 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onDeleteEntry={onDeleteEntry ?? noop}
       onAddEntry={handleAddEntry}
       externallyDisabled={externallyDisabled}
-      deadlineAt={logDeadlineAt ?? null}
-      onToggleLog={onToggleLog}
-      onSetLogDeadline={onSetLogDeadline}
+      deadlineAt={deadlineAt ?? null}
+      onToggleEnabled={onToggleEnabled}
+      onSetDeadline={onSetDeadline}
       onStartCapture={onStartCapture}
       onAutoCloseEntry={onAutoCloseEntry}
     />

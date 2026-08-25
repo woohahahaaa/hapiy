@@ -1,6 +1,7 @@
-import { SlotContainer } from '@/components/topology/SlotContainer'
+import { SlotContainer } from '@/components/node/slot/slot-container'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
+import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { NodeExecutorProvider, type FlatProviderChild } from '@/components/node/executor/sub/provider'
 
@@ -19,6 +20,10 @@ export interface NodeSlotProviderProps {
   onToggleProvider?: (providerId: string, enabled: boolean) => void
   onDeleteProvider?: (providerId: string) => void
   externallyDisabled?: boolean
+  enabled: boolean
+  onToggleEnabled?: (enabled: boolean) => void
+  onSelectExecutor?: (token: string | null) => void
+  selectedExecutorToken?: string | null
   dragIndex: number | null
   overIndex: number | null
   onDragStart: (i: number) => void
@@ -40,6 +45,10 @@ export function NodeSlotProvider({
   onToggleProvider,
   onDeleteProvider,
   externallyDisabled,
+  enabled,
+  onToggleEnabled,
+  onSelectExecutor,
+  selectedExecutorToken,
   dragIndex,
   overIndex,
   onDragStart,
@@ -54,14 +63,21 @@ export function NodeSlotProvider({
   const titleBadge = (
     <div className="flex items-center justify-between">
       <span>{title}</span>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); onCycleStrategy?.() }}
-        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
-      >
-        {strategyLabel[strategy]}
-        <AppIcon name="refresh" size={10} />
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onCycleStrategy?.() }}
+          className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          {strategyLabel[strategy]}
+          <AppIcon name="refresh" size={10} />
+        </button>
+        <SlotEnableControl
+          variant="switch"
+          enabled={enabled}
+          onToggle={onToggleEnabled ?? (() => {})}
+        />
+      </div>
     </div>
   )
   return (
@@ -70,10 +86,14 @@ export function NodeSlotProvider({
       onAddNode={onAddProvider}
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
+      onExecutorPick={onSelectExecutor}
     >
       {children.map((child, i) => (
         <NodeExecutorProvider
           key={child.id}
+          token={child.id}
+          picked={selectedExecutorToken === child.id}
+          onPickToken={onSelectExecutor}
           index={i + 1}
           child={child}
           providers={providers}

@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { SlotContainer } from '@/components/topology/SlotContainer'
+import { SlotContainer } from '@/components/node/slot/slot-container'
 import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
+import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
-import type { SlotItemDragProps, RequestModifySlotEntry } from '@/components/topology/slot-items'
+import type { SlotItemDragProps, RequestModifySlotEntry } from '@/components/node/slot/items'
 import type { RewriteRule } from '@/lib/dashboard-api'
 import { NodeExecutorRequestModify } from '@/components/node/executor/sub/request-modify'
 
 export interface NodeSlotRequestModifyProps {
+  onSelectExecutor?: (token: string | null) => void
+  selectedExecutorToken?: string | null
   title: string
   entries: readonly RequestModifySlotEntry[]
   rules: readonly RewriteRule[]
@@ -18,6 +21,8 @@ export interface NodeSlotRequestModifyProps {
   onDeleteEntry: (index: number) => void
   onAddEntry: () => void
   externallyDisabled?: boolean
+  enabled: boolean
+  onToggleEnabled?: (enabled: boolean) => void
 }
 
 // 请求改写插槽节点：测试按钮标题栏 + 请求改写业务条目列表。
@@ -31,6 +36,10 @@ export function NodeSlotRequestModify({
   onDeleteEntry,
   onAddEntry,
   externallyDisabled,
+  enabled,
+  onToggleEnabled,
+  onSelectExecutor,
+  selectedExecutorToken,
 }: NodeSlotRequestModifyProps) {
   const [testOpen, setTestOpen] = useState(false)
   const boundEntries = entries
@@ -42,13 +51,20 @@ export function NodeSlotRequestModify({
   const titleBadge = (
     <div className="flex items-center justify-between">
       <span>{title}</span>
-      <button
-        type="button"
-        className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
-        onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
-      >
-        测试
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="nodrag nopan flex items-center gap-1 rounded-md border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+          onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
+        >
+          测试
+        </button>
+        <SlotEnableControl
+          variant="switch"
+          enabled={enabled}
+          onToggle={onToggleEnabled ?? (() => {})}
+        />
+      </div>
     </div>
   )
   return (
@@ -58,10 +74,14 @@ export function NodeSlotRequestModify({
         onAddNode={onAddEntry}
         style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
         externallyDisabled={externallyDisabled}
+      onExecutorPick={onSelectExecutor}
       >
         {[...entries].sort((left, right) => left.index - right.index).map((entry) => (
           <NodeExecutorRequestModify
             key={entry.id}
+            token={entry.id}
+            picked={selectedExecutorToken === entry.id}
+            onPickToken={onSelectExecutor}
             entry={entry}
             rules={rules}
             onChange={onChangeEntry}

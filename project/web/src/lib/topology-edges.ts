@@ -1,6 +1,6 @@
 import type { Edge } from '@xyflow/react'
 import type { Provider } from '@/lib/dashboard-api'
-import { SLOT_ORDER, type SlotType } from '@/components/topology/slot-items/types'
+import { SLOT_ORDER, type SlotType } from '@/components/node/slot/items/types'
 import type { Workflow, WorkflowEntry } from '@/lib/topology-document'
 import { topologyConfig } from '@/config/topology-config'
 

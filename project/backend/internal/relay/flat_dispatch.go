@@ -3,7 +3,6 @@ package relay
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 
 	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/model"
@@ -64,39 +63,11 @@ func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string)
 	if err != nil {
 		return nil, err
 	}
-	if len(eligible) == 0 {
+	pick, ok := topology.PickEligibleProvider(eligible)
+	if !ok {
 		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, model)
 	}
-	// Weighted selection: each eligible provider carries its request-entry
-	// weight in [0,1]. Higher weight => higher chance.
-	pick := weightedPick(eligible)
 	return &pick, nil
-}
-
-// weightedPick returns one eligible provider by weight. All providers with a
-// zero weight are eligible but only via the equal fallback; providers with
-// positive weight are preferred by their relative weight.
-func weightedPick(eligible []topology.EligibleProvider) topology.EligibleProvider {
-	total := 0.0
-	for _, p := range eligible {
-		total += p.Weight
-	}
-	if total <= 0 {
-		return eligible[0]
-	}
-	// roll is in [0,1); compare against the cumulative fraction cum/total so
-	// equal weights yield an equal (uniform) chance. The <= is deliberate:
-	// roll can never reach 1.0, so the last provider's boundary (cum==total)
-	// is only hit by floating-point rounding, which still picks it.
-	roll := rand.Float64()
-	cum := 0.0
-	for _, p := range eligible {
-		cum += p.Weight
-		if roll*total <= cum {
-			return p
-		}
-	}
-	return eligible[len(eligible)-1]
 }
 
 // Channel-reuse states recorded per request after a channel-affinity match.
@@ -118,6 +89,9 @@ type DispatchResult struct {
 	Provider     *model.Provider
 	KeyIndex     int
 	BaseURLIndex int
+	// EntryID is the request entry whose workflow served the request;
+	// empty on the legacy provider scan (no topology).
+	EntryID string
 	// AffinityMatch, when non-nil, means the provider was chosen via channel
 	// affinity; the handler records the successful recall on request success.
 	AffinityMatch *affinity.MatchResult
@@ -137,18 +111,22 @@ type DispatchResult struct {
 }
 
 // channelHint is the (provider, key, baseURL) tuple a channel-affinity
-// match (fallback history or affinity rule) wants to reuse.
+// match (fallback history or affinity rule) wants to reuse. entryID scopes
+// the reuse to the request entry the channel was last used through; empty
+// disables the scope (legacy history rows).
 type channelHint struct {
 	providerID   string
 	providerName string
 	keyIndex     int
 	baseURLIndex int
+	entryID      string
 }
 
 // affinityCandidate is a provider that can currently serve this request.
 type affinityCandidate struct {
 	provider *model.Provider
 	plan     *ExecutionPlan
+	entryID  string
 }
 
 // Dispatch selects a provider for a request and builds its execution plan. It
@@ -167,11 +145,18 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				providerName: fallback.providerName,
 				keyIndex:     fallback.keyIndex,
 				baseURLIndex: fallback.baseURLIndex,
+				entryID:      fallback.entryID,
 			}); used {
 				return result, nil
 			}
 		}
 	}
+	// weakAffinityMatch carries a rule that applies to this request even
+	// when nothing was cached yet (or the cached channel went stale), so
+	// the handler can record the channel that actually served the request.
+	// Without it affinity could only ever re-confirm existing hits and a
+	// fresh session would never take hold of its first channel.
+	var weakAffinityMatch *affinity.MatchResult
 	if affinityReq != nil && e.Affinity() != nil {
 		match := e.Affinity().Lookup(affinityReq)
 		if match.Matched {
@@ -179,6 +164,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				providerName: match.Triple.ProviderName,
 				keyIndex:     match.Triple.KeyIndex,
 				baseURLIndex: match.Triple.BaseURLIndex,
+				entryID:      match.Triple.EntryID,
 			}); used {
 				result.AffinityMatch = &match
 				return result, nil
@@ -186,6 +172,9 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 			// The recalled channel is no longer usable: drop the stale
 			// affinity entry so the next request does not recall it again.
 			e.Affinity().Delete(match.CacheKey)
+		}
+		if match.RuleName != "" {
+			weakAffinityMatch = &match
 		}
 	}
 
@@ -206,12 +195,14 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				return nil, err
 			}
 			return &DispatchResult{
-				Plan:         plan,
-				Provider:     provider,
-				KeyIndex:     -1,
-				BaseURLIndex: -1,
-				PathNodeIDs:  topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID),
-				Origin:       &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
+				Plan:          plan,
+				Provider:      provider,
+				KeyIndex:      -1,
+				BaseURLIndex:  -1,
+				EntryID:       eligible.EntryID,
+				AffinityMatch: weakAffinityMatch,
+				PathNodeIDs:   topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID),
+				Origin:        &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
 			}, nil
 		}
 	}
@@ -224,18 +215,38 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 	if err != nil {
 		return nil, err
 	}
-	return &DispatchResult{Plan: plan, Provider: provider, KeyIndex: -1, BaseURLIndex: -1}, nil
+	return &DispatchResult{
+		Plan:          plan,
+		Provider:      provider,
+		KeyIndex:      -1,
+		BaseURLIndex:  -1,
+		AffinityMatch: weakAffinityMatch,
+	}, nil
 }
 
 // dispatchWithChannelHint resolves a channel-affinity hint against the set of
-// providers currently eligible for this request. Priority: the hinted provider
-// itself -> any eligible provider carrying the hinted baseURL -> any eligible
-// provider carrying the hinted key. Returns used=false when nothing matches,
-// so the caller falls through to normal selection.
+// providers currently eligible for this request. The hint is scoped to its
+// request entry (when set): candidates from other entries are ignored. Within
+// the scope: the hinted provider itself -> any eligible provider carrying the
+// hinted baseURL -> any eligible provider carrying the hinted key. Returns
+// used=false when nothing matches, so the caller falls through to normal
+// selection.
 func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (*DispatchResult, bool) {
 	candidates := e.eligibleAffinityCandidates(model, path)
 	if len(candidates) == 0 {
 		return nil, false
+	}
+	if hint.entryID != "" {
+		scoped := candidates[:0:0]
+		for _, c := range candidates {
+			if c.entryID == hint.entryID {
+				scoped = append(scoped, c)
+			}
+		}
+		candidates = scoped
+		if len(candidates) == 0 {
+			return nil, false
+		}
 	}
 
 	// 1) The hinted provider is still eligible: use it. Full reuse only when
@@ -255,6 +266,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 				Provider:      c.provider,
 				KeyIndex:      hint.keyIndex,
 				BaseURLIndex:  hint.baseURLIndex,
+				EntryID:       c.entryID,
 				AffinityReuse: reuse,
 			}
 			result.AffinityReuseParts = e.reuseParts(hint, result)
@@ -273,6 +285,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 						Provider:      c.provider,
 						KeyIndex:      hint.keyIndex,
 						BaseURLIndex:  bi,
+						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
@@ -293,6 +306,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint) (
 						Provider:      c.provider,
 						KeyIndex:      ki,
 						BaseURLIndex:  hint.baseURLIndex,
+						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
@@ -344,7 +358,7 @@ func (e *Engine) eligibleAffinityCandidates(modelName, path string) []affinityCa
 				if err != nil {
 					continue
 				}
-				candidates = append(candidates, affinityCandidate{provider: provider, plan: plan})
+				candidates = append(candidates, affinityCandidate{provider: provider, plan: plan, entryID: el.EntryID})
 			}
 			return candidates
 		}

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
+	"time"
 )
 
 // NodeKind is the flat topology node type. A "request entry" carries the
@@ -40,7 +41,7 @@ type FlatNode struct {
 	Enabled       bool            `json:"enabled"`                   // request-entry master switch / provider mini-switch / logOutput slot master switch
 	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
 	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
-	LogDeadlineAt *int64          `json:"log_deadline_at,omitempty"` // logOutput slot-level deadline, Unix epoch ms
+	DeadlineAt *int64          `json:"deadline_at,omitempty"` // slot-level optional deadline (auto-off), Unix epoch ms
 	Strategy      string          `json:"strategy,omitempty"`        // provider slot child-picking strategy: sequential|random|roundRobin
 }
 
@@ -219,16 +220,22 @@ type EligibleProvider struct {
 	// EntryID is the request entry whose workflow selected this provider,
 	// so callers can reconstruct the exact node path the request traverses.
 	EntryID string
+	// SlotID is the owning provider slot node id ("" for a provider wired
+	// directly under a request entry). It scopes round-robin rotation.
+	SlotID string
+	// Strategy is the owning provider slot's child-picking strategy, used
+	// only for the DEFAULT pick when no channel-affinity hint applies.
+	Strategy string
 }
 
 // FindEligibleProviders walks the active request entries and returns every
 // provider node reachable from them that can serve the request. Each entry's
-// downstream provider is tagged with the entry's weight. A provider must be
+// downstream providers are tagged with the entry's weight. A provider must be
 // enabled (mini-switch), its configured provider must be Status-enabled and
 // match the model, and (when the provider declares paths) the request path.
-// When a provider slot holds several providers, the slot's "按顺序" semantics
-// apply: if the provider the walk lands on cannot serve the request, the next
-// child of the same slot (in array order) is tried.
+// ALL eligible providers of a provider slot are returned in display order —
+// the slot's strategy only decides the default pick among them (see
+// PickEligibleProvider); channel affinity is free to reuse any of them.
 func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path string) ([]EligibleProvider, error) {
 	if err := ValidateTopology(t); err != nil {
 		return nil, err
@@ -248,41 +255,92 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 				break
 			}
 			if node.Kind == KindProvider {
-				slotID, pickable := slotRunFor(t, refs, node, model, path)
-				var selected FlatNode
-				if len(pickable) > 0 {
-					switch slotStrategy(t, slotID) {
-					case StrategyRandom:
-						selected = pickable[rand.Intn(len(pickable))]
-					case StrategyRoundRobin:
-						selected = pickable[roundRobinIndex(slotID, len(pickable))]
-					default:
-						selected = pickable[0]
+				slotID, _ := slotRunFor(t, refs, node, model, path)
+				var pickable []FlatNode
+				if slotID != "" {
+					if slot, ok := nodeByID(t, slotID); !ok || !SlotActive(slot, time.Now().UnixMilli()) {
+						break
 					}
+					for _, child := range providerChildren(t, slotID) {
+						if providerEligible(refs, child, model, path) {
+							pickable = append(pickable, child)
+						}
+					}
+				} else if providerEligible(refs, node, model, path) {
+					pickable = []FlatNode{node}
 				}
-				if selected.ID == "" {
-					break
+				strategy := slotStrategy(t, slotID)
+				for _, p := range pickable {
+					key := p.ID + ":" + entry.ID
+					if seen[key] {
+						continue
+					}
+					seen[key] = true
+					result = append(result, EligibleProvider{
+						Node:       p,
+						Name:       p.Name,
+						ProviderID: p.ProviderID,
+						Weight:     entry.Weight,
+						Chain:      collectChain(t, p),
+						EntryID:    entry.ID,
+						SlotID:     slotID,
+						Strategy:   strategy,
+					})
 				}
-				chain := collectChain(t, selected)
-				key := selected.ID + ":" + entry.ID
-				if seen[key] {
-					break
-				}
-				seen[key] = true
-				result = append(result, EligibleProvider{
-					Node:       selected,
-					Name:       selected.Name,
-					ProviderID: selected.ProviderID,
-					Weight:     entry.Weight,
-					Chain:      chain,
-					EntryID:    entry.ID,
-				})
 				break
 			}
 			cur = outgoing(t, cur)
 		}
 	}
 	return result, nil
+}
+
+// PickEligibleProvider selects the default provider for a request that has no
+// channel-affinity hint. It picks the request entry by weight (only entries
+// with at least one eligible provider participate), then applies the owning
+// provider slot's strategy among that entry's providers: sequential picks the
+// first in display order, random picks uniformly, roundRobin rotates per
+// request. Returns false when the set is empty.
+func PickEligibleProvider(eligible []EligibleProvider) (EligibleProvider, bool) {
+	if len(eligible) == 0 {
+		return EligibleProvider{}, false
+	}
+	// Group by entry, preserving display order (first occurrence).
+	var entryIDs []string
+	byEntry := map[string][]EligibleProvider{}
+	for _, c := range eligible {
+		if _, ok := byEntry[c.EntryID]; !ok {
+			entryIDs = append(entryIDs, c.EntryID)
+		}
+		byEntry[c.EntryID] = append(byEntry[c.EntryID], c)
+	}
+	pickedEntry := entryIDs[0]
+	if len(entryIDs) > 1 {
+		total := 0.0
+		for _, id := range entryIDs {
+			total += byEntry[id][0].Weight
+		}
+		if total > 0 {
+			roll := rand.Float64()
+			cum := 0.0
+			for _, id := range entryIDs {
+				cum += byEntry[id][0].Weight
+				if roll*total <= cum {
+					pickedEntry = id
+					break
+				}
+			}
+		}
+	}
+	cands := byEntry[pickedEntry]
+	switch cands[0].Strategy {
+	case StrategyRandom:
+		return cands[rand.Intn(len(cands))], true
+	case StrategyRoundRobin:
+		return cands[roundRobinIndex(cands[0].SlotID, len(cands))], true
+	default:
+		return cands[0], true
+	}
 }
 
 func providerSupports(ref ProviderRef, model, path string) bool {
@@ -417,6 +475,13 @@ func slotRunFor(t *Topology, refs map[string]ProviderRef, node FlatNode, model, 
 	if idx < 0 {
 		return "", nil
 	}
+	// The owning provider slot must be currently active (master switch on and
+	// any deadline not yet passed); otherwise no child may be picked at all.
+	if slotID != "" {
+		if slot, ok := nodeByID(t, slotID); ok && !SlotActive(slot, time.Now().UnixMilli()) {
+			return "", nil
+		}
+	}
 	pickable := make([]FlatNode, 0, 2)
 	if providerEligible(refs, node, model, path) {
 		pickable = append(pickable, node)
@@ -506,4 +571,14 @@ func FindDuplicateActivations(t *Topology) []DuplicateActivation {
 		result = append(result, DuplicateActivation{ProviderName: name, EntryIDs: ids})
 	}
 	return result
+}
+
+// SlotActive reports whether a slot node is currently effective: the master
+// switch is on and, when a deadline is set, the deadline is still in the
+// future. A nil deadline means the slot stays on indefinitely.
+func SlotActive(n FlatNode, now int64) bool {
+	if !n.Enabled {
+		return false
+	}
+	return n.DeadlineAt == nil || *n.DeadlineAt > now
 }

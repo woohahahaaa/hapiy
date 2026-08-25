@@ -118,6 +118,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.KeyIndex = dispatchResult.KeyIndex
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 		relayReq.TopologyOrigin = dispatchResult.Origin
+		relayReq.EntryID = dispatchResult.EntryID
 		common.Global().TrackActiveRequest(common.ActiveRequest{
 			RequestID:   relayReq.RequestID,
 			Model:       relayReq.Model,
@@ -235,6 +236,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				ProviderName: provider.Name,
 				KeyIndex:     relayReq.KeyIndex,
 				BaseURLIndex: relayReq.BaseURLIndex,
+				EntryID:      dispatchResult.EntryID,
 			}, 0)
 		}
 		// AffinityReuse covers both the rule path (AffinityMatch) and the

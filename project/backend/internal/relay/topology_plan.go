@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
@@ -104,6 +105,9 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 }
 
 func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment model.TopologySlotAssignment) error {
+	if !assignmentEffective(assignment, time.Now().UnixMilli()) {
+		return nil
+	}
 	if assignment.SlotType == "logOutput" {
 		plan.LogOutputs = append(plan.LogOutputs, LogOutputAssignment{
 			ID:          assignment.ID,
@@ -248,4 +252,23 @@ func jsonOrEmpty(raw string) string {
 		return "[]"
 	}
 	return raw
+}
+
+// assignmentEffective reports whether a topology slot assignment is currently
+// effective at plan time: the slot master switch (NodeEnabled) is on and any
+// auto-off deadline stored in the assignment Config is still in the future.
+func assignmentEffective(assignment model.TopologySlotAssignment, now int64) bool {
+	if assignment.NodeEnabled != nil && !*assignment.NodeEnabled {
+		return false
+	}
+	if assignment.Config == "" || assignment.Config == "{}" {
+		return true
+	}
+	var cfg struct {
+		DeadlineAt *int64 `json:"deadline_at"`
+	}
+	if err := json.Unmarshal([]byte(assignment.Config), &cfg); err != nil {
+		return true
+	}
+	return cfg.DeadlineAt == nil || *cfg.DeadlineAt > now
 }

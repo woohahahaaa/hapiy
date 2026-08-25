@@ -13,8 +13,8 @@ import { dashboardApi, type Provider, type FlatTopology } from '@/lib/dashboard-
 import { topologyConfig } from '@/config/topology-config'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
 import { canvasFromFlat, isProviderSlot, isRequestEntry, PROVIDER_SLOT_TYPE, ALL_SLOT_TYPES } from '@/lib/flat-topology'
-import { SLOT_LABELS } from '@/components/topology/slot-items'
-import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
+import { SLOT_LABELS } from '@/components/node/slot/items'
+import { useSlotRules } from '@/components/node/executor/use-slot-rules'
 import { cn } from '@/lib/utils'
 
 const nodeTypes = {

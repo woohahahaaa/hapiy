@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptySlotEntryMap } from '@/components/topology/slot-items/types'
+import { emptySlotEntryMap } from '@/components/node/slot/items/types'
 import {
   parseTopologyDocument,
   slotMapsFromWorkflows,

@@ -308,6 +308,9 @@ export function DataTable<T extends Record<string, unknown>>({
       initialConfigRef.current = false
       return
     }
+    // Load-backfill sets configs programmatically; only persist real user
+    // edits so merely opening a page never writes (and is never audited).
+    if (!userEditedRef.current) return
     const handle = window.setTimeout(() => {
       const toSave = configsRef.current
       void dashboardApi.saveTableConfig(id, toSave).catch((err) => {

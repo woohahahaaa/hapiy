@@ -42,6 +42,10 @@ type Triple struct {
 	ProviderName string `json:"provider_name"`
 	KeyIndex     int    `json:"key_index"`
 	BaseURLIndex int    `json:"base_url_index"`
+	// EntryID is the request entry whose workflow served the request.
+	// Reuse is only honored for the same entry, so affinity never leaks
+	// across workflows.
+	EntryID string `json:"entry_id,omitempty"`
 }
 
 // compiledRule is the in-memory form. Sets are precomputed so request-

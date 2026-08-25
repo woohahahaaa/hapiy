@@ -379,6 +379,7 @@ type RequestChannelHistory struct {
 	ProviderID    string    `gorm:"not null" json:"provider_id"`
 	KeyIndex      int       `json:"key_index"`
 	BaseURLIndex  int       `json:"base_url_index"`
+	EntryID       string    `json:"entry_id"` // request entry the channel was used through; "" = legacy/unscoped
 	LastUsedAt    time.Time `gorm:"index" json:"last_used_at"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`

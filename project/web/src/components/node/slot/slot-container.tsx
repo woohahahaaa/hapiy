@@ -10,6 +10,7 @@ interface SlotContainerProps {
   style?: CSSProperties
   externallyDisabled?: boolean
   dimChildren?: boolean
+  onExecutorPick?: (token: string) => void
 }
 
 export function SlotContainer({
@@ -20,11 +21,21 @@ export function SlotContainer({
   style,
   externallyDisabled = false,
   dimChildren = false,
+  onExecutorPick,
 }: SlotContainerProps) {
   const hasNodes = Boolean(children)
 
   return (
     <div
+      onClick={(e) => {
+        if (!onExecutorPick) return
+        const hit = (e.target as HTMLElement).closest('[data-executor]')
+        const token = hit?.getAttribute('data-executor')
+        if (token) {
+          e.stopPropagation()
+          onExecutorPick(token)
+        }
+      }}
       className={cn(
         'border-2 border-dashed border-border rounded-lg p-4 relative bg-background',
         externallyDisabled && 'opacity-50 pointer-events-none',

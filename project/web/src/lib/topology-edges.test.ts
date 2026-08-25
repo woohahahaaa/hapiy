@@ -12,7 +12,7 @@ import {
   isWiringEdge,
   type TopologyEdgeUnit,
 } from './topology-edges'
-import { emptySlotEntryMap } from '@/components/topology/slot-items/types'
+import { emptySlotEntryMap } from '@/components/node/slot/items/types'
 import type { WorkflowEntry } from './topology-document'
 
 function doc(...providerIds: string[]): Workflow[] {

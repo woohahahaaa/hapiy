@@ -196,8 +196,8 @@ func TestRelayRequestFailure_skipsLogCaptureWhenNodeDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get plan: %v", err)
 	}
-	if len(plan.LogOutputs) != 1 || plan.LogOutputs[0].NodeEnabled {
-		t.Fatalf("expected one logOutput assignment with node switch off, got %+v", plan.LogOutputs)
+	if len(plan.LogOutputs) != 0 {
+		t.Fatalf("expected logOutput assignment filtered out at plan time when node switch is off, got %+v", plan.LogOutputs)
 	}
 
 	if _, err := engine.RelayRequest(context.Background(), plan, &RelayRequest{RequestID: "req-fail", Path: "/v1/chat/completions"}); err == nil {

@@ -169,6 +169,9 @@ type RelayRequest struct {
 	KeyIndex       int                     `json:"-"`
 	BaseURLIndex   int                     `json:"-"`
 	TopologyOrigin *topology.RequestOrigin `json:"-"`
+	// EntryID is the request entry whose workflow served the request; it is
+	// recorded into fallback channel history so reuse stays entry-scoped.
+	EntryID string `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
 	// caller surface live progress on the monitoring page without polling the
@@ -395,7 +398,7 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		e.logDebug(plan, req, resp)
 	}
 
-	e.recordFallbackChannel(req, plan.Provider.ID, req.BaseURLIndex, req.KeyIndex)
+	e.recordFallbackChannel(req, plan.Provider.ID, req.KeyIndex, req.BaseURLIndex)
 
 	return resp, nil
 }

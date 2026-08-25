@@ -235,7 +235,7 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 		}
 		nextOrder[orderKey] = order
 
-		entryEnabled := providerEnabled && e.Enabled
+		entryEnabled := providerEnabled && slot.Enabled && e.Enabled
 
 		if slot.SlotType == "logOutput" {
 			// Per-entry fields (prefix, record_*) live on the entry; slot-level
@@ -251,8 +251,8 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 					"record_response": e.RecordResponse,
 					"record_system":   e.RecordSystem,
 				}
-				if slot.LogDeadlineAt != nil && *slot.LogDeadlineAt > 0 {
-					cfg["deadline_at"] = *slot.LogDeadlineAt
+				if slot.DeadlineAt != nil && *slot.DeadlineAt > 0 {
+					cfg["deadline_at"] = *slot.DeadlineAt
 				}
 				if packed, err := json.Marshal(cfg); err == nil {
 					config = packed
@@ -283,14 +283,16 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			log.Printf("flat-topology: slot %s entry %s rule %s invalid: %v; skipping", slot.ID, e.ID, ruleID, err)
 			continue
 		}
+		nodeEnabled := slot.Enabled
 		*rows = append(*rows, model.TopologySlotAssignment{
-			ProviderID: providerID,
-			SlotType:   slot.SlotType,
-			Order:      order,
-			Enabled:    entryEnabled,
-			RuleID:     &ruleID,
-			Name:       "",
-			Config:     "{}",
+			ProviderID:  providerID,
+			SlotType:    slot.SlotType,
+			Order:       order,
+			Enabled:     entryEnabled,
+			NodeEnabled: &nodeEnabled,
+			RuleID:      &ruleID,
+			Name:        "",
+			Config:      slotDeadlineConfig(slot),
 		})
 	}
 }
@@ -412,4 +414,16 @@ func validateFlatRuleExists(db *gorm.DB, slotType, ruleID string) error {
 		return fmt.Errorf("%s rule %s not found or disabled", slotType, ruleID)
 	}
 	return nil
+}
+// slotDeadlineConfig packs a slot's optional auto-off deadline into the
+// assignment Config JSON the engine reads at plan time.
+func slotDeadlineConfig(slot topology.FlatNode) string {
+	if slot.DeadlineAt == nil || *slot.DeadlineAt <= 0 {
+		return "{}"
+	}
+	packed, err := json.Marshal(map[string]any{"deadline_at": *slot.DeadlineAt})
+	if err != nil {
+		return "{}"
+	}
+	return string(packed)
 }

@@ -1,8 +1,9 @@
-import { SlotContainer } from '@/components/topology/SlotContainer'
+import { SlotContainer } from '@/components/node/slot/slot-container'
+import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import { topologyConfig } from '@/config/topology-config'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
-import { LogOutputSlotItem, type LogOutputSlotEntry, type SlotItemDragProps } from '@/components/topology/slot-items'
-import { NodeExecutorLogOutput } from '@/components/node/executor/sub/log-output'
+import type { LogOutputSlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
+import { NodeExecutorLogOutputItem } from '@/components/node/executor/sub/log-output'
 
 export interface NodeSlotLogOutputProps {
   title: string
@@ -15,13 +16,14 @@ export interface NodeSlotLogOutputProps {
   onAddEntry: () => void
   externallyDisabled?: boolean
   deadlineAt: number | null
-  onToggleLog?: (enabled: boolean) => void
-  onSetLogDeadline?: (deadlineAt: number | null) => void
+  onToggleEnabled?: (enabled: boolean) => void
+  onSetDeadline?: (deadlineAt: number | null) => void
   onStartCapture?: (deadlineAt: number) => void
   onAutoCloseEntry?: () => void
+  onSelectExecutor?: (token: string | null) => void
+  selectedExecutorToken?: string | null
 }
 
-// 日志抓取插槽节点：日志业务标题栏（开启/关闭 + 时长） + 日志条目列表。
 export function NodeSlotLogOutput({
   title,
   enabled,
@@ -33,21 +35,26 @@ export function NodeSlotLogOutput({
   onAddEntry,
   externallyDisabled,
   deadlineAt,
-  onToggleLog,
-  onSetLogDeadline,
+  onToggleEnabled,
+  onSetDeadline,
   onStartCapture,
   onAutoCloseEntry,
+  onSelectExecutor,
+  selectedExecutorToken,
 }: NodeSlotLogOutputProps) {
   const titleBadge = (
-    <NodeExecutorLogOutput
-      title={title}
-      enabled={enabled}
-      deadlineAt={deadlineAt}
-      onToggle={onToggleLog}
-      onSetDeadline={onSetLogDeadline}
-      onStartCapture={onStartCapture}
-      onAutoClose={onAutoCloseEntry}
-    />
+    <div className="flex items-center justify-between gap-2">
+      <span>{title}</span>
+      <SlotEnableControl
+        variant="countdown"
+        enabled={enabled}
+        deadlineAt={deadlineAt}
+        onToggle={onToggleEnabled ?? (() => {})}
+        onSetDeadline={onSetDeadline ?? (() => {})}
+        onStartCapture={onStartCapture}
+        onAutoClose={onAutoCloseEntry}
+      />
+    </div>
   )
   return (
     <SlotContainer
@@ -56,10 +63,14 @@ export function NodeSlotLogOutput({
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
       dimChildren={!enabled}
+      onExecutorPick={onSelectExecutor}
     >
       {[...entries].sort((left, right) => left.index - right.index).map((entry) => (
-        <LogOutputSlotItem
+        <NodeExecutorLogOutputItem
           key={entry.id}
+          token={entry.id}
+          picked={selectedExecutorToken === entry.id}
+          onPickToken={onSelectExecutor}
           entry={entry}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}

@@ -22,6 +22,7 @@ type fallbackLookupResult struct {
 	providerName  string
 	keyIndex      int
 	baseURLIndex  int
+	entryID       string
 }
 
 // lookupFallbackAffinity runs the fallback affinity check for a request.
@@ -78,6 +79,7 @@ func (e *Engine) lookupFallbackAffinity(req *affinity.Request) fallbackLookupRes
 		providerName: provider.Name,
 		keyIndex:     row.KeyIndex,
 		baseURLIndex: row.BaseURLIndex,
+		entryID:      row.EntryID,
 	}
 }
 
@@ -116,6 +118,7 @@ func (e *Engine) recordFallbackChannel(req *RelayRequest, providerID string, key
 		ProviderID:   providerID,
 		KeyIndex:     keyIndex,
 		BaseURLIndex: baseURLIndex,
+		EntryID:      req.EntryID,
 		LastUsedAt:   now,
 	}
 	// Upsert on the (session_id, model) unique index with explicit column

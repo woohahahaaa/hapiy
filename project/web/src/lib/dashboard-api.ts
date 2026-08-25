@@ -1,6 +1,6 @@
 import { parseTopologyDocument } from './topology-document'
 import type { Workflow } from './topology-document'
-import type { SlotEntry } from '@/components/topology/slot-items'
+import type { SlotEntry } from '@/components/node/slot/items'
 export { parseTopologyDocument } from './topology-document'
 export type { Workflow } from './topology-document'
 export type TopologyDocument = Workflow[]
@@ -383,7 +383,7 @@ export type FlatNode = {
   readonly enabled: boolean
   readonly weight?: number
   readonly entries?: readonly SlotEntry[]
-  readonly logDeadlineAt?: number | null
+  readonly deadlineAt?: number | null
   readonly strategy?: ProviderStrategy
 }
 
@@ -422,7 +422,7 @@ function parseFlatNode(value: unknown): FlatNode {
     enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
     weight: typeof value.weight === 'number' ? value.weight : undefined,
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
-    logDeadlineAt: typeof value.log_deadline_at === 'number' ? value.log_deadline_at : null,
+    deadlineAt: typeof value.deadline_at === 'number' ? value.deadline_at : null,
     strategy: isProviderStrategy(value.strategy) ? value.strategy : undefined,
   }
 }
@@ -456,7 +456,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     enabled: node.enabled,
     ...(node.weight !== undefined ? { weight: node.weight } : {}),
     ...(node.entries !== undefined ? { entries: node.entries } : {}),
-    ...(node.logDeadlineAt !== undefined ? { log_deadline_at: node.logDeadlineAt } : {}),
+    ...(node.deadlineAt !== undefined ? { deadline_at: node.deadlineAt } : {}),
     ...(node.strategy !== undefined ? { strategy: node.strategy } : {}),
   }
 }

@@ -11,7 +11,7 @@ const canvas = {
     { id: 'entry-1', kind: 'requestEntry' },
     { id: 'pslot-1', kind: 'slot', slotType: 'provider' },
     { id: 'requestModify-1', kind: 'slot', slotType: 'requestModify' },
-    { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: Date.now() + 60_000 },
+    { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, deadlineAt: Date.now() + 60_000 },
   ],
   providers: [{ id: 'prov-a' }, { id: 'prov-b' }],
   providerSlotOf: new Map([
@@ -55,7 +55,7 @@ describe('buildFlowSteps', () => {
       topLevel: [
         { id: 'model-kimi-k3', kind: 'modelHub' },
         { id: 'entry-1', kind: 'requestEntry' },
-        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: false, logDeadlineAt: null },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: false, deadlineAt: null },
       ],
       providers: [],
       providerSlotOf: new Map(),
@@ -68,14 +68,13 @@ describe('buildFlowSteps', () => {
     ])
   })
 
-  it('skips a logOutput slot that is enabled but has no capture deadline', () => {
-    // The master switch is on but the log hook never started capturing: under
-    // the global rule the slot is inactive, so it must not light up.
+  it('lights up a logOutput slot enabled without a deadline (stays on by default)', () => {
+    // A slot without a deadline defaults to always-on: enabled alone is enough.
     const openButIdleCanvas = {
       topLevel: [
         { id: 'model-kimi-k3', kind: 'modelHub' },
         { id: 'entry-1', kind: 'requestEntry' },
-        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: null },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, deadlineAt: null },
       ],
       providers: [],
       providerSlotOf: new Map(),
@@ -85,6 +84,8 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
+      { kind: 'node', nodeId: 'logOutput-1' },
     ])
   })
 
@@ -93,7 +94,7 @@ describe('buildFlowSteps', () => {
       topLevel: [
         { id: 'model-kimi-k3', kind: 'modelHub' },
         { id: 'entry-1', kind: 'requestEntry' },
-        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: 0 },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, deadlineAt: 0 },
       ],
       providers: [],
       providerSlotOf: new Map(),
@@ -113,7 +114,7 @@ describe('buildFlowSteps', () => {
       topLevel: [
         { id: 'model-kimi-k3', kind: 'modelHub' },
         { id: 'entry-1', kind: 'requestEntry' },
-        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, logDeadlineAt: 2_000_000 },
+        { id: 'logOutput-1', kind: 'slot', slotType: 'logOutput', enabled: true, deadlineAt: 2_000_000 },
       ],
       providers: [],
       providerSlotOf: new Map(),

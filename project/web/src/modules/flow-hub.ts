@@ -54,16 +54,7 @@ export function buildFlowSteps(
     if (node.enabled === false) return false
     if (node.kind !== 'slot') return true
     if (state?.externallyDisabledSlotIds.has(nodeId)) return false
-    // A logOutput slot is only ON when it is actually capturing: enabled AND a
-    // future deadline. The master switch alone (enabled=true with no deadline,
-    // or an expired one) means the hook is inactive — do not light it up,
-    // mirroring LogOutputSlotHeader.capturing.
-    if (node.slotType === 'logOutput') {
-      return node.enabled === true &&
-        node.logDeadlineAt !== null && node.logDeadlineAt !== undefined &&
-        node.logDeadlineAt > Date.now()
-    }
-    return true
+    return node.deadlineAt === undefined || node.deadlineAt === null || node.deadlineAt > Date.now()
   }
   const providerActive = (nodeId: string): boolean => {
     const child = canvas.providers.find((provider) => provider.id === nodeId)

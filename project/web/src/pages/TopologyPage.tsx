@@ -29,6 +29,7 @@ import { NodeExecutor } from '@/components/node/executor'
 import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
+import { ExecutorDebug } from '@/components/node/executor-debug'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderStrategy } from '@/lib/dashboard-api'
 import { FlowLightEdge } from '@/edges/FlowLightEdge'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
@@ -37,8 +38,8 @@ import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
-import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/topology/slot-items'
-import { useSlotRules } from '@/components/topology/slot-items/use-slot-rules'
+import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/node/slot/items'
+import { useSlotRules } from '@/components/node/executor/use-slot-rules'
 import {
   buildCopySnapshot,
   pasteTopologySnapshot,
@@ -465,12 +466,12 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
-  const handleToggleLog = useCallback(
+  const handleToggleSlotEnabled = useCallback(
     (slotId: string, enabled: boolean) => {
       updateTopologyNodes((list) =>
         list.map((n) =>
           n.id === slotId && n.kind === 'slot'
-            ? { ...n, enabled, ...(enabled ? {} : { logDeadlineAt: null }) }
+            ? { ...n, enabled, ...(enabled ? {} : { deadlineAt: null }) }
             : n,
         ),
       )
@@ -478,12 +479,12 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
-  const handleStartLogCapture = useCallback(
+  const handleStartSlotCapture = useCallback(
     (slotId: string, deadlineAt: number) => {
       updateTopologyNodes((list) =>
         list.map((n) =>
           n.id === slotId && n.kind === 'slot'
-            ? { ...n, enabled: true, logDeadlineAt: deadlineAt }
+            ? { ...n, enabled: true, deadlineAt: deadlineAt }
             : n,
         ),
       )
@@ -491,10 +492,10 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
-  const handleSetLogDeadline = useCallback(
+  const handleSetSlotDeadline = useCallback(
     (slotId: string, deadlineAt: number | null) => {
       updateTopologyNodes((list) =>
-        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, logDeadlineAt: deadlineAt } : n)),
+        list.map((n) => (n.id === slotId && n.kind === 'slot' ? { ...n, deadlineAt: deadlineAt } : n)),
       )
     },
     [updateTopologyNodes],
@@ -584,6 +585,8 @@ export function TopologyPage() {
   // overlay and rebuilds these maps, so overlapping runs stack naturally
   // instead of restarting keyframe animations. Declared before topLevelNodes
   // because it feeds node data.
+  const [selectedDebugIds, setSelectedDebugIds] = useState<string[]>([])
+  const [selectedExecutor, setSelectedExecutor] = useState<{ slotId: string; token: string } | null>(null)
   const [litNodeLayers, setLitNodeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
   const [litEdgeLayers, setLitEdgeLayers] = useState<ReadonlyMap<string, readonly FlowLayerOverlay[]>>(new Map())
   const litNodeRef = useRef(new Map<string, FlowLayerOverlay[]>())
@@ -802,6 +805,10 @@ export function TopologyPage() {
             onReorderProvider: (from: number, to: number) => handleReorderProvider(node.id, from, to),
             strategy: node.strategy ?? 'sequential',
             onCycleStrategy: () => handleCycleProviderStrategy(node.id, node.strategy ?? 'sequential'),
+            enabled: node.enabled,
+            onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
+            onSelectExecutor: (token: string | null) => setSelectedExecutor(token ? { slotId: node.id, token } : null),
+            selectedExecutorToken: selectedExecutor?.slotId === node.id ? selectedExecutor.token : null,
           },
         })
       } else {
@@ -821,24 +828,22 @@ export function TopologyPage() {
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
             onDeleteEntry: (index: number) => handleDeleteSlotEntry(node.id, slotType, index),
             onReorderEntries: (from: number, to: number) => handleReorderSlotEntries(node.id, slotType, from, to),
+            deadlineAt: node.deadlineAt ?? null,
+            onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
+            onSetDeadline: (deadlineAt: number | null) => handleSetSlotDeadline(node.id, deadlineAt),
+            onStartCapture: (deadlineAt: number) => handleStartSlotCapture(node.id, deadlineAt),
+            onSelectExecutor: (token: string | null) => setSelectedExecutor(token ? { slotId: node.id, token } : null),
+            selectedExecutorToken: selectedExecutor?.slotId === node.id ? selectedExecutor.token : null,
             onAutoCloseEntry: () => {
               void persistTopology()
             },
-            ...(slotType === 'logOutput'
-              ? {
-                  logDeadlineAt: node.logDeadlineAt ?? null,
-                  onToggleLog: (nextEnabled: boolean) => handleToggleLog(node.id, nextEnabled),
-                  onSetLogDeadline: (deadlineAt: number | null) => handleSetLogDeadline(node.id, deadlineAt),
-                  onStartCapture: (deadlineAt: number) => handleStartLogCapture(node.id, deadlineAt),
-                }
-              : {}),
           },
         })
       }
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
+  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet, selectedExecutor])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -1337,6 +1342,8 @@ export function TopologyPage() {
 
   const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     selectionRef.current = { nodes: params.nodes, edges: params.edges }
+    setSelectedDebugIds(params.nodes.map((n) => n.id))
+    if (params.nodes.length > 0) setSelectedExecutor(null)
   }, [])
 
   const handleDeleteSelectedEdges = useCallback(() => {
@@ -1961,6 +1968,19 @@ export function TopologyPage() {
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}
+        <ExecutorDebug
+          topology={tp}
+          providers={providers}
+          canvas={canvas}
+          externallyDisabledSlotIds={externallyDisabledSet}
+          target={
+            selectedExecutor
+              ? { kind: 'executor', slotId: selectedExecutor.slotId, token: selectedExecutor.token }
+              : selectedDebugIds[0]
+                ? { kind: 'node', nodeId: selectedDebugIds[0] }
+                : null
+          }
+        />
         <TopologyVersionsModal
           open={versionsOpen}
           onClose={() => setVersionsOpen(false)}
