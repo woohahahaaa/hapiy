@@ -16,7 +16,8 @@ import type {
 } from '@/components/node/slot/items'
 import { makeEmptyEntry } from '@/components/node/slot/items'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
-import type { FlatProviderChild } from '@/components/node/executor/sub/provider'
+import type { FlatProviderChild, ProviderOption } from '@/components/node/executor/sub/provider'
+import type { SlotRuleKey, SlotRuleStatusMap } from '@/components/node/executor/use-slot-rules'
 import { NodeSlotProvider, type ProviderStrategy } from './sub/provider'
 import { NodeSlotRequestModify } from './sub/request-modify'
 import { NodeSlotResponseModify } from './sub/response-modify'
@@ -34,18 +35,21 @@ export interface NodeSlotData {
   externallyDisabled?: boolean
   enabled?: boolean
   children?: readonly FlatProviderChild[]
-  providers?: readonly string[]
+  providers?: readonly ProviderOption[]
   strategy?: ProviderStrategy
   onCycleStrategy?: () => void
   providerFlashLayers?: ReadonlyMap<string, readonly FlowLayerOverlay[]>
   flashLayers?: readonly FlowLayerOverlay[]
   onAddProvider?: () => void
-  onSelectProvider?: (providerId: string, name: string) => void
+  onSelectProvider?: (nodeId: string, providerId: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
   onDeleteProvider?: (providerId: string) => void
   onReorderProvider?: (fromIndex: number, toIndex: number) => void
   entries?: SlotEntry[]
   rules?: SlotRuleMap
+  // A-group wiring: 绑定下拉框按类型读取 加载中/加载失败 状态并支持打开时刷新。
+  ruleStatus?: SlotRuleStatusMap
+  refreshRuleType?: (key: SlotRuleKey) => void
   onChangeEntry?: (next: SlotEntry) => void
   onDeleteEntry?: (index: number) => void
   onReorderEntries?: (fromIndex: number, toIndex: number) => void
@@ -93,6 +97,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
     onReorderProvider,
     entries: entriesProp,
     rules,
+    ruleStatus,
+    refreshRuleType,
     onChangeEntry,
     onDeleteEntry,
     onReorderEntries,
@@ -106,7 +112,9 @@ export function NodeSlot({ data }: NodeSlotProps) {
   } = data
   const entries = entriesProp ?? []
   const slotRules = rules ?? EMPTY_RULES
-  const takenLabels = new Set(children.map((c) => c.label).filter(Boolean))
+  // 已占用检测按键 = 真实供应商 ID（旧数据缺 providerId 时按名称兜底），
+  // 供应商重命名不会破坏去重。
+  const takenLabels = new Set(children.map((c) => c.providerId || c.label).filter(Boolean))
   const strategy = strategyProp ?? 'sequential'
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -173,6 +181,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onToggleEnabled={onToggleEnabled}
       entries={entries as RequestModifySlotEntry[]}
       rules={slotRules.requestModify}
+      ruleStatus={ruleStatus?.requestModify}
+      onRefreshRules={() => refreshRuleType?.('requestModify')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}
@@ -189,6 +199,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onToggleEnabled={onToggleEnabled}
       entries={entries as ResponseModifySlotEntry[]}
       rules={slotRules.responseModify}
+      ruleStatus={ruleStatus?.responseModify}
+      onRefreshRules={() => refreshRuleType?.('responseModify')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}
@@ -205,6 +217,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onToggleEnabled={onToggleEnabled}
       entries={entries as AutoReplySlotEntry[]}
       rules={slotRules.autoReply}
+      ruleStatus={ruleStatus?.autoReply}
+      onRefreshRules={() => refreshRuleType?.('autoReply')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}
@@ -221,6 +235,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onToggleEnabled={onToggleEnabled}
       entries={entries as ConcurrencySlotEntry[]}
       rules={slotRules.concurrency}
+      ruleStatus={ruleStatus?.concurrency}
+      onRefreshRules={() => refreshRuleType?.('concurrency')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}
@@ -237,6 +253,8 @@ export function NodeSlot({ data }: NodeSlotProps) {
       onToggleEnabled={onToggleEnabled}
       entries={entries as AutoSwitchSlotEntry[]}
       rules={slotRules.autoSwitch}
+      ruleStatus={ruleStatus?.autoSwitch}
+      onRefreshRules={() => refreshRuleType?.('autoSwitch')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}

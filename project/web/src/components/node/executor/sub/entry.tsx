@@ -4,9 +4,14 @@ import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
+import type { FlowLayerOverlay } from '@/modules/flow-hub'
+import { createDebouncedCommit, type DebouncedCommit } from './debounce'
+import { WEIGHT_DEBOUNCE_MS, clampWeight } from './weight'
 
+// ReactFlow 节点 data 载荷：由 TopologyPage 组装传入（label/enabled/weight/
+// models/flashLayers/onChange*）。此前引用了一个无定义的幽灵类型 NodeExecutorData，
+// tsc -b 一直报 TS2304；这里显式声明并在组件中使用。
 interface NodeExecutorEntryData {
   label: string
   enabled: boolean
@@ -18,7 +23,7 @@ interface NodeExecutorEntryData {
 }
 
 interface NodeExecutorEntryProps {
-  data: NodeExecutorData
+  data: NodeExecutorEntryData
   id: string
 }
 
@@ -28,7 +33,9 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
   const rootRef = useRef<HTMLDivElement>(null)
+  const lastHeightRef = useRef(0)
   const [nodeHeight, setNodeHeight] = useState(0)
+  const [weightText, setWeightText] = useState(() => String(Number.isFinite(weight) ? weight : 1))
 
   useEffect(() => {
     if (models.length !== lenRef.current) {
@@ -37,16 +44,32 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
     }
   }, [id, models.length, updateNodeInternals])
 
+  // rAF-coalesced: rapid ResizeObserver callbacks collapse into one per frame,
+  // and updateNodeInternals only fires when the height really changed >1px.
   useEffect(() => {
     const el = rootRef.current
     if (!el) return
-    const ro = new ResizeObserver(() => {
-      setNodeHeight(el.offsetHeight)
+
+    let rafId: number | null = null
+    const applySize = () => {
+      rafId = null
+      const height = el.offsetHeight
+      if (Math.abs(height - lastHeightRef.current) <= 1) return
+      lastHeightRef.current = height
+      setNodeHeight(height)
       updateNodeInternals(id)
+    }
+    const ro = new ResizeObserver(() => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(applySize)
+      }
     })
     ro.observe(el)
-    setNodeHeight(el.offsetHeight)
-    return () => ro.disconnect()
+    applySize()
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      ro.disconnect()
+    }
   }, [id, updateNodeInternals])
 
   const targetHandle = topologyConfig.handles.provider.target
@@ -61,11 +84,33 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   const total = baseTotal * scale
   const start = -(total / 2)
 
-  const handleWeight = (raw: string) => {
-    const parsed = Number(raw)
-    if (Number.isNaN(parsed)) return
-    const clamped = Math.min(1, Math.max(0, parsed))
-    onChangeWeight(Math.round(clamped * 100) / 100)
+  const onChangeWeightRef = useRef(onChangeWeight)
+  useEffect(() => {
+    onChangeWeightRef.current = onChangeWeight
+  })
+
+  const weightDebouncerRef = useRef<DebouncedCommit<number> | null>(null)
+  useEffect(() => {
+    weightDebouncerRef.current = createDebouncedCommit<number>(WEIGHT_DEBOUNCE_MS, (value) => {
+      onChangeWeightRef.current(value)
+    })
+    return () => {
+      weightDebouncerRef.current?.dispose()
+      weightDebouncerRef.current = null
+    }
+  }, [])
+
+  const [prevWeight, setPrevWeight] = useState(weight)
+  if (prevWeight !== weight) {
+    setPrevWeight(weight)
+    setWeightText(String(Number.isFinite(weight) ? weight : 1))
+  }
+
+  const commitWeightOnBlur = () => {
+    weightDebouncerRef.current?.flush()
+    if (clampWeight(weightText) === null) {
+      setWeightText(String(Number.isFinite(weight) ? weight : 1))
+    }
   }
 
   return (
@@ -143,8 +188,13 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
             min={0}
             max={1}
             step={0.01}
-            value={Number.isFinite(weight) ? weight : 1}
-            onChange={(e) => handleWeight(e.target.value)}
+            value={weightText}
+            onChange={(e) => {
+              setWeightText(e.target.value)
+              const next = clampWeight(e.target.value)
+              if (next !== null) weightDebouncerRef.current?.schedule(next)
+            }}
+            onBlur={commitWeightOnBlur}
             onKeyDown={(e) => e.stopPropagation()}
             className="nodrag nopan w-full px-1 py-0 text-left"
           />

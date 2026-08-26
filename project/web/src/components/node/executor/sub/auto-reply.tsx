@@ -1,5 +1,6 @@
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import { RuleSelect } from '../rule-select'
+import type { RuleTypeStatus } from '../use-slot-rules'
 import type { AutoReplySlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
 import type { HeartbeatRule } from '@/lib/dashboard-api'
 
@@ -9,12 +10,15 @@ export interface NodeExecutorAutoReplyProps extends SlotItemDragProps {
   onPickToken?: (token: string) => void
   entry: AutoReplySlotEntry
   rules: readonly HeartbeatRule[]
+  // 该类型规则列表的加载状态与打开时刷新回调（由 useSlotRules 透传下来）。
+  ruleStatus?: RuleTypeStatus
+  onRefreshRules?: () => void
   onChange: (next: AutoReplySlotEntry) => void
   onDelete: () => void
 }
 
 // 心跳回复业务节点：槽位内的一条心跳回复条目（绑定心跳规则）。
-export function NodeExecutorAutoReply({ entry, rules, onChange, onDelete, token, picked, onPickToken, ...drag }: NodeExecutorAutoReplyProps) {
+export function NodeExecutorAutoReply({ entry, rules, onChange, onDelete, token, picked, onPickToken, ruleStatus, onRefreshRules, ...drag }: NodeExecutorAutoReplyProps) {
   return (
     <SlotItemCard
       index={entry.index}
@@ -29,7 +33,10 @@ export function NodeExecutorAutoReply({ entry, rules, onChange, onDelete, token,
       <RuleSelect
         value={entry.ruleId}
         options={rules.map((r) => ({ id: r.id, label: r.name }))}
-        placeholder="选择规则"
+        placeholder="请选择"
+        loading={ruleStatus?.loading}
+        error={ruleStatus?.error ?? null}
+        onOpenRefresh={onRefreshRules}
         onChange={(id) => onChange({ ...entry, ruleId: id })}
       />
     </SlotItemCard>

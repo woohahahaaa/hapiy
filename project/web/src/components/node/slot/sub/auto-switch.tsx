@@ -6,6 +6,7 @@ import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type { SlotItemDragProps, AutoSwitchSlotEntry } from '@/components/node/slot/items'
 import type { FailoverRule } from '@/lib/dashboard-api'
 import { NodeExecutorAutoSwitch } from '@/components/node/executor/sub/auto-switch'
+import type { RuleTypeStatus } from '@/components/node/executor/use-slot-rules'
 
 export interface NodeSlotAutoSwitchProps {
   onSelectExecutor?: (token: string | null) => void
@@ -13,6 +14,9 @@ export interface NodeSlotAutoSwitchProps {
   title: string
   entries: readonly AutoSwitchSlotEntry[]
   rules: readonly FailoverRule[]
+  // 该类型规则列表的加载状态与打开时刷新回调（由 useSlotRules 透传下来）。
+  ruleStatus?: RuleTypeStatus
+  onRefreshRules?: () => void
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
   onChangeEntry: (next: AutoSwitchSlotEntry) => void
@@ -38,6 +42,8 @@ export function NodeSlotAutoSwitch({
   onToggleEnabled,
   onSelectExecutor,
   selectedExecutorToken,
+  ruleStatus,
+  onRefreshRules,
 }: NodeSlotAutoSwitchProps) {
     const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
@@ -66,6 +72,8 @@ export function NodeSlotAutoSwitch({
           onPickToken={onSelectExecutor}
           entry={entry}
           rules={rules}
+          ruleStatus={ruleStatus}
+          onRefreshRules={onRefreshRules}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}

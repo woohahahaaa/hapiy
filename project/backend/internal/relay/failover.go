@@ -44,6 +44,14 @@ func isFailoverEligible(outcome upstreamOutcome, rules []*model.FailoverRule) (s
 
 // ruleMatchesOutcome checks a single rule's condition against the outcome.
 func ruleMatchesOutcome(rule *model.FailoverRule, outcome upstreamOutcome) bool {
+	if len(rule.MatchPatterns) > 0 {
+		for _, pattern := range rule.MatchPatterns {
+			if pattern != "" && strings.Contains(outcome.message, pattern) {
+				return true
+			}
+		}
+		return false
+	}
 	if len(rule.Keywords) > 0 {
 		for _, keyword := range rule.Keywords {
 			if keyword != "" && strings.Contains(outcome.message, keyword) {

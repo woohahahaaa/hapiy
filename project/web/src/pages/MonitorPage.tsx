@@ -190,7 +190,7 @@ function MetricCard({ icon, label, value, sub, className }: MetricCardProps) {
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground truncate">{label}</p>
-            <p className="mt-1 text-2xl font-bold tabular-nums truncate">{value}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums break-words">{value}</p>
             {sub && <p className="mt-0.5 text-xs text-muted-foreground truncate">{sub}</p>}
           </div>
           <div className="ml-2 shrink-0 rounded-lg bg-muted p-2 text-muted-foreground [&>svg]:size-4">
@@ -221,7 +221,7 @@ function StatsSection() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [clearOpen, setClearOpen] = useState(false)
-  const [clearArmed, setClearArmed] = useState(false)
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
   const mountedRef = useRef(true)
 
@@ -267,28 +267,27 @@ function StatsSection() {
 
   const handleClearUsage = useCallback(async () => {
     if (clearing) return
-    if (!clearArmed) {
-      setClearArmed(true)
-      return
-    }
     setClearing(true)
     try {
       await dashboardApi.clearUsage()
       toast('用量已清空')
-      setClearOpen(false)
-      setClearArmed(false)
+      setClearConfirmOpen(false)
       void fetchStats(dateRange)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     } finally {
       setClearing(false)
     }
-  }, [clearing, clearArmed, fetchStats, dateRange])
+  }, [clearing, fetchStats, dateRange])
 
   const closeClearDialog = useCallback((open: boolean) => {
     if (clearing) return
     setClearOpen(open)
-    if (!open) setClearArmed(false)
+  }, [clearing])
+
+  const closeClearConfirmDialog = useCallback((open: boolean) => {
+    if (clearing) return
+    setClearConfirmOpen(open)
   }, [clearing])
 
   return (
@@ -311,7 +310,7 @@ function StatsSection() {
 
       {/* Loading state: first load only */}
       {loading && !stats ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-9">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {Array.from({ length: 9 }).map((_, i) => <MetricSkeleton key={i} />)}
         </div>
       ) : error && !stats ? (
@@ -327,7 +326,7 @@ function StatsSection() {
         </div>
       ) : stats ? (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-9">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             <MetricCard
               icon={<AppIcon name="hashtag" />}
               label="总请求"
@@ -389,7 +388,7 @@ function StatsSection() {
           <DialogHeader>
             <DialogTitle>清空用量</DialogTitle>
             <DialogDescription>
-              将把所有累计用量统计清零（不影响请求记录）。此操作不可恢复。
+              将清空累计用量统计，不影响请求记录。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -400,9 +399,28 @@ function StatsSection() {
               variant="destructive"
               size="sm"
               disabled={clearing}
-              onClick={() => void handleClearUsage()}
+              onClick={() => {
+                setClearOpen(false)
+                setClearConfirmOpen(true)
+              }}
             >
-              {clearing ? '清空中…' : (clearArmed ? '再次点击确认 (不可恢复)' : '确认清空')}
+              清空
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clearConfirmOpen} onOpenChange={closeClearConfirmDialog}>
+        <DialogContent width="sm" className="!w-[360px] !max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>确认清空用量？</DialogTitle>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => closeClearConfirmDialog(false)} disabled={clearing}>
+              取消
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => void handleClearUsage()} disabled={clearing}>
+              {clearing ? '清空中…' : '确认清空'}
             </Button>
           </DialogFooter>
         </DialogContent>

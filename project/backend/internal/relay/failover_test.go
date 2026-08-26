@@ -183,6 +183,42 @@ func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDi
 	}
 }
 
+func TestRelayWithFailover_autoDisablesProvider_whenMatchPatternMatchesHTTP429Body(t *testing.T) {
+	// Given
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{})
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("可用预算已用尽"))
+	}))
+	defer primary.Close()
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{primary.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{
+			{
+				Condition:     "timeout",
+				MatchPatterns: []string{"可用预算已用尽"},
+				Dimension:     model.FailoverDimensionProvider,
+				AutoDisable:   true,
+			},
+		},
+	}
+
+	// When
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+
+	// Then
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider was not auto-disabled")
+	}
+}
+
 func TestRelayWithFailover_retriesOnceOnError(t *testing.T) {
 	primaryHits := 0
 	fallbackHits := 0

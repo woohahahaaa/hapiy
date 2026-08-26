@@ -206,10 +206,11 @@ export function isActiveProvider(provider: FlatNode, providerStatus: boolean): b
 }
 
 /**
- * Return every provider name that is reachable from more than one ENABLED
- * request entry. This is the frontend mirror of the backend's
- * `FindDuplicateActivations` and drives the "同一个 Provider 不能在多个工作流中
- * 被激活" rule.
+ * 返回在两个及以上激活工作流中同时启用的供应商（去重键 = 真实供应商 ID；
+ * 旧数据缺 providerId 时按名称兜底，供应商重命名不会破坏去重）。每条链走到
+ * 第一个 provider 节点即停止。只有"启用"的请求入口会引发激活传播。这是后端
+ * `FindDuplicateActivations` 的前端镜像，并驱动"同一个 Provider 不能在多个
+ * 工作流中被激活"规则。
  */
 export function findDuplicateActivations(
   nodes: readonly FlatNode[],
@@ -226,13 +227,13 @@ export function findDuplicateActivations(
       const node = nodes.find((n) => n.id === cur)
       if (!node) break
       if (node.kind === 'provider') {
-        const name = node.name ?? ''
-        if (name) {
-          const priorEntry = claimed.get(name)
+        const key = node.providerId ?? node.name ?? ''
+        if (key) {
+          const priorEntry = claimed.get(key)
           if (priorEntry !== undefined && priorEntry !== entryId) {
-            duplicated.add(name)
+            duplicated.add(key)
           } else if (priorEntry === undefined) {
-            claimed.set(name, entryId)
+            claimed.set(key, entryId)
           }
         }
         break

@@ -6,6 +6,7 @@ import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type { SlotItemDragProps, AutoReplySlotEntry } from '@/components/node/slot/items'
 import type { HeartbeatRule } from '@/lib/dashboard-api'
 import { NodeExecutorAutoReply } from '@/components/node/executor/sub/auto-reply'
+import type { RuleTypeStatus } from '@/components/node/executor/use-slot-rules'
 
 export interface NodeSlotAutoReplyProps {
   onSelectExecutor?: (token: string | null) => void
@@ -13,6 +14,9 @@ export interface NodeSlotAutoReplyProps {
   title: string
   entries: readonly AutoReplySlotEntry[]
   rules: readonly HeartbeatRule[]
+  // 该类型规则列表的加载状态与打开时刷新回调（由 useSlotRules 透传下来）。
+  ruleStatus?: RuleTypeStatus
+  onRefreshRules?: () => void
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
   onChangeEntry: (next: AutoReplySlotEntry) => void
@@ -38,6 +42,8 @@ export function NodeSlotAutoReply({
   onToggleEnabled,
   onSelectExecutor,
   selectedExecutorToken,
+  ruleStatus,
+  onRefreshRules,
 }: NodeSlotAutoReplyProps) {
     const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
@@ -66,6 +72,8 @@ export function NodeSlotAutoReply({
           onPickToken={onSelectExecutor}
           entry={entry}
           rules={rules}
+          ruleStatus={ruleStatus}
+          onRefreshRules={onRefreshRules}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}

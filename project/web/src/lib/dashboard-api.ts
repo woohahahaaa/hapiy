@@ -154,7 +154,7 @@ export type UsageLog = {
   readonly status: 'success' | 'failed' | ''
   readonly errorMessage: string
   readonly upstreamUrl: string
-  readonly affinityReuse: '' | 'none' | 'partial' | 'full'
+  readonly affinityReuse: '' | 'none' | 'partial' | 'full' | 'new'
   readonly affinityReuseParts: readonly string[]
 }
 

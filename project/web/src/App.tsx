@@ -12,7 +12,6 @@ import { PolicyPage } from '@/pages/PolicyPage'
 import { BaseUrlSettingsPage } from '@/pages/BaseUrlSettingsPage'
 import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
 import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
-import { RecoverySettingsPage } from '@/pages/RecoverySettingsPage'
 import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
 import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
@@ -42,7 +41,6 @@ function App() {
                   <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
                   <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
                   <Route path="/settings/general" element={<GeneralSettingsPage />} />
-                  <Route path="/settings/recovery" element={<RecoverySettingsPage />} />
                   <Route path="/settings/billing" element={<BillingSettingsPage />} />
                   <Route path="/settings/debug" element={<DebugSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />

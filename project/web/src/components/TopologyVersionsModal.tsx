@@ -173,13 +173,23 @@ export function TopologyVersionsModal({
         const children = canvas.providers
           .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
           .map((p) => {
-            const provider = providers.find((x) => x.name === p.name)
+            // ID 优先解析供应商；旧数据缺 providerId 时按名称兜底
+            const provider = p.providerId
+              ? providers.find((x) => x.id === p.providerId)
+              : p.name
+                ? providers.find((x) => x.name === p.name)
+                : undefined
             return {
               id: p.id,
-              label: p.name,
+              providerId: p.providerId ?? '',
+              label: provider?.name ?? p.name ?? '',
+              baseURLCount: provider?.baseUrls.length ?? 0,
+              keyCount: provider?.keys.length ?? 0,
               modelCount: provider?.models.length ?? 0,
+              endpointCount: provider?.endpoints.length ?? 0,
               enabled: p.enabled,
               providerStatus: provider?.status ?? false,
+              autoDisabled: provider?.autoDisabled ?? false,
             }
           })
         nodes.push({

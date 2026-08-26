@@ -31,7 +31,7 @@ import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { ExecutorDebug } from '@/components/node/executor-debug'
 import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/DebugSettings'
-import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderStrategy } from '@/lib/dashboard-api'
+import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy } from '@/lib/dashboard-api'
 import { NodeEdge } from '@/components/node/edge'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
@@ -258,8 +258,10 @@ function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
 }
 
 export function TopologyPage() {
-  const { rules: slotRules } = useSlotRules()
+  // A-group wiring: 绑定下拉框按类型读取 加载中/加载失败 状态并支持打开时刷新
+  const { rules: slotRules, status: slotRuleStatus, refreshRuleType } = useSlotRules()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
+  const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tp, setTp] = useState<FlatTopology | null>(null)
@@ -538,7 +540,7 @@ export function TopologyPage() {
     [updateTopologyNodes],
   )
 
-  const duplicateProviderNames = useMemo(() => {
+  const duplicateProviderKeys = useMemo(() => {
     if (!tp) return new Set<string>()
     return new Set(findDuplicateActivations(tp.nodes, tp.wires))
   }, [tp])
@@ -557,9 +559,12 @@ export function TopologyPage() {
         const node = canvas.topLevel.find((n) => n.id === cur)
         if (node && isProviderSlot(node)) {
           for (const p of canvas.providers) {
-            if (canvas.providerSlotOf.get(p.id) !== cur || !p.name) continue
-            const provider = providerByName.get(p.name)
-            if (provider && !result.some((r) => r.provider.name === provider.name)) {
+            if (canvas.providerSlotOf.get(p.id) !== cur) continue
+            // ID 优先：先按真实供应商 ID 解析记录，旧数据缺 providerId 时按名称兜底
+            const provider = p.providerId ? providerById.get(p.providerId) : p.name ? providerByName.get(p.name) : undefined
+            if (!provider) continue
+            const dupKey = p.providerId ?? p.name ?? ''
+            if (!result.some((r) => r.provider.id === provider.id)) {
               result.push({
                 provider,
                 active:
@@ -568,7 +573,7 @@ export function TopologyPage() {
                   provider.status &&
                   !provider.autoDisabled &&
                   provider.workflowEnabled &&
-                  !duplicateProviderNames.has(provider.name),
+                  !duplicateProviderKeys.has(dupKey),
               })
             }
           }
@@ -577,7 +582,7 @@ export function TopologyPage() {
       }
       return result
     },
-    [canvas, providerByName, duplicateProviderNames],
+    [canvas, providerById, providerByName, duplicateProviderKeys],
   )
 
   // Per-run overlay layers: nodeId -> stacked layers, edgeId -> stacked layers.
@@ -769,7 +774,7 @@ export function TopologyPage() {
                 }
                 const dup = new Set(findDuplicateActivations(next, tpRef.current?.wires ?? []))
                 return next.map((n) => {
-                  if (n.kind === 'provider' && entryReaches.has(n.id) && dup.has(n.name ?? '')) {
+                  if (n.kind === 'provider' && entryReaches.has(n.id) && dup.has(n.providerId ?? n.name ?? '')) {
                     return { ...n, enabled: false }
                   }
                   return n
@@ -785,16 +790,20 @@ export function TopologyPage() {
         const children = canvas.providers
           .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
           .map((p) => {
+            // ID 优先解析供应商；旧数据缺 providerId 时按名称兜底
             const provider = p.providerId ? providerById.get(p.providerId) : p.name ? providerByName.get(p.name) : undefined
             return {
               id: p.id,
+              providerId: p.providerId ?? '',
               label: provider?.name ?? p.name ?? '',
               baseURLCount: provider?.baseUrls.length ?? 0,
               keyCount: provider?.keys.length ?? 0,
               modelCount: provider?.models.length ?? 0,
+              endpointCount: provider?.endpoints.length ?? 0,
               enabled: p.enabled,
               providerStatus: provider?.status ?? false,
               autoDisabled: provider?.autoDisabled ?? false,
+              disableStatus: p.providerId ? disableStatuses.get(p.providerId) ?? null : null,
             }
           })
         nodes.push({
@@ -807,9 +816,9 @@ export function TopologyPage() {
             isProviderSlot: true,
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
-            providers: (providers ?? []).map((p) => p.name),
+            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
             onAddProvider: () => handleAddProvider(node.id),
-            onSelectProvider: (providerId: string, name: string) => handleSelectProvider(providerId, name),
+            onSelectProvider: (nodeId: string, providerId: string) => handleSelectProvider(nodeId, providerId),
             onToggleProvider: (providerId: string, enabled: boolean) =>
               updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n))),
             onDeleteProvider: (providerId: string) => handleDeleteNode(providerId),
@@ -835,6 +844,8 @@ export function TopologyPage() {
             externallyDisabled: externallyDisabledSet.has(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
+            ruleStatus: slotRuleStatus,
+            refreshRuleType,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
             onDeleteEntry: (index: number) => handleDeleteSlotEntry(node.id, slotType, index),
             onReorderEntries: (from: number, to: number) => handleReorderSlotEntries(node.id, slotType, from, to),
@@ -852,7 +863,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerByName, slotRules, modelNodes, externallyDisabledSet])
+  }, [canvas, layoutSnapshot, providerById, providerByName, slotRules, slotRuleStatus, refreshRuleType, modelNodes, externallyDisabledSet, disableStatuses])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -1161,12 +1172,14 @@ export function TopologyPage() {
     setLoading(true)
     setError(null)
     try {
-      const [providers, flat, settings] = await Promise.all([
+      const [providers, flat, settings, disableStatuses] = await Promise.all([
         dashboardApi.listProviders({ limit: 1000, offset: 0 }),
         dashboardApi.getFlatTopology(),
         dashboardApi.getSettings(),
+        dashboardApi.listProviderDisableStatuses(),
       ])
       setProviders(providers.providers)
+      setDisableStatuses(new Map(disableStatuses.map((s) => [s.providerId, s])))
       historyRef.current = []
       redoRef.current = []
       syncHistory()
@@ -1201,9 +1214,14 @@ export function TopologyPage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      void dashboardApi
-        .listProviders({ limit: 1000, offset: 0 })
-        .then((res) => setProviders(res.providers))
+      void Promise.all([
+        dashboardApi.listProviders({ limit: 1000, offset: 0 }),
+        dashboardApi.listProviderDisableStatuses(),
+      ])
+        .then(([{ providers }, disableStatuses]) => {
+          setProviders(providers)
+          setDisableStatuses(new Map(disableStatuses.map((s) => [s.providerId, s])))
+        })
         .catch(() => {})
     }, PROVIDER_REFRESH_MS)
     return () => window.clearInterval(timer)
@@ -1723,17 +1741,22 @@ export function TopologyPage() {
   )
 
   const handleSelectProvider = useCallback(
-    (providerId: string, name: string) => {
+    (nodeId: string, providerId: string) => {
       const cur = tpRef.current
       if (!cur) return
+      const provider = providerById.get(providerId)
+      if (!provider) return
+      const name = provider.name
       const collapsed = canvasFromFlat(cur.nodes, cur.wires)
-      const slotId = collapsed.providerSlotOf.get(providerId)
+      const slotId = collapsed.providerSlotOf.get(nodeId)
       let defaultEnabled = true
       if (slotId) {
         const slotInEnabledEntry = cur.nodes.some(
           (n) => n.kind === 'requestEntry' && n.enabled && reaches(cur.wires, n.id, slotId),
         )
-        const alreadyActive = findDuplicateActivations(cur.nodes, cur.wires).includes(name)
+        const dup = findDuplicateActivations(cur.nodes, cur.wires)
+        // 去重按真实 ID；旧数据（无 providerId）仍按名称参与去重
+        const alreadyActive = dup.includes(providerId) || dup.includes(name)
         defaultEnabled = !(slotInEnabledEntry && alreadyActive)
         if (!defaultEnabled) {
           toast.error(`同一个 Provider（${name}）不能在多个激活工作流中被启用`)
@@ -1741,11 +1764,11 @@ export function TopologyPage() {
       }
       updateTopologyNodes((list) =>
         list.map((n) =>
-          n.id === providerId ? { ...n, name, providerId: providerByName.get(name)?.id ?? n.providerId, enabled: n.enabled && defaultEnabled } : n,
+          n.id === nodeId ? { ...n, name, providerId, enabled: n.enabled && defaultEnabled } : n,
         ),
       )
     },
-    [updateTopologyNodes, providerByName],
+    [updateTopologyNodes, providerById],
   )
 
   const handleReorderProvider = useCallback(

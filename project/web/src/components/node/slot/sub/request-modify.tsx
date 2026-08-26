@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { SlotContainer } from '@/components/node/slot/slot-container'
 import { slotNodeActive } from '@/components/node/effectiveness'
-import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import { RewriteTestDialog } from '@/components/RewriteTestDialog'
@@ -9,6 +8,7 @@ import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type { SlotItemDragProps, RequestModifySlotEntry } from '@/components/node/slot/items'
 import type { RewriteRule } from '@/lib/dashboard-api'
 import { NodeExecutorRequestModify } from '@/components/node/executor/sub/request-modify'
+import type { RuleTypeStatus } from '@/components/node/executor/use-slot-rules'
 
 export interface NodeSlotRequestModifyProps {
   onSelectExecutor?: (token: string | null) => void
@@ -16,6 +16,9 @@ export interface NodeSlotRequestModifyProps {
   title: string
   entries: readonly RequestModifySlotEntry[]
   rules: readonly RewriteRule[]
+  // 该类型规则列表的加载状态与打开时刷新回调（由 useSlotRules 透传下来）。
+  ruleStatus?: RuleTypeStatus
+  onRefreshRules?: () => void
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
   onChangeEntry: (next: RequestModifySlotEntry) => void
@@ -41,6 +44,8 @@ export function NodeSlotRequestModify({
   onToggleEnabled,
   onSelectExecutor,
   selectedExecutorToken,
+  ruleStatus,
+  onRefreshRules,
 }: NodeSlotRequestModifyProps) {
   const [testOpen, setTestOpen] = useState(false)
   const boundEntries = entries
@@ -85,9 +90,11 @@ export function NodeSlotRequestModify({
             token={entry.id}
             picked={selectedExecutorToken === entry.id}
             onPickToken={onSelectExecutor}
-            entry={entry}
-            rules={rules}
-            onChange={onChangeEntry}
+entry={entry}
+          rules={rules}
+          ruleStatus={ruleStatus}
+          onRefreshRules={onRefreshRules}
+          onChange={onChangeEntry}
             onDelete={() => onDeleteEntry(entry.index)}
             flashLayers={flashLayers}
             {...dragProps(entry.index)}

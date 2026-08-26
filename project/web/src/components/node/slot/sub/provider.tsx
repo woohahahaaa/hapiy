@@ -4,20 +4,20 @@ import { AppIcon } from '@/components/AppIcon'
 import { topologyConfig } from '@/config/topology-config'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
-import { NodeExecutorProvider, type FlatProviderChild } from '@/components/node/executor/sub/provider'
+import { NodeExecutorProvider, type FlatProviderChild, type ProviderOption } from '@/components/node/executor/sub/provider'
 
 export type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
 
 export interface NodeSlotProviderProps {
   title: string
   children: readonly FlatProviderChild[]
-  providers: readonly string[]
+  providers: readonly ProviderOption[]
   takenLabels: Set<string>
   providerFlashLayers?: ReadonlyMap<string, readonly FlowLayerOverlay[]>
   strategy: ProviderStrategy
   onCycleStrategy?: () => void
   onAddProvider?: () => void
-  onSelectProvider?: (providerId: string, name: string) => void
+  onSelectProvider?: (nodeId: string, providerId: string) => void
   onToggleProvider?: (providerId: string, enabled: boolean) => void
   onDeleteProvider?: (providerId: string) => void
   externallyDisabled?: boolean
@@ -108,7 +108,7 @@ export function NodeSlotProvider({
           onDragOver={() => onDragOver(i)}
           onDrop={() => onDrop(i)}
           onToggle={(enabled) => onToggleProvider?.(child.id, enabled)}
-          onSelect={(name) => onSelectProvider?.(child.id, name)}
+          onSelect={(providerId) => onSelectProvider?.(child.id, providerId)}
           onDelete={() => onDeleteProvider?.(child.id)}
         />
       ))}

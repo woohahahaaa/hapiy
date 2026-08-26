@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 
 import { Switch } from '@/components/ui/switch'
 import { DataTable, type ColumnDef } from '@/components/data-table'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
@@ -26,13 +27,13 @@ import { dashboardApi,
   type HeartbeatRule,
   type ConcurrencyRule,
   type FailoverRule,
-  type FailoverAction,
   type ResponseRewriteRule,
   type RuleType,
 } from '@/lib/dashboard-api'
 import { RewriteTestDialog } from '@/components/RewriteTestDialog'
 import { RewriteRuleEditor, GjsonPathHelp, parseRule, isActionValid } from '@/components/rewrite-rule-editor'
 import { RewriteResponseForm } from '@/components/response-rewrite-editor'
+import { RecoverySettings } from '@/pages/RecoverySettings'
 
 const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite',
@@ -217,7 +218,7 @@ function RewritePage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -361,7 +362,7 @@ function HeartbeatPage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -486,7 +487,7 @@ function ConcurrencyPage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -627,8 +628,21 @@ function FailoverPage() {
 
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'keywords', label: '关键词', defaultWidth: { kind: 'percent', value: 25 }, render: (_, row) => <span className="text-xs">{(row.keywords ?? []).join('、') || '未设置'}</span> },
-    { key: 'actions', label: '自动禁用', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
+    { key: 'dimension', label: '轮询维度', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
+    {
+      key: 'matchPatterns',
+      label: '触发匹配',
+      defaultWidth: { kind: 'percent', value: 25 },
+      render: (_, row) => {
+        const patterns = row.matchPatterns ?? []
+        if (patterns.length === 0) return <span className="text-xs text-muted-foreground">未设置</span>
+        const head = patterns.slice(0, 3).join('、')
+        const more = patterns.length > 3 ? ` …+${patterns.length - 3}` : ''
+        return <span className="text-xs" title={patterns.join('\n')}>{head}{more}</span>
+      },
+    },
+    { key: 'ttfbSeconds', label: '首字超时', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.ttfbSeconds > 0 ? `${row.ttfbSeconds}s` : '未启用'}</span> },
+    { key: 'retryCount', label: '重试次数', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right' },
     {
       key: 'id',
       label: '操作',
@@ -640,7 +654,7 @@ function FailoverPage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -653,31 +667,41 @@ function FailoverPage() {
       <PageHeader
         title="自动禁用"
         description="主供应商失败时自动切换到备选供应商"
-        status={`${total} 条规则`}
       />
-      <div className="p-6">
-        <DataTable
-          id="policy-failover"
-          columns={columns}
-          data={rules}
-          total={total}
-          loading={loading}
-          error={error}
-          offset={offset}
-          limit={limit}
-          onOffsetChange={setOffset}
-          onLimitChange={setLimit}
-          emptyText='暂无自动禁用规则，点击"添加规则"创建第一条'
-          onRetry={() => void fetch()}
-          actions={
-            <div className="flex items-center gap-2">
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                <AppIcon name="add" data-icon="inline-start" />
-                添加规则
-              </Button>
-            </div>
-          }
-        />
+      <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+        <Tabs defaultValue="failover" className="flex min-h-0 flex-1 flex-col">
+          <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border p-0">
+            <TabsTrigger value="failover" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">自动禁用</TabsTrigger>
+            <TabsTrigger value="recovery" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">自动恢复</TabsTrigger>
+          </TabsList>
+          <TabsContent value="failover" className="flex min-h-0 flex-1 flex-col">
+            <DataTable
+              id="policy-failover"
+              columns={columns}
+              data={rules}
+              total={total}
+              loading={loading}
+              error={error}
+              offset={offset}
+              limit={limit}
+              onOffsetChange={setOffset}
+              onLimitChange={setLimit}
+              emptyText='暂无自动禁用规则，点击"添加规则"创建第一条'
+              onRetry={() => void fetch()}
+              actions={
+                <div className="flex items-center gap-2">
+                  <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                    <AppIcon name="add" data-icon="inline-start" />
+                    添加规则
+                  </Button>
+                </div>
+              }
+            />
+          </TabsContent>
+          <TabsContent value="recovery" className="flex min-h-0 flex-1 flex-col overflow-auto">
+            <RecoverySettings />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditing(null); clearEditQuery() } }}>
@@ -685,7 +709,7 @@ function FailoverPage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <FailoverForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); clearEditQuery() }} saving={mutating} />
+          <FailoverForm key={editing?.id ?? 'new'} rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); clearEditQuery() }} saving={mutating} />
         </DialogContent>
 </Dialog>
     </div>
@@ -780,7 +804,6 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
             onSave({
               ...form,
               name: form.name.trim(),
-              autoDisable: true,
               matchPatterns: matchPatterns.split('\n').map((s) => s.trim()).filter(Boolean),
             })
           }
@@ -835,7 +858,7 @@ function RewriteResponsePage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDeleteRule(row.name)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
             <AppIcon name="delete" />
           </Button>
         </div>
