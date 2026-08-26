@@ -58,10 +58,10 @@ function LogDetailFields({ log }: { log: UsageLog }) {
           value={
             isEventLog(log) ? '-' : (
               <span>
-                <span className="text-muted-foreground/40">输入</span> {log.promptTokens}（
-                <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens} /{' '}
-                <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
-                <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
+                <span className="text-muted-foreground/60">输入</span> {log.promptTokens}（
+                <span className="text-muted-foreground/60">缓存写入</span> {log.promptCacheMissTokens} /{' '}
+                <span className="text-muted-foreground/60">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
+                <span className="text-muted-foreground/60">输出</span> {log.completionTokens}
               </span>
             )
           }

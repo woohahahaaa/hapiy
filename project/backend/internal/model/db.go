@@ -45,6 +45,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&TableConfig{},
 		&RequestChannelHistory{},
 		&DisabledRecord{},
+		&FailoverHitCounter{},
 	)
 }
 

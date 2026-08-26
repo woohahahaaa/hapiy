@@ -15,6 +15,7 @@ import (
 	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/publicFunction"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
@@ -253,10 +254,10 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		clientDisconnected := false
 		if relayReq.Stream {
 			common.Global().UpdateActiveRequestProgress(requestID, "waiting_upstream", 0, 0)
-			firstByteMs, clientDisconnected = handleStreamingResponse(c, resp, requestID)
+			firstByteMs, clientDisconnected = handleStreamingResponse(c, resp, requestID, db)
 		} else {
 			common.Global().UpdateActiveRequestProgress(requestID, "receiving", 0, 0)
-			firstByteMs = handleNonStreamingResponse(c, resp)
+			firstByteMs = handleNonStreamingResponse(c, resp, db)
 			common.Global().UpdateActiveRequestFirstByte(requestID, int64(firstByteMs))
 		}
 
@@ -351,8 +352,25 @@ func intPtr(v int) *int {
 	return &v
 }
 
-// Reuses MergeLLMBody so both non-SSE JSON and SSE bodies yield usage.
-func extractUsageInfo(body []byte, contentType string) *relay.UsageInfo {
+// tokenUsageFieldsSettingKey is the settings key holding the per-field gjson
+// path lists used to read token usage from upstream response bodies.
+const tokenUsageFieldsSettingKey = "token_usage_fields"
+
+func loadTokenUsageFields(db *gorm.DB) publicfunction.TokenUsageFields {
+	if db == nil {
+		return publicfunction.DefaultTokenUsageFields()
+	}
+	var setting model.Setting
+	if err := db.Where("key = ?", tokenUsageFieldsSettingKey).First(&setting).Error; err != nil {
+		return publicfunction.DefaultTokenUsageFields()
+	}
+	return publicfunction.ParseTokenUsageFields(setting.Value)
+}
+
+// Reuses MergeLLMBody so both non-SSE JSON and SSE bodies yield usage, then
+// reads the token counters through the shared publicfunction extractor with
+// the configured gjson paths.
+func extractUsageInfo(db *gorm.DB, body []byte, contentType string) *relay.UsageInfo {
 	if len(body) == 0 {
 		return nil
 	}
@@ -360,63 +378,31 @@ func extractUsageInfo(body []byte, contentType string) *relay.UsageInfo {
 	if err != nil {
 		return nil
 	}
-	obj, ok := merged.(map[string]any)
-	if !ok {
+	mergedBytes, err := json.Marshal(merged)
+	if err != nil {
 		return nil
 	}
-	raw, ok := obj["usage"]
-	if !ok || raw == nil {
-		return nil
-	}
-	usage, ok := raw.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	asInt := func(keys ...string) int {
-		for _, k := range keys {
-			switch v := usage[k].(type) {
-			case float64:
-				return int(v)
-			case int:
-				return v
-			case int64:
-				return int(v)
-			case json.Number:
-				if i, err := v.Int64(); err == nil {
-					return int(i)
-				}
-			}
-		}
-		return 0
-	}
-
-	// OpenAI uses prompt_tokens/completion_tokens; Anthropic uses
-	// input_tokens/output_tokens.
-	prompt := asInt("prompt_tokens", "input_tokens")
-	completion := asInt("completion_tokens", "output_tokens")
-	cacheWrite := asInt("prompt_cache_miss_tokens", "cache_creation_input_tokens")
-	cacheRead := asInt("prompt_cache_hit_tokens", "cache_read_input_tokens")
-	if prompt == 0 && completion == 0 {
+	u := publicfunction.ExtractTokenUsage(mergedBytes, loadTokenUsageFields(db))
+	if u.PromptTokens == 0 && u.CompletionTokens == 0 {
 		return nil
 	}
 	return &relay.UsageInfo{
-		PromptTokens:     prompt,
-		CompletionTokens: completion,
-		TotalTokens:      prompt + completion,
-		CacheWriteTokens: cacheWrite,
-		CacheReadTokens:  cacheRead,
+		PromptTokens:     int(u.PromptTokens),
+		CompletionTokens: int(u.CompletionTokens),
+		TotalTokens:      int(u.PromptTokens + u.CompletionTokens),
+		CacheWriteTokens: int(u.CacheWriteTokens),
+		CacheReadTokens:  int(u.CacheReadTokens),
 	}
 }
 
-func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
+func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse, db *gorm.DB) int {
 	defer resp.Body.Close()
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read response"})
 		return -1
 	}
-	resp.Usage = extractUsageInfo(bodyBytes, resp.Headers["content-type"])
+	resp.Usage = extractUsageInfo(db, bodyBytes, resp.Headers["content-type"])
 	c.Data(resp.StatusCode, "application/json", bodyBytes)
 	return int(time.Since(resp.FirstByteAt).Milliseconds())
 }
@@ -425,7 +411,7 @@ func handleNonStreamingResponse(c *gin.Context, resp *relay.RelayResponse) int {
 // milliseconds from upstream headers until the first body byte (-1 when the
 // stream produced no bytes, e.g. it errored immediately), plus whether the
 // client disconnected before the stream finished.
-func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestID string) (int, bool) {
+func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestID string, db *gorm.DB) (int, bool) {
 	defer resp.Body.Close()
 
 	c.Header("Content-Type", "text/event-stream")
@@ -483,7 +469,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 			break
 		}
 	}
-	resp.Usage = extractUsageInfo(captured, resp.Headers["content-type"])
+	resp.Usage = extractUsageInfo(db, captured, resp.Headers["content-type"])
 	return firstByteMs, clientDisconnected
 }
 

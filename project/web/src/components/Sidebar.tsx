@@ -88,6 +88,7 @@ const navigation: NavItem[] = [
       { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
       { id: 'debug', label: 'Debug', href: '/settings/debug' },
+      { id: 'token-usage', label: 'Token 用量', href: '/settings/token-usage' },
     ],
   },
   {

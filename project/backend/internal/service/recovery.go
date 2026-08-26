@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	SettingRecoveryInterval   = "automatic_disable_recovery_minutes"
-	SettingRecoveryTTFBSecond = "recovery_ttfb_seconds"
+	SettingRecoveryInterval    = "automatic_disable_recovery_minutes"
+	SettingRecoveryTTFBSecond  = "recovery_ttfb_seconds"
+	SettingRecoveryMode        = "recovery_mode"
+	SettingRecoveryTimedMinute = "recovery_timed_minutes"
+
+	recoveryModeProbe = "probe"
+	recoveryModeTimed = "timed"
 )
 
 // ProbeResult is what ChannelProbe returns. Success reports whether the
@@ -125,35 +130,94 @@ type RecoveryOptions struct {
 }
 
 // StartRecoveryScheduler runs auto-recovery cycles in the background. The
-// cycle interval and TTFB threshold are read from settings on every
-// iteration, so changes take effect at the next tick. An interval of 0
-// disables the scheduler (it still re-checks the setting hourly so a later
-// enable is picked up without a process restart).
+// scheduler picks up mode, interval, TTFB threshold and timed-recovery
+// duration from settings on every iteration, so changes take effect at the
+// next tick. An interval of 0 in probe mode disables the scheduler (it
+// still re-checks the setting hourly so a later enable is picked up
+// without a process restart).
 func StartRecoveryScheduler(db *gorm.DB) {
-	StartRecoverySchedulerWithRecordReplay(db, nil, nil)
+	StartRecoverySchedulerWithRecordReplay(db, nil)
 }
 
 // StartRecoverySchedulerWithRecordReplay is the same as
 // StartRecoveryScheduler but also invokes recordReplay (if non-nil)
-// at the start of every cycle so recorded disable contexts get
+// at the start of every probe cycle so recorded disable contexts get
 // replayed before the harness-based pass runs.
-func StartRecoverySchedulerWithRecordReplay(db *gorm.DB, _ any, recordReplay func() (resolved, total int)) {
+func StartRecoverySchedulerWithRecordReplay(db *gorm.DB, recordReplay func() (resolved, total int)) {
 	go func() {
+		// lastMode/nextProbeAt track the save moment: when the saved mode
+		// differs from what we last saw, the next probe cycle fires
+		// immediately and the next tick is scheduled interval minutes
+		// from that moment.
+		var (
+			lastMode    string
+			nextProbeAt time.Time
+		)
 		for {
-			interval := readRecoveryInterval(db)
-			if interval <= 0 {
+			mode := readRecoveryMode(db)
+			switch mode {
+			case recoveryModeTimed:
+				nextProbeAt = time.Time{}
+				if minutes := readRecoveryTimedMinutes(db); minutes > 0 {
+					runTimedRecovery(db, time.Duration(minutes)*time.Minute)
+				}
+			case recoveryModeProbe:
+				interval := readRecoveryInterval(db)
+				if interval <= 0 {
+					lastMode = mode
+					nextProbeAt = time.Time{}
+					time.Sleep(time.Hour)
+					continue
+				}
+				intervalDur := time.Duration(interval) * time.Minute
+				now := time.Now()
+				if mode != lastMode || nextProbeAt.IsZero() || !now.Before(nextProbeAt) {
+					runProbeCycle(db, recordReplay)
+					nextProbeAt = now.Add(intervalDur)
+				}
+			default:
+				lastMode = mode
+				nextProbeAt = time.Time{}
 				time.Sleep(time.Hour)
 				continue
 			}
-			opts := RecoveryOptions{
-				TTFBThreshold: readRecoveryTTFB(db),
-				Probe:         ChannelProbe,
-				RecordReplay:  recordReplay,
-			}
-			RunRecoveryCycle(db, opts)
-			time.Sleep(time.Duration(interval) * time.Minute)
+			lastMode = mode
+			// 1-minute tick keeps mode flips + timed-mode countdowns
+			// responsive; probe-mode timing is enforced by nextProbeAt.
+			time.Sleep(time.Minute)
 		}
 	}()
+}
+
+func runProbeCycle(db *gorm.DB, recordReplay func() (resolved, total int)) {
+	RunRecoveryCycle(db, RecoveryOptions{
+		TTFBThreshold: readRecoveryTTFB(db),
+		Probe:         ChannelProbe,
+		RecordReplay:  recordReplay,
+	})
+}
+
+func readRecoveryMode(db *gorm.DB) string {
+	val, err := GetSetting(db, SettingRecoveryMode)
+	if err != nil || val == "" {
+		return recoveryModeProbe
+	}
+	if val != recoveryModeProbe && val != recoveryModeTimed {
+		return recoveryModeProbe
+	}
+	return val
+}
+
+func readRecoveryTimedMinutes(db *gorm.DB) int {
+	val, err := GetSetting(db, SettingRecoveryTimedMinute)
+	if err != nil || val == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(val)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 func readRecoveryInterval(db *gorm.DB) int {
@@ -229,6 +293,42 @@ func passProbe(result ProbeResult, ttfbThreshold time.Duration) bool {
 		return false
 	}
 	return true
+}
+
+// runTimedRecovery is the timed-mode equivalent of RunRecoveryCycle: any
+// DisabledRecord whose age exceeds duration is dropped and the matching
+// ProviderDisableState is cleared. No upstream probing is involved — the
+// user explicitly opted into "wait N minutes and re-enable".
+func runTimedRecovery(db *gorm.DB, duration time.Duration) {
+	var records []model.DisabledRecord
+	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
+		log.Printf("timed-recovery: load records: %v", err)
+		return
+	}
+	if len(records) == 0 {
+		return
+	}
+	now := time.Now()
+	cleared := 0
+	for _, r := range records {
+		if !r.DisabledAt.IsZero() && now.Sub(r.DisabledAt) < duration {
+			continue
+		}
+		var provider model.Provider
+		if err := db.First(&provider, "id = ?", r.ProviderID).Error; err != nil {
+			log.Printf("timed-recovery: load provider %s: %v", r.ProviderID, err)
+			continue
+		}
+		clearDisable(db, provider.ID, provider.Name, r.Dimension, r.Value)
+		if err := db.Where("id = ?", r.ID).Delete(&model.DisabledRecord{}).Error; err != nil {
+			log.Printf("timed-recovery: drop record %s: %v", r.ID, err)
+			continue
+		}
+		cleared++
+	}
+	if cleared > 0 {
+		log.Printf("timed-recovery: cleared %d disabled record(s) past %s", cleared, duration)
+	}
 }
 
 func runProviderRecovery(

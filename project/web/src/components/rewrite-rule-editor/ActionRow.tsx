@@ -2,6 +2,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppIcon } from '@/components/AppIcon'
 import { MODES, MODE_BY_VALUE, SCOPE_OPTIONS, type ModeName } from './modes'
+import { LiteralValueInput } from './LiteralValueInput'
 import type { Action } from './serializer'
 
 interface ActionRowProps {
@@ -64,14 +65,23 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                 </SelectGroup>
               </SelectContent>
             </Select>
-            {spec.needs.length > 0 && spec.needs.map((field) => (
-              <Input
-                key={field}
-                className="h-7 min-w-0 flex-1 font-mono text-xs"
-                value={action[field]}
-                onChange={(e) => onChange({ ...action, [field]: e.target.value } as Action)}
-                placeholder={fieldPlaceholder(field)}
-              />
+{spec.needs.length > 0 && spec.needs.map((field) => (
+              field === 'value' ? (
+                <LiteralValueInput
+                  key={field}
+                  action={action}
+                  onChange={onChange}
+                  placeholder={fieldPlaceholder(field)}
+                />
+              ) : (
+                <Input
+                  key={field}
+                  className="h-7 min-w-0 flex-1 font-mono text-xs"
+                  value={action[field]}
+                  onChange={(e) => onChange({ ...action, [field]: e.target.value })}
+                  placeholder={fieldPlaceholder(field)}
+                />
+              )
             ))}
           </div>
         )}

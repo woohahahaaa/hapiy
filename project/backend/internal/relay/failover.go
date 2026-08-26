@@ -8,10 +8,12 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/topology"
+	"gorm.io/gorm"
 )
 
 // upstreamOutcome captures the failure signal from one upstream call so
@@ -101,6 +103,12 @@ func (e *Engine) resolveFallbackPlan(name string) *ExecutionPlan {
 // outcome matches a failover rule, the rule's single action decides
 // which dimension to rotate on and whether to auto-disable the
 // originating entity. Each rule fires exactly one rotation.
+//
+// Auto-disable is gated by a consecutive-hit counter: the matched
+// (provider, dimension, value) only gets disabled once it has been
+// matched DisableThreshold times within DisableWindowMinutes (or on
+// the very first match when the threshold is the legacy default of 1).
+// A successful follow-up request on the same entity resets the count.
 func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	resp, err := e.performUpstreamCall(ctx, plan, req)
 	if err == nil {
@@ -114,12 +122,18 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if dimension == "" {
 		return resp, err
 	}
+	value := failoverActionValue(plan, req, dimension)
+	hitReached := false
+	if autoDisable && value != "" {
+		_, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
+	}
 	disableApplied := false
-	if autoDisable {
+	if hitReached {
 		if applyErr := e.applyFailoverAction(plan, req, dimension); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 		} else {
 			disableApplied = true
+			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 		}
 	}
 	switch dimension {
@@ -128,6 +142,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			if disableApplied {
 				e.recordDisabledAttempt(req, plan, err)
 			}
+			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 			return rotated, nil
 		}
 	case model.FailoverDimensionProvider:
@@ -144,10 +159,93 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			if disableApplied {
 				e.recordDisabledAttempt(req, plan, err)
 			}
+			if fbErr == nil {
+				e.clearFailoverHit(plan.Provider.ID, dimension, value)
+			}
 			return fbResp, fbErr
 		}
 	}
 	return resp, err
+}
+
+// failoverActionValue mirrors the value lookup in applyFailoverAction
+// so the hit counter tracks exactly the entity that would be disabled.
+func failoverActionValue(plan *ExecutionPlan, req *RelayRequest, dimension string) string {
+	if plan == nil || req == nil {
+		return ""
+	}
+	switch dimension {
+	case model.FailoverDimensionBaseURL:
+		return pickIndex(plan.BaseURLs, req.BaseURLIndex)
+	case model.FailoverDimensionKey:
+		return pickIndex(plan.Keys, req.KeyIndex)
+	case model.FailoverDimensionProvider:
+		return plan.Provider.ID
+	}
+	return ""
+}
+
+// recordFailoverHit increments the consecutive-match counter for
+// (providerID, dimension, value) and reports whether DisableThreshold
+// has been reached inside DisableWindowMinutes. A first hit seeds the
+// counter; subsequent hits inside the window increment, and a hit
+// outside the window resets the counter to 1.
+func (e *Engine) recordFailoverHit(providerID, dimension, value string, rule *model.FailoverRule) (int, bool) {
+	if e.db == nil || providerID == "" || dimension == "" || value == "" || rule == nil || !rule.AutoDisable {
+		return 0, false
+	}
+	threshold := rule.DisableThreshold
+	if threshold <= 0 {
+		threshold = 1
+	}
+	window := rule.DisableWindowMinutes
+	if window < 0 {
+		window = 0
+	}
+	now := time.Now()
+
+	var counter model.FailoverHitCounter
+	err := e.db.Where("provider_id = ? AND dimension = ? AND value = ?", providerID, dimension, value).First(&counter).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		counter = model.FailoverHitCounter{
+			ProviderID: providerID, Dimension: dimension, Value: value,
+			HitCount: 1, FirstHitAt: now, LastHitAt: now,
+		}
+		if createErr := e.db.Create(&counter).Error; createErr != nil {
+			log.Printf("relay: create failover hit counter: %v", createErr)
+			return 0, false
+		}
+		return 1, threshold <= 1
+	}
+	if err != nil {
+		log.Printf("relay: load failover hit counter: %v", err)
+		return 0, false
+	}
+
+	withinWindow := window == 0 || counter.FirstHitAt.IsZero() || now.Sub(counter.FirstHitAt) <= time.Duration(window)*time.Minute
+	if withinWindow {
+		counter.HitCount++
+	} else {
+		counter.HitCount = 1
+		counter.FirstHitAt = now
+	}
+	counter.LastHitAt = now
+	if saveErr := e.db.Save(&counter).Error; saveErr != nil {
+		log.Printf("relay: save failover hit counter: %v", saveErr)
+		return 0, false
+	}
+	return counter.HitCount, counter.HitCount >= threshold
+}
+
+// clearFailoverHit removes the counter so the next failure restarts at 1.
+func (e *Engine) clearFailoverHit(providerID, dimension, value string) {
+	if e.db == nil || providerID == "" || dimension == "" || value == "" {
+		return
+	}
+	if err := e.db.Where("provider_id = ? AND dimension = ? AND value = ?", providerID, dimension, value).
+		Delete(&model.FailoverHitCounter{}).Error; err != nil {
+		log.Printf("relay: clear failover hit counter: %v", err)
+	}
 }
 
 func (e *Engine) resolveTopologyFallbackPlan(req *RelayRequest, failed *ExecutionPlan) *ExecutionPlan {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/topology"
@@ -24,6 +25,16 @@ func newRelayTestDB(t *testing.T, models ...interface{}) *gorm.DB {
 		t.Fatalf("migrate database: %v", err)
 	}
 	return db
+}
+
+func failingServer(t *testing.T, status int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }
 
 func TestIsFailoverEligible_matchesByCondition(t *testing.T) {
@@ -185,7 +196,7 @@ func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDi
 
 func TestRelayWithFailover_autoDisablesProvider_whenMatchPatternMatchesHTTP429Body(t *testing.T) {
 	// Given
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte("可用预算已用尽"))
@@ -444,4 +455,198 @@ func indexOf(s, sub string) int {
 		}
 	}
 	return -1
+}
+
+func TestRelayWithFailover_defaultThresholdOne_disablesOnFirstMatch(t *testing.T) {
+	// Given: no explicit DisableThreshold -> behaves as 1 (legacy contract)
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:     "timeout",
+			MatchPatterns: []string{"可用预算已用尽"},
+			Dimension:     model.FailoverDimensionProvider,
+			AutoDisable:   true,
+		}},
+	}
+
+	// When
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+
+	// Then: a single match disables the provider (preserves today's behavior)
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider should be disabled on the first match with default threshold 1")
+	}
+}
+
+func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
+	// Given: threshold=3, no fallback so the request surfaces its error
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:          "timeout",
+			MatchPatterns:      []string{"可用预算已用尽"},
+			Dimension:          model.FailoverDimensionProvider,
+			AutoDisable:        true,
+			DisableThreshold:   3,
+			DisableWindowMinutes: 5,
+		}},
+	}
+
+	// When: two requests, threshold is 3
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+
+	// Then: still not disabled, counter should be at 2
+	if engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider was disabled before reaching the threshold")
+	}
+	var counter model.FailoverHitCounter
+	if err := db.First(&counter, "provider_id = ? AND dimension = ?", provider.ID, model.FailoverDimensionProvider).Error; err != nil {
+		t.Fatalf("counter missing: %v", err)
+	}
+	if counter.HitCount != 2 {
+		t.Fatalf("hit count: want 2, got %d", counter.HitCount)
+	}
+}
+
+func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
+	// Given: threshold=3, no fallback so requests surface their error
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:          "timeout",
+			MatchPatterns:      []string{"可用预算已用尽"},
+			Dimension:          model.FailoverDimensionProvider,
+			AutoDisable:        true,
+			DisableThreshold:   3,
+			DisableWindowMinutes: 5,
+		}},
+	}
+
+	// When: 3 consecutive failures
+	for i := 0; i < 3; i++ {
+		_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+	}
+
+	// Then: provider disabled, counter dropped
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider should be disabled after the third match")
+	}
+	var leftover model.FailoverHitCounter
+	if err := db.First(&leftover, "provider_id = ?", provider.ID).Error; err == nil {
+		t.Fatalf("hit counter should be cleared on disable, found %+v", leftover)
+	}
+}
+
+func TestRelayWithFailover_successResetsCounter(t *testing.T) {
+	// Threshold=3; rotation must succeed on the second baseURL so the
+	// failing key/baseURL counter is reset by clearFailoverHit.
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	failing := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	working := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer working.Close()
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{failing.URL, working.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:          "timeout",
+			MatchPatterns:      []string{"可用预算已用尽"},
+			Dimension:          model.FailoverDimensionBaseURL,
+			AutoDisable:        true,
+			DisableThreshold:   3,
+			DisableWindowMinutes: 5,
+		}},
+	}
+
+	for i := 0; i < 4; i++ {
+		_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{BaseURLIndex: 0})
+	}
+
+	if engine.isDisabled(provider.ID, model.FailoverDimensionBaseURL, failing.URL) {
+		t.Fatal("failing baseURL should not be disabled — successful rotations reset the counter")
+	}
+}
+
+func TestRelayWithFailover_windowExpiryResetsCounter(t *testing.T) {
+	// Given: threshold=3 with a 1-minute window. Two hits land, time is
+	// rewound past the window, then a third hit must NOT trigger a
+	// disable because the counter should restart at 1.
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:          "timeout",
+			MatchPatterns:      []string{"可用预算已用尽"},
+			Dimension:          model.FailoverDimensionProvider,
+			AutoDisable:        true,
+			DisableThreshold:   3,
+			DisableWindowMinutes: 1,
+		}},
+	}
+
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+
+	// Rewind the seeded counter so the next hit is "outside the window".
+	if err := db.Model(&model.FailoverHitCounter{}).
+		Where("provider_id = ?", provider.ID).
+		Update("first_hit_at", time.Now().Add(-2*time.Minute)).Error; err != nil {
+		t.Fatalf("rewind counter: %v", err)
+	}
+	_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+
+	if engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider should not be disabled — window expired and counter reset")
+	}
+	var counter model.FailoverHitCounter
+	if err := db.First(&counter, "provider_id = ?", provider.ID).Error; err != nil {
+		t.Fatalf("counter missing: %v", err)
+	}
+	if counter.HitCount != 1 {
+		t.Fatalf("hit count after window reset: want 1, got %d", counter.HitCount)
+	}
 }

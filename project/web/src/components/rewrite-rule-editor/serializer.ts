@@ -27,6 +27,12 @@ export type Action = {
   to: string
   dst: string
   scope: Scope
+  /**
+ * 用户在 value 输入框选了「字面量」建议后存的是解析后的原生 JSON 值
+   （boolean / null / number）。序列化时优先用它，后端拿到的就是
+   原生类型；null 走字符串模式。
+   */
+  valueLiteral?: boolean | number | string | null
 }
 
 export type Block = {
@@ -84,10 +90,17 @@ export function isActionValid(a: Action): boolean {
   if (!a.path.trim()) return false
   const spec = MODE_BY_VALUE.get(mode as ModeName)!
   for (const f of spec.needs) {
-    if (f === 'value' && !a.value.trim()) return false
-    if (f === 'from' && !a.from.trim()) return false
-    if (f === 'to' && !a.to.trim()) return false
-    if (f === 'dst' && !a.dst.trim()) return false
+    if (f === 'value') {
+      // 走字面量模式时 value 字符串可空着，靠 valueLiteral 携带数据。
+      if (a.valueLiteral !== undefined) continue
+      if (!a.value.trim()) return false
+    } else if (f === 'from' && !a.from.trim()) {
+      return false
+    } else if (f === 'to' && !a.to.trim()) {
+      return false
+    } else if (f === 'dst' && !a.dst.trim()) {
+      return false
+    }
   }
   return true
 }
@@ -124,7 +137,11 @@ function actionToJson(a: Action, conditions: JsonObject[]): JsonObject {
   const op: JsonObject = { mode, path: withHeaderPrefix(a.path.trim(), a.scope) }
   const spec = MODE_BY_VALUE.get(mode)!
   for (const f of spec.needs) {
-    op[f] = a[f].trim()
+    if (f === 'value' && a.valueLiteral !== undefined) {
+      op.value = a.valueLiteral
+    } else {
+      op[f] = a[f].trim()
+    }
   }
   if (a.scope !== 'all') op.scope = a.scope
   if (conditions.length > 0) op.conditions = conditions
@@ -195,9 +212,17 @@ function actionFromJson(op: JsonObject): Action | null {
     scope,
   }
   for (const f of spec.needs) {
-    a[f] = typeof op[f] === 'string' ? op[f] : ''
+    if (f === 'value' && isJsonLiteral(op.value)) {
+      a.valueLiteral = op.value as Action['valueLiteral']
+    } else {
+      a[f] = typeof op[f] === 'string' ? op[f] : ''
+    }
   }
   return a
+}
+
+function isJsonLiteral(v: unknown): boolean {
+  return typeof v === 'boolean' || v === null || typeof v === 'number'
 }
 
 function parseScope(v: unknown): Scope {

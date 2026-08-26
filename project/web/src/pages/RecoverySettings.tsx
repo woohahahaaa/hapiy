@@ -30,8 +30,17 @@ import {
 
 const RECOVERY_INTERVAL_KEY = 'automatic_disable_recovery_minutes'
 const RECOVERY_TTFB_KEY = 'recovery_ttfb_seconds'
+const RECOVERY_MODE_KEY = 'recovery_mode'
+const RECOVERY_TIMED_MINUTES_KEY = 'recovery_timed_minutes'
 const RECOVERY_HANDLER_KEY = 'recovery_request_handler'
 const DISABLED_RECORDS_PAGE_SIZE = 50
+
+type RecoveryMode = 'probe' | 'timed'
+const RECOVERY_MODES: readonly { value: RecoveryMode; label: string }[] = [
+  { value: 'probe', label: '测试上游恢复' },
+  { value: 'timed', label: '定时恢复' },
+]
+const DEFAULT_TIMED_MINUTES = 60
 
 // DEFAULT_HANDLER_OPS 是系统兜底的恢复方法，字段路径基于 OpenAI /
 // Anthropic 官方 API 文档确认：
@@ -127,16 +136,42 @@ function toErrorMessage(err: unknown): string {
 }
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+	const date = new Date(iso)
+	if (Number.isNaN(date.getTime())) return iso
+	const pad = (n: number) => String(n).padStart(2, '0')
+	return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function formatCountdown(remainingMs: number): string {
+	if (remainingMs <= 0) return '已超时'
+	const totalSeconds = Math.ceil(remainingMs / 1000)
+	const hours = Math.floor(totalSeconds / 3600)
+	const minutes = Math.floor((totalSeconds % 3600) / 60)
+	const seconds = totalSeconds % 60
+	if (hours > 0) return `${hours}小时${minutes}分${seconds}秒`
+	if (minutes > 0) return `${minutes}分${seconds}秒`
+	return `${seconds}秒`
+}
+
+function disabledAtMs(row: DisabledRecord): number {
+	return new Date(row.disabledAt).getTime()
+}
+
+function isPastDeadline(row: DisabledRecord, durationMs: number): boolean {
+	const ts = disabledAtMs(row)
+	if (!Number.isFinite(ts)) return false
+	return ts + durationMs - Date.now() <= 0
 }
 
 export function RecoverySettings() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>('probe')
   const [recoveryMinutes, setRecoveryMinutes] = useState('')
   const [recoveryTTFB, setRecoveryTTFB] = useState('')
+  const [recoveryTimedMinutes, setRecoveryTimedMinutes] = useState('')
+  // modeDirty: 用户切换过 dropdown；保存前先藏掉下面的表格，避免与
+  // 未生效的模式混在一起展示。
+  const [modeDirty, setModeDirty] = useState(false)
   const [savingInterval, setSavingInterval] = useState(false)
   const [recordsState, setRecordsState] = useState<RecordsState>({ kind: 'loading' })
   const [replayingId, setReplayingId] = useState<string | null>(null)
@@ -146,14 +181,25 @@ export function RecoverySettings() {
   const [savingHandler, setSavingHandler] = useState(false)
   const [previewRecord, setPreviewRecord] = useState<DisabledRecord | null>(null)
   const [providerNameById, setProviderNameById] = useState<ReadonlyMap<string, string>>(new Map())
+  // 一次性快照：哪些记录已超时，按顺序逐个弹窗。
+  const [pastDeadlineQueue, setPastDeadlineQueue] = useState<readonly DisabledRecord[] | null>(null)
+  const [queueIndex, setQueueIndex] = useState(0)
+  const [pastDeadlineDismissed, setPastDeadlineDismissed] = useState(false)
+  const [extendedRecordIds, setExtendedRecordIds] = useState<ReadonlySet<string>>(new Set())
+  const [, setCountdownTick] = useState(0)
 
   const load = useCallback(() => {
     dashboardApi
       .getSettings()
       .then((settings) => {
+        const modeRaw = settingsValue(settings, RECOVERY_MODE_KEY)
+        setRecoveryMode(modeRaw === 'timed' ? 'timed' : 'probe')
         setRecoveryMinutes(settingsValue(settings, RECOVERY_INTERVAL_KEY))
         setRecoveryTTFB(settingsValue(settings, RECOVERY_TTFB_KEY))
+        const timed = settingsValue(settings, RECOVERY_TIMED_MINUTES_KEY)
+        setRecoveryTimedMinutes(timed === '' ? String(DEFAULT_TIMED_MINUTES) : timed)
         setHandler(parseHandler(settingsValue(settings, RECOVERY_HANDLER_KEY)))
+        setModeDirty(false)
         setState({ kind: 'ready' })
       })
       .catch((err) => {
@@ -205,6 +251,29 @@ export function RecoverySettings() {
     loadRecords()
   }, [loadRecords])
 
+  useEffect(() => {
+    if (recoveryMode !== 'timed') return
+    const interval = setInterval(() => setCountdownTick((n) => (n + 1) % 1_000_000), 1000)
+    return () => clearInterval(interval)
+  }, [recoveryMode])
+
+  // 首次拿到记录时拍快照，弹窗队列只跑一次。
+  useEffect(() => {
+    if (pastDeadlineQueue !== null) return
+    if (recordsState.kind !== 'ready') return
+    if (recoveryMode !== 'timed') {
+      setPastDeadlineQueue([])
+      return
+    }
+    const timedMinutes = Number(recoveryTimedMinutes)
+    if (!Number.isFinite(timedMinutes) || timedMinutes <= 0) {
+      setPastDeadlineQueue([])
+      return
+    }
+    const past = recordsState.records.filter((r) => isPastDeadline(r, timedMinutes * 60 * 1000))
+    setPastDeadlineQueue(past)
+  }, [recordsState, recoveryMode, recoveryTimedMinutes, pastDeadlineQueue])
+
   const handleRetry = () => {
     setState({ kind: 'loading' })
     load()
@@ -222,12 +291,21 @@ export function RecoverySettings() {
       toast.error('首字超时必须是非负数字')
       return
     }
+    const timedMinutes = Number(recoveryTimedMinutes)
+    if (!Number.isFinite(timedMinutes) || timedMinutes <= 0) {
+      toast.error('定时恢复时长必须是正数')
+      return
+    }
     setSavingInterval(true)
     try {
       await Promise.all([
+        dashboardApi.updateSetting(RECOVERY_MODE_KEY, recoveryMode),
         dashboardApi.updateSetting(RECOVERY_INTERVAL_KEY, String(minutes)),
         dashboardApi.updateSetting(RECOVERY_TTFB_KEY, seconds === null ? '' : String(seconds)),
+        dashboardApi.updateSetting(RECOVERY_TIMED_MINUTES_KEY, String(timedMinutes)),
       ])
+      setModeDirty(false)
+      loadRecords()
       toast('已保存')
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -255,6 +333,72 @@ export function RecoverySettings() {
     }
   }
 
+  const currentPastDeadlineRecord =
+    !pastDeadlineDismissed &&
+    pastDeadlineQueue !== null &&
+    queueIndex < pastDeadlineQueue.length
+      ? pastDeadlineQueue[queueIndex]
+      : null
+
+  const handleImmediateRestore = async () => {
+    if (!currentPastDeadlineRecord) return
+    const id = currentPastDeadlineRecord.id
+    setReplayingId(id)
+    setQueueIndex((i) => i + 1)
+    try {
+      const { resolved } = await dashboardApi.restoreDisabledRecordDirectly(id)
+      if (resolved) {
+        setRecordsState((current) =>
+          current.kind === 'ready'
+            ? { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
+            : current,
+        )
+        toast('已立即恢复')
+      }
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+    } finally {
+      setReplayingId(null)
+    }
+  }
+
+  const handleExtendOneCycle = async () => {
+    if (!currentPastDeadlineRecord) return
+    const id = currentPastDeadlineRecord.id
+    const minutes = Number(recoveryTimedMinutes)
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      toast.error('恢复时长未设置')
+      return
+    }
+    setReplayingId(id)
+    setQueueIndex((i) => i + 1)
+    try {
+      const { record: updated, extended } = await dashboardApi.extendDisabledRecordCountdown(id, minutes)
+      if (extended) {
+        setRecordsState((current) =>
+          current.kind === 'ready'
+            ? { kind: 'ready', records: current.records.map((r) => (r.id === id ? updated : r)) }
+            : current,
+        )
+        setExtendedRecordIds((prev) => {
+          const next = new Set(prev)
+          next.add(id)
+          return next
+        })
+        toast(`已延后 ${minutes} 分钟`)
+      }
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+    } finally {
+      setReplayingId(null)
+    }
+  }
+
+  const handleSkipPastDeadlineQueue = () => {
+    setPastDeadlineDismissed(true)
+    setQueueIndex(0)
+  }
+
   const records = recordsState.kind === 'ready' ? recordsState.records : []
   const recordsCount = records.length
   const recordsLoading = recordsState.kind === 'loading'
@@ -264,73 +408,93 @@ export function RecoverySettings() {
     [records, recordsOffset],
   )
 
-  const columns: ColumnDef<DisabledRecord>[] = useMemo(() => [
-    {
-      key: 'disabledAt',
-      label: '时间',
-      defaultWidth: { kind: 'pixel', value: 160 },
-      isTime: true,
-      accessor: (row) => formatDateTime(row.disabledAt),
-    },
-    {
-      key: 'providerId',
-      label: '供应商',
-      defaultWidth: { kind: 'pixel', value: 160 },
-      accessor: (row) => providerNameById.get(row.providerId) ?? row.providerId,
-    },
-    {
-      key: 'dimension',
-      label: '维度',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      accessor: (row) => DIMENSION_LABEL[row.dimension],
-    },
-    {
-      key: 'value',
-      label: '值',
-      defaultWidth: { kind: 'percent', value: 20 },
-      defaultOverflow: 'ellipsis',
-      accessor: (row) => {
-        // provider 维度的 value 就是 provider ID 本身，直接显示名字即可
-        if (row.dimension === 'provider') {
-          return providerNameById.get(row.value) ?? null
-        }
-        return row.value
+  const columns: ColumnDef<DisabledRecord>[] = useMemo(() => {
+    const timedMinutes = Number(recoveryTimedMinutes)
+    const isTimed = recoveryMode === 'timed' && Number.isFinite(timedMinutes) && timedMinutes > 0
+    const timedMs = isTimed ? timedMinutes * 60 * 1000 : 0
+    return [
+      {
+        key: 'disabledAt',
+        label: '时间',
+        defaultWidth: { kind: 'pixel', value: 160 },
+        isTime: true,
+        accessor: (row) => formatDateTime(row.disabledAt),
       },
-    },
-    {
-      key: 'retryCount',
-      label: '测试上游次数',
-      defaultWidth: { kind: 'pixel', value: 100 },
-      defaultAlign: 'right',
-    },
-    {
-      key: 'actions',
-      label: '操作',
-      defaultWidth: { kind: 'pixel', value: 200 },
-      defaultAlign: 'right',
-      showEmptyPlaceholder: false,
-      render: (_, row) => (
-        <div className="inline-flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={replayingId !== null}
-            onClick={() => setPreviewRecord(row)}
-          >
-            测试上游
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={replayingId !== null}
-            onClick={() => void handleRestoreDirect(row.id)}
-          >
-            直接恢复
-          </Button>
-        </div>
-      ),
-    },
-  ], [replayingId, providerNameById])
+      {
+        key: 'providerId',
+        label: '供应商',
+        defaultWidth: { kind: 'pixel', value: 160 },
+        accessor: (row) => providerNameById.get(row.providerId) ?? row.providerId,
+      },
+      {
+        key: 'dimension',
+        label: '维度',
+        defaultWidth: { kind: 'pixel', value: 100 },
+        accessor: (row) => DIMENSION_LABEL[row.dimension],
+      },
+      {
+        key: 'value',
+        label: '值',
+        defaultWidth: { kind: 'percent', value: 20 },
+        defaultOverflow: 'ellipsis',
+        accessor: (row) => {
+          // provider 维度的 value 就是 provider ID 本身，直接显示名字即可
+          if (row.dimension === 'provider') {
+            return providerNameById.get(row.value) ?? null
+          }
+          return row.value
+        },
+      },
+      isTimed
+        ? {
+            key: 'countdown',
+            label: '剩余倒计时',
+            defaultWidth: { kind: 'pixel', value: 140 },
+            defaultAlign: 'right',
+            accessor: (row) => {
+              const disabledAt = disabledAtMs(row)
+              if (!Number.isFinite(disabledAt)) return '-'
+              const text = formatCountdown(disabledAt + timedMs - Date.now())
+              return extendedRecordIds.has(row.id) ? `${text}（延长）` : text
+            },
+          }
+        : {
+            key: 'retryCount',
+            label: '测试上游次数',
+            defaultWidth: { kind: 'pixel', value: 100 },
+            defaultAlign: 'right',
+          },
+      {
+        key: 'actions',
+        label: '操作',
+        defaultWidth: { kind: 'pixel', value: 200 },
+        defaultAlign: 'right',
+        showEmptyPlaceholder: false,
+        render: (_, row) => (
+          <div className="inline-flex items-center gap-2">
+            {!isTimed && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={replayingId !== null}
+                onClick={() => setPreviewRecord(row)}
+              >
+                测试上游
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={replayingId !== null}
+              onClick={() => void handleRestoreDirect(row.id)}
+            >
+              直接恢复
+            </Button>
+          </div>
+        ),
+      },
+    ]
+  }, [replayingId, providerNameById, recoveryMode, recoveryTimedMinutes, extendedRecordIds, handleRestoreDirect])
 
   return (
     <div className="flex flex-col gap-6">
@@ -361,45 +525,93 @@ export function RecoverySettings() {
           {state.kind === 'ready' && (
             <form className="flex flex-col gap-4" onSubmit={handleSaveInterval}>
               <div className="flex flex-wrap items-end gap-4">
-                <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
-                  自动恢复轮询间隔（分钟）
-                  <Input
-                    id="automatic-disable-recovery-minutes"
-                    className="w-40"
-                    type="number"
-                    min={0}
-                    value={recoveryMinutes}
-                    onChange={(event) => setRecoveryMinutes(event.target.value)}
+                <label className="grid gap-1.5 text-sm">
+                  恢复模式
+                  <Select
+                    value={recoveryMode}
+                    onValueChange={(next) => {
+                      const nextMode = next as RecoveryMode
+                      if (nextMode !== recoveryMode) {
+                        setRecoveryMode(nextMode)
+                        setModeDirty(true)
+                      }
+                    }}
                     disabled={savingInterval}
-                    placeholder="1440"
-                  />
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        {RECOVERY_MODES.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
                 </label>
-                <label className="grid gap-1.5 text-sm" htmlFor="recovery-ttfb-seconds">
-                  限制最低首字速度（秒）
-                  <Input
-                    id="recovery-ttfb-seconds"
-                    className="w-40"
-                    type="number"
-                    min={0}
-                    value={recoveryTTFB}
-                    onChange={(event) => setRecoveryTTFB(event.target.value)}
-                    disabled={savingInterval}
-                    placeholder="留空"
-                  />
-                </label>
+                {recoveryMode === 'probe' ? (
+                  <>
+                    <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
+                      自动恢复轮询间隔（分钟）
+                      <Input
+                        id="automatic-disable-recovery-minutes"
+                        className="w-40"
+                        type="number"
+                        min={0}
+                        value={recoveryMinutes}
+                        onChange={(event) => setRecoveryMinutes(event.target.value)}
+                        disabled={savingInterval}
+                        placeholder="1440"
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-sm" htmlFor="recovery-ttfb-seconds">
+                      限制最低首字速度（秒）
+                      <Input
+                        id="recovery-ttfb-seconds"
+                        className="w-40"
+                        type="number"
+                        min={0}
+                        value={recoveryTTFB}
+                        onChange={(event) => setRecoveryTTFB(event.target.value)}
+                        disabled={savingInterval}
+                        placeholder="留空"
+                      />
+                    </label>
+                  </>
+                ) : (
+                  <label className="grid gap-1.5 text-sm" htmlFor="recovery-timed-minutes">
+                    自动恢复时长（分钟）
+                    <Input
+                      id="recovery-timed-minutes"
+                      className="w-40"
+                      type="number"
+                      min={1}
+                      value={recoveryTimedMinutes}
+                      onChange={(event) => setRecoveryTimedMinutes(event.target.value)}
+                      disabled={savingInterval}
+                      placeholder={String(DEFAULT_TIMED_MINUTES)}
+                    />
+                  </label>
+                )}
                 <Button type="submit" disabled={savingInterval}>
                   {savingInterval && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                   保存
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。首字限时：留空只判断响应正常；填了则要求首字在 N 秒内。
+                {recoveryMode === 'probe'
+                  ? '轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。首字限时：留空只判断响应正常；填了则要求首字在 N 秒内。'
+                  : '禁用后倒计时归零自动恢复；倒计时从禁用瞬间开始算，切换到此模式后立刻按保存时刻起算。'}
               </p>
             </form>
           )}
         </CardContent>
       </Card>
 
+      {!modeDirty && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -471,9 +683,81 @@ export function RecoverySettings() {
               )
             }}
           />
+          <PastDeadlineDialog
+            record={currentPastDeadlineRecord}
+            remaining={(() => {
+              if (!currentPastDeadlineRecord) return 0
+              const timedMs = (Number(recoveryTimedMinutes) || 0) * 60 * 1000
+              const ts = disabledAtMs(currentPastDeadlineRecord)
+              return Number.isFinite(ts) ? ts + timedMs - Date.now() : 0
+            })()}
+            busy={replayingId !== null}
+            onCancel={() => setPastDeadlineDismissed(true)}
+            onSkip={() => setQueueIndex((i) => i + 1)}
+            onImmediate={() => void handleImmediateRestore()}
+            onExtend={() => void handleExtendOneCycle()}
+          />
         </CardContent>
       </Card>
+      )}
     </div>
+  )
+}
+
+function PastDeadlineDialog({
+  record,
+  remaining,
+  busy,
+  onCancel,
+  onSkip,
+  onImmediate,
+  onExtend,
+}: {
+  record: DisabledRecord | null
+  remaining: number
+  busy: boolean
+  onCancel: () => void
+  onSkip: () => void
+  onImmediate: () => void
+  onExtend: () => void
+}) {
+  return (
+    <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onCancel() }}>
+      <DialogContent width="sm">
+        <DialogHeader>
+          <DialogTitle>自动恢复已超时</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+          <p>
+            该条禁用记录的自动恢复已超过设定的恢复时长
+            {remaining < 0 && (
+              <>
+                （已超时
+                <span className="mx-1 font-medium text-foreground">{formatCountdown(-remaining)}</span>
+                ）
+              </>
+            )}
+            。可立即解除，或为它再延后恢复时长，等下个周期再判断。
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>
+            全部取消
+          </Button>
+          <Button variant="outline" onClick={onSkip} disabled={busy}>
+            跳过这条
+          </Button>
+          <Button variant="outline" onClick={onExtend} disabled={busy}>
+            {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+            下个周期再恢复
+          </Button>
+          <Button onClick={onImmediate} disabled={busy}>
+            {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+            立即恢复
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

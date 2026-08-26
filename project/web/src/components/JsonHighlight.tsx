@@ -128,7 +128,7 @@ export function JsonHighlight({ value, className }: JsonHighlightProps): ReactNo
   }
   return (
     <pre className={cn(
-      'overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed',
+      'overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words',
       className,
     )}>
       <JsonTokens text={text} />

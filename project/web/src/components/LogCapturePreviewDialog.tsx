@@ -46,11 +46,11 @@ function renderBody(title: string, body: unknown) {
   )
 }
 
-function renderHeaders(headers: Record<string, string> | null) {
+function renderHeaders(headers: Record<string, string> | null, showTitle = true) {
   if (!headers || Object.keys(headers).length === 0) return null
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="font-mono text-xs font-medium text-foreground">请求头</div>
+      {showTitle && <div className="font-mono text-xs font-medium text-foreground">请求头</div>}
       <div className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
         {Object.entries(headers).map(([k, v]) => (
           <div key={k}>
@@ -191,7 +191,7 @@ type StageNode = {
 }
 
 function renderStageBody(node: StageNode): ReactNode {
-  const headersEl = renderHeaders(node.before?.headers ?? node.after?.headers ?? null)
+  const headersEl = renderHeaders(node.before?.headers ?? node.after?.headers ?? null, false)
   let bodyEl: ReactNode
   if (node.modified) {
     bodyEl = <DiffView before={node.before?.body} after={node.after?.body} />
@@ -201,8 +201,8 @@ function renderStageBody(node: StageNode): ReactNode {
   if (headersEl === null && bodyEl === null) return null
   return (
     <>
-      {headersEl}
-      {bodyEl}
+      {headersEl !== null && <Node label="请求头">{headersEl}</Node>}
+      {bodyEl !== null && <Node label="请求体">{bodyEl}</Node>}
     </>
   )
 }
@@ -316,6 +316,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   const rawText = responseStageRawText(stageRow.body)
   const contentType = responseStageContentType(stageRow.headers)
   const canMerge = rawText !== null && contentType.toLowerCase().includes('text/event-stream')
+  const headersEl = renderHeaders(stageRow.headers, false)
 
   const loadMerged = useCallback(() => {
     const stageNode = findResponseNodeForStageRow(stageRow)
@@ -373,51 +374,57 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   if (!canMerge) {
     return (
       <div className="flex flex-col gap-1.5">
-        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
-        <JsonHighlight value={stageRow.body} />
+        {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
+        <Node label="响应体">
+          <JsonHighlight value={stageRow.body} />
+        </Node>
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="font-mono text-xs font-medium text-foreground">响应体</div>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant={mode === 'merged' ? 'default' : 'outline'}
-            disabled={mergeLoading}
-            onClick={() => switchTo('merged')}
-          >
-            {mergeLoading ? '整合中…' : '整合JSON'}
-          </Button>
-          <Button
-            size="sm"
-            variant={mode === 'raw' ? 'default' : 'outline'}
-            onClick={() => switchTo('raw')}
-          >
-            原始内容
-          </Button>
-        </div>
-      </div>
-      {mode === 'merged' ? (
-        mergeError ? (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
-            {mergeError}
+      {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
+      <Node
+        label="响应体"
+        actions={
+          <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant={mode === 'merged' ? 'default' : 'outline'}
+              disabled={mergeLoading}
+              onClick={() => switchTo('merged')}
+            >
+              {mergeLoading ? '整合中…' : '整合JSON'}
+            </Button>
+            <Button
+              size="sm"
+              variant={mode === 'raw' ? 'default' : 'outline'}
+              onClick={() => switchTo('raw')}
+            >
+              原始内容
+            </Button>
           </div>
-        ) : merged === undefined ? (
-          <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-            整合中…
-          </div>
+        }
+      >
+        {mode === 'merged' ? (
+          mergeError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+              {mergeError}
+            </div>
+          ) : merged === undefined ? (
+            <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              整合中…
+            </div>
+          ) : (
+            <JsonHighlight value={merged} />
+          )
+        ) : rawText !== null ? (
+          <RawSseView text={rawText} />
         ) : (
-          <JsonHighlight value={merged} />
-        )
-      ) : rawText !== null ? (
-        <RawSseView text={rawText} />
-      ) : (
-        <JsonHighlight value={stageRow.body} />
-      )}
+          <JsonHighlight value={stageRow.body} />
+        )}
+      </Node>
     </div>
   )
 }
@@ -615,8 +622,16 @@ function PairDialog({ requestId, open, onClose }: {
 // ResponseNodeBody: DiffView when modified, otherwise toggle on the
 // available stage row (after preferred, falls back to before).
 function ResponseNodeBody({ resp }: { readonly resp: import('@/lib/dashboard-api').LogCaptureResponseNode }) {
+  const headersEl = renderHeaders(resp.before?.headers ?? resp.after?.headers ?? null, false)
   if (resp.modified) {
-    return <DiffView before={resp.before?.body} after={resp.after?.body} />
+    return (
+      <div className="flex flex-col gap-1.5">
+        {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
+        <Node label="响应体">
+          <DiffView before={resp.before?.body} after={resp.after?.body} />
+        </Node>
+      </div>
+    )
   }
   if (resp.after) return <ResponseStageBody stageRow={resp.after} />
   if (resp.before) return <ResponseStageBody stageRow={resp.before} />

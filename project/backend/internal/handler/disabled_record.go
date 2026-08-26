@@ -141,6 +141,46 @@ func ReplayDisabledRecord(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	}
 }
 
+// ExtendDisabledRecordCountdown pushes a record's countdown deadline
+// forward by `minutes` — timed-recovery mode lets the user defer a
+// past-deadline record's recovery to the next cycle instead of either
+// restoring immediately or waiting for auto-recovery to fire. The
+// record's disabled_at is shifted so the remaining countdown gains the
+// full configured duration on top of whatever is already elapsed.
+func ExtendDisabledRecordCountdown(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var body struct {
+			Minutes int `json:"minutes"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体格式无效"})
+			return
+		}
+		if body.Minutes <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "minutes 必须为正数"})
+			return
+		}
+		var record model.DisabledRecord
+		if err := db.First(&record, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "记录不存在"})
+			return
+		}
+		if record.ResolvedAt != nil {
+			c.JSON(http.StatusOK, gin.H{"data": record, "extended": false})
+			return
+		}
+		record.DisabledAt = record.DisabledAt.Add(time.Duration(body.Minutes) * time.Minute)
+		if err := db.Model(&model.DisabledRecord{}).
+			Where("id = ?", id).
+			Update("disabled_at", record.DisabledAt).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": record, "extended": true})
+	}
+}
+
 // RestoreDisabledRecordDirectly clears the disable state behind a record
 // without running a probe — an explicit user action. The record row and
 // its underlying ProviderDisableState/auto_disabled flag are reset.
@@ -166,15 +206,17 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 				return
 			}
 		}
-		result := db.Delete(&model.DisabledRecord{}, "id = ?", id)
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
-			return
-		}
-		if result.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
-		}
-		engine.LoadProviders()
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id}, "resolved": true})
+	result := db.Delete(&model.DisabledRecord{}, "id = ?", id)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
 	}
+	if result.RowsAffected > 0 {
+		service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
+		_ = db.Where("provider_id = ? AND dimension = ? AND value = ?", record.ProviderID, record.Dimension, record.Value).
+			Delete(&model.FailoverHitCounter{}).Error
+	}
+	engine.LoadProviders()
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id}, "resolved": true})
+}
 }

@@ -644,6 +644,17 @@ function FailoverPage() {
     { key: 'ttfbSeconds', label: '首字超时', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.ttfbSeconds > 0 ? `${row.ttfbSeconds}s` : '未启用'}</span> },
     { key: 'retryCount', label: '重试次数', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right' },
     {
+      key: 'disableThreshold',
+      label: '禁用阈值',
+      defaultWidth: { kind: 'pixel', value: 180 },
+      render: (_, row) => {
+        const threshold = row.disableThreshold ?? 1
+        const window = row.disableWindowMinutes ?? 0
+        const winText = window === 0 ? '不限' : `${window}分钟`
+        return <span className="text-xs">{threshold} 次 / {winText}</span>
+      },
+    },
+    {
       key: 'id',
       label: '操作',
       defaultWidth: { kind: 'pixel', value: 140 },
@@ -744,6 +755,8 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
     autoDisable: true,
     matchPatterns: [],
     ttfbSeconds: 0,
+    disableThreshold: 1,
+    disableWindowMinutes: 5,
   }
   const [form, setForm] = useState<FailoverRule>(initial)
   const [matchPatterns, setMatchPatterns] = useState(() => (rule?.matchPatterns ?? []).join('\n'))
@@ -794,6 +807,18 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
       <Field>
         <FieldLabel htmlFor="failover-retry">重试次数</FieldLabel>
         <Input id="failover-retry" type="number" min={0} className="w-40" value={form.retryCount} onChange={(event) => setForm((p) => ({ ...p, retryCount: Math.max(0, Number(event.target.value) || 0) }))} />
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="failover-disable-threshold">禁用前命中次数</FieldLabel>
+        <Input id="failover-disable-threshold" type="number" min={1} className="w-40" value={form.disableThreshold} onChange={(event) => setForm((p) => ({ ...p, disableThreshold: Math.max(1, Number(event.target.value) || 1) }))} />
+        <p className="text-xs text-muted-foreground">规则连续命中多少次才禁用该维度。1 = 跟旧版"一次就禁"行为一致。</p>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="failover-disable-window">命中时间窗口（分钟）</FieldLabel>
+        <Input id="failover-disable-window" type="number" min={0} className="w-40" value={form.disableWindowMinutes} onChange={(event) => setForm((p) => ({ ...p, disableWindowMinutes: Math.max(0, Number(event.target.value) || 0) }))} />
+        <p className="text-xs text-muted-foreground">命中必须落在这个时间窗口内才算连续。0 = 不限窗口。</p>
       </Field>
 
       <DialogFooter>

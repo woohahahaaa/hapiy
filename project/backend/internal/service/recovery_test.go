@@ -20,7 +20,7 @@ func newRecoveryTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Provider{}, &model.ProviderDisableState{}, &model.Setting{}); err != nil {
+	if err := db.AutoMigrate(&model.Provider{}, &model.ProviderDisableState{}, &model.Setting{}, &model.DisabledRecord{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
 	return db
@@ -79,6 +79,103 @@ func upsertSetting(t *testing.T, db *gorm.DB, key, value string) {
 	t.Helper()
 	if err := db.Save(&model.Setting{Key: key, Value: value}).Error; err != nil {
 		t.Fatalf("upsert setting %s: %v", key, err)
+	}
+}
+
+func insertDisabledRecord(t *testing.T, db *gorm.DB, providerID, dimension, value string, disabledAt time.Time) string {
+	t.Helper()
+	row := model.DisabledRecord{
+		ProviderID: providerID,
+		Dimension:  dimension,
+		Value:      value,
+		DisabledAt: disabledAt,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("create disabled record: %v", err)
+	}
+	return row.ID
+}
+
+func disabledRecordExists(t *testing.T, db *gorm.DB, id string) bool {
+	t.Helper()
+	var row model.DisabledRecord
+	if err := db.Where("id = ?", id).First(&row).Error; err != nil {
+		return false
+	}
+	return true
+}
+
+func TestReadRecoveryMode(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	if got := readRecoveryMode(db); got != recoveryModeProbe {
+		t.Fatalf("default mode = %q, want %q", got, recoveryModeProbe)
+	}
+	upsertSetting(t, db, SettingRecoveryMode, recoveryModeTimed)
+	if got := readRecoveryMode(db); got != recoveryModeTimed {
+		t.Fatalf("timed mode = %q, want %q", got, recoveryModeTimed)
+	}
+	upsertSetting(t, db, SettingRecoveryMode, "garbage")
+	if got := readRecoveryMode(db); got != recoveryModeProbe {
+		t.Fatalf("unknown mode should fall back to probe, got %q", got)
+	}
+}
+
+func TestReadRecoveryTimedMinutes(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	if got := readRecoveryTimedMinutes(db); got != 0 {
+		t.Fatalf("default = %d, want 0", got)
+	}
+	upsertSetting(t, db, SettingRecoveryTimedMinute, "30")
+	if got := readRecoveryTimedMinutes(db); got != 30 {
+		t.Fatalf("got %d, want 30", got)
+	}
+	upsertSetting(t, db, SettingRecoveryTimedMinute, "0")
+	if got := readRecoveryTimedMinutes(db); got != 0 {
+		t.Fatalf("0 should disable, got %d", got)
+	}
+	upsertSetting(t, db, SettingRecoveryTimedMinute, "abc")
+	if got := readRecoveryTimedMinutes(db); got != 0 {
+		t.Fatalf("non-numeric should disable, got %d", got)
+	}
+}
+
+func TestRunTimedRecovery_clearsRecordPastDeadline(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	providerID := makeProvider(t, db, "openai",
+		[]string{"https://u1"},
+		[]string{"k1", "k2"},
+		[]string{"gpt-4"},
+	)
+	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	recordID := insertDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", time.Now().Add(-10*time.Minute))
+
+	runTimedRecovery(db, 5*time.Minute)
+
+	if disabledRecordExists(t, db, recordID) {
+		t.Fatalf("record past deadline should be dropped")
+	}
+	if !isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
+		t.Fatalf("matching disable state should be cleared")
+	}
+}
+
+func TestRunTimedRecovery_keepsRecordBeforeDeadline(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	providerID := makeProvider(t, db, "openai",
+		[]string{"https://u1"},
+		[]string{"k1", "k2"},
+		[]string{"gpt-4"},
+	)
+	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	recordID := insertDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", time.Now().Add(-1*time.Minute))
+
+	runTimedRecovery(db, 5*time.Minute)
+
+	if !disabledRecordExists(t, db, recordID) {
+		t.Fatalf("record before deadline must be kept")
+	}
+	if isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
+		t.Fatalf("disable state must stay disabled before deadline")
 	}
 }
 

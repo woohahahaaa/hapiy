@@ -6,7 +6,7 @@ import (
 
 func TestExtractUsageInfoOpenAIChatCompletion(t *testing.T) {
 	body := []byte(`{"object":"chat.completion","usage":{"prompt_tokens":12,"completion_tokens":34,"total_tokens":46}}`)
-	got := extractUsageInfo(body, "application/json")
+	got := extractUsageInfo(nil, body, "application/json")
 	if got == nil {
 		t.Fatal("expected usage to be extracted")
 	}
@@ -19,7 +19,7 @@ func TestExtractUsageInfoSSEChatChunks(t *testing.T) {
 	body := "data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n" +
 		"data: {\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":5}}\n\n" +
 		"data: [DONE]\n\n"
-	got := extractUsageInfo([]byte(body), "text/event-stream")
+	got := extractUsageInfo(nil, []byte(body), "text/event-stream")
 	if got == nil {
 		t.Fatal("expected usage info from SSE chunks")
 	}
@@ -30,7 +30,7 @@ func TestExtractUsageInfoSSEChatChunks(t *testing.T) {
 
 func TestExtractUsageInfoAnthropicInputOutputTokens(t *testing.T) {
 	body := `data: {"type":"message_start","message":{"usage":{"input_tokens":9,"output_tokens":1}}}` + "\n\n"
-	got := extractUsageInfo([]byte(body), "text/event-stream")
+	got := extractUsageInfo(nil, []byte(body), "text/event-stream")
 	if got == nil {
 		t.Fatal("expected usage info from Anthropic message")
 	}
@@ -40,27 +40,27 @@ func TestExtractUsageInfoAnthropicInputOutputTokens(t *testing.T) {
 }
 
 func TestExtractUsageInfoNoUsageReturnsNil(t *testing.T) {
-	if got := extractUsageInfo([]byte(`{"object":"chat.completion"}`), "application/json"); got != nil {
+	if got := extractUsageInfo(nil, []byte(`{"object":"chat.completion"}`), "application/json"); got != nil {
 		t.Fatalf("expected nil, got %+v", got)
 	}
-	if got := extractUsageInfo(nil, "application/json"); got != nil {
+	if got := extractUsageInfo(nil, nil, "application/json"); got != nil {
 		t.Fatalf("expected nil for empty body, got %+v", got)
 	}
-	if got := extractUsageInfo([]byte(`not json`), "application/json"); got != nil {
+	if got := extractUsageInfo(nil, []byte(`not json`), "application/json"); got != nil {
 		t.Fatalf("expected nil for invalid json, got %+v", got)
 	}
 }
 
 func TestExtractUsageInfoZeroTokensReturnsNil(t *testing.T) {
 	body := []byte(`{"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}`)
-	if got := extractUsageInfo(body, "application/json"); got != nil {
+	if got := extractUsageInfo(nil, body, "application/json"); got != nil {
 		t.Fatalf("expected nil when both token counts are zero, got %+v", got)
 	}
 }
 
 func TestExtractUsageInfoDeepSeekCacheFields(t *testing.T) {
 	body := []byte(`{"usage":{"prompt_tokens":120,"completion_tokens":50,"total_tokens":170,"prompt_cache_hit_tokens":80,"prompt_cache_miss_tokens":40}}`)
-	got := extractUsageInfo(body, "application/json")
+	got := extractUsageInfo(nil, body, "application/json")
 	if got == nil {
 		t.Fatal("expected usage info")
 	}
@@ -71,7 +71,7 @@ func TestExtractUsageInfoDeepSeekCacheFields(t *testing.T) {
 
 func TestExtractUsageInfoMissingCacheFieldsDefaultsZero(t *testing.T) {
 	body := []byte(`{"usage":{"prompt_tokens":5,"completion_tokens":3}}`)
-	got := extractUsageInfo(body, "application/json")
+	got := extractUsageInfo(nil, body, "application/json")
 	if got == nil {
 		t.Fatal("expected usage info")
 	}

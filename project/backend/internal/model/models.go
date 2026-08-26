@@ -234,6 +234,12 @@ type FailoverRule struct {
 	AutoDisable   bool     `gorm:"default:true" json:"auto_disable"`
 	MatchPatterns []string `gorm:"serializer:json;type:text" json:"match_patterns"`
 	TTFBSeconds   int      `gorm:"default:0" json:"ttfb_seconds"`
+
+	// DisableThreshold counts rule hits before auto-disable fires;
+	// 0 preserves legacy "disable on first match" behavior. DisableWindowMinutes
+	// is the rolling window for those hits; 0 disables the time check.
+	DisableThreshold    int `gorm:"default:0" json:"disable_threshold"`
+	DisableWindowMinutes int `gorm:"default:0" json:"disable_window_minutes"`
 }
 
 type FailoverAction struct {
@@ -298,6 +304,12 @@ func (r *FailoverRule) Validate() error {
 		}
 		if r.TTFBSeconds < 0 {
 			return fmt.Errorf("failover ttfb_seconds must be non-negative")
+		}
+		if r.DisableThreshold < 0 {
+			return fmt.Errorf("failover disable_threshold must be non-negative")
+		}
+		if r.DisableWindowMinutes < 0 {
+			return fmt.Errorf("failover disable_window_minutes must be non-negative")
 		}
 		return nil
 	}
@@ -374,6 +386,30 @@ type ProviderDisableState struct {
 func (s *ProviderDisableState) BeforeCreate(tx *gorm.DB) error {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// FailoverHitCounter tracks consecutive rule matches for one
+// (provider_id, dimension, value) triple so the relay engine can decide
+// when a rule's DisableThreshold has been reached inside its
+// DisableWindowMinutes. Rows are dropped on success or manual restore
+// to keep the table free of stale state.
+type FailoverHitCounter struct {
+	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
+	ProviderID string    `gorm:"not null;uniqueIndex:idx_fhc_provider_dim_value" json:"provider_id"`
+	Dimension  string    `gorm:"not null;uniqueIndex:idx_fhc_provider_dim_value" json:"dimension"`
+	Value      string    `gorm:"not null;uniqueIndex:idx_fhc_provider_dim_value" json:"value"`
+	HitCount   int       `gorm:"not null;default:1" json:"hit_count"`
+	FirstHitAt time.Time `gorm:"index" json:"first_hit_at"`
+	LastHitAt  time.Time `json:"last_hit_at"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (c *FailoverHitCounter) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
 	}
 	return nil
 }

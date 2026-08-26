@@ -83,8 +83,9 @@ func main() {
 	service.StartExchangeRateScheduler(db)
 
 	// Auto-recovery scheduler: re-enables disabled providers/BaseURLs/keys
-	// whose probe returns upstream-OK (and TTFB within threshold, if set).
-	service.StartRecoverySchedulerWithRecordReplay(db, engine, func() (int, int) {
+	// either by probing the upstream (probe mode) or after a configured
+	// cooldown elapses since the disable (timed mode).
+	service.StartRecoverySchedulerWithRecordReplay(db, func() (int, int) {
 		var rows []model.DisabledRecord
 		if err := db.Where("resolved_at IS NULL").Find(&rows).Error; err != nil {
 			log.Printf("auto-recovery: load disabled records: %v", err)
@@ -191,6 +192,7 @@ func main() {
 			dashboardAuthed.GET("/disabled-records", handler.ListDisabledRecords(db, engine))
 			dashboardAuthed.POST("/disabled-records/:id/replay", handler.ReplayDisabledRecord(db, engine))
 			dashboardAuthed.POST("/disabled-records/:id/restore-direct", handler.RestoreDisabledRecordDirectly(db, engine))
+			dashboardAuthed.POST("/disabled-records/:id/extend-countdown", handler.ExtendDisabledRecordCountdown(db))
 			dashboardAuthed.GET("/providers/:id", handler.GetProvider(db))
 			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))

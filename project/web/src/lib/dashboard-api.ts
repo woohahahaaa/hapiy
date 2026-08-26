@@ -1247,8 +1247,7 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
     throw new DashboardApiError('无法连接后端', null)
   }
 
-  const text = await response.text()
-  const body = text === '' ? null : parseJson(text, '响应体')
+  const body = await parseResponseBody(response)
   if (!response.ok) {
     const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
     const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
@@ -1279,13 +1278,25 @@ async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
     }
     throw new DashboardApiError('无法连接后端', null)
   }
-  const text = await response.text()
-  const body = text === '' ? null : parseJson(text, '响应体')
+
+  const body = await parseResponseBody(response)
   if (!response.ok) {
     const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
     throw new DashboardApiError(message, response.status)
   }
   return body
+}
+
+// 非 JSON 时把 HTTP 状态码一并塞进错误里，方便排查。
+async function parseResponseBody(response: Response): Promise<unknown> {
+  const text = await response.text()
+  if (text === '') return null
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    const prefix = response.ok ? '服务端返回的响应体不是有效 JSON' : `请求失败（HTTP ${response.status}）：响应不是有效 JSON`
+    throw new DashboardApiError(prefix, response.status)
+  }
 }
 
 function serializeProvider(provider: ProviderInput): JsonRecord {
@@ -1353,6 +1364,8 @@ export type FailoverRule = {
   readonly autoDisable: boolean
   readonly matchPatterns: readonly string[]
   readonly ttfbSeconds: number
+  readonly disableThreshold: number
+  readonly disableWindowMinutes: number
 }
 
 export type FailoverAction = {
@@ -1440,6 +1453,8 @@ function parseFailoverRule(value: unknown): FailoverRule {
     autoDisable: readBoolean(value.auto_disable, 'rule.auto_disable'),
     matchPatterns: readStringArray(value.match_patterns, 'rule.match_patterns'),
     ttfbSeconds: readNumber(value.ttfb_seconds, 'rule.ttfb_seconds', 0),
+    disableThreshold: readNumber(value.disable_threshold, 'rule.disable_threshold', 1),
+    disableWindowMinutes: readNumber(value.disable_window_minutes, 'rule.disable_window_minutes', 5),
   }
 }
 
@@ -1509,6 +1524,8 @@ const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
   auto_disable: (rule as FailoverRule).autoDisable ?? true,
   match_patterns: (rule as FailoverRule).matchPatterns ?? [],
   ttfb_seconds: (rule as FailoverRule).ttfbSeconds ?? 0,
+  disable_threshold: (rule as FailoverRule).disableThreshold ?? 1,
+  disable_window_minutes: (rule as FailoverRule).disableWindowMinutes ?? 5,
 })
 
 const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
@@ -1695,6 +1712,16 @@ export const dashboardApi = {
   async restoreDisabledRecordDirectly(id: string): Promise<{ readonly resolved: boolean }> {
     const body = await requestFull(`/disabled-records/${encodeURIComponent(id)}/restore-direct`, { method: 'POST' })
     return { resolved: readBoolean(body.resolved, 'restore.resolved') }
+  },
+  async extendDisabledRecordCountdown(id: string, minutes: number): Promise<{ readonly record: DisabledRecord; readonly extended: boolean }> {
+    const body = await requestFull(`/disabled-records/${encodeURIComponent(id)}/extend-countdown`, {
+      method: 'POST',
+      body: JSON.stringify({ minutes }),
+    })
+    return {
+      record: parseDisabledRecord(body.data),
+      extended: readBoolean(body.extended, 'extend.extended'),
+    }
   },
 
   // ── Tokens ──
