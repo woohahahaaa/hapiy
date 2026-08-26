@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { BlockCard } from './BlockCard'
 import {
@@ -19,20 +19,29 @@ interface RewriteRuleEditorProps {
  * 改写规则结构化编辑器。
  * 表单状态内部持有；外部只通过 initialScript 喂初值、通过 onScriptChange 接收变更。
  * 通过 key={rule.id} 强制重挂载可在父级切换编辑不同规则时重置表单。
+ *
+ * 回传时机是用户实际改动表单之后；挂载和 initialScript 重置都不回传。
+ * 原因：parseRule 对嵌套 AND/OR 等高级结构是有损的，把「重新序列化的表单」
+ * 静默回推会覆盖父级持有的原始 script，打开弹窗即破坏数据。
  */
 export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRuleEditorProps) {
   const [form, setForm] = useState<RuleForm>(() => parseRule(initialScript))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+  // 标记下一次 form 变化来自 initialScript 重置，跳过回传。
+  const skipNextPush = useRef(false)
 
-  // 监听初始值变化（编辑不同规则时父级通过 key 重挂载，这里兜底处理同实例内替换）。
   useEffect(() => {
+    skipNextPush.current = true
     setForm(parseRule(initialScript))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialScript])
 
-  // 表单状态变化时把序列化结果推出去。
   useEffect(() => {
+    if (skipNextPush.current) {
+      skipNextPush.current = false
+      return
+    }
     onScriptChange(serializeRule(form))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form])

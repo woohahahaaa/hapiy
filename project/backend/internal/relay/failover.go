@@ -23,6 +23,10 @@ type upstreamOutcome struct {
 	transport  bool // true: network/timeout/error; false: HTTP status
 	err        error
 	message    string
+	// ttfbExceeded 标记「请求本身成功，但响应头到达耗时超过了规则配置的
+	// ttfb_seconds」。它作为规则内 OR 条件：命中即触发，不影响其他条件。
+	ttfbExceeded bool
+	ttfbMs       int
 }
 
 // isFailoverEligible returns true when the upstream outcome matches one
@@ -46,6 +50,11 @@ func isFailoverEligible(outcome upstreamOutcome, rules []*model.FailoverRule) (s
 
 // ruleMatchesOutcome checks a single rule's condition against the outcome.
 func ruleMatchesOutcome(rule *model.FailoverRule, outcome upstreamOutcome) bool {
+	// TTFB 是独立 OR 条件：只要规则配了 ttfb_seconds 且本次响应头超时，
+	// 无论关键词/condition 是否命中都算匹配。
+	if rule.TTFBSeconds > 0 && outcome.ttfbExceeded {
+		return true
+	}
 	if len(rule.MatchPatterns) > 0 {
 		for _, pattern := range rule.MatchPatterns {
 			if pattern != "" && strings.Contains(outcome.message, pattern) {
@@ -111,14 +120,28 @@ func (e *Engine) resolveFallbackPlan(name string) *ExecutionPlan {
 // A successful follow-up request on the same entity resets the count.
 func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	resp, err := e.performUpstreamCall(ctx, plan, req)
+	ttfbMs := 0
 	if err == nil {
-		return resp, nil
+		// 请求本身成功了，但响应头到达耗时超过某条规则的 ttfb_seconds →
+		// 把它当成一次可轮询的「慢响应」失败，进入 failover 判定。
+		ttfbMs = e.exceededTTFB(plan, resp)
+		if ttfbMs == 0 {
+			return resp, nil
+		}
+		err = fmt.Errorf("upstream response header timeout after %dms", ttfbMs)
 	}
-	rule, matched := matchingFailoverRule(classifyOutcome(resp, err), plan.FailoverRules)
+	outcome := classifyOutcome(resp, err)
+	if ttfbMs > 0 {
+		outcome.ttfbExceeded = true
+		outcome.ttfbMs = ttfbMs
+		outcome.transport = true
+		outcome.message = fmt.Sprintf("upstream response header timeout after %dms", ttfbMs)
+	}
+	rule, matched := matchingFailoverRule(outcome, plan.FailoverRules)
 	if !matched {
 		return resp, err
 	}
-	dimension, retryCount, autoDisable := rule.SingleAction()
+	dimension, autoDisable := rule.SingleAction()
 	if dimension == "" {
 		return resp, err
 	}
@@ -138,7 +161,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
-		if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, retryCount); rotated != nil {
+		if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, dimension); rotated != nil {
 			if disableApplied {
 				e.recordDisabledAttempt(req, plan, err)
 			}
@@ -183,6 +206,26 @@ func failoverActionValue(plan *ExecutionPlan, req *RelayRequest, dimension strin
 		return plan.Provider.ID
 	}
 	return ""
+}
+
+// exceededTTFB reports the response-header latency in milliseconds when it
+// exceeds the ttfb_seconds limit of at least one enabled rule; 0 otherwise.
+// It uses ConnectMs (time from request issue until the upstream response
+// headers arrive) — the same signal the dashboard shows as connect_ms.
+func (e *Engine) exceededTTFB(plan *ExecutionPlan, resp *RelayResponse) int {
+	if plan == nil || resp == nil {
+		return 0
+	}
+	connectMs := resp.ConnectMs
+	if connectMs <= 0 {
+		return 0
+	}
+	for _, rule := range plan.FailoverRules {
+		if rule != nil && rule.Status && rule.TTFBSeconds > 0 && connectMs > rule.TTFBSeconds*1000 {
+			return connectMs
+		}
+	}
+	return 0
 }
 
 // recordFailoverHit increments the consecutive-match counter for
@@ -305,7 +348,10 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 			return err
 		}
 	}
-	e.saveDisabledRecord(plan.Provider.ID, dimension, value, req, "")
+	// 记录当时实际用过的 (baseURL, key)，恢复探针用它，不做 harness 交叉。
+	usedBaseURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
+	usedKey := pickIndex(plan.Keys, req.KeyIndex)
+	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, req, "")
 	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value))
 	return nil
 }
@@ -330,23 +376,17 @@ func (e *Engine) recordDisabledAttempt(req *RelayRequest, plan *ExecutionPlan, f
 	})
 }
 
-// rotateKeyOrBaseURL retries the request against another key or base URL of the
-// same provider. It returns the response, or nil when nothing is left to try.
-func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, req *RelayRequest, dimension string, retryCount int) *RelayResponse {
+// rotateKeyOrBaseURL retries the request against every other key or
+// base URL of the same provider. It returns the first successful
+// response, or nil when nothing is left to try.
+func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, req *RelayRequest, dimension string) *RelayResponse {
 	baseCount := len(plan.BaseURLs)
 	keyCount := len(plan.Keys)
-	if baseCount <= 0 || keyCount <= 0 || retryCount <= 0 {
+	if baseCount <= 0 || keyCount <= 0 {
 		return nil
 	}
-	attempts := 0
-	for bi := 0; bi < baseCount && attempts < retryCount; bi++ {
+	for bi := 0; bi < baseCount; bi++ {
 		for ki := 0; ki < keyCount; ki++ {
-			if attempts >= retryCount {
-				break
-			}
-			candidate := RelayRequest(*req)
-			candidate.BaseURLIndex = bi
-			candidate.KeyIndex = ki
 			if dimension == model.FailoverDimensionBaseURL && bi == req.BaseURLIndex {
 				continue
 			}
@@ -356,7 +396,9 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 			if e.isDisabled(plan.Provider.ID, model.FailoverDimensionBaseURL, pickIndex(plan.BaseURLs, bi)) || e.isDisabled(plan.Provider.ID, model.FailoverDimensionKey, pickIndex(plan.Keys, ki)) {
 				continue
 			}
-			attempts++
+			candidate := RelayRequest(*req)
+			candidate.BaseURLIndex = bi
+			candidate.KeyIndex = ki
 			resp, err := e.performUpstreamCall(ctx, plan, &candidate)
 			if err == nil {
 				return resp

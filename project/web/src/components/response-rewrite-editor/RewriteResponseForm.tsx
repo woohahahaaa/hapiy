@@ -61,7 +61,7 @@ export function RewriteResponseForm({ rule, onSave, onCancel, saving }: RewriteR
     if (!trimmedName) return
     const cleaned: RuleForm = {
       blocks: form.blocks
-        .map((b) => ({ id: b.id, actions: b.actions.filter(isActionValid) }))
+        .map((b) => ({ id: b.id, conditionLogic: b.conditionLogic, conditions: b.conditions, actions: b.actions.filter(isActionValid) }))
         .filter((b) => b.actions.length > 0),
     }
     onSave({

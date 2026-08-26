@@ -24,7 +24,7 @@ func TestCreateRule_persistsSingleAction_whenPayloadIsValid(t *testing.T) {
 	}
 	router := gin.New()
 	router.POST("/rules/:type", CreateRule(db))
-	body := []byte(`{"name":"key-on-error","keywords":["quota"],"status":true,"dimension":"key","retry_count":2,"auto_disable":true,"match_patterns":["rate_limit","401"],"ttfb_seconds":5}`)
+	body := []byte(`{"name":"key-on-error","keywords":["quota"],"status":true,"dimension":"key","auto_disable":true,"match_patterns":["rate_limit","401"],"ttfb_seconds":5}`)
 	req := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -42,9 +42,6 @@ func TestCreateRule_persistsSingleAction_whenPayloadIsValid(t *testing.T) {
 	}
 	if response.Data.Dimension != model.FailoverDimensionKey {
 		t.Fatalf("expected dimension key, got %q", response.Data.Dimension)
-	}
-	if response.Data.RetryCount != 2 {
-		t.Fatalf("expected retry_count 2, got %d", response.Data.RetryCount)
 	}
 	if !response.Data.AutoDisable {
 		t.Fatalf("expected auto_disable true")
@@ -65,7 +62,7 @@ func TestCreateRule_rejectsMultipleActions(t *testing.T) {
 	}
 	router := gin.New()
 	router.POST("/rules/:type", CreateRule(db))
-	body := []byte(`{"name":"invalid","status":true,"actions":[{"dimension":"key","retry_count":3},{"dimension":"provider","retry_count":3}]}`)
+	body := []byte(`{"name":"invalid","status":true,"actions":[{"dimension":"key"},{"dimension":"provider"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -88,7 +85,7 @@ func TestCreateRule_rejectsInvalidDimension(t *testing.T) {
 	}
 	router := gin.New()
 	router.POST("/rules/:type", CreateRule(db))
-	body := []byte(`{"name":"bad","status":true,"dimension":"invalid_dim","retry_count":3}`)
+	body := []byte(`{"name":"bad","status":true,"dimension":"invalid_dim"}`)
 	req := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
@@ -113,7 +110,7 @@ func TestCreateRule_rejectsDuplicateName(t *testing.T) {
 	router.POST("/rules/:type", CreateRule(db))
 	router.PUT("/rules/:type/:id", UpdateRule(db))
 
-	first := []byte(`{"name":"dup","status":true,"dimension":"base_url","retry_count":3,"auto_disable":true}`)
+	first := []byte(`{"name":"dup","status":true,"dimension":"base_url","auto_disable":true}`)
 	req1 := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(first))
 	req1.Header.Set("Content-Type", "application/json")
 	rec1 := httptest.NewRecorder()
@@ -122,7 +119,7 @@ func TestCreateRule_rejectsDuplicateName(t *testing.T) {
 		t.Fatalf("first create: want 201, got %d: %s", rec1.Code, rec1.Body.String())
 	}
 
-	second := []byte(`{"name":"dup","status":true,"dimension":"key","retry_count":3,"auto_disable":true}`)
+	second := []byte(`{"name":"dup","status":true,"dimension":"key","auto_disable":true}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(second))
 	req2.Header.Set("Content-Type", "application/json")
 	rec2 := httptest.NewRecorder()
@@ -148,7 +145,7 @@ func TestUpdateRule_appliesPayloadChanges(t *testing.T) {
 	router.POST("/rules/:type", CreateRule(db))
 	router.PUT("/rules/:type/:id", UpdateRule(db))
 
-	createBody := []byte(`{"name":"rule-a","keywords":["quota"],"status":true,"dimension":"base_url","retry_count":3,"auto_disable":true,"match_patterns":["429"],"ttfb_seconds":0}`)
+	createBody := []byte(`{"name":"rule-a","keywords":["quota"],"status":true,"dimension":"base_url","auto_disable":true,"match_patterns":["429"],"ttfb_seconds":0}`)
 	req := httptest.NewRequest(http.MethodPost, "/rules/failover", bytes.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -166,7 +163,7 @@ func TestUpdateRule_appliesPayloadChanges(t *testing.T) {
 		t.Fatal("created rule has empty id")
 	}
 
-	updateBody := []byte(`{"name":"rule-a-renamed","keywords":["quota","retry"],"status":false,"dimension":"key","retry_count":5,"auto_disable":false,"match_patterns":["rate_limit","401"],"ttfb_seconds":7}`)
+	updateBody := []byte(`{"name":"rule-a-renamed","keywords":["quota","retry"],"status":false,"dimension":"key","auto_disable":false,"match_patterns":["rate_limit","401"],"ttfb_seconds":7}`)
 	req2 := httptest.NewRequest(http.MethodPut, "/rules/failover/"+created.Data.ID, bytes.NewReader(updateBody))
 	req2.Header.Set("Content-Type", "application/json")
 	rec2 := httptest.NewRecorder()
@@ -186,9 +183,6 @@ func TestUpdateRule_appliesPayloadChanges(t *testing.T) {
 	if updated.Data.Dimension != model.FailoverDimensionKey {
 		t.Fatalf("expected dimension key, got %q", updated.Data.Dimension)
 	}
-	if updated.Data.RetryCount != 5 {
-		t.Fatalf("expected retry_count 5, got %d", updated.Data.RetryCount)
-	}
 	if updated.Data.AutoDisable {
 		t.Fatalf("expected auto_disable false")
 	}
@@ -206,7 +200,6 @@ func TestUpdateRule_appliesPayloadChanges(t *testing.T) {
 	}
 	if persisted.Name != "rule-a-renamed" ||
 		persisted.Dimension != model.FailoverDimensionKey ||
-		persisted.RetryCount != 5 ||
 		persisted.AutoDisable ||
 		persisted.Status ||
 		persisted.TTFBSeconds != 7 {

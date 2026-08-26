@@ -70,3 +70,29 @@ describe('valueLiteral 兼容性', () => {
     expect(script).toBe(JSON.stringify([{ mode: 'replace', path: 'a', from: 'foo', to: 'bar' }]))
   })
 })
+
+describe('嵌套 AND/OR 条件 round-trip', () => {
+  const cases: [string, string][] = [
+    ['单层 OR 组', JSON.stringify([{ mode: 'set', path: 'model', value: 'x', conditions: [{ logic: 'OR', children: [{ path: 'a', op: 'eq', value: '1' }, { path: 'b', op: 'eq', value: '2' }] }] }])],
+    ['双层嵌套', JSON.stringify([{ mode: 'set', path: 'model', value: 'x', conditions: [{ logic: 'AND', children: [{ path: 'a', op: 'eq', value: '1' }, { logic: 'OR', children: [{ path: 'b', op: 'eq', value: '2' }, { path: 'c', op: 'eq', value: '3' }] }] }] }])],
+  ]
+  for (const [name, script] of cases) {
+    it(`${name} 无损往返`, () => {
+      expect(serializeRule(parseRule(script))).toBe(script)
+    })
+  }
+
+  it('顶层单层 OR 组拆为 conditionLogic + 平铺叶子', () => {
+    const form = parseRule(JSON.stringify([{ mode: 'set', path: 'p', value: 'v', conditions: [{ logic: 'OR', children: [{ path: 'a', op: 'eq', value: '1' }] }] }]))
+    expect(form.blocks[0].conditionLogic).toBe('OR')
+    expect(form.blocks[0].conditions).toHaveLength(1)
+    expect(form.blocks[0].conditions[0]).toMatchObject({ path: 'a', op: 'eq' })
+  })
+
+  it('嵌套在组内的逻辑组保持组合节点', () => {
+    const form = parseRule(JSON.stringify([{ mode: 'set', path: 'p', value: 'v', conditions: [{ logic: 'AND', children: [{ path: 'a', op: 'eq', value: '1' }, { logic: 'OR', children: [{ path: 'b', op: 'eq', value: '2' }] }] }] }]))
+    const cond = form.blocks[0].conditions[0]
+    expect(cond).toMatchObject({ logic: 'AND' })
+    expect('children' in cond && cond.children).toHaveLength(2)
+  })
+})

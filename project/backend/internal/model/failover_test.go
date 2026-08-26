@@ -19,7 +19,7 @@ func TestFailoverRuleNormalize_setsCompatibilityDefaults_whenLegacyFieldsAbsent(
 		t.Fatalf("unexpected action sequence: %#v", rule.Actions)
 	}
 	for _, action := range rule.Actions {
-		if action.RetryCount != 3 || !action.AutomaticPolling || !action.AutoDisable {
+		if !action.AutomaticPolling || !action.AutoDisable {
 			t.Fatalf("unexpected default action: %#v", action)
 		}
 	}
@@ -35,9 +35,9 @@ func TestFailoverRuleActions_roundTripPreservesClientOrderAndPerRowSettings(t *t
 		t.Fatalf("migrate database: %v", err)
 	}
 	rule := FailoverRule{Name: "ordered", Actions: []FailoverAction{
-		{Dimension: FailoverDimensionProvider, RetryCount: 1, AutomaticPolling: false, AutoDisable: false},
-		{Dimension: FailoverDimensionKey, RetryCount: 2, AutomaticPolling: true, AutoDisable: false},
-		{Dimension: FailoverDimensionBaseURL, RetryCount: 4, AutomaticPolling: false, AutoDisable: true},
+		{Dimension: FailoverDimensionProvider, AutomaticPolling: false, AutoDisable: false},
+		{Dimension: FailoverDimensionKey, AutomaticPolling: true, AutoDisable: false},
+		{Dimension: FailoverDimensionBaseURL, AutomaticPolling: false, AutoDisable: true},
 	}}
 
 	// When
@@ -50,15 +50,15 @@ func TestFailoverRuleActions_roundTripPreservesClientOrderAndPerRowSettings(t *t
 	}
 
 	// Then
-	if reloaded.Actions[0].Dimension != FailoverDimensionProvider || reloaded.Actions[1].RetryCount != 2 || !reloaded.Actions[2].AutoDisable {
+	if reloaded.Actions[0].Dimension != FailoverDimensionProvider || !reloaded.Actions[1].AutomaticPolling || !reloaded.Actions[2].AutoDisable {
 		t.Fatalf("actions did not round-trip: %#v", reloaded.Actions)
 	}
 }
 
 func TestFailoverRuleValidate_rejectsMultipleLegacyActions(t *testing.T) {
 	rule := FailoverRule{Actions: []FailoverAction{
-		{Dimension: FailoverDimensionBaseURL, RetryCount: 3},
-		{Dimension: FailoverDimensionProvider, RetryCount: 3},
+		{Dimension: FailoverDimensionBaseURL},
+		{Dimension: FailoverDimensionProvider},
 	}}
 	if err := rule.Validate(); err == nil {
 		t.Fatal("expected multiple-action validation failure")
@@ -66,42 +66,48 @@ func TestFailoverRuleValidate_rejectsMultipleLegacyActions(t *testing.T) {
 }
 
 func TestFailoverRuleValidate_acceptsSingleDimension(t *testing.T) {
-	rule := FailoverRule{Dimension: FailoverDimensionKey, RetryCount: 3, TTFBSeconds: 5}
+	rule := FailoverRule{Dimension: FailoverDimensionKey, DisableThreshold: 1, TTFBSeconds: 5}
 	if err := rule.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestFailoverRuleValidate_rejectsInvalidDimension(t *testing.T) {
-	rule := FailoverRule{Dimension: "garbage", RetryCount: 3}
+	rule := FailoverRule{Dimension: "garbage", DisableThreshold: 1}
 	if err := rule.Validate(); err == nil {
 		t.Fatal("expected invalid dimension validation failure")
+	}
+}
+
+func TestFailoverRuleValidate_rejectsZeroThreshold(t *testing.T) {
+	rule := FailoverRule{Dimension: FailoverDimensionKey, DisableThreshold: 0}
+	if err := rule.Validate(); err == nil {
+		t.Fatal("expected disable_threshold < 1 validation failure")
 	}
 }
 
 func TestFailoverRuleSingleAction_prefersNewFields(t *testing.T) {
 	rule := FailoverRule{
 		Dimension:   FailoverDimensionKey,
-		RetryCount:  5,
 		AutoDisable: true,
 		Actions: []FailoverAction{
-			{Dimension: FailoverDimensionBaseURL, RetryCount: 1, AutoDisable: false},
+			{Dimension: FailoverDimensionBaseURL, AutoDisable: false},
 		},
 	}
-	dim, retry, autoDisable := rule.SingleAction()
-	if dim != FailoverDimensionKey || retry != 5 || !autoDisable {
-		t.Fatalf("SingleAction should prefer new fields, got dim=%q retry=%d auto=%v", dim, retry, autoDisable)
+	dim, autoDisable := rule.SingleAction()
+	if dim != FailoverDimensionKey || !autoDisable {
+		t.Fatalf("SingleAction should prefer new fields, got dim=%q auto=%v", dim, autoDisable)
 	}
 }
 
 func TestFailoverRuleSingleAction_fallsBackToLegacy(t *testing.T) {
 	rule := FailoverRule{
 		Actions: []FailoverAction{
-			{Dimension: FailoverDimensionProvider, RetryCount: 4, AutoDisable: false},
+			{Dimension: FailoverDimensionProvider, AutoDisable: false},
 		},
 	}
-	dim, retry, autoDisable := rule.SingleAction()
-	if dim != FailoverDimensionProvider || retry != 4 || autoDisable {
-		t.Fatalf("SingleAction should fall back to legacy, got dim=%q retry=%d auto=%v", dim, retry, autoDisable)
+	dim, autoDisable := rule.SingleAction()
+	if dim != FailoverDimensionProvider || autoDisable {
+		t.Fatalf("SingleAction should fall back to legacy, got dim=%q auto=%v", dim, autoDisable)
 	}
 }

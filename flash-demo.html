@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flash 对比：普通 vs 增强（渐变光带）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    min-height:100vh; background:#f6f6f6;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:system-ui, sans-serif;
+  }
+  .canvas {
+    position:relative; width:900px; height:560px; background-color:#fefefe;
+    background-image:radial-gradient(circle,#e0e0e0 1px,transparent 1px);
+    background-size:20px 20px;
+  }
+  .node {
+    position:absolute; width:130px; height:60px; background:#f9f9f9;
+    border:2px solid #c9c9c9; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    color:#3f3f46; font-size:14px; font-weight:500;
+    box-shadow:0 1px 3px rgb(0 0 0 / .08);
+  }
+  .node.source { top:80px; left:5px; }
+  .node.target { top:80px; left:765px; }
+  .node.source-f { top:300px; left:5px; }
+  .node.target-f { top:300px; left:765px; }
+  .edge-base { fill:none; stroke:#b1b1b7; stroke-width:1.5; }
+  .beam { fill:none; stroke-linecap:butt; }
+
+  @keyframes beam-sweep {
+    0% { stroke-dashoffset:30; opacity:0 }
+    1% { stroke-dashoffset:30; opacity:var(--beam-on) }
+    99% { stroke-dashoffset:-100; opacity:var(--beam-on) }
+    100% { stroke-dashoffset:-100; opacity:0 }
+  }
+  #layer-plain.on .beam,
+  #layer-fancy.on .beam { animation:beam-sweep 2400ms linear both; }
+  #layer-plain:not(.on) .beam,
+  #layer-fancy:not(.on) .beam { animation:none; opacity:0; }
+
+  .label { font-size:13px; fill:#71717a; font-weight:500; }
+  .note {
+    margin-top:24px; padding:14px 20px; background:#fff;
+    border:1px solid #e4e4e7; border-radius:10px; max-width:860px;
+    color:#71717a; font-size:13px; line-height:1.8;
+  }
+  .note code { background:#f4f4f5; padding:1px 6px; border-radius:4px; color:#2563eb; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="node source">Source</div>
+  <div class="node target">Target</div>
+  <div class="node source-f">Source</div>
+  <div class="node target-f">Target</div>
+
+  <svg viewBox="0 0 900 560" width="900" height="560">
+    <text class="label" x="10" y="55">① 普通 flash</text>
+    <text class="label" x="10" y="275">② 增强（更宽 + 白色方块头）</text>
+
+    <!-- ① 普通 flash：5px，头亮尾淡的彗星渐变（4 层透明度叠加） -->
+    <path class="edge-base" d="M 135 110 L 765 110"/>
+    <g id="layer-plain" style="filter:drop-shadow(0 0 4px #3b82f6)">
+      <path class="beam" pathLength="100" d="M 145 110 L 755 110"
+        style="stroke:#3b82f6; stroke-width:5; stroke-dasharray:21 79; --beam-on:.15"/>
+      <path class="beam" pathLength="100" d="M 145 110 L 755 110"
+        style="stroke:#3b82f6; stroke-width:5; stroke-dasharray:0 7 14 79; --beam-on:.45"/>
+      <path class="beam" pathLength="100" d="M 145 110 L 755 110"
+        style="stroke:#3b82f6; stroke-width:5; stroke-dasharray:0 13 8 79; --beam-on:.75"/>
+      <path class="beam" pathLength="100" d="M 145 110 L 755 110"
+        style="stroke:#3b82f6; stroke-width:5; stroke-dasharray:0 17 4 79; --beam-on:1"/>
+    </g>
+
+    <!-- ② 增强：8px 更宽 + 白色方块头部，同样的彗星渐变 -->
+    <path class="edge-base" d="M 135 330 L 765 330"/>
+    <g id="layer-fancy" style="filter:drop-shadow(0 0 6px #3b82f6)">
+      <path class="beam" pathLength="100" d="M 145 330 L 755 330"
+        style="stroke:#3b82f6; stroke-width:8; stroke-dasharray:21 79; --beam-on:.15"/>
+      <path class="beam" pathLength="100" d="M 145 330 L 755 330"
+        style="stroke:#3b82f6; stroke-width:8; stroke-dasharray:0 7 14 79; --beam-on:.45"/>
+      <path class="beam" pathLength="100" d="M 145 330 L 755 330"
+        style="stroke:#3b82f6; stroke-width:8; stroke-dasharray:0 13 8 79; --beam-on:.75"/>
+      <path class="beam" pathLength="100" d="M 145 330 L 755 330"
+        style="stroke:#ffffff; stroke-width:8; stroke-dasharray:0 17 4 79; --beam-on:1"/>
+    </g>
+  </svg>
+</div>
+
+<div class="note">
+  现在两层都是"头部实、尾部渐隐"的彗星渐变（4 层 dash 叠加）：<br>
+  • 尾部最淡（15%）→ 中段渐亮（53% → 88%）→ 头部 100% 实心<br>
+  ① 普通：5px，头部为亮蓝色实心。<br>
+  ② 增强：整体 8px 更宽，头部为<b>白色方块</b>，光晕更强。<br>
+  运动一致（2400ms 滑过 + 停 2s），透明度层数和渐隐速度都可调。
+</div>
+
+<script>
+  const FLASH_MS = 2400, PAUSE_MS = 2000
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const plain = document.getElementById('layer-plain')
+  const fancy = document.getElementById('layer-fancy')
+
+  async function playPair() {
+    plain.classList.remove('on'); fancy.classList.remove('on')
+    void plain.getBoundingClientRect()
+    plain.classList.add('on'); fancy.classList.add('on')
+    await sleep(FLASH_MS)
+    plain.classList.remove('on'); fancy.classList.remove('on')
+  }
+  async function loop() {
+    for (;;) { await playPair(); await sleep(PAUSE_MS) }
+  }
+  void loop()
+</script>
+</body>
+</html>

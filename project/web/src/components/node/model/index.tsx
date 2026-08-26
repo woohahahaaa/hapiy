@@ -21,6 +21,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
   const models = data.models || []
   const simplified = data.simplified === true
   const flashLayers = data.flashLayers ?? []
+  const allDisabled = models.length > 0 && models.every((m) => m.disabled)
   const updateNodeInternals = useUpdateNodeInternals()
   const lenRef = useRef(models.length)
 
@@ -35,7 +36,10 @@ export function NodeModel({ data, id }: NodeModelProps) {
 
   return (
     <div
-      className="relative rounded-lg border border-border bg-card text-card-foreground"
+      className={cn(
+        'relative rounded-lg border border-border bg-card text-card-foreground',
+        allDisabled && 'opacity-60',
+      )}
       style={{
         width: 'fit-content',
       }}
@@ -56,7 +60,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
             key={m.id}
             className={cn(
               'flex items-center gap-2 text-base text-card-foreground',
-              m.disabled && 'opacity-60'
+              m.disabled && !allDisabled && 'opacity-60'
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >

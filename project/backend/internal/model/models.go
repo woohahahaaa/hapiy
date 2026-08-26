@@ -230,7 +230,6 @@ type FailoverRule struct {
 	// Single-action fields. When Dimension is set, runtime prefers these
 	// over the legacy Actions array.
 	Dimension     string   `gorm:"default:''" json:"dimension"`
-	RetryCount    int      `gorm:"default:0" json:"retry_count"`
 	AutoDisable   bool     `gorm:"default:true" json:"auto_disable"`
 	MatchPatterns []string `gorm:"serializer:json;type:text" json:"match_patterns"`
 	TTFBSeconds   int      `gorm:"default:0" json:"ttfb_seconds"`
@@ -244,7 +243,6 @@ type FailoverRule struct {
 
 type FailoverAction struct {
 	Dimension        string `json:"dimension"`
-	RetryCount       int    `json:"retry_count"`
 	AutomaticPolling bool   `json:"automatic_polling"`
 	AutoDisable      bool   `json:"auto_disable"`
 }
@@ -255,35 +253,34 @@ const (
 	FailoverDimensionProvider = "provider"
 )
 
-// SingleAction returns the rule's effective single action, falling back
-// to the first legacy Actions entry when the new fields are unset.
-func (r *FailoverRule) SingleAction() (string, int, bool) {
+// SingleAction returns the dimension the rule operates on and whether
+// auto-disable is enabled. Falls back to the first legacy Actions
+// entry when the new fields are unset.
+func (r *FailoverRule) SingleAction() (string, bool) {
 	if r.Dimension != "" {
-		retry := r.RetryCount
-		if retry <= 0 {
-			retry = 3
-		}
-		return r.Dimension, retry, r.AutoDisable
+		return r.Dimension, r.AutoDisable
 	}
 	if len(r.Actions) == 0 {
-		return "", 0, false
+		return "", false
 	}
-	return r.Actions[0].Dimension, r.Actions[0].RetryCount, r.Actions[0].AutoDisable
+	return r.Actions[0].Dimension, r.Actions[0].AutoDisable
 }
 
 // Normalize applies compatibility defaults to rows created before the richer
 // failover payload existed. The action sequence is fixed and persisted in this
-// order so runtime behavior remains deterministic.
+// order so runtime behavior remains deterministic. DisableThreshold is
+// clamped to >= 1 so legacy rows with the default 0 are treated as the
+// "disable on first match" baseline.
 func (r *FailoverRule) Normalize() {
-	if r.Dimension != "" {
-		return
-	}
-	if len(r.Actions) == 0 {
+	if r.Dimension == "" && len(r.Actions) == 0 {
 		r.Actions = []FailoverAction{
-			{Dimension: FailoverDimensionBaseURL, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
-			{Dimension: FailoverDimensionKey, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
-			{Dimension: FailoverDimensionProvider, RetryCount: 3, AutomaticPolling: true, AutoDisable: true},
+			{Dimension: FailoverDimensionBaseURL, AutomaticPolling: true, AutoDisable: true},
+			{Dimension: FailoverDimensionKey, AutomaticPolling: true, AutoDisable: true},
+			{Dimension: FailoverDimensionProvider, AutomaticPolling: true, AutoDisable: true},
 		}
+	}
+	if r.DisableThreshold < 1 {
+		r.DisableThreshold = 1
 	}
 }
 
@@ -299,14 +296,11 @@ func (r *FailoverRule) Validate() error {
 		default:
 			return fmt.Errorf("invalid failover dimension %q", r.Dimension)
 		}
-		if r.RetryCount < 0 {
-			return fmt.Errorf("failover retry_count must be non-negative")
-		}
 		if r.TTFBSeconds < 0 {
 			return fmt.Errorf("failover ttfb_seconds must be non-negative")
 		}
-		if r.DisableThreshold < 0 {
-			return fmt.Errorf("failover disable_threshold must be non-negative")
+		if r.DisableThreshold < 1 {
+			return fmt.Errorf("failover disable_threshold must be at least 1")
 		}
 		if r.DisableWindowMinutes < 0 {
 			return fmt.Errorf("failover disable_window_minutes must be non-negative")
@@ -331,23 +325,29 @@ func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
 // auto-recovery can replay it later. The unique index on
 // (provider_id, dimension, value) dedupes repeated disables on the same
 // entity: a second disable updates the row instead of inserting a new one.
-// For key/base_url dimensions, the row carries the ProviderID so the
-// recovery cascade can find sibling records that share the same
-// provider or base URL.
+// DisabledRecord stores a captured request snapshot for the auto-recovery
+// loop, plus the original (baseURL, key, model) used at the moment the
+// request was disabled. Recovery probes use those recorded values instead
+// of cross-combining against other entries — the original request was the
+// one that reached (or tried to reach) the upstream, so its combo is the
+// only one with a meaningful failure context.
 type DisabledRecord struct {
-	ID                string    `gorm:"primaryKey;type:uuid" json:"id"`
-	ProviderID        string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
-	Dimension         string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
-	Value             string    `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
-	RequestHeaders    string    `gorm:"type:text" json:"request_headers"`
-	RequestBody       string    `gorm:"type:text" json:"request_body"`
-	ErrorMessage      string    `gorm:"type:text" json:"error_message"`
-	DisabledAt        time.Time `gorm:"index" json:"disabled_at"`
-	LastRetryAt       *time.Time `json:"last_retry_at"`
-	RetryCount        int        `json:"retry_count"`
-	ResolvedAt        *time.Time `json:"resolved_at"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID             string     `gorm:"primaryKey;type:uuid" json:"id"`
+	ProviderID     string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
+	Dimension      string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
+	Value          string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
+	BaseURL        string     `gorm:"type:text" json:"base_url"`
+	Key            string     `gorm:"type:text" json:"key"`
+	Model          string     `gorm:"type:text" json:"model"`
+	RequestHeaders string     `gorm:"type:text" json:"request_headers"`
+	RequestBody    string     `gorm:"type:text" json:"request_body"`
+	ErrorMessage   string     `gorm:"type:text" json:"error_message"`
+	DisabledAt     time.Time  `gorm:"index" json:"disabled_at"`
+	LastRetryAt    *time.Time `json:"last_retry_at"`
+	RetryCount     int        `json:"retry_count"`
+	ResolvedAt     *time.Time `json:"resolved_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 func (r *DisabledRecord) BeforeCreate(tx *gorm.DB) error {

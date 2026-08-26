@@ -13,7 +13,7 @@ function makeAction(partial: Partial<Action>): Action {
 }
 
 function makeBlock(actions: Action[]): Block {
-  return { id: 'rule-test', actions }
+  return { id: 'rule-test', conditions: [], actions }
 }
 
 describe('response-rewrite serializer — round-trip', () => {
@@ -183,5 +183,19 @@ describe('response-rewrite serializer — legacy script parsing', () => {
     expect(parseRule('not json').blocks[0].actions).toEqual([makeAction({})])
     expect(parseRule('{}').blocks[0].actions).toEqual([makeAction({})])
     expect(parseRule('[]').blocks[0].actions).toEqual([makeAction({})])
+  })
+})
+
+describe('response-rewrite serializer — conditions round-trip', () => {
+  it('嵌套 AND/OR 条件无损往返', () => {
+    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1' }, { path: 'c', op: 'eq', value: '2' }] }] }])
+    expect(serializeRule(parseRule(script))).toBe(script)
+  })
+
+  it('顶层 OR 包装还原为 conditionLogic 再序列化回单组', () => {
+    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1' }] }] }])
+    const parsed = parseRule(script)
+    expect(parsed.blocks[0].conditionLogic).toBe('OR')
+    expect(serializeRule(parsed)).toBe(script)
   })
 })

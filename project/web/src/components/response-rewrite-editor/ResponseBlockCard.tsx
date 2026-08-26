@@ -1,6 +1,8 @@
 import { AppIcon } from '@/components/AppIcon'
 import { ResponseActionRow } from './ResponseActionRow'
-import { emptyAction, type Block } from './serializer'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ConditionList } from '../rewrite-rule-editor/ConditionList'
+import { emptyAction, emptyCondition, type Block } from './serializer'
 import { cn } from '@/lib/utils'
 
 function ruleNumber(id: string, fallback: number): number {
@@ -106,6 +108,49 @@ export function ResponseBlockCard({
       </div>
 
       <div className="space-y-3 p-3">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+              条件
+            </span>
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={block.conditionLogic ?? 'AND'}
+                onValueChange={(v) => onChange({ ...block, conditionLogic: v as 'AND' | 'OR' })}
+              >
+                <SelectTrigger className="h-6 w-[84px]" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="AND">AND（都满足）</SelectItem>
+                    <SelectItem value="OR">OR（任一满足）</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                onClick={() => onChange({ ...block, conditions: [...(block.conditions ?? []), emptyCondition()] })}
+                className="nodrag nopan flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
+                aria-label="添加条件"
+                title="添加条件"
+              >
+                <AppIcon name="add" size={14} />
+              </button>
+            </div>
+          </div>
+          {!block.conditions || block.conditions.length === 0 ? (
+            <div className="rounded border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
+              暂无条件，留空表示无条件执行
+            </div>
+          ) : (
+            <ConditionList
+              conditions={block.conditions}
+              onChange={(conditions) => onChange({ ...block, conditions })}
+            />
+          )}
+        </div>
+
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center rounded-md bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">

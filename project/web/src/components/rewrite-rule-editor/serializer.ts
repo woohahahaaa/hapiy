@@ -11,13 +11,22 @@
 
 import { MODE_BY_VALUE, type ModeName, type Scope } from './modes'
 
-export type Condition = {
+export type LeafCondition = {
   path: string
   op: string
   value: string
   invert: boolean
   scope: Scope
 }
+
+export type ConditionGroup = {
+  logic: 'AND' | 'OR'
+  children: Condition[]
+}
+
+// conditions 数组元素：叶子（path/op/value）或组合节点（logic + children）。
+// 组合节点对应后端 {"logic":"AND"|"OR","children":[...]}，可任意嵌套。
+export type Condition = LeafCondition | ConditionGroup
 
 export type Action = {
   mode: ModeName | ''
@@ -39,6 +48,9 @@ export type Block = {
   /** 客户端稳定 ID，格式 `rule-N`（N 是创建序号）；用于绑定 UI 显示的「规则 N」标签，
    * 拖拽重排后 ID 跟随原 block，不随位置变化。 */
   id: string
+  /** 顶层条件的连接方式。序列化时 OR 会包装成 {"logic":"OR","children":[...]} 单组；
+   * AND 保持平铺数组（后端数组即 AND 语义）。 */
+  conditionLogic?: 'AND' | 'OR'
   conditions: Condition[]
   actions: Action[]
 }
@@ -55,8 +67,12 @@ export function emptyAction(): Action {
   return { mode: 'set', path: '', value: '', from: '', to: '', dst: '', scope: 'all' }
 }
 
-export function emptyCondition(): Condition {
+export function emptyCondition(): LeafCondition {
   return { path: '', op: 'contains', value: '', invert: false, scope: 'all' }
+}
+
+export function emptyConditionGroup(): ConditionGroup {
+  return { logic: 'AND', children: [emptyCondition()] }
 }
 
 // 计算下一个可用的 rule-N ID：扫一遍已有 blocks，找最大的 N，N+1 返回。
@@ -106,7 +122,15 @@ export function isActionValid(a: Action): boolean {
 }
 
 export function isConditionValid(c: Condition): boolean {
+  if ('children' in c) {
+    if (c.children.length === 0) return false
+    return c.children.some(isConditionValid)
+  }
   return Boolean(c.path.trim()) && Boolean(c.op.trim())
+}
+
+export function isConditionLeaf(c: Condition): c is LeafCondition {
+  return !('children' in c)
 }
 
 // ── Serialize: form → script JSON array string ──
@@ -115,17 +139,27 @@ export function serializeRule(form: RuleForm): string {
   const out: JsonObject[] = []
   for (const block of form.blocks) {
     const blockConds = block.conditions.filter(isConditionValid).map(conditionToJson)
-    const blockCondsKey = JSON.stringify(blockConds)
+    let emittedConds = blockConds
+    if (block.conditionLogic === 'OR' && blockConds.length > 0) {
+      emittedConds = [{ logic: 'OR', children: blockConds }]
+    }
+    const blockCondsKey = JSON.stringify(emittedConds)
     const validActions = block.actions.filter(isActionValid)
     if (validActions.length === 0) continue
     for (const a of validActions) {
-      out.push(actionToJson(a, blockCondsKey ? blockConds : []))
+      out.push(actionToJson(a, blockCondsKey ? emittedConds : []))
     }
   }
   return JSON.stringify(out)
 }
 
-function conditionToJson(c: Condition): JsonObject {
+export function conditionToJson(c: Condition): JsonObject {
+  if ('children' in c) {
+    const children = c.children.filter(isConditionValid).map(conditionToJson)
+    const o: JsonObject = { logic: c.logic }
+    if (children.length > 0) o.children = children
+    return o
+  }
   const o: JsonObject = { path: withHeaderPrefix(c.path.trim(), c.scope), op: c.op.trim(), value: c.value }
   if (c.invert) o.invert = true
   if (c.scope !== 'all') o.scope = c.scope
@@ -179,12 +213,20 @@ export function parseRule(script: string): RuleForm {
     const action = actionFromJson(op)
     if (!action) continue
     const conds = conditionsFromJson(op.conditions)
-    const key = JSON.stringify(conds)
+    // 顶层 OR 包装（单组）拆回 conditionLogic，让 UI 显示为顶层 AND/OR 切换；
+    // AND 包装保留为组卡片，避免拆开后丢失包装结构。
+    let conditionLogic: 'AND' | 'OR' | undefined
+    let blockConds = conds
+    if (conds.length === 1 && conds[0].logic === 'OR' && 'children' in conds[0]) {
+      conditionLogic = conds[0].logic
+      blockConds = conds[0].children
+    }
+    const key = JSON.stringify(blockConds)
     if (currentBlock && key === currentKey) {
       currentBlock.actions.push(action)
     } else {
       seq += 1
-      currentBlock = { id: `rule-${seq}`, conditions: conds, actions: [action] }
+      currentBlock = { id: `rule-${seq}`, conditionLogic, conditions: blockConds, actions: [action] }
       blocks.push(currentBlock)
       currentKey = key
     }
@@ -237,15 +279,23 @@ function stripHeaderPrefix(path: string, scope: Scope): string {
   return path
 }
 
-function conditionsFromJson(raw: unknown): Condition[] {
+export function conditionsFromJson(raw: unknown): Condition[] {
   if (!Array.isArray(raw)) return []
   const out: Condition[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const c = item as JsonObject
+    // 组合节点：{"logic":"AND"|"OR","children":[...]}，递归解析子条件。
+    if (typeof c.logic === 'string') {
+      const logic = c.logic.toUpperCase()
+      if (logic !== 'AND' && logic !== 'OR') continue
+      const children = conditionsFromJson(c.children)
+      if (children.length === 0) continue
+      out.push({ logic, children })
+      continue
+    }
     const op = typeof c.op === 'string' ? c.op : ''
-    // 嵌套 AND/OR 节点只展示在「编辑 JSON」中，结构化编辑器扁平化跳过。
-    if ('logic' in c || !op) continue
+    if (!op) continue
     const scope = parseScope(c.scope)
     out.push({
       path: stripHeaderPrefix(typeof c.path === 'string' ? c.path : '', scope),

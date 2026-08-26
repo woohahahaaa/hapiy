@@ -78,7 +78,7 @@ func compactValue(v interface{}) interface{} {
 // (provider_id, dimension, value) ensures we never create duplicates —
 // a second disable of the same entity overwrites the previous row's
 // request snapshot and resets retry counters.
-func (e *Engine) saveDisabledRecord(providerID, dimension, value string, req *RelayRequest, errMsg string) {
+func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key string, req *RelayRequest, errMsg string) {
 	if e.db == nil || req == nil {
 		return
 	}
@@ -108,6 +108,9 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value string, req *Re
 		ProviderID:     providerID,
 		Dimension:      dimension,
 		Value:          value,
+		BaseURL:        baseURL,
+		Key:            key,
+		Model:          req.Model,
 		RequestHeaders: string(headersJSON),
 		RequestBody:    bodyJSON,
 		ErrorMessage:   errMsg,
@@ -185,7 +188,14 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	if err != nil || plan == nil {
 		return false
 	}
-	baseURL, key, ok := e.pickReplayChannel(plan)
+	// 优先用禁用瞬间记录的原始 (baseURL, key) —— 不交叉、不换通道；
+	// 旧数据没存的才回落 pickReplayChannel。
+	baseURL, key, ok := "", "", false
+	if record.BaseURL != "" && record.Key != "" {
+		baseURL, key, ok = record.BaseURL, record.Key, true
+	} else {
+		baseURL, key, ok = e.pickReplayChannel(plan)
+	}
 	if !ok {
 		return false
 	}

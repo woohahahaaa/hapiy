@@ -650,3 +650,114 @@ func TestRelayWithFailover_windowExpiryResetsCounter(t *testing.T) {
 		t.Fatalf("hit count after window reset: want 1, got %d", counter.HitCount)
 	}
 }
+
+func TestExceededTTFB_returnsConnectMs_whenOverLimit(t *testing.T) {
+	engine := NewEngine(nil)
+	plan := &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		FailoverRules: []*model.FailoverRule{
+			{TTFBSeconds: 10, Status: true, Dimension: model.FailoverDimensionProvider},
+		},
+	}
+	resp := &RelayResponse{ConnectMs: 15000}
+	if got := engine.exceededTTFB(plan, resp); got != 15000 {
+		t.Fatalf("expected 15000, got %d", got)
+	}
+}
+
+func TestExceededTTFB_returnsZero_whenWithinLimit(t *testing.T) {
+	engine := NewEngine(nil)
+	plan := &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		FailoverRules: []*model.FailoverRule{
+			{TTFBSeconds: 10, Status: true, Dimension: model.FailoverDimensionProvider},
+		},
+	}
+	resp := &RelayResponse{ConnectMs: 5000}
+	if got := engine.exceededTTFB(plan, resp); got != 0 {
+		t.Fatalf("expected 0, got %d", got)
+	}
+}
+
+func TestExceededTTFB_ignoresDisabledOrZeroLimitRules(t *testing.T) {
+	engine := NewEngine(nil)
+	plan := &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		FailoverRules: []*model.FailoverRule{
+			{TTFBSeconds: 0, Status: true},
+			{TTFBSeconds: 5, Status: false},
+		},
+	}
+	resp := &RelayResponse{ConnectMs: 9000}
+	if got := engine.exceededTTFB(plan, resp); got != 0 {
+		t.Fatalf("expected 0 (no enabled rule with limit), got %d", got)
+	}
+}
+
+func TestRuleMatchesOutcome_ttfbExceeded_matchesRuleWithLimit(t *testing.T) {
+	rule := &model.FailoverRule{
+		TTFBSeconds:   10,
+		MatchPatterns: []string{"无关关键词"}, // patterns 不命中也不影响 TTFB OR 条件
+		Dimension:     model.FailoverDimensionProvider,
+	}
+	if !ruleMatchesOutcome(rule, upstreamOutcome{ttfbExceeded: true, ttfbMs: 12000}) {
+		t.Fatal("ttfbExceeded should match even when match patterns don't")
+	}
+	if ruleMatchesOutcome(rule, upstreamOutcome{}) {
+		t.Fatal("non-exceeded outcome must not match")
+	}
+}
+
+func TestRuleMatchesOutcome_ttfbExceeded_doesNotMatchRuleWithoutLimit(t *testing.T) {
+	rule := &model.FailoverRule{
+		TTFBSeconds: 0,
+		Condition:   "timeout",
+	}
+	if ruleMatchesOutcome(rule, upstreamOutcome{ttfbExceeded: true, ttfbMs: 9999}) {
+		t.Fatal("rule without ttfb limit must not match on ttfbExceeded")
+	}
+}
+
+func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.T) {
+	// Given: upstream responds successfully but only after 1.2s; rule allows 1s.
+	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(1200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
+	}))
+	defer upstream.Close()
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			TTFBSeconds: 1,
+			Status:      true,
+			Dimension:   model.FailoverDimensionProvider,
+			AutoDisable: true,
+		}},
+	}
+
+	// When: the request "succeeds" upstream but the header is slow.
+	resp, err := engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+	if err == nil {
+		t.Fatal("expected error for slow response after TTFB exceed")
+	}
+	if resp == nil {
+		t.Fatal("expected response to be returned alongside the error")
+	}
+	if resp.ConnectMs < 1000 {
+		t.Fatalf("expected connectMs > 1s, got %d", resp.ConnectMs)
+	}
+
+	// Then: provider got auto-disabled even though the upstream returned 2xx.
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider should be auto-disabled when TTFB exceeds the rule limit")
+	}
+}

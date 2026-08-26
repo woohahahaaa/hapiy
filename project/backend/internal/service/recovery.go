@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +58,7 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body))
 	if err != nil {
 		log.Printf("recovery probe: build request: %v", err)
-		return ProbeResult{}
+		return ProbeResult{ErrorMessage: fmt.Sprintf("构造请求失败：%v", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
@@ -68,7 +67,10 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 	start := time.Now()
 	resp, err := DefaultClient().Do(req)
 	if err != nil {
-		return ProbeResult{TTFB: time.Since(start)}
+		return ProbeResult{
+			TTFB:         time.Since(start),
+			ErrorMessage: fmt.Sprintf("无法连接上游：%v", err),
+		}
 	}
 	defer resp.Body.Close()
 
@@ -76,21 +78,29 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 	raw, err := io.ReadAll(rec)
 	ttfb := rec.firstByteLatency(start)
 	if err != nil {
-		return ProbeResult{TTFB: ttfb}
+		return ProbeResult{TTFB: ttfb, ErrorMessage: fmt.Sprintf("读取响应失败：%v", err)}
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return ProbeResult{TTFB: ttfb}
+		msg := fmt.Sprintf("HTTP %d", resp.StatusCode)
+		if excerpt := probeErrorExcerpt(raw); excerpt != "" {
+			msg += ": " + excerpt
+		}
+		return ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 
 	var parsed struct {
 		Choices []json.RawMessage `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return ProbeResult{TTFB: ttfb}
+		return ProbeResult{TTFB: ttfb, ErrorMessage: fmt.Sprintf("响应体不是合法 JSON：%v", err)}
 	}
 	if len(parsed.Choices) == 0 {
-		return ProbeResult{TTFB: ttfb}
+		msg := "响应缺少 choices 字段"
+		if excerpt := probeErrorExcerpt(raw); excerpt != "" {
+			msg = msg + ": " + excerpt
+		}
+		return ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 	return ProbeResult{Success: true, TTFB: ttfb}
 }
@@ -115,6 +125,47 @@ func (f *firstByteRecorder) firstByteLatency(start time.Time) time.Duration {
 		return time.Since(start)
 	}
 	return f.stamp.Sub(start)
+}
+
+// probeErrorExcerpt 解析 OpenAI / Anthropic 风格的 {"error":{...}}，
+// 失败则截断原 body。与 internal/relay/disabled_record.go 同名函数同语义。
+func probeErrorExcerpt(body []byte) string {
+	const max = 300
+	var parsed struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+			Code    string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &parsed) == nil {
+		var parts []string
+		if parsed.Error.Code != "" {
+			parts = append(parts, "Code: "+parsed.Error.Code)
+		}
+		if parsed.Error.Type != "" {
+			parts = append(parts, "Type: "+parsed.Error.Type)
+		}
+		msg := strings.TrimSpace(parsed.Error.Message)
+		if msg != "" {
+			parts = append(parts, "Message: "+msg)
+		}
+		if len(parts) > 0 {
+			result := strings.Join(parts, "\n")
+			if len(result) > max {
+				result = result[:max] + "…"
+			}
+			return result
+		}
+	}
+	snippet := strings.TrimSpace(string(body))
+	if snippet == "" {
+		return ""
+	}
+	if len(snippet) > max {
+		snippet = snippet[:max] + "…"
+	}
+	return snippet
 }
 
 // RecoveryOptions configures one recovery cycle. TTFBThreshold == 0 means
@@ -248,39 +299,91 @@ func readRecoveryTTFB(db *gorm.DB) time.Duration {
 // callback is supplied it runs first so disabled entities that have a
 // recorded request context get the most accurate test (replaying the
 // same request that triggered the disable). Whatever's still disabled
-// afterwards falls through to the harness-based pass below.
+// afterwards goes through the per-record probe below.
 func RunRecoveryCycle(db *gorm.DB, opts RecoveryOptions) {
 	if opts.RecordReplay != nil {
 		opts.RecordReplay()
 	}
 
-	var states []model.ProviderDisableState
-	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
-		log.Printf("recovery: load disabled states: %v", err)
-		return
-	}
-	if len(states) == 0 {
-		return
-	}
-
-	byProvider := make(map[string][]model.ProviderDisableState)
-	for _, s := range states {
-		byProvider[s.ProviderID] = append(byProvider[s.ProviderID], s)
-	}
-	providerIDs := make([]string, 0, len(byProvider))
-	for id := range byProvider {
-		providerIDs = append(providerIDs, id)
-	}
-	sort.Strings(providerIDs)
-
 	probe := opts.Probe
 	if probe == nil {
 		probe = defaultChannelProbe
 	}
+	runRecordRecovery(db, probe, opts.TTFBThreshold)
+}
 
-	for _, pid := range providerIDs {
-		runProviderRecovery(db, pid, byProvider[pid], probe, opts.TTFBThreshold)
+// runRecordRecovery probes every open DisabledRecord using the (baseURL,
+// key, model) captured at disable time — the exact combination that
+// triggered the disable, so we never cross-combine with other entries.
+// Rows missing the captured combo (legacy / backfilled) fall back to the
+// provider's first usable entries so they still get a chance.
+func runRecordRecovery(db *gorm.DB, probe func(baseURL, key, model string) ProbeResult, ttfbThreshold time.Duration) {
+	var records []model.DisabledRecord
+	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
+		log.Printf("recovery: load disabled records: %v", err)
+		return
 	}
+	for i := range records {
+		r := &records[i]
+		var provider model.Provider
+		baseURL, key, modelName, ok := recoveryTarget(db, r, &provider)
+		if !ok {
+			continue
+		}
+		result := probe(baseURL, key, modelName)
+		if !passProbe(result, ttfbThreshold) {
+			if result.ErrorMessage != "" {
+				log.Printf("recovery: probe %s/%s failed: %s (ttfb=%v)", baseURL, key, result.ErrorMessage, result.TTFB)
+			}
+			continue
+		}
+		clearDisable(db, provider.ID, provider.Name, r.Dimension, r.Value)
+		if err := db.Where("id = ?", r.ID).Delete(&model.DisabledRecord{}).Error; err != nil {
+			log.Printf("recovery: drop record %s: %v", r.ID, err)
+		}
+	}
+}
+
+// recoveryTarget resolves the (baseURL, key, model) to probe for one
+// DisabledRecord. The recorded combo wins; rows without it fall back to
+// the provider's first list entries not among the disabled ones.
+func recoveryTarget(db *gorm.DB, r *model.DisabledRecord, provider *model.Provider) (baseURL, key, modelName string, ok bool) {
+	if err := db.First(provider, "id = ?", r.ProviderID).Error; err != nil {
+		log.Printf("recovery: load provider %s: %v", r.ProviderID, err)
+		return "", "", "", false
+	}
+	baseURLs := parseJSONStringArray(provider.BaseURLs)
+	keys := parseJSONStringArray(provider.Keys)
+	models := parseJSONStringArray(provider.Models)
+
+	if r.BaseURL != "" && r.Key != "" {
+		baseURL, key = r.BaseURL, r.Key
+	} else {
+		var disabledBaseURLs, disabledKeys []string
+		if r.Dimension == model.FailoverDimensionBaseURL {
+			disabledBaseURLs = append(disabledBaseURLs, r.Value)
+		}
+		if r.Dimension == model.FailoverDimensionKey {
+			disabledKeys = append(disabledKeys, r.Value)
+		}
+		baseURL = firstNotIn(baseURLs, disabledBaseURLs)
+		if baseURL == "" {
+			baseURL = firstNotIn(baseURLs, nil)
+		}
+		key = firstNotIn(keys, disabledKeys)
+		if key == "" {
+			key = firstNotIn(keys, nil)
+		}
+	}
+	modelName = r.Model
+	if modelName == "" && len(models) > 0 {
+		modelName = models[0]
+	}
+	if baseURL == "" || key == "" || modelName == "" {
+		log.Printf("recovery: record %s missing baseURL/key/model, skipping", r.ID)
+		return "", "", "", false
+	}
+	return baseURL, key, modelName, true
 }
 
 // passProbe returns true only when the probe succeeded and the optional
@@ -328,74 +431,6 @@ func runTimedRecovery(db *gorm.DB, duration time.Duration) {
 	}
 	if cleared > 0 {
 		log.Printf("timed-recovery: cleared %d disabled record(s) past %s", cleared, duration)
-	}
-}
-
-func runProviderRecovery(
-	db *gorm.DB,
-	providerID string,
-	states []model.ProviderDisableState,
-	probe func(baseURL, key, model string) ProbeResult,
-	ttfbThreshold time.Duration,
-) {
-	var provider model.Provider
-	if err := db.First(&provider, "id = ?", providerID).Error; err != nil {
-		log.Printf("recovery: load provider %s: %v", providerID, err)
-		return
-	}
-	baseURLs := parseJSONStringArray(provider.BaseURLs)
-	keys := parseJSONStringArray(provider.Keys)
-	models := parseJSONStringArray(provider.Models)
-	if len(baseURLs) == 0 || len(keys) == 0 || len(models) == 0 {
-		log.Printf("recovery: provider %s missing baseURLs/keys/models, skipping", providerID)
-		return
-	}
-	probeModel := models[0]
-
-	var disabledBaseURLs, disabledKeys []string
-	var providerDisabled bool
-	for _, s := range states {
-		switch s.Dimension {
-		case model.FailoverDimensionBaseURL:
-			disabledBaseURLs = append(disabledBaseURLs, s.Value)
-		case model.FailoverDimensionKey:
-			disabledKeys = append(disabledKeys, s.Value)
-		case model.FailoverDimensionProvider:
-			providerDisabled = true
-		}
-	}
-
-	harnessBaseURL := firstNotIn(baseURLs, disabledBaseURLs)
-	harnessKey := firstNotIn(keys, disabledKeys)
-
-	if harnessBaseURL != "" {
-		for _, k := range disabledKeys {
-			if passProbe(probe(harnessBaseURL, k, probeModel), ttfbThreshold) {
-				clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionKey, k)
-			}
-		}
-	}
-
-	if harnessKey != "" {
-		for _, u := range disabledBaseURLs {
-			if passProbe(probe(u, harnessKey, probeModel), ttfbThreshold) {
-				clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionBaseURL, u)
-			}
-		}
-	}
-
-	if providerDisabled {
-		u := harnessBaseURL
-		if u == "" {
-			u = baseURLs[0]
-		}
-		k := harnessKey
-		if k == "" {
-			k = keys[0]
-		}
-		if u != "" && k != "" && passProbe(probe(u, k, probeModel), ttfbThreshold) {
-			clearDisable(db, provider.ID, provider.Name, model.FailoverDimensionProvider, provider.ID)
-		}
 	}
 }
 

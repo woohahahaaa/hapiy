@@ -1,6 +1,7 @@
 import { AppIcon } from '@/components/AppIcon'
-import { ConditionRow } from './ConditionRow'
+import { ConditionList } from './ConditionList'
 import { ActionRow } from './ActionRow'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   emptyAction,
   emptyCondition,
@@ -38,18 +39,6 @@ export function BlockCard({
   isDragging = false,
   isDragOver = false,
 }: BlockCardProps) {
-  const updateCond = (i: number, next: Block['conditions'][number]) => {
-    onChange({
-      ...block,
-      conditions: block.conditions.map((c, ci) => (ci === i ? next : c)),
-    })
-  }
-  const removeCond = (i: number) => {
-    onChange({ ...block, conditions: block.conditions.filter((_, ci) => ci !== i) })
-  }
-  const addCond = () => {
-    onChange({ ...block, conditions: [...block.conditions, emptyCondition()] })
-  }
   const updateAction = (i: number, next: Block['actions'][number]) => {
     onChange({
       ...block,
@@ -124,37 +113,45 @@ export function BlockCard({
 
       <div className="space-y-3 p-3">
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              条件（AND，全部满足才执行）
+              条件
             </span>
-            <button
-              type="button"
-              onClick={addCond}
-              className="nodrag nopan flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
-              aria-label="添加条件"
-              title="添加条件"
-            >
-              <AppIcon name="add" size={14} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={block.conditionLogic ?? 'AND'}
+                onValueChange={(v) => onChange({ ...block, conditionLogic: v as 'AND' | 'OR' })}
+              >
+                <SelectTrigger className="h-6 w-[84px]" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="AND">AND（都满足）</SelectItem>
+                    <SelectItem value="OR">OR（任一满足）</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <button
+                type="button"
+                onClick={() => onChange({ ...block, conditions: [...block.conditions, emptyCondition()] })}
+                className="nodrag nopan flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
+                aria-label="添加条件"
+                title="添加条件"
+              >
+                <AppIcon name="add" size={14} />
+              </button>
+            </div>
           </div>
           {block.conditions.length === 0 ? (
             <div className="rounded border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
               暂无条件，留空表示无条件执行
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {block.conditions.map((c, i) => (
-                <ConditionRow
-                  key={i}
-                  index={i}
-                  condition={c}
-                  onChange={(next) => updateCond(i, next)}
-                  onRemove={() => removeCond(i)}
-                  canRemove={block.conditions.length > 0}
-                />
-              ))}
-            </div>
+            <ConditionList
+              conditions={block.conditions}
+              onChange={(conditions) => onChange({ ...block, conditions })}
+            />
           )}
         </div>
 

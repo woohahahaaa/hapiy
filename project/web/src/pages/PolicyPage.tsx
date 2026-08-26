@@ -631,7 +631,7 @@ function FailoverPage() {
     { key: 'dimension', label: '轮询维度', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
     {
       key: 'matchPatterns',
-      label: '触发匹配',
+      label: '触发字段',
       defaultWidth: { kind: 'percent', value: 25 },
       render: (_, row) => {
         const patterns = row.matchPatterns ?? []
@@ -642,13 +642,12 @@ function FailoverPage() {
       },
     },
     { key: 'ttfbSeconds', label: '首字超时', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.ttfbSeconds > 0 ? `${row.ttfbSeconds}s` : '未启用'}</span> },
-    { key: 'retryCount', label: '重试次数', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right' },
     {
       key: 'disableThreshold',
       label: '禁用阈值',
       defaultWidth: { kind: 'pixel', value: 180 },
       render: (_, row) => {
-        const threshold = row.disableThreshold ?? 1
+        const threshold = row.disableThreshold >= 1 ? row.disableThreshold : 1
         const window = row.disableWindowMinutes ?? 0
         const winText = window === 0 ? '不限' : `${window}分钟`
         return <span className="text-xs">{threshold} 次 / {winText}</span>
@@ -741,7 +740,10 @@ function failoverDimensionLabel(dimension: FailoverRule['dimension']): string {
 }
 
 function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void; saving: boolean }) {
-  const initial: FailoverRule = rule ?? {
+  const initial: FailoverRule = rule ? {
+    ...rule,
+    disableThreshold: rule.disableThreshold >= 1 ? rule.disableThreshold : 1,
+  } : {
     id: '',
     name: '',
     primaryProvider: '',
@@ -751,7 +753,6 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
     keywords: [],
     actions: [],
     dimension: 'base_url',
-    retryCount: 3,
     autoDisable: true,
     matchPatterns: [],
     ttfbSeconds: 0,
@@ -793,9 +794,9 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="failover-patterns">触发匹配字段</FieldLabel>
-        <Textarea id="failover-patterns" value={matchPatterns} onChange={(event) => setMatchPatterns(event.target.value)} placeholder={'一行一个文本或错误码\n429\nrate_limit_exceeded\ninsufficient_quota'} rows={4} />
-        <p className="text-xs text-muted-foreground">普通字符匹配，任一行匹配即触发轮询。</p>
+        <FieldLabel htmlFor="failover-patterns">上游报错字段包含以下关键词时自动触发</FieldLabel>
+        <Textarea id="failover-patterns" value={matchPatterns} onChange={(event) => setMatchPatterns(event.target.value)} placeholder={'每行一个关键词或错误码\n429\nrate_limit_exceeded\ninsufficient_quota'} rows={4} />
+        <p className="text-xs text-muted-foreground">每行一个；任一行出现在上游报错内容中即触发轮询。留空则仅按下方条件触发。</p>
       </Field>
 
       <Field>
@@ -805,20 +806,15 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="failover-retry">重试次数</FieldLabel>
-        <Input id="failover-retry" type="number" min={0} className="w-40" value={form.retryCount} onChange={(event) => setForm((p) => ({ ...p, retryCount: Math.max(0, Number(event.target.value) || 0) }))} />
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="failover-disable-threshold">禁用前命中次数</FieldLabel>
-        <Input id="failover-disable-threshold" type="number" min={1} className="w-40" value={form.disableThreshold} onChange={(event) => setForm((p) => ({ ...p, disableThreshold: Math.max(1, Number(event.target.value) || 1) }))} />
-        <p className="text-xs text-muted-foreground">规则连续命中多少次才禁用该维度。1 = 跟旧版"一次就禁"行为一致。</p>
-      </Field>
-
-      <Field>
-        <FieldLabel htmlFor="failover-disable-window">命中时间窗口（分钟）</FieldLabel>
-        <Input id="failover-disable-window" type="number" min={0} className="w-40" value={form.disableWindowMinutes} onChange={(event) => setForm((p) => ({ ...p, disableWindowMinutes: Math.max(0, Number(event.target.value) || 0) }))} />
-        <p className="text-xs text-muted-foreground">命中必须落在这个时间窗口内才算连续。0 = 不限窗口。</p>
+        <FieldLabel>禁用阈值</FieldLabel>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span>每</span>
+          <Input type="number" min={0} className="w-20" aria-label="命中时间窗口（分钟）" value={form.disableWindowMinutes} onChange={(event) => setForm((p) => ({ ...p, disableWindowMinutes: Math.max(0, Number(event.target.value) || 0) }))} />
+          <span>分钟命中</span>
+          <Input type="number" min={1} className="w-20" aria-label="禁用前命中次数" value={form.disableThreshold} onChange={(event) => setForm((p) => ({ ...p, disableThreshold: Math.max(1, Number(event.target.value) || 1) }))} />
+          <span>次则禁用</span>
+        </div>
+        <p className="text-xs text-muted-foreground">窗口期内连续命中 N 次才禁用。窗口填 0 表示不限时间；次数填 1 等于「一次就禁」。</p>
       </Field>
 
       <DialogFooter>

@@ -65,6 +65,25 @@ func setDisabled(t *testing.T, db *gorm.DB, providerID, dimension, value string)
 	}
 }
 
+// setDisabledRecord 同时落 ProviderDisableState 和带原始 (baseURL, key,
+// model) 的 DisabledRecord，模拟真实禁用路径（failover 会一起写）。
+func setDisabledRecord(t *testing.T, db *gorm.DB, providerID, dimension, value, baseURL, key, modelName string) {
+	t.Helper()
+	setDisabled(t, db, providerID, dimension, value)
+	row := model.DisabledRecord{
+		ProviderID: providerID,
+		Dimension:  dimension,
+		Value:      value,
+		BaseURL:    baseURL,
+		Key:        key,
+		Model:      modelName,
+		DisabledAt: time.Now(),
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("create disabled record: %v", err)
+	}
+}
+
 func isEnabled(t *testing.T, db *gorm.DB, providerID, dimension, value string) bool {
 	t.Helper()
 	var s model.ProviderDisableState
@@ -234,12 +253,17 @@ func TestRunRecoveryCycle_clearsDisabledKeyWhenProbePasses(t *testing.T) {
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u2", "k2", "gpt-4")
 
+	var gotKey string
 	probe := func(baseURL, key, model string) ProbeResult {
+		gotKey = key
 		return ProbeResult{Success: true, TTFB: 1 * time.Second}
 	}
 	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 0, Probe: probe})
+	if gotKey != "k2" {
+		t.Fatalf("probe should hit the recorded key k2, got %q", gotKey)
+	}
 
 	if !isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
 		t.Fatalf("expected disabled key k2 to be cleared after probe success")
@@ -253,7 +277,7 @@ func TestRunRecoveryCycle_keepsDisabledKeyWhenProbeFails(t *testing.T) {
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "")
 
 	probe := func(baseURL, key, model string) ProbeResult { return ProbeResult{Success: false} }
 	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
@@ -270,7 +294,7 @@ func TestRunRecoveryCycle_keepsDisabledKeyWhenTTFBExceedsThreshold(t *testing.T)
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4")
 
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 10 * time.Second}
@@ -289,7 +313,7 @@ func TestRunRecoveryCycle_clearsDisabledKeyWhenTTFBUnderThreshold(t *testing.T) 
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4")
 
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 2 * time.Second}
@@ -301,7 +325,7 @@ func TestRunRecoveryCycle_clearsDisabledKeyWhenTTFBUnderThreshold(t *testing.T) 
 	}
 }
 
-func TestRunRecoveryCycle_skipsKeyWhenAllBaseURLsDisabled(t *testing.T) {
+func TestRunRecoveryCycle_probesRecordedComboEvenWhenBaseURLDisabled(t *testing.T) {
 	db := newRecoveryTestDB(t)
 	providerID := makeProvider(t, db, "openai",
 		[]string{"https://u1"},
@@ -309,13 +333,20 @@ func TestRunRecoveryCycle_skipsKeyWhenAllBaseURLsDisabled(t *testing.T) {
 		[]string{"gpt-4"},
 	)
 	setDisabled(t, db, providerID, model.FailoverDimensionBaseURL, "https://u1")
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4")
 
-	probe := func(baseURL, key, model string) ProbeResult { return ProbeResult{Success: true} }
+	var gotBaseURL, gotKey string
+	probe := func(baseURL, key, model string) ProbeResult {
+		gotBaseURL, gotKey = baseURL, key
+		return ProbeResult{Success: true}
+	}
 	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
 
-	if isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
-		t.Fatalf("expected k2 to remain disabled when no harness BaseURL is available")
+	if gotBaseURL != "https://u1" || gotKey != "k2" {
+		t.Fatalf("expected probe to use recorded combo u1/k2, got %s/%s", gotBaseURL, gotKey)
+	}
+	if !isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
+		t.Fatalf("k2 should be cleared: its recorded baseURL is used even though it is disabled")
 	}
 }
 
@@ -326,7 +357,7 @@ func TestRunRecoveryCycle_clearsDisabledBaseURL(t *testing.T) {
 		[]string{"k1"},
 		[]string{"gpt-4"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionBaseURL, "https://u2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionBaseURL, "https://u2", "https://u2", "k1", "gpt-4")
 
 	probe := func(baseURL, key, model string) ProbeResult { return ProbeResult{Success: true} }
 	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
@@ -346,7 +377,7 @@ func TestRunRecoveryCycle_clearsProviderLevelDisable(t *testing.T) {
 	if err := db.Model(&model.Provider{}).Where("id = ?", providerID).Update("auto_disabled", true).Error; err != nil {
 		t.Fatalf("set auto_disabled: %v", err)
 	}
-	setDisabled(t, db, providerID, model.FailoverDimensionProvider, providerID)
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionProvider, providerID, "https://u1", "k1", "gpt-4")
 
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 500 * time.Millisecond}
@@ -369,8 +400,8 @@ func TestRunRecoveryCycle_multipleProviders_processedInIDOrder(t *testing.T) {
 	db := newRecoveryTestDB(t)
 	pA := makeProvider(t, db, "aaa", []string{"https://u"}, []string{"k1", "k2"}, []string{"m"})
 	pB := makeProvider(t, db, "bbb", []string{"https://u"}, []string{"k1", "k2"}, []string{"m"})
-	setDisabled(t, db, pB, model.FailoverDimensionKey, "k2")
-	setDisabled(t, db, pA, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, pB, model.FailoverDimensionKey, "k2", "https://u", "k2", "m")
+	setDisabledRecord(t, db, pA, model.FailoverDimensionKey, "k2", "https://u", "k2", "m")
 
 	probe := func(baseURL, key, model string) ProbeResult { return ProbeResult{Success: true} }
 	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
@@ -390,7 +421,7 @@ func TestRunRecoveryCycle_skipsProviderWithoutModels(t *testing.T) {
 		[]string{"k1", "k2"},
 		nil,
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "")
 
 	probe := func(baseURL, key, model string) ProbeResult { return ProbeResult{Success: true} }
 	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
@@ -407,7 +438,7 @@ func TestRunRecoveryCycle_passesFirstModelToProbe(t *testing.T) {
 		[]string{"k1", "k2"},
 		[]string{"gpt-4o", "gpt-3.5-turbo"},
 	)
-	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k2")
+	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "")
 
 	var observedModel string
 	probe := func(baseURL, key, model string) ProbeResult {
