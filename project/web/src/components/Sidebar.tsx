@@ -58,12 +58,11 @@ const navigation: NavItem[] = [
   },
   {
     id: 'llm-config',
-    label: 'LLM配置',
+    label: '模型接入',
     icon: <AppIcon name="layers" />,
     children: [
       { id: 'token', label: '令牌管理', href: '/token' },
       { id: 'provider', label: '供应商', href: '/provider' },
-      { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
       { id: 'price', label: '模型信息', href: '/model' },
     ],
   },
@@ -76,6 +75,7 @@ const navigation: NavItem[] = [
       { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
       { id: 'heartbeat', label: '心跳回复', href: '/policy/heartbeat' },
       { id: 'concurrency', label: '并发控制', href: '/policy/concurrency' },
+      { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
       { id: 'failover', label: '自动禁用', href: '/policy/failover' },
     ],
   },

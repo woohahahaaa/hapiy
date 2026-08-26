@@ -150,6 +150,9 @@ type RelayRequest struct {
 	// TokenName is the display name of the authenticated token, populated by
 	// the handler for log capture rows.
 	TokenName string `json:"-"`
+	// IP is the client IP, populated by the handler so engine-side log rows
+	// (e.g. the disabled-attempt record) can carry it.
+	IP string `json:"-"`
 	// Model is the literal user-supplied model name (e.g. "gpt-4").
 	Model       string                   `json:"model"`
 	Messages    []map[string]interface{} `json:"messages,omitempty"`

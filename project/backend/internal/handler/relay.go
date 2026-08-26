@@ -80,6 +80,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
 		relayReq.UserID = getString(userID)
 		relayReq.TokenName = getString(tokenName)
+		relayReq.IP = c.ClientIP()
 		if tokenID, ok := tokenIDRaw.(string); ok {
 			relayReq.TokenID = tokenID
 		}

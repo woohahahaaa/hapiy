@@ -114,14 +114,20 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if dimension == "" {
 		return resp, err
 	}
+	disableApplied := false
 	if autoDisable {
 		if applyErr := e.applyFailoverAction(plan, req, dimension); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
+		} else {
+			disableApplied = true
 		}
 	}
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
 		if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, retryCount); rotated != nil {
+			if disableApplied {
+				e.recordDisabledAttempt(req, plan, err)
+			}
 			return rotated, nil
 		}
 	case model.FailoverDimensionProvider:
@@ -134,7 +140,11 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 				_, _ = io.Copy(io.Discard, resp.Body)
 				_ = resp.Body.Close()
 			}
-			return e.performUpstreamCall(ctx, fallbackPlan, req)
+			fbResp, fbErr := e.performUpstreamCall(ctx, fallbackPlan, req)
+			if disableApplied {
+				e.recordDisabledAttempt(req, plan, err)
+			}
+			return fbResp, fbErr
 		}
 	}
 	return resp, err
@@ -200,6 +210,26 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 	e.saveDisabledRecord(plan.Provider.ID, dimension, value, req, "")
 	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value))
 	return nil
+}
+
+// recordDisabledAttempt queues a "failed" usage-log row for the upstream
+// attempt whose failure triggered an auto-disable. Without it a request
+// that recovers via key/BaseURL rotation or a fallback provider only
+// produces the final success row, and the upstream error behind the
+// disable event is lost from the 使用记录. The handler still writes the
+// final row (success, or the fallback's failure); this row carries the
+// original error. Callers must skip it when the original error is the
+// final error the handler logs (the relayWithFailover tail return).
+func (e *Engine) recordDisabledAttempt(req *RelayRequest, plan *ExecutionPlan, failErr error) {
+	service.LogRelayFailure(service.LogRelayFailureInput{
+		UserID:       req.UserID,
+		TokenName:    req.TokenName,
+		ProviderName: plan.Provider.Name,
+		ModelName:    req.Model,
+		RequestID:    req.RequestID,
+		IP:           req.IP,
+		Error:        failErr,
+	})
 }
 
 // rotateKeyOrBaseURL retries the request against another key or base URL of the

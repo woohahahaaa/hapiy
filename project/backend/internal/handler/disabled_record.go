@@ -175,6 +175,6 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
 		}
 		engine.LoadProviders()
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "resolved": true}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id}, "resolved": true})
 	}
 }

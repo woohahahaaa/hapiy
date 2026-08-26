@@ -346,24 +346,35 @@ func (f *ttfbRecorder) ttfb() time.Duration {
 // probeErrorExcerpt extracts a short human-readable error from an upstream
 // error body. It prefers OpenAI-style {"error":{"message":"..."}} and
 // Anthropic-style {"error":{"message":"..."}}; falls back to a raw snippet.
+// The result uses newlines to separate fields so the dashboard can render
+// multi-line error details.
 func probeErrorExcerpt(body []byte) string {
 	const max = 300
 	var parsed struct {
 		Error struct {
 			Message string `json:"message"`
 			Type    string `json:"type"`
+			Code    string `json:"code"`
 		} `json:"error"`
 	}
 	if json.Unmarshal(body, &parsed) == nil {
-		msg := strings.TrimSpace(parsed.Error.Message)
-		if parsed.Error.Type != "" {
-			msg = parsed.Error.Type + ": " + msg
+		var parts []string
+		if parsed.Error.Code != "" {
+			parts = append(parts, "Code: "+parsed.Error.Code)
 		}
+		if parsed.Error.Type != "" {
+			parts = append(parts, "Type: "+parsed.Error.Type)
+		}
+		msg := strings.TrimSpace(parsed.Error.Message)
 		if msg != "" {
-			if len(msg) > max {
-				msg = msg[:max] + "…"
+			parts = append(parts, "Message: "+msg)
+		}
+		if len(parts) > 0 {
+			result := strings.Join(parts, "\n")
+			if len(result) > max {
+				result = result[:max] + "…"
 			}
-			return msg
+			return result
 		}
 	}
 	snippet := strings.TrimSpace(string(body))
