@@ -5,7 +5,6 @@ import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -25,14 +24,6 @@ import {
 type CaptureRow =
   | { kind: 'pair'; pair: LogCapturePairSummary }
   | { kind: 'system'; file: LogCaptureFile }
-
-type CaptureCategory = '请求' | '响应' | '系统'
-
-const TYPE_OPTIONS: readonly { value: CaptureCategory; label: string }[] = [
-  { value: '请求', label: '请求' },
-  { value: '响应', label: '响应' },
-  { value: '系统', label: '系统' },
-]
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -62,7 +53,6 @@ export function LogCapturePage() {
   const [error, setError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange>({})
-  const [selectedTypes, setSelectedTypes] = useState<readonly CaptureCategory[]>([])
   const [prefix, setPrefix] = useState('')
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
@@ -73,80 +63,43 @@ export function LogCapturePage() {
 
   const total = pairTotal + systemTotal
 
-  const shouldFetchPairs = useCallback(
-    () =>
-      selectedTypes.length === 0 ||
-      selectedTypes.includes('请求') ||
-      selectedTypes.includes('响应'),
-    [selectedTypes],
-  )
-  const shouldFetchSystem = useCallback(
-    () => selectedTypes.length === 0 || selectedTypes.includes('系统'),
-    [selectedTypes],
-  )
-  const pairTypeQuery = useMemo(
-    () =>
-      (['请求', '响应'] as const)
-        .filter((t) => selectedTypes.includes(t))
-        .map((t) => (t === '请求' ? 'request' : 'response'))
-        .join(',') || undefined,
-    [selectedTypes],
-  )
-
   // Initial fetch clears the table and blocks it via initialLoading.
   const fetchPage = useCallback(async () => {
     setInitialLoading(true)
     setError(null)
 
-    const fetchPairs = shouldFetchPairs()
-    const fetchSystem = shouldFetchSystem()
-    const pairType = pairTypeQuery
+    const pairTask: Promise<void> = dashboardApi
+      .listLogCapturePairs({
+        prefix: prefix || undefined,
+        from: dateRange.from,
+        to: dateRange.to,
+        headerKey: headerKey || undefined,
+        headerValue: headerValue || undefined,
+        limit,
+        offset,
+      })
+      .then((result) => {
+        if (!mountedRef.current) return
+        setPairs(result.pairs)
+        setPairTotal(result.total)
+      })
 
-    const pairTask: Promise<void> = fetchPairs
-      ? dashboardApi
-          .listLogCapturePairs({
-            prefix: prefix || undefined,
-            type: pairType,
-            from: dateRange.from,
-            to: dateRange.to,
-            headerKey: headerKey || undefined,
-            headerValue: headerValue || undefined,
-            limit,
-            offset,
-          })
-          .then((result) => {
-            if (!mountedRef.current) return
-            setPairs(result.pairs)
-            setPairTotal(result.total)
-          })
-      : Promise.resolve().then(() => {
-          if (!mountedRef.current) return
-          setPairs([])
-          setPairTotal(0)
-        })
-
-    const systemTask: Promise<void> = fetchSystem
-      ? dashboardApi
-          .listLogCaptureFiles({
-            prefix: prefix || undefined,
-            type: 'system',
-            from: dateRange.from,
-            to: dateRange.to,
-            headerKey: headerKey || undefined,
-            headerValue: headerValue || undefined,
-            limit,
-            offset,
-          })
-          .then((result) => {
-            if (!mountedRef.current) return
-            setSystemFiles(result.files)
-            setSystemTotal(result.total)
-          })
-      : Promise.resolve().then(() => {
-          if (!mountedRef.current) return
-          setSystemFiles([])
-          setSystemTotal(0)
-        })
+    const systemTask: Promise<void> = dashboardApi
+      .listLogCaptureFiles({
+        prefix: prefix || undefined,
+        type: 'system',
+        from: dateRange.from,
+        to: dateRange.to,
+        headerKey: headerKey || undefined,
+        headerValue: headerValue || undefined,
+        limit,
+        offset,
+      })
+      .then((result) => {
+        if (!mountedRef.current) return
+        setSystemFiles(result.files)
+        setSystemTotal(result.total)
+      })
 
     const settled = await Promise.allSettled([pairTask, systemTask])
     for (const r of settled) {
@@ -161,7 +114,7 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setInitialLoading(false)
     }
-  }, [prefix, selectedTypes, dateRange.from, dateRange.to, headerKey, headerValue, limit, offset, shouldFetchPairs, shouldFetchSystem, pairTypeQuery])
+  }, [prefix, dateRange.from, dateRange.to, headerKey, headerValue, limit, offset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -174,15 +127,8 @@ export function LogCapturePage() {
     void fetchPage()
   }, [fetchPage])
 
-  const toggleType = useCallback((value: CaptureCategory) => {
-    setSelectedTypes((prev) =>
-      prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value],
-    )
-  }, [])
-
   const handleResetFilters = useCallback(() => {
     setDateRange({})
-    setSelectedTypes([])
     setPrefix('')
     setHeaderKey('')
     setHeaderValue('')
@@ -191,18 +137,12 @@ export function LogCapturePage() {
   const handleClear = useCallback(
     async (scope: 'filtered' | 'all') => {
       setClearing(true)
-      const clearTypeQuery =
-        (['请求', '响应', '系统'] as const)
-          .filter((t) => selectedTypes.includes(t))
-          .map((t) => (t === '请求' ? 'request' : t === '响应' ? 'response' : 'system'))
-          .join(',') || undefined
       try {
         await dashboardApi.clearLogCapture({
           scope,
           ...(scope === 'filtered'
             ? {
                 prefix: prefix || undefined,
-                type: clearTypeQuery,
                 from: dateRange.from,
                 to: dateRange.to,
               }
@@ -220,7 +160,7 @@ export function LogCapturePage() {
       }
     },
 
-    [prefix, selectedTypes, dateRange.from, dateRange.to, fetchPage],
+    [prefix, dateRange.from, dateRange.to, fetchPage],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -352,17 +292,6 @@ export function LogCapturePage() {
                   setDateRange(range)
                 }}
               />
-              <div className="flex items-center gap-3">
-                {TYPE_OPTIONS.map((opt) => (
-                  <label key={opt.value} className="flex cursor-pointer items-center gap-1.5">
-                    <Checkbox
-                      checked={selectedTypes.includes(opt.value)}
-                      onCheckedChange={() => toggleType(opt.value)}
-                    />
-                    <span className="text-xs text-muted-foreground">{opt.label}</span>
-                  </label>
-                ))}
-              </div>
               <Input
                 placeholder="文件夹前缀..."
                 value={prefix}
