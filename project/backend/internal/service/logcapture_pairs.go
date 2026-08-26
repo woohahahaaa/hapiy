@@ -242,6 +242,15 @@ func applyPairFilters(q *gorm.DB, params LogListParams, filteredTypes []string) 
 		q = q.Where("request_id IN (SELECT DISTINCT request_id FROM log_captures WHERE json_extract(headers, ?) = ?)",
 			"$."+params.HeaderKey, params.HeaderValue)
 	}
+	if params.TokenName != "" {
+		q = q.Where("token_name = ?", params.TokenName)
+	}
+	if params.ProviderName != "" {
+		q = q.Where("provider_name = ?", params.ProviderName)
+	}
+	if params.ModelName != "" {
+		q = q.Where("model_name = ?", params.ModelName)
+	}
 	return q
 }
 

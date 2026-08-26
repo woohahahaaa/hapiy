@@ -48,6 +48,9 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 		if tokenName := c.Query("token"); tokenName != "" {
 			query = query.Where("token_name = ?", tokenName)
 		}
+		if rid := c.Query("request_id"); rid != "" {
+			query = query.Where("request_id = ?", rid)
+		}
 		if from := c.Query("from"); from != "" {
 			if t, err := time.Parse(time.RFC3339, from); err == nil {
 				query = query.Where("created_at >= ?", t)

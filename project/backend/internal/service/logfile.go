@@ -181,14 +181,17 @@ type HTTPCapture struct {
 
 // LogListParams filters the captured log entries during listing.
 type LogListParams struct {
-	Prefix      string
-	Types       []string
-	From        time.Time
-	To          time.Time
-	HeaderKey   string
-	HeaderValue string
-	Limit       int
-	Offset      int
+	Prefix       string
+	Types        []string
+	From         time.Time
+	To           time.Time
+	HeaderKey    string
+	HeaderValue  string
+	TokenName    string
+	ProviderName string
+	ModelName    string
+	Limit        int
+	Offset       int
 }
 
 // LogFileEntry is one captured log entry surfaced to the dashboard.
@@ -227,6 +230,15 @@ func (w *LogCaptureWriter) ListFiles(params LogListParams) ([]LogFileEntry, int,
 		// SQLite JSON path: headers->>'$.key' = value
 		query = query.Where("json_extract(headers, ?) = ?",
 			"$."+params.HeaderKey, params.HeaderValue)
+	}
+	if params.TokenName != "" {
+		query = query.Where("token_name = ?", params.TokenName)
+	}
+	if params.ProviderName != "" {
+		query = query.Where("provider_name = ?", params.ProviderName)
+	}
+	if params.ModelName != "" {
+		query = query.Where("model_name = ?", params.ModelName)
 	}
 
 	var total int64

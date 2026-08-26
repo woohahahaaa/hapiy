@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
+import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
-import { dashboardApi, type DateRange, type UsageLog } from '@/lib/dashboard-api'
+import { dashboardApi, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
 function fmtSeconds(val: number): string {
@@ -52,9 +52,9 @@ export function LogsPage() {
   const [error, setError] = useState<string | null>(null)
   const [modelFilter, setModelFilter] = useState('all')
   const [providerFilter, setProviderFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState<LogTypeFilter>('')
+  const [typeFilter, setTypeFilter] = useState<LogTypeFilter | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [searchText, setSearchText] = useState('')
+  const [tokenFilter, setTokenFilter] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange>({})
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
@@ -63,18 +63,19 @@ export function LogsPage() {
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
   const [modelOptions, setModelOptions] = useState<readonly string[]>([])
   const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
+  const [tokenOptions, setTokenOptions] = useState<readonly string[]>([])
 
   const filterArgs = useMemo(
     () => ({
       model: modelFilter !== 'all' ? modelFilter : undefined,
       provider: providerFilter !== 'all' ? providerFilter : undefined,
-      type: typeFilter || undefined,
+      type: typeFilter !== 'all' ? typeFilter : undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
-      token: searchText || undefined,
+      token: tokenFilter !== 'all' ? tokenFilter : undefined,
       from: dateRange.from,
       to: dateRange.to,
     }),
-    [modelFilter, providerFilter, typeFilter, statusFilter, searchText, dateRange.from, dateRange.to],
+    [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, dateRange.from, dateRange.to],
   )
 
   const fetchPage = useCallback(async () => {
@@ -103,7 +104,8 @@ export function LogsPage() {
   }, [])
 
   useEffect(() => {
-    void fetchPage()
+    const timer = setTimeout(() => void fetchPage(), 0)
+    return () => clearTimeout(timer)
   }, [fetchPage])
 
   const handleFilterChange = useCallback(
@@ -118,9 +120,9 @@ export function LogsPage() {
       const filters: Record<string, unknown> = {}
       if (modelFilter !== 'all') filters.model = modelFilter
       if (providerFilter !== 'all') filters.provider = providerFilter
-      if (typeFilter) filters.type = typeFilter
+      if (typeFilter !== 'all') filters.type = typeFilter
       if (statusFilter !== 'all') filters.status = statusFilter
-      if (searchText) filters.token = searchText
+      if (tokenFilter !== 'all') filters.token = tokenFilter
       if (dateRange.from) filters.from = dateRange.from
       if (dateRange.to) filters.to = dateRange.to
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
@@ -130,13 +132,13 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, providerFilter, typeFilter, statusFilter, searchText, dateRange.from, dateRange.to, fetchPage])
+  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, dateRange.from, dateRange.to, fetchPage])
 
   const handleResetFilters = useCallback(() => {
-    setSearchText('')
+    setTokenFilter('all')
     setModelFilter('all')
     setProviderFilter('all')
-    setTypeFilter('')
+    setTypeFilter('all')
     setStatusFilter('all')
     setDateRange({})
   }, [])
@@ -179,10 +181,30 @@ export function LogsPage() {
     }
   }, [])
 
+  // Load the full token name pool once so the token filter stays stable
+  // across pagination.
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const tokens = await dashboardApi.listTokens({ limit: 500, offset: 0 })
+        if (!alive) return
+        setTokenOptions(
+          [...new Set(tokens.tokens.map((t) => t.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+      } catch {
+        // Non-fatal: filters still work with whatever options we have.
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
   function formatDateTimeCell(row: UsageLog): { date: string; time: string } | null {
     const v = row.createdAt
     if (v === null || v === undefined || v === '') return null
-    const d = v instanceof Date ? v : new Date(v as string | number)
+    const d = new Date(v as string | number)
     if (Number.isNaN(d.getTime())) return { date: String(v), time: '' }
     const pad = (n: number) => String(n).padStart(2, '0')
     return {
@@ -325,14 +347,14 @@ export function LogsPage() {
               />
               <Select
                 value={typeFilter}
-                onValueChange={(value) => setTypeFilter(value as LogTypeFilter)}
+                onValueChange={(value) => setTypeFilter(value as LogTypeFilter | 'all')}
               >
                 <SelectTrigger className="w-32">
                   <SelectValue placeholder="类型" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="">全部类型</SelectItem>
+                    <SelectItem value="all">全部类型</SelectItem>
                     <SelectItem value="request">请求</SelectItem>
                     <SelectItem value="channel_disabled">自动禁用</SelectItem>
                     <SelectItem value="channel_recovered_auto">自动恢复</SelectItem>
@@ -341,14 +363,22 @@ export function LogsPage() {
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <Input
-                placeholder="搜索令牌..."
-                value={searchText}
-                onChange={(e) => {
-                  setSearchText(e.target.value)
-                }}
-                className="w-56"
-              />
+              <Select
+                value={tokenFilter}
+                onValueChange={(value) => setTokenFilter(value)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="令牌" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部令牌</SelectItem>
+                    {tokenOptions.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <Select
                 value={providerFilter}
                 onValueChange={(value) => handleFilterChange(setProviderFilter, value)}
@@ -437,127 +467,10 @@ export function LogsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={selectedLog !== null} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-        <DialogContent width="sm">
-          <DialogHeader>
-            <DialogTitle>记录详情 {selectedLog?.id ?? ''}</DialogTitle>
-          </DialogHeader>
-          {selectedLog && <LogDetailFields log={selectedLog} />}
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-function LogDetailFields({ log }: { log: UsageLog }) {
-  const date = new Date(log.createdAt)
-  const timeText = Number.isNaN(date.getTime())
-    ? log.createdAt
-    : `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`
-  return (
-    <div className="space-y-4 text-xs">
-      <FieldGroup>
-        <DetailRow className="col-span-2" label="请求 id" value={log.requestId || '-'} />
-        <DetailRow className="col-span-2" label="时间" value={timeText} />
-        <DetailRow className="col-span-2" label="令牌" value={log.tokenName || '-'} />
-        <DetailRow className="col-span-2" label="供应商" value={log.providerName || '-'} />
-        <DetailRow className="col-span-2" label="模型" value={log.modelName || '-'} />
-        <DetailRow className="col-span-2" label="来源" value={log.source || '-'} />
-        <div className="col-span-2 flex items-baseline gap-2">
-          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 URL</span>
-          <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
-        </div>
-      </FieldGroup>
-      <FieldGroup>
-        <DetailRow
-          className="col-span-2"
-          label="Tokens"
-          value={
-            isEventLog(log) ? '-' : (
-              <span>
-                <span className="text-muted-foreground/40">输入</span> {log.promptTokens}（
-                <span className="text-muted-foreground/40">缓存写入</span> {log.promptCacheMissTokens} /{' '}
-                <span className="text-muted-foreground/40">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
-                <span className="text-muted-foreground/40">输出</span> {log.completionTokens}
-              </span>
-            )
-          }
-        />
-        <DetailRow className="col-span-2" label="流式" value={log.isStream ? 'SSE' : '-'} />
-        <DetailRow className="col-span-2" label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
-      </FieldGroup>
-      <FieldGroup>
-        {isEventLog(log) ? <DetailRow className="col-span-2" label="耗时" value="-" /> : (
-          <DetailRow
-            className="col-span-2"
-            label="耗时"
-            value={
-              <span className="space-y-1">
-                <span className="block">{`${(log.useTime / 1000).toFixed(1)}s`}</span>
-                <span className="block text-muted-foreground/60">
-                  排队 {fmtSeconds(log.queueWaitMs)} · 请求改写 {fmtSeconds(log.requestRewriteMs)} · 连接{' '}
-                  {fmtSeconds(log.connectMs)} · 首字 {fmtSeconds(log.firstByteMs)} · 响应改写{' '}
-                  {fmtSeconds(log.responseRewriteMs)} · 流式改写 {fmtSeconds(log.streamRewriteMs)}
-                </span>
-              </span>
-            }
-          />
-        )}
-      </FieldGroup>
-      <FieldGroup>
-        <DetailRow
-          className="col-span-2"
-          label="渠道亲和性"
-          value={
-            log.affinityReuse === ''
-              ? '-'
-              : (() => {
-                  const labels: Record<string, string> = {
-                    none: '创建渠道',
-                    partial: '部分复用',
-                    full: '复用渠道',
-                  }
-                  const state = labels[log.affinityReuse] ?? log.affinityReuse
-                  const partLabels: Record<string, string> = {
-                    provider: 'Provider',
-                    baseurl: 'Base URL',
-                    key: 'Key',
-                  }
-                  const parts = log.affinityReuseParts.map((p) => partLabels[p] ?? p).join('、')
-                  return parts ? `${state}（复用：${parts}）` : state
-                })()
-          }
-        />
-        <DetailRow
-          className="col-span-2"
-          label="状态"
-          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : (log.errorMessage || log.source || '-')}
-        />
-        {log.status === 'failed' && log.errorMessage && (
-          <div className="col-span-2 flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">详细信息</span>
-            <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
-          </div>
-        )}
-      </FieldGroup>
-    </div>
-  )
-}
-
-function FieldGroup({ children }: { children: ReactNode }) {
-  return (
-    <section>
-      <div className="mb-3 h-px bg-border" />
-      <div className="grid grid-cols-2 gap-x-6 gap-y-2">{children}</div>
-    </section>
-  )
-}
-
-function DetailRow({ label, value, className = '' }: { label: string; value: ReactNode; className?: string }) {
-  return (
-    <div className={`flex items-baseline gap-2 ${className}`}>
-      <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{label}</span>
-      <span className="break-words text-foreground">{value}</span>
+      <UsageLogDetailDialog
+        log={selectedLog}
+        onOpenChange={(open) => { if (!open) setSelectedLog(null) }}
+      />
     </div>
   )
 }

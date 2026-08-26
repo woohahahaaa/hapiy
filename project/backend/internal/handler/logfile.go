@@ -23,15 +23,18 @@ func ensureLogCaptureWriter(db *gorm.DB) *service.LogCaptureWriter {
 
 // ListLogFiles lists captured log entries, newest first.
 // Query params: prefix, type (comma-separated), from, to (RFC3339),
-// headerKey, headerValue, limit, offset.
+// headerKey, headerValue, token, provider, model, limit, offset.
 func ListLogFiles(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		params := service.LogListParams{
-			Prefix:      c.Query("prefix"),
-			HeaderKey:   c.Query("headerKey"),
-			HeaderValue: c.Query("headerValue"),
-			Limit:       parseInt(c.Query("limit"), 50),
-			Offset:      parseInt(c.Query("offset"), 0),
+			Prefix:       c.Query("prefix"),
+			HeaderKey:    c.Query("headerKey"),
+			HeaderValue:  c.Query("headerValue"),
+			TokenName:    c.Query("token"),
+			ProviderName: c.Query("provider"),
+			ModelName:    c.Query("model"),
+			Limit:        parseInt(c.Query("limit"), 50),
+			Offset:       parseInt(c.Query("offset"), 0),
 		}
 		if types := c.Query("type"); types != "" {
 			params.Types = splitComma(types)
@@ -63,16 +66,20 @@ func ListLogFiles(db *gorm.DB) gin.HandlerFunc {
 
 // ListLogCapturePairs lists pair summaries, newest-first by MIN(created_at).
 // Query params: prefix, type (comma-separated — "包含" semantics, system is
-// ignored by the service), from, to (RFC3339), headerKey, headerValue, limit, offset.
+// ignored by the service), from, to (RFC3339), headerKey, headerValue,
+// token, provider, model, limit, offset.
 // Returns {data: []LogCapturePairSummary, total: int}.
 func ListLogCapturePairs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		params := service.LogListParams{
-			Prefix:        c.Query("prefix"),
-			HeaderKey:     c.Query("headerKey"),
-			HeaderValue:   c.Query("headerValue"),
-			Limit:         parseInt(c.Query("limit"), 50),
-			Offset:        parseInt(c.Query("offset"), 0),
+			Prefix:       c.Query("prefix"),
+			HeaderKey:    c.Query("headerKey"),
+			HeaderValue:  c.Query("headerValue"),
+			TokenName:    c.Query("token"),
+			ProviderName: c.Query("provider"),
+			ModelName:    c.Query("model"),
+			Limit:        parseInt(c.Query("limit"), 50),
+			Offset:       parseInt(c.Query("offset"), 0),
 		}
 		if types := c.Query("type"); types != "" {
 			params.Types = splitComma(types)
@@ -99,6 +106,29 @@ func ListLogCapturePairs(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": pairs, "total": total})
+	}
+}
+
+// ListLogCapturePrefixes lists the distinct non-empty prefixes from the
+// log_captures table, sorted ascending. Returns {data: []string, total: int}.
+func ListLogCapturePrefixes(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+
+		var prefixes []string
+		if err := db.Model(&model.LogCapture{}).
+			Distinct("prefix").
+			Where("prefix != ''").
+			Order("prefix ASC").
+			Pluck("prefix", &prefixes).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": prefixes, "total": len(prefixes)})
 	}
 }
 

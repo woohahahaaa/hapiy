@@ -12,8 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { DataTable, type ColumnDef } from '@/components/data-table'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   dashboardApi,
   type DateRange,
@@ -53,9 +60,14 @@ export function LogCapturePage() {
   const [error, setError] = useState<string | null>(null)
 
   const [dateRange, setDateRange] = useState<DateRange>({})
-  const [prefix, setPrefix] = useState('')
-  const [headerKey, setHeaderKey] = useState('')
-  const [headerValue, setHeaderValue] = useState('')
+  const [prefixFilter, setPrefixFilter] = useState('all')
+  const [prefixOptions, setPrefixOptions] = useState<readonly string[]>([])
+  const [tokenFilter, setTokenFilter] = useState('all')
+  const [tokenOptions, setTokenOptions] = useState<readonly string[]>([])
+  const [providerFilter, setProviderFilter] = useState('all')
+  const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
+  const [modelFilter, setModelFilter] = useState('all')
+  const [modelOptions, setModelOptions] = useState<readonly string[]>([])
   const [preview, setPreview] = useState<CaptureRow | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -70,11 +82,12 @@ export function LogCapturePage() {
 
     const pairTask: Promise<void> = dashboardApi
       .listLogCapturePairs({
-        prefix: prefix || undefined,
+        prefix: prefixFilter !== 'all' ? prefixFilter : undefined,
         from: dateRange.from,
         to: dateRange.to,
-        headerKey: headerKey || undefined,
-        headerValue: headerValue || undefined,
+        token: tokenFilter !== 'all' ? tokenFilter : undefined,
+        provider: providerFilter !== 'all' ? providerFilter : undefined,
+        model: modelFilter !== 'all' ? modelFilter : undefined,
         limit,
         offset,
       })
@@ -86,12 +99,13 @@ export function LogCapturePage() {
 
     const systemTask: Promise<void> = dashboardApi
       .listLogCaptureFiles({
-        prefix: prefix || undefined,
+        prefix: prefixFilter !== 'all' ? prefixFilter : undefined,
         type: 'system',
         from: dateRange.from,
         to: dateRange.to,
-        headerKey: headerKey || undefined,
-        headerValue: headerValue || undefined,
+        token: tokenFilter !== 'all' ? tokenFilter : undefined,
+        provider: providerFilter !== 'all' ? providerFilter : undefined,
+        model: modelFilter !== 'all' ? modelFilter : undefined,
         limit,
         offset,
       })
@@ -114,12 +128,46 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setInitialLoading(false)
     }
-  }, [prefix, dateRange.from, dateRange.to, headerKey, headerValue, limit, offset])
+  }, [prefixFilter, tokenFilter, providerFilter, modelFilter, dateRange.from, dateRange.to, limit, offset])
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+    }
+  }, [])
+
+  // Load the filter option pools once (folders, tokens, providers, models) so
+  // the dropdowns stay stable across pagination. Non-fatal on error.
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const [prefixes, tokens, providers, prices] = await Promise.all([
+          dashboardApi.listLogCapturePrefixes(),
+          dashboardApi.listTokens({ limit: 500, offset: 0 }),
+          dashboardApi.listProviders({ limit: 500, offset: 0 }),
+          dashboardApi.listPrices({ limit: 2000, offset: 0 }),
+        ])
+        if (!alive) return
+        setPrefixOptions(
+          [...new Set(prefixes.filter((p) => p !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+        setTokenOptions(
+          [...new Set(tokens.tokens.map((t) => t.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+        setProviderOptions(
+          [...new Set(providers.providers.map((p) => p.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+        setModelOptions(
+          [...new Set(prices.prices.map((m) => m.model).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
+        )
+      } catch {
+        // Non-fatal: filters still work with whatever options we have.
+      }
+    })()
+    return () => {
+      alive = false
     }
   }, [])
 
@@ -129,9 +177,10 @@ export function LogCapturePage() {
 
   const handleResetFilters = useCallback(() => {
     setDateRange({})
-    setPrefix('')
-    setHeaderKey('')
-    setHeaderValue('')
+    setPrefixFilter('all')
+    setTokenFilter('all')
+    setProviderFilter('all')
+    setModelFilter('all')
   }, [])
 
   const handleClear = useCallback(
@@ -142,7 +191,7 @@ export function LogCapturePage() {
           scope,
           ...(scope === 'filtered'
             ? {
-                prefix: prefix || undefined,
+                prefix: prefixFilter !== 'all' ? prefixFilter : undefined,
                 from: dateRange.from,
                 to: dateRange.to,
               }
@@ -160,7 +209,7 @@ export function LogCapturePage() {
       }
     },
 
-    [prefix, dateRange.from, dateRange.to, fetchPage],
+    [prefixFilter, dateRange.from, dateRange.to, fetchPage],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -292,30 +341,58 @@ export function LogCapturePage() {
                   setDateRange(range)
                 }}
               />
-              <Input
-                placeholder="文件夹前缀..."
-                value={prefix}
-                onChange={(e) => {
-                  setPrefix(e.target.value)
-                }}
-                className="w-48"
-              />
-              <Input
-                placeholder="请求头名 (如 x-session-id)"
-                value={headerKey}
-                onChange={(e) => {
-                  setHeaderKey(e.target.value)
-                }}
-                className="w-48"
-              />
-              <Input
-                placeholder="请求头值"
-                value={headerValue}
-                onChange={(e) => {
-                  setHeaderValue(e.target.value)
-                }}
-                className="w-48"
-              />
+              <Select value={prefixFilter} onValueChange={setPrefixFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="文件夹" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部文件夹</SelectItem>
+                    {prefixOptions.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={tokenFilter} onValueChange={setTokenFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="令牌" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部令牌</SelectItem>
+                    {tokenOptions.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={providerFilter} onValueChange={setProviderFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="供应商" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部供应商</SelectItem>
+                    {providerOptions.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={modelFilter} onValueChange={setModelFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="模型" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部模型</SelectItem>
+                    {modelOptions.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 size="sm"

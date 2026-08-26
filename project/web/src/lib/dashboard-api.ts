@@ -164,6 +164,7 @@ export type LogListParams = {
   readonly type?: string
   readonly status?: string
   readonly token?: string
+  readonly requestId?: string
   readonly from?: string
   readonly to?: string
   readonly limit: number
@@ -241,6 +242,9 @@ export type LogCaptureListParams = {
   readonly to?: string // ISO 日期
   readonly headerKey?: string
   readonly headerValue?: string
+  readonly token?: string
+  readonly provider?: string
+  readonly model?: string
   readonly limit: number
   readonly offset: number
 }
@@ -1734,6 +1738,7 @@ export const dashboardApi = {
     if (params.type) qp.set('type', params.type)
     if (params.status) qp.set('status', params.status)
     if (params.token) qp.set('token', params.token)
+    if (params.requestId) qp.set('request_id', params.requestId)
     if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)
     if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
 
@@ -1770,6 +1775,9 @@ export const dashboardApi = {
     if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
     if (params.headerKey) qp.set('headerKey', params.headerKey)
     if (params.headerValue) qp.set('headerValue', params.headerValue)
+    if (params.token) qp.set('token', params.token)
+    if (params.provider) qp.set('provider', params.provider)
+    if (params.model) qp.set('model', params.model)
 
     const body = await requestFull(`/logs/capture?${qp.toString()}`)
     const data = body.data
@@ -1817,6 +1825,9 @@ export const dashboardApi = {
     if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
     if (params.headerKey) qp.set('headerKey', params.headerKey)
     if (params.headerValue) qp.set('headerValue', params.headerValue)
+    if (params.token) qp.set('token', params.token)
+    if (params.provider) qp.set('provider', params.provider)
+    if (params.model) qp.set('model', params.model)
     const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
@@ -1826,6 +1837,15 @@ export const dashboardApi = {
       pairs: data.map(parseLogCapturePairSummary),
       total: readNumber(body.total, 'total', 0),
     }
+  },
+
+  async listLogCapturePrefixes(): Promise<readonly string[]> {
+    const body = await requestFull('/logs/capture/prefixes')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的抓取文件夹列表格式无效', null)
+    }
+    return data.map((v) => readString(v, 'prefix.name'))
   },
 
   async readLogCapturePair(requestId: string): Promise<LogCapturePairFull> {

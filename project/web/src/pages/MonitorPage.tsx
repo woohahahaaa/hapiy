@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
+import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +20,7 @@ import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import {
   dashboardApi,
+  type UsageLog,
   type LogStats,
   type ActiveRequest,
   type ActiveRequestConfig,
@@ -459,6 +461,7 @@ function ActiveRequestsSection() {
   const [config, setConfig] = useState<ActiveRequestConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [selectedUsageLog, setSelectedUsageLog] = useState<UsageLog | null>(null)
   const [draft, setDraft] = useState(5)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -550,6 +553,15 @@ function ActiveRequestsSection() {
         limit={requests.length}
         onOffsetChange={() => {}}
         onRetry={fetchActive}
+        onRowClick={(row) => {
+          if (!row.endTime) return
+          void dashboardApi
+            .listLogs({ requestId: row.requestId, limit: 1, offset: 0 })
+            .then((result) => {
+              if (result.logs[0]) setSelectedUsageLog(result.logs[0])
+            })
+            .catch(() => {})
+        }}
         showPagination={false}
         actions={
           <>
@@ -609,6 +621,13 @@ function ActiveRequestsSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UsageLogDetailDialog
+        log={selectedUsageLog}
+        onOpenChange={(open) => {
+          if (!open) setSelectedUsageLog(null)
+        }}
+      />
     </section>
   )
 }
