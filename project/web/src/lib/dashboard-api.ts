@@ -1447,7 +1447,6 @@ function parseFailoverRule(value: unknown): FailoverRule {
     keywords: readStringArray(value.keywords, 'rule.keywords'),
     actions: readObjectArray(value.actions, 'rule.actions', parseFailoverAction),
     dimension,
-    dimension,
     autoDisable: readBoolean(value.auto_disable, 'rule.auto_disable'),
     matchPatterns: readStringArray(value.match_patterns, 'rule.match_patterns'),
     ttfbSeconds: readNumber(value.ttfb_seconds, 'rule.ttfb_seconds', 0),

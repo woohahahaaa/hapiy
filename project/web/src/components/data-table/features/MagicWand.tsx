@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { JSX } from "react"
 
 import { AppIcon } from "@/components/AppIcon";
 import { Button } from "@/components/ui/button";

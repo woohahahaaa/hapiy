@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/publicFunction"
 	"gorm.io/gorm"
 )
 
@@ -74,9 +75,9 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 	}
 	defer resp.Body.Close()
 
-	rec := &firstByteRecorder{r: resp.Body}
+	rec := publicfunction.NewFirstByteProbeReader(resp.Body, start)
 	raw, err := io.ReadAll(rec)
-	ttfb := rec.firstByteLatency(start)
+	ttfb := rec.FirstByteLatency()
 	if err != nil {
 		return ProbeResult{TTFB: ttfb, ErrorMessage: fmt.Sprintf("读取响应失败：%v", err)}
 	}
@@ -103,28 +104,6 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 		return ProbeResult{TTFB: ttfb, ErrorMessage: msg}
 	}
 	return ProbeResult{Success: true, TTFB: ttfb}
-}
-
-// firstByteRecorder wraps an io.Reader and stamps the moment the first byte
-// passes through. We use it to measure TTFB without buffering the whole body.
-type firstByteRecorder struct {
-	r     io.Reader
-	stamp time.Time
-}
-
-func (f *firstByteRecorder) Read(p []byte) (int, error) {
-	n, err := f.r.Read(p)
-	if n > 0 && f.stamp.IsZero() {
-		f.stamp = time.Now()
-	}
-	return n, err
-}
-
-func (f *firstByteRecorder) firstByteLatency(start time.Time) time.Duration {
-	if f.stamp.IsZero() {
-		return time.Since(start)
-	}
-	return f.stamp.Sub(start)
 }
 
 // probeErrorExcerpt 解析 OpenAI / Anthropic 风格的 {"error":{...}}，

@@ -60,7 +60,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
             key={m.id}
             className={cn(
               'flex items-center gap-2 text-base text-card-foreground',
-              m.disabled && !allDisabled && 'opacity-60'
+              m.disabled && 'opacity-60'
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >

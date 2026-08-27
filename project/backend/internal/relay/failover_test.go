@@ -3,9 +3,11 @@ package relay
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -651,35 +653,69 @@ func TestRelayWithFailover_windowExpiryResetsCounter(t *testing.T) {
 	}
 }
 
-func TestExceededTTFB_returnsConnectMs_whenOverLimit(t *testing.T) {
+func TestTTFBForSlowUpstream_returnsMs_whenFirstByteOverLimit(t *testing.T) {
+	// Given: upstream delays the first body byte 1.2s, rule limit is 1s.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush() // headers arrive immediately
+		time.Sleep(1200 * time.Millisecond)
+		_, _ = w.Write([]byte(`x`))
+	}))
+	defer upstream.Close()
 	engine := NewEngine(nil)
 	plan := &ExecutionPlan{
 		Provider: &model.Provider{ID: "p", Name: "p"},
 		FailoverRules: []*model.FailoverRule{
-			{TTFBSeconds: 10, Status: true, Dimension: model.FailoverDimensionProvider},
+			{TTFBSeconds: 1, Status: true, Dimension: model.FailoverDimensionProvider},
 		},
 	}
-	resp := &RelayResponse{ConnectMs: 15000}
-	if got := engine.exceededTTFB(plan, resp); got != 15000 {
-		t.Fatalf("expected 15000, got %d", got)
+	resp, err := engine.performUpstreamCall(context.Background(), &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"k"},
+	}, &RelayRequest{})
+	if err != nil {
+		t.Fatalf("upstream call: %v", err)
 	}
+	if got := engine.ttfbForSlowUpstream(plan, resp); got < 1000 {
+		t.Fatalf("expected first byte ms > 1000, got %d", got)
+	}
+	// The probe reader must still deliver the first byte to the consumer.
+	buf := make([]byte, 1)
+	if _, err := io.ReadFull(resp.Body, buf); err != nil || string(buf) != "x" {
+		t.Fatalf("expected body to still be readable, got %q err=%v", buf, err)
+	}
+	_ = resp.Body.Close()
 }
 
-func TestExceededTTFB_returnsZero_whenWithinLimit(t *testing.T) {
+func TestTTFBForSlowUpstream_returnsZero_whenFirstByteWithinLimit(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer upstream.Close()
 	engine := NewEngine(nil)
 	plan := &ExecutionPlan{
 		Provider: &model.Provider{ID: "p", Name: "p"},
 		FailoverRules: []*model.FailoverRule{
-			{TTFBSeconds: 10, Status: true, Dimension: model.FailoverDimensionProvider},
+			{TTFBSeconds: 5, Status: true, Dimension: model.FailoverDimensionProvider},
 		},
 	}
-	resp := &RelayResponse{ConnectMs: 5000}
-	if got := engine.exceededTTFB(plan, resp); got != 0 {
-		t.Fatalf("expected 0, got %d", got)
+	resp, err := engine.performUpstreamCall(context.Background(), &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"k"},
+	}, &RelayRequest{})
+	if err != nil {
+		t.Fatalf("upstream call: %v", err)
 	}
+	if got := engine.ttfbForSlowUpstream(plan, resp); got != 0 {
+		t.Fatalf("expected 0 (first byte within limit), got %d", got)
+	}
+	_ = resp.Body.Close()
 }
 
-func TestExceededTTFB_ignoresDisabledOrZeroLimitRules(t *testing.T) {
+func TestTTFBForSlowUpstream_returnsZero_whenNoRuleHasLimit(t *testing.T) {
 	engine := NewEngine(nil)
 	plan := &ExecutionPlan{
 		Provider: &model.Provider{ID: "p", Name: "p"},
@@ -688,8 +724,8 @@ func TestExceededTTFB_ignoresDisabledOrZeroLimitRules(t *testing.T) {
 			{TTFBSeconds: 5, Status: false},
 		},
 	}
-	resp := &RelayResponse{ConnectMs: 9000}
-	if got := engine.exceededTTFB(plan, resp); got != 0 {
+	resp := &RelayResponse{Body: io.NopCloser(strings.NewReader("x"))}
+	if got := engine.ttfbForSlowUpstream(plan, resp); got != 0 {
 		t.Fatalf("expected 0 (no enabled rule with limit), got %d", got)
 	}
 }
@@ -722,8 +758,11 @@ func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.
 	// Given: upstream responds successfully but only after 1.2s; rule allows 1s.
 	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(1200 * time.Millisecond)
+		// header 立即到达，但 body 首字节拖到 1.2s 之后才发 —— 模拟真正的
+		// 「首字慢」场景（老写法 header+body 一起延迟，测不出首字语义）。
 		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(1200 * time.Millisecond)
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
 	}))
 	defer upstream.Close()
@@ -744,7 +783,7 @@ func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.
 		}},
 	}
 
-	// When: the request "succeeds" upstream but the header is slow.
+	// When: the request "succeeds" upstream but the first body byte is slow.
 	resp, err := engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
 	if err == nil {
 		t.Fatal("expected error for slow response after TTFB exceed")
@@ -752,8 +791,9 @@ func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.
 	if resp == nil {
 		t.Fatal("expected response to be returned alongside the error")
 	}
-	if resp.ConnectMs < 1000 {
-		t.Fatalf("expected connectMs > 1s, got %d", resp.ConnectMs)
+	// header 秒回（connect 快），慢的是 body 首字节 —— 验证的是首字语义。
+	if resp.ConnectMs >= 1000 {
+		t.Fatalf("expected fast connect (< 1s), got %d — this scenario must be a body-first-byte timeout", resp.ConnectMs)
 	}
 
 	// Then: provider got auto-disabled even though the upstream returned 2xx.

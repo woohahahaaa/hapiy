@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import type { JSX } from "react";
 import { ColorText } from "./ColorText";
 
 type NumberCellProps = Readonly<{

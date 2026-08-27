@@ -217,7 +217,7 @@ export function parseRule(script: string): RuleForm {
     // AND 包装保留为组卡片，避免拆开后丢失包装结构。
     let conditionLogic: 'AND' | 'OR' | undefined
     let blockConds = conds
-    if (conds.length === 1 && conds[0].logic === 'OR' && 'children' in conds[0]) {
+    if (conds.length === 1 && 'children' in conds[0] && conds[0].logic === 'OR') {
       conditionLogic = conds[0].logic
       blockConds = conds[0].children
     }

@@ -9,6 +9,9 @@ export const PREFIX_DEBOUNCE_MS = 400
 
 export interface NodeExecutorLogOutputItemProps extends SlotItemDragProps {
   entry: LogOutputSlotEntry
+  token?: string
+  picked?: boolean
+  onPickToken?: (token: string) => void
   onChange: (next: LogOutputSlotEntry) => void
   onDelete: () => void
   onAutoClose?: () => void
@@ -20,6 +23,9 @@ export function NodeExecutorLogOutputItem({
   onChange,
   onDelete,
   onAutoClose,
+  token,
+  picked,
+  onPickToken,
   ...drag
 }: NodeExecutorLogOutputItemProps) {
   const [localPrefix, setLocalPrefix] = useState(entry.prefix)
@@ -62,6 +68,9 @@ export function NodeExecutorLogOutputItem({
       enabled={entry.enabled}
       onToggleEnabled={(v) => onChange({ ...entry, enabled: v })}
       onDelete={onDelete}
+      token={token}
+      picked={picked}
+      onPickToken={onPickToken}
       {...drag}
     >
       <div className="space-y-3">

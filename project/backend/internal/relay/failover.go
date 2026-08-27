@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/publicFunction"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
@@ -122,20 +123,21 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	resp, err := e.performUpstreamCall(ctx, plan, req)
 	ttfbMs := 0
 	if err == nil {
-		// 请求本身成功了，但响应头到达耗时超过某条规则的 ttfb_seconds →
+		// 请求本身成功了，但「首字节」超过某条规则的 ttfb_seconds 才到 →
 		// 把它当成一次可轮询的「慢响应」失败，进入 failover 判定。
-		ttfbMs = e.exceededTTFB(plan, resp)
+		// 与自动恢复探针共用同一套首字节测量（publicfunction 包）。
+		ttfbMs = e.ttfbForSlowUpstream(plan, resp)
 		if ttfbMs == 0 {
 			return resp, nil
 		}
-		err = fmt.Errorf("upstream response header timeout after %dms", ttfbMs)
+		err = fmt.Errorf("upstream first byte timeout after %dms", ttfbMs)
 	}
 	outcome := classifyOutcome(resp, err)
 	if ttfbMs > 0 {
 		outcome.ttfbExceeded = true
 		outcome.ttfbMs = ttfbMs
 		outcome.transport = true
-		outcome.message = fmt.Sprintf("upstream response header timeout after %dms", ttfbMs)
+		outcome.message = fmt.Sprintf("upstream first byte timeout after %dms", ttfbMs)
 	}
 	rule, matched := matchingFailoverRule(outcome, plan.FailoverRules)
 	if !matched {
@@ -208,24 +210,34 @@ func failoverActionValue(plan *ExecutionPlan, req *RelayRequest, dimension strin
 	return ""
 }
 
-// exceededTTFB reports the response-header latency in milliseconds when it
-// exceeds the ttfb_seconds limit of at least one enabled rule; 0 otherwise.
-// It uses ConnectMs (time from request issue until the upstream response
-// headers arrive) — the same signal the dashboard shows as connect_ms.
-func (e *Engine) exceededTTFB(plan *ExecutionPlan, resp *RelayResponse) int {
-	if plan == nil || resp == nil {
+// ttfbForSlowUpstream wraps the response body in a first-byte probe and
+// waits up to the smallest enabled rule's ttfb_seconds. Returns the first
+// byte latency in milliseconds when it exceeded a rule limit; 0 when the
+// first byte arrived in time or no rule has a TTFB limit. The probe reader
+// replaces resp.Body so the buffered first byte is still delivered to the
+// consumer (handler forwarding / failover drain).
+func (e *Engine) ttfbForSlowUpstream(plan *ExecutionPlan, resp *RelayResponse) int {
+	if plan == nil || resp == nil || resp.Body == nil {
 		return 0
 	}
-	connectMs := resp.ConnectMs
-	if connectMs <= 0 {
-		return 0
-	}
+	limitSeconds := 0
 	for _, rule := range plan.FailoverRules {
-		if rule != nil && rule.Status && rule.TTFBSeconds > 0 && connectMs > rule.TTFBSeconds*1000 {
-			return connectMs
+		if rule != nil && rule.Status && rule.TTFBSeconds > 0 {
+			if limitSeconds == 0 || rule.TTFBSeconds < limitSeconds {
+				limitSeconds = rule.TTFBSeconds
+			}
 		}
 	}
-	return 0
+	if limitSeconds == 0 {
+		return 0
+	}
+	started := time.Now()
+	probe := publicfunction.NewFirstByteProbeReader(resp.Body, started)
+	resp.Body = probe
+	if probe.WaitFirstByte(time.Duration(limitSeconds) * time.Second) {
+		return 0
+	}
+	return int(time.Since(started).Milliseconds())
 }
 
 // recordFailoverHit increments the consecutive-match counter for

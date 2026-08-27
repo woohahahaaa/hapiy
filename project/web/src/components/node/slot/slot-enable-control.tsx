@@ -12,10 +12,10 @@ import {
 
 export interface SlotEnableControlProps {
   enabled: boolean
-  deadlineAt: number | null
+  deadlineAt?: number | null
   variant?: 'switch' | 'countdown'
   onToggle: (enabled: boolean) => void
-  onSetDeadline: (deadlineAt: number | null) => void
+  onSetDeadline?: (deadlineAt: number | null) => void
   onStartCapture?: (deadlineAt: number) => void
   onAutoClose?: () => void
 }
@@ -48,9 +48,9 @@ export function SlotEnableControl({
   return (
     <CountdownControl
       enabled={enabled}
-      deadlineAt={deadlineAt}
+      deadlineAt={deadlineAt ?? null}
       onToggle={onToggle}
-      onSetDeadline={onSetDeadline}
+      onSetDeadline={(d) => onSetDeadline?.(d)}
       onStartCapture={onStartCapture}
       onAutoClose={onAutoClose}
     />

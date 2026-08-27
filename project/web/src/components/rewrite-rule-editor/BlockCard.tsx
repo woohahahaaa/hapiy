@@ -122,7 +122,7 @@ export function BlockCard({
                 value={block.conditionLogic ?? 'AND'}
                 onValueChange={(v) => onChange({ ...block, conditionLogic: v as 'AND' | 'OR' })}
               >
-                <SelectTrigger className="h-6 w-[84px]" size="sm">
+                <SelectTrigger className="h-6 w-[140px]" size="sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

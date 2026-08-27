@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/publicFunction"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -220,10 +221,9 @@ func TestPassProbe(t *testing.T) {
 	}
 }
 
-func TestFirstByteRecorder_stampsOnFirstByte(t *testing.T) {
+func TestFirstByteProbeReader_stampsOnFirstByte(t *testing.T) {
 	start := time.Now()
-	src := strings.NewReader("hello world")
-	rec := &firstByteRecorder{r: src}
+	rec := publicfunction.NewFirstByteProbeReader(io.NopCloser(strings.NewReader("hello world")), start)
 	out, err := io.ReadAll(rec)
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -231,19 +231,71 @@ func TestFirstByteRecorder_stampsOnFirstByte(t *testing.T) {
 	if string(out) != "hello world" {
 		t.Fatalf("payload mismatch: %q", string(out))
 	}
-	if rec.firstByteLatency(start) <= 0 {
-		t.Fatalf("expected positive TTFB, got %v", rec.firstByteLatency(start))
+	if rec.FirstByteLatency() <= 0 {
+		t.Fatalf("expected positive TTFB, got %v", rec.FirstByteLatency())
+	}
+	if !rec.FirstByteSeen() {
+		t.Fatalf("expected FirstByteSeen=true after reading")
 	}
 }
 
-func TestFirstByteRecorder_emptyReader(t *testing.T) {
+func TestFirstByteProbeReader_emptyReader(t *testing.T) {
 	start := time.Now()
-	rec := &firstByteRecorder{r: strings.NewReader("")}
+	rec := publicfunction.NewFirstByteProbeReader(io.NopCloser(strings.NewReader("")), start)
 	_, _ = io.ReadAll(rec)
-	ttfb := rec.firstByteLatency(start)
+	ttfb := rec.FirstByteLatency()
 	if ttfb <= 0 {
 		t.Fatalf("expected fallback ttfb from time.Since(start), got %v", ttfb)
 	}
+	if rec.FirstByteSeen() {
+		t.Fatalf("empty reader must not report first byte seen")
+	}
+}
+
+func TestFirstByteProbeReader_waitFirstByte_withinTimeout(t *testing.T) {
+	start := time.Now()
+	rec := publicfunction.NewFirstByteProbeReader(io.NopCloser(strings.NewReader("x")), start)
+	if !rec.WaitFirstByte(time.Second) {
+		t.Fatal("expected first byte within 1s")
+	}
+	if !rec.FirstByteSeen() {
+		t.Fatal("expected first byte seen after WaitFirstByte")
+	}
+	// 字节不能丢：WaitFirstByte 观察过的内容后续 Read 还要能拿到。
+	buf := make([]byte, 1)
+	if _, err := io.ReadFull(rec, buf); err != nil || string(buf) != "x" {
+		t.Fatalf("expected buffered first byte 'x', got %q err=%v", buf, err)
+	}
+}
+
+func TestFirstByteProbeReader_waitFirstByte_timeout(t *testing.T) {
+	start := time.Now()
+	// 永不发送数据的 reader：WaitFirstByte 应超时返回 false。
+	blocking := &blockingReadCloser{done: make(chan struct{})}
+	rec := publicfunction.NewFirstByteProbeReader(blocking, start)
+	if rec.WaitFirstByte(200 * time.Millisecond) {
+		t.Fatal("expected timeout (no data available)")
+	}
+	if rec.FirstByteSeen() {
+		t.Fatal("no byte should be seen on timeout")
+	}
+	blocking.Close()
+}
+
+// blockingReadCloser 是一个除 Close 外永远不返回的 reader，用于模拟上游
+// 挂死（不发数据也不断连）的场景。
+type blockingReadCloser struct {
+	done chan struct{}
+}
+
+func (b *blockingReadCloser) Read(p []byte) (int, error) {
+	<-b.done
+	return 0, io.EOF
+}
+
+func (b *blockingReadCloser) Close() error {
+	close(b.done)
+	return nil
 }
 
 func TestRunRecoveryCycle_clearsDisabledKeyWhenProbePasses(t *testing.T) {

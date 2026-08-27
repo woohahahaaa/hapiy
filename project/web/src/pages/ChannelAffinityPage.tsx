@@ -9,20 +9,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   dashboardApi,
   DashboardApiError,
   type ChannelAffinitySetting,
   type ChannelAffinityPayload,
   type ChannelAffinityRule,
   type ChannelAffinityFallback,
-  type ChannelAffinityKeySource,
 } from '@/lib/dashboard-api'
 
 function emptyRule(): ChannelAffinityRule {
@@ -34,8 +26,6 @@ function emptyRule(): ChannelAffinityRule {
     ttlSeconds: 1800,
   }
 }
-
-type FieldListKey = 'sessionIdFields' | 'modelFields'
 
 const parseList = (text: string): string[] => {
   const seen = new Set<string>()

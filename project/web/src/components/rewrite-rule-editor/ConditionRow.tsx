@@ -3,12 +3,12 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Checkbox } from '@/components/ui/checkbox'
 import { AppIcon } from '@/components/AppIcon'
 import { COND_OPS, SCOPE_OPTIONS } from './modes'
-import type { Condition } from './serializer'
+import type { LeafCondition } from './serializer'
 
 interface ConditionRowProps {
   index: number
-  condition: Condition
-  onChange: (next: Condition) => void
+  condition: LeafCondition
+  onChange: (next: LeafCondition) => void
   onRemove: () => void
   canRemove: boolean
 }
@@ -26,7 +26,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
             value={condition.scope}
             onValueChange={(v) => onChange({ ...condition, scope: v as typeof condition.scope })}
           >
-            <SelectTrigger className="h-7 w-[112px] shrink-0" size="sm">
+            <SelectTrigger className="h-7 w-[130px] shrink-0" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -49,7 +49,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
             value={condition.op}
             onValueChange={(v) => onChange({ ...condition, op: v })}
           >
-            <SelectTrigger className="h-7 w-[112px] shrink-0" size="sm">
+            <SelectTrigger className="h-7 w-[130px] shrink-0" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

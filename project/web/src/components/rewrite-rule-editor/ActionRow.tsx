@@ -30,7 +30,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
             value={action.scope}
             onValueChange={(v) => onChange({ ...action, scope: v as typeof action.scope })}
           >
-            <SelectTrigger className="h-7 w-[112px] shrink-0" size="sm">
+            <SelectTrigger className="h-7 w-[130px] shrink-0" size="sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

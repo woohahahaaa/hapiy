@@ -85,7 +85,7 @@ function logChecks(indent: string, checks: Check[]) {
   }
 }
 
-function logExecutorRow(name: string, kind: string, checks: Check[]) {
+function logExecutorRow(kind: string, checks: Check[]) {
   logChecks('  ', checks)
   console.log(`  == 最终判定: ${checks.every((c) => c.ok) ? '启用' : '禁用'} (${kind})`)
 }
@@ -110,10 +110,10 @@ export function ExecutorDebug({ topology, providers, canvas, externallyDisabledS
       if (child) {
         const self = selfCheck(child)
         const rule = ruleCheck('provider', child, providers)
-        logExecutorRow(child.name ?? child.id, 'provider', [entry, slotC, self, rule])
+        logExecutorRow('provider', [entry, slotC, self, rule])
       } else if (entryRow) {
         const self = { label: '自身', detail: `${entryRow.id} enabled=${entryRow.enabled === true}`, ok: entryRow.enabled === true }
-        logExecutorRow(`${slot.slotType} #${entryRow.index ?? 1}`, String(slot.slotType), [entry, slotC, self])
+        logExecutorRow(String(slot.slotType), [entry, slotC, self])
       } else {
         console.log('  目标条目不存在（可能已删除）')
       }
@@ -126,13 +126,7 @@ export function ExecutorDebug({ topology, providers, canvas, externallyDisabledS
 
     if (node.kind === 'requestEntry') {
       console.group(`[ExecutorDebug] entry ${node.id}`)
-      logExecutorRow('请求入口', 'requestEntry', [entryCheck(node)])
-      console.groupEnd()
-      return
-    }
-    if (node.kind === 'modelHub') {
-      console.group(`[ExecutorDebug] model ${node.id}`)
-      console.log('  模型中心：无生效判定（仅请求入口/插槽参与判定）')
+      logExecutorRow('requestEntry', [entryCheck(node)])
       console.groupEnd()
       return
     }

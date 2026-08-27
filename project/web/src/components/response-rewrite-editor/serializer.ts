@@ -23,6 +23,7 @@ import {
 } from '../rewrite-rule-editor/serializer'
 
 export type { Condition, ConditionGroup, LeafCondition }
+export { emptyCondition, emptyConditionGroup, isConditionValid }
 
 export type Action = {
   mode: ModeName | ''

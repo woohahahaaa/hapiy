@@ -149,8 +149,8 @@ function computeResolvedWidths(
 // over `key`; when neither is set, falls back to the row field named `key`.
 function resolveValue<T>(col: ColumnDef<T>, row: T): unknown {
   if (typeof col.accessor === 'function') return col.accessor(row)
-  if (typeof col.accessor === 'string') return row[col.accessor]
-  return row[col.key]
+  if (typeof col.accessor === 'string') return (row as Record<string, unknown>)[col.accessor]
+  return (row as Record<string, unknown>)[col.key]
 }
 
 // Render a column's cell content (no outer clamp wrapper). Shared by the real

@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
@@ -392,11 +392,6 @@ export function RecoverySettings() {
     } finally {
       setReplayingId(null)
     }
-  }
-
-  const handleSkipPastDeadlineQueue = () => {
-    setPastDeadlineDismissed(true)
-    setQueueIndex(0)
   }
 
   const records = recordsState.kind === 'ready' ? recordsState.records : []

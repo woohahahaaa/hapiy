@@ -16,11 +16,11 @@ export type ColumnWidthConfig =
 export type ColumnAlign = 'left' | 'right'
 export type ColumnOverflow = 'ellipsis' | 'wrap'
 
-export interface ColumnSlot {
+export interface ColumnSlot<T = unknown> {
   /** First line content. Required for the cell to render. */
-  readonly line1?: string | null
+  readonly line1?: string | null | ((row: T) => string | null)
   /** Second line content. Optional. */
-  readonly line2?: string | null
+  readonly line2?: string | null | ((row: T) => string | null)
 }
 
 export interface ColumnDef<T> {
@@ -31,7 +31,7 @@ export interface ColumnDef<T> {
   readonly accessor?: string | ((row: T) => unknown)
 
   /** Multi-line layout. When set, `accessor`/`render` are ignored for slot content. */
-  readonly slot?: ColumnSlot
+  readonly slot?: ColumnSlot<T>
 
   /** Legacy flag: renders the raw value through DateCell (single line). New code should use `slot`. */
   readonly isTime?: boolean

@@ -13,10 +13,11 @@ const rule: FailoverRule = {
   keywords: [],
   actions: [],
   dimension: 'provider',
-  retryCount: 3,
   autoDisable: false,
   matchPatterns: [],
   ttfbSeconds: 5,
+  disableThreshold: 1,
+  disableWindowMinutes: 5,
 }
 
 const boundEntry = {

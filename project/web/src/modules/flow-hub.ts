@@ -1,6 +1,7 @@
 import type { FlatCanvas } from '@/lib/flat-topology'
 
 export type FlowProviderState = {
+  readonly name?: string
   readonly status: boolean
   readonly autoDisabled: boolean
   readonly workflowEnabled: boolean

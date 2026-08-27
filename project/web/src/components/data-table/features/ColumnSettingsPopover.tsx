@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import type { JSX } from "react"
 import type { ReactNode } from "react"
 
 import { AppIcon } from "@/components/AppIcon"
@@ -29,7 +30,7 @@ type ColumnSettingsPopoverProps<T> = {
   /** Controlled open state (optional; internal state used when omitted). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  anchorRef?: React.RefObject<HTMLElement>
+  anchorRef?: React.Ref<HTMLButtonElement>
 }
 
 // Icon note: the AppIcon registry exposes a `lock` semantic alias (mapped to

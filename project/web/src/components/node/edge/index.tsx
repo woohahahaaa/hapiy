@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react'
-import { memo, type CSSProperties } from 'react'
+import { memo, type ComponentProps, type CSSProperties } from 'react'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { FLOW_STEP_MS } from '@/modules/flow-hub'
 import { edgeFlowKeyframeName } from '@/components/node/flash-layer'
@@ -19,10 +19,6 @@ const FLOW_OVERSHOOT = FLOW_STROKE_WIDTH * 2
 const FLOW_START_OFFSET = FLOW_TAIL_LEN
 const FLOW_END_OFFSET = -100
 const FLOW_TAIL_OPACITY = 0.35
-
-function safeId(edgeId: string): string {
-  return edgeId.replace(/[^a-zA-Z0-9_-]/g, '_')
-}
 
 function extendAgainstHandle(x: number, y: number, position: Position): { x: number; y: number } {
   switch (position) {
@@ -50,7 +46,7 @@ function buildSweepKeyframes(name: string): string {
   )
 }
 
-type StaticBaseEdgeProps = Pick<EdgeProps, 'id' | 'path' | 'markerEnd' | 'style' | 'interactionWidth'>
+type StaticBaseEdgeProps = ComponentProps<typeof BaseEdge>
 
 const StaticBaseEdge = memo(
   function StaticBaseEdge(props: StaticBaseEdgeProps) {
