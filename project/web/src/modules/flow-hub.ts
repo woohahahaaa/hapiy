@@ -29,6 +29,10 @@ export type FlowLayerOverlay = {
   readonly runId: number
   readonly color: string
   readonly loop: number
+  // True when the request that owns this run was dispatched with channel
+  // affinity (affinityReuse non-empty). The edge renders the channel-affinity
+  // beam (wider + white head) for these layers instead of the default one.
+  readonly channelAffinity?: boolean
 }
 
 export type FlowRunInput = {

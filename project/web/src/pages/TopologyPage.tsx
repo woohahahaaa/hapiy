@@ -610,6 +610,8 @@ export function TopologyPage() {
   const runStepsRef = useRef(
     new Map<number, { color: string; step: FlowStep; requestId: string; loop: number; stepIndex: number; stepTotal: number }>(),
   )
+  // requestId -> 渠道亲和性是否生效（后端 affinity_reuse 非空）
+  const channelAffinityByRequestRef = useRef(new Map<string, boolean>())
 
   const rebuildLayers = useCallback(() => {
     setLitNodeLayers(new Map(litNodeRef.current))
@@ -634,11 +636,11 @@ export function TopologyPage() {
       }
       if (step.kind === 'node') {
         const existing = litNodeRef.current.get(step.nodeId) ?? []
-        existing.push({ runId, color, loop: meta.loop })
+        existing.push({ runId, color, loop: meta.loop, channelAffinity: channelAffinityByRequestRef.current.get(meta.requestId) ?? false })
         litNodeRef.current.set(step.nodeId, existing)
       } else {
         const existing = litEdgeRef.current.get(step.edgeId) ?? []
-        existing.push({ runId, color, loop: meta.loop })
+        existing.push({ runId, color, loop: meta.loop, channelAffinity: channelAffinityByRequestRef.current.get(meta.requestId) ?? false })
         litEdgeRef.current.set(step.edgeId, existing)
       }
       rebuildLayers()
@@ -1060,6 +1062,7 @@ export function TopologyPage() {
       if (request.endTime !== null) continue
       if (!requestStartedAfterBoundary(request.startTime, flowEditBoundaryMsRef.current)) continue
       activeRequestIds.add(request.requestId)
+      channelAffinityByRequestRef.current.set(request.requestId, request.affinityReuse !== '')
       if ((flowHubRef.current?.activeRunCount(request.requestId) ?? 0) > 0) continue
       const path = resolveLayerPath(request)
       if (!path) continue
@@ -1134,6 +1137,7 @@ export function TopologyPage() {
     runStepsRef.current.clear()
     runInfoRef.current.clear()
     requestMetaRef.current.clear()
+    channelAffinityByRequestRef.current.clear()
     litNodeRef.current.clear()
     litEdgeRef.current.clear()
     rebuildLayers()

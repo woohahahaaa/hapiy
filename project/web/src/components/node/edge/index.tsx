@@ -1,37 +1,18 @@
 /* eslint-disable react-refresh/only-export-components */
-import { BaseEdge, getBezierPath, Position, type EdgeProps } from '@xyflow/react'
+import { BaseEdge, getBezierPath, type EdgeProps } from '@xyflow/react'
 import { memo, type ComponentProps, type CSSProperties } from 'react'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { FLOW_STEP_MS } from '@/modules/flow-hub'
 import { edgeFlowKeyframeName } from '@/components/node/flash-layer'
+import { DefaultBeam, ChannelAffinityBeam, FLOW_TAIL_LEN } from './beams'
 
 // The edge renders the beam as a moving dash: an opaque head (FLOW_HEAD_LEN)
 // followed by a faint tail (FLOW_TAIL_LEN at FLOW_TAIL_OPACITY). Each active
 // run owns one keyframe keyed by runId+edgeId (stable, never renamed), and
 // the beam slides from source to target once per FLOW_STEP_MS cycle. Overlap
 // runs stack naturally — each layer is a separate <g>.
-const FLOW_HEAD_LEN = 22
-const FLOW_TAIL_LEN = 55
-const FLOW_PATTERN_LENGTH = 200
-const FLOW_PATTERN_GAP = FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN
-const FLOW_STROKE_WIDTH = 5
-const FLOW_OVERSHOOT = FLOW_STROKE_WIDTH * 2
 const FLOW_START_OFFSET = FLOW_TAIL_LEN
 const FLOW_END_OFFSET = -100
-const FLOW_TAIL_OPACITY = 0.35
-
-function extendAgainstHandle(x: number, y: number, position: Position): { x: number; y: number } {
-  switch (position) {
-    case Position.Left:
-      return { x: x + FLOW_OVERSHOOT, y }
-    case Position.Right:
-      return { x: x - FLOW_OVERSHOOT, y }
-    case Position.Top:
-      return { x, y: y + FLOW_OVERSHOOT }
-    case Position.Bottom:
-      return { x, y: y - FLOW_OVERSHOOT }
-  }
-}
 
 // One full sweep from source to target. The keyframe name is stable per run,
 // so re-activating the same edge from the same run never restarts the
@@ -84,17 +65,6 @@ export function NodeEdge(props: EdgeProps) {
     targetPosition,
   })
 
-  const lightSource = extendAgainstHandle(sourceX, sourceY, sourcePosition)
-  const lightTarget = extendAgainstHandle(targetX, targetY, targetPosition)
-  const [lightPath] = getBezierPath({
-    sourceX: lightSource.x,
-    sourceY: lightSource.y,
-    sourcePosition,
-    targetX: lightTarget.x,
-    targetY: lightTarget.y,
-    targetPosition,
-  })
-
   const layers = (data?.layers as FlowLayerOverlay[] | undefined) ?? []
 
   return (
@@ -112,34 +82,27 @@ export function NodeEdge(props: EdgeProps) {
         }
         const dashVars = (dash: string, on: number): CSSProperties =>
           ({ strokeDasharray: dash, strokeDashoffset: FLOW_START_OFFSET, '--beam-on': String(on) }) as CSSProperties
+        if (layer.channelAffinity) {
+          return (
+            <ChannelAffinityBeam
+              key={`${layer.runId}-${layer.loop}-aff`}
+              css={css}
+              animStyle={animStyle}
+              dashVars={dashVars}
+              lightPath={path}
+              color={layer.color}
+            />
+          )
+        }
         return (
-          <g key={`${layer.runId}-${layer.loop}`} style={{ filter: `drop-shadow(0 0 4px ${layer.color})` }}>
-            <style>{css}</style>
-            <path
-              d={lightPath}
-              fill="none"
-              stroke={layer.color}
-              strokeWidth={FLOW_STROKE_WIDTH}
-              strokeLinecap="butt"
-              pathLength={100}
-              style={{ ...animStyle, ...dashVars(`${FLOW_TAIL_LEN} ${FLOW_PATTERN_GAP}`, FLOW_TAIL_OPACITY) }}
-            />
-            <path
-              d={lightPath}
-              fill="none"
-              stroke={layer.color}
-              strokeWidth={FLOW_STROKE_WIDTH}
-              strokeLinecap="butt"
-              pathLength={100}
-              style={{
-                ...animStyle,
-                ...dashVars(
-                  `0 ${FLOW_TAIL_LEN - FLOW_HEAD_LEN} ${FLOW_HEAD_LEN} ${FLOW_PATTERN_LENGTH - FLOW_TAIL_LEN}`,
-                  1,
-                ),
-              }}
-            />
-          </g>
+          <DefaultBeam
+            key={`${layer.runId}-${layer.loop}`}
+            css={css}
+            animStyle={animStyle}
+            dashVars={dashVars}
+            lightPath={path}
+            color={layer.color}
+          />
         )
       })}
     </>
