@@ -104,7 +104,12 @@ type Log struct {
 	AffinityReuseParts string `json:"affinity_reuse_parts"`
 	IP            string `json:"ip"`
 	RequestID     string `json:"request_id"`
-	ErrorMessage  string `json:"error_message"`
+	ErrorMessage string `json:"error_message"`
+	// EventDetail is populated for event rows (auto-disable / auto-recover /
+	// manual action / system admin) and explains which rule fired or which
+	// action ran. Empty for request rows; historical rows stay empty
+	// (no backfill).
+	EventDetail    string `gorm:"type:text" json:"event_detail,omitempty"`
 	// Stage timings in milliseconds; nil means the stage does not apply.
 	// ConnectMs: time from issuing the upstream request until its response
 	// headers arrive. FirstByteMs: time from response headers until the first

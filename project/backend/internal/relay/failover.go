@@ -154,7 +154,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 	disableApplied := false
 	if hitReached {
-		if applyErr := e.applyFailoverAction(plan, req, dimension); applyErr != nil {
+		if applyErr := e.applyFailoverAction(plan, req, dimension, rule, outcome); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 		} else {
 			disableApplied = true
@@ -335,7 +335,7 @@ func matchingFailoverRule(outcome upstreamOutcome, rules []*model.FailoverRule) 
 	return nil, false
 }
 
-func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dimension string) error {
+func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dimension string, rule *model.FailoverRule, outcome upstreamOutcome) error {
 	if plan.Provider == nil || e.db == nil {
 		return nil
 	}
@@ -364,8 +364,57 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 	usedBaseURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
 	usedKey := pickIndex(plan.Keys, req.KeyIndex)
 	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, req, "")
-	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value))
+	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value), failoverEventDetail(rule, dimension, outcome))
 	return nil
+}
+
+func failoverEventDetail(rule *model.FailoverRule, dimension string, outcome upstreamOutcome) string {
+	if rule == nil {
+		return ""
+	}
+	lines := []string{"规则: " + rule.Name}
+	dimLabel := service.DimensionLabel(dimension)
+	if dimLabel != "" {
+		lines = append(lines, "禁用维度: "+dimLabel)
+	}
+	var cond string
+	switch {
+	case rule.TTFBSeconds > 0 && outcome.ttfbExceeded:
+		if outcome.ttfbMs > 0 {
+			cond = fmt.Sprintf("首字速度不满足（实测 %dms，阈值 %ds）", outcome.ttfbMs, rule.TTFBSeconds)
+		} else {
+			cond = fmt.Sprintf("首字速度不满足（阈值 %ds）", rule.TTFBSeconds)
+		}
+	case len(rule.MatchPatterns) > 0:
+		for _, p := range rule.MatchPatterns {
+			if p != "" && strings.Contains(outcome.message, p) {
+				cond = "命中响应字段: " + p
+				break
+			}
+		}
+	case len(rule.Keywords) > 0:
+		for _, k := range rule.Keywords {
+			if k != "" && strings.Contains(outcome.message, k) {
+				cond = "命中关键词: " + k
+				break
+			}
+		}
+	default:
+		switch rule.Condition {
+		case "timeout":
+			if outcome.transport {
+				cond = "传输层超时"
+			}
+		case "rate_limit":
+			cond = "状态码 429（限流）"
+		case "error":
+			cond = fmt.Sprintf("HTTP 错误（实际 %d）", outcome.statusCode)
+		}
+	}
+	if cond != "" {
+		lines = append(lines, "触发条件: "+cond)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // recordDisabledAttempt queues a "failed" usage-log row for the upstream

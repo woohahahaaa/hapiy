@@ -122,6 +122,12 @@ function LogDetailFields({ log }: { log: UsageLog }) {
             <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
           </div>
         )}
+        {log.eventDetail && (
+          <div className="col-span-2 flex items-baseline gap-2">
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">详细信息</span>
+            <span className="break-words whitespace-pre-wrap text-foreground">{log.eventDetail}</span>
+          </div>
+        )}
       </FieldGroup>
     </div>
   )

@@ -30,7 +30,6 @@ export function SlotItemCard({
   index,
   enabled,
   onToggleEnabled,
-  onDelete,
   children,
   className,
   onDragStart,
@@ -104,19 +103,6 @@ export function SlotItemCard({
               aria-label={enabled ? '禁用' : '启用'}
               className="nodrag nopan shrink-0"
             />
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              className={cn(
-                'nodrag nopan rounded p-0.5 transition-colors hover:bg-destructive/10 hover:text-destructive',
-                dimContentWhenDisabled && !enabled && 'opacity-50',
-              )}
-              aria-label="删除"
-            >
-              <AppIcon name="close" size={12} />
-            </button>
           )}
         </div>
       </div>

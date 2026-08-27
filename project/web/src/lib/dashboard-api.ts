@@ -153,6 +153,8 @@ export type UsageLog = {
   readonly queueWaitMs: number
   readonly status: 'success' | 'failed' | ''
   readonly errorMessage: string
+  // eventDetail is populated for event rows with the matched rule / action explanation; empty for request rows and pre-existing data.
+  readonly eventDetail: string
   readonly upstreamUrl: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full' | 'new'
   readonly affinityReuseParts: readonly string[]
@@ -983,6 +985,7 @@ function parseLog(value: unknown): UsageLog {
     queueWaitMs: parseStageMs(value.queue_wait_ms),
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
+    eventDetail: readString(value.event_detail ?? '', 'log.event_detail'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
     affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',
     affinityReuseParts: typeof value.affinity_reuse_parts === 'string' && value.affinity_reuse_parts !== ''

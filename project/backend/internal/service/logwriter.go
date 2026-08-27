@@ -228,10 +228,13 @@ func ChannelEventMessage(dimension, value string) string {
 	return label + "：" + value
 }
 
-// LogEvent queues a channel/management event row for batched insertion.
-// No-op when the log writer is not yet initialised, so callers can fire
-// it unconditionally without guarding for boot order.
-func LogEvent(source, providerName, message string) {
+// LogEvent queues a channel/management event row for batched
+// insertion. No-op when the log writer is not yet initialised, so
+// callers can fire it unconditionally without guarding for boot order.
+// detail is a free-text, multi-line explanation of why the event
+// fired (matched rule + condition, probe outcome, action kind, etc.);
+// pass "" when the message alone is enough.
+func LogEvent(source, providerName, message, detail string) {
 	if globalLogWriter == nil {
 		return
 	}
@@ -239,6 +242,7 @@ func LogEvent(source, providerName, message string) {
 		Source:       source,
 		ProviderName: providerName,
 		ErrorMessage: message,
+		EventDetail:  detail,
 		Status:       "",
 	})
 }

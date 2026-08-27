@@ -424,7 +424,7 @@ func clearDisable(db *gorm.DB, providerID, providerName, dimension, value string
 	// Only record a recovery event when a row was actually flipped, so a
 	// no-op clear never produces a phantom "自动恢复" log entry.
 	if result.RowsAffected > 0 {
-		LogEvent(LogSourceChannelRecoveredAuto, providerName, ChannelEventMessage(dimension, value))
+		LogEvent(LogSourceChannelRecoveredAuto, providerName, ChannelEventMessage(dimension, value), "恢复方式: 自动探针")
 	}
 	if dimension == model.FailoverDimensionProvider {
 		if err := db.Model(&model.Provider{}).

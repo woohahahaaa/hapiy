@@ -311,7 +311,7 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 			return
 		}
 		if stateResult.RowsAffected > 0 || delResult.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, ""))
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, ""), "操作: 重置供应商 "+service.DimensionLabel(req.Dimension)+" 维度禁用状态")
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension}})
@@ -341,7 +341,7 @@ func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.Handle
 			return
 		}
 		if stateResult.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, "", "重置全部 "+service.DimensionLabel(req.Dimension)+" 禁用状态")
+			service.LogEvent(service.LogSourceChannelRecoveredManual, "", "重置全部 "+service.DimensionLabel(req.Dimension)+" 禁用状态", "操作: 重置全部 "+service.DimensionLabel(req.Dimension)+" 维度禁用状态")
 		}
 		if req.Dimension == model.FailoverDimensionProvider {
 			if err := db.Model(&model.Provider{}).

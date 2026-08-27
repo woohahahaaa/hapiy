@@ -91,6 +91,6 @@ func AuditSystemAdmin(db *gorm.DB) gin.HandlerFunc {
 		if !ok {
 			label = c.Request.Method + " " + strings.TrimPrefix(fullPath, "/v1/dashboard")
 		}
-		service.LogEvent(service.LogSourceSystemAdmin, "", label)
+		service.LogEvent(service.LogSourceSystemAdmin, "", label, "")
 	}
 }

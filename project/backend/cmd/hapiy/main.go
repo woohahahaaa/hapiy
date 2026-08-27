@@ -100,7 +100,7 @@ func main() {
 				if err := db.First(&p, "id = ?", rows[i].ProviderID).Error; err == nil {
 					providerName = p.Name
 				}
-				service.LogEvent(service.LogSourceChannelRecoveredAuto, providerName, service.ChannelEventMessage(rows[i].Dimension, rows[i].Value))
+				service.LogEvent(service.LogSourceChannelRecoveredAuto, providerName, service.ChannelEventMessage(rows[i].Dimension, rows[i].Value), "恢复方式: 自动探针")
 			}
 		}
 		return resolved, len(rows)

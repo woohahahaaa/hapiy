@@ -135,7 +135,7 @@ func ReplayDisabledRecord(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// Re-read the row so the client sees the updated retry_count / resolved_at.
 		_ = db.First(&record, "id = ?", id).Error
 		if resolved {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value), "操作: 重放该禁用记录进行恢复")
 		}
 		c.JSON(http.StatusOK, gin.H{"data": record, "resolved": resolved})
 	}
@@ -212,7 +212,7 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 		return
 	}
 	if result.RowsAffected > 0 {
-		service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value))
+		service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, record.ProviderID), service.ChannelEventMessage(record.Dimension, record.Value), "操作: 直接清除该禁用记录")
 		_ = db.Where("provider_id = ? AND dimension = ? AND value = ?", record.ProviderID, record.Dimension, record.Value).
 			Delete(&model.FailoverHitCounter{}).Error
 	}

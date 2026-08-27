@@ -178,7 +178,7 @@ func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDi
 	plan := &ExecutionPlan{Provider: &provider, BaseURLs: []string{"https://upstream.example"}, Keys: []string{"key"}}
 
 	// When
-	err := engine.applyFailoverAction(plan, &RelayRequest{BaseURLIndex: 0, KeyIndex: 0}, model.FailoverDimensionProvider)
+	err := engine.applyFailoverAction(plan, &RelayRequest{BaseURLIndex: 0, KeyIndex: 0}, model.FailoverDimensionProvider, nil, upstreamOutcome{})
 
 	// Then
 	if err != nil {

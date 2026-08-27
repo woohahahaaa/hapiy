@@ -1425,7 +1425,11 @@ export function TopologyPage() {
   const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     selectionRef.current = { nodes: params.nodes, edges: params.edges }
     setSelectedDebugIds(params.nodes.map((n) => n.id))
-    if (params.nodes.length > 0) setSelectedExecutor(null)
+    // Clear the sub-slot executor pick on any RF selection change. A
+// node selection supersedes it; an empty pane click must also clear it
+// (otherwise the executor stays "selected" with no RF counterpart).
+// Edge-only selection keeps the pick so wire inspection doesn't lose it.
+if (params.nodes.length > 0 || params.edges.length === 0) setSelectedExecutor(null)
   }, [])
 
   const handleDeleteSelectedEdges = useCallback(() => {
