@@ -182,9 +182,6 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
                       )}
                     >
                       <span className="truncate">{displayId}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {formatContext(model)}
-                      </span>
                     </button>
                   </li>
                 )
@@ -195,11 +192,4 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
       )}
     </div>
   )
-}
-
-function formatContext(model: ModelsDevModel): string {
-  const parts: string[] = []
-  if (model.contextLength > 0) parts.push(`${(model.contextLength / 1000).toFixed(0)}k`)
-  if (model.inputPrice > 0) parts.push(`$${model.inputPrice}`)
-  return parts.join(' · ')
 }

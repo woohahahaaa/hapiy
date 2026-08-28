@@ -359,6 +359,7 @@ export type FetchedModel = {
 export type PriceConfig = {
   readonly id: string
   readonly model: string
+  readonly providerId?: string
   readonly inputPrice: number
   readonly outputPrice: number
   readonly cacheWritePrice: number
@@ -681,6 +682,7 @@ export function parsePrice(value: unknown): PriceConfig {
   return {
     id: readString(value.id, 'price.id'),
     model: readString(value.model, 'price.model'),
+    providerId: typeof value.provider_id === 'string' ? value.provider_id : undefined,
     inputPrice: readNumber(value.input_price, 'price.input_price', 0),
     outputPrice: readNumber(value.output_price, 'price.output_price', 0),
     cacheWritePrice: readNumber(value.cache_write_price, 'price.cache_write_price', 0),
@@ -708,6 +710,7 @@ function parsePriceRule(value: unknown): PriceRule {
 export function serializePrice(input: PriceConfigInput): JsonRecord {
   return {
     model: input.model,
+    provider_id: input.providerId ?? undefined,
     input_price: input.inputPrice,
     output_price: input.outputPrice,
     cache_write_price: input.cacheWritePrice,

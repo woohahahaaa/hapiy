@@ -295,8 +295,10 @@ function PriceForm({
   const toDisplay = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
   const toUsd = (display: number): number => (currency === 'CNY' ? display / rate : display)
   const [form, setForm] = useState<PriceConfigInput>(initial ? toDisplayInput(initial, toDisplay) : emptyPrice)
-  const [modelsDevEnabled, setModelsDevEnabled] = useState(false)
-  const [providerId, setProviderId] = useState<string | null>(null)
+  // The models.dev switch and provider selection restore from the persisted
+  // provider_id: a non-empty provider_id means the last save used models.dev.
+  const [modelsDevEnabled, setModelsDevEnabled] = useState(initial?.providerId !== undefined && initial.providerId !== '')
+  const [providerId, setProviderId] = useState<string | null>(initial?.providerId ?? null)
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [existingNames, setExistingNames] = useState<ExistingNamesState>({ kind: 'loading' })
@@ -409,7 +411,7 @@ function PriceForm({
       cacheReadPrice: toUsd(form.cacheReadPrice),
     }
     if (!modelsDevEnabled) {
-      onSave(payload)
+      onSave({ ...payload, providerId: undefined })
       return
     }
     if (snapshot === null) {
@@ -422,7 +424,8 @@ function PriceForm({
       setForm((current) => ({ ...current, model: '' }))
       return
     }
-    onSave({ ...payload, model: match.id })
+    // Keep the provider-id attribution so the switch/provider survive reopening.
+    onSave({ ...payload, model: match.id, providerId: providerId ?? undefined })
   }
 
   const nameConflicts = existingNames.kind === 'ready'
@@ -734,6 +737,7 @@ function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
 function toInput(price: PriceConfig): PriceConfigInput {
   return {
     model: price.model,
+    providerId: price.providerId,
     inputPrice: price.inputPrice,
     outputPrice: price.outputPrice,
     cacheWritePrice: price.cacheWritePrice,
