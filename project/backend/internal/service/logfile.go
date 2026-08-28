@@ -190,6 +190,7 @@ type LogListParams struct {
 	TokenName    string
 	ProviderName string
 	ModelName    string
+	Source       string
 	Limit        int
 	Offset       int
 }
@@ -240,6 +241,9 @@ func (w *LogCaptureWriter) ListFiles(params LogListParams) ([]LogFileEntry, int,
 	if params.ModelName != "" {
 		query = query.Where("model_name = ?", params.ModelName)
 	}
+	if params.Source != "" {
+		query = ApplySourceFilter(query, params.Source)
+	}
 
 	var total int64
 	query.Count(&total)
@@ -282,7 +286,18 @@ type LogDeleteParams struct {
 	Types  []string
 	From   time.Time
 	To     time.Time
+	Source string
 	All    bool
+}
+
+// ApplySourceFilter narrows a query by the dashboard source filter. An empty
+// source means "no filter"; LogSourceUnmarked matches rows without a source
+// mark; anything else matches that exact source.
+func ApplySourceFilter(query *gorm.DB, source string) *gorm.DB {
+	if source == LogSourceUnmarked {
+		return query.Where("(source IS NULL OR source = '')")
+	}
+	return query.Where("source = ?", source)
 }
 
 // DeleteFiles removes captured entries matching the params and returns the
@@ -301,6 +316,9 @@ func (w *LogCaptureWriter) DeleteFiles(params LogDeleteParams) (int, error) {
 		}
 		if len(params.Types) > 0 {
 			query = query.Where("type IN ?", params.Types)
+		}
+		if params.Source != "" {
+			query = ApplySourceFilter(query, params.Source)
 		}
 		if !params.From.IsZero() {
 			query = query.Where("created_at >= ?", params.From)

@@ -48,6 +48,9 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 		if tokenName := c.Query("token"); tokenName != "" {
 			query = query.Where("token_name = ?", tokenName)
 		}
+		if source := c.Query("source"); source != "" {
+			query = service.ApplySourceFilter(query, source)
+		}
 		if rid := c.Query("request_id"); rid != "" {
 			query = query.Where("request_id = ?", rid)
 		}
@@ -159,6 +162,7 @@ func ClearLogs(db *gorm.DB) gin.HandlerFunc {
 				Provider string `json:"provider"`
 				Model    string `json:"model"`
 				Status   string `json:"status"`
+				Source   string `json:"source"`
 				From     string `json:"from"`
 				To       string `json:"to"`
 			} `json:"filters"`
@@ -177,6 +181,9 @@ func ClearLogs(db *gorm.DB) gin.HandlerFunc {
 			}
 			if body.Filters.Status != "" {
 				query = query.Where("status = ?", body.Filters.Status)
+			}
+			if body.Filters.Source != "" {
+				query = service.ApplySourceFilter(query, body.Filters.Source)
 			}
 			if t, err := time.Parse(time.RFC3339, body.Filters.From); err == nil {
 				query = query.Where("created_at >= ?", t)

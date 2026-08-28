@@ -251,6 +251,9 @@ func applyPairFilters(q *gorm.DB, params LogListParams, filteredTypes []string) 
 	if params.ModelName != "" {
 		q = q.Where("model_name = ?", params.ModelName)
 	}
+	if params.Source != "" {
+		q = ApplySourceFilter(q, params.Source)
+	}
 	return q
 }
 

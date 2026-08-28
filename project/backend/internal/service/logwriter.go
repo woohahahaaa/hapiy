@@ -202,6 +202,11 @@ const (
 	LogSourceSystemAdmin            = "系统管理"
 )
 
+// LogSourceUnmarked is the dashboard filter sentinel for "no source mark":
+// rows whose source column is empty/NULL. A real source can never equal this
+// value because it starts with "__" and carries the literal marker.
+const LogSourceUnmarked = "__unmarked__"
+
 // DimensionLabel maps a failover dimension key to its display label.
 // Unknown dimensions are returned verbatim.
 func DimensionLabel(dimension string) string {
