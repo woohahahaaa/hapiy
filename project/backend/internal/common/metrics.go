@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,11 @@ type Metrics struct {
 	// Stored pointers are immutable: EndRequest replaces the pointer with a
 	// copy (copy-on-write) instead of mutating the shared value.
 	activeEntries sync.Map
+
+	// requestCancels maps requestID -> *requestCancelEntry so the dashboard
+	// kill endpoint can abort an in-flight request by cancelling the context
+	// the relay handler registered under that ID.
+	requestCancels sync.Map
 
 	// retentionMinutes keeps finished request entries visible for this many
 	// minutes after they end (0 = evict immediately). Configurable at runtime.
@@ -102,6 +108,58 @@ func (m *Metrics) BeginRequest() {
 // Call EndRequest (with the same requestID) to remove it when the request finishes.
 func (m *Metrics) TrackActiveRequest(req ActiveRequest) {
 	m.activeEntries.Store(req.RequestID, &req)
+}
+
+// requestCancelEntry pairs a request's context cancel func with a flag set by
+// the kill endpoint. killed is set before cancel() runs so the relay handler
+// can classify the outcome as "killed" instead of a generic upstream error.
+type requestCancelEntry struct {
+	cancel context.CancelFunc
+	killed atomic.Bool
+}
+
+// TrackCancel registers the cancel func a request's context will be cancelled
+// with when the dashboard kills it. The relay handler registers right before
+// the upstream call and clears it via ClearCancel when the handler returns.
+func (m *Metrics) TrackCancel(requestID string, cancel context.CancelFunc) {
+	if requestID == "" || cancel == nil {
+		return
+	}
+	m.requestCancels.Store(requestID, &requestCancelEntry{cancel: cancel})
+}
+
+// CancelRequest kills an in-flight request: it marks the entry killed and
+// invokes the registered cancel func, aborting the upstream request (and any
+// concurrency-gate wait). Returns false when no in-flight entry exists (the
+// request already finished or never reached the relay stage).
+func (m *Metrics) CancelRequest(requestID string) bool {
+	if requestID == "" {
+		return false
+	}
+	v, ok := m.requestCancels.Load(requestID)
+	if !ok {
+		return false
+	}
+	entry := v.(*requestCancelEntry)
+	entry.killed.Store(true)
+	entry.cancel()
+	return true
+}
+
+// ClearCancel unregisters a request's cancel entry once its handler returns.
+func (m *Metrics) ClearCancel(requestID string) {
+	m.requestCancels.Delete(requestID)
+}
+
+// WasKilled reports whether the request's cancel entry was marked by the kill
+// endpoint. Safe to call after CancelRequest deleted nothing: entries are only
+// removed by ClearCancel when the handler completes.
+func (m *Metrics) WasKilled(requestID string) bool {
+	if requestID == "" {
+		return false
+	}
+	v, ok := m.requestCancels.Load(requestID)
+	return ok && v.(*requestCancelEntry).killed.Load()
 }
 
 // UpdateActiveRequestProgress refreshes the live progress fields (stage, chunk

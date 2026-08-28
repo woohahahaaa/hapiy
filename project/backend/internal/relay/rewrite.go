@@ -23,9 +23,10 @@ type CompiledRewriteChain struct {
 
 // RewriteOp is a single, pre-parsed operation from a rule's Script.
 type RewriteOp struct {
-	Mode       string             // set | delete | append | prepend | trim_prefix | trim_suffix | ensure_prefix | ensure_suffix | trim_space | to_lower | to_upper | replace | regex_replace | move | copy
-	Path       string             // gjson path
-	Value      string             // raw value for set/append/prepend/ensure_*
+	Mode       string // set | delete | append | prepend | trim_prefix | trim_suffix | ensure_prefix | ensure_suffix | trim_space | to_lower | to_upper | replace | regex_replace | move | copy
+	Path       string // gjson path
+	Value      string // raw value for set/append/prepend/ensure_*
+	RawValue   json.RawMessage
 	From       string             // replace / regex_replace source
 	To         string             // replace / regex_replace target
 	Regex      *regexp.Regexp     // compiled regex for regex_replace
@@ -92,7 +93,19 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 		return op, fmt.Errorf("rule %s: op %d (%s): path is required", ruleID, index, op.Mode)
 	}
 	switch op.Mode {
-	case "set", "append", "prepend", "ensure_prefix", "ensure_suffix", "trim_prefix", "trim_suffix",
+	case "set":
+		raw, ok := entry["value"]
+		if !ok {
+			op.RawValue = json.RawMessage(`""`)
+			break
+		}
+		op.RawValue = raw
+		if strings.HasPrefix(op.Path, "header.") {
+			if err := json.Unmarshal(raw, &op.Value); err != nil {
+				return op, fmt.Errorf("rule %s: op %d (set): value is not a string: %w", ruleID, index, err)
+			}
+		}
+	case "append", "prepend", "ensure_prefix", "ensure_suffix", "trim_prefix", "trim_suffix",
 		"first_prepend", "last_append":
 		if raw, ok := entry["value"]; ok {
 			if err := json.Unmarshal(raw, &op.Value); err != nil {
@@ -297,7 +310,7 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 	}
 	switch op.Mode {
 	case "set":
-		updated, err := sjson.SetBytes(body, writePath, op.Value)
+		updated, err := sjson.SetRawBytes(body, writePath, op.RawValue)
 		return updated, headers, err
 	case "delete":
 		updated, err := sjson.DeleteBytes(body, writePath)

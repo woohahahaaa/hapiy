@@ -309,6 +309,7 @@ func main() {
 			dashboardAuthed.GET("/active-requests/config", handler.GetActiveRequestConfig(db))
 			dashboardAuthed.PUT("/active-requests/config", handler.PutActiveRequestConfig(db))
 			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())
+			dashboardAuthed.POST("/active-requests/:requestId/kill", handler.KillActiveRequest())
 			dashboardAuthed.GET("/events", handler.DashboardEvents())
 		}
 

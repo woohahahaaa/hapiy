@@ -201,7 +201,15 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				})
 			}
 		}
-		resp, err := engine.RelayRequest(c.Request.Context(), plan, &relayReq)
+		// Wrap the gin request context in one the 掐断 (kill) endpoint can
+		// cancel, and register the cancel func under the request ID so a kill
+		// reaches this exact in-flight request. Cancelling aborts the upstream
+		// call, the concurrency-gate wait, and any streamed body read.
+		killCtx, cancelRequest := context.WithCancel(c.Request.Context())
+		common.Global().TrackCancel(requestID, cancelRequest)
+		defer common.Global().ClearCancel(requestID)
+
+		resp, err := engine.RelayRequest(killCtx, plan, &relayReq)
 		if err != nil {
 			if flowStarted {
 				dashboardEventsHub.publish("request_finished", map[string]any{
@@ -324,6 +332,9 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		outcome := "completed"
 		if clientDisconnected {
 			outcome = "client_disconnected"
+		}
+		if common.Global().WasKilled(requestID) {
+			outcome = "killed"
 		}
 		if flowStarted {
 			dashboardEventsHub.publish("request_finished", map[string]any{
@@ -494,6 +505,9 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 	}
 	if errors.Is(err, relay.ErrNoProvider) {
 		outcome = "failed"
+	}
+	if common.Global().WasKilled(c.GetString("request_id")) {
+		outcome = "killed"
 	}
 	common.Global().EndRequest(c.GetString("request_id"), modelName, false, int64(useTime), 0, outcome)
 }

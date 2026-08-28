@@ -2083,6 +2083,9 @@ export const dashboardApi = {
     }
     return data.map(parseActiveRequest)
   },
+  async killActiveRequest(requestId: string): Promise<void> {
+    await request(`/active-requests/${encodeURIComponent(requestId)}/kill`, { method: 'POST' })
+  },
 
   async getActiveRequestConfig(): Promise<ActiveRequestConfig> {
     const data = await request('/active-requests/config')

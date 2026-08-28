@@ -72,6 +72,16 @@ func TestApplyRewriteChain_set_append_delete(t *testing.T) {
 	}
 }
 
+func TestApplyScript_set_boolean_preserves_json_type(t *testing.T) {
+	updated, err := ApplyScript([]byte(`{}`), `[{"mode":"set","path":"reasoning_split","value":true}]`)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"reasoning_split":true}` {
+		t.Fatalf("expected native JSON boolean, got %s", updated)
+	}
+}
+
 func TestApplyRewriteChain_string_transforms(t *testing.T) {
 	chain, err := compileRewriteChain("r", `[
 		{"path":"u","mode":"to_upper"},

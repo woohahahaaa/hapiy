@@ -82,3 +82,17 @@ func ActiveRequests() gin.HandlerFunc {
 		c.JSON(http.StatusOK, gin.H{"data": common.Global().ActiveRequests()})
 	}
 }
+
+// KillActiveRequest aborts an in-flight request by cancelling the context the
+// relay handler registered under its request ID. Returns 404 when no in-flight
+// request matches (it already finished, or never reached the relay stage).
+func KillActiveRequest() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		requestID := c.Param("requestId")
+		if !common.Global().CancelRequest(requestID) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "请求不存在或已结束"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"request_id": requestID}})
+	}
+}
