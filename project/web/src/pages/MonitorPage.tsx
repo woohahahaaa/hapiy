@@ -46,18 +46,19 @@ function formatActiveStage(row: ActiveRequest): string {
   const elapsed = `${(row.elapsedMs / 1000).toFixed(1)}s`
   switch (row.stage) {
     case 'queued':
-      return `排队中 · 已等 ${elapsed}`
+      return `排队中·已等 ${elapsed}`
     case 'connecting':
-      return `连接上游${row.provider ? ` ${row.provider}` : ''} · 已 ${elapsed}`
+      return `连接上游${row.provider ? ` ${row.provider}` : ''}·已 ${elapsed}`
     case 'waiting_upstream':
-      return `等待上游响应 · 已 ${elapsed}`
+      return `等待上游响应·已 ${elapsed}`
     case 'receiving_stream':
-      return `接收中 · 第 ${row.chunkCount} chunk · 已收 ${formatBytes(row.bytesReceived)}`
+      return `接收中·第${row.chunkCount}chunk·已收${formatBytes(row.bytesReceived)}`
     case 'receiving':
-      return `接收响应中 · 已读 ${formatBytes(row.bytesReceived)}`
+      return `接收响应中·已读${formatBytes(row.bytesReceived)}`
     default:
       return '活跃中'
   }
+}
 }
 
 function formatOutcome(outcome: string): string {

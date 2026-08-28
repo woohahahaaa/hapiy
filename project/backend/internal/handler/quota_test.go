@@ -185,6 +185,74 @@ func TestComputeQuota_noMatchReturnsZeroAndEmptyCurrency(t *testing.T) {
 	}
 }
 
+func TestComputeQuota_boundRateUsesBoundRowPrices(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
+		t.Fatalf("set currency: %v", err)
+	}
+	// The bound model-info row (by internal ID) is the rate source: its prices
+	// × the multiplier, not the global row matched by name.
+	bound := model.PriceConfig{
+		Model:           "deepseek-v4-flash",
+		ProviderID:      "DeepSeek",
+		InputPrice:      10,
+		OutputPrice:     20,
+		CacheWritePrice: 30,
+		CacheReadPrice:  40,
+	}
+	if err := db.Create(&bound).Error; err != nil {
+		t.Fatalf("create bound price: %v", err)
+	}
+	// A second row with the same model name but a different supplier must NOT
+	// be picked up by the binding.
+	if err := db.Create(&model.PriceConfig{
+		Model:      "deepseek-v4-flash",
+		ProviderID: "OpenRouter",
+		InputPrice: 1,
+		OutputPrice: 1,
+		CacheWritePrice: 1,
+		CacheReadPrice: 1,
+	}).Error; err != nil {
+		t.Fatalf("create global price: %v", err)
+	}
+	provider := &model.Provider{Models: `[{"model":"deepseek-v4-flash","rate":"2","ratePriceConfigId":"` + bound.ID + `"}]`}
+	usage := &relay.UsageInfo{
+		PromptTokens:     1000000,
+		CompletionTokens: 1000000,
+		CacheWriteTokens: 1000000,
+		CacheReadTokens:  1000000,
+	}
+
+	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: bound.Model, usage: usage})
+	expected := (10.0 + 20 + 30 + 40) * 2
+	if math.Abs(quota-expected) > 0.000000001 {
+		t.Fatalf("quota: want %.12f, got %.12f", expected, quota)
+	}
+	if currency != "USD" {
+		t.Fatalf("currency: want USD, got %v", currency)
+	}
+}
+
+func TestComputeQuota_deletedBindingResolvesToZero(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
+		t.Fatalf("set currency: %v", err)
+	}
+	// A rate binding whose model-info row was deleted contributes zero prices
+	// (bound row lookup misses), so quota is 0 even though a global row for the
+	// same model name exists.
+	if err := db.Create(&model.PriceConfig{Model: "deepseek-v4-flash", InputPrice: 5, OutputPrice: 5}).Error; err != nil {
+		t.Fatalf("create price: %v", err)
+	}
+	provider := &model.Provider{Models: `[{"model":"deepseek-v4-flash","rate":"7","ratePriceConfigId":"missing-id"}]`}
+	usage := &relay.UsageInfo{PromptTokens: 1000000}
+
+	quota, _ := computeQuota(db, quotaRequest{provider: provider, modelName: "deepseek-v4-flash", usage: usage})
+	if quota != 0 {
+		t.Fatalf("quota: want 0, got %v", quota)
+	}
+}
+
 func TestComputeQuota_ignoresRateForAnotherModelEntry(t *testing.T) {
 	db := newPriceTestDB(t)
 	// Two models; requesting the one without prices/config yields 0.

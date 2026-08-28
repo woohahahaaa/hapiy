@@ -696,8 +696,19 @@ function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
 
   const handleBlur = () => {
     const trimmed = draft.trim()
+    // Whatever was typed is taken as the field value (the supplier text is
+    // not restricted to models.dev matches); an exact candidate picks the
+    // official casing, otherwise the typed text stands as-is.
     const match = providers.find((provider) => provider.providerName.toLowerCase() === trimmed.toLowerCase())
-    commit(match ?? null)
+    if (trimmed === '') {
+      commit(null)
+    } else if (match) {
+      commit(match)
+    } else {
+      setDraft(trimmed)
+      onSelect(trimmed)
+      setOpen(false)
+    }
   }
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {

@@ -83,7 +83,7 @@ func modelRateBinding(db *gorm.DB, provider *model.Provider, modelName string) (
 	var entries []struct {
 		Model         string `json:"model"`
 		Rate          string `json:"rate"`
-		PriceConfigID string `json:"priceConfigId"`
+		PriceConfigID string `json:"ratePriceConfigId"`
 	}
 	if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
 		return nil, 0, false

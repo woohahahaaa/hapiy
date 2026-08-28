@@ -15,6 +15,7 @@ export interface NodeSlotProviderProps {
   takenLabels: Set<string>
   providerFlashLayers?: ReadonlyMap<string, readonly FlowLayerOverlay[]>
   strategy: ProviderStrategy
+  emergency?: boolean
   onCycleStrategy?: () => void
   onAddProvider?: () => void
   onSelectProvider?: (nodeId: string, providerId: string) => void
@@ -40,6 +41,7 @@ export function NodeSlotProvider({
   takenLabels,
   providerFlashLayers,
   strategy,
+  emergency,
   onCycleStrategy,
   onAddProvider,
   onSelectProvider,
@@ -101,6 +103,7 @@ export function NodeSlotProvider({
           child={child}
           providers={providers}
           takenLabels={takenLabels}
+          emergency={emergency}
           flashLayers={providerFlashLayers?.get(child.id)}
           isDragging={dragIndex === i}
           isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}

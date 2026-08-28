@@ -311,6 +311,36 @@ func TestPriceUpdate_persists_provider_id(t *testing.T) {
 	}
 }
 
+func TestPriceCreate_allowsSameModelDifferentProvider(t *testing.T) {
+	db := newPriceTestDB(t)
+	body := `{"model":"deepseek-v4-flash","provider_id":"DeepSeek","input_price":1}`
+	rec := priceRequest(t, http.MethodPost, "/models", body, CreatePrice(db))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create#1 status: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The same model name under a different upstream supplier is a distinct row.
+	rec = priceRequest(t, http.MethodPost, "/models", `{"model":"deepseek-v4-flash","provider_id":"OpenRouter","input_price":2}`, CreatePrice(db))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create#2 status: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPriceCreate_rejectsSameModelSameProvider(t *testing.T) {
+	db := newPriceTestDB(t)
+	rec := priceRequest(t, http.MethodPost, "/models", `{"model":"deepseek-v4-flash","provider_id":"DeepSeek","input_price":1}`, CreatePrice(db))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create#1 status: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The identical (model, supplier) pair is rejected by the composite key.
+	rec = priceRequest(t, http.MethodPost, "/models", `{"model":"DEEPSEEK-V4-FLASH","provider_id":"deepseek","input_price":2}`, CreatePrice(db))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("create#2 status: want 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "组合已存在") {
+		t.Fatalf("error message: got %s", rec.Body.String())
+	}
+}
+
 func TestPriceUpdate_rejects_negative_context_length(t *testing.T) {
 	db := newPriceTestDB(t)
 	createBody := `{"model":"gpt-4o"}`

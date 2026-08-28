@@ -24,6 +24,7 @@ interface SlotItemCardProps {
   token?: string
   picked?: boolean
   onPickToken?: (token: string) => void
+  emergency?: boolean
 }
 
 export function SlotItemCard({
@@ -43,6 +44,7 @@ export function SlotItemCard({
   token,
   picked = false,
   onPickToken,
+  emergency = false,
 }: SlotItemCardProps) {
   const layers = flashLayers ?? []
   return (
@@ -66,8 +68,8 @@ export function SlotItemCard({
         'relative rounded-md border border-border bg-card text-card-foreground transition-opacity',
         !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
-        isDragOver && 'border-primary border-dashed',
-        picked && 'ring-2 ring-primary',
+        isDragOver && (emergency ? 'border-warning border-dashed' : 'border-primary border-dashed'),
+        picked && (emergency ? 'ring-2 ring-warning' : 'ring-2 ring-primary'),
         className,
       )}
       style={{
