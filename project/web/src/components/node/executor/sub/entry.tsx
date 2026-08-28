@@ -78,7 +78,8 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   const baseSegH = targetHandle.height
   const baseGap = topologyConfig.handles.provider.segmentGap
   const baseTotal = models.length * baseSegH + Math.max(0, models.length - 1) * baseGap
-  const maxTotal = nodeHeight > 0 ? nodeHeight - 8 : 0
+  // 上下留 padding（原 8px 的 3 倍），shrink 到节点高度内
+  const maxTotal = nodeHeight > 0 ? nodeHeight - 24 : 0
   const scale = maxTotal > 0 && baseTotal > maxTotal ? maxTotal / baseTotal : 1
   const segH = baseSegH * scale
   const gap = baseGap * scale
