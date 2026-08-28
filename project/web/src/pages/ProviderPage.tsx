@@ -707,7 +707,7 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
   }
 
   const unbound = supplierCandidates.length === 0
-  const boundLabel = model.ratePriceConfigId === null ? null : supplierCandidates.find((c) => c.id === model.ratePriceConfigId)
+  const bound = !unbound && model.ratePriceConfigId !== null
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -739,7 +739,7 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
             disabled={unbound}
             onValueChange={(value) => onPatch({ ratePriceConfigId: value === '' || value === '__unfound__' ? null : value })}
           >
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-40"><SelectValue placeholder="请选择" /></SelectTrigger>
             <SelectContent>
               {unbound ? (
                 <SelectItem value="__unfound__">未在模型信息模块查到对应该模型的数据</SelectItem>
@@ -755,12 +755,11 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
           <Input
             value={model.rate}
             onChange={(event) => onPatch({ rate: event.target.value })}
-            disabled={unbound}
+            disabled={!bound}
             className="min-w-0 w-16 flex-1 px-2 text-xs"
-            placeholder={unbound ? '—' : '1'}
+            placeholder="1"
             title="倍率，支持分数，如 1/2"
           />
-          {boundLabel && <span className="shrink-0 text-xs text-muted-foreground">× {boundLabel.model} · {boundLabel.providerId || '默认'}</span>}
         </>
       )}
     </div>

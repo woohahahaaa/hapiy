@@ -82,6 +82,9 @@ export async function loadModelsDevModels(): Promise<readonly ModelsDevModel[]> 
   return loadPromise
 }
 
+// Score a candidate against the query: lower is a better match. The tiers
+// encode overlap quality (exact id > id prefix > id contains > name tiers),
+// and the tie-break inside a tier sorts by upstream-supplier name.
 function scoreMatch(model: ModelsDevModel, needle: string): number {
   const id = model.id.toLowerCase()
   const name = model.name.toLowerCase()
@@ -114,7 +117,9 @@ export function searchModelsDevModels(
   return models
     .map((model) => ({ model, score: scoreMatch(model, needle) }))
     .filter((entry) => entry.score >= 0)
-    .sort((a, b) => a.score - b.score || a.model.id.localeCompare(b.model.id))
+    .sort((a, b) => a.score - b.score ||
+      a.model.providerName.localeCompare(b.model.providerName) ||
+      a.model.id.localeCompare(b.model.id))
     .slice(0, limit)
     .map((entry) => entry.model)
 }
