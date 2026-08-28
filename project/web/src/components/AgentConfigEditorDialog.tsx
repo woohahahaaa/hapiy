@@ -91,7 +91,7 @@ export function AgentConfigEditorDialog({
       <DialogContent
         width="full"
         height="full"
-        className="flex flex-col overflow-hidden rounded-none border-0 p-0"
+        bare className="flex flex-col overflow-hidden"
       >
         <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
           <DialogTitle className="text-base">{record.record_name}</DialogTitle>

@@ -261,7 +261,7 @@ export function TopologyVersionsModal({
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
-      <DialogContent width="md" height="auto" className="grid-rows-[auto_minmax(0,1fr)] min-h-[640px]">
+      <DialogContent width="md" height="auto" minHeight="640px" className="grid-rows-[auto_minmax(0,1fr)]">
         <DialogHeader>
           <DialogTitle>历史版本</DialogTitle>
         </DialogHeader>

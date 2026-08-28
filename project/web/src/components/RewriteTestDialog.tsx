@@ -126,7 +126,7 @@ export function RewriteTestDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width={width} height={height} className="flex flex-col overflow-hidden rounded-none border-0 p-0">
+      <DialogContent width={width} height={height} bare className="flex flex-col overflow-hidden">
         <DialogHeader className="flex shrink-0 flex-row items-center border-b border-border px-6 py-4">
           <DialogTitle className="text-base">
             {readonlyRule ? '规则测试（插槽）' : '规则测试'}

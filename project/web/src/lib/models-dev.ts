@@ -95,6 +95,15 @@ function scoreMatch(model: ModelsDevModel, needle: string): number {
   return -1
 }
 
+// Models.dev publishes the same model under different id shapes: some
+// providers use "provider/model", others the bare model id. A stored model
+// name therefore matches both the exact id/name and a fully-qualified id
+// whose trailing segment is the model name.
+function modelKeyMatches(id: string, name: string, needle: string): boolean {
+  if (id === needle || name === needle) return true
+  return id.endsWith(`/${needle}`)
+}
+
 export function searchModelsDevModels(
   models: readonly ModelsDevModel[],
   query: string,
@@ -110,17 +119,27 @@ export function searchModelsDevModels(
     .map((entry) => entry.model)
 }
 
-// Trim + case-insensitive id/name match; null when nothing matches.
+// Trim + case-insensitive id/name match (falling back to a qualified
+// provider/model id's bare trailing segment, see modelKeyMatches); null when
+// nothing matches. The returned row's id keeps its snapshot casing — callers
+// normalize to lowercase before persisting.
 export function findModelsDevModel(
   models: readonly ModelsDevModel[],
   value: string,
 ): ModelsDevModel | null {
   const needle = value.trim().toLowerCase()
   if (!needle) return null
-  const found = models.find(
-    (model) => model.id.toLowerCase() === needle || model.name.toLowerCase() === needle,
+  const exact = models.find(
+    (model) =>
+      model.id.toLowerCase() === needle || model.name.toLowerCase() === needle,
   )
-  return found ?? null
+  if (exact) return exact
+  const qualified = models.find(
+    (model) =>
+      model.id.toLowerCase() !== needle &&
+      model.id.toLowerCase().endsWith(`/${needle}`),
+  )
+  return qualified ?? null
 }
 
 // Distinct providers of rows whose id/name equals the committed model value.
@@ -132,7 +151,7 @@ export function providersForModel(
   if (!needle) return []
   const providers = new Map<string, string>()
   for (const model of models) {
-    if (model.id.toLowerCase() === needle || model.name.toLowerCase() === needle) {
+    if (modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle)) {
       providers.set(model.providerId, model.providerName)
     }
   }
@@ -151,7 +170,7 @@ export function findModelsDevProviderRow(
   if (!needle) return null
   const found = models.find(
     (model) =>
-      (model.id.toLowerCase() === needle || model.name.toLowerCase() === needle) &&
+      modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle) &&
       model.providerId.toLowerCase() === providerId.toLowerCase(),
   )
   return found ?? null

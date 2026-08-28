@@ -74,6 +74,24 @@ describe('findModelsDevModel', () => {
     expect(findModelsDevModel(models, 'deepseek v3 flash')?.id).toBe('other')
   })
 
+  it('matches an id published as provider/model by its bare trailing segment', () => {
+    const qualified: readonly ModelsDevModel[] = [
+      makeModel({ id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerName: 'DeepSeek' }),
+      makeModel({ id: 'alibaba/deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerName: 'Alibaba' }),
+    ]
+    const found = findModelsDevModel(qualified, 'deepseek-v4-flash')
+    expect(found?.id).toBe('deepseek/deepseek-v4-flash')
+  })
+
+  it('prefers an exact bare id row over a qualified provider/model row', () => {
+    const mixed: readonly ModelsDevModel[] = [
+      makeModel({ id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerName: 'DeepSeek' }),
+      makeModel({ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerName: 'Zhipu AI' }),
+    ]
+    const found = findModelsDevModel(mixed, 'deepseek-v4-flash')
+    expect(found?.id).toBe('deepseek-v4-flash')
+  })
+
   it('returns null for blank or unmatched values', () => {
     expect(findModelsDevModel(models, '   ')).toBeNull()
     expect(findModelsDevModel(models, 'claude')).toBeNull()
@@ -90,6 +108,21 @@ describe('providersForModel', () => {
 
   it('returns distinct providers sorted by provider name', () => {
     const result = providersForModel(models, 'DEEPSEEK-V3-FLASH')
+    expect(result).toEqual([
+      { providerId: 'alibaba', providerName: 'Alibaba' },
+      { providerId: 'deepseek', providerName: 'DeepSeek' },
+      { providerId: 'zhipu', providerName: 'Zhipu AI' },
+    ])
+  })
+
+  it('collects providers whose id is a qualified provider/model row', () => {
+    const qualified: readonly ModelsDevModel[] = [
+      makeModel({ id: 'deepseek/deepseek-v4-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
+      makeModel({ id: 'alibaba/deepseek-v4-flash', providerName: 'Alibaba', providerId: 'alibaba' }),
+      makeModel({ id: 'deepseek-v4-flash', providerName: 'Zhipu AI', providerId: 'zhipu' }),
+      makeModel({ id: 'gpt-4o', providerName: 'OpenAI', providerId: 'openai' }),
+    ]
+    const result = providersForModel(qualified, 'deepseek-v4-flash')
     expect(result).toEqual([
       { providerId: 'alibaba', providerName: 'Alibaba' },
       { providerId: 'deepseek', providerName: 'DeepSeek' },
@@ -120,6 +153,15 @@ describe('findModelsDevProviderRow', () => {
   it('finds the row for the requested provider', () => {
     const row = findModelsDevProviderRow(models, 'deepseek-v3-flash', 'zhipu')
     expect(row?.providerName).toBe('Zhipu AI')
+  })
+
+  it('finds a qualified provider/model row for the requested provider', () => {
+    const qualified: readonly ModelsDevModel[] = [
+      makeModel({ id: 'alibaba/deepseek-v4-flash', providerName: 'Alibaba', providerId: 'alibaba' }),
+      makeModel({ id: 'deepseek/deepseek-v4-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
+    ]
+    const row = findModelsDevProviderRow(qualified, 'deepseek-v4-flash', 'deepseek')
+    expect(row?.providerId).toBe('deepseek')
   })
 
   it('returns null when the provider is not present for the model', () => {

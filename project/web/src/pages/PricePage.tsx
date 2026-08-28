@@ -340,7 +340,6 @@ function PriceForm({
       .filter((s) => s.length > 0)
 
   useEffect(() => {
-    if (!modelsDevEnabled) return
     let cancelled = false
     setSnapshotError(null)
     loadModelsDevModels()
@@ -351,7 +350,7 @@ function PriceForm({
         if (!cancelled) setSnapshotError('models.dev 数据加载失败，请检查网络')
       })
     return () => { cancelled = true }
-  }, [modelsDevEnabled])
+  }, [])
 
   const providers = useMemo(
     () => (modelsDevEnabled ? providersForModel(snapshot ?? [], form.model) : []),
@@ -359,11 +358,14 @@ function PriceForm({
   )
 
   // Drop a provider selection that no longer belongs to the committed model.
+  // Only runs once the models.dev snapshot is loaded: while it's still
+  // pending, providers is empty and a stored provider_id must not be cleared.
   useEffect(() => {
+    if (snapshot === null) return
     if (providerId !== null && !providers.some((provider) => provider.providerId === providerId)) {
       setProviderId(null)
     }
-  }, [providerId, providers])
+  }, [providerId, providers, snapshot])
 
   const fillFromProvider = (pid: string) => {
     if (snapshot === null) return
@@ -394,7 +396,7 @@ function PriceForm({
     if (!modelsDevEnabled || snapshot === null) return
     const match = findModelsDevModel(snapshot, model)
     if (match) {
-      setForm((current) => ({ ...current, model: match.id }))
+      setForm((current) => ({ ...current, model: match.id.toLowerCase() }))
     } else {
       setProviderId(null)
       setForm((current) => ({ ...current, model: '' }))
@@ -425,7 +427,7 @@ function PriceForm({
       return
     }
     // Keep the provider-id attribution so the switch/provider survive reopening.
-    onSave({ ...payload, model: match.id, providerId: providerId ?? undefined })
+    onSave({ ...payload, model: match.id.toLowerCase(), providerId: providerId ?? undefined })
   }
 
   const nameConflicts = existingNames.kind === 'ready'
