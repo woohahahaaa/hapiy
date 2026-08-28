@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { searchModelsDevModels, type ModelsDevModel } from './models-dev'
+import {
+  findModelsDevModel,
+  findModelsDevProviderRow,
+  providersForModel,
+  searchModelsDevModels,
+  type ModelsDevModel,
+} from './models-dev'
 
 function makeModel(partial: Partial<ModelsDevModel> & { id: string }): ModelsDevModel {
   return {

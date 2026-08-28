@@ -109,3 +109,50 @@ export function searchModelsDevModels(
     .slice(0, limit)
     .map((entry) => entry.model)
 }
+
+// Trim + case-insensitive id/name match; null when nothing matches.
+export function findModelsDevModel(
+  models: readonly ModelsDevModel[],
+  value: string,
+): ModelsDevModel | null {
+  const needle = value.trim().toLowerCase()
+  if (!needle) return null
+  const found = models.find(
+    (model) => model.id.toLowerCase() === needle || model.name.toLowerCase() === needle,
+  )
+  return found ?? null
+}
+
+// Distinct providers of rows whose id/name equals the committed model value.
+export function providersForModel(
+  models: readonly ModelsDevModel[],
+  value: string,
+): ReadonlyArray<{ readonly providerId: string; readonly providerName: string }> {
+  const needle = value.trim().toLowerCase()
+  if (!needle) return []
+  const providers = new Map<string, string>()
+  for (const model of models) {
+    if (model.id.toLowerCase() === needle || model.name.toLowerCase() === needle) {
+      providers.set(model.providerId, model.providerName)
+    }
+  }
+  return [...providers.entries()]
+    .map(([providerId, providerName]) => ({ providerId, providerName }))
+    .sort((a, b) => a.providerName.localeCompare(b.providerName))
+}
+
+// First models.dev row matching (modelValue, providerId) for refilling prices.
+export function findModelsDevProviderRow(
+  models: readonly ModelsDevModel[],
+  modelValue: string,
+  providerId: string,
+): ModelsDevModel | null {
+  const needle = modelValue.trim().toLowerCase()
+  if (!needle) return null
+  const found = models.find(
+    (model) =>
+      (model.id.toLowerCase() === needle || model.name.toLowerCase() === needle) &&
+      model.providerId.toLowerCase() === providerId.toLowerCase(),
+  )
+  return found ?? null
+}

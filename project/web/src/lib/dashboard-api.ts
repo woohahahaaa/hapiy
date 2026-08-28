@@ -564,6 +564,55 @@ export type TableConfig = {
   readonly updatedAt: string
 }
 
+export type AgentTypeRule = {
+  readonly id: string
+  readonly name: string
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export type AgentSshConfig = {
+  readonly host: string
+  readonly port: number
+  readonly username: string
+  readonly auth_type: 'password' | 'key'
+  readonly password?: string
+  readonly private_key?: string
+  readonly jump_enabled: boolean
+  readonly jump_host?: string
+  readonly jump_port?: number
+  readonly jump_username?: string
+  readonly jump_auth_type?: 'password' | 'key'
+  readonly jump_password?: string
+  readonly jump_private_key?: string
+}
+
+export type AgentConfigMode = 'local' | 'ssh'
+
+export type AgentConfigFile = {
+  readonly id: string
+  readonly record_name: string
+  readonly agent_type: string
+  readonly mode: AgentConfigMode
+  readonly path: string
+  readonly ssh_config: AgentSshConfig | null
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export type AgentConfigFileInput = {
+  readonly record_name: string
+  readonly agent_type: string
+  readonly mode: AgentConfigMode
+  readonly path: string
+  readonly ssh_config: AgentSshConfig | null
+}
+
+export type AgentConfigListParams = {
+  readonly limit: number
+  readonly offset: number
+}
+
 export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
@@ -1637,6 +1686,85 @@ function parseTopologyVersionList(value: unknown): TopologyVersionList {
   }
 }
 
+function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
+  if (value === null || value === undefined) return null
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
+  }
+  const authType = readString(value.auth_type, 'ssh_config.auth_type')
+  if (authType !== 'password' && authType !== 'key') {
+    throw new DashboardApiError(`无效的 SSH 认证方式: ${authType}`, null)
+  }
+  const jumpAuthTypeValue = value.jump_auth_type
+  const jumpAuthType = jumpAuthTypeValue === undefined || jumpAuthTypeValue === null || jumpAuthTypeValue === ''
+    ? undefined
+    : readString(jumpAuthTypeValue, 'ssh_config.jump_auth_type')
+  if (jumpAuthType !== undefined && jumpAuthType !== 'password' && jumpAuthType !== 'key') {
+    throw new DashboardApiError(`无效的跳板机认证方式: ${jumpAuthType}`, null)
+  }
+  return {
+    host: readString(value.host, 'ssh_config.host'),
+    port: readNumber(value.port, 'ssh_config.port', 22),
+    username: readString(value.username, 'ssh_config.username'),
+    auth_type: authType,
+    password: value.password === undefined || value.password === null || value.password === ''
+      ? undefined
+      : readString(value.password, 'ssh_config.password'),
+    private_key: value.private_key === undefined || value.private_key === null || value.private_key === ''
+      ? undefined
+      : readString(value.private_key, 'ssh_config.private_key'),
+    jump_enabled: value.jump_enabled === undefined || value.jump_enabled === null
+      ? false
+      : readBoolean(value.jump_enabled, 'ssh_config.jump_enabled'),
+    jump_host: value.jump_host === undefined || value.jump_host === null || value.jump_host === ''
+      ? undefined
+      : readString(value.jump_host, 'ssh_config.jump_host'),
+    jump_port: readNumber(value.jump_port, 'ssh_config.jump_port', 22),
+    jump_username: value.jump_username === undefined || value.jump_username === null || value.jump_username === ''
+      ? undefined
+      : readString(value.jump_username, 'ssh_config.jump_username'),
+    jump_auth_type: jumpAuthType,
+    jump_password: value.jump_password === undefined || value.jump_password === null || value.jump_password === ''
+      ? undefined
+      : readString(value.jump_password, 'ssh_config.jump_password'),
+    jump_private_key: value.jump_private_key === undefined || value.jump_private_key === null || value.jump_private_key === ''
+      ? undefined
+      : readString(value.jump_private_key, 'ssh_config.jump_private_key'),
+  }
+}
+
+function parseAgentTypeRule(value: unknown): AgentTypeRule {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的软件类型规则格式无效', null)
+  }
+  return {
+    id: readString(value.id, 'agent_type_rule.id'),
+    name: readString(value.name, 'agent_type_rule.name'),
+    created_at: readString(value.created_at, 'agent_type_rule.created_at'),
+    updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
+  }
+}
+
+function parseAgentConfigFile(value: unknown): AgentConfigFile {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的接管配置格式无效', null)
+  }
+  const mode = readString(value.mode, 'agent_config.mode')
+  if (mode !== 'local' && mode !== 'ssh') {
+    throw new DashboardApiError(`无效的接管模式: ${mode}`, null)
+  }
+  return {
+    id: readString(value.id, 'agent_config.id'),
+    record_name: readString(value.record_name, 'agent_config.record_name'),
+    agent_type: readString(value.agent_type, 'agent_config.agent_type'),
+    mode,
+    path: readString(value.path, 'agent_config.path'),
+    ssh_config: parseAgentSshConfig(value.ssh_config),
+    created_at: readString(value.created_at, 'agent_config.created_at'),
+    updated_at: readString(value.updated_at, 'agent_config.updated_at'),
+  }
+}
+
 export const dashboardApi = {
   // ── Providers ──
   async listProviders(params: ProviderListParams): Promise<{ readonly providers: readonly Provider[]; readonly total: number }> {
@@ -2262,5 +2390,75 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
 
     const body = text === '' ? null : parseJson(text, '指标响应')
     return parseMetrics(body)
+  },
+
+  // ── Agent 接管 ──
+  async listAgentTypes(): Promise<readonly string[]> {
+    const data = await request('/agent-types')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的软件类型列表格式无效', null)
+    }
+    return data.map((name) => {
+      if (typeof name !== 'string') {
+        throw new DashboardApiError('服务端返回的软件类型列表格式无效', null)
+      }
+      return name
+    })
+  },
+  async listAgentTypeRules(): Promise<{ readonly rules: readonly AgentTypeRule[]; readonly total: number }> {
+    const body = await requestFull('/agent-type-rules?limit=1000&offset=0')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的软件类型规则列表格式无效', null)
+    }
+    return {
+      rules: data.map(parseAgentTypeRule),
+      total: readNumber(body.total, 'total', 0),
+    }
+  },
+  async createAgentTypeRule(name: string): Promise<AgentTypeRule> {
+    return parseAgentTypeRule(await request('/agent-type-rules', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }))
+  },
+  async deleteAgentTypeRule(id: string): Promise<void> {
+    await request(`/agent-type-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async listAgentConfigFiles(params: AgentConfigListParams): Promise<{ readonly files: readonly AgentConfigFile[]; readonly total: number }> {
+    const qp = new URLSearchParams()
+    qp.set('limit', String(params.limit))
+    qp.set('offset', String(params.offset))
+    const body = await requestFull(`/agent-config-files?${qp.toString()}`)
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的接管配置列表格式无效', null)
+    }
+    return {
+      files: data.map(parseAgentConfigFile),
+      total: readNumber(body.total, 'total', 0),
+    }
+  },
+  async createAgentConfigFile(input: AgentConfigFileInput): Promise<AgentConfigFile> {
+    return parseAgentConfigFile(await request('/agent-config-files', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }))
+  },
+  async getAgentConfigFileContent(id: string): Promise<string> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/content`)
+    if (!isRecord(data) || typeof data.content !== 'string') {
+      throw new DashboardApiError('服务端返回的文件内容格式无效', null)
+    }
+    return data.content
+  },
+  async saveAgentConfigFileContent(id: string, content: string): Promise<void> {
+    await request(`/agent-config-files/${encodeURIComponent(id)}/content`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    })
+  },
+  async deleteAgentConfigFile(id: string): Promise<void> {
+    await request(`/agent-config-files/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
 }

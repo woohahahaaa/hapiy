@@ -80,6 +80,14 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    id: 'agent',
+    label: '接管Agent',
+    icon: <AppIcon name="dns" />,
+    children: [
+      { id: 'agent-config', label: '配置文件', href: '/agent/config' },
+    ],
+  },
+  {
     id: 'settings',
     label: '系统设置',
     icon: <AppIcon name="settings" />,
@@ -275,7 +283,7 @@ function CollapsedNavItem({
 
 const OPEN_SECTIONS_KEY = 'sidebar_open_sections'
 
-const DEFAULT_OPEN_SECTIONS = ['monitor', 'llm-config', 'policy', 'settings']
+const DEFAULT_OPEN_SECTIONS = ['monitor', 'llm-config', 'policy', 'agent', 'settings']
 
 function readOpenSections(): Set<string> {
   const fallback = () => new Set(DEFAULT_OPEN_SECTIONS)
