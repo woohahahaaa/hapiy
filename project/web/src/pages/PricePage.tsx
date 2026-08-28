@@ -716,7 +716,7 @@ function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
                     onMouseEnter={() => setActive(index)}
                     className={cn(
                       'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
-                      index === active ? 'bg-accent text-accent-foreground' : 'text-foreground',
+                      index === active ? 'bg-primary text-primary-foreground' : 'text-foreground',
                     )}
                   >
                     <span className="truncate">{option.providerName}</span>

@@ -68,13 +68,15 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
     if (!searchable) return [] as readonly ModelsDevModel[]
     const trimmed = draft.trim()
     if (trimmed.length === 0) return [] as readonly ModelsDevModel[]
-    // One row per logical model: dedupe by id so a model published under
-    // multiple providers shows up only once.
+    // One row per logical model: dedupe by lowercase id so a model published
+    // under multiple providers (or with casing drift across providers) shows
+    // up only once, e.g. deepseek-ve-flash and deepseek-ve-Flash are the same.
     const seen = new Set<string>()
     const result: ModelsDevModel[] = []
     for (const model of searchModelsDevModels(all, trimmed)) {
-      if (!seen.has(model.id)) {
-        seen.add(model.id)
+      const key = model.id.toLowerCase()
+      if (!seen.has(key)) {
+        seen.add(key)
         result.push(model)
       }
     }
@@ -174,7 +176,7 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
                     onMouseEnter={() => setActive(index)}
                     className={cn(
                       'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
-                      index === active ? 'bg-accent text-accent-foreground' : 'text-foreground',
+                      index === active ? 'bg-primary text-primary-foreground' : 'text-foreground',
                     )}
                   >
                     <span className="truncate">{model.id}</span>
