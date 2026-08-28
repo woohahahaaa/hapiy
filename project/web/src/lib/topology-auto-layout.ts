@@ -212,7 +212,13 @@ export function layoutFlatCanvas(
     if (!outMap.has(w.source)) outMap.set(w.source, w.target)
   }
 
-  const entries = canvas.topLevel.filter(isRequestEntry).sort((a, b) => a.id.localeCompare(b.id))
+  const entries = canvas.topLevel
+    .filter(isRequestEntry)
+    .sort((a, b) => {
+      const laneA = a.emergency === true ? 1 : 0
+      const laneB = b.emergency === true ? 1 : 0
+      return laneA - laneB || a.id.localeCompare(b.id)
+    })
   const entryChains = new Map<string, string[]>()
   const ownerOfSlot = new Map<string, string>()
   for (const entry of entries) {

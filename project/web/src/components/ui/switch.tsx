@@ -46,7 +46,7 @@ function Switch({
         height: h,
         width: w,
         borderRadius: rootRadius,
-        backgroundColor: checked ? (color ?? "var(--color-primary)") : "var(--color-secondary)",
+        backgroundColor: checked ? (color ?? "var(--node-accent, var(--color-primary))") : "var(--color-secondary)",
         ...style,
       }}
       {...props}

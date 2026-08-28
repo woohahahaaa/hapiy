@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react'
 import {
   ReactFlow,
   Background,
@@ -391,7 +391,7 @@ export function TopologyPage() {
 
   const externallyDisabledSet = useMemo(() => (tp ? externallyDisabledSlotIds(tp) : new Set<string>()), [tp])
 
-  // 应急链路节点集合：应急请求入口本身 + 其下游所有节点，用于渲染警告色。
+  // 应急链路节点集合：应急请求入口本身 + 其下游所有节点，用于注入关键色。
   const emergencyNodeIds = useMemo(() => {
     const ids = new Set<string>()
     if (!tp) return ids
@@ -404,6 +404,11 @@ export function TopologyPage() {
     }
     return ids
   }, [tp])
+
+  const accentStyleOf = (nodeId: string): CSSProperties | undefined => {
+    if (!emergencyNodeIds.has(nodeId)) return undefined
+    return { '--node-accent': 'var(--warning)' } as CSSProperties
+  }
 
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()
@@ -771,11 +776,12 @@ export function TopologyPage() {
           id: node.id,
           type: 'requestEntry',
           position: layoutSnapshot[node.id] ?? { x: 300, y: 20 },
+          style: accentStyleOf(node.id),
           data: {
             label: node.name ?? '请求入口',
             enabled: node.enabled,
             weight: node.weight ?? 1,
-            emergency: isEmergencyEntry(node),
+            accentColor: isEmergencyEntry(node) ? 'var(--warning)' : undefined,
             models: modelNodes.entryModels.get(node.id) ?? [],
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
@@ -828,11 +834,11 @@ export function TopologyPage() {
           id: node.id,
           type: 'slot',
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
+          style: accentStyleOf(node.id),
           data: {
             title: '供应商',
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
-            emergency: emergencyNodeIds.has(node.id),
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -855,6 +861,7 @@ export function TopologyPage() {
           id: node.id,
           type: 'slot',
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
+          style: accentStyleOf(node.id),
           data: {
             title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
             slotType: node.slotType ?? '',

@@ -32,7 +32,6 @@ export interface NodeSlotData {
   title: string
   slotType: string
   isProviderSlot?: boolean
-  emergency?: boolean
   externallyDisabled?: boolean
   enabled?: boolean
   children?: readonly FlatProviderChild[]
@@ -84,7 +83,6 @@ export function NodeSlot({ data }: NodeSlotProps) {
     title,
     slotType,
     isProviderSlot,
-    emergency,
     externallyDisabled = false,
     children = [],
     providers = [],
@@ -154,7 +152,6 @@ export function NodeSlot({ data }: NodeSlotProps) {
     <NodeSlotProvider
       title={title}
       enabled={data.enabled ?? true}
-      emergency={emergency}
       onSelectExecutor={onSelectExecutor}
       selectedExecutorToken={selectedExecutorToken}
       onToggleEnabled={onToggleEnabled}
