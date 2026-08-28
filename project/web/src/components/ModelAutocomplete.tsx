@@ -155,6 +155,12 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
         id="price-model"
         value={draft}
         onChange={(event) => handleInput(event.target.value)}
+        onPointerDown={() => {
+          if (searchable && draft.trim().length > 0) {
+            setOpen(true)
+            setActive(0)
+          }
+        }}
         onFocus={() => {
           if (searchable && draft.trim().length > 0) {
             setOpen(true)
@@ -171,6 +177,11 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
         placeholder="输入模型名称"
         autoComplete="off"
       />
+      {searchable && open && loading && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+          models.dev 数据加载中...
+        </div>
+      )}
       {searchable && open && !loading && !loadError && suggestions.length === 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
           未找到匹配的模型

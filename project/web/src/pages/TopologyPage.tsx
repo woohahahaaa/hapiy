@@ -1507,7 +1507,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     [setTopology, setEdges, markDirty, commitHistory, beginFlowIsolation],
   )
 
-  const [confirmDelete, setConfirmDelete] = useState<{ nodeCount: number; edgeCount: number } | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ nodeCount: number; edgeCount: number; executorToken?: string } | null>(null)
 
   const executeDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes
@@ -1515,19 +1515,28 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       .map((n) => n.id)
     if (topLevelIds.length > 0) {
       handleDeleteNodes(topLevelIds)
+    } else if (confirmDelete?.executorToken) {
+      handleDeleteNode(confirmDelete.executorToken)
+      setSelectedExecutor(null)
     } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
       handleDeleteSelectedEdges()
     }
-  }, [handleDeleteNodes, handleDeleteSelectedEdges])
+  }, [confirmDelete, handleDeleteNodes, handleDeleteNode, handleDeleteSelectedEdges])
 
   const requestDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes.filter(
       (n) => n.type === 'requestEntry' || n.type === 'slot',
     )
     const edgeCount = selectionRef.current.edges.filter((e) => !e.source.startsWith('model-')).length
-    if (topLevelIds.length === 0 && edgeCount === 0) return
-    setConfirmDelete({ nodeCount: topLevelIds.length, edgeCount })
-  }, [])
+    if (topLevelIds.length > 0 || edgeCount > 0) {
+      setConfirmDelete({ nodeCount: topLevelIds.length, edgeCount })
+      return
+    }
+    // executor 拾取态：选中的是某张供应商卡片（token = provider 节点 id）
+    if (selectedExecutor && canvas?.providers.some((p) => p.id === selectedExecutor.token)) {
+      setConfirmDelete({ nodeCount: 1, edgeCount: 0, executorToken: selectedExecutor.token })
+    }
+  }, [selectedExecutor, canvas])
 
   const handleUndo = useCallback(() => {
     const cur = tpRef.current
