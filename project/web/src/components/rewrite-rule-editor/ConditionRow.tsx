@@ -3,7 +3,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Checkbox } from '@/components/ui/checkbox'
 import { AppIcon } from '@/components/AppIcon'
 import { COND_OPS, SCOPE_OPTIONS } from './modes'
-import type { LeafCondition } from './serializer'
+import { parseValueInput, type LeafCondition } from './serializer'
 
 interface ConditionRowProps {
   index: number
@@ -60,12 +60,17 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Input
-            className="h-7 min-w-0 flex-1 font-mono text-xs"
-            value={condition.value}
-            onChange={(e) => onChange({ ...condition, value: e.target.value })}
-            placeholder="value"
-          />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <Input
+              className="h-7 w-full font-mono text-xs"
+              value={condition.value}
+              onChange={(e) => onChange({ ...condition, value: e.target.value })}
+              placeholder="value"
+            />
+            {condition.value.trim() !== '' && parseValueInput(condition.value).kind === 'invalid' && (
+              <p className="text-xs text-muted-foreground">字符串需要手动添加引号</p>
+            )}
+          </div>
           <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <Checkbox
               className="size-[18px] bg-background !opacity-100"

@@ -38,9 +38,12 @@ type RewriteOp struct {
 // RewriteCondition evaluates the current value at a path and decides
 // whether the op should run. Logic is AND/OR across siblings.
 type RewriteCondition struct {
-	Path     string // gjson path to evaluate against (defaults to op.Path)
-	Op       string // contains | prefix | suffix | eq | neq | gt | gte | lt | lte | matches
-	Value    string // literal string to compare against
+	Path  string // gjson path to evaluate against (defaults to op.Path)
+	Op    string // contains | prefix | suffix | eq | neq | gt | gte | lt | lte | matches
+	Value string // literal string to compare against
+	// RawValue is set when the authored value is a native JSON literal
+	// (bool / number / null); comparisons then happen type-aware.
+	RawValue json.RawMessage
 	Invert   bool
 	combined bool   // internal: true when this is a logic node, not a leaf
 	Logic    string // "AND" | "OR" — only used when combined
@@ -245,8 +248,15 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 		}
 	}
 	if raw, ok := leaf["value"]; ok {
-		if err := json.Unmarshal(raw, &c.Value); err != nil {
-			return c, fmt.Errorf("rule %s: op %d condition %d: value is not a string: %w", ruleID, opIndex, ci, err)
+		var s string
+		if err := json.Unmarshal(raw, &s); err == nil && string(raw) != "null" {
+			c.Value = s
+		} else {
+			trimmed := strings.TrimSpace(string(raw))
+			if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+				return c, fmt.Errorf("rule %s: op %d condition %d: value must be a scalar", ruleID, opIndex, ci)
+			}
+			c.RawValue = json.RawMessage(trimmed)
 		}
 	}
 	if raw, ok := leaf["invert"]; ok {
@@ -255,7 +265,11 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 		}
 	}
 	if c.Op == "matches" {
-		re, err := regexp.Compile(c.Value)
+		pattern := c.Value
+		if c.RawValue != nil {
+			pattern = string(c.RawValue)
+		}
+		re, err := regexp.Compile(pattern)
 		if err != nil {
 			return c, fmt.Errorf("rule %s: op %d condition %d: invalid matches regex: %w", ruleID, opIndex, ci, err)
 		}
@@ -500,11 +514,15 @@ func evaluateCondition(c *RewriteCondition, body []byte, headers map[string]stri
 		if headers != nil {
 			actual = headers[key]
 		}
+		expected := c.Value
+		if c.RawValue != nil {
+			expected = string(c.RawValue)
+		}
 		var ok bool
 		if c.Op == "matches" && c.Regex != nil {
 			ok = c.Regex.MatchString(actual)
 		} else {
-			ok, err = compareValues(c.Op, actual, c.Value)
+			ok, err = compareValues(c.Op, actual, expected)
 			if err != nil {
 				return false, err
 			}
@@ -515,13 +533,14 @@ func evaluateCondition(c *RewriteCondition, body []byte, headers map[string]stri
 		return ok, nil
 	}
 	current := gjson.GetBytes(body, path)
-	actual := current.String()
 	var ok bool
-	if c.Op == "matches" && c.Regex != nil {
-		ok = c.Regex.MatchString(actual)
+	if c.RawValue != nil {
+		ok = compareNativeLiteral(c, current)
+	} else if c.Op == "matches" && c.Regex != nil {
+		ok = c.Regex.MatchString(current.String())
 	} else {
 		var err error
-		ok, err = compareValues(c.Op, actual, c.Value)
+		ok, err = compareValues(c.Op, current.String(), c.Value)
 		if err != nil {
 			return false, err
 		}
@@ -601,4 +620,68 @@ func compareValues(op, actual, expected string) (bool, error) {
 		return actual <= expected, nil
 	}
 	return false, fmt.Errorf("unsupported comparison op %q", op)
+}
+
+// compareNativeLiteral evaluates a condition whose value is a native JSON
+// literal (bool / number / null) against the body value. eq/neq are
+// type-aware: a JSON string "true" never equals the boolean true. Ordering
+// ops compare numerically when both sides are numeric, otherwise
+// lexicographically; string ops use the literal's text form.
+func compareNativeLiteral(c *RewriteCondition, actual gjson.Result) bool {
+	raw := string(c.RawValue)
+	switch c.Op {
+	case "eq":
+		return nativeLiteralEqual(actual, raw)
+	case "neq":
+		return !nativeLiteralEqual(actual, raw)
+	case "gt", "gte", "lt", "lte":
+		return nativeLiteralCompare(c.Op, actual, raw)
+	case "contains":
+		return strings.Contains(actual.String(), raw)
+	case "prefix":
+		return strings.HasPrefix(actual.String(), raw)
+	case "suffix":
+		return strings.HasSuffix(actual.String(), raw)
+	case "matches":
+		return c.Regex != nil && c.Regex.MatchString(actual.String())
+	}
+	return false
+}
+
+func nativeLiteralEqual(actual gjson.Result, raw string) bool {
+	if aNum, err := strconv.ParseFloat(actual.Raw, 64); err == nil {
+		if bNum, bErr := strconv.ParseFloat(raw, 64); bErr == nil {
+			return aNum == bNum
+		}
+	}
+	return actual.Raw == raw
+}
+
+func nativeLiteralCompare(op string, actual gjson.Result, raw string) bool {
+	aNum, aErr := strconv.ParseFloat(actual.Raw, 64)
+	bNum, bErr := strconv.ParseFloat(raw, 64)
+	if aErr == nil && bErr == nil {
+		switch op {
+		case "gt":
+			return aNum > bNum
+		case "gte":
+			return aNum >= bNum
+		case "lt":
+			return aNum < bNum
+		case "lte":
+			return aNum <= bNum
+		}
+	}
+	a, b := actual.String(), raw
+	switch op {
+	case "gt":
+		return a > b
+	case "gte":
+		return a >= b
+	case "lt":
+		return a < b
+	case "lte":
+		return a <= b
+	}
+	return false
 }

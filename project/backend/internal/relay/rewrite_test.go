@@ -82,6 +82,58 @@ func TestApplyScript_set_boolean_preserves_json_type(t *testing.T) {
 	}
 }
 
+func TestCondition_native_bool_is_type_aware(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"out","mode":"set","value":"hit","conditions":[{"path":"f","op":"eq","value":true}]}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	out, _, err := applyRewriteChains([]byte(`{"f":true}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply bool: %v", err)
+	}
+	if !strings.Contains(string(out), `"out":"hit"`) {
+		t.Fatalf("native true should match JSON bool true: %s", out)
+	}
+	out, _, err = applyRewriteChains([]byte(`{"f":"true"}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply string: %v", err)
+	}
+	if strings.Contains(string(out), `"out":"hit"`) {
+		t.Fatalf("native true must NOT match JSON string \"true\": %s", out)
+	}
+}
+
+func TestCondition_native_null_and_number(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"a","mode":"set","value":"1","conditions":[{"path":"v","op":"eq","value":null}]},
+		{"path":"b","mode":"set","value":"2","conditions":[{"path":"n","op":"gte","value":1.5}]}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	out, _, err := applyRewriteChains([]byte(`{"v":null,"n":2}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply match: %v", err)
+	}
+	if !strings.Contains(string(out), `"a":"1"`) || !strings.Contains(string(out), `"b":"2"`) {
+		t.Fatalf("null eq and numeric gte should match: %s", out)
+	}
+	out, _, err = applyRewriteChains([]byte(`{"v":"null","n":1}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply no-match: %v", err)
+	}
+	if strings.Contains(string(out), `"a":"1"`) || strings.Contains(string(out), `"b":"2"`) {
+		t.Fatalf("string \"null\" and n=1 must not match: %s", out)
+	}
+}
+
+func TestCompileCondition_rejects_object_value(t *testing.T) {
+	_, err := compileRewriteChain("r", `[{"path":"a","mode":"delete","conditions":[{"path":"x","op":"eq","value":{"k":1}}]}]`)
+	if err == nil {
+		t.Fatal("object condition value must fail compilation")
+	}
+}
+
 func TestApplyRewriteChain_string_transforms(t *testing.T) {
 	chain, err := compileRewriteChain("r", `[
 		{"path":"u","mode":"to_upper"},

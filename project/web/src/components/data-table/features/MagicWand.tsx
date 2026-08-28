@@ -44,7 +44,7 @@ export function MagicWandButton({
       title={isActive ? "退出自动列宽" : "自动列宽"}
       onClick={handleToggle}
     >
-      <AppIcon name="auto_fix_high" size={24} theme="outline" fill="currentColor" />
+      <AppIcon name="auto_width" size={24} theme="outline" fill="currentColor" />
     </Button>
   );
 }
@@ -102,6 +102,34 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
     cbRef.current.onActivate?.(false);
   }, [pendingReference]);
 
+  // Keep the follow-cursor tooltip inside the viewport: measure its rendered
+  // size and flip the offset to the other side of the cursor when it would
+  // overflow the right or bottom screen edge. The tooltip is rendered hidden
+  // until the first clamp so it never flashes at an unclamped position.
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
+  const [clampedPos, setClampedPos] = React.useState<{ x: number; y: number } | null>(null);
+  React.useLayoutEffect(() => {
+    if (!isActive || !cursorPos) {
+      setClampedPos(null);
+      return;
+    }
+    const rect = tooltipRef.current?.getBoundingClientRect();
+    const pad = 8;
+    let x = cursorPos.x + TOOLTIP_OFFSET_PX;
+    let y = cursorPos.y + TOOLTIP_OFFSET_PX;
+    if (rect) {
+      if (x + rect.width + pad > window.innerWidth) {
+        x = cursorPos.x - rect.width - TOOLTIP_OFFSET_PX;
+      }
+      if (y + rect.height + pad > window.innerHeight) {
+        y = cursorPos.y - rect.height - TOOLTIP_OFFSET_PX;
+      }
+      x = Math.max(pad, x);
+      y = Math.max(pad, y);
+    }
+    setClampedPos({ x, y });
+  }, [isActive, cursorPos]);
+
   const handlePick = React.useCallback((mode: "percent" | "pixel") => {
     cbRef.current.onApply?.(mode);
   }, []);
@@ -144,6 +172,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
 
       {isActive && (
         <div
+          ref={tooltipRef}
           aria-hidden
           className={cn(
             "pointer-events-none fixed z-50",
@@ -151,8 +180,9 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
             "whitespace-nowrap",
           )}
           style={{
-            left: cursorPos ? cursorPos.x + TOOLTIP_OFFSET_PX : 0,
-            top: cursorPos ? cursorPos.y + TOOLTIP_OFFSET_PX : 0,
+            left: clampedPos ? clampedPos.x : 0,
+            top: clampedPos ? clampedPos.y : 0,
+            visibility: clampedPos ? "visible" : "hidden",
           }}
         >
           {TOOLTIP_TEXT}

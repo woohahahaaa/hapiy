@@ -79,8 +79,8 @@ export function ColumnSettingsPopover<T>(
           <AppIcon name="settings" size={16} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-80 p-3">
-        <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+      <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-80 p-3">
+        <div className="flex max-h-[min(60vh,calc(100dvh-8rem))] flex-col gap-3 overflow-y-auto">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium">列设置</div>
             {headerExtra}
