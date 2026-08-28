@@ -82,7 +82,7 @@ const navigation: NavItem[] = [
   {
     id: 'agent',
     label: '接管Agent',
-    icon: <AppIcon name="dns" />,
+    icon: <AppIcon name="robot" />,
     children: [
       { id: 'agent-config', label: '配置文件', href: '/agent/config' },
     ],

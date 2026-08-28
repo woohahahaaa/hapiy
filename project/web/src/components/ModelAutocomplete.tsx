@@ -165,27 +165,30 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
         <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-md">
           <ScrollArea className="h-72">
             <ul className="py-1">
-              {suggestions.map((model, index) => (
-                <li key={model.id}>
-                  <button
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      pick(model)
-                    }}
-                    onMouseEnter={() => setActive(index)}
-                    className={cn(
-                      'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
-                      index === active ? 'bg-primary text-primary-foreground' : 'text-foreground',
-                    )}
-                  >
-                    <span className="truncate">{model.id}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {formatContext(model)}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {suggestions.map((model, index) => {
+                const displayId = model.id.toLowerCase()
+                return (
+                  <li key={displayId}>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        pick(model)
+                      }}
+                      onMouseEnter={() => setActive(index)}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
+                        index === active ? 'bg-primary text-primary-foreground' : 'text-foreground',
+                      )}
+                    >
+                      <span className="truncate">{displayId}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {formatContext(model)}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           </ScrollArea>
         </div>
