@@ -16,7 +16,6 @@ interface NodeExecutorEntryData {
   label: string
   enabled: boolean
   weight: number
-  emergency?: boolean
   models?: Array<{ id: string; label: string; active: boolean }>
   flashLayers?: readonly FlowLayerOverlay[]
   onChangeEnabled: (enabled: boolean) => void
@@ -119,7 +118,6 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
       ref={rootRef}
       className={cn(
         'relative rounded-lg border border-border bg-card text-card-foreground',
-        data.emergency && 'border-warning/60',
         !enabled && 'opacity-60',
       )}
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
@@ -167,9 +165,9 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         <span className={cn('flex min-w-0 items-center gap-1.5')}>
           <span
             aria-hidden="true"
-            className={cn('size-2 shrink-0 rounded-full', enabled ? (data.emergency ? 'bg-warning' : 'bg-primary') : 'bg-muted-foreground/50')}
+            className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-primary' : 'bg-muted-foreground/50')}
           />
-          <span className={cn('truncate text-sm font-medium', data.emergency && 'text-warning')}>{label || '请求入口'}</span>
+          <span className="truncate text-sm font-medium">{label || '请求入口'}</span>
         </span>
         <Switch
           checked={enabled}

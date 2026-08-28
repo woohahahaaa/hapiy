@@ -40,7 +40,6 @@ type FlatNode struct {
 	SlotType      string          `json:"slot_type,omitempty"`       // for KindSlot
 	Enabled       bool            `json:"enabled"`                   // request-entry master switch / provider mini-switch / logOutput slot master switch
 	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
-	Emergency     bool            `json:"emergency,omitempty"`       // 应急请求入口：普通入口无可用供应商时才参与调度
 	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
 	DeadlineAt *int64          `json:"deadline_at,omitempty"` // slot-level optional deadline (auto-off), Unix epoch ms
 	Strategy      string          `json:"strategy,omitempty"`        // provider slot child-picking strategy: sequential|random|roundRobin
@@ -163,44 +162,6 @@ func activeRequestEntries(t *Topology) []FlatNode {
 	return entries
 }
 
-// activeRequestEntriesOfLane returns the enabled request entries with positive
-// weight restricted to one lane: emergency=false keeps normal entries,
-// emergency=true keeps 应急请求入口 only.
-func activeRequestEntriesOfLane(t *Topology, emergency bool) []FlatNode {
-	entries := make([]FlatNode, 0)
-	for _, n := range activeRequestEntries(t) {
-		if n.Emergency == emergency {
-			entries = append(entries, n)
-		}
-	}
-	return entries
-}
-
-// HasEmergencyEntries reports whether the topology declares any request entry
-// as 应急请求入口 (regardless of enabled state).
-func HasEmergencyEntries(t *Topology) bool {
-	if t == nil {
-		return false
-	}
-	for _, n := range t.Nodes {
-		if n.Kind == KindRequestEntry && n.Emergency {
-			return true
-		}
-	}
-	return false
-}
-
-// EntryIsEmergency reports whether the entry node with the given id is an
-// 应急请求入口. Unknown ids (or no topology) count as normal so legacy
-// affinity triples keep their existing stale-entry handling.
-func EntryIsEmergency(t *Topology, entryID string) bool {
-	if t == nil || entryID == "" {
-		return false
-	}
-	n, ok := nodeByID(t, entryID)
-	return ok && n.Kind == KindRequestEntry && n.Emergency
-}
-
 // outgoing returns the single target a node connects to, or "".
 func outgoing(t *Topology, id string) string {
 	for _, w := range t.Wires {
@@ -279,20 +240,7 @@ func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path
 	if err := ValidateTopology(t); err != nil {
 		return nil, err
 	}
-	return findEligibleFromEntries(t, refs, model, path, activeRequestEntries(t)), nil
-}
-
-// FindEligibleProvidersOfLane is FindEligibleProviders restricted to one lane:
-// emergency=false walks normal request entries only, emergency=true walks
-// 应急请求入口 only.
-func FindEligibleProvidersOfLane(t *Topology, refs map[string]ProviderRef, model, path string, emergency bool) ([]EligibleProvider, error) {
-	if err := ValidateTopology(t); err != nil {
-		return nil, err
-	}
-	return findEligibleFromEntries(t, refs, model, path, activeRequestEntriesOfLane(t, emergency)), nil
-}
-
-func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, path string, entries []FlatNode) []EligibleProvider {
+	entries := activeRequestEntries(t)
 	result := make([]EligibleProvider, 0)
 	seen := map[string]bool{}
 	for _, entry := range entries {
@@ -344,7 +292,7 @@ func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, pa
 			cur = outgoing(t, cur)
 		}
 	}
-	return result
+	return result, nil
 }
 
 // PickEligibleProvider selects the default provider for a request that has no
@@ -590,15 +538,13 @@ type DuplicateActivation struct {
 	EntryIDs     []string
 }
 
-// FindDuplicateActivations walks the enabled normal request entries and
-// reports any provider reachable from more than one of them. It is the source
-// of truth for the frontend's "同一个 Provider 不能在多个工作流中被激活" rule.
-// 应急请求入口 are exempt: the same provider may be activated under a normal
-// entry and an 应急 entry at the same time.
+// FindDuplicateActivations walks the enabled request entries and reports any
+// provider reachable from more than one of them. It is the source of truth for
+// the frontend's "同一个 Provider 不能在多个工作流中被激活" rule.
 func FindDuplicateActivations(t *Topology) []DuplicateActivation {
 	entryProvider := map[string]string{}
 	conflicts := map[string][]string{}
-	entries := activeRequestEntriesOfLane(t, false)
+	entries := activeRequestEntries(t)
 	for _, entry := range entries {
 		cur := outgoing(t, entry.ID)
 		visited := map[string]bool{entry.ID: true}

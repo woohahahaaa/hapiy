@@ -15,7 +15,6 @@ interface FlatCanvasMenuProps {
   y: number
   mode: 'corner' | 'cursor'
   onAddFullWorkflow: () => void
-  onAddEmergencyWorkflow: () => void
   onAddEntry: () => void
   onAddProviderSlot: () => void
   onAddSlot: (slotType: RewriteSlotType) => void
@@ -27,7 +26,6 @@ export function FlatCanvasMenu({
   y,
   mode,
   onAddFullWorkflow,
-  onAddEmergencyWorkflow,
   onAddEntry,
   onAddProviderSlot,
   onAddSlot,
@@ -99,17 +97,6 @@ export function FlatCanvasMenu({
             <span>添加 {REWRITE_SLOT_LABELS[slotType]} 插槽</span>
           </button>
         ))}
-        <div className="mt-1 border-t border-border" />
-        <button
-          type="button"
-          onClick={() => {
-            onAddEmergencyWorkflow()
-            onClose()
-          }}
-          className="flex w-full items-center rounded-sm bg-warning/10 px-2 py-1.5 text-sm text-warning transition-colors hover:bg-warning/20 hover:text-warning"
-        >
-          <span>添加应急供应商</span>
-        </button>
       </div>
     </>
   )

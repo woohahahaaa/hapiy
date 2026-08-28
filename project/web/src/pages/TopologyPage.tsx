@@ -51,7 +51,6 @@ import {
   canvasFromFlat,
   flatWiresFromCanvas,
   findDuplicateActivations,
-  isEmergencyEntry,
   isProviderSlot,
   isRequestEntry,
   isProvider,
@@ -390,20 +389,6 @@ export function TopologyPage() {
   const canvas: FlatCanvas | null = useMemo(() => (tp ? canvasFromFlat(tp.nodes, tp.wires) : null), [tp])
 
   const externallyDisabledSet = useMemo(() => (tp ? externallyDisabledSlotIds(tp) : new Set<string>()), [tp])
-
-  // 应急链路节点集合：应急请求入口本身 + 其下游所有节点，用于渲染警告色。
-  const emergencyNodeIds = useMemo(() => {
-    const ids = new Set<string>()
-    if (!tp) return ids
-    const entries = tp.nodes.filter(isEmergencyEntry)
-    if (entries.length === 0) return ids
-    for (const node of tp.nodes) {
-      if (entries.some((entry) => node.id === entry.id || reaches(tp.wires, entry.id, node.id))) {
-        ids.add(node.id)
-      }
-    }
-    return ids
-  }, [tp])
 
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()
@@ -775,7 +760,6 @@ export function TopologyPage() {
             label: node.name ?? '请求入口',
             enabled: node.enabled,
             weight: node.weight ?? 1,
-            emergency: isEmergencyEntry(node),
             models: modelNodes.entryModels.get(node.id) ?? [],
             onChangeEnabled: (enabled: boolean) => {
               updateTopologyNodes((list) => {
@@ -832,7 +816,6 @@ export function TopologyPage() {
             title: '供应商',
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
-            emergency: emergencyNodeIds.has(node.id),
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -1858,45 +1841,6 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     ])
   }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
 
-  const handleAddEmergencyWorkflow = useCallback(() => {
-    const cur = tpRef.current
-    if (!cur) return
-    const suffix = crypto.randomUUID().slice(0, 8)
-    const entryId = `entry-${suffix}`
-    const pslotId = `pslot-${suffix}`
-    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'logOutput']
-    const nodeIds = new Map<RewriteSlotType, string>()
-    for (const st of slotIds) nodeIds.set(st, `${st}-${suffix}`)
-
-    const newNodes: FlatNode[] = [
-      ...cur.nodes,
-      { id: entryId, kind: 'requestEntry', name: '应急请求入口', enabled: true, weight: 1, emergency: true },
-      { id: pslotId, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true },
-      ...slotIds.map((st) => ({
-        id: nodeIds.get(st)!,
-        kind: 'slot' as const,
-        slotType: st,
-        enabled: st !== 'logOutput',
-      })),
-    ]
-    const chain: FlatWire[] = [
-      { source: entryId, target: pslotId },
-      { source: pslotId, target: nodeIds.get(slotIds[0])! },
-    ]
-    for (let i = 0; i < slotIds.length - 1; i++) {
-      chain.push({ source: nodeIds.get(slotIds[i])!, target: nodeIds.get(slotIds[i + 1])! })
-    }
-    commitHistory(cur)
-    beginFlowIsolation()
-    setTopology({ nodes: newNodes, wires: [...cur.wires, ...chain] })
-    markDirty()
-    placeNewNodes([
-      { id: entryId, width: topologyConfig.fallbackNodeSize.width },
-      { id: pslotId, width: topologyConfig.render.slot.shellMinWidth },
-      ...slotIds.map((st) => ({ id: nodeIds.get(st)!, width: topologyConfig.render.slot.shellMinWidth })),
-    ])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
-
   const handleAddButtonClick = useCallback(() => {
     const btn = addButtonRef.current
     if (!btn) {
@@ -2105,9 +2049,8 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
             x={menuState.x}
             y={menuState.y}
             mode={menuState.mode}
-    onAddFullWorkflow={handleAddFullWorkflow}
-    onAddEmergencyWorkflow={handleAddEmergencyWorkflow}
-    onAddEntry={handleAddEntry}
+            onAddFullWorkflow={handleAddFullWorkflow}
+            onAddEntry={handleAddEntry}
             onAddProviderSlot={handleAddProviderSlot}
             onAddSlot={handleAddSlot}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}

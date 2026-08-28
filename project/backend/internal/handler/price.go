@@ -274,7 +274,7 @@ func PriceReferences(db *gorm.DB) gin.HandlerFunc {
 			}
 			var entries []struct {
 				Model         string `json:"model"`
-				PriceConfigID string `json:"ratePriceConfigId"`
+				PriceConfigID string `json:"priceConfigId"`
 			}
 			if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
 				continue

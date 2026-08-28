@@ -42,11 +42,6 @@ export function isRequestEntry(node: FlatNode): boolean {
   return node.kind === 'requestEntry'
 }
 
-/** 应急请求入口：普通入口无可用供应商时才参与调度的兜底入口。 */
-export function isEmergencyEntry(node: FlatNode): boolean {
-  return node.kind === 'requestEntry' && node.emergency === true
-}
-
 export function isProvider(node: FlatNode): boolean {
   return node.kind === 'provider'
 }
@@ -248,8 +243,7 @@ export function findDuplicateActivations(
   }
 
   for (const n of nodes) {
-    // 应急入口豁免去重：同一供应商可同时出现在普通入口和应急入口下。
-    if (n.kind === 'requestEntry' && n.enabled && !n.emergency) walk(n.id)
+    if (n.kind === 'requestEntry' && n.enabled) walk(n.id)
   }
   return Array.from(duplicated)
 }
