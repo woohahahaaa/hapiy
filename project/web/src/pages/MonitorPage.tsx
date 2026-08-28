@@ -44,7 +44,7 @@ function formatBytes(n: number): string {
 
 function formatActiveStage(row: ActiveRequest): string {
   const elapsed = `${(row.elapsedMs / 1000).toFixed(1)}s`
-switch (row.stage) {
+  switch (row.stage) {
     case 'queued':
       return `排队中·已等${elapsed}`
     case 'connecting':
@@ -58,7 +58,6 @@ switch (row.stage) {
     default:
       return '活跃中'
   }
-}
 }
 
 function formatOutcome(outcome: string): string {

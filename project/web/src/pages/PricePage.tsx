@@ -152,13 +152,13 @@ export function PricePage() {
       label: '模型',
       defaultWidth: { kind: 'pixel', value: 240 },
       render: (_, row) => (
-        <div className="flex items-center gap-2">
+        <span>
           <span>{row.model}</span>
-          <span className="text-xs text-muted-foreground">· {row.providerId || '默认'}</span>
+          <span className="text-muted-foreground"> · {row.providerId || '默认'}</span>
           {row.cacheWritePrice === 0 && row.cacheReadPrice === 0 && (
-            <span className="text-xs text-muted-foreground">无缓存</span>
+            <span className="text-muted-foreground"> 无缓存</span>
           )}
-        </div>
+        </span>
       ),
     },
     {

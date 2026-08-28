@@ -155,6 +155,12 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
         id="price-model"
         value={draft}
         onChange={(event) => handleInput(event.target.value)}
+        onFocus={() => {
+          if (searchable && draft.trim().length > 0) {
+            setOpen(true)
+            setActive(0)
+          }
+        }}
         onKeyDown={handleKeyDown}
         onBlur={(event) => {
           const next = event.relatedTarget
