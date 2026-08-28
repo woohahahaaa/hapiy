@@ -146,7 +146,7 @@ function DetailRow({ label, value, className = '' }: { label: string; value: Rea
   return (
     <div className={`flex items-baseline gap-2 ${className}`}>
       <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{label}</span>
-      <span className="break-words text-foreground">{value}</span>
+      <span className="min-w-0 break-words whitespace-pre-wrap text-foreground">{value}</span>
     </div>
   )
 }

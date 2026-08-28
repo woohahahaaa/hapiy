@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -13,8 +13,17 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Switch } from '@/components/ui/switch'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelAutocomplete } from '@/components/ModelAutocomplete'
-import type { ModelsDevModel } from '@/lib/models-dev'
+import { cn } from '@/lib/utils'
+import {
+  findModelsDevModel,
+  findModelsDevProviderRow,
+  loadModelsDevModels,
+  providersForModel,
+  type ModelsDevModel,
+} from '@/lib/models-dev'
 import { getModelNameConflicts } from '@/lib/model-name-validation'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { PriceConfig, PriceConfigInput } from '@/lib/dashboard-api'
@@ -286,8 +295,10 @@ function PriceForm({
   const toDisplay = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
   const toUsd = (display: number): number => (currency === 'CNY' ? display / rate : display)
   const [form, setForm] = useState<PriceConfigInput>(initial ? toDisplayInput(initial, toDisplay) : emptyPrice)
-  const [pickedModel, setPickedModel] = useState<ModelsDevModel | null>(null)
-  const [autoFillError, setAutoFillError] = useState<string | null>(null)
+  const [modelsDevEnabled, setModelsDevEnabled] = useState(false)
+  const [providerId, setProviderId] = useState<string | null>(null)
+  const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
+  const [snapshotError, setSnapshotError] = useState<string | null>(null)
   const [existingNames, setExistingNames] = useState<ExistingNamesState>({ kind: 'loading' })
 
   useEffect(() => {
@@ -326,23 +337,92 @@ function PriceForm({
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
 
-  const applyModelsDevData = () => {
-    if (!pickedModel) return
-    setAutoFillError(null)
-    const supportedTypes = [
-      ...new Set([...pickedModel.inputTypes, ...pickedModel.outputTypes]),
-    ]
+  useEffect(() => {
+    if (!modelsDevEnabled) return
+    let cancelled = false
+    setSnapshotError(null)
+    loadModelsDevModels()
+      .then((models) => {
+        if (!cancelled) setSnapshot(models)
+      })
+      .catch(() => {
+        if (!cancelled) setSnapshotError('models.dev 数据加载失败，请检查网络')
+      })
+    return () => { cancelled = true }
+  }, [modelsDevEnabled])
+
+  const providers = useMemo(
+    () => (modelsDevEnabled ? providersForModel(snapshot ?? [], form.model) : []),
+    [modelsDevEnabled, snapshot, form.model],
+  )
+
+  // Drop a provider selection that no longer belongs to the committed model.
+  useEffect(() => {
+    if (providerId !== null && !providers.some((provider) => provider.providerId === providerId)) {
+      setProviderId(null)
+    }
+  }, [providerId, providers])
+
+  const fillFromProvider = (pid: string) => {
+    if (snapshot === null) return
+    const row = findModelsDevProviderRow(snapshot, form.model, pid)
+    if (!row) return
     setForm((current) => ({
       ...current,
-      inputPrice: toDisplay(pickedModel.inputPrice),
-      outputPrice: toDisplay(pickedModel.outputPrice),
-      cacheWritePrice: toDisplay(pickedModel.cacheWritePrice),
-      cacheReadPrice: toDisplay(pickedModel.cacheReadPrice),
-      contextLength: pickedModel.contextLength,
-      maxToken: pickedModel.maxOutput,
-      supportedTypes,
+      inputPrice: toDisplay(row.inputPrice),
+      outputPrice: toDisplay(row.outputPrice),
+      cacheWritePrice: toDisplay(row.cacheWritePrice),
+      cacheReadPrice: toDisplay(row.cacheReadPrice),
+      contextLength: row.contextLength,
+      maxToken: row.maxOutput,
+      supportedTypes: [...new Set([...row.inputTypes, ...row.outputTypes])],
     }))
-    setPickedModel(null)
+  }
+
+  const handleProviderSelect = (pid: string | null) => {
+    setProviderId(pid)
+    if (pid) fillFromProvider(pid)
+  }
+
+  // Model name commits (pick or blur). While the switch is on, an exact
+  // case-insensitive match keeps the official casing; otherwise the model
+  // field and the provider selection are cleared together.
+  const handleModelChange = (model: string) => {
+    setForm((current) => ({ ...current, model }))
+    if (!modelsDevEnabled || snapshot === null) return
+    const match = findModelsDevModel(snapshot, model)
+    if (match) {
+      setForm((current) => ({ ...current, model: match.id }))
+    } else {
+      setProviderId(null)
+      setForm((current) => ({ ...current, model: '' }))
+    }
+  }
+
+  const handleSave = () => {
+    const payload = {
+      ...form,
+      model: form.model.trim(),
+      inputPrice: toUsd(form.inputPrice),
+      outputPrice: toUsd(form.outputPrice),
+      cacheWritePrice: toUsd(form.cacheWritePrice),
+      cacheReadPrice: toUsd(form.cacheReadPrice),
+    }
+    if (!modelsDevEnabled) {
+      onSave(payload)
+      return
+    }
+    if (snapshot === null) {
+      setSnapshotError('models.dev 数据加载失败，请检查网络')
+      return
+    }
+    const match = findModelsDevModel(snapshot, form.model)
+    if (!match) {
+      setProviderId(null)
+      setForm((current) => ({ ...current, model: '' }))
+      return
+    }
+    onSave({ ...payload, model: match.id })
   }
 
   const nameConflicts = existingNames.kind === 'ready'
@@ -360,7 +440,8 @@ function PriceForm({
     form.contextLength >= 0 &&
     form.maxToken >= 0 &&
     existingNames.kind === 'ready' &&
-    nameConflicts.length === 0
+    nameConflicts.length === 0 &&
+    (!modelsDevEnabled || providerId !== null)
 
   return (
     <FieldGroup>
@@ -370,21 +451,48 @@ function PriceForm({
           <div className="flex-1">
             <ModelAutocomplete
               value={form.model}
-              onChange={(model) => setForm((current) => ({ ...current, model }))}
-              onPick={setPickedModel}
+              onChange={handleModelChange}
+              searchable={modelsDevEnabled}
             />
           </div>
-          {pickedModel && (
-            <Button type="button" variant="outline" size="sm" onClick={applyModelsDevData}>
-              从 models.dev 获取模型信息
-            </Button>
+          {form.model.trim() !== '' && (
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={modelsDevEnabled}
+                onCheckedChange={(checked) => setModelsDevEnabled(checked === true)}
+              />
+              从 models.dev 获取信息
+            </label>
           )}
         </div>
-        {autoFillError && <p role="alert" className="text-xs text-destructive">{autoFillError}</p>}
+        {snapshotError && <p role="alert" className="text-xs text-destructive">{snapshotError}</p>}
         {existingNames.kind === 'loading' && <p className="text-xs text-muted-foreground">正在检查历史模型名称...</p>}
         {existingNames.kind === 'error' && <p role="alert" className="text-xs text-destructive">无法检查历史模型名称，请稍后重试</p>}
         <p className="text-xs text-muted-foreground">大小写不敏感</p>
       </Field>
+      {modelsDevEnabled && (
+        <Field>
+          <FieldLabel htmlFor="price-provider">供应商</FieldLabel>
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <ProviderSelect providers={providers} value={providerId} onSelect={handleProviderSelect} />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={providerId === null}
+              onClick={() => { if (providerId !== null) fillFromProvider(providerId) }}
+            >
+              <AppIcon name="refresh" data-icon="inline-start" />
+              更新模型数据
+            </Button>
+          </div>
+          {providerId === null && (
+            <p className="text-xs text-muted-foreground">开启后需选择供应商才能保存</p>
+          )}
+        </Field>
+      )}
       <Field>
         <FieldLabel htmlFor="price-aliases">匹配更多名称</FieldLabel>
         <Input
@@ -488,18 +596,138 @@ function PriceForm({
       </Field>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={!valid || saving} onClick={() => onSave({
-          ...form,
-          model: form.model.trim(),
-          inputPrice: toUsd(form.inputPrice),
-          outputPrice: toUsd(form.outputPrice),
-          cacheWritePrice: toUsd(form.cacheWritePrice),
-          cacheReadPrice: toUsd(form.cacheReadPrice),
-        })}>
+        <Button disabled={!valid || saving} onClick={handleSave}>
           {saving ? '保存中...' : '保存'}
         </Button>
       </DialogFooter>
     </FieldGroup>
+  )
+}
+
+type ProviderOption = {
+  readonly providerId: string
+  readonly providerName: string
+}
+
+type ProviderSelectProps = {
+  readonly providers: readonly ProviderOption[]
+  readonly value: string | null
+  readonly onSelect: (providerId: string | null) => void
+}
+
+// Input-style provider picker (same interaction as ModelAutocomplete, not a
+// button+popover): typing only updates the local draft and the candidate
+// list; the parent is notified on candidate pick or on blur.
+function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
+  const [draft, setDraft] = useState('')
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const anchorRef = useRef<HTMLDivElement | null>(null)
+
+  // Reflect the committed selection (official casing) into the input.
+  useEffect(() => {
+    const option = providers.find((provider) => provider.providerId === value)
+    setDraft(option ? option.providerName : '')
+  }, [value, providers])
+
+  const candidates = useMemo(() => {
+    const needle = draft.trim().toLowerCase()
+    if (!needle) return providers
+    return providers.filter((provider) =>
+      provider.providerName.toLowerCase().includes(needle) ||
+      provider.providerId.toLowerCase().includes(needle),
+    )
+  }, [providers, draft])
+
+  const commit = (option: ProviderOption | null) => {
+    if (option) {
+      setDraft(option.providerName)
+      onSelect(option.providerId)
+    } else {
+      setDraft('')
+      onSelect(null)
+    }
+    setOpen(false)
+  }
+
+  const handleBlur = () => {
+    const trimmed = draft.trim()
+    const match = providers.find((provider) => provider.providerName.toLowerCase() === trimmed.toLowerCase())
+    commit(match ?? null)
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || candidates.length === 0) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActive((current) => (current + 1) % candidates.length)
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActive((current) => (current - 1 + candidates.length) % candidates.length)
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      commit(candidates[active])
+    } else if (event.key === 'Escape') {
+      setOpen(false)
+    }
+  }
+
+  return (
+    <div ref={anchorRef} className="relative">
+      <Input
+        id="price-provider"
+        value={draft}
+        onChange={(event) => {
+          setDraft(event.target.value)
+          setOpen(true)
+          setActive(0)
+        }}
+        onFocus={() => {
+          setOpen(true)
+          setActive(0)
+        }}
+        onKeyDown={handleKeyDown}
+        onBlur={(event) => {
+          const next = event.relatedTarget
+          if (!(next instanceof Node) || !anchorRef.current?.contains(next)) {
+            handleBlur()
+          }
+        }}
+        placeholder="请选择供应商"
+        autoComplete="off"
+      />
+      {open && candidates.length === 0 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+          未找到匹配的供应商
+        </div>
+      )}
+      {open && candidates.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-md">
+          <ScrollArea className="h-72">
+            <ul className="py-1">
+              {candidates.map((option, index) => (
+                <li key={option.providerId}>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      commit(option)
+                    }}
+                    onMouseEnter={() => setActive(index)}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
+                      index === active ? 'bg-accent text-accent-foreground' : 'text-foreground',
+                    )}
+                  >
+                    <span className="truncate">{option.providerName}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </ScrollArea>
+        </div>
+      )}
+    </div>
   )
 }
 

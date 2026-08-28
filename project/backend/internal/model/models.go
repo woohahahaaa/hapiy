@@ -35,7 +35,11 @@ type Provider struct {
 	Endpoints       string    `gorm:"type:text" json:"endpoints"` // JSON array
 	Models          string    `gorm:"type:text" json:"models"`    // JSON array
 	Status          bool      `gorm:"default:true" json:"status"`
-	AutoDisabled    bool      `gorm:"default:false" json:"auto_disabled"`
+	// AutoDisabled is derived (not a column): the persisted automatic-disable
+	// source is the auto_disable_states table. It is kept on the struct so the
+	// API contract (auto_disabled in provider payloads) is preserved; callers
+	// derive it from AutoDisableState before serializing.
+	AutoDisabled    bool      `gorm:"-" json:"auto_disabled"`
 	WorkflowEnabled bool      `gorm:"default:true" json:"workflow_enabled"`
 	Weight          int       `gorm:"default:1" json:"weight"`
 	Priority        int       `gorm:"default:0" json:"priority"`
@@ -375,20 +379,23 @@ func (r *FailoverRule) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
-// ProviderDisableState is the persisted, global automatic-disable state for
-// a provider, a single base URL, or a single API key. Provider BaseURLs and
-// Keys deliberately remain their legacy JSON arrays.
-type ProviderDisableState struct {
+// AutoDisableState is the single persisted source of automatic-disable state
+// for a provider, a single base URL, or a single API key. It replaced the
+// legacy dual-source design (ProviderDisableState table + providers.auto_disabled
+// column): every dimension's disable flag lives here, deduped by the unique
+// (provider_id, dimension, value) index. Provider.BaseURLs and Keys deliberately
+// remain their legacy JSON arrays.
+type AutoDisableState struct {
 	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
-	ProviderID string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"provider_id"`
-	Dimension  string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"dimension"`
-	Value      string    `gorm:"not null;uniqueIndex:idx_provider_disable_dimension_value" json:"value"`
+	ProviderID string    `gorm:"not null;uniqueIndex:idx_auto_disable_dimension_value" json:"provider_id"`
+	Dimension  string    `gorm:"not null;uniqueIndex:idx_auto_disable_dimension_value" json:"dimension"`
+	Value      string    `gorm:"not null;uniqueIndex:idx_auto_disable_dimension_value" json:"value"`
 	Disabled   bool      `gorm:"not null;default:false" json:"disabled"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-func (s *ProviderDisableState) BeforeCreate(tx *gorm.DB) error {
+func (s *AutoDisableState) BeforeCreate(tx *gorm.DB) error {
 	if s.ID == "" {
 		s.ID = uuid.New().String()
 	}

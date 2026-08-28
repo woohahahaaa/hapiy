@@ -409,7 +409,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
       >
         {mode === 'merged' ? (
           mergeError ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive break-words whitespace-pre-wrap">
               {mergeError}
             </div>
           ) : merged === undefined ? (
@@ -559,7 +559,7 @@ function PairDialog({ requestId, open, onClose }: {
           ) : pair ? (
             <div className="flex flex-col gap-3">
               {pair.error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
                   {pair.error}
                 </div>
               )}
@@ -697,7 +697,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
           ) : row ? (
             <div className="flex flex-col gap-3">
               {row.error && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
                   {row.error}
                 </div>
               )}

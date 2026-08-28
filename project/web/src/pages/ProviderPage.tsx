@@ -210,10 +210,7 @@ export function ProviderPage() {
 
 function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
-  const [newEndpoint, setNewEndpoint] = useState<ProviderEndpoint>({ pathSuffix: '' })
   const [endpointError, setEndpointError] = useState<string | null>(null)
-  const endpointInputRef = useRef<HTMLInputElement | null>(null)
-  const [newModel, setNewModel] = useState<ProviderModel>({ model: '', endpoints: [], rate: '1', prices: null })
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
   const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
@@ -298,11 +295,78 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
-  const updateModel = (oldName: string, patch: Partial<ProviderModel>) => {
-    setForm((current) => ({
-      ...current,
-      models: current.models.map((item) => (item.model === oldName ? { ...item, ...patch } : item)),
-    }))
+  // Index-based model updates: rows render in array order (no re-sorting per
+  // keystroke) so editing a name never remounts the row.
+  const patchModel = (index: number, patch: Partial<ProviderModel>) => {
+    setForm((current) => {
+      if (current.models.length === 0 && index === 0) {
+        return { ...current, models: [{ model: '', endpoints: [], rate: '1', prices: null, ...patch }] }
+      }
+      return {
+        ...current,
+        models: current.models.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+      }
+    })
+  }
+
+  const removeModel = (index: number) => {
+    setForm((current) => ({ ...current, models: current.models.filter((_, i) => i !== index) }))
+  }
+
+  const updateEndpoints = (updater: (current: readonly ProviderEndpoint[]) => readonly ProviderEndpoint[]) => {
+    setForm((current) => ({ ...current, endpoints: updater(current.endpoints) }))
+  }
+
+  const handleEndpointChange = (index: number, value: string) => {
+    setForm((current) => {
+      if (current.endpoints.length === 0) {
+        return { ...current, endpoints: [{ pathSuffix: value }] }
+      }
+      return {
+        ...current,
+        endpoints: current.endpoints.map((endpoint, i) => (i === index ? { pathSuffix: value } : endpoint)),
+      }
+    })
+  }
+
+  // Normalize on blur: prepend "/" to non-empty paths, reject duplicates.
+  const handleEndpointBlur = (index: number) => {
+    if (form.endpoints.length === 0) return
+    const raw = form.endpoints[index]?.pathSuffix ?? ''
+    const trimmed = raw.trim()
+    if (trimmed === '') {
+      setEndpointError(null)
+      return
+    }
+    const normalized = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+    const isDuplicate = form.endpoints.some(
+      (endpoint, i) => i !== index && endpoint.pathSuffix.trim() === normalized,
+    )
+    if (isDuplicate) {
+      setEndpointError('该路径已添加')
+      return
+    }
+    setEndpointError(null)
+    if (normalized !== raw) {
+      updateEndpoints((current) => current.map((endpoint, i) => (i === index ? { pathSuffix: normalized } : endpoint)))
+    }
+  }
+
+  // Deleting an endpoint also strips that path from every model's endpoints.
+  const handleEndpointDelete = (index: number) => {
+    setForm((current) => {
+      const path = current.endpoints[index]?.pathSuffix
+      if (path === undefined) return current
+      return {
+        ...current,
+        endpoints: current.endpoints.filter((_, i) => i !== index),
+        models: current.models.map((item) =>
+          item.endpoints.includes(path)
+            ? { ...item, endpoints: item.endpoints.filter((endpoint) => endpoint !== path) }
+            : item,
+        ),
+      }
+    })
   }
 
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
@@ -375,34 +439,32 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       <Field>
         <FieldLabel>Endpoints</FieldLabel>
         <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
-            <Input ref={endpointInputRef} value={newEndpoint.pathSuffix} onChange={(event) => { setNewEndpoint((current) => ({ ...current, pathSuffix: event.target.value })); setEndpointError(null) }} placeholder="如 /chat/completions 或 /responses" />
-            <Button type="button" variant="outline" size="icon" disabled={!newEndpoint.pathSuffix} onClick={() => {
-              const path = newEndpoint.pathSuffix.trim()
-              if (!path.startsWith('/')) {
-                setEndpointError('路径必须以斜杠开头（/）')
-                return
-              }
-              if (form.endpoints.some((item) => item.pathSuffix === path)) {
-                setEndpointError('该路径已添加')
-                return
-              }
-              setForm((current) => ({ ...current, endpoints: [...current.endpoints, { pathSuffix: path }] }))
-              setNewEndpoint((current) => ({ ...current, pathSuffix: '' }))
-              setEndpointError(null)
-              endpointInputRef.current?.focus()
-            }}><AppIcon name="add" /></Button>
+          <div className="space-y-2">
+            {endpointRows.map((endpoint, index) => {
+              const isPhantom = form.endpoints.length === 0
+              return (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    value={endpoint.pathSuffix}
+                    onChange={(event) => handleEndpointChange(index, event.target.value)}
+                    onBlur={() => handleEndpointBlur(index)}
+                    placeholder="如 /chat/completions 或 /responses"
+                  />
+                  <Button type="button" variant="ghost" size="icon" disabled={isPhantom} onClick={() => handleEndpointDelete(index)} aria-label="删除 Endpoint">
+                    <AppIcon name="delete" />
+                  </Button>
+                </div>
+              )
+            })}
+            <Button type="button" variant="outline" size="sm" onClick={() => updateEndpoints((current) => [...current, { pathSuffix: '' }])}>
+              <AppIcon name="add" data-icon="inline-start" />添加一行
+            </Button>
           </div>
           {endpointError && <p role="alert" className="text-xs text-destructive">{endpointError}</p>}
-          <div className="flex flex-wrap gap-2">
-            {form.endpoints.map((endpoint) => (
-              <span key={endpoint.pathSuffix} className="inline-flex items-center rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"><button className="mr-1 text-foreground/70 hover:text-foreground" onClick={() => setForm((current) => ({ ...current, endpoints: current.endpoints.filter((item) => item.pathSuffix !== endpoint.pathSuffix), models: current.models.map((model) => model.endpoints.includes(endpoint.pathSuffix) ? { ...model, endpoints: model.endpoints.filter((path) => path !== endpoint.pathSuffix) } : model) }))}><AppIcon name="close" size={12} className="inline" /></button>{endpoint.pathSuffix}</span>
-            ))}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            填写请求允许访问的路径（必须以 / 开头）；不填写任何 endpoint 表示不限制请求路径
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground">
-          填写请求允许访问的路径（必须以 / 开头）；不填写任何 endpoint 表示不限制请求路径
-        </p>
       </Field>
       <Field>
         <FieldLabel>模型</FieldLabel>

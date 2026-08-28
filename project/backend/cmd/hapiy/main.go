@@ -52,6 +52,12 @@ func main() {
 		log.Fatalf("Failed to migrate legacy topology schema: %v", err)
 	}
 
+	// Fold legacy automatic-disable state into the single auto_disable_states
+	// table and drop the old dual-source structures.
+	if err := model.MigrateAutoDisableState(db); err != nil {
+		log.Fatalf("Failed to migrate auto-disable state: %v", err)
+	}
+
 	// Drop archived topology versions stored in the legacy nested-document
 	// format: the version archive was rebuilt around the flat topology, so old
 	// snapshots are unreadable and are intentionally discarded (no migration).

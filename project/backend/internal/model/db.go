@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -23,7 +24,7 @@ func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&User{},
 		&Provider{},
-		&ProviderDisableState{},
+		&AutoDisableState{},
 		&Token{},
 		&Log{},
 		&UsageCounter{},
@@ -113,4 +114,83 @@ func MigrateTopologySchema(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// MigrateAutoDisableState transitions the automatic-disable source from the
+// legacy dual-source design (ProviderDisableState table + providers.auto_disabled
+// column) to the single AutoDisableState table. It is idempotent: on an
+// already-migrated database (auto_disable_states present, legacy structures
+// gone) it is a no-op. Legacy rows are folded into AutoDisableState first,
+// deduped by the unique (provider_id, dimension, value) index, so no disable
+// state is lost when the legacy structures are dropped.
+func MigrateAutoDisableState(db *gorm.DB) error {
+	if err := db.AutoMigrate(&AutoDisableState{}); err != nil {
+		return fmt.Errorf("migrate auto_disable_states: %w", err)
+	}
+
+	// Fold legacy provider_disable_states rows into AutoDisableState. A row
+	// that already exists in the new table is left untouched so re-running
+	// this migration never clobbers current state.
+	if db.Migrator().HasTable("provider_disable_states") {
+		type legacyDisableState struct {
+			ProviderID string
+			Dimension  string
+			Value      string
+			Disabled   bool
+		}
+		var legacy []legacyDisableState
+		if err := db.Table("provider_disable_states").Find(&legacy).Error; err != nil {
+			return fmt.Errorf("snapshot provider_disable_states: %w", err)
+		}
+		for _, row := range legacy {
+			if err := upsertAutoDisableState(db, AutoDisableState{
+				ProviderID: row.ProviderID,
+				Dimension:  row.Dimension,
+				Value:      row.Value,
+				Disabled:   row.Disabled,
+			}); err != nil {
+				return fmt.Errorf("fold provider_disable_states row %s/%s/%s: %w", row.ProviderID, row.Dimension, row.Value, err)
+			}
+		}
+		if err := db.Migrator().DropTable("provider_disable_states"); err != nil {
+			return fmt.Errorf("drop legacy provider_disable_states: %w", err)
+		}
+	}
+
+	// Fold legacy providers.auto_disabled=1 flags into provider-dimension
+	// AutoDisableState rows, then drop the column.
+	if db.Migrator().HasColumn(&Provider{}, "auto_disabled") {
+		var flagged []Provider
+		if err := db.Table("providers").Where("auto_disabled = ?", true).Find(&flagged).Error; err != nil {
+			return fmt.Errorf("snapshot providers.auto_disabled: %w", err)
+		}
+		for _, provider := range flagged {
+			if err := upsertAutoDisableState(db, AutoDisableState{
+				ProviderID: provider.ID,
+				Dimension:  FailoverDimensionProvider,
+				Value:      provider.ID,
+				Disabled:   true,
+			}); err != nil {
+				return fmt.Errorf("fold providers.auto_disabled row %s: %w", provider.ID, err)
+			}
+		}
+		if err := db.Migrator().DropColumn(&Provider{}, "auto_disabled"); err != nil {
+			return fmt.Errorf("drop legacy providers.auto_disabled: %w", err)
+		}
+	}
+	return nil
+}
+
+// upsertAutoDisableState inserts an AutoDisableState row unless one already
+// exists for the (provider_id, dimension, value) triple.
+func upsertAutoDisableState(db *gorm.DB, state AutoDisableState) error {
+	var existing AutoDisableState
+	err := db.Where("provider_id = ? AND dimension = ? AND value = ?", state.ProviderID, state.Dimension, state.Value).First(&existing).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return db.Create(&state).Error
 }

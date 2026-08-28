@@ -57,3 +57,76 @@ describe('searchModelsDevModels', () => {
     expect(searchModelsDevModels(models, 'claude')).toEqual([])
   })
 })
+
+describe('findModelsDevModel', () => {
+  const models: readonly ModelsDevModel[] = [
+    makeModel({ id: 'gpt-4o', providerName: 'OpenAI' }),
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'DeepSeek' }),
+    makeModel({ id: 'other', name: 'DeepSeek V3 Flash', providerName: 'Alibaba' }),
+  ]
+
+  it('matches id case-insensitively and trims whitespace', () => {
+    const found = findModelsDevModel(models, '  DEEPSEEK-V3-FLASH  ')
+    expect(found?.id).toBe('deepseek-v3-flash')
+  })
+
+  it('matches name case-insensitively', () => {
+    expect(findModelsDevModel(models, 'deepseek v3 flash')?.id).toBe('other')
+  })
+
+  it('returns null for blank or unmatched values', () => {
+    expect(findModelsDevModel(models, '   ')).toBeNull()
+    expect(findModelsDevModel(models, 'claude')).toBeNull()
+  })
+})
+
+describe('providersForModel', () => {
+  const models: readonly ModelsDevModel[] = [
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'Zhipu AI', providerId: 'zhipu' }),
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'Alibaba', providerId: 'alibaba' }),
+    makeModel({ id: 'gpt-4o', providerName: 'OpenAI' }),
+  ]
+
+  it('returns distinct providers sorted by provider name', () => {
+    const result = providersForModel(models, 'DEEPSEEK-V3-FLASH')
+    expect(result).toEqual([
+      { providerId: 'alibaba', providerName: 'Alibaba' },
+      { providerId: 'deepseek', providerName: 'DeepSeek' },
+      { providerId: 'zhipu', providerName: 'Zhipu AI' },
+    ])
+  })
+
+  it('dedupes rows of the same provider', () => {
+    const duplicated = [
+      ...models,
+      makeModel({ id: 'deepseek-v3-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
+    ]
+    expect(providersForModel(duplicated, 'deepseek-v3-flash')).toHaveLength(3)
+  })
+
+  it('returns empty for blank or unmatched model values', () => {
+    expect(providersForModel(models, 'gpt-5')).toEqual([])
+    expect(providersForModel(models, '')).toEqual([])
+  })
+})
+
+describe('findModelsDevProviderRow', () => {
+  const models: readonly ModelsDevModel[] = [
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
+    makeModel({ id: 'deepseek-v3-flash', providerName: 'Zhipu AI', providerId: 'zhipu' }),
+  ]
+
+  it('finds the row for the requested provider', () => {
+    const row = findModelsDevProviderRow(models, 'deepseek-v3-flash', 'zhipu')
+    expect(row?.providerName).toBe('Zhipu AI')
+  })
+
+  it('returns null when the provider is not present for the model', () => {
+    expect(findModelsDevProviderRow(models, 'deepseek-v3-flash', 'openai')).toBeNull()
+  })
+
+  it('returns null for an unmatched model value', () => {
+    expect(findModelsDevProviderRow(models, 'claude', 'deepseek')).toBeNull()
+  })
+})
