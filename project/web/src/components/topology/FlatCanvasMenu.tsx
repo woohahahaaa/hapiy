@@ -65,7 +65,7 @@ export function FlatCanvasMenu({
         >
           <span>添加完整工作流</span>
         </button>
-        <div className="mt-1 border-t border-border" />
+        <div className="my-1.5 border-t border-border" />
         <button
           type="button"
           onClick={() => {
@@ -84,7 +84,7 @@ export function FlatCanvasMenu({
           }}
           className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
         >
-          <span>添加 provider 插槽</span>
+          <span>添加供应商插槽</span>
         </button>
         {REQUEST_REWRITE_SLOT_TYPES.map((slotType) => (
           <button
@@ -99,7 +99,7 @@ export function FlatCanvasMenu({
             <span>添加 {REWRITE_SLOT_LABELS[slotType]} 插槽</span>
           </button>
         ))}
-        <div className="mt-1 border-t border-border" />
+        <div className="my-1.5 border-t border-border" />
         <button
           type="button"
           onClick={() => {

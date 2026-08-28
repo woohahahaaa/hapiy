@@ -114,7 +114,9 @@ export function searchModelsDevModels(
   return models
     .map((model) => ({ model, score: scoreMatch(model, needle) }))
     .filter((entry) => entry.score >= 0)
-    .sort((a, b) => a.score - b.score || a.model.id.localeCompare(b.model.id))
+    .sort((a, b) => a.score - b.score ||
+      a.model.providerName.localeCompare(b.model.providerName) ||
+      a.model.id.localeCompare(b.model.id))
     .slice(0, limit)
     .map((entry) => entry.model)
 }
