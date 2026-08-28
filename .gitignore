@@ -27,6 +27,10 @@ logs/
 *.sqlite-journal
 encryption.key
 
+# Database backups
+.backup/
+*.db.bak*
+
 # Tool artifacts
 .playwright-mcp/
 .omo/start-work/
