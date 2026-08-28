@@ -735,9 +735,9 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
       ) : (
         <>
           <Select
-            value={model.ratePriceConfigId ?? ''}
+            value={unbound ? '__unfound__' : (model.ratePriceConfigId ?? '')}
             disabled={unbound}
-            onValueChange={(value) => onPatch({ ratePriceConfigId: value === '' ? null : value })}
+            onValueChange={(value) => onPatch({ ratePriceConfigId: value === '' || value === '__unfound__' ? null : value })}
           >
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>

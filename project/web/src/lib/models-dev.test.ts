@@ -151,7 +151,7 @@ describe('findModelsDevProviderRow', () => {
   ]
 
   it('finds the row for the requested provider', () => {
-    const row = findModelsDevProviderRow(models, 'deepseek-v3-flash', 'zhipu')
+    const row = findModelsDevProviderRow(models, 'deepseek-v3-flash', 'Zhipu AI')
     expect(row?.providerName).toBe('Zhipu AI')
   })
 
@@ -160,15 +160,15 @@ describe('findModelsDevProviderRow', () => {
       makeModel({ id: 'alibaba/deepseek-v4-flash', providerName: 'Alibaba', providerId: 'alibaba' }),
       makeModel({ id: 'deepseek/deepseek-v4-flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
     ]
-    const row = findModelsDevProviderRow(qualified, 'deepseek-v4-flash', 'deepseek')
+    const row = findModelsDevProviderRow(qualified, 'deepseek-v4-flash', 'DeepSeek')
     expect(row?.providerId).toBe('deepseek')
   })
 
   it('returns null when the provider is not present for the model', () => {
-    expect(findModelsDevProviderRow(models, 'deepseek-v3-flash', 'openai')).toBeNull()
+    expect(findModelsDevProviderRow(models, 'deepseek-v3-flash', 'OpenAI')).toBeNull()
   })
 
   it('returns null for an unmatched model value', () => {
-    expect(findModelsDevProviderRow(models, 'claude', 'deepseek')).toBeNull()
+    expect(findModelsDevProviderRow(models, 'claude', 'DeepSeek')).toBeNull()
   })
 })

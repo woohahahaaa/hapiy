@@ -17,7 +17,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelAutocomplete } from '@/components/ModelAutocomplete'
 import { cn } from '@/lib/utils'
 import {
-  findModelsDevModel,
   findModelsDevProviderRow,
   loadModelsDevModels,
   providersForModel,
@@ -449,13 +448,13 @@ function PriceForm({
       setFetchError('models.dev 数据加载失败，请检查网络')
       return
     }
-    const match = findModelsDevModel(snapshot, model)
-    if (!match) {
-      setFetchError('没有查到对应的模型信息。请检查模型名称和上游供应商是否填写正确。')
+    if (!providerName.trim()) {
+      setFetchError('请先填写上游供应商')
       return
     }
-    let row = findModelsDevProviderRow(snapshot, model, providerName)
-    if (!row && match) row = match
+    // Look up the exact (model, supplier) pair in models.dev; a miss shows the
+    // alignment warning instead of guessing on the model name alone.
+    const row = findModelsDevProviderRow(snapshot, model, providerName)
     if (!row) {
       setFetchError('没有查到对应的模型信息。请检查模型名称和上游供应商是否填写正确。')
       return
@@ -471,9 +470,6 @@ function PriceForm({
       maxToken: row.maxOutput,
       supportedTypes: [...new Set([...row.inputTypes, ...row.outputTypes])],
     }))
-    if (!providerName.trim()) {
-      setProviderName(row.providerName)
-    }
   }
 
   const handleSave = () => {
