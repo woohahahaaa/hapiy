@@ -25,6 +25,7 @@ logs/
 *.db-wal
 *.sqlite
 *.sqlite-journal
+encryption.key
 
 # Tool artifacts
 .playwright-mcp/

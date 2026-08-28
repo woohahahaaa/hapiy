@@ -46,6 +46,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&RequestChannelHistory{},
 		&DisabledRecord{},
 		&FailoverHitCounter{},
+		&AgentTypeRule{},
+		&AgentConfigFile{},
 	)
 }
 

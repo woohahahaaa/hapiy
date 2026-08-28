@@ -1,0 +1,332 @@
+package service
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+)
+
+// SshConfig describes how to reach a remote host for the SSH-mode agent
+// config files. It is stored on the AgentConfigFile row as a JSON blob
+// string (see Marshal/Unmarshal) so the dashboard can edit it without
+// introducing a separate table.
+type SshConfig struct {
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	Username   string `json:"username"`
+	AuthType   string `json:"auth_type"` // "password" | "key"
+	Password   string `json:"password"`
+	PrivateKey string `json:"private_key"`
+
+	// Optional jump host (跳板机) tunneled over when JumpEnabled.
+	JumpEnabled    bool   `json:"jump_enabled,omitempty"`
+	JumpHost       string `json:"jump_host,omitempty"`
+	JumpPort       int    `json:"jump_port,omitempty"`
+	JumpUsername   string `json:"jump_username,omitempty"`
+	JumpAuthType   string `json:"jump_auth_type,omitempty"` // "password" | "key"
+	JumpPassword   string `json:"jump_password,omitempty"`
+	JumpPrivateKey string `json:"jump_private_key,omitempty"`
+}
+
+// Marshal serializes the config into the JSON blob string persisted on the
+// AgentConfigFile row.
+func (c SshConfig) Marshal() (string, error) {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// Unmarshal parses a stored JSON blob back into the config. An empty
+// blob yields a zero-valued config so callers can default it.
+func (c *SshConfig) Unmarshal(s string) error {
+	if s == "" {
+		*c = SshConfig{}
+		return nil
+	}
+	return json.Unmarshal([]byte(s), c)
+}
+
+// EncryptSensitive encrypts Password, PrivateKey, JumpPassword and
+// JumpPrivateKey in place so the marshaled blob can be persisted without
+// leaking credentials. Empty values stay empty.
+func (c *SshConfig) EncryptSensitive(key []byte) error {
+	password, err := EncryptField(key, c.Password)
+	if err != nil {
+		return err
+	}
+	privateKey, err := EncryptField(key, c.PrivateKey)
+	if err != nil {
+		return err
+	}
+	jumpPassword, err := EncryptField(key, c.JumpPassword)
+	if err != nil {
+		return err
+	}
+	jumpPrivateKey, err := EncryptField(key, c.JumpPrivateKey)
+	if err != nil {
+		return err
+	}
+	c.Password = password
+	c.PrivateKey = privateKey
+	c.JumpPassword = jumpPassword
+	c.JumpPrivateKey = jumpPrivateKey
+	return nil
+}
+
+// DecryptSensitive reverses EncryptSensitive, restoring the plaintext
+// credentials needed to dial the remote host (and the jump host when
+// enabled). Legacy plaintext blobs pass through unchanged.
+func (c *SshConfig) DecryptSensitive(key []byte) error {
+	password, err := DecryptField(key, c.Password)
+	if err != nil {
+		return err
+	}
+	privateKey, err := DecryptField(key, c.PrivateKey)
+	if err != nil {
+		return err
+	}
+	jumpPassword, err := DecryptField(key, c.JumpPassword)
+	if err != nil {
+		return err
+	}
+	jumpPrivateKey, err := DecryptField(key, c.JumpPrivateKey)
+	if err != nil {
+		return err
+	}
+	c.Password = password
+	c.PrivateKey = privateKey
+	c.JumpPassword = jumpPassword
+	c.JumpPrivateKey = jumpPrivateKey
+	return nil
+}
+
+// Sanitized returns a copy of the config with credentials blanked, safe to
+// include in API responses.
+func (c SshConfig) Sanitized() SshConfig {
+	c.Password = ""
+	c.PrivateKey = ""
+	c.JumpPassword = ""
+	c.JumpPrivateKey = ""
+	return c
+}
+
+// ReadLocalFile returns the raw content of a local file.
+func ReadLocalFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("读取文件失败: %w", err)
+	}
+	return string(data), nil
+}
+
+// WriteLocalFileAtomic replaces the file at path with content atomically:
+// it writes a temp file in the same directory and renames it over the
+// target, so a crash mid-write never leaves a truncated config file. The
+// temp file is cleaned up on any failure.
+func WriteLocalFileAtomic(path, content string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".agent-config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpName := tmp.Name()
+	// Remove the temp file unless the rename below succeeded (the defer
+	// runs with tmpName reset to "" after a successful rename).
+	defer func() {
+		if tmpName != "" {
+			os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		return fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("同步临时文件失败: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("关闭临时文件失败: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return fmt.Errorf("替换目标文件失败: %w", err)
+	}
+	tmpName = ""
+	return nil
+}
+
+// ReadRemoteFile returns the raw content of a remote file via SSH by
+// running `cat <path>` on the host. Detailed errors (connection, auth,
+// missing file) are returned as-is because the frontend surfaces them.
+func ReadRemoteFile(cfg SshConfig, path string) (string, error) {
+	client, err := dialSSH(cfg)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	session, err := client.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("创建 SSH 会话失败: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	if err := session.Run("cat " + shellQuote(path)); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return "", fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
+		}
+		return "", fmt.Errorf("读取远程文件失败: %w", err)
+	}
+	return stdout.String(), nil
+}
+
+// WriteRemoteFileAtomic replaces a remote file via SSH using one session
+// that writes stdin to a mktemp file and renames it over the target. The
+// path is passed as $1 (a positional argument) so shell metacharacters in
+// the path cannot break the command. stderr is captured for error reports.
+func WriteRemoteFileAtomic(cfg SshConfig, path, content string) error {
+	client, err := dialSSH(cfg)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	session, err := client.client.NewSession()
+	if err != nil {
+		return fmt.Errorf("创建 SSH 会话失败: %w", err)
+	}
+	defer session.Close()
+
+	session.Stdin = strings.NewReader(content)
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	cmd := "sh -c 'tmp=$(mktemp) && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"' sh " + shellQuote(path)
+	if err := session.Run(cmd); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return fmt.Errorf("写入远程文件失败: %w (%s)", err, detail)
+		}
+		return fmt.Errorf("写入远程文件失败: %w", err)
+	}
+	return nil
+}
+
+// sshClientConfig builds an *ssh.ClientConfig for one hop. AuthType selects
+// password vs private-key authentication. Host key verification deliberately
+// uses InsecureIgnoreHostKey: this is an internal admin tool without a
+// host-key pinning infrastructure, and the hosts are operator-configured
+// trusted servers.
+func sshClientConfig(username, authType, password, privateKey string) (*ssh.ClientConfig, error) {
+	var auth ssh.AuthMethod
+	switch authType {
+	case "password":
+		auth = ssh.Password(password)
+	case "key":
+		signer, err := ssh.ParsePrivateKey([]byte(privateKey))
+		if err != nil {
+			return nil, fmt.Errorf("解析 SSH 私钥失败: %w", err)
+		}
+		auth = ssh.PublicKeys(signer)
+	default:
+		return nil, fmt.Errorf("不支持的 SSH 认证方式 %q", authType)
+	}
+
+	return &ssh.ClientConfig{
+		User:            username,
+		Auth:            []ssh.AuthMethod{auth},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}, nil
+}
+
+// sshClient pairs the target SSH client with the jump-host client it was
+// dialed through, so Close releases both connections. jump is nil when the
+// target was reached directly.
+type sshClient struct {
+	client *ssh.Client
+	jump   *ssh.Client // non-nil when dialed through a jump host
+}
+
+// Close closes the target client and then the jump client, returning the
+// first non-nil error.
+func (c *sshClient) Close() error {
+	var err error
+	if c.client != nil {
+		err = c.client.Close()
+	}
+	if c.jump != nil {
+		if jerr := c.jump.Close(); err == nil && jerr != nil {
+			err = jerr
+		}
+	}
+	return err
+}
+
+// dialSSH establishes an SSH client connection with a 10-second dial
+// timeout. Port defaults to 22 when zero. When JumpEnabled, the jump host
+// is dialed first (its port also defaults to 22) and the target SSH
+// connection is tunneled over it (ProxyJump-style chaining).
+func dialSSH(cfg SshConfig) (*sshClient, error) {
+	if cfg.Port == 0 {
+		cfg.Port = 22
+	}
+	targetAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	targetConfig, err := sshClientConfig(cfg.Username, cfg.AuthType, cfg.Password, cfg.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if !cfg.JumpEnabled {
+		client, err := ssh.Dial("tcp", targetAddr, targetConfig)
+		if err != nil {
+			return nil, fmt.Errorf("SSH 连接失败: %w", err)
+		}
+		return &sshClient{client: client}, nil
+	}
+
+	if cfg.JumpPort == 0 {
+		cfg.JumpPort = 22
+	}
+	jumpAddr := fmt.Sprintf("%s:%d", cfg.JumpHost, cfg.JumpPort)
+	jumpConfig, err := sshClientConfig(cfg.JumpUsername, cfg.JumpAuthType, cfg.JumpPassword, cfg.JumpPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	jumpClient, err := ssh.Dial("tcp", jumpAddr, jumpConfig)
+	if err != nil {
+		return nil, fmt.Errorf("跳板机 SSH 连接失败: %w", err)
+	}
+
+	// Tunnel the target SSH connection through the jump host.
+	conn, err := jumpClient.Dial("tcp", targetAddr)
+	if err != nil {
+		jumpClient.Close()
+		return nil, fmt.Errorf("通过跳板机连接 %s 失败: %w", targetAddr, err)
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, targetAddr, targetConfig)
+	if err != nil {
+		conn.Close()
+		jumpClient.Close()
+		return nil, fmt.Errorf("SSH 连接失败: %w", err)
+	}
+	return &sshClient{client: ssh.NewClient(sshConn, chans, reqs), jump: jumpClient}, nil
+}
+
+// shellQuote wraps s in single quotes with embedded single quotes escaped,
+// so it can be safely embedded in a remote shell command line.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}

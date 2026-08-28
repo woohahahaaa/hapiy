@@ -22,6 +22,11 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	encKey, err := config.LoadEncryptionKey(cfg)
+	if err != nil {
+		log.Fatalf("Failed to load encryption key: %v", err)
+	}
+
 	// Set Gin mode
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -36,6 +41,11 @@ func main() {
 	// Auto-migrate models
 	if err := model.AutoMigrate(db); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	// Seed the built-in agent type (opencode) for the 接管配置文件 feature.
+	if err := model.EnsureDefaultAgentTypes(db); err != nil {
+		log.Fatalf("Failed to seed default agent types: %v", err)
 	}
 
 	if err := model.MigrateTopologySchema(db); err != nil {
@@ -199,6 +209,17 @@ func main() {
 			dashboardAuthed.POST("/providers/:id/toggle", handler.ToggleProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/workflow-toggle", handler.ToggleWorkflow(db, engine))
 			dashboardAuthed.POST("/providers/fetch-models", handler.FetchModels())
+
+			// Agent config takeover (接管配置文件) & agent-type rules (管理规则)
+			dashboardAuthed.GET("/agent-types", handler.ListAgentTypes(db))
+			dashboardAuthed.GET("/agent-type-rules", handler.ListAgentTypeRules(db))
+			dashboardAuthed.POST("/agent-type-rules", handler.CreateAgentTypeRule(db))
+			dashboardAuthed.DELETE("/agent-type-rules/:id", handler.DeleteAgentTypeRule(db))
+			dashboardAuthed.GET("/agent-config-files", handler.ListAgentConfigFiles(db))
+			dashboardAuthed.POST("/agent-config-files", handler.CreateAgentConfigFile(db, encKey))
+			dashboardAuthed.GET("/agent-config-files/:id/content", handler.GetAgentConfigFileContent(db, encKey))
+			dashboardAuthed.PUT("/agent-config-files/:id/content", handler.PutAgentConfigFileContent(db, encKey))
+			dashboardAuthed.DELETE("/agent-config-files/:id", handler.DeleteAgentConfigFile(db))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))
