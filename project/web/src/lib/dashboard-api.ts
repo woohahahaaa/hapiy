@@ -406,6 +406,7 @@ export type FlatNode = {
   readonly slotType?: string
   readonly enabled: boolean
   readonly weight?: number
+  readonly emergency?: boolean
   readonly entries?: readonly SlotEntry[]
   readonly deadlineAt?: number | null
   readonly strategy?: ProviderStrategy
@@ -445,6 +446,7 @@ function parseFlatNode(value: unknown): FlatNode {
     slotType: typeof value.slot_type === 'string' ? value.slot_type : undefined,
     enabled: value.enabled === undefined ? true : readBoolean(value.enabled, 'node.enabled'),
     weight: typeof value.weight === 'number' ? value.weight : undefined,
+    emergency: value.emergency === true ? true : undefined,
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
     deadlineAt: typeof value.deadline_at === 'number' ? value.deadline_at : null,
     strategy: isProviderStrategy(value.strategy) ? value.strategy : undefined,
@@ -479,6 +481,7 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     ...(node.slotType !== undefined ? { slot_type: node.slotType } : {}),
     enabled: node.enabled,
     ...(node.weight !== undefined ? { weight: node.weight } : {}),
+    ...(node.emergency ? { emergency: true } : {}),
     ...(node.entries !== undefined ? { entries: node.entries } : {}),
     ...(node.deadlineAt !== undefined ? { deadline_at: node.deadlineAt } : {}),
     ...(node.strategy !== undefined ? { strategy: node.strategy } : {}),

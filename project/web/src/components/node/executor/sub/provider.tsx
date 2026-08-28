@@ -37,6 +37,7 @@ export interface NodeExecutorProviderProps {
   child: FlatProviderChild
   providers: readonly ProviderOption[]
   takenLabels: Set<string>
+  emergency?: boolean
   flashLayers?: readonly FlowLayerOverlay[]
   isDragging: boolean
   isDragOver: boolean
@@ -50,7 +51,7 @@ export interface NodeExecutorProviderProps {
 
 // 供应商业务节点：单张供应商卡片（按 ID 选择、逐维度禁用详情、base URL/Key/模型计数）。
 // 所有插槽条目中唯一"个体级点亮"（flash 层按 child.id 独立查询）的业务。
-export function NodeExecutorProvider({ index, child, providers, takenLabels, flashLayers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete, token, picked, onPickToken }: NodeExecutorProviderProps) {
+export function NodeExecutorProvider({ index, child, providers, takenLabels, emergency, flashLayers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete, token, picked, onPickToken }: NodeExecutorProviderProps) {
   // 下拉值 = 真实供应商 ID。旧数据缺失 providerId 时只读地按名称解析到同一 ID，
   // 不新增任何按名字写入的逻辑。
   const selectedId = child.providerId !== ''
@@ -90,8 +91,10 @@ export function NodeExecutorProvider({ index, child, providers, takenLabels, fla
       token={token}
       picked={picked}
       onPickToken={onPickToken}
+      emergency={emergency}
       className={cn(
         (!providerCardActive(child) || !availability.overall) && 'opacity-60',
+        emergency && 'border-warning/60',
       )}
     >
       <div className="space-y-1.5">
