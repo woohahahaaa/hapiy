@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 
 type FlowColorsPanelProps = {
   readonly colors: readonly string[]

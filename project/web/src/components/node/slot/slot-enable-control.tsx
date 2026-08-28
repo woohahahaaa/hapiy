@@ -8,7 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 
 export interface SlotEnableControlProps {
   enabled: boolean

@@ -4,7 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 import type { UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.

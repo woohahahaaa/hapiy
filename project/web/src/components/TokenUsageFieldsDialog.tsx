@@ -7,7 +7,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 import { AppIcon } from '@/components/AppIcon'
 import { DEFAULT_TOKEN_USAGE_FIELDS, type TokenUsageFields } from '@/lib/token-usage-fields'
 

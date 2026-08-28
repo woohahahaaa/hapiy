@@ -17,7 +17,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { DataTable, type ColumnDef } from '@/components/data-table'

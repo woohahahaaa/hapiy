@@ -12,7 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Select,

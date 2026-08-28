@@ -45,16 +45,15 @@ export function ConventionValueInput({ text, onChange, placeholder, active }: Co
         <TooltipProvider delayDuration={150}>
           <Tooltip open={focused}>
             <TooltipTrigger asChild>{input}</TooltipTrigger>
-            <TooltipContent
-              side="top"
-              className="flex-col items-start gap-1 whitespace-nowrap bg-popover text-popover-foreground text-left"
-            >
-              <p className="text-xs">
-                不加引号 → 按 JSON 字面量解析（true / false / null / 数字）
-              </p>
-              <p className="text-xs">
-                加引号 → 按字符串发送，引号内为实际内容
-              </p>
+            <TooltipContent side="top" align="start" className="whitespace-nowrap">
+              <div className="flex flex-col items-start gap-0.5 text-left">
+                <p className="text-xs">
+                  不加引号 → 按 JSON 字面量解析（true / false / null / 数字）
+                </p>
+                <p className="text-xs">
+                  加引号 → 按字符串发送，引号内为实际内容
+                </p>
+              </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

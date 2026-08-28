@@ -5,7 +5,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/dialog'
 import { NodeModel } from '@/components/node/model'
 import { NodeSlot } from '@/components/node/slot'
 import { NodeExecutor } from '@/components/node/executor'

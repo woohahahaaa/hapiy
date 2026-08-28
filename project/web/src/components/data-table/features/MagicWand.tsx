@@ -12,7 +12,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/dialog";
 import { cn } from "@/lib/utils";
 
 const TOOLTIP_TEXT = "请点击一行作为宽度参考";

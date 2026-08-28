@@ -21,7 +21,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { NodeModel } from '@/components/node/model'
 import { NodeSlot } from '@/components/node/slot'
