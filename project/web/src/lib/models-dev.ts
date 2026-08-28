@@ -160,18 +160,18 @@ export function providersForModel(
     .sort((a, b) => a.providerName.localeCompare(b.providerName))
 }
 
-// First models.dev row matching (modelValue, providerId) for refilling prices.
+// First models.dev row matching (modelValue, providerName) for refilling prices.
 export function findModelsDevProviderRow(
   models: readonly ModelsDevModel[],
   modelValue: string,
-  providerId: string,
+  providerName: string,
 ): ModelsDevModel | null {
   const needle = modelValue.trim().toLowerCase()
   if (!needle) return null
   const found = models.find(
     (model) =>
       modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle) &&
-      model.providerId.toLowerCase() === providerId.toLowerCase(),
+      model.providerName.toLowerCase() === providerName.toLowerCase(),
   )
   return found ?? null
 }

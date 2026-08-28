@@ -11,7 +11,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel } from '@/lib/dashboard-api'
+import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, PriceConfig } from '@/lib/dashboard-api'
 
 type ProviderFormProps = {
   readonly provider: Provider | null
@@ -223,6 +223,27 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [priceErrorPos, setPriceErrorPos] = useState<{ left: number; top: number } | null>(null)
   const priceErrorTimer = useRef<number | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
+  // Model-info rows from the 模型信息 page: rate-mode models bind an upstream
+  // supplier entry by its internal PriceConfig ID as the price source.
+  const [priceConfigs, setPriceConfigs] = useState<readonly PriceConfig[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void dashboardApi.listPrices({ limit: 10000, offset: 0 })
+      .then((result) => {
+        if (!cancelled) setPriceConfigs(result.prices)
+      })
+      .catch(() => {
+        if (!cancelled) setPriceConfigs([])
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const supplierCandidatesFor = (modelName: string): readonly PriceConfig[] => {
+    const needle = modelName.trim().toLowerCase()
+    if (!needle) return []
+    return priceConfigs.filter((config) => config.model.toLowerCase() === needle)
+  }
 
   // Floating tooltip near the offending input, auto-dismissed after ~4 seconds.
   const showPriceError = (anchor?: HTMLElement | null) => {
@@ -300,7 +321,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const patchModel = (index: number, patch: Partial<ProviderModel>) => {
     setForm((current) => {
       if (current.models.length === 0 && index === 0) {
-        return { ...current, models: [{ model: '', endpoints: [], rate: '1', prices: null, ...patch }] }
+        return { ...current, models: [{ model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null, ...patch }] }
       }
       return {
         ...current,
@@ -372,7 +393,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   // One phantom editable row while the array is empty.
   const endpointRows = form.endpoints.length === 0 ? [{ pathSuffix: '' }] : form.endpoints
   const modelRows = form.models.length === 0
-    ? [{ model: '', endpoints: [], rate: '1', prices: null }]
+    ? [{ model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }]
     : form.models
 
   const handleSave = () => {
@@ -409,7 +430,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   }
 
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
-    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1', prices: null }))
+    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }))
     if (replace) {
       setForm((current) => ({ ...current, models: additions }))
     } else {
@@ -527,7 +548,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               return (
                 <div key={index} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
                   <Input value={model.model} onChange={(event) => patchModel(index, { model: event.target.value })} className="w-full" placeholder="模型名称" />
-                  <ModelPriceCell model={model} onPatch={(patch) => patchModel(index, patch)} onInvalid={(anchor) => showPriceError(anchor)} />
+                  <ModelPriceCell model={model} onPatch={(patch) => patchModel(index, patch)} onInvalid={(anchor) => showPriceError(anchor)} supplierCandidates={supplierCandidatesFor(model.model)} />
                   <Select
                     value={endpointValue}
                     onValueChange={(value) => patchModel(index, { endpoints: value === '__all__' ? [] : [value] })}
@@ -544,7 +565,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 </div>
               )
             })}
-            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', prices: null }] }))}>
+            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }] }))}>
               <AppIcon name="add" data-icon="inline-start" />添加一行
             </Button>
           </div>
@@ -651,14 +672,16 @@ type ModelPriceCellProps = {
   readonly model: ProviderModel
   readonly onPatch: (patch: Partial<ProviderModel>) => void
   readonly onInvalid: (anchor: HTMLElement | null) => void
+  readonly supplierCandidates: readonly PriceConfig[]
 }
 
-// Price cell: a dropdown switching between 设置倍率 (rate multiplier input)
-// and 单独设置价格 (four per-1M-token price inputs). When typing in prices
-// mode, whitespace is stripped automatically once the value starts with a
-// currency symbol; a non-empty value without a symbol is rejected on blur and
-// on save via the outer floating tooltip.
-function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
+// Price cell: a dropdown switching between 设置倍率 (rate multiplier input,
+// bound to a 模型信息 upstream-supplier entry) and 单独设置价格 (four
+// per-1M-token price inputs). When typing in prices mode, whitespace is
+// stripped automatically once the value starts with a currency symbol; a
+// non-empty value without a symbol is rejected on blur and on save via the
+// outer floating tooltip.
+function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: ModelPriceCellProps) {
   const usePrices = model.prices !== null
   const setMode = (next: 'rate' | 'prices') => {
     if (next === 'prices') {
@@ -683,8 +706,11 @@ function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
     }
   }
 
+  const unbound = supplierCandidates.length === 0
+  const boundLabel = model.ratePriceConfigId === null ? null : supplierCandidates.find((c) => c.id === model.ratePriceConfigId)
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Select value={usePrices ? 'prices' : 'rate'} onValueChange={(value) => setMode(value as 'rate' | 'prices')}>
         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -707,13 +733,35 @@ function ModelPriceCell({ model, onPatch, onInvalid }: ModelPriceCellProps) {
           ))}
         </div>
       ) : (
-        <Input
-          value={model.rate}
-          onChange={(event) => onPatch({ rate: event.target.value })}
-          className="min-w-0 flex-1 px-2 text-xs"
-          placeholder="1"
-          title="倍率，支持分数，如 1/2"
-        />
+        <>
+          <Select
+            value={model.ratePriceConfigId ?? ''}
+            disabled={unbound}
+            onValueChange={(value) => onPatch({ ratePriceConfigId: value === '' ? null : value })}
+          >
+            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {unbound ? (
+                <SelectItem value="__unfound__">未在模型信息模块查到对应该模型的数据</SelectItem>
+              ) : (
+                supplierCandidates.map((config) => (
+                  <SelectItem key={config.id} value={config.id}>
+                    {config.model} · {config.providerId || '默认'}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Input
+            value={model.rate}
+            onChange={(event) => onPatch({ rate: event.target.value })}
+            disabled={unbound}
+            className="min-w-0 w-16 flex-1 px-2 text-xs"
+            placeholder={unbound ? '—' : '1'}
+            title="倍率，支持分数，如 1/2"
+          />
+          {boundLabel && <span className="shrink-0 text-xs text-muted-foreground">× {boundLabel.model} · {boundLabel.providerId || '默认'}</span>}
+        </>
       )}
     </div>
   )

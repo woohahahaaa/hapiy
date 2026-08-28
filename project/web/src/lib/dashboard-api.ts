@@ -50,6 +50,7 @@ export type ProviderModel = {
   readonly model: string
   readonly endpoints: readonly string[]
   readonly rate: string
+  readonly ratePriceConfigId: string | null
   readonly prices: ModelPrices | null
 }
 
@@ -374,6 +375,12 @@ export type PriceConfig = {
 }
 
 export type PriceConfigInput = Omit<PriceConfig, 'id'>
+
+export type PriceReference = {
+  readonly providerId: string
+  readonly providerName: string
+  readonly model: string
+}
 
 export type PriceListParams = {
   readonly limit: number
@@ -789,6 +796,7 @@ function parseModel(value: unknown): ProviderModel {
     model: readString(value.model, 'models.model'),
     endpoints: readStringArray(value.endpoints ?? [], 'models.endpoints'),
     rate: readString(value.rate ?? legacyRate ?? '1', 'models.rate'),
+    ratePriceConfigId: typeof value.priceConfigId === 'string' ? value.priceConfigId : null,
     prices: value.prices === null || value.prices === undefined ? null : parseModelPrices(value.prices),
   }
 }
@@ -2221,6 +2229,23 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async deletePrice(id: string): Promise<void> {
     await request(`/models/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async priceReferences(id: string): Promise<readonly PriceReference[]> {
+    const body = await requestFull(`/models/${encodeURIComponent(id)}/references`)
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的模型引用列表格式无效', null)
+    }
+    return data.map((item) => {
+      if (!isRecord(item)) {
+        throw new DashboardApiError('服务端返回的引用格式无效', null)
+      }
+      return {
+        providerId: readString(item.provider_id, 'reference.provider_id'),
+        providerName: readString(item.provider_name, 'reference.provider_name'),
+        model: readString(item.model, 'reference.model'),
+      }
+    })
   },
 
   // ── Settings ──

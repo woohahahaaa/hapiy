@@ -43,59 +43,104 @@ func validatePriceConfig(price *model.PriceConfig) error {
 	return nil
 }
 
+// validatePriceNames enforces the naming uniqueness rules after the
+// (model, provider) composite-key redesign:
+//   - the same normalized (model, provider) pair may be stored only once
+//   - an alias must not collide with any other row's model or alias (matching
+//     by alias stays unambiguous across providers)
 func validatePriceNames(db *gorm.DB, price *model.PriceConfig) error {
-	candidates, err := priceNames(price)
-	if err != nil {
-		return err
-	}
-	seen := make(map[string]struct{}, len(candidates))
-	for _, name := range candidates {
-		if _, exists := seen[name]; exists {
-			return fmt.Errorf("名称 %q 重复", name)
-		}
-		seen[name] = struct{}{}
-	}
+	normModel := normalizePriceName(price.Model)
+	normProvider := normalizePriceName(price.ProviderID)
 
 	var prices []model.PriceConfig
 	if err := db.Find(&prices).Error; err != nil {
 		return fmt.Errorf("查询历史模型: %w", err)
 	}
-	occupied := make(map[string]struct{})
+
+	// Composite (model, provider) uniqueness, case-insensitive, excluding self.
 	for _, existing := range prices {
 		if existing.ID == price.ID {
 			continue
 		}
-		names, err := priceNames(&existing)
-		if err != nil {
-			continue
-		}
-		for _, name := range names {
-			occupied[name] = struct{}{}
+		if normalizePriceName(existing.Model) == normModel &&
+			normalizePriceName(existing.ProviderID) == normProvider &&
+			normModel != "" {
+			return fmt.Errorf("模型名称 %q 与上游供应商 %q 的组合已存在", price.Model, price.ProviderID)
 		}
 	}
-	for _, name := range candidates {
-		if _, exists := occupied[name]; exists {
-			return fmt.Errorf("名称 %q 已被历史模型或别名占用", name)
+
+	// The model name and aliases must not trip the matching resolvers of other
+	// rows: an alias always counts globally (matching by alias must stay
+	// unambiguous), while a model name only conflicts with an existing alias.
+	type namedRow struct {
+		model   string
+		aliases []string
+	}
+	rows := make([]namedRow, 0, len(prices))
+	for _, existing := range prices {
+		if existing.ID == price.ID {
+			continue
+		}
+		rows = append(rows, namedRow{model: normalizePriceName(existing.Model), aliases: priceAliasesOf(&existing)})
+	}
+	for _, row := range rows {
+		for _, alias := range row.aliases {
+			if alias == normModel && normModel != "" {
+				return fmt.Errorf("名称 %q 已被历史模型或别名占用", price.Model)
+			}
+		}
+	}
+
+	// Alias uniqueness against every other row's model and aliases.
+	aliases, err := priceAliases(price)
+	if err != nil {
+		return err
+	}
+	seen := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		if _, exists := seen[alias]; exists || alias == normModel {
+			return fmt.Errorf("名称 %q 重复", alias)
+		}
+		seen[alias] = struct{}{}
+	}
+	for _, row := range rows {
+		occupied := make(map[string]struct{}, len(row.aliases)+1)
+		occupied[row.model] = struct{}{}
+		for _, alias := range row.aliases {
+			occupied[alias] = struct{}{}
+		}
+		for _, alias := range aliases {
+			if _, exists := occupied[alias]; exists {
+				return fmt.Errorf("名称 %q 已被历史模型或别名占用", alias)
+			}
 		}
 	}
 	return nil
 }
 
-func priceNames(price *model.PriceConfig) ([]string, error) {
-	names := []string{normalizePriceName(price.Model)}
+func priceAliases(price *model.PriceConfig) ([]string, error) {
 	if strings.TrimSpace(price.Aliases) == "" {
-		return names, nil
+		return nil, nil
 	}
 	var aliases []string
 	if err := json.Unmarshal([]byte(price.Aliases), &aliases); err != nil {
 		return nil, errors.New("aliases 不是有效的 JSON 数组")
 	}
+	result := make([]string, 0, len(aliases))
 	for _, alias := range aliases {
 		if normalized := normalizePriceName(alias); normalized != "" {
-			names = append(names, normalized)
+			result = append(result, normalized)
 		}
 	}
-	return names, nil
+	return result, nil
+}
+
+func priceAliasesOf(price *model.PriceConfig) []string {
+	aliases, err := priceAliases(price)
+	if err != nil {
+		return nil
+	}
+	return aliases
 }
 
 func normalizePriceName(name string) string {
@@ -201,5 +246,49 @@ func DeletePrice(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "price deleted"})
+	}
+}
+
+type priceReference struct {
+	ProviderID   string `json:"provider_id"`
+	ProviderName string `json:"provider_name"`
+	Model        string `json:"model"`
+}
+
+// PriceReferences lists the provider models whose rate-mode entries are bound
+// to the given PriceConfig row (by its internal ID). It powers the delete
+// confirmation: a non-empty list warns that deleting the row breaks those
+// providers' price calcutions.
+func PriceReferences(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var providers []model.Provider
+		if err := db.Find(&providers).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		refs := make([]priceReference, 0)
+		for _, provider := range providers {
+			if strings.TrimSpace(provider.Models) == "" {
+				continue
+			}
+			var entries []struct {
+				Model         string `json:"model"`
+				PriceConfigID string `json:"priceConfigId"`
+			}
+			if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				if entry.PriceConfigID == id {
+					refs = append(refs, priceReference{
+						ProviderID:   provider.ID,
+						ProviderName: provider.Name,
+						Model:        entry.Model,
+					})
+				}
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"data": refs})
 	}
 }

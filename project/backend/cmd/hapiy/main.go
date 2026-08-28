@@ -58,6 +58,12 @@ func main() {
 		log.Fatalf("Failed to migrate auto-disable state: %v", err)
 	}
 
+	// Drop the legacy per-model unique index so (model, provider) composite
+	// uniqueness can apply on upgraded databases.
+	if err := model.MigratePriceConfigSchema(db); err != nil {
+		log.Fatalf("Failed to migrate price config schema: %v", err)
+	}
+
 	// Drop archived topology versions stored in the legacy nested-document
 	// format: the version archive was rebuilt around the flat topology, so old
 	// snapshots are unreadable and are intentionally discarded (no migration).
@@ -270,6 +276,7 @@ func main() {
 			dashboard.POST("/models", handler.CreatePrice(db))
 			dashboard.PUT("/models/:id", handler.UpdatePrice(db))
 			dashboard.DELETE("/models/:id", handler.DeletePrice(db))
+			dashboard.GET("/models/:id/references", handler.PriceReferences(db))
 			dashboardAuthed.GET("/models-dev", handler.ModelsDevList())
 
 			// Settings

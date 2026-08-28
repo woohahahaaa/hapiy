@@ -13,7 +13,6 @@ import {
 } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Switch } from '@/components/ui/switch'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelAutocomplete } from '@/components/ModelAutocomplete'
 import { cn } from '@/lib/utils'
@@ -70,6 +69,7 @@ export function PricePage() {
   const [limit, setLimit] = useState(50)
   const [currency, setCurrency] = useState<'USD' | 'CNY'>('CNY')
   const [rate, setRate] = useState(7.2)
+  const [deleteTarget, setDeleteTarget] = useState<{ readonly id: string; readonly referenced: boolean; readonly refs: readonly import('@/lib/dashboard-api').PriceReference[] } | null>(null)
 
   useEffect(() => {
     dashboardApi
@@ -103,10 +103,24 @@ export function PricePage() {
     void fetch()
   }, [fetch])
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteRequest = async (id: string) => {
     setMutating(true)
     try {
-      await dashboardApi.deletePrice(id)
+      const refs = await dashboardApi.priceReferences(id)
+      setDeleteTarget({ id, referenced: refs.length > 0, refs })
+    } catch (err) {
+      setState({ kind: 'error', message: toErrorMessage(err) })
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
+    setMutating(true)
+    try {
+      await dashboardApi.deletePrice(deleteTarget.id)
+      setDeleteTarget(null)
       await fetch()
     } catch (err) {
       setState({ kind: 'error', message: toErrorMessage(err) })
@@ -141,6 +155,7 @@ export function PricePage() {
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <span>{row.model}</span>
+          <span className="text-xs text-muted-foreground">· {row.providerId || '默认'}</span>
           {row.cacheWritePrice === 0 && row.cacheReadPrice === 0 && (
             <span className="text-xs text-muted-foreground">无缓存</span>
           )}
@@ -217,7 +232,7 @@ const price = (usd: number) =>
             disabled={mutating}
             onClick={(e) => {
               e.stopPropagation()
-              void handleDelete(row.id)
+              void handleDeleteRequest(row.id)
             }}
           >
             <AppIcon name="delete" />
@@ -272,6 +287,32 @@ const price = (usd: number) =>
             <PriceForm initial={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} currency={currency} rate={rate} />
           </DialogContent>
         </Dialog>
+
+            <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
+          <DialogContent width="xs">
+            <DialogHeader>
+              <DialogTitle>确认删除</DialogTitle>
+            </DialogHeader>
+            {deleteTarget?.referenced ? (
+              <p>
+                删除后，以下供应商的模型价格计算将受到影响（共 {deleteTarget.refs.length} 处）：
+                {deleteTarget.refs.map((ref) => (
+                  <span key={ref.providerId} className="mt-2 block text-muted-foreground">
+                    {ref.providerName}（{ref.model}）
+                  </span>
+                ))}
+              </p>
+            ) : (
+              <p>确定要删除这条模型配置吗？</p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteTarget(null)}>取消</Button>
+              <Button variant="destructive" disabled={mutating} onClick={() => void handleDeleteConfirm()}>
+                {mutating ? '删除中...' : '确认删除'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
@@ -295,17 +336,18 @@ function PriceForm({
   const toDisplay = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
   const toUsd = (display: number): number => (currency === 'CNY' ? display / rate : display)
   const [form, setForm] = useState<PriceConfigInput>(initial ? toDisplayInput(initial, toDisplay) : emptyPrice)
-  // The models.dev switch and provider selection restore from the persisted
-  // provider_id: a non-empty provider_id means the last save used models.dev.
-  const [modelsDevEnabled, setModelsDevEnabled] = useState(initial?.providerId !== undefined && initial.providerId !== '')
-  const [providerId, setProviderId] = useState<string | null>(initial?.providerId ?? null)
+  // The upstream-supplier text restores from the persisted provider_id; an
+  // empty value is normalized to the 默认 sentinel on save.
+  const [providerName, setProviderName] = useState<string>(initial?.providerId ?? '')
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [snapshotError, setSnapshotError] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [existingNames, setExistingNames] = useState<ExistingNamesState>({ kind: 'loading' })
 
   useEffect(() => {
     if (!initial) {
       setForm(emptyPrice)
+      setProviderName('')
       return
     }
     const convert = (usd: number): number => (currency === 'CNY' ? usd * rate : usd)
@@ -316,6 +358,7 @@ function PriceForm({
       cacheWritePrice: convert(initial.cacheWritePrice),
       cacheReadPrice: convert(initial.cacheReadPrice),
     })
+    setProviderName(initial.providerId ?? '')
   }, [initial, currency, rate])
 
   const symbol = currency === 'CNY' ? '¥' : '$'
@@ -339,6 +382,8 @@ function PriceForm({
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
 
+  // Preload the models.dev snapshot the moment the dialog opens so the
+  // upstream-supplier candidates are ready without any extra interaction.
   useEffect(() => {
     let cancelled = false
     setSnapshotError(null)
@@ -352,20 +397,12 @@ function PriceForm({
     return () => { cancelled = true }
   }, [])
 
+  // Upstream-supplier candidates: every models.dev provider that carries the
+  // committed model name (exact, case-insensitive).
   const providers = useMemo(
-    () => (modelsDevEnabled ? providersForModel(snapshot ?? [], form.model) : []),
-    [modelsDevEnabled, snapshot, form.model],
+    () => providersForModel(snapshot ?? [], form.model),
+    [snapshot, form.model],
   )
-
-  // Drop a provider selection that no longer belongs to the committed model.
-  // Only runs once the models.dev snapshot is loaded: while it's still
-  // pending, providers is empty and a stored provider_id must not be cleared.
-  useEffect(() => {
-    if (snapshot === null) return
-    if (providerId !== null && !providers.some((provider) => provider.providerId === providerId)) {
-      setProviderId(null)
-    }
-  }, [providerId, providers, snapshot])
 
   const fillFromProvider = (pid: string) => {
     if (snapshot === null) return
@@ -383,51 +420,73 @@ function PriceForm({
     }))
   }
 
-  const handleProviderSelect = (pid: string | null) => {
-    setProviderId(pid)
-    if (pid) fillFromProvider(pid)
+  const handleProviderSelect = (name: string | null) => {
+    setProviderName(name ?? '')
+    if (name) fillFromProvider(name)
   }
 
-  // Model name commits (pick or blur). While the switch is on, an exact
-  // case-insensitive match keeps the official casing; otherwise the model
-  // field and the provider selection are cleared together.
+  // Model name commits (pick or blur). A pick from the enriched candidate list
+  // sets the upstream supplier via onPickProvider; a typed commit only touches
+  // the model name.
   const handleModelChange = (model: string) => {
-    setForm((current) => ({ ...current, model }))
-    if (!modelsDevEnabled || snapshot === null) return
+    setForm((current) => ({ ...current, model: model.toLowerCase() }))
+  }
+
+  const handlePickProvider = (provider: string) => {
+    setProviderName(provider)
+    fillFromProvider(provider)
+  }
+
+  // 「从 models.dev 获取信息」: query the committed model name + supplier.
+  const handleFetchFromModelsDev = () => {
+    setFetchError(null)
+    const model = form.model.trim().toLowerCase()
+    if (!model) {
+      setFetchError('请先填写模型名称')
+      return
+    }
+    if (snapshot === null) {
+      setFetchError('models.dev 数据加载失败，请检查网络')
+      return
+    }
     const match = findModelsDevModel(snapshot, model)
-    if (match) {
-      setForm((current) => ({ ...current, model: match.id.toLowerCase() }))
-    } else {
-      setProviderId(null)
-      setForm((current) => ({ ...current, model: '' }))
+    if (!match) {
+      setFetchError('没有查到对应的模型信息。请检查模型名称和上游供应商是否填写正确。')
+      return
+    }
+    let row = findModelsDevProviderRow(snapshot, model, providerName)
+    if (!row && match) row = match
+    if (!row) {
+      setFetchError('没有查到对应的模型信息。请检查模型名称和上游供应商是否填写正确。')
+      return
+    }
+    setForm((current) => ({
+      ...current,
+      model: row.id.toLowerCase(),
+      inputPrice: toDisplay(row.inputPrice),
+      outputPrice: toDisplay(row.outputPrice),
+      cacheWritePrice: toDisplay(row.cacheWritePrice),
+      cacheReadPrice: toDisplay(row.cacheReadPrice),
+      contextLength: row.contextLength,
+      maxToken: row.maxOutput,
+      supportedTypes: [...new Set([...row.inputTypes, ...row.outputTypes])],
+    }))
+    if (!providerName.trim()) {
+      setProviderName(row.providerName)
     }
   }
 
   const handleSave = () => {
     const payload = {
       ...form,
-      model: form.model.trim(),
+      model: form.model.trim().toLowerCase(),
       inputPrice: toUsd(form.inputPrice),
       outputPrice: toUsd(form.outputPrice),
       cacheWritePrice: toUsd(form.cacheWritePrice),
       cacheReadPrice: toUsd(form.cacheReadPrice),
     }
-    if (!modelsDevEnabled) {
-      onSave({ ...payload, providerId: undefined })
-      return
-    }
-    if (snapshot === null) {
-      setSnapshotError('models.dev 数据加载失败，请检查网络')
-      return
-    }
-    const match = findModelsDevModel(snapshot, form.model)
-    if (!match) {
-      setProviderId(null)
-      setForm((current) => ({ ...current, model: '' }))
-      return
-    }
-    // Keep the provider-id attribution so the switch/provider survive reopening.
-    onSave({ ...payload, model: match.id.toLowerCase(), providerId: providerId ?? undefined })
+    const normalizedProvider = providerName.trim() || '默认'
+    onSave({ ...payload, providerId: normalizedProvider })
   }
 
   const nameConflicts = existingNames.kind === 'ready'
@@ -445,59 +504,43 @@ function PriceForm({
     form.contextLength >= 0 &&
     form.maxToken >= 0 &&
     existingNames.kind === 'ready' &&
-    nameConflicts.length === 0 &&
-    (!modelsDevEnabled || providerId !== null)
+    nameConflicts.length === 0
 
   return (
     <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="price-model">模型名称</FieldLabel>
-        <div className="flex items-center gap-2">
-          <div className="flex-1">
-            <ModelAutocomplete
-              value={form.model}
-              onChange={handleModelChange}
-              searchable={modelsDevEnabled}
-            />
-          </div>
-          {form.model.trim() !== '' && (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-              <Switch
-                checked={modelsDevEnabled}
-                onCheckedChange={(checked) => setModelsDevEnabled(checked === true)}
-              />
-              从 models.dev 获取信息
-            </label>
-          )}
-        </div>
-        {snapshotError && <p role="alert" className="text-xs text-destructive">{snapshotError}</p>}
-        {existingNames.kind === 'loading' && <p className="text-xs text-muted-foreground">正在检查历史模型名称...</p>}
-        {existingNames.kind === 'error' && <p role="alert" className="text-xs text-destructive">无法检查历史模型名称，请稍后重试</p>}
-        <p className="text-xs text-muted-foreground">大小写不敏感</p>
-      </Field>
-      {modelsDevEnabled && (
+      <div className="grid grid-cols-2 gap-4">
         <Field>
-          <FieldLabel htmlFor="price-provider">供应商</FieldLabel>
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <ProviderSelect providers={providers} value={providerId} onSelect={handleProviderSelect} />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={providerId === null}
-              onClick={() => { if (providerId !== null) fillFromProvider(providerId) }}
-            >
-              <AppIcon name="refresh" data-icon="inline-start" />
-              更新模型数据
-            </Button>
-          </div>
-          {providerId === null && (
-            <p className="text-xs text-muted-foreground">开启后需选择供应商才能保存</p>
-          )}
+          <FieldLabel htmlFor="price-model">模型名称</FieldLabel>
+          <ModelAutocomplete
+            value={form.model}
+            onChange={handleModelChange}
+            searchable
+            onPickProvider={handlePickProvider}
+          />
+          <p className="text-xs text-muted-foreground">大小写不敏感，保存后统一转为小写</p>
         </Field>
-      )}
+        <Field>
+          <FieldLabel htmlFor="price-provider">上游供应商</FieldLabel>
+          <ProviderSelect providers={providers} value={providerName} onSelect={handleProviderSelect} />
+          <p className="text-xs text-muted-foreground">选填；不填将保存为「默认」</p>
+        </Field>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={snapshot === null}
+          onClick={handleFetchFromModelsDev}
+        >
+          <AppIcon name="refresh" data-icon="inline-start" />
+          从 models.dev 获取信息
+        </Button>
+        {fetchError && <p role="alert" className="text-xs text-destructive">{fetchError}</p>}
+      </div>
+      {snapshotError && <p role="alert" className="text-xs text-destructive">{snapshotError}</p>}
+      {existingNames.kind === 'loading' && <p className="text-xs text-muted-foreground">正在检查历史模型名称...</p>}
+      {existingNames.kind === 'error' && <p role="alert" className="text-xs text-destructive">无法检查历史模型名称，请稍后重试</p>}
       <Field>
         <FieldLabel htmlFor="price-aliases">匹配更多名称</FieldLabel>
         <Input
@@ -616,8 +659,8 @@ type ProviderOption = {
 
 type ProviderSelectProps = {
   readonly providers: readonly ProviderOption[]
-  readonly value: string | null
-  readonly onSelect: (providerId: string | null) => void
+  readonly value: string
+  readonly onSelect: (providerName: string | null) => void
 }
 
 // Input-style provider picker (same interaction as ModelAutocomplete, not a
@@ -631,8 +674,8 @@ function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
 
   // Reflect the committed selection (official casing) into the input.
   useEffect(() => {
-    const option = providers.find((provider) => provider.providerId === value)
-    setDraft(option ? option.providerName : '')
+    const option = providers.find((provider) => provider.providerName === value)
+    setDraft(option ? option.providerName : value)
   }, [value, providers])
 
   const candidates = useMemo(() => {
@@ -647,7 +690,7 @@ function ProviderSelect({ providers, value, onSelect }: ProviderSelectProps) {
   const commit = (option: ProviderOption | null) => {
     if (option) {
       setDraft(option.providerName)
-      onSelect(option.providerId)
+      onSelect(option.providerName)
     } else {
       setDraft('')
       onSelect(null)

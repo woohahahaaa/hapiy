@@ -181,6 +181,18 @@ func MigrateAutoDisableState(db *gorm.DB) error {
 	return nil
 }
 
+// MigratePriceConfigSchema drops the legacy per-model unique index
+// (idx_price_configs_model) that AutoMigrate cannot remove, so the new
+// (model, provider) composite uniqueness takes effect on upgraded databases.
+func MigratePriceConfigSchema(db *gorm.DB) error {
+	if db.Migrator().HasIndex(&PriceConfig{}, "idx_price_configs_model") {
+		if err := db.Migrator().DropIndex(&PriceConfig{}, "idx_price_configs_model"); err != nil {
+			return fmt.Errorf("drop legacy price_configs model index: %w", err)
+		}
+	}
+	return nil
+}
+
 // upsertAutoDisableState inserts an AutoDisableState row unless one already
 // exists for the (provider_id, dimension, value) triple.
 func upsertAutoDisableState(db *gorm.DB, state AutoDisableState) error {

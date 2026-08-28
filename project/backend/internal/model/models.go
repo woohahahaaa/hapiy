@@ -468,11 +468,14 @@ type PriceRule struct {
 	Multiplier float64 `json:"multiplier"`
 }
 
-// PriceConfig model — per-model pricing; units are per 1M tokens.
+// PriceConfig model — per-model pricing; units are per 1M tokens. Multiple
+// rows may share the same model name as long as (model, provider) differs;
+// the upstream-supplier text lives in ProviderID ("" is stored by the client
+// as the "默认" sentinel).
 type PriceConfig struct {
 	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Model           string    `gorm:"uniqueIndex;not null" json:"model"`
-	ProviderID      string    `gorm:"type:uuid" json:"provider_id,omitempty"` // models.dev provider the prices were filled from
+	Model           string    `gorm:"not null;uniqueIndex:idx_price_model_provider,priority:1" json:"model"`
+	ProviderID      string    `gorm:"uniqueIndex:idx_price_model_provider,priority:2" json:"provider_id,omitempty"` // 上游供应商文本（默认「默认」）
 	InputPrice      float64   `gorm:"default:0" json:"input_price"`
 	OutputPrice     float64   `gorm:"default:0" json:"output_price"`
 	CacheWritePrice float64   `gorm:"default:0" json:"cache_write_price"`

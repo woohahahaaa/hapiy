@@ -48,12 +48,61 @@ func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 		float64(usage.CompletionTokens)/tokensPerMillion*price.OutputPrice +
 		float64(usage.CacheWriteTokens)/tokensPerMillion*price.CacheWritePrice +
 		float64(usage.CacheReadTokens)/tokensPerMillion*price.CacheReadPrice
+	if bound, rate, ok := modelRateBinding(db, request.provider, request.modelName); ok {
+		// Rate mode is bound to a specific model-info row: price = that row's
+		// prices × the configured multiplier. A deleted binding resolves to 0.
+		total = float64(usage.PromptTokens)/tokensPerMillion*bound.InputPrice +
+			float64(usage.CompletionTokens)/tokensPerMillion*bound.OutputPrice +
+			float64(usage.CacheWriteTokens)/tokensPerMillion*bound.CacheWritePrice +
+			float64(usage.CacheReadTokens)/tokensPerMillion*bound.CacheReadPrice
+		quota := total * rate
+		currency := service.GetBillingCurrency(db)
+		if currency == "CNY" {
+			quota *= service.GetExchangeRate(db)
+		}
+		return quota, currency
+	}
 	quota := total * parseModelRate(request.provider, request.modelName)
 	currency := service.GetBillingCurrency(db)
 	if currency == "CNY" {
 		quota *= service.GetExchangeRate(db)
 	}
 	return quota, currency
+}
+
+// modelRateBinding returns the model-info row a rate-mode provider model is
+// bound to (by PriceConfig ID) together with its multiplier. ok is false when
+// the model has no binding (rate mode without an upstream supplier selected,
+// resolved by the legacy global PriceConfig × rate path instead) or when the
+// provider is explicit-pricing. A binding whose row was deleted still resolves:
+// the row is missing so it contributes zero prices (ok stays true, zero rows).
+func modelRateBinding(db *gorm.DB, provider *model.Provider, modelName string) (*model.PriceConfig, float64, bool) {
+	if db == nil || provider == nil || strings.TrimSpace(provider.Models) == "" {
+		return nil, 0, false
+	}
+	var entries []struct {
+		Model         string `json:"model"`
+		Rate          string `json:"rate"`
+		PriceConfigID string `json:"priceConfigId"`
+	}
+	if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
+		return nil, 0, false
+	}
+	for _, entry := range entries {
+		if !strings.EqualFold(strings.TrimSpace(entry.Model), strings.TrimSpace(modelName)) {
+			continue
+		}
+		if entry.PriceConfigID == "" {
+			return nil, 0, false
+		}
+		var bound model.PriceConfig
+		err := db.First(&bound, "id = ?", entry.PriceConfigID).Error
+		if err != nil {
+			bound = model.PriceConfig{}
+		}
+		return &bound, parseFraction(entry.Rate), true
+	}
+	return nil, 0, false
 }
 
 // modelPrices are explicit per-model prices, stored as strings with a "$" or

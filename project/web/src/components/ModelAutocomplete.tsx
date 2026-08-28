@@ -14,11 +14,16 @@ type ModelAutocompleteProps = {
   readonly value: string
   readonly onChange: (value: string) => void
   // When false (default) this is a plain input: no models.dev fetch, no
-  // candidate dropdown, and typing only updates the local draft.
+  // candidate dropdown, and typing only updates the local draft. When true the
+  // first candidate is the bare model name (no provider); the rest carry the
+  // models.dev provider they were found under and call onPickProvider.
   readonly searchable?: boolean
+  readonly onPickProvider?: (providerName: string) => void
 }
 
-export function ModelAutocomplete({ value, onChange, searchable = false }: ModelAutocompleteProps) {
+// Candidate rows: the first is always the bare committed model name, the rest
+// are models.dev matches rendered with their upstream provider.
+export function ModelAutocomplete({ value, onChange, searchable = false, onPickProvider }: ModelAutocompleteProps) {
   const [draft, setDraft] = useState(value)
   const [all, setAll] = useState<readonly ModelsDevModel[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,11 +75,11 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
     if (trimmed.length === 0) return [] as readonly ModelsDevModel[]
     // One row per logical model: dedupe by lowercase id so a model published
     // under multiple providers (or with casing drift across providers) shows
-    // up only once, e.g. deepseek-ve-flash and deepseek-ve-Flash are the same.
+    // up only once per provider variant.
     const seen = new Set<string>()
     const result: ModelsDevModel[] = []
     for (const model of searchModelsDevModels(all, trimmed)) {
-      const key = model.id.toLowerCase()
+      const key = `${model.id.toLowerCase()}|${model.providerName.toLowerCase()}`
       if (!seen.has(key)) {
         seen.add(key)
         result.push(model)
@@ -116,17 +121,29 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
     setOpen(false)
   }
 
+  const pickWithProvider = (model: ModelsDevModel) => {
+    commit(model.id)
+    onPickProvider?.(model.providerName)
+    setOpen(false)
+  }
+
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (!searchable || !open || suggestions.length === 0) return
+    const maxActive = suggestions.length // 0 = bare name, 1..n = providers
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setActive((current) => (current + 1) % suggestions.length)
+      setActive((current) => (current + 1) % (maxActive + 1))
     } else if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setActive((current) => (current - 1 + suggestions.length) % suggestions.length)
+      setActive((current) => (current - 1 + maxActive + 1) % (maxActive + 1))
     } else if (event.key === 'Enter') {
       event.preventDefault()
-      pick(suggestions[active])
+      if (active === 0) {
+        commit(draft.trim())
+        setOpen(false)
+      } else {
+        pick(suggestions[active - 1])
+      }
     } else if (event.key === 'Escape') {
       setOpen(false)
     }
@@ -165,23 +182,39 @@ export function ModelAutocomplete({ value, onChange, searchable = false }: Model
         <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-md">
           <ScrollArea className="h-72">
             <ul className="py-1">
+              <li>
+                <button
+                  type="button"
+                  onMouseDown={(event) => {
+                    event.preventDefault()
+                    commit(draft.trim())
+                    setOpen(false)
+                  }}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs text-foreground hover:bg-primary/10"
+                >
+                  <span className="truncate">{draft.trim()}</span>
+                </button>
+              </li>
               {suggestions.map((model, index) => {
                 const displayId = model.id.toLowerCase()
                 return (
-                  <li key={displayId}>
+                  <li key={`${displayId}|${model.providerName.toLowerCase()}`}>
                     <button
                       type="button"
                       onMouseDown={(event) => {
                         event.preventDefault()
-                        pick(model)
+                        pickWithProvider(model)
                       }}
-                      onMouseEnter={() => setActive(index)}
+                      onMouseEnter={() => setActive(index + 1)}
                       className={cn(
                         'flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs',
-                        index === active ? 'bg-primary text-primary-foreground' : 'text-foreground',
+                        active === index + 1 ? 'bg-primary text-primary-foreground' : 'text-foreground',
                       )}
                     >
                       <span className="truncate">{displayId}</span>
+                      <span className={cn('shrink-0', active === index + 1 ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                        {model.providerName}
+                      </span>
                     </button>
                   </li>
                 )
