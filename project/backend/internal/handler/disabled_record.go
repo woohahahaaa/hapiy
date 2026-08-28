@@ -31,7 +31,7 @@ func ListDisabledRecords(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	}
 }
 
-// backfillMissingDisabledRecords reconciles provider_disable_states with
+// backfillMissingDisabledRecords reconciles auto_disable_states with
 // disabled_records in both directions:
 //   - states that are disabled but have no record get one created (so the
 //     pending table always reflects reality even if the original disable
@@ -43,7 +43,7 @@ func ListDisabledRecords(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 //     elsewhere, e.g. the provider editor) are dropped so the pending
 //     table never shows items that are no longer disabled.
 func backfillMissingDisabledRecords(db *gorm.DB) {
-	var states []model.ProviderDisableState
+	var states []model.AutoDisableState
 	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
 		return
 	}
@@ -92,7 +92,7 @@ func backfillMissingDisabledRecords(db *gorm.DB) {
 	}
 	for _, rec := range records {
 		var stateCount int64
-		if err := db.Model(&model.ProviderDisableState{}).
+		if err := db.Model(&model.AutoDisableState{}).
 			Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?",
 				rec.ProviderID, rec.Dimension, rec.Value, true).
 			Count(&stateCount).Error; err != nil {
@@ -183,7 +183,7 @@ func ExtendDisabledRecordCountdown(db *gorm.DB) gin.HandlerFunc {
 
 // RestoreDisabledRecordDirectly clears the disable state behind a record
 // without running a probe — an explicit user action. The record row and
-// its underlying ProviderDisableState/auto_disabled flag are reset.
+// its underlying AutoDisableState are reset.
 func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -192,19 +192,11 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusNotFound, gin.H{"error": "记录不存在"})
 			return
 		}
-		if err := db.Model(&model.ProviderDisableState{}).
+		if err := db.Model(&model.AutoDisableState{}).
 			Where("provider_id = ? AND dimension = ? AND value = ?", record.ProviderID, record.Dimension, record.Value).
 			Update("disabled", false).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
-		}
-		if record.Dimension == model.FailoverDimensionProvider {
-			if err := db.Model(&model.Provider{}).
-				Where("id = ?", record.ProviderID).
-				Update("auto_disabled", false).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 		}
 	result := db.Delete(&model.DisabledRecord{}, "id = ?", id)
 	if result.Error != nil {

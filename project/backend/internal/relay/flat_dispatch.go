@@ -47,7 +47,7 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 }
 
 func (e *Engine) providerDisabled(provider *model.Provider) bool {
-	return provider.AutoDisabled || e.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID)
+	return e.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID)
 }
 
 // SelectByFlatTopology chooses a provider for a request using the flat topology

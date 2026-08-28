@@ -351,14 +351,9 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 	if value == "" {
 		return nil
 	}
-	state := model.ProviderDisableState{ProviderID: plan.Provider.ID, Dimension: dimension, Value: value, Disabled: true}
-	if err := e.db.Where(model.ProviderDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).Assign(state).FirstOrCreate(&state).Error; err != nil {
+	state := model.AutoDisableState{ProviderID: plan.Provider.ID, Dimension: dimension, Value: value, Disabled: true}
+	if err := e.db.Where(model.AutoDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).Assign(state).FirstOrCreate(&state).Error; err != nil {
 		return err
-	}
-	if dimension == model.FailoverDimensionProvider {
-		if err := e.db.Model(&model.Provider{}).Where("id = ?", plan.Provider.ID).Update("auto_disabled", true).Error; err != nil {
-			return err
-		}
 	}
 	// 记录当时实际用过的 (baseURL, key)，恢复探针用它，不做 harness 交叉。
 	usedBaseURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
@@ -477,11 +472,8 @@ func (e *Engine) isDisabled(providerID, dimension, value string) bool {
 	if e.db == nil || providerID == "" || value == "" {
 		return false
 	}
-	if !e.db.Migrator().HasTable(&model.ProviderDisableState{}) {
-		return false
-	}
 	var count int64
-	if err := e.db.Model(&model.ProviderDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?", providerID, dimension, value, true).Count(&count).Error; err != nil {
+	if err := e.db.Model(&model.AutoDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?", providerID, dimension, value, true).Count(&count).Error; err != nil {
 		return false
 	}
 	return count > 0

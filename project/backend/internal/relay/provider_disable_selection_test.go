@@ -20,7 +20,7 @@ func TestSelectProvider_skipsPersistedProviderDisable(t *testing.T) {
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
 	}
-	if err := db.Create(&model.ProviderDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}).Error; err != nil {
+	if err := db.Create(&model.AutoDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}).Error; err != nil {
 		t.Fatalf("create disable state: %v", err)
 	}
 	if err := engine.LoadProviders(); err != nil {
@@ -42,7 +42,7 @@ func TestSelectProvider_skipsPersistedProviderDisable(t *testing.T) {
 func TestDispatch_flatTopologySkipsPersistedProviderDisable(t *testing.T) {
 	// Given
 	engine, db := newTestEngine(t)
-	if err := db.AutoMigrate(&model.ProviderDisableState{}); err != nil {
+	if err := db.AutoMigrate(&model.AutoDisableState{}); err != nil {
 		t.Fatalf("migrate disable state: %v", err)
 	}
 	providers := []model.Provider{
@@ -52,7 +52,7 @@ func TestDispatch_flatTopologySkipsPersistedProviderDisable(t *testing.T) {
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
 	}
-	state := model.ProviderDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}
+	state := model.AutoDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}
 	if err := db.Create(&state).Error; err != nil {
 		t.Fatalf("create disable state: %v", err)
 	}
@@ -75,15 +75,18 @@ func TestDispatch_flatTopologySkipsPersistedProviderDisable(t *testing.T) {
 	}
 }
 
-func TestDispatch_affinityFallsBackWhenRecalledProviderIsLegacyAutoDisabled(t *testing.T) {
+func TestDispatch_affinityFallsBackWhenRecalledProviderIsAutoDisabled(t *testing.T) {
 	// Given
 	engine, db := newTestEngine(t)
 	providers := []model.Provider{
-		{ID: "disabled", Name: "disabled", BaseURLs: `[]`, Keys: `[]`, Models: `[{"model":"m1"}]`, Status: true, WorkflowEnabled: true, AutoDisabled: true},
+		{ID: "disabled", Name: "disabled", BaseURLs: `[]`, Keys: `[]`, Models: `[{"model":"m1"}]`, Status: true, WorkflowEnabled: true},
 		{ID: "enabled", Name: "enabled", BaseURLs: `[]`, Keys: `[]`, Models: `[{"model":"m1"}]`, Status: true, WorkflowEnabled: true},
 	}
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
+	}
+	if err := db.Create(&model.AutoDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}).Error; err != nil {
+		t.Fatalf("create disable state: %v", err)
 	}
 	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
 		t.Fatalf("save affinity rules: %v", err)

@@ -22,6 +22,32 @@ type resetProviderDisableRequest struct {
 	Value     string `json:"value"`
 }
 
+// fillAutoDisabled derives each provider's AutoDisabled flag from the
+// provider-dimension AutoDisableState rows so the API contract
+// (auto_disabled in provider payloads) is preserved without a stored column.
+func fillAutoDisabled(db *gorm.DB, providers []model.Provider) error {
+	if len(providers) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(providers))
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	var states []model.AutoDisableState
+	if err := db.Where("dimension = ? AND disabled = ? AND provider_id IN ?",
+		model.FailoverDimensionProvider, true, ids).Find(&states).Error; err != nil {
+		return err
+	}
+	disabled := make(map[string]bool, len(states))
+	for _, s := range states {
+		disabled[s.ProviderID] = true
+	}
+	for i := range providers {
+		providers[i].AutoDisabled = disabled[providers[i].ID]
+	}
+	return nil
+}
+
 // Provider handlers
 
 func ListProviders(db *gorm.DB) gin.HandlerFunc {
@@ -38,6 +64,10 @@ func ListProviders(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if err := fillAutoDisabled(db, providers); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"data": providers, "total": total})
 	}
 }
@@ -48,6 +78,10 @@ func GetProvider(db *gorm.DB) gin.HandlerFunc {
 		var provider model.Provider
 		if err := db.First(&provider, "id = ?", id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			return
+		}
+		if err := fillAutoDisabled(db, []model.Provider{provider}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": provider})
@@ -113,6 +147,11 @@ func UpdateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		engine.InvalidatePlan(provider.ID)
+
+		if err := fillAutoDisabled(db, []model.Provider{provider}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 
 		c.JSON(http.StatusOK, gin.H{"data": provider})
 	}
@@ -199,18 +238,18 @@ func ListProviderDisableStatus(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		var states []model.ProviderDisableState
+		var states []model.AutoDisableState
 		if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		byProvider := make(map[string][]model.ProviderDisableState)
+		byProvider := make(map[string][]model.AutoDisableState)
 		for _, state := range states {
 			byProvider[state.ProviderID] = append(byProvider[state.ProviderID], state)
 		}
 		data := make([]providerDisableStatus, 0, len(providers))
 		for _, provider := range providers {
-			status := providerDisableStatus{ProviderID: provider.ID, Provider: provider.AutoDisabled, BaseURLs: map[string]bool{}, Keys: map[string]bool{}}
+			status := providerDisableStatus{ProviderID: provider.ID, BaseURLs: map[string]bool{}, Keys: map[string]bool{}}
 			for _, state := range byProvider[provider.ID] {
 				switch state.Dimension {
 				case model.FailoverDimensionProvider:
@@ -247,16 +286,9 @@ func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFu
 			c.JSON(http.StatusBadRequest, gin.H{"error": "value is required for base_url and key"})
 			return
 		}
-		if err := db.Model(&model.ProviderDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).Update("disabled", false).Error; err != nil {
+		if err := db.Model(&model.AutoDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).Update("disabled", false).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
-		}
-		if req.Dimension == model.FailoverDimensionProvider && provider.AutoDisabled {
-			provider.AutoDisabled = false
-			if err := db.Save(&provider).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 		}
 		// Manual restore only clears the exact restored entity: drop the
 		// matching pending record so it stops showing in the recovery list.
@@ -276,9 +308,8 @@ type resetProviderDimensionRequest struct {
 }
 
 // ResetProviderDisableDimension clears every auto-disable state of one
-// dimension for a single provider. For the provider dimension the
-// provider's auto_disabled flag is reset too. Used by the provider
-// editor dialog's "自动禁用" block (恢复 Provider 行 / 恢复该供应商全部 BaseURL / 全部 Key).
+// dimension for a single provider. Used by the provider editor dialog's
+// "自动禁用" block (恢复 Provider 行 / 恢复该供应商全部 BaseURL / 全部 Key).
 func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -287,20 +318,12 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		stateResult := db.Model(&model.ProviderDisableState{}).
+		stateResult := db.Model(&model.AutoDisableState{}).
 			Where("provider_id = ? AND dimension = ?", id, req.Dimension).
 			Update("disabled", false)
 		if stateResult.Error != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
 			return
-		}
-		if req.Dimension == model.FailoverDimensionProvider {
-			if err := db.Model(&model.Provider{}).
-				Where("id = ?", id).
-				Update("auto_disabled", false).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 		}
 		// Manual dimension restore drops every pending record of this
 		// provider+dimension (they no longer represent an active disable).
@@ -323,9 +346,8 @@ type resetAllProviderDisableRequest struct {
 }
 
 // ResetAllProviderDisableStatus clears every auto-disable state of one
-// dimension across all providers. For the provider dimension the
-// providers' auto_disabled flag is reset too. Used by the dashboard's
-// "自动禁用" summary block (恢复 provider 行 / 恢复全部 baseURL / 恢复全部 key).
+// dimension across all providers. Used by the dashboard's "自动禁用"
+// summary block (恢复 provider 行 / 恢复全部 baseURL / 恢复全部 key).
 func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req resetAllProviderDisableRequest
@@ -333,7 +355,7 @@ func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		stateResult := db.Model(&model.ProviderDisableState{}).
+		stateResult := db.Model(&model.AutoDisableState{}).
 			Where("dimension = ?", req.Dimension).
 			Update("disabled", false)
 		if stateResult.Error != nil {
@@ -342,14 +364,6 @@ func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.Handle
 		}
 		if stateResult.RowsAffected > 0 {
 			service.LogEvent(service.LogSourceChannelRecoveredManual, "", "重置全部 "+service.DimensionLabel(req.Dimension)+" 禁用状态", "操作: 重置全部 "+service.DimensionLabel(req.Dimension)+" 维度禁用状态")
-		}
-		if req.Dimension == model.FailoverDimensionProvider {
-			if err := db.Model(&model.Provider{}).
-				Where("auto_disabled = ?", true).
-				Update("auto_disabled", false).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"dimension": req.Dimension}})

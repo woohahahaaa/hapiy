@@ -27,7 +27,7 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 		&model.HeartbeatRule{},
 		&model.ConcurrencyRule{},
 		&model.FailoverRule{},
-		&model.ProviderDisableState{},
+		&model.AutoDisableState{},
 		&model.Setting{},
 		&model.TopologyState{},
 		&model.TopologySlotAssignment{},

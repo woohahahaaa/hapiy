@@ -32,7 +32,7 @@ func newIntegrationDB(t *testing.T) *gorm.DB {
 	}
 	if err := db.AutoMigrate(
 		&model.Provider{},
-		&model.ProviderDisableState{},
+		&model.AutoDisableState{},
 		&model.Setting{},
 		&model.DisabledRecord{},
 	); err != nil {
@@ -69,7 +69,7 @@ func makeProviderForProbe(t *testing.T, db *gorm.DB, baseURLs, keys, models []st
 
 func setKeyDisabled(t *testing.T, db *gorm.DB, providerID, key string) {
 	t.Helper()
-	if err := db.Save(&model.ProviderDisableState{
+	if err := db.Save(&model.AutoDisableState{
 		ProviderID: providerID,
 		Dimension:  model.FailoverDimensionKey,
 		Value:      key,
@@ -81,7 +81,7 @@ func setKeyDisabled(t *testing.T, db *gorm.DB, providerID, key string) {
 
 func setBaseURLDisabled(t *testing.T, db *gorm.DB, providerID, baseURL string) {
 	t.Helper()
-	if err := db.Save(&model.ProviderDisableState{
+	if err := db.Save(&model.AutoDisableState{
 		ProviderID: providerID,
 		Dimension:  model.FailoverDimensionBaseURL,
 		Value:      baseURL,
@@ -93,7 +93,7 @@ func setBaseURLDisabled(t *testing.T, db *gorm.DB, providerID, baseURL string) {
 
 func isKeyDisabled(t *testing.T, db *gorm.DB, providerID, key string) bool {
 	t.Helper()
-	var s model.ProviderDisableState
+	var s model.AutoDisableState
 	if err := db.Where("provider_id = ? AND dimension = ? AND value = ?",
 		providerID, model.FailoverDimensionKey, key).First(&s).Error; err != nil {
 		return false
@@ -103,7 +103,7 @@ func isKeyDisabled(t *testing.T, db *gorm.DB, providerID, key string) bool {
 
 func isBaseURLDisabled(t *testing.T, db *gorm.DB, providerID, baseURL string) bool {
 	t.Helper()
-	var s model.ProviderDisableState
+	var s model.AutoDisableState
 	if err := db.Where("provider_id = ? AND dimension = ? AND value = ?",
 		providerID, model.FailoverDimensionBaseURL, baseURL).First(&s).Error; err != nil {
 		return false
@@ -392,17 +392,13 @@ func TestRecoveryFlow_ProviderLevelDisabled(t *testing.T) {
 		[]string{"k-healthy"},
 		[]string{"gpt-4o"},
 	)
-	if err := db.Save(&model.ProviderDisableState{
+	if err := db.Save(&model.AutoDisableState{
 		ProviderID: providerID,
 		Dimension:  model.FailoverDimensionProvider,
 		Value:      providerID,
 		Disabled:   true,
 	}).Error; err != nil {
 		t.Fatalf("set provider disable: %v", err)
-	}
-	if err := db.Model(&model.Provider{}).Where("id = ?", providerID).
-		Update("auto_disabled", true).Error; err != nil {
-		t.Fatalf("set auto_disabled: %v", err)
 	}
 	if err := db.Save(&model.DisabledRecord{
 		ProviderID: providerID,
@@ -418,22 +414,14 @@ func TestRecoveryFlow_ProviderLevelDisabled(t *testing.T) {
 
 	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 0, Probe: ChannelProbe})
 
-	var s model.ProviderDisableState
+	var s model.AutoDisableState
 	if err := db.Where("provider_id = ? AND dimension = ?", providerID,
 		model.FailoverDimensionProvider).First(&s).Error; err != nil {
 		t.Fatalf("state: %v", err)
 	}
-	var p model.Provider
-	if err := db.First(&p, "id = ?", providerID).Error; err != nil {
-		t.Fatalf("provider: %v", err)
-	}
 	t.Logf("【provider 级禁用】")
-	t.Logf("  ProviderDisableState.disabled: %v", s.Disabled)
-	t.Logf("  Provider.auto_disabled: %v", p.AutoDisabled)
+	t.Logf("  AutoDisableState.disabled: %v", s.Disabled)
 	if s.Disabled {
 		t.Fatalf("provider 级禁用应被解除")
-	}
-	if p.AutoDisabled {
-		t.Fatalf("Provider.auto_disabled 应被解除")
 	}
 }

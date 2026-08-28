@@ -369,6 +369,45 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     })
   }
 
+  // One phantom editable row while the array is empty.
+  const endpointRows = form.endpoints.length === 0 ? [{ pathSuffix: '' }] : form.endpoints
+  const modelRows = form.models.length === 0
+    ? [{ model: '', endpoints: [], rate: '1', prices: null }]
+    : form.models
+
+  const handleSave = () => {
+    const endpoints = form.endpoints
+      .map((endpoint) => ({ pathSuffix: endpoint.pathSuffix.trim() }))
+      .filter((endpoint) => endpoint.pathSuffix !== '')
+    const baseUrls = form.baseUrls.map((value) => value.trim()).filter((value) => value !== '')
+    const keys = form.keys.map((value) => value.trim()).filter((value) => value !== '')
+    const models = form.models
+      .map((item) => {
+        const model = item.model.trim()
+        if (!item.prices) return { ...item, model }
+        const prices: ModelPrices = {
+          input: item.prices.input.replace(/\s+/g, ''),
+          cacheWrite: item.prices.cacheWrite.replace(/\s+/g, ''),
+          cacheRead: item.prices.cacheRead.replace(/\s+/g, ''),
+          output: item.prices.output.replace(/\s+/g, ''),
+        }
+        return { ...item, model, prices }
+      })
+      .filter((item) =>
+        !(item.model === '' && (item.rate === '' || item.rate === '1') && item.prices === null && item.endpoints.length === 0),
+      )
+    for (const item of models) {
+      if (item.prices && PRICE_FIELDS.some(({ key }) => {
+        const value = item.prices![key].trim()
+        return value !== '' && !PRICE_PREFIX.test(value)
+      })) {
+        showPriceError()
+        return
+      }
+    }
+    onSave({ ...form, name: form.name.trim(), baseUrls, keys, endpoints, models })
+  }
+
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
     const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1', prices: null }))
     if (replace) {
@@ -434,7 +473,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
         )
       })()}
-      <ProviderValueList label="Base URLs" placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} />
+      <ProviderValueList label="Base URLs" placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash />
       <ProviderValueList label="API Keys" placeholder="sk-xxx" values={form.keys} onChange={(keys) => setForm((current) => ({ ...current, keys }))} />
       <Field>
         <FieldLabel>Endpoints</FieldLabel>
@@ -469,23 +508,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       <Field>
         <FieldLabel>模型</FieldLabel>
         <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Input value={newModel.model} onChange={(event) => setNewModel((current) => ({ ...current, model: event.target.value }))} placeholder="模型名称" className="min-w-0 flex-1" />
-              <Button type="button" variant="outline" size="sm" disabled={!newModel.model} onClick={() => { setForm((current) => ({ ...current, models: [...current.models, { ...newModel, model: newModel.model.trim() }] })); setNewModel({ model: '', endpoints: [], rate: '1', prices: null }) }}>
-                <AppIcon name="add" data-icon="inline-start" />添加模型
-              </Button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
-                {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
-                从上游获取模型
-              </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
-                <AppIcon name="settings" />
-              </Button>
-            </div>
-          </div>
           <div ref={listRef} className="relative flex flex-col gap-2">
             {priceError && (
               <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
@@ -499,15 +521,16 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               <span>Endpoint</span>
               <span />
             </div>
-            {[...form.models].sort((a, b) => a.model.localeCompare(b.model)).map((model) => {
+            {modelRows.map((model, index) => {
               const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__all__'
+              const isPhantom = form.models.length === 0
               return (
-                <div key={model.model} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
-                  <Input value={model.model} onChange={(event) => updateModel(model.model, { model: event.target.value })} className="w-full" />
-                  <ModelPriceCell model={model} onPatch={(patch) => updateModel(model.model, patch)} onInvalid={(anchor) => showPriceError(anchor)} />
+                <div key={index} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
+                  <Input value={model.model} onChange={(event) => patchModel(index, { model: event.target.value })} className="w-full" placeholder="模型名称" />
+                  <ModelPriceCell model={model} onPatch={(patch) => patchModel(index, patch)} onInvalid={(anchor) => showPriceError(anchor)} />
                   <Select
                     value={endpointValue}
-                    onValueChange={(value) => updateModel(model.model, { endpoints: value === '__all__' ? [] : [value] })}
+                    onValueChange={(value) => patchModel(index, { endpoints: value === '__all__' ? [] : [value] })}
                   >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -517,10 +540,22 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => setForm((current) => ({ ...current, models: current.models.filter((item) => item.model !== model.model) }))}><AppIcon name="delete" /></Button>
+                  <Button type="button" variant="ghost" size="icon" disabled={isPhantom} onClick={() => removeModel(index)}><AppIcon name="delete" /></Button>
                 </div>
               )
             })}
+            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', prices: null }] }))}>
+              <AppIcon name="add" data-icon="inline-start" />添加一行
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
+              {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+              从上游获取模型
+            </Button>
+            <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
+              <AppIcon name="settings" />
+            </Button>
           </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>
@@ -529,26 +564,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       </Field>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
-        <Button disabled={isSaving || !form.name.trim()} onClick={() => {
-          const sanitizedModels = form.models.map((item) => {
-            if (!item.prices) return item
-            const prices = { ...item.prices }
-            for (const { key } of PRICE_FIELDS) {
-              prices[key] = prices[key].replace(/\s+/g, '')
-            }
-            return { ...item, prices }
-          })
-          for (const item of sanitizedModels) {
-            if (item.prices && PRICE_FIELDS.some(({ key }) => {
-              const value = item.prices![key].trim()
-              return value !== '' && !PRICE_PREFIX.test(value)
-            })) {
-              showPriceError()
-              return
-            }
-          }
-          onSave({ ...form, models: sanitizedModels, name: form.name.trim() })
-        }}>{isSaving ? '保存中...' : '保存'}</Button>
+        <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? '保存中...' : '保存'}</Button>
       </div>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
         <DialogContent className="max-w-sm">
@@ -588,26 +604,44 @@ type ProviderValueListProps = {
   readonly placeholder: string
   readonly values: readonly string[]
   readonly onChange: (values: readonly string[]) => void
+  readonly stripTrailingSlash?: boolean
 }
 
-function ProviderValueList({ label, placeholder, values, onChange }: ProviderValueListProps) {
-  const [draft, setDraft] = useState('')
-  const inputRef = useRef<HTMLInputElement | null>(null)
-  const add = () => {
-    const value = draft.trim()
-    if (!value || values.includes(value)) return
-    onChange([...values, value])
-    setDraft('')
-    inputRef.current?.focus()
-  }
+function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false }: ProviderValueListProps) {
+  const rows = values.length === 0 ? [''] : [...values]
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
       <div className="space-y-2">
-        <div className="flex gap-2"><Input ref={inputRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={placeholder} /><Button type="button" variant="outline" size="sm" onClick={add}>{label === 'Base URLs' ? '添加 Base URL' : '添加 Key'}</Button></div>
-        {values.map((value) => (
-          <div key={value} className="flex items-center gap-2"><Input value={value} onChange={(event) => onChange(values.map((item) => item === value ? event.target.value : item))} /><Button type="button" variant="ghost" size="icon" onClick={() => onChange(values.filter((item) => item !== value))} aria-label={`删除${label}`}><AppIcon name="delete" /></Button></div>
-        ))}
+        {rows.map((value, index) => {
+          const isPhantom = values.length === 0
+          const apply = (next: string) => {
+            if (isPhantom) {
+              onChange([next])
+            } else {
+              onChange(values.map((item, i) => (i === index ? next : item)))
+            }
+          }
+          return (
+            <div key={index} className="flex items-center gap-2">
+              <Input
+                value={value}
+                onChange={(event) => apply(event.target.value)}
+                onBlur={stripTrailingSlash ? () => {
+                  const trimmed = value.replace(/\/+$/, '')
+                  if (trimmed !== value) apply(trimmed)
+                } : undefined}
+                placeholder={placeholder}
+              />
+              <Button type="button" variant="ghost" size="icon" disabled={isPhantom} onClick={() => onChange(values.filter((_, i) => i !== index))} aria-label={`删除${label}`}>
+                <AppIcon name="delete" />
+              </Button>
+            </div>
+          )
+        })}
+        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...values, ''])}>
+          <AppIcon name="add" data-icon="inline-start" />添加一行
+        </Button>
       </div>
     </Field>
   )
@@ -698,6 +732,9 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
   )
   const [saving, setSaving] = useState(false)
 
+  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id))
+  const someSelected = models.some((model) => selected.has(model.id))
+
   const toggle = (id: string, checked: boolean) => {
     setSelected((current) => {
       const next = new Set(current)
@@ -722,6 +759,19 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>从上游获取模型</DialogTitle></DialogHeader>
         <div className="flex max-h-64 flex-col overflow-y-auto">
+          <label className="flex cursor-pointer items-center gap-2 border-b border-border py-1.5">
+            <Checkbox
+              checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+              onCheckedChange={(checked) => {
+                if (checked === true) {
+                  setSelected(new Set(models.map((model) => model.id)))
+                } else {
+                  setSelected(new Set())
+                }
+              }}
+            />
+            <span className="text-sm font-medium text-foreground">全选</span>
+          </label>
           {models.map((model) => (
             <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
               <Checkbox checked={selected.has(model.id)} onCheckedChange={(checked) => toggle(model.id, checked === true)} />

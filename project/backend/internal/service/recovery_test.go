@@ -21,7 +21,7 @@ func newRecoveryTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Provider{}, &model.ProviderDisableState{}, &model.Setting{}, &model.DisabledRecord{}); err != nil {
+	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}, &model.Setting{}, &model.DisabledRecord{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
 	return db
@@ -55,7 +55,7 @@ func makeProvider(t *testing.T, db *gorm.DB, name string, baseURLs, keys, models
 
 func setDisabled(t *testing.T, db *gorm.DB, providerID, dimension, value string) {
 	t.Helper()
-	state := model.ProviderDisableState{
+	state := model.AutoDisableState{
 		ProviderID: providerID,
 		Dimension:  dimension,
 		Value:      value,
@@ -66,7 +66,7 @@ func setDisabled(t *testing.T, db *gorm.DB, providerID, dimension, value string)
 	}
 }
 
-// setDisabledRecord 同时落 ProviderDisableState 和带原始 (baseURL, key,
+// setDisabledRecord 同时落 AutoDisableState 和带原始 (baseURL, key,
 // model) 的 DisabledRecord，模拟真实禁用路径（failover 会一起写）。
 func setDisabledRecord(t *testing.T, db *gorm.DB, providerID, dimension, value, baseURL, key, modelName string) {
 	t.Helper()
@@ -87,7 +87,7 @@ func setDisabledRecord(t *testing.T, db *gorm.DB, providerID, dimension, value, 
 
 func isEnabled(t *testing.T, db *gorm.DB, providerID, dimension, value string) bool {
 	t.Helper()
-	var s model.ProviderDisableState
+	var s model.AutoDisableState
 	err := db.Where("provider_id = ? AND dimension = ? AND value = ?", providerID, dimension, value).First(&s).Error
 	if err != nil {
 		return false
@@ -426,9 +426,6 @@ func TestRunRecoveryCycle_clearsProviderLevelDisable(t *testing.T) {
 		[]string{"k1"},
 		[]string{"gpt-4"},
 	)
-	if err := db.Model(&model.Provider{}).Where("id = ?", providerID).Update("auto_disabled", true).Error; err != nil {
-		t.Fatalf("set auto_disabled: %v", err)
-	}
 	setDisabledRecord(t, db, providerID, model.FailoverDimensionProvider, providerID, "https://u1", "k1", "gpt-4")
 
 	probe := func(baseURL, key, model string) ProbeResult {
@@ -438,13 +435,6 @@ func TestRunRecoveryCycle_clearsProviderLevelDisable(t *testing.T) {
 
 	if !isEnabled(t, db, providerID, model.FailoverDimensionProvider, providerID) {
 		t.Fatalf("expected provider-level disable to be cleared")
-	}
-	var p model.Provider
-	if err := db.First(&p, "id = ?", providerID).Error; err != nil {
-		t.Fatalf("load provider: %v", err)
-	}
-	if p.AutoDisabled {
-		t.Fatalf("expected provider.AutoDisabled to be false after recovery")
 	}
 }
 

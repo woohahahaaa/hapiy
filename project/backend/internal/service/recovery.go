@@ -379,7 +379,7 @@ func passProbe(result ProbeResult, ttfbThreshold time.Duration) bool {
 
 // runTimedRecovery is the timed-mode equivalent of RunRecoveryCycle: any
 // DisabledRecord whose age exceeds duration is dropped and the matching
-// ProviderDisableState is cleared. No upstream probing is involved — the
+// AutoDisableState is cleared. No upstream probing is involved — the
 // user explicitly opted into "wait N minutes and re-enable".
 func runTimedRecovery(db *gorm.DB, duration time.Duration) {
 	var records []model.DisabledRecord
@@ -414,7 +414,7 @@ func runTimedRecovery(db *gorm.DB, duration time.Duration) {
 }
 
 func clearDisable(db *gorm.DB, providerID, providerName, dimension, value string) {
-	result := db.Model(&model.ProviderDisableState{}).
+	result := db.Model(&model.AutoDisableState{}).
 		Where("provider_id = ? AND dimension = ? AND value = ?", providerID, dimension, value).
 		Update("disabled", false)
 	if result.Error != nil {
@@ -425,13 +425,6 @@ func clearDisable(db *gorm.DB, providerID, providerName, dimension, value string
 	// no-op clear never produces a phantom "自动恢复" log entry.
 	if result.RowsAffected > 0 {
 		LogEvent(LogSourceChannelRecoveredAuto, providerName, ChannelEventMessage(dimension, value), "恢复方式: 自动探针")
-	}
-	if dimension == model.FailoverDimensionProvider {
-		if err := db.Model(&model.Provider{}).
-			Where("id = ?", providerID).
-			Update("auto_disabled", false).Error; err != nil {
-			log.Printf("recovery: clear provider.AutoDisabled %s: %v", providerID, err)
-		}
 	}
 }
 

@@ -151,8 +151,8 @@ func TestMatchingFailoverRule_matchesHTTPStatusKeyword_whenUpstreamReturnsError(
 
 func TestEngineFirstEnabledIndex_skipsPersistedDisabledDimension_whenSelecting(t *testing.T) {
 	// Given
-	db := newRelayTestDB(t, &model.ProviderDisableState{})
-	state := model.ProviderDisableState{ProviderID: "provider", Dimension: model.FailoverDimensionKey, Value: "bad", Disabled: true}
+	db := newRelayTestDB(t, &model.AutoDisableState{})
+	state := model.AutoDisableState{ProviderID: "provider", Dimension: model.FailoverDimensionKey, Value: "bad", Disabled: true}
 	if err := db.Create(&state).Error; err != nil {
 		t.Fatalf("create state: %v", err)
 	}
@@ -169,8 +169,8 @@ func TestEngineFirstEnabledIndex_skipsPersistedDisabledDimension_whenSelecting(t
 
 func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDisableEnabled(t *testing.T) {
 	// Given
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{})
-	provider := model.Provider{ID: "provider", Name: "provider", AutoDisabled: false}
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{})
+	provider := model.Provider{ID: "provider", Name: "provider"}
 	if err := db.Create(&provider).Error; err != nil {
 		t.Fatalf("create provider: %v", err)
 	}
@@ -187,18 +187,18 @@ func TestEngineApplyFailoverActions_persistsConfiguredProviderDisable_whenAutoDi
 	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
 		t.Fatal("provider state was not persisted")
 	}
-	var reloaded model.Provider
-	if err := db.First(&reloaded, "id = ?", provider.ID).Error; err != nil {
-		t.Fatalf("reload provider: %v", err)
+	var state model.AutoDisableState
+	if err := db.First(&state, "provider_id = ? AND dimension = ?", provider.ID, model.FailoverDimensionProvider).Error; err != nil {
+		t.Fatalf("reload disable state: %v", err)
 	}
-	if !reloaded.AutoDisabled {
-		t.Fatal("legacy provider auto-disabled flag was not synchronized")
+	if !state.Disabled {
+		t.Fatal("provider disable state was not persisted as disabled")
 	}
 }
 
 func TestRelayWithFailover_autoDisablesProvider_whenMatchPatternMatchesHTTP429Body(t *testing.T) {
 	// Given
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte("可用预算已用尽"))
@@ -287,7 +287,7 @@ func TestRelayWithFailover_retriesOnceOnError(t *testing.T) {
 
 func TestRelayWithFailover_emptyFallbackUsesSameProviderSlotOrder(t *testing.T) {
 	// Given
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.TopologyConfig{}, &model.TopologySlotAssignment{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.TopologyConfig{}, &model.TopologySlotAssignment{})
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -461,7 +461,7 @@ func indexOf(s, sub string) int {
 
 func TestRelayWithFailover_defaultThresholdOne_disablesOnFirstMatch(t *testing.T) {
 	// Given: no explicit DisableThreshold -> behaves as 1 (legacy contract)
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	provider := &model.Provider{ID: "primary", Name: "primary"}
 	if err := db.Create(provider).Error; err != nil {
@@ -491,7 +491,7 @@ func TestRelayWithFailover_defaultThresholdOne_disablesOnFirstMatch(t *testing.T
 
 func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
 	// Given: threshold=3, no fallback so the request surfaces its error
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	provider := &model.Provider{ID: "primary", Name: "primary"}
 	if err := db.Create(provider).Error; err != nil {
@@ -531,7 +531,7 @@ func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
 
 func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
 	// Given: threshold=3, no fallback so requests surface their error
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	provider := &model.Provider{ID: "primary", Name: "primary"}
 	if err := db.Create(provider).Error; err != nil {
@@ -570,7 +570,7 @@ func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
 func TestRelayWithFailover_successResetsCounter(t *testing.T) {
 	// Threshold=3; rotation must succeed on the second baseURL so the
 	// failing key/baseURL counter is reset by clearFailoverHit.
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	failing := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	working := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -609,7 +609,7 @@ func TestRelayWithFailover_windowExpiryResetsCounter(t *testing.T) {
 	// Given: threshold=3 with a 1-minute window. Two hits land, time is
 	// rewound past the window, then a third hit must NOT trigger a
 	// disable because the counter should restart at 1.
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	provider := &model.Provider{ID: "primary", Name: "primary"}
 	if err := db.Create(provider).Error; err != nil {
@@ -756,7 +756,7 @@ func TestRuleMatchesOutcome_ttfbExceeded_doesNotMatchRuleWithoutLimit(t *testing
 
 func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.T) {
 	// Given: upstream responds successfully but only after 1.2s; rule allows 1s.
-	db := newRelayTestDB(t, &model.Provider{}, &model.ProviderDisableState{}, &model.FailoverHitCounter{})
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// header 立即到达，但 body 首字节拖到 1.2s 之后才发 —— 模拟真正的
 		// 「首字慢」场景（老写法 header+body 一起延迟，测不出首字语义）。

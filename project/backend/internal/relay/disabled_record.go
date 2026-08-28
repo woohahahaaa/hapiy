@@ -398,17 +398,17 @@ func probeErrorExcerpt(body []byte) string {
 }
 
 // resolveCascade clears disable states for the provider that just proved
-// healthy: every dimension of that provider (provider/base_url/key), the
-// provider's auto_disabled flag, and any base_url-dimension disable that
-// shares the same baseURL value (other providers reusing the endpoint).
-// Open DisabledRecord rows matching the provider or the baseURL are
-// dropped so no redundant replay probes run for them.
+// healthy: every dimension of that provider (provider/base_url/key) and any
+// base_url-dimension disable that shares the same baseURL value (other
+// providers reusing the endpoint). Open DisabledRecord rows matching the
+// provider or the baseURL are dropped so no redundant replay probes run for
+// them.
 func (e *Engine) resolveCascade(provider *model.Provider, baseURL string) {
 	if e.db == nil || provider == nil {
 		return
 	}
 	// Clear every disable dimension of this provider.
-	if err := e.db.Model(&model.ProviderDisableState{}).
+	if err := e.db.Model(&model.AutoDisableState{}).
 		Where("provider_id = ?", provider.ID).
 		Update("disabled", false).Error; err != nil {
 		log.Printf("relay: cascade clear provider disables: %v", err)
@@ -416,16 +416,11 @@ func (e *Engine) resolveCascade(provider *model.Provider, baseURL string) {
 	// Clear base_url-dimension disables on OTHER providers that reuse the
 	// same baseURL value (the endpoint itself is healthy).
 	if baseURL != "" {
-		if err := e.db.Model(&model.ProviderDisableState{}).
+		if err := e.db.Model(&model.AutoDisableState{}).
 			Where("dimension = ? AND value = ?", model.FailoverDimensionBaseURL, baseURL).
 			Update("disabled", false).Error; err != nil {
 			log.Printf("relay: cascade clear shared baseURL: %v", err)
 		}
-	}
-	if err := e.db.Model(&model.Provider{}).
-		Where("id = ?", provider.ID).
-		Update("auto_disabled", false).Error; err != nil {
-		log.Printf("relay: cascade clear provider.AutoDisabled: %v", err)
 	}
 	// Drop open records for this provider or for the recovered baseURL so
 	// the scheduler never replays them again.

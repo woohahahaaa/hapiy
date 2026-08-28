@@ -20,7 +20,7 @@ func TestProviderRoutes_disableStatusDoesNotMatchProviderID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Provider{}, &model.ProviderDisableState{}); err != nil {
+	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	if err := db.Create(&model.Provider{ID: "provider-1", Name: "provider"}).Error; err != nil {
@@ -69,7 +69,7 @@ func TestProviderRoutes_providerIDStillMatchesProviderHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Provider{}); err != nil {
+	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
 	if err := db.Create(&model.Provider{ID: "provider-1", Name: "provider"}).Error; err != nil {

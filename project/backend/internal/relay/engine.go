@@ -112,7 +112,7 @@ func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error)
 		if plan.Provider == nil {
 			continue
 		}
-		if !plan.Provider.Status || plan.Provider.AutoDisabled || !plan.Provider.WorkflowEnabled || e.isDisabled(plan.Provider.ID, model.FailoverDimensionProvider, plan.Provider.ID) {
+		if !plan.Provider.Status || !plan.Provider.WorkflowEnabled || e.isDisabled(plan.Provider.ID, model.FailoverDimensionProvider, plan.Provider.ID) {
 			continue
 		}
 		if _, ok := plan.ModelSet[modelName]; !ok {
