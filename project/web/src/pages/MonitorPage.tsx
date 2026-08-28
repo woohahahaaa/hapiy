@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
@@ -72,6 +72,8 @@ function formatOutcome(outcome: string): string {
       return '并发超限'
     case 'invalid_request':
       return '解析错误'
+    case 'killed':
+      return '已掐断'
     default:
       return '已结束'
   }
@@ -85,6 +87,7 @@ function formatOutcomeClass(outcome: string): string {
     case 'failed':
     case 'queued_rejected':
     case 'invalid_request':
+    case 'killed':
       return 'text-destructive'
     default:
       return ''
@@ -468,6 +471,7 @@ function ActiveRequestsSection() {
   const mountedRef = useRef(true)
   // Latest-poll-wins: drop stale snapshots so a slow response can't overwrite a fresher one.
   const fetchSeqRef = useRef(0)
+  const [killingId, setKillingId] = useState<string | null>(null)
 
   const fetchActive = useCallback(async () => {
     const seq = ++fetchSeqRef.current
@@ -507,6 +511,47 @@ function ActiveRequestsSection() {
     return () => { active = false }
   }, [])
 
+  const handleKill = useCallback(async (row: ActiveRequest) => {
+    if (killingId !== null) return
+    setKillingId(row.requestId)
+    try {
+      await dashboardApi.killActiveRequest(row.requestId)
+      toast('已掐断')
+      void fetchActive()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '掐断失败')
+    } finally {
+      setKillingId(null)
+    }
+  }, [killingId, fetchActive])
+
+  const columns = useMemo<ColumnDef<ActiveRequest>[]>(() => [
+    ...ACTIVE_REQUEST_COLUMNS,
+    {
+      key: 'actions',
+      label: '操作',
+      defaultWidth: { kind: 'pixel', value: 90 },
+      defaultAlign: 'right',
+      showEmptyPlaceholder: false,
+      render: (_, row) =>
+        row.endTime !== null ? null : (
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={killingId !== null}
+            title="掐断该请求（将中止上游请求）"
+            onClick={(event) => {
+              event.stopPropagation()
+              void handleKill(row)
+            }}
+          >
+            {killingId === row.requestId ? '掐断中…' : '掐断'}
+          </Button>
+        ),
+    },
+  ], [killingId, handleKill])
+
   const handleOpenDialog = () => {
     setDraft(config?.retentionMinutes ?? 5)
     setDialogOpen(true)
@@ -542,7 +587,7 @@ function ActiveRequestsSection() {
 
       <DataTable
         id="monitor-requests"
-        columns={ACTIVE_REQUEST_COLUMNS}
+        columns={columns}
         data={requests}
         total={requests.length}
         loading={loading}
