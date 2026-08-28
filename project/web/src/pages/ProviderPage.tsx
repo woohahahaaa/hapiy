@@ -567,7 +567,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? '保存中...' : '保存'}</Button>
       </div>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent width="xs">
           <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>
           <div className="flex flex-col gap-2">
             <Field>
@@ -756,7 +756,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-sm">
+      <DialogContent width="xs">
         <DialogHeader><DialogTitle>从上游获取模型</DialogTitle></DialogHeader>
         <div className="flex max-h-64 flex-col overflow-y-auto">
           <label className="flex cursor-pointer items-center gap-2 border-b border-border py-1.5">

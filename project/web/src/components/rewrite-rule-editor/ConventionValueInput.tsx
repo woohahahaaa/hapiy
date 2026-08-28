@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 import { cn } from '@/lib/utils'
 import { parseValueInput } from './serializer'
 
@@ -45,7 +45,7 @@ export function ConventionValueInput({ text, onChange, placeholder, active }: Co
         <TooltipProvider delayDuration={150}>
           <Tooltip open={focused}>
             <TooltipTrigger asChild>{input}</TooltipTrigger>
-            <TooltipContent side="top" align="start" className="whitespace-nowrap">
+            <TooltipContent side="top" align="start">
               <div className="flex flex-col items-start gap-0.5 text-left">
                 <p className="text-xs">
                   不加引号 → 按 JSON 字面量解析（true / false / null / 数字）

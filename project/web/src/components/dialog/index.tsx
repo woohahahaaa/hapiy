@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button"
 import { AppIcon } from "@/components/AppIcon"
 
 const WIDTH_MAP: Record<string, string> = {
+  xs: '!w-[384px] !max-w-[384px]',
   sm: '!w-[640px] !max-w-[640px]',
   md: '!w-[960px] !max-w-[960px]',
+  lg: '!w-[1024px] !max-w-[1024px]',
   full: '!w-screen !max-w-none',
 }
 const HEIGHT_MAP: Record<string, string> = {
@@ -64,7 +66,7 @@ function DialogContent({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
-  width?: 'sm' | 'md' | 'full'
+  width?: 'xs' | 'sm' | 'md' | 'lg' | 'full'
   height?: 'auto' | 'full'
 }) {
   const sizeClass = width === 'full' && height === 'full'

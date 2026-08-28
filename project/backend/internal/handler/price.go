@@ -174,6 +174,7 @@ func UpdatePrice(db *gorm.DB) gin.HandlerFunc {
 	price.Endpoints = patch.Endpoints
 	price.ThinkingLevels = patch.ThinkingLevels
 	price.Rate = patch.Rate
+	price.ProviderID = patch.ProviderID
 		// Validate the merged record: a partial update without a model keeps the
 		// existing non-empty model, while the new fields are taken verbatim.
 		if err := validatePriceConfig(&price); err != nil {

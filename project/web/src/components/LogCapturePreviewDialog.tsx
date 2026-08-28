@@ -540,7 +540,7 @@ function PairDialog({ requestId, open, onClose }: {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width="md" height="auto" className="flex flex-col overflow-hidden !w-[1024px] !max-w-5xl">
+      <DialogContent width="lg" height="auto" className="flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{pair?.request_id ?? requestId}</span>
@@ -678,7 +678,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width="md" height="auto" className="flex flex-col overflow-hidden !w-[1024px] !max-w-5xl">
+      <DialogContent width="lg" height="auto" className="flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{fileName}</span>

@@ -798,7 +798,7 @@ function RecoveryHandlerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent width="sm">
         <DialogHeader>
           <DialogTitle>测试方法</DialogTitle>
         </DialogHeader>
@@ -960,7 +960,7 @@ function RequestPreviewDialog({
 
   return (
     <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>测试上游</DialogTitle>
         </DialogHeader>

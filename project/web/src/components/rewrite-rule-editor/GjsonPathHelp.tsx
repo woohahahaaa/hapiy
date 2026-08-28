@@ -1,5 +1,5 @@
 import { AppIcon } from '@/components/AppIcon'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 
 const EXAMPLES: ReadonlyArray<{ readonly path: string; readonly desc: string }> = [
   { path: 'model', desc: '顶层字段' },
@@ -26,7 +26,7 @@ export function GjsonPathHelp() {
         <TooltipContent
           side="top"
           align="start"
-          className="w-72 !rounded-md !border-0 !bg-zinc-900 !px-0 !py-0 !text-zinc-100 [&_[data-slot=tooltip-arrow]]:!bg-zinc-900 [&_[data-slot=tooltip-arrow]]:!fill-zinc-900"
+          className="w-72 !px-0 !py-0"
         >
           <div className="space-y-2 px-3 py-2.5">
             <div className="text-[11px] font-semibold">gjson 路径语法</div>

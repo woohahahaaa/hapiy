@@ -265,6 +265,52 @@ func TestPriceUpdate_preserves_and_updates_new_fields(t *testing.T) {
 	}
 }
 
+func TestPriceUpdate_persists_provider_id(t *testing.T) {
+	db := newPriceTestDB(t)
+	createBody := `{"model":"gpt-4o","provider_id":"openai-prod"}`
+	rec := priceRequest(t, http.MethodPost, "/prices", createBody, CreatePrice(db))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status: want 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Data model.PriceConfig `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	id := created.Data.ID
+
+	// Editing the dialog with the models.dev switch on saves a new provider_id.
+	rec = priceRequestRoute(t, http.MethodPut, "/models/:id", "/models/"+id,
+		`{"model":"gpt-4o","provider_id":"new-provider"}`, UpdatePrice(db))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = priceRequest(t, http.MethodGet, "/models", "", ListPrices(db))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rows := decodePriceList(t, rec.Body.Bytes())
+	if len(rows) != 1 || rows[0].ProviderID != "new-provider" {
+		t.Fatalf("provider_id after update: got %+v", rows)
+	}
+
+	// Saving with the switch off sends no provider_id and must clear it.
+	rec = priceRequestRoute(t, http.MethodPut, "/models/:id", "/models/"+id,
+		`{"model":"gpt-4o"}`, UpdatePrice(db))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear update status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rec = priceRequest(t, http.MethodGet, "/models", "", ListPrices(db))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("list status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	rows = decodePriceList(t, rec.Body.Bytes())
+	if len(rows) != 1 || rows[0].ProviderID != "" {
+		t.Fatalf("provider_id after clearing update: got %+v", rows)
+	}
+}
+
 func TestPriceUpdate_rejects_negative_context_length(t *testing.T) {
 	db := newPriceTestDB(t)
 	createBody := `{"model":"gpt-4o"}`

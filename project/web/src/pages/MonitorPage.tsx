@@ -414,7 +414,7 @@ function StatsSection() {
       </Dialog>
 
       <Dialog open={clearConfirmOpen} onOpenChange={closeClearConfirmDialog}>
-        <DialogContent width="sm" className="!w-[360px] !max-w-[360px]">
+        <DialogContent width="xs">
           <DialogHeader>
             <DialogTitle>确认清空用量？</DialogTitle>
           </DialogHeader>

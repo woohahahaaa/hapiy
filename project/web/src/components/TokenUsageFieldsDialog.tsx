@@ -51,7 +51,7 @@ export function TokenUsageFieldsDialog({ open, onOpenChange, initial, onSave }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="md" className="!w-[640px] !max-w-2xl">
+      <DialogContent width="sm">
         <DialogHeader>
           <DialogTitle>Token 用量字段配置</DialogTitle>
         </DialogHeader>

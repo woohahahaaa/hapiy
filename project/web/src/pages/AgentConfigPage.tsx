@@ -551,7 +551,7 @@ function TakeoverDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="md" className="max-h-[90vh] overflow-y-auto">
+      <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>接管新的配置文件</DialogTitle>
         </DialogHeader>
