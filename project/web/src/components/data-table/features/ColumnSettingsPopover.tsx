@@ -61,30 +61,18 @@ export function ColumnSettingsPopover<T>(
   const isControlled = openProp !== undefined
   const open = isControlled ? openProp : internalOpen
 
-  // Self-adaptive height: measure the popover's own position after Radix
-  // places it and clamp the list height to the space actually left below it.
-  // Some Android WebViews don't honour dvh, so the measured value (rather than
-  // a viewport unit) is what keeps the popover inside the window on small pads.
-  const contentRef = React.useRef<HTMLDivElement>(null)
-  const [maxListHeight, setMaxListHeight] = React.useState<number | undefined>(undefined)
+  // Max height of the popover is always the browser window height (minus the
+  // collision padding). No overflow prediction: the popover opens flush to the
+  // left of the trigger, bottom-aligned with it, and Radix's collision
+  // handling clamps the opposite edge inside the window — with the height
+  // capped here it can never poke out on either side.
+  const [maxContentHeight, setMaxContentHeight] = React.useState<number | undefined>(undefined)
   React.useLayoutEffect(() => {
     if (!open) return
-    const measure = () => {
-      const el = contentRef.current
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      const margin = 16
-      const avail = Math.floor(window.innerHeight - rect.top - margin)
-      setMaxListHeight(avail > 80 ? avail : undefined)
-    }
-    measure()
-    const observer = new ResizeObserver(measure)
-    if (contentRef.current) observer.observe(contentRef.current)
-    window.addEventListener("resize", measure)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener("resize", measure)
-    }
+    const update = () => setMaxContentHeight(Math.max(0, window.innerHeight - 16))
+    update()
+    window.addEventListener("resize", update)
+    return () => window.removeEventListener("resize", update)
   }, [open])
 
   return (
@@ -105,12 +93,15 @@ export function ColumnSettingsPopover<T>(
           <AppIcon name="auto_width" size={16} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-80 p-3">
-        <div
-          ref={contentRef}
-          style={{ maxHeight: maxListHeight ?? undefined }}
-          className="flex max-h-[min(60vh,calc(100dvh-8rem))] flex-col gap-3 overflow-y-auto"
-        >
+      <PopoverContent
+        side="left"
+        align="end"
+        sideOffset={0}
+        collisionPadding={8}
+        style={{ maxHeight: maxContentHeight ?? undefined }}
+        className="flex w-80 flex-col p-3"
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium">列设置</div>
             {headerExtra}

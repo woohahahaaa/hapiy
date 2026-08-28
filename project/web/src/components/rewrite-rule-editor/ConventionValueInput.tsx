@@ -47,10 +47,14 @@ export function ConventionValueInput({ text, onChange, placeholder, active }: Co
             <TooltipTrigger asChild>{input}</TooltipTrigger>
             <TooltipContent
               side="top"
-              className="flex-col gap-1 whitespace-nowrap bg-popover text-popover-foreground"
+              className="flex-col items-start gap-1 whitespace-nowrap bg-popover text-popover-foreground text-left"
             >
-              <p className="text-xs text-violet-600 dark:text-violet-400">无引号：true / false / null / 1.5 → 原生字面量</p>
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">加引号："文本" → 字符串</p>
+              <p className="text-xs text-violet-600 dark:text-violet-400">
+                不加引号 → 按 JSON 字面量解析（true / false / null / 数字）
+              </p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                加引号 → 按字符串发送，引号内为实际内容
+              </p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
