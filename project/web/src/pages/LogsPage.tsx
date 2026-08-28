@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toast'
-import { dashboardApi, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
+import { dashboardApi, LOG_SOURCE_UNMARKED, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
 function fmtSeconds(val: number): string {
@@ -55,6 +55,7 @@ export function LogsPage() {
   const [typeFilter, setTypeFilter] = useState<LogTypeFilter | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [tokenFilter, setTokenFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange>({})
   const [limit, setLimit] = useState(50)
   const [offset, setOffset] = useState(0)
@@ -64,6 +65,7 @@ export function LogsPage() {
   const [modelOptions, setModelOptions] = useState<readonly string[]>([])
   const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
   const [tokenOptions, setTokenOptions] = useState<readonly string[]>([])
+  const [sourceOptions, setSourceOptions] = useState<readonly string[]>([])
 
   const filterArgs = useMemo(
     () => ({
@@ -72,10 +74,11 @@ export function LogsPage() {
       type: typeFilter !== 'all' ? typeFilter : undefined,
       status: statusFilter !== 'all' ? statusFilter : undefined,
       token: tokenFilter !== 'all' ? tokenFilter : undefined,
+      source: sourceFilter !== 'all' ? sourceFilter : undefined,
       from: dateRange.from,
       to: dateRange.to,
     }),
-    [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, dateRange.from, dateRange.to],
+    [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to],
   )
 
   const fetchPage = useCallback(async () => {
@@ -123,6 +126,7 @@ export function LogsPage() {
       if (typeFilter !== 'all') filters.type = typeFilter
       if (statusFilter !== 'all') filters.status = statusFilter
       if (tokenFilter !== 'all') filters.token = tokenFilter
+      if (sourceFilter !== 'all') filters.source = sourceFilter
       if (dateRange.from) filters.from = dateRange.from
       if (dateRange.to) filters.to = dateRange.to
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
@@ -132,7 +136,7 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '清空失败')
     }
-  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, dateRange.from, dateRange.to, fetchPage])
+  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage])
 
   const handleResetFilters = useCallback(() => {
     setTokenFilter('all')
@@ -140,6 +144,7 @@ export function LogsPage() {
     setProviderFilter('all')
     setTypeFilter('all')
     setStatusFilter('all')
+    setSourceFilter('all')
     setDateRange({})
   }, [])
 
@@ -161,17 +166,15 @@ export function LogsPage() {
     let alive = true
     void (async () => {
       try {
-        const [providers, prices] = await Promise.all([
+        const [providers, models] = await Promise.all([
           dashboardApi.listProviders({ limit: 500, offset: 0 }),
-          dashboardApi.listPrices({ limit: 2000, offset: 0 }),
+          dashboardApi.listLogModels(),
         ])
         if (!alive) return
         setProviderOptions(
           [...new Set(providers.providers.map((p) => p.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
         )
-        setModelOptions(
-          [...new Set(prices.prices.map((m) => m.model).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
-        )
+        setModelOptions(models)
       } catch {
         // Non-fatal: filters still work with whatever options we have.
       }
@@ -192,6 +195,24 @@ export function LogsPage() {
         setTokenOptions(
           [...new Set(tokens.tokens.map((t) => t.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
         )
+      } catch {
+        // Non-fatal: filters still work with whatever options we have.
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Load the distinct source pool once so the source filter stays stable
+  // across pagination.
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      try {
+        const sources = await dashboardApi.listLogSources()
+        if (!alive) return
+        setSourceOptions(sources)
       } catch {
         // Non-fatal: filters still work with whatever options we have.
       }
@@ -360,6 +381,23 @@ export function LogsPage() {
                     <SelectItem value="channel_recovered_auto">自动恢复</SelectItem>
                     <SelectItem value="channel_recovered_manual">手动恢复</SelectItem>
                     <SelectItem value="system_admin">系统管理</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select
+                value={sourceFilter}
+                onValueChange={(value) => handleFilterChange(setSourceFilter, value)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部来源</SelectItem>
+                    <SelectItem value={LOG_SOURCE_UNMARKED}>未标注来源</SelectItem>
+                    {sourceOptions.map((s) => (
+                      <SelectItem key={s} value={s}>{s.replace(/^__/, '')}</SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>

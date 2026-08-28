@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import {
   dashboardApi,
+  LOG_SOURCE_UNMARKED,
   type DateRange,
   type LogCaptureFile,
   type LogCapturePairSummary,
@@ -68,6 +69,8 @@ export function LogCapturePage() {
   const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
   const [modelFilter, setModelFilter] = useState('all')
   const [modelOptions, setModelOptions] = useState<readonly string[]>([])
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [sourceOptions, setSourceOptions] = useState<readonly string[]>([])
   const [preview, setPreview] = useState<CaptureRow | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -88,6 +91,7 @@ export function LogCapturePage() {
         token: tokenFilter !== 'all' ? tokenFilter : undefined,
         provider: providerFilter !== 'all' ? providerFilter : undefined,
         model: modelFilter !== 'all' ? modelFilter : undefined,
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
         limit,
         offset,
       })
@@ -106,6 +110,7 @@ export function LogCapturePage() {
         token: tokenFilter !== 'all' ? tokenFilter : undefined,
         provider: providerFilter !== 'all' ? providerFilter : undefined,
         model: modelFilter !== 'all' ? modelFilter : undefined,
+        source: sourceFilter !== 'all' ? sourceFilter : undefined,
         limit,
         offset,
       })
@@ -128,7 +133,7 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setInitialLoading(false)
     }
-  }, [prefixFilter, tokenFilter, providerFilter, modelFilter, dateRange.from, dateRange.to, limit, offset])
+    }, [prefixFilter, tokenFilter, providerFilter, modelFilter, sourceFilter, dateRange.from, dateRange.to, limit, offset])
 
   useEffect(() => {
     mountedRef.current = true
@@ -143,11 +148,12 @@ export function LogCapturePage() {
     let alive = true
     void (async () => {
       try {
-        const [prefixes, tokens, providers, prices] = await Promise.all([
+        const [prefixes, tokens, providers, models, sources] = await Promise.all([
           dashboardApi.listLogCapturePrefixes(),
           dashboardApi.listTokens({ limit: 500, offset: 0 }),
           dashboardApi.listProviders({ limit: 500, offset: 0 }),
-          dashboardApi.listPrices({ limit: 2000, offset: 0 }),
+          dashboardApi.listLogCaptureModels(),
+          dashboardApi.listLogCaptureSources(),
         ])
         if (!alive) return
         setPrefixOptions(
@@ -159,9 +165,8 @@ export function LogCapturePage() {
         setProviderOptions(
           [...new Set(providers.providers.map((p) => p.name).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
         )
-        setModelOptions(
-          [...new Set(prices.prices.map((m) => m.model).filter((n) => n !== ''))].sort((a, b) => a.localeCompare(b)),
-        )
+        setModelOptions(models)
+        setSourceOptions(sources)
       } catch {
         // Non-fatal: filters still work with whatever options we have.
       }
@@ -181,6 +186,7 @@ export function LogCapturePage() {
     setTokenFilter('all')
     setProviderFilter('all')
     setModelFilter('all')
+    setSourceFilter('all')
   }, [])
 
   const handleClear = useCallback(
@@ -192,6 +198,7 @@ export function LogCapturePage() {
           ...(scope === 'filtered'
             ? {
                 prefix: prefixFilter !== 'all' ? prefixFilter : undefined,
+                source: sourceFilter !== 'all' ? sourceFilter : undefined,
                 from: dateRange.from,
                 to: dateRange.to,
               }
@@ -209,7 +216,7 @@ export function LogCapturePage() {
       }
     },
 
-    [prefixFilter, dateRange.from, dateRange.to, fetchPage],
+    [prefixFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -350,6 +357,20 @@ export function LogCapturePage() {
                     <SelectItem value="all">全部文件夹</SelectItem>
                     {prefixOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="来源" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">全部来源</SelectItem>
+                    <SelectItem value={LOG_SOURCE_UNMARKED}>未标注来源</SelectItem>
+                    {sourceOptions.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
                   </SelectGroup>
                 </SelectContent>

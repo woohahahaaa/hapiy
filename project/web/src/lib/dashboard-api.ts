@@ -161,19 +161,24 @@ export type UsageLog = {
 }
 
 export type LogListParams = {
-  readonly model?: string
-  readonly provider?: string
-  readonly type?: string
-  readonly status?: string
-  readonly token?: string
-  readonly requestId?: string
-  readonly from?: string
-  readonly to?: string
-  readonly limit: number
-  readonly offset: number
+	readonly model?: string
+	readonly provider?: string
+	readonly type?: string
+	readonly status?: string
+	readonly token?: string
+	readonly source?: string
+	readonly requestId?: string
+	readonly from?: string
+	readonly to?: string
+	readonly limit: number
+	readonly offset: number
 }
 
 export type LogTypeFilter = '' | 'request' | 'channel_disabled' | 'channel_recovered_auto' | 'channel_recovered_manual' | 'system_admin'
+
+// Sentinel passed to the logs/capture list+clear APIs for the "未标注来源"
+// filter option (rows whose source is empty). Backend maps it to source = ''.
+export const LOG_SOURCE_UNMARKED = '__unmarked__'
 
 export type StatsRange = 'all' | '30d' | '7d' | '1d'
 
@@ -238,17 +243,18 @@ export type LogCaptureFile = {
 }
 
 export type LogCaptureListParams = {
-  readonly prefix?: string
-  readonly type?: string // 逗号分隔
-  readonly from?: string // ISO 日期
-  readonly to?: string // ISO 日期
-  readonly headerKey?: string
-  readonly headerValue?: string
-  readonly token?: string
-  readonly provider?: string
-  readonly model?: string
-  readonly limit: number
-  readonly offset: number
+	readonly prefix?: string
+	readonly type?: string // 逗号分隔
+	readonly from?: string // ISO 日期
+	readonly to?: string // ISO 日期
+	readonly headerKey?: string
+	readonly headerValue?: string
+	readonly token?: string
+	readonly provider?: string
+	readonly model?: string
+	readonly source?: string
+	readonly limit: number
+	readonly offset: number
 }
 
 export type LogCaptureListResult = {
@@ -1762,6 +1768,7 @@ export const dashboardApi = {
     if (params.type) qp.set('type', params.type)
     if (params.status) qp.set('status', params.status)
     if (params.token) qp.set('token', params.token)
+    if (params.source) qp.set('source', params.source)
     if (params.requestId) qp.set('request_id', params.requestId)
     if (params.from) qp.set('from', toRFC3339Date(params.from, false) ?? params.from)
     if (params.to) qp.set('to', toRFC3339Date(params.to, true) ?? params.to)
@@ -1802,6 +1809,7 @@ export const dashboardApi = {
     if (params.token) qp.set('token', params.token)
     if (params.provider) qp.set('provider', params.provider)
     if (params.model) qp.set('model', params.model)
+    if (params.source) qp.set('source', params.source)
 
     const body = await requestFull(`/logs/capture?${qp.toString()}`)
     const data = body.data
@@ -1818,6 +1826,7 @@ export const dashboardApi = {
     scope: 'filtered' | 'all'
     prefix?: string
     type?: string
+    source?: string
     from?: string
     to?: string
   }): Promise<number> {
@@ -1827,6 +1836,7 @@ export const dashboardApi = {
         scope: input.scope,
         ...(input.prefix !== undefined ? { prefix: input.prefix } : {}),
         ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.source !== undefined ? { source: input.source } : {}),
         ...(input.from !== undefined ? { from: input.from } : {}),
         ...(input.to !== undefined ? { to: input.to } : {}),
       }),
@@ -1852,6 +1862,7 @@ export const dashboardApi = {
     if (params.token) qp.set('token', params.token)
     if (params.provider) qp.set('provider', params.provider)
     if (params.model) qp.set('model', params.model)
+    if (params.source) qp.set('source', params.source)
     const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
@@ -1870,6 +1881,42 @@ export const dashboardApi = {
       throw new DashboardApiError('服务端返回的抓取文件夹列表格式无效', null)
     }
     return data.map((v) => readString(v, 'prefix.name'))
+  },
+
+  async listLogSources(): Promise<readonly string[]> {
+    const body = await requestFull('/logs/sources')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的来源列表格式无效', null)
+    }
+    return data.map((v) => readString(v, 'source.name'))
+  },
+
+  async listLogModels(): Promise<readonly string[]> {
+    const body = await requestFull('/logs/models')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
+    }
+    return data.map((v) => readString(v, 'model.name'))
+  },
+
+  async listLogCaptureSources(): Promise<readonly string[]> {
+    const body = await requestFull('/logs/capture/sources')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的抓取来源列表格式无效', null)
+    }
+    return data.map((v) => readString(v, 'source.name'))
+  },
+
+  async listLogCaptureModels(): Promise<readonly string[]> {
+    const body = await requestFull('/logs/capture/models')
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的抓取模型列表格式无效', null)
+    }
+    return data.map((v) => readString(v, 'model.name'))
   },
 
   async readLogCapturePair(requestId: string): Promise<LogCapturePairFull> {

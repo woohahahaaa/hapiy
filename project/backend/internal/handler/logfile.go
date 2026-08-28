@@ -33,6 +33,7 @@ func ListLogFiles(db *gorm.DB) gin.HandlerFunc {
 			TokenName:    c.Query("token"),
 			ProviderName: c.Query("provider"),
 			ModelName:    c.Query("model"),
+			Source:       c.Query("source"),
 			Limit:        parseInt(c.Query("limit"), 50),
 			Offset:       parseInt(c.Query("offset"), 0),
 		}
@@ -78,6 +79,7 @@ func ListLogCapturePairs(db *gorm.DB) gin.HandlerFunc {
 			TokenName:    c.Query("token"),
 			ProviderName: c.Query("provider"),
 			ModelName:    c.Query("model"),
+			Source:       c.Query("source"),
 			Limit:        parseInt(c.Query("limit"), 50),
 			Offset:       parseInt(c.Query("offset"), 0),
 		}
@@ -129,6 +131,52 @@ func ListLogCapturePrefixes(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": prefixes, "total": len(prefixes)})
+	}
+}
+
+// ListLogCaptureSources lists the distinct non-empty sources from the
+// log_captures table, sorted ascending. Returns {data: []string, total: int}.
+func ListLogCaptureSources(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+
+		var sources []string
+		if err := db.Model(&model.LogCapture{}).
+			Distinct("source").
+			Where("source != ''").
+			Order("source ASC").
+			Pluck("source", &sources).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": sources, "total": len(sources)})
+	}
+}
+
+// ListLogCaptureModels lists the distinct non-empty model names from the
+// log_captures table, sorted ascending. Returns {data: []string, total: int}.
+func ListLogCaptureModels(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		writer := ensureLogCaptureWriter(db)
+		if writer == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
+			return
+		}
+
+		var models []string
+		if err := db.Model(&model.LogCapture{}).
+			Distinct("model_name").
+			Where("model_name != ''").
+			Order("model_name ASC").
+			Pluck("model_name", &models).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": models, "total": len(models)})
 	}
 }
 
@@ -285,6 +333,7 @@ func ClearLogFiles(db *gorm.DB) gin.HandlerFunc {
 			Scope  string `json:"scope"`
 			Prefix string `json:"prefix"`
 			Type   string `json:"type"`
+			Source string `json:"source"`
 			From   string `json:"from"`
 			To     string `json:"to"`
 		}
@@ -298,6 +347,7 @@ func ClearLogFiles(db *gorm.DB) gin.HandlerFunc {
 		if !params.All {
 			params.Prefix = body.Prefix
 			params.Types = splitComma(body.Type)
+			params.Source = body.Source
 			if t, err := time.Parse(time.RFC3339, body.From); err == nil {
 				params.From = t
 			}

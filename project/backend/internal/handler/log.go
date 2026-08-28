@@ -91,45 +91,142 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// GetLogStats returns lifetime-cumulative usage stats read from the
-// usage_counters table. Range / from / to query params are parsed for
-// backward compatibility but ignored — the counter is decoupled from
-// the logs table and represents all-time totals since the last reset.
-func GetLogStats(db *gorm.DB) gin.HandlerFunc {
+// ListLogSources lists the distinct non-empty sources from the logs table,
+// sorted ascending, for the dashboard source filter dropdown.
+func ListLogSources(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Range/from/to are silently accepted but no longer applied — the
-		// counter is lifetime-cumulative.
-		_ = c.Query("range")
-		_ = c.Query("from")
-		_ = c.Query("to")
-
-		var counter model.UsageCounter
-		err := db.First(&counter, "id = ?", 1).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		var sources []string
+		if err := db.Model(&model.Log{}).
+			Distinct("source").
+			Where("source != ''").
+			Order("source ASC").
+			Pluck("source", &sources).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		c.JSON(http.StatusOK, gin.H{"data": sources, "total": len(sources)})
+	}
+}
+
+// ListLogModels lists the distinct non-empty model names from the logs
+// table, sorted ascending, for the dashboard model filter dropdown.
+func ListLogModels(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var models []string
+		if err := db.Model(&model.Log{}).
+			Distinct("model_name").
+			Where("model_name != ''").
+			Order("model_name ASC").
+			Pluck("model_name", &models).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": models, "total": len(models)})
+	}
+}
+
+// GetLogStats returns usage stats. When from/to are present it aggregates
+// request rows from the logs table scoped to the time window (success counts
+// tokens/cost, failed counts requests, event rows excluded); otherwise it
+// returns the lifetime-cumulative usage_counters row.
+func GetLogStats(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// "range" is accepted for backward compatibility but not applied.
+		_ = c.Query("range")
+		fromStr := c.Query("from")
+		toStr := c.Query("to")
+
+		var totalRequests, successCount, failedCount, totalTokens int64
+		var totalCost float64
+		var cacheHitTokens, cacheMissTokens, totalUseTimeMs int64
+
+		if fromStr != "" || toStr != "" {
+			query := db.Model(&model.Log{}).
+				Select("COALESCE(SUM(CASE WHEN status = 'success' OR status = 'failed' THEN 1 ELSE 0 END), 0) AS total_requests, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) AS success_count, "+
+					"COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens ELSE 0 END), 0) AS total_tokens, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN quota ELSE 0 END), 0) AS total_cost, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_cache_hit_tokens ELSE 0 END), 0) AS cache_hit_tokens, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_cache_miss_tokens ELSE 0 END), 0) AS cache_miss_tokens, "+
+					"COALESCE(SUM(CASE WHEN status = 'success' THEN use_time ELSE 0 END), 0) AS total_use_time_ms").
+				Where("status IN ?", []string{"success", "failed"})
+			if fromStr != "" {
+				from, err := time.Parse(time.RFC3339, fromStr)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid from: must be RFC3339"})
+					return
+				}
+				query = query.Where("created_at >= ?", from)
+			}
+			if toStr != "" {
+				to, err := time.Parse(time.RFC3339, toStr)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "invalid to: must be RFC3339"})
+					return
+				}
+				query = query.Where("created_at <= ?", to)
+			}
+
+			var agg struct {
+				TotalRequests   int64
+				SuccessCount    int64
+				FailedCount     int64
+				TotalTokens     int64
+				TotalCost       float64
+				CacheHitTokens  int64
+				CacheMissTokens int64
+				TotalUseTimeMs  int64
+			}
+			if err := query.Scan(&agg).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			totalRequests = agg.TotalRequests
+			successCount = agg.SuccessCount
+			failedCount = agg.FailedCount
+			totalTokens = agg.TotalTokens
+			totalCost = agg.TotalCost
+			cacheHitTokens = agg.CacheHitTokens
+			cacheMissTokens = agg.CacheMissTokens
+			totalUseTimeMs = agg.TotalUseTimeMs
+		} else {
+			var counter model.UsageCounter
+			err := db.First(&counter, "id = ?", 1).Error
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			totalRequests = counter.TotalRequests
+			successCount = counter.SuccessCount
+			failedCount = counter.FailedCount
+			totalTokens = counter.TotalTokens
+			totalCost = counter.TotalCost
+			cacheHitTokens = counter.CacheHitTokens
+			cacheMissTokens = counter.CacheMissTokens
+			totalUseTimeMs = counter.TotalUseTimeMs
+		}
 
 		var avgLatency float64
-		if counter.SuccessCount > 0 {
-			avgLatency = float64(counter.TotalUseTimeMs) / float64(counter.SuccessCount)
+		if successCount > 0 {
+			avgLatency = float64(totalUseTimeMs) / float64(successCount)
 		}
 		var cacheHitRate float64
-		if denom := counter.CacheHitTokens + counter.CacheMissTokens; denom > 0 {
-			cacheHitRate = float64(counter.CacheHitTokens) / float64(denom)
+		if denom := cacheHitTokens + cacheMissTokens; denom > 0 {
+			cacheHitRate = float64(cacheHitTokens) / float64(denom)
 		}
 		var throughput float64
-		if counter.TotalUseTimeMs > 0 {
-			throughput = float64(counter.TotalTokens) * 1000.0 / float64(counter.TotalUseTimeMs)
+		if totalUseTimeMs > 0 {
+			throughput = float64(totalTokens) * 1000.0 / float64(totalUseTimeMs)
 		}
 
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
-			"total_requests":  counter.TotalRequests,
-			"success_count":   counter.SuccessCount,
-			"failed_count":    counter.FailedCount,
-			"total_tokens":    counter.TotalTokens,
+			"total_requests":  totalRequests,
+			"success_count":   successCount,
+			"failed_count":    failedCount,
+			"total_tokens":    totalTokens,
 			"average_latency": avgLatency,
-			"total_cost":      counter.TotalCost,
+			"total_cost":      totalCost,
 			"cache_hit_rate":  cacheHitRate,
 			"throughput":      throughput,
 			"models":          []struct{}{},
