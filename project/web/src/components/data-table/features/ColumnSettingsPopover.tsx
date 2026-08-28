@@ -61,6 +61,32 @@ export function ColumnSettingsPopover<T>(
   const isControlled = openProp !== undefined
   const open = isControlled ? openProp : internalOpen
 
+  // Self-adaptive height: measure the popover's own position after Radix
+  // places it and clamp the list height to the space actually left below it.
+  // Some Android WebViews don't honour dvh, so the measured value (rather than
+  // a viewport unit) is what keeps the popover inside the window on small pads.
+  const contentRef = React.useRef<HTMLDivElement>(null)
+  const [maxListHeight, setMaxListHeight] = React.useState<number | undefined>(undefined)
+  React.useLayoutEffect(() => {
+    if (!open) return
+    const measure = () => {
+      const el = contentRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const margin = 16
+      const avail = Math.floor(window.innerHeight - rect.top - margin)
+      setMaxListHeight(avail > 80 ? avail : undefined)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    if (contentRef.current) observer.observe(contentRef.current)
+    window.addEventListener("resize", measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener("resize", measure)
+    }
+  }, [open])
+
   return (
     <Popover
       open={open}
@@ -76,11 +102,15 @@ export function ColumnSettingsPopover<T>(
           size="icon"
           aria-label="列设置"
         >
-          <AppIcon name="settings" size={16} />
+          <AppIcon name="auto_width" size={16} />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} collisionPadding={8} className="w-80 p-3">
-        <div className="flex max-h-[min(60vh,calc(100dvh-8rem))] flex-col gap-3 overflow-y-auto">
+        <div
+          ref={contentRef}
+          style={{ maxHeight: maxListHeight ?? undefined }}
+          className="flex max-h-[min(60vh,calc(100dvh-8rem))] flex-col gap-3 overflow-y-auto"
+        >
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium">列设置</div>
             {headerExtra}
