@@ -279,7 +279,7 @@ const price = (usd: number) =>
         />
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogContent width="sm">
+          <DialogContent width="sm" onOpenAutoFocus={(event) => event.preventDefault()}>
             <DialogHeader>
               <DialogTitle>{editing ? '编辑模型' : '添加模型'}</DialogTitle>
             </DialogHeader>

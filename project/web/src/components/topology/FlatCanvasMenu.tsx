@@ -10,6 +10,10 @@ const REWRITE_SLOT_LABELS: Record<RewriteSlotType, string> = {
   logOutput: '日志抓取',
 }
 
+const ROW_CLASS = 'flex min-h-8 w-full items-center rounded-sm px-2 text-sm transition-colors'
+const PLAIN_ROW_CLASS = cn(ROW_CLASS, 'bg-muted/40 hover:bg-muted hover:text-foreground')
+const EMERGENCY_ROW_CLASS = cn(ROW_CLASS, 'bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning')
+
 interface FlatCanvasMenuProps {
   x: number
   y: number
@@ -61,7 +65,7 @@ export function FlatCanvasMenu({
             onAddFullWorkflow()
             onClose()
           }}
-          className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
+          className={PLAIN_ROW_CLASS}
         >
           <span>添加完整工作流</span>
         </button>
@@ -72,7 +76,7 @@ export function FlatCanvasMenu({
             onAddEntry()
             onClose()
           }}
-          className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
+          className={PLAIN_ROW_CLASS}
         >
           <span>添加请求入口</span>
         </button>
@@ -82,7 +86,7 @@ export function FlatCanvasMenu({
             onAddProviderSlot()
             onClose()
           }}
-          className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
+          className={PLAIN_ROW_CLASS}
         >
           <span>添加供应商插槽</span>
         </button>
@@ -94,7 +98,7 @@ export function FlatCanvasMenu({
               onAddSlot(slotType)
               onClose()
             }}
-            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
+            className={PLAIN_ROW_CLASS}
           >
             <span>添加 {REWRITE_SLOT_LABELS[slotType]} 插槽</span>
           </button>
@@ -106,7 +110,7 @@ export function FlatCanvasMenu({
             onAddEmergencyWorkflow()
             onClose()
           }}
-          className="flex w-full items-center rounded-sm bg-warning/10 px-2 py-1.5 text-sm text-warning transition-colors hover:bg-warning/20 hover:text-warning"
+          className={EMERGENCY_ROW_CLASS}
         >
           <span>添加应急供应商</span>
         </button>
