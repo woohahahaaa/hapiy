@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,7 +75,7 @@ func (r *AgentTypeRule) BeforeCreate(tx *gorm.DB) error {
 // other JSON blobs (e.g. Provider.Models) are stored.
 type AgentConfigFile struct {
 	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
-	RecordName string    `gorm:"not null" json:"record_name"`
+	RecordName string    `gorm:"uniqueIndex;not null" json:"record_name"`
 	AgentType  string    `gorm:"not null" json:"agent_type"`
 	Mode       string    `gorm:"not null" json:"mode"` // "local" | "ssh"
 	TargetOS   string    `gorm:"not null;default:''" json:"target_os"`
@@ -152,6 +153,41 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 		}
 		if err := db.Create(&rule).Error; err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// DeduplicateAgentConfigRecordNames renames duplicate takeover records
+// (kept the oldest, appending " (2)", " (3)" … to the rest) so the
+// RecordName unique index added by AutoMigrate can be created on databases
+// that already accumulated duplicates. Called from main before AutoMigrate.
+func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {
+	type dupGroup struct {
+		RecordName string
+		Count      int
+	}
+	var groups []dupGroup
+	if err := db.Model(&AgentConfigFile{}).
+		Select("record_name, COUNT(*) AS count").
+		Group("record_name").
+		Having("COUNT(*) > 1").
+		Scan(&groups).Error; err != nil {
+		return err
+	}
+	for _, g := range groups {
+		var rows []AgentConfigFile
+		if err := db.Where("record_name = ?", g.RecordName).
+			Order("created_at ASC, id ASC").
+			Find(&rows).Error; err != nil {
+			return err
+		}
+		// Keep the oldest as-is, rename the rest with a numeric suffix.
+		for i := 1; i < len(rows); i++ {
+			newName := fmt.Sprintf("%s (%d)", rows[i].RecordName, i+1)
+			if err := db.Model(&rows[i]).Update("record_name", newName).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil

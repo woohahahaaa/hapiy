@@ -204,6 +204,17 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
 			return
 		}
+		var dupCount int64
+		if err := db.Model(&model.AgentConfigFile{}).
+			Where("record_name = ?", req.RecordName).
+			Count(&dupCount).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if dupCount > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在，请使用其他名称"})
+			return
+		}
 
 		var sshCfg service.SshConfig
 		switch req.Mode {

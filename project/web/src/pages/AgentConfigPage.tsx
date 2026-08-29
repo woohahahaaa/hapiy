@@ -136,7 +136,7 @@ function formatTime(iso: string): string {
 export function AgentConfigPage() {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="配置文件" />
+      <PageHeader title="配置阶层" />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <AgentConfigFilesTab />
       </div>
@@ -649,11 +649,12 @@ function TakeoverDialog({
                       {TARGET_OS_LABELS[os]}
                     </Button>
                   ))}
+                  <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={presetSyncSuggested && canSyncPreset ? 'ml-auto border-primary text-primary' : 'ml-auto'}
+                    className={presetSyncSuggested && canSyncPreset ? 'border-primary text-primary' : undefined}
                     disabled={!canSyncPreset}
                     onClick={syncPresetPath}
                   >

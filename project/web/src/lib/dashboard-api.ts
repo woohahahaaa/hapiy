@@ -1723,7 +1723,7 @@ function parseTopologyVersionList(value: unknown): TopologyVersionList {
 }
 
 function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
-  if (value === null || value === undefined) return null
+  if (value === null || value === undefined || value === '') return null
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
   }
