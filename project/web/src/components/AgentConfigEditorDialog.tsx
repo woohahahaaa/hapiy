@@ -213,16 +213,16 @@ export function AgentConfigEditorDialog({
           </span>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 py-1">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {fetchError && (
-            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
                 {fetchError}
               </div>
             </div>
           )}
           {saveError && (
-            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
                 {saveError}
               </div>
@@ -257,9 +257,11 @@ export function AgentConfigEditorDialog({
           <Dialog open={confirmSave} onOpenChange={(o) => !saving && setConfirmSave(o)}>
             <DialogContent width="sm">
               <DialogHeader>
-                <DialogTitle>确认保存修改</DialogTitle>
+                <DialogTitle>{warning ? 'JSON 格式可能有误' : '确认保存'}</DialogTitle>
                 <DialogDescription>
-                  检测到文件内容已修改，是否覆盖写入「{record.path}」？
+                  {warning
+                    ? `检测到 JSON 格式问题，是否仍要保存对「${record.path}」的修改？`
+                    : `是否确认保存对「${record.path}」的修改？`}
                 </DialogDescription>
                 {warning && (
                   <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 font-mono text-xs text-warning-foreground">
@@ -273,7 +275,7 @@ export function AgentConfigEditorDialog({
               <DialogFooter>
                 <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>
                 <Button onClick={() => void doSave()} disabled={saving}>
-                  {saving ? '保存中...' : '确认保存'}
+                  {saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}
                 </Button>
               </DialogFooter>
             </DialogContent>
