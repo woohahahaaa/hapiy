@@ -9,18 +9,18 @@ import (
 )
 
 // ownModelListItem is the OpenAI-compatible model list item returned by the
-// own model list endpoint. `owned_by` mirrors the configured provider name
-// so OpenAI-compatible clients can display it directly.
+// own model list endpoint. Provider information is intentionally omitted —
+// the endpoint exposes only the model names that the topology currently
+// routes, not how they are backed.
 type ownModelListItem struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	OwnedBy string `json:"owned_by"`
+	ID     string `json:"id"`
+	Object string `json:"object"`
 }
 
 // OwnModelList returns hapiy's aggregated model list in OpenAI-compatible
-// format ({ "object": "list", "data": [{id, object, owned_by}, ...] }).
-// The data source is the union of every enabled provider's compiled
-// ModelSet — i.e. the models the relay can actually serve right now.
+// format ({ "object": "list", "data": [{id, object}, ...] }). The data
+// source is the union of every enabled provider's compiled ModelSet —
+// the same set that drives the model-hub column on the topology page.
 func OwnModelList(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if engine == nil {
@@ -31,9 +31,8 @@ func OwnModelList(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		items := make([]ownModelListItem, 0, len(models))
 		for _, m := range models {
 			items = append(items, ownModelListItem{
-				ID:      m.ID,
-				Object:  "model",
-				OwnedBy: m.OwnedBy,
+				ID:     m.ID,
+				Object: "model",
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"object": "list", "data": items})
