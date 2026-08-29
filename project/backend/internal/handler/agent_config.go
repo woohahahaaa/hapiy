@@ -59,6 +59,7 @@ type updateAgentTypeRuleRequest struct {
 	Mac          string `json:"mac"`
 	ProviderPath string `json:"provider_path"`
 	ModelPath    string `json:"model_path"`
+	Notes        string `json:"notes"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
@@ -100,6 +101,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		rule.Notes = strings.TrimSpace(req.Notes)
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -114,6 +116,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Name         string `json:"name"`
 			ProviderPath string `json:"provider_path"`
 			ModelPath    string `json:"model_path"`
+			Notes        string `json:"notes"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -133,7 +136,10 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型已存在"})
 			return
 		}
-		rule := model.AgentTypeRule{Name: name}
+		rule := model.AgentTypeRule{
+			Name:  name,
+			Notes: strings.TrimSpace(req.Notes),
+		}
 		if err := rule.SetJsonPaths(model.AgentJsonPaths{
 			Provider: strings.TrimSpace(req.ProviderPath),
 			Model:    strings.TrimSpace(req.ModelPath),
@@ -708,10 +714,12 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 
 // parseAgentModels walks the config blob with two gjson expressions and
 // returns a flat list of provider summaries. provider_path must resolve
-// to an object whose keys are provider ids; model_path is applied to each
-// provider value (it may return an object map or an array). The per-
-// provider "other fields" is the provider object with the model_path key
-// removed so the UI can render the non-model config separately.
+// to an object whose keys are provider ids. model_path is a full gjson
+// path from the document root with `{provider_id}` substituted per
+// provider — writing the full path lets the schema handle agents whose
+// models live anywhere reachable from the root, not just under each
+// provider object. The per-provider "other fields" is the provider
+// object with the leaf key of model_path stripped.
 func parseAgentModels(content, providerPath, modelPath string) ([]modelSummary, error) {
 	root := gjson.Parse(stripJSON5Comments(content))
 	provResult := root.Get(providerPath)
@@ -721,19 +729,32 @@ func parseAgentModels(content, providerPath, modelPath string) ([]modelSummary, 
 	if provResult.Type != gjson.JSON {
 		return nil, fmt.Errorf("provider 路径 %q 必须解析为对象，实际类型为 %s", providerPath, provResult.Type)
 	}
+	modelLeaf := lastPathSegment(modelPath)
 	out := make([]modelSummary, 0, len(provResult.Map()))
 	for id, provVal := range provResult.Map() {
 		ms := modelSummary{ProviderID: id, OtherFields: json.RawMessage("{}"), Models: []modelEntry{}}
 		if modelPath != "" {
-			if sub := provVal.Get(modelPath); sub.Exists() {
+			resolved := strings.ReplaceAll(modelPath, "{provider_id}", id)
+			if sub := root.Get(resolved); sub.Exists() {
 				ms.Models = collectModels(sub)
 			}
 		}
-		other := stripJSONKey(provVal, modelPath)
+		other := stripJSONKey(provVal, modelLeaf)
 		ms.OtherFields = json.RawMessage(other.Raw)
 		out = append(out, ms)
 	}
 	return out, nil
+}
+
+// lastPathSegment returns the trailing key of a dotted gjson path so the
+// caller can strip the same leaf key from the provider object —
+// `provider.{provider_id}.models` → `models`. A path with no dot is
+// returned verbatim.
+func lastPathSegment(path string) string {
+	if i := strings.LastIndex(path, "."); i >= 0 {
+		return path[i+1:]
+	}
+	return path
 }
 
 // collectModels turns a gjson.Result (object map or array) into a list of

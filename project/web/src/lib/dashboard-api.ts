@@ -590,6 +590,7 @@ export type AgentTypeRule = {
   readonly name: string
   readonly os_paths: AgentOsPaths
   readonly json_paths: AgentJsonPaths
+  readonly notes: string
   readonly created_at: string
   readonly updated_at: string
 }
@@ -600,6 +601,7 @@ export type AgentTypeRuleInput = {
   readonly mac?: string
   readonly provider_path?: string
   readonly model_path?: string
+  readonly notes?: string
 }
 
 export type AgentPathCheckResult = {
@@ -1810,6 +1812,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
+    notes: typeof value.notes === 'string' ? value.notes : '',
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
   }

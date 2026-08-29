@@ -215,6 +215,7 @@ function RuleDialog({
   const [macPath, setMacPath] = useState('')
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -225,6 +226,7 @@ function RuleDialog({
       setMacPath(editing?.os_paths.mac ?? '')
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
+      setNotes(editing?.notes ?? '')
       setError(null)
       setSaving(false)
     }
@@ -247,6 +249,7 @@ function RuleDialog({
           mac: macPath.trim(),
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
+          notes,
         })
       } else {
         await dashboardApi.createAgentTypeRule(trimmed)
@@ -263,7 +266,7 @@ function RuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
+      <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
         </DialogHeader>
@@ -272,48 +275,60 @@ function RuleDialog({
             <FieldLabel>名称</FieldLabel>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：opencode" />
           </Field>
-          <Field>
-            <FieldLabel>Windows 默认路径</FieldLabel>
-            <Input
-              value={windowsPath}
-              onChange={(e) => setWindowsPath(e.target.value)}
-              placeholder="例如：%USERPROFILE%\.config\opencode\opencode.json"
-            />
-            <p className="text-xs text-muted-foreground">支持 %APPDATA%、%USERPROFILE% 等环境变量</p>
-          </Field>
-          <Field>
-            <FieldLabel>Mac 默认路径</FieldLabel>
-            <Input
-              value={macPath}
-              onChange={(e) => setMacPath(e.target.value)}
-              placeholder="例如：~/.config/opencode/opencode.json"
-            />
-            <p className="text-xs text-muted-foreground">支持 ~ 和 $HOME</p>
-          </Field>
-          <Field>
-            <FieldLabel className="font-medium">json路径</FieldLabel>
-            <div className="flex flex-col gap-2 pl-1">
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">provider</span>
-                <Input
-                  value={providerPath}
-                  onChange={(e) => setProviderPath(e.target.value)}
-                  placeholder="例如：provider 或 models.providers"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-xs text-muted-foreground">model</span>
-                <Input
-                  value={modelPath}
-                  onChange={(e) => setModelPath(e.target.value)}
-                  placeholder="例如：models（相对每个 provider）"
-                />
-              </div>
+
+          <Group label="配置文件">
+            <Field>
+              <FieldLabel>Windows 默认路径</FieldLabel>
+              <Input
+                value={windowsPath}
+                onChange={(e) => setWindowsPath(e.target.value)}
+                placeholder="例如：%USERPROFILE%\.config\opencode\opencode.json"
+              />
+              <p className="text-xs text-muted-foreground">支持 %APPDATA%、%USERPROFILE% 等环境变量</p>
+            </Field>
+            <Field>
+              <FieldLabel>Mac 默认路径</FieldLabel>
+              <Input
+                value={macPath}
+                onChange={(e) => setMacPath(e.target.value)}
+                placeholder="例如：~/.config/opencode/opencode.json"
+              />
+              <p className="text-xs text-muted-foreground">支持 ~ 和 $HOME</p>
+            </Field>
+          </Group>
+
+          <Group label="jsonc">
+            <Field>
+              <FieldLabel>provider gjson 路径</FieldLabel>
+              <Input
+                value={providerPath}
+                onChange={(e) => setProviderPath(e.target.value)}
+                placeholder="例如：provider"
+              />
+            </Field>
+            <Field>
+              <FieldLabel>model gjson 路径</FieldLabel>
+              <Input
+                value={modelPath}
+                onChange={(e) => setModelPath(e.target.value)}
+                placeholder="例如：provider.{provider_id}.models"
+              />
               <p className="text-xs text-muted-foreground">
-                gjson 路径：provider 命中对象后逐 key 列出，model 在每个 provider 内取模型列表/对象
+                完整 gjson 路径，model 里用 {'{provider_id}'} 占位当前 provider 键名
               </p>
-            </div>
-          </Field>
+            </Field>
+            <Field>
+              <FieldLabel>备注</FieldLabel>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="粘贴该 agent 官方文档里 provider 字段下支持的字段说明…"
+                rows={10}
+                className="min-h-[180px] font-mono text-xs leading-relaxed"
+              />
+            </Field>
+          </Group>
+
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">{error}</div>
@@ -328,5 +343,14 @@ function RuleDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="flex flex-col gap-3 rounded-md border border-border p-3">
+      <legend className="px-1 text-xs font-medium text-muted-foreground">{label}</legend>
+      {children}
+    </fieldset>
   )
 }

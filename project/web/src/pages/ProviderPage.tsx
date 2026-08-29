@@ -565,19 +565,18 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 </div>
               )
             })}
-            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }] }))}>
-              <AppIcon name="add" data-icon="inline-start" />添加一行
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
-              {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
-              从上游获取模型
-            </Button>
-            <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
-              <AppIcon name="settings" />
-            </Button>
-          </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }] }))}>
+                <AppIcon name="add" data-icon="inline-start" />添加一行
+              </Button>
+              <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
+                {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+                从上游获取模型
+              </Button>
+              <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
+                <AppIcon name="settings" />
+              </Button>
+            </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>
           )}
