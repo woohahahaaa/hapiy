@@ -118,6 +118,52 @@ func (c SshConfig) Sanitized() SshConfig {
 	return c
 }
 
+// ExpandPath expands tilde and environment-variable placeholders in a
+// config path template into the concrete path on this machine. Supported:
+// leading ~ (user home dir), $VAR and ${VAR} (os.ExpandEnv), and %VAR%
+// (Windows-style, resolved from the same environment). Unresolvable
+// placeholders are left verbatim so the caller can report the mismatch.
+func ExpandPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if path[0] == '~' {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = home + path[1:]
+		}
+	}
+	path = os.ExpandEnv(path)
+	var buf strings.Builder
+	buf.Grow(len(path))
+	for i := 0; i < len(path); {
+		if path[i] == '%' {
+			end := strings.IndexByte(path[i+1:], '%')
+			if end >= 0 {
+				key := path[i+1 : i+1+end]
+				if v := os.Getenv(key); v != "" {
+					buf.WriteString(v)
+					i += end + 2
+					continue
+				}
+			}
+		}
+		buf.WriteByte(path[i])
+		i++
+	}
+	return buf.String()
+}
+
+// StatLocalFile reports whether a local config file exists and its size in
+// bytes. It returns (false, 0) when the file (or a parent directory) is
+// missing, and true only for regular files.
+func StatLocalFile(path string) (exists bool, size int64) {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return false, 0
+	}
+	return true, info.Size()
+}
+
 // ReadLocalFile returns the raw content of a local file.
 func ReadLocalFile(path string) (string, error) {
 	data, err := os.ReadFile(path)

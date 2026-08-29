@@ -575,11 +575,30 @@ export type TableConfig = {
   readonly updatedAt: string
 }
 
+export type AgentOsPaths = {
+  readonly windows: string
+  readonly mac: string
+}
+
 export type AgentTypeRule = {
   readonly id: string
   readonly name: string
+  readonly os_paths: AgentOsPaths
   readonly created_at: string
   readonly updated_at: string
+}
+
+export type AgentTypeRuleInput = {
+  readonly name?: string
+  readonly windows?: string
+  readonly mac?: string
+}
+
+export type AgentPathCheckResult = {
+  readonly exists: boolean
+  readonly size: number
+  readonly current_os: string
+  readonly expandedPath: string
 }
 
 export type AgentSshConfig = {
@@ -1751,11 +1770,28 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的软件类型规则格式无效', null)
   }
+  const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   return {
     id: readString(value.id, 'agent_type_rule.id'),
     name: readString(value.name, 'agent_type_rule.name'),
+    os_paths: {
+      windows: typeof osPaths.windows === 'string' ? osPaths.windows : '',
+      mac: typeof osPaths.mac === 'string' ? osPaths.mac : '',
+    },
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
+  }
+}
+
+function parseAgentPathCheckResult(value: unknown): AgentPathCheckResult {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的路径检测结果无效', null)
+  }
+  return {
+    exists: readBoolean(value.exists, 'path_check.exists'),
+    size: readNumber(value.size, 'path_check.size', 0),
+    current_os: readString(value.current_os, 'path_check.current_os'),
+    expandedPath: readString(value.expandedPath, 'path_check.expandedPath'),
   }
 }
 
@@ -2456,8 +2492,25 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ name }),
     }))
   },
+  async updateAgentTypeRule(id: string, input: AgentTypeRuleInput): Promise<AgentTypeRule> {
+    return parseAgentTypeRule(await request(`/agent-type-rules/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }))
+  },
   async deleteAgentTypeRule(id: string): Promise<void> {
     await request(`/agent-type-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async checkAgentConfigPath(rawPath: string): Promise<AgentPathCheckResult> {
+    const data = await request(`/agent-config-files/check?path=${encodeURIComponent(rawPath)}`)
+    return parseAgentPathCheckResult(data)
+  },
+  async readAgentConfigPath(rawPath: string): Promise<string> {
+    const data = await request(`/agent-config-files/read?path=${encodeURIComponent(rawPath)}`)
+    if (!isRecord(data) || typeof data.content !== 'string') {
+      throw new DashboardApiError('服务端返回的文件内容格式无效', null)
+    }
+    return data.content
   },
   async listAgentConfigFiles(params: AgentConfigListParams): Promise<{ readonly files: readonly AgentConfigFile[]; readonly total: number }> {
     const qp = new URLSearchParams()

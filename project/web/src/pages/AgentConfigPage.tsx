@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { AppIcon } from '@/components/AppIcon'
+import { JsonHighlight } from '@/components/JsonHighlight'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -29,10 +30,90 @@ import {
   dashboardApi,
   DashboardApiError,
   type AgentConfigFile,
+  type AgentPathCheckResult,
+  type AgentOsPaths,
   type AgentSshConfig,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
 import { AgentConfigEditorDialog } from '@/components/AgentConfigEditorDialog'
+
+// ── Agent 接管 ──
+
+export type AgentTargetOs = 'windows' | 'mac' | 'custom'
+
+export const TARGET_OS_LABELS: Record<AgentTargetOs, string> = {
+  windows: 'Windows',
+  mac: 'Mac',
+  custom: '自定义',
+}
+
+export function formatFileSize(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+export function osNameFromCode(code: string): string {
+  switch (code) {
+    case 'windows':
+      return 'Windows'
+    case 'darwin':
+      return 'macOS'
+    case 'linux':
+      return 'Linux'
+    default:
+      return code
+  }
+}
+
+export function osPathFor(osPaths: AgentOsPaths | undefined, targetOs: 'windows' | 'mac'): string {
+  if (!osPaths) return ''
+  return (targetOs === 'windows' ? osPaths.windows : osPaths.mac).trim()
+}
+
+// ── Agent 接管: 路径检测提示 ──
+
+function PathCheckHint({
+  result,
+  targetOs,
+  onPreview,
+}: {
+  result: AgentPathCheckResult
+  targetOs: AgentTargetOs
+  onPreview: () => void
+}) {
+  const { exists, size, current_os, expandedPath } = result
+  const osMismatch =
+    (targetOs === 'windows' && current_os !== 'windows') ||
+    (targetOs === 'mac' && current_os !== 'darwin')
+
+  if (!exists) {
+    return (
+      <span className="flex min-w-0 items-center gap-2 text-destructive">
+        <span className="truncate">
+          文件不存在（已检查：{expandedPath}）
+          {osMismatch && ` · 目标系统 ${TARGET_OS_LABELS[targetOs]}，当前系统 ${osNameFromCode(current_os)}，路径可能不适用`}
+        </span>
+      </span>
+    )
+  }
+
+  if (size === 0) {
+    return (
+      <span className="flex min-w-0 items-center gap-2 text-warning">
+        <span className="truncate">文件存在，大小 0（{expandedPath}）</span>
+        <Button type="button" variant="outline" size="sm" onClick={onPreview}>预览</Button>
+      </span>
+    )
+  }
+
+  return (
+    <span className="flex min-w-0 items-center gap-2 text-green-600">
+      <span className="truncate">文件存在，大小 {formatFileSize(size)}（{expandedPath}）</span>
+      <Button type="button" variant="outline" size="sm" onClick={onPreview}>预览</Button>
+    </span>
+  )
+}
 
 const TAB_TRIGGER_CLASS =
   '-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary'
@@ -89,6 +170,7 @@ function AgentConfigFilesTab() {
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
   const [takeoverOpen, setTakeoverOpen] = useState(false)
+  const [previewing, setPreviewing] = useState<AgentConfigFile | null>(null)
   const [editing, setEditing] = useState<AgentConfigFile | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<AgentConfigFile | null>(null)
 
@@ -172,6 +254,15 @@ function AgentConfigFilesTab() {
             variant="ghost"
             size="icon-sm"
             disabled={mutating}
+            title="预览文件"
+            onClick={() => setPreviewing(row)}
+          >
+            <AppIcon name="open_in_new" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={mutating}
             title="编辑文件"
             onClick={() => setEditing(row)}
           >
@@ -220,6 +311,18 @@ function AgentConfigFilesTab() {
         onCreated={() => void fetch()}
       />
 
+      {previewing && (
+        <ConfigFilePreviewDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPreviewing(null)
+          }}
+          title={previewing.record_name}
+          subtitle={previewing.path}
+          load={() => dashboardApi.getAgentConfigFileContent(previewing.id)}
+        />
+      )}
+
       {editing && (
         <AgentConfigEditorDialog
           open
@@ -257,6 +360,7 @@ function AgentTypeRulesTab() {
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
   const [addOpen, setAddOpen] = useState(false)
+  const [editingRule, setEditingRule] = useState<AgentTypeRule | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<AgentTypeRule | null>(null)
 
   const fetch = useCallback(async () => {
@@ -319,6 +423,15 @@ function AgentTypeRulesTab() {
             variant="ghost"
             size="icon-sm"
             disabled={mutating}
+            title="编辑"
+            onClick={() => setEditingRule(row)}
+          >
+            <AppIcon name="edit" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            disabled={mutating}
             title="删除"
             onClick={() => setConfirmDelete(row)}
           >
@@ -352,10 +465,16 @@ function AgentTypeRulesTab() {
         }
       />
 
-      <AddRuleDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
+      <RuleDialog
+        open={addOpen || editingRule !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddOpen(false)
+            setEditingRule(null)
+          }
+        }}
         onCreated={() => void fetch()}
+        editing={editingRule}
       />
 
       <ConfirmDeleteDialog
@@ -388,6 +507,7 @@ function TakeoverDialog({
   const [recordName, setRecordName] = useState('')
   const [mode, setMode] = useState<'local' | 'ssh'>('local')
   const [agentType, setAgentType] = useState('')
+  const [targetOs, setTargetOs] = useState<AgentTargetOs>('custom')
   const [path, setPath] = useState('')
   const [host, setHost] = useState('')
   const [port, setPort] = useState('22')
@@ -402,16 +522,21 @@ function TakeoverDialog({
   const [jumpAuthType, setJumpAuthType] = useState<'password' | 'key'>('password')
   const [jumpPassword, setJumpPassword] = useState('')
   const [jumpPrivateKey, setJumpPrivateKey] = useState('')
-  const [agentTypes, setAgentTypes] = useState<readonly string[]>([])
+  const [rules, setRules] = useState<readonly AgentTypeRule[]>([])
   const [loadingTypes, setLoadingTypes] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Path detection state (本机模式 only).
+  const [detecting, setDetecting] = useState(false)
+  const [checkResult, setCheckResult] = useState<AgentPathCheckResult | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setRecordName('')
     setMode('local')
     setAgentType('')
+    setTargetOs('custom')
     setPath('')
     setHost('')
     setPort('22')
@@ -428,13 +553,16 @@ function TakeoverDialog({
     setJumpPrivateKey('')
     setError(null)
     setSaving(false)
+    setDetecting(false)
+    setCheckResult(null)
+    setPreviewOpen(false)
     let cancelled = false
     setLoadingTypes(true)
-    setAgentTypes([])
+    setRules([])
     dashboardApi
-      .listAgentTypes()
-      .then((types) => {
-        if (!cancelled) setAgentTypes(types)
+      .listAgentTypeRules()
+      .then((result) => {
+        if (!cancelled) setRules(result.rules)
       })
       .catch((err) => {
         if (!cancelled) setError(toErrorMessage(err, '获取软件类型失败'))
@@ -446,6 +574,71 @@ function TakeoverDialog({
       cancelled = true
     }
   }, [open])
+
+  const ruleForType = useMemo(
+    () => rules.find((rule) => rule.name === agentType) ?? null,
+    [rules, agentType]
+  )
+
+  const handleAgentTypeChange = (value: string) => {
+    setAgentType(value)
+    setCheckResult(null)
+  }
+
+  const handleTargetOsChange = (value: AgentTargetOs) => {
+    setTargetOs(value)
+    setCheckResult(null)
+  }
+
+  // Manually pull the preset path template into the path field. Nothing is
+  // autofilled; the user decides when to sync from the rule.
+  const syncPresetPath = () => {
+    setCheckResult(null)
+    const preset = ruleForType?.os_paths
+    if (mode !== 'local' || targetOs === 'custom' || !preset) return
+    const template = targetOs === 'windows' ? preset.windows : preset.mac
+    if (template.trim() === '') return
+    setPath(template.trim())
+  }
+
+  const canSyncPreset =
+    mode === 'local' && targetOs !== 'custom' &&
+    ruleForType != null &&
+    osPathFor(ruleForType.os_paths, targetOs === 'windows' ? 'windows' : 'mac') !== ''
+
+  // Debounced path existence check, local mode only. If the user edited the
+  // autofilled path it still triggers a normal check.
+  useEffect(() => {
+    if (!open || mode !== 'local') {
+      setDetecting(false)
+      setCheckResult(null)
+      return
+    }
+    const trimmed = path.trim()
+    if (trimmed === '') {
+      setDetecting(false)
+      setCheckResult(null)
+      return
+    }
+    setDetecting(true)
+    const timer = setTimeout(() => {
+      dashboardApi
+        .checkAgentConfigPath(trimmed)
+        .then((result) => {
+          setCheckResult(result)
+        })
+        .catch(() => {
+          setCheckResult(null)
+        })
+        .finally(() => {
+          setDetecting(false)
+        })
+    }, 400)
+    return () => {
+      clearTimeout(timer)
+      setDetecting(false)
+    }
+  }, [open, mode, path])
 
   const handleSave = async () => {
     if (saving) return
@@ -461,10 +654,6 @@ function TakeoverDialog({
     }
     if (!trimmedPath) {
       setError(mode === 'local' ? '请填写本机路径' : '请填写远程路径')
-      return
-    }
-    if (mode === 'local' && !trimmedPath.toLowerCase().endsWith('.json')) {
-      setError('仅支持 .json 文件')
       return
     }
     let sshConfig: AgentSshConfig | null = null
@@ -563,19 +752,19 @@ function TakeoverDialog({
 
           <Field>
             <FieldLabel>软件类型</FieldLabel>
-            <Select value={agentType} onValueChange={setAgentType} disabled={loadingTypes}>
+            <Select value={agentType} onValueChange={handleAgentTypeChange} disabled={loadingTypes}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder={loadingTypes ? '加载中…' : '选择软件类型'} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {agentTypes.map((type) => (
-                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                  {rules.map((rule) => (
+                    <SelectItem key={rule.id} value={rule.name}>{rule.name}</SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
-            {!loadingTypes && agentTypes.length === 0 && (
+            {!loadingTypes && rules.length === 0 && (
               <p className="text-xs text-muted-foreground">暂无可用软件类型，请先在「管理规则」中添加</p>
             )}
           </Field>
@@ -593,11 +782,56 @@ function TakeoverDialog({
           </Field>
 
           {mode === 'local' && (
-            <Field>
-              <FieldLabel>路径</FieldLabel>
-              <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
-              <p className="text-xs text-muted-foreground">仅支持 .json 文件</p>
-            </Field>
+            <>
+              <Field>
+                <FieldLabel>系统</FieldLabel>
+                <div className="flex items-center gap-2">
+                  {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
+                    <Button
+                      key={os}
+                      type="button"
+                      variant={targetOs === os ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleTargetOsChange(os)}
+                    >
+                      {TARGET_OS_LABELS[os]}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto"
+                    disabled={!canSyncPreset}
+                    onClick={syncPresetPath}
+                  >
+                    从预设列同步信息
+                  </Button>
+                </div>
+                {(targetOs === 'windows' || targetOs === 'mac') && (
+                  <p className="text-xs text-muted-foreground">
+                    点击「从预设列同步信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
+                  </p>
+                )}
+              </Field>
+
+              <Field>
+                <FieldLabel>路径</FieldLabel>
+                <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                <div className="flex items-center gap-2 text-xs">
+                  {detecting ? (
+                    <>
+                      <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                      <span className="text-muted-foreground">正在检测文件…</span>
+                    </>
+                  ) : checkResult ? (
+                    <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
+                  ) : (
+                    <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
+                  )}
+                </div>
+              </Field>
+            </>
           )}
 
           {mode === 'ssh' && (
@@ -710,32 +944,188 @@ function TakeoverDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {previewOpen && (
+        <ConfigFilePreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          title={recordName.trim()}
+          subtitle={path.trim()}
+          load={() => dashboardApi.readAgentConfigPath(path.trim())}
+          onSave={async () => {
+            await dashboardApi.createAgentConfigFile({
+              record_name: recordName.trim(),
+              agent_type: agentType,
+              mode: 'local' as const,
+              path: path.trim(),
+              ssh_config: null,
+            })
+            toast('已接管配置')
+            onOpenChange(false)
+            onCreated()
+          }}
+        />
+      )}
     </Dialog>
   )
 }
 
-// ── 添加规则 ──
+// ── 文件预览（只读，始终读取磁盘最新版本）──
 
-function AddRuleDialog({
+function ConfigFilePreviewDialog({
+  open,
+  onOpenChange,
+  title,
+  subtitle,
+  load,
+  onSave,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title: string
+  subtitle: string
+  load: () => Promise<string>
+  onSave?: () => Promise<void>
+}) {
+  const [content, setContent] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Always re-read the live file when the preview opens so the user sees
+  // the current disk version, not any stale/edited copy.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    setContent(null)
+    setLoading(true)
+    setFetchError(null)
+    setSaveError(null)
+    load()
+      .then((text) => {
+        if (!cancelled) setContent(text)
+      })
+      .catch((err) => {
+        if (!cancelled) setFetchError(toErrorMessage(err, '读取失败'))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // load is captured per open; it is recreated by callers with fresh closures.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const handleSave = async () => {
+    if (saving || !onSave) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave()
+    } catch (err) {
+      setSaveError(toErrorMessage(err, '保存失败'))
+      setSaving(false)
+      return
+    }
+    setSaving(false)
+  }
+
+  const busy = loading || saving
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !saving) onOpenChange(false)
+      }}
+    >
+      <DialogContent
+        width="full"
+        height="full"
+        bare className="flex flex-col overflow-hidden"
+      >
+        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
+          <DialogTitle className="text-base">预览 — {title}</DialogTitle>
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+            {subtitle}
+          </span>
+        </DialogHeader>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
+          {fetchError && (
+            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
+                {fetchError}
+              </div>
+            </div>
+          )}
+          {saveError && (
+            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
+                {saveError}
+              </div>
+            </div>
+          )}
+          {loading ? (
+            <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+              正在加载文件内容…
+            </div>
+          ) : (
+            content !== null && (
+              <JsonHighlight
+                value={content}
+                className="min-h-0 flex-1"
+              />
+            )
+          )}
+        </div>
+
+        <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+            关闭
+          </Button>
+          {onSave && (
+            <Button onClick={() => void handleSave()} disabled={busy}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── 添加 / 编辑规则 ──
+
+function RuleDialog({
   open,
   onOpenChange,
   onCreated,
+  editing,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated: () => void
+  editing: AgentTypeRule | null
 }) {
   const [name, setName] = useState('')
+  const [windowsPath, setWindowsPath] = useState('')
+  const [macPath, setMacPath] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
-      setName('')
+      setName(editing?.name ?? '')
+      setWindowsPath(editing?.os_paths.windows ?? '')
+      setMacPath(editing?.os_paths.mac ?? '')
       setError(null)
       setSaving(false)
     }
-  }, [open])
+  }, [open, editing])
 
   const handleSave = async () => {
     if (saving) return
@@ -747,12 +1137,20 @@ function AddRuleDialog({
     setSaving(true)
     setError(null)
     try {
-      await dashboardApi.createAgentTypeRule(trimmed)
-      toast('已添加')
+      if (editing) {
+        await dashboardApi.updateAgentTypeRule(editing.id, {
+          name: trimmed,
+          windows: windowsPath.trim(),
+          mac: macPath.trim(),
+        })
+      } else {
+        await dashboardApi.createAgentTypeRule(trimmed)
+      }
+      toast(editing ? '已更新' : '已添加')
       onOpenChange(false)
       onCreated()
     } catch (err) {
-      setError(toErrorMessage(err, '添加失败'))
+      setError(toErrorMessage(err, editing ? '更新失败' : '添加失败'))
     } finally {
       setSaving(false)
     }
@@ -762,12 +1160,30 @@ function AddRuleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm">
         <DialogHeader>
-          <DialogTitle>添加规则</DialogTitle>
+          <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
         </DialogHeader>
         <FieldGroup>
           <Field>
             <FieldLabel>名称</FieldLabel>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：opencode" />
+          </Field>
+          <Field>
+            <FieldLabel>Windows 默认路径</FieldLabel>
+            <Input
+              value={windowsPath}
+              onChange={(e) => setWindowsPath(e.target.value)}
+              placeholder="例如：%USERPROFILE%\.config\opencode\opencode.json"
+            />
+            <p className="text-xs text-muted-foreground">支持 %APPDATA%、%USERPROFILE% 等环境变量</p>
+          </Field>
+          <Field>
+            <FieldLabel>Mac 默认路径</FieldLabel>
+            <Input
+              value={macPath}
+              onChange={(e) => setMacPath(e.target.value)}
+              placeholder="例如：~/.config/opencode/opencode.json"
+            />
+            <p className="text-xs text-muted-foreground">支持 ~ 和 $HOME</p>
           </Field>
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">

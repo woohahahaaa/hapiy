@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -48,6 +49,51 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": rules, "total": total})
+	}
+}
+
+type updateAgentTypeRuleRequest struct {
+	Name    string `json:"name"`
+	Windows string `json:"windows"`
+	Mac     string `json:"mac"`
+}
+
+// UpdateAgentTypeRule edits an existing rule's display name and/or its
+// per-OS path templates. A duplicated name is rejected.
+func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var rule model.AgentTypeRule
+		if err := db.First(&rule, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "规则不存在"})
+			return
+		}
+		var req updateAgentTypeRuleRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if name := strings.TrimSpace(req.Name); name != "" && name != rule.Name {
+			var count int64
+			if err := db.Model(&model.AgentTypeRule{}).Where("name = ? AND id <> ?", name, rule.ID).Count(&count).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if count > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型已存在"})
+				return
+			}
+			rule.Name = name
+		}
+		paths := model.AgentOsPaths{Windows: strings.TrimSpace(req.Windows), Mac: strings.TrimSpace(req.Mac)}
+		if err := rule.SetOsPaths(paths); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := db.Save(&rule).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": rule})
 	}
 }
 
@@ -160,10 +206,8 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		var sshCfg service.SshConfig
 		switch req.Mode {
 		case "local":
-			if !strings.HasSuffix(strings.ToLower(req.Path), ".json") {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "仅支持 .json 配置文件"})
-				return
-			}
+			// Any file extension is allowed (builtin templates include
+			// .json and .toml); existence is verified by caller.
 		case "ssh":
 			if len(req.SshConfig) == 0 {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置不能为空"})
@@ -288,6 +332,47 @@ func DeleteAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	}
+}
+
+// CheckAgentConfigPath stats a local config path (with ~/$VAR/%VAR%
+// placeholders expanded) and reports existence, size, and the OS the
+// backend runs on. Used by the takeover dialog to validate paths before a
+// record is created.
+func CheckAgentConfigPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw := strings.TrimSpace(c.Query("path"))
+		if raw == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			return
+		}
+		expanded := service.ExpandPath(raw)
+		exists, size := service.StatLocalFile(expanded)
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"exists":       exists,
+			"size":         size,
+			"current_os":   runtime.GOOS,
+			"expandedPath": expanded,
+		}})
+	}
+}
+
+// ReadAgentConfigPath returns the content of a local file at an expanded
+// path. It mirrors GetAgentConfigFileContent but works without a stored
+// record, so the takeover dialog can preview a file before saving.
+func ReadAgentConfigPath() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		raw := strings.TrimSpace(c.Query("path"))
+		if raw == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			return
+		}
+		content, err := service.ReadLocalFile(service.ExpandPath(raw))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": content}})
 	}
 }
 
