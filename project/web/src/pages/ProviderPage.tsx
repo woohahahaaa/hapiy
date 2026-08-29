@@ -781,6 +781,8 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
   )
   const [saving, setSaving] = useState(false)
 
+  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id))
+
   const toggle = (id: string, checked: boolean) => {
     setSelected((current) => {
       const next = new Set(current)
@@ -790,8 +792,8 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
     })
   }
 
-  const handleSelectAll = () => {
-    setSelected(new Set(models.map((model) => model.id)))
+  const handleToggleSelectAll = () => {
+    setSelected(allSelected ? new Set() : new Set(models.map((model) => model.id)))
   }
 
   const handleConfirm = () => {
@@ -817,7 +819,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
           ))}
         </div>
         <DialogFooter className="sm:justify-between">
-          <Button variant="outline" disabled={saving} onClick={handleSelectAll}>全选</Button>
+          <Button variant="outline" disabled={saving} onClick={handleToggleSelectAll}>{allSelected ? '全不选' : '全选'}</Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
             <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>

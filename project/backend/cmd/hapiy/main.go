@@ -144,13 +144,15 @@ func main() {
 	// Create Gin router
 	r := gin.Default()
 
-	// Own model list fallback: catch any GET /v1/<path> that didn't match a
-	// registered route, and serve the aggregated model list when the path
-	// equals the configured `own_model_list_endpoint`. Gin doesn't allow
-	// catch-all wildcards alongside sub-groups, so we hook NoRoute and
-	// scope it to /v1/ ourselves.
+	// Own model list fallback: catch any GET whose path ends with the
+	// configured `own_model_list_endpoint`, and serve the aggregated model
+	// list. This lets clients compose the URL as `<baseurl><endpoint>` —
+	// e.g. baseurl `http://host:port/proxy/__macCodex` + `/v1/models` —
+	// regardless of upstream baseurl prefix. Gin doesn't allow catch-all
+	// wildcards alongside sub-groups, so we hook NoRoute and match by
+	// suffix ourselves.
 	r.NoRoute(func(c *gin.Context) {
-		if c.Request.Method != http.MethodGet || !strings.HasPrefix(c.Request.URL.Path, "/v1/") {
+		if c.Request.Method != http.MethodGet {
 			c.String(http.StatusNotFound, "404 page not found")
 			return
 		}
@@ -164,7 +166,7 @@ func main() {
 			c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
 			return
 		}
-		if c.Request.URL.Path != expected {
+		if !strings.HasSuffix(c.Request.URL.Path, expected) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
 			return
 		}
@@ -172,7 +174,7 @@ func main() {
 		if c.IsAborted() {
 			return
 		}
-		handler.OwnModelList(db)(c)
+		handler.OwnModelList(db, engine)(c)
 	})
 
 	sessions := middleware.NewSessionStore()

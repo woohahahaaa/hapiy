@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -65,6 +66,44 @@ func (e *Engine) GetPlan(providerID string) (*ExecutionPlan, error) {
 		return nil, errors.New("plan not found")
 	}
 	return plan, nil
+}
+
+// OwnModel is one entry of the aggregated model list served at
+// /v1/models. OwnedBy mirrors the configured provider name so OpenAI-
+// compatible clients can display it directly.
+type OwnModel struct {
+	ID      string
+	OwnedBy string
+}
+
+// OwnModels returns the deduplicated, sorted union of every model name
+// declared by enabled providers in their compiled execution plans. This is
+// the user-facing model surface (what the relay can actually serve) and is
+// the data source for the /v1/models endpoint.
+func (e *Engine) OwnModels() []OwnModel {
+	e.plansMu.RLock()
+	defer e.plansMu.RUnlock()
+	seen := map[string]string{}
+	for _, plan := range e.plans {
+		if plan == nil || plan.Provider == nil || plan.Provider.Name == "" {
+			continue
+		}
+		ownedBy := plan.Provider.Name
+		for id := range plan.ModelSet {
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; !ok {
+				seen[id] = ownedBy
+			}
+		}
+	}
+	out := make([]OwnModel, 0, len(seen))
+	for id, ownedBy := range seen {
+		out = append(out, OwnModel{ID: id, OwnedBy: ownedBy})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // InvalidatePlan forces recompilation of a provider's execution plan.

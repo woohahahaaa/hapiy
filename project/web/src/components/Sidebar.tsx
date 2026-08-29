@@ -61,7 +61,7 @@ const navigation: NavItem[] = [
     label: '模型接入',
     icon: <AppIcon name="layers" />,
     children: [
-      { id: 'token', label: '令牌管理', href: '/token' },
+      { id: 'token', label: '管理令牌', href: '/token' },
       { id: 'provider', label: '供应商', href: '/provider' },
       { id: 'price', label: '模型信息', href: '/model' },
     ],
@@ -96,8 +96,8 @@ const navigation: NavItem[] = [
       { id: 'base-url', label: 'BaseURL', href: '/settings/base-url' },
       { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
+      { id: 'token-usage', label: 'token用量获取', href: '/settings/token-usage' },
       { id: 'debug', label: 'Debug', href: '/settings/debug' },
-      { id: 'token-usage', label: 'Token 用量', href: '/settings/token-usage' },
     ],
   },
   {

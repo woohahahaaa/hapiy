@@ -3,6 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -276,7 +277,7 @@ function RuleDialog({
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：opencode" />
           </Field>
 
-          <Group label="配置文件">
+          <Group label="Agent软件配置文件默认路径">
             <Field>
               <FieldLabel>Windows 默认路径</FieldLabel>
               <Input
@@ -297,7 +298,7 @@ function RuleDialog({
             </Field>
           </Group>
 
-          <Group label="jsonc">
+          <Group label="provider json路径与操作方法">
             <Field>
               <FieldLabel>provider gjson 路径</FieldLabel>
               <Input
