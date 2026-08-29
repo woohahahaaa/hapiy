@@ -32,31 +32,49 @@ type AgentJsonPaths struct {
 	Model    string `json:"model"`    // e.g. `provider.{provider_id}.models`
 }
 
+// AgentRecommendation — one recommended field for an agent's provider or
+// model config. Scope decides where the field is checked/applied:
+// "provider" against the provider's other_fields, "model" against each
+// model's config object. Key is a gjson path under that scope (single
+// segment or dotted, no array wildcards); Recommended is the value to
+// fill in when the user clicks "一键套用推荐值".
+type AgentRecommendation struct {
+	Scope        string `json:"scope"`         // "provider" | "model"
+	Key          string `json:"key"`           // gjson path, e.g. "maxConcurrency" or "thinking.type"
+	Description  string `json:"description"`   // human-readable meaning
+	Type         string `json:"type"`          // "string" | "number" | "boolean" | "object" | "array"
+	Recommended  any    `json:"recommended"`   // recommended value, or null when not filled
+	Required     bool   `json:"required"`      // recommended to be present?
+}
+
 // AgentTypeRule — an agent software type (e.g. "opencode") that owns
 // config files managed through the dashboard ("管理规则"). The seeded
 // default rows let the frontend dropdown work on a fresh database.
 type AgentTypeRule struct {
-	ID        string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Name      string    `gorm:"uniqueIndex;not null" json:"name"`
-	OsPaths   string    `gorm:"type:text" json:"-"` // JSON blob of AgentOsPaths
-	JsonPaths string    `gorm:"type:text" json:"-"` // JSON blob of AgentJsonPaths
-	Notes     string    `gorm:"type:text" json:"notes"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
+	Name            string    `gorm:"uniqueIndex;not null" json:"name"`
+	OsPaths         string    `gorm:"type:text" json:"-"` // JSON blob of AgentOsPaths
+	JsonPaths       string    `gorm:"type:text" json:"-"` // JSON blob of AgentJsonPaths
+	Notes           string    `gorm:"type:text" json:"notes"`
+	Recommendations string    `gorm:"type:text" json:"-"` // JSON blob of []AgentRecommendation
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// MarshalJSON embeds os_paths and json_paths as parsed objects in the API
-// response so the frontend can read per-OS path templates and the
-// provider/model gjson paths without re-parsing the blobs.
+// MarshalJSON embeds os_paths, json_paths and recommendations as parsed
+// objects in the API response so the frontend can read them without
+// re-parsing the blobs.
 func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 	type alias AgentTypeRule
 	p, _ := r.GetOsPaths()
 	j, _ := r.GetJsonPaths()
+	recs, _ := r.GetRecommendations()
 	return json.Marshal(struct {
 		alias
-		OsPaths   AgentOsPaths   `json:"os_paths"`
-		JsonPaths AgentJsonPaths `json:"json_paths"`
-	}{alias: alias(r), OsPaths: p, JsonPaths: j})
+		OsPaths         AgentOsPaths         `json:"os_paths"`
+		JsonPaths       AgentJsonPaths       `json:"json_paths"`
+		Recommendations []AgentRecommendation `json:"recommendations"`
+	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs})
 }
 
 // GetOsPaths parses the stored JSON blob back into a struct. An empty blob
@@ -101,6 +119,34 @@ func (r *AgentTypeRule) SetJsonPaths(p AgentJsonPaths) error {
 	return nil
 }
 
+// GetRecommendations parses the stored JSON blob back into a slice. An
+// empty blob yields a nil slice so callers can default it.
+func (r *AgentTypeRule) GetRecommendations() ([]AgentRecommendation, error) {
+	if r.Recommendations == "" {
+		return nil, nil
+	}
+	var out []AgentRecommendation
+	if err := json.Unmarshal([]byte(r.Recommendations), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetRecommendations serializes the structured schema into the JSON
+// blob persisted on the rule row.
+func (r *AgentTypeRule) SetRecommendations(recs []AgentRecommendation) error {
+	if recs == nil {
+		r.Recommendations = ""
+		return nil
+	}
+	data, err := json.Marshal(recs)
+	if err != nil {
+		return err
+	}
+	r.Recommendations = string(data)
+	return nil
+}
+
 func (r *AgentTypeRule) BeforeCreate(tx *gorm.DB) error {
 	if r.ID == "" {
 		r.ID = uuid.New().String()
@@ -136,13 +182,14 @@ func (f *AgentConfigFile) BeforeCreate(tx *gorm.DB) error {
 
 // builtinAgentRules are the agent types seeded into agent_type_rules when
 // the table is empty. Operators can rename or edit them later; seeding only
-// fills os_paths, json_paths, and notes for rows that lack them, so user
-// edits are never lost.
+// fills os_paths, json_paths, notes, and recommendations for rows that
+// lack them, so user edits are never lost.
 var builtinAgentRules = []struct {
-	Name      string
-	OsPaths   AgentOsPaths
-	JsonPaths AgentJsonPaths
-	Notes     string
+	Name             string
+	OsPaths          AgentOsPaths
+	JsonPaths        AgentJsonPaths
+	Notes            string
+	Recommendations  []AgentRecommendation
 }{
 	{
 		Name: "opencode",
@@ -154,7 +201,8 @@ var builtinAgentRules = []struct {
 			Provider: `provider`,
 			Model:    `provider.{provider_id}.models`,
 		},
-		Notes: opencodeProviderNotes,
+		Notes:           opencodeProviderNotes,
+		Recommendations: opencodeRecommendations,
 	},
 	{
 		Name: "WorkBuddy",
@@ -165,8 +213,9 @@ var builtinAgentRules = []struct {
 		// WorkBuddy uses a flat `models` array keyed by `vendor`. The current
 		// gjson design only walks provider objects with a sibling models key,
 		// so the seeded paths stay empty until a vendor-grouping pass lands.
-		JsonPaths: AgentJsonPaths{},
-		Notes:     "",
+		JsonPaths:       AgentJsonPaths{},
+		Notes:           "",
+		Recommendations: nil,
 	},
 	{
 		Name: "ChatGPT",
@@ -176,8 +225,9 @@ var builtinAgentRules = []struct {
 		},
 		// Codex stores its config in TOML with a [model_providers.*] table
 		// and no per-provider model list, so the seeded paths stay empty.
-		JsonPaths: AgentJsonPaths{},
-		Notes:     "",
+		JsonPaths:       AgentJsonPaths{},
+		Notes:           "",
+		Recommendations: nil,
 	},
 	{
 		Name: "openclaw",
@@ -189,7 +239,8 @@ var builtinAgentRules = []struct {
 			Provider: `models.providers`,
 			Model:    `models.providers.{provider_id}.models`,
 		},
-		Notes: "",
+		Notes:           "",
+		Recommendations: openclawRecommendations,
 	},
 }
 
@@ -224,14 +275,37 @@ const opencodeProviderNotes = `provider.<id> 对象支持的字段（参考 open
     ...其它 npm 专属字段
 `
 
+// opencodeRecommendations are the recommended provider/model fields for
+// opencode. Each entry is checked against the live config in the
+// "管理模型" view and surfaced as a missing / mismatch / extra marker.
+// Clicking "一键套用推荐值" writes the Recommended value into the file.
+var opencodeRecommendations = []AgentRecommendation{
+	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名，决定下面 options / models 可用的字段", Required: true},
+	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点", Required: true},
+	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
+	{Scope: "provider", Key: "options.maxConcurrency", Type: "number", Description: "最大并发请求数", Recommended: 5},
+	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）", Recommended: 30000},
+	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+	{Scope: "model", Key: "limits.context", Type: "number", Description: "上下文 token 上限"},
+}
+
+// openclawRecommendations covers the JSON5-shaped providers block.
+var openclawRecommendations = []AgentRecommendation{
+	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "API 端点", Required: true},
+	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
+	{Scope: "provider", Key: "api", Type: "string", Description: "API 协议", Recommended: "openai-completions"},
+	{Scope: "model", Key: "id", Type: "string", Description: "模型 ID", Required: true},
+	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+}
+
 // EnsureDefaultAgentTypes seeds the agent_type_rules table with the
 // built-in rules. Called right after AutoMigrate on startup; inserts the
-// built-ins that are missing and back-fills os_paths / json_paths when
-// the stored rule exists but has none. If a row has a json_paths blob
-// that lacks the {provider_id} placeholder, the model_path is upgraded
-// to the current full-path format so existing databases pick up the
-// new convention on the next launch. User customizations (different
-// name, different path templates, custom notes) are never overwritten.
+// built-ins that are missing and back-fills os_paths / json_paths /
+// notes / recommendations when the stored rule exists but has none. If
+// a row has a json_paths blob that lacks the {provider_id} placeholder,
+// the model_path is upgraded to the current full-path format so
+// existing databases pick up the new convention on the next launch.
+// User customizations are never overwritten.
 func EnsureDefaultAgentTypes(db *gorm.DB) error {
 	for _, want := range builtinAgentRules {
 		var rule AgentTypeRule
@@ -255,13 +329,20 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				rule.Notes = want.Notes
 				dirty = true
 			}
+			if rule.Recommendations == "" && want.Recommendations != nil {
+				if err := rule.SetRecommendations(want.Recommendations); err != nil {
+					return err
+				}
+				dirty = true
+			}
 			if !dirty {
 				continue
 			}
 			if err := db.Model(&rule).Updates(map[string]any{
-				"os_paths":   rule.OsPaths,
-				"json_paths": rule.JsonPaths,
-				"notes":      rule.Notes,
+				"os_paths":         rule.OsPaths,
+				"json_paths":       rule.JsonPaths,
+				"notes":            rule.Notes,
+				"recommendations":  rule.Recommendations,
 			}).Error; err != nil {
 				return err
 			}
@@ -277,6 +358,9 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 			return err
 		}
 		if err := rule.SetJsonPaths(want.JsonPaths); err != nil {
+			return err
+		}
+		if err := rule.SetRecommendations(want.Recommendations); err != nil {
 			return err
 		}
 		if err := db.Create(&rule).Error; err != nil {

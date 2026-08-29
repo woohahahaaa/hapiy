@@ -32,6 +32,7 @@ import {
   type AgentPathCheckResult,
   type AgentOsPaths,
   type AgentSshConfig,
+  type AgentSshProbeResult,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
 import { AgentConfigEditorDialog } from '@/components/dialog/agent-config-editor'
@@ -69,6 +70,52 @@ export function osNameFromCode(code: string): string {
 export function osPathFor(osPaths: AgentOsPaths | undefined, targetOs: 'windows' | 'mac'): string {
   if (!osPaths) return ''
   return (targetOs === 'windows' ? osPaths.windows : osPaths.mac).trim()
+}
+
+function blankSshConfig(): AgentSshConfig {
+  return {
+    host: '',
+    port: 22,
+    username: '',
+    auth_type: 'password',
+    jump_enabled: false,
+  }
+}
+
+function SshProbeRow({ label, result }: { readonly label: string; readonly result: AgentSshProbeResult }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span
+        className={
+          result.ok
+            ? 'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-green-600 text-[10px] font-bold text-white'
+            : 'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-white'
+        }
+        aria-hidden
+      >
+        {result.ok ? '✓' : '✗'}
+      </span>
+      <span className={result.ok ? 'text-xs font-medium text-green-600' : 'text-xs font-medium text-destructive'}>{label}</span>
+      {result.ok && result.detail && <span className="truncate text-xs text-muted-foreground">· {result.detail}</span>}
+      {!result.ok && result.error && <span className="truncate text-xs text-destructive" title={result.error}>· {result.error}</span>}
+    </div>
+  )
+}
+
+function SshTestResultPanel({
+  result,
+}: {
+  readonly result: { readonly connect: AgentSshProbeResult; readonly read: AgentSshProbeResult; readonly write: AgentSshProbeResult }
+}) {
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3">
+      <div className="flex flex-col gap-1.5">
+        <SshProbeRow label="连接" result={result.connect} />
+        <SshProbeRow label="读取远程路径" result={result.read} />
+        <SshProbeRow label="写入（临时文件 mktemp → 写 → 删除）" result={result.write} />
+      </div>
+    </div>
+  )
 }
 
 // ── Agent 接管: 路径检测提示 ──
@@ -388,6 +435,12 @@ function AgentConfigFormDialog({
   const [detecting, setDetecting] = useState(false)
   const [checkResult, setCheckResult] = useState<AgentPathCheckResult | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
+  // SSH capability probe state (connect/read/write).
+  const [sshTesting, setSshTesting] = useState(false)
+  const [sshTestResult, setSshTestResult] = useState<
+    | { readonly connect: AgentSshProbeResult; readonly read: AgentSshProbeResult; readonly write: AgentSshProbeResult }
+    | null
+  >(null)
 
   useEffect(() => {
     if (!open) return
@@ -416,6 +469,8 @@ function AgentConfigFormDialog({
     setDetecting(false)
     setCheckResult(null)
     setPreviewOpen(false)
+    setSshTesting(false)
+    setSshTestResult(null)
     let cancelled = false
     setLoadingTypes(true)
     setRules([])
@@ -451,12 +506,27 @@ function AgentConfigFormDialog({
     setPresetSyncSuggested(value !== 'other')
   }
 
+  // Clear SSH-only state when switching modes so the local tab doesn't
+  // inherit leftover probe results from an SSH attempt.
+  useEffect(() => {
+    if (mode !== 'ssh') {
+      setSshTestResult(null)
+      setSshTesting(false)
+    }
+    if (mode !== 'local') {
+      setCheckResult(null)
+      setDetecting(false)
+    }
+  }, [mode])
+
   // Manually pull the preset path template into the path field. Nothing is
-  // autofilled; the user decides when to sync from the rule.
+  // autofilled; the user decides when to sync from the rule. Works for both
+  // local and SSH modes — the SSH path field is the only thing that uses
+  // the preset, the rest of the SSH fields stay separate.
   const syncPresetPath = () => {
     setCheckResult(null)
     const preset = ruleForType?.os_paths
-    if (mode !== 'local' || targetOs === 'other' || !preset) return
+    if (targetOs === 'other' || !preset) return
     const template = targetOs === 'windows' ? preset.windows : preset.mac
     if (template.trim() === '') return
     setPath(template.trim())
@@ -464,7 +534,7 @@ function AgentConfigFormDialog({
   }
 
   const canSyncPreset =
-    mode === 'local' && targetOs !== 'other' &&
+    targetOs !== 'other' &&
     ruleForType != null &&
     osPathFor(ruleForType.os_paths, targetOs === 'windows' ? 'windows' : 'mac') !== ''
 
@@ -613,6 +683,80 @@ function AgentConfigFormDialog({
     }
   }
 
+  // Build an unsaved AgentSshConfig from the current form state and a
+  // short Chinese validation message if anything is missing. Returning a
+  // partial cfg alongside the message keeps callers simple — they just
+  // look at error first.
+  const buildSshConfigForProbe = useCallback((): { readonly cfg: AgentSshConfig; readonly error: string | null } => {
+    if (!host.trim()) return { cfg: blankSshConfig(), error: '请填写主机地址' }
+    const portNum = Number(port)
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      return { cfg: blankSshConfig(), error: '端口必须是 1-65535 之间的整数' }
+    }
+    if (!username.trim()) return { cfg: blankSshConfig(), error: '请填写用户名' }
+    if (authType === 'password' && password === '') {
+      return { cfg: blankSshConfig(), error: '请填写密码' }
+    }
+    if (authType === 'key' && privateKey.trim() === '') {
+      return { cfg: blankSshConfig(), error: '请填写私钥内容' }
+    }
+    if (jumpEnabled) {
+      if (!jumpHost.trim()) return { cfg: blankSshConfig(), error: '请填写跳板机主机地址' }
+      const jumpPortNum = Number(jumpPort)
+      if (!Number.isInteger(jumpPortNum) || jumpPortNum < 1 || jumpPortNum > 65535) {
+        return { cfg: blankSshConfig(), error: '跳板机端口必须是 1-65535 之间的整数' }
+      }
+      if (!jumpUsername.trim()) return { cfg: blankSshConfig(), error: '请填写跳板机用户名' }
+      if (jumpAuthType === 'password' && jumpPassword === '') {
+        return { cfg: blankSshConfig(), error: '请填写跳板机密码' }
+      }
+      if (jumpAuthType === 'key' && jumpPrivateKey.trim() === '') {
+        return { cfg: blankSshConfig(), error: '请填写跳板机私钥内容' }
+      }
+    }
+    return {
+      cfg: {
+        host: host.trim(),
+        port: portNum,
+        username: username.trim(),
+        auth_type: authType,
+        password: authType === 'password' ? password : undefined,
+        private_key: authType === 'key' ? privateKey.trim() : undefined,
+        jump_enabled: jumpEnabled,
+        jump_host: jumpEnabled ? jumpHost.trim() : undefined,
+        jump_port: jumpEnabled ? Number(jumpPort) : undefined,
+        jump_username: jumpEnabled ? jumpUsername.trim() : undefined,
+        jump_auth_type: jumpEnabled ? jumpAuthType : undefined,
+        jump_password: jumpEnabled && jumpAuthType === 'password' ? jumpPassword : undefined,
+        jump_private_key: jumpEnabled && jumpAuthType === 'key' ? jumpPrivateKey.trim() : undefined,
+      },
+      error: null,
+    }
+  }, [host, port, username, authType, password, privateKey, jumpEnabled, jumpHost, jumpPort, jumpUsername, jumpAuthType, jumpPassword, jumpPrivateKey])
+
+  const runSshTest = useCallback(async () => {
+    const { cfg, error } = buildSshConfigForProbe()
+    if (error) {
+      const failed: AgentSshProbeResult = { ok: false, error }
+      setSshTestResult({ connect: failed, read: failed, write: failed })
+      return
+    }
+    setSshTesting(true)
+    setSshTestResult(null)
+    try {
+      const result = await dashboardApi.testAgentSshConnection({
+        ssh_config: cfg,
+        path: path.trim(),
+      })
+      setSshTestResult(result)
+    } catch (err) {
+      const failed: AgentSshProbeResult = { ok: false, error: toErrorMessage(err, '测试失败') }
+      setSshTestResult({ connect: failed, read: failed, write: failed })
+    } finally {
+      setSshTesting(false)
+    }
+  }, [buildSshConfigForProbe, path])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="md">
@@ -656,69 +800,67 @@ function AgentConfigFormDialog({
             </div>
           </Field>
 
-          {mode === 'local' && (
-            <>
-              <Field>
-                <FieldLabel>系统</FieldLabel>
-                <div className="flex items-center gap-2">
-                  {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
-                    <Button
-                      key={os}
-                      type="button"
-                      variant={targetOs === os ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handleTargetOsChange(os)}
-                    >
-                      {TARGET_OS_LABELS[os]}
-                    </Button>
-                  ))}
-                  <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={presetSyncSuggested && canSyncPreset ? '!border-primary !text-primary' : undefined}
-                    disabled={!canSyncPreset}
-                    onClick={syncPresetPath}
-                  >
-                    同步预设Agent信息
-                  </Button>
-                </div>
-                {(targetOs === 'windows' || targetOs === 'mac') && (
-                  <p className="text-xs text-muted-foreground">
-                    点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
-                  </p>
-                )}
-              </Field>
+          <Field>
+            <FieldLabel>系统</FieldLabel>
+            <div className="flex items-center gap-2">
+              {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
+                <Button
+                  key={os}
+                  type="button"
+                  variant={targetOs === os ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleTargetOsChange(os)}
+                >
+                  {TARGET_OS_LABELS[os]}
+                </Button>
+              ))}
+              <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={presetSyncSuggested && canSyncPreset ? '!border-primary !text-primary' : undefined}
+                disabled={!canSyncPreset}
+                onClick={syncPresetPath}
+              >
+                同步预设Agent信息
+              </Button>
+            </div>
+            {(targetOs === 'windows' || targetOs === 'mac') && (
+              <p className="text-xs text-muted-foreground">
+                点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
+              </p>
+            )}
+          </Field>
 
-              <Field>
-                <FieldLabel>路径</FieldLabel>
-                <div className="flex gap-2">
-                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={path.trim() === '' || detecting}
-                    onClick={() => void runPathCheck()}
-                  >
-                    {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2 text-xs">
-                  {detecting ? (
-                    <>
-                      <AppIcon name="progress_activity" size={14} className="animate-spin" />
-                      <span className="text-muted-foreground">正在检测文件…</span>
-                    </>
-                  ) : checkResult ? (
-                    <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
-                  ) : (
-                    <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
-                  )}
-                </div>
-              </Field>
-            </>
+          {mode === 'local' && (
+            <Field>
+              <FieldLabel>路径</FieldLabel>
+              <div className="flex gap-2">
+                <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={path.trim() === '' || detecting}
+                  onClick={() => void runPathCheck()}
+                >
+                  {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                {detecting ? (
+                  <>
+                    <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                    <span className="text-muted-foreground">正在检测文件…</span>
+                  </>
+                ) : checkResult ? (
+                  <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
+                ) : (
+                  <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
+                )}
+              </div>
+            </Field>
           )}
 
           {mode === 'ssh' && (
@@ -811,8 +953,38 @@ function AgentConfigFormDialog({
               )}
 
               <Field>
+                <FieldLabel>测试 SSH 连接（连接/读/写）</FieldLabel>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={sshTesting}
+                    onClick={() => void runSshTest()}
+                  >
+                    {sshTesting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '测试 SSH 读写能力'}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    用当前填写的 SSH 配置连接目标主机；连接成功后读取下方路径，并在临时目录写入一个测试文件后删除
+                  </span>
+                </div>
+                {sshTestResult && <SshTestResultPanel result={sshTestResult} />}
+              </Field>
+
+              <Field>
                 <FieldLabel>远程路径</FieldLabel>
-                <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                <div className="flex gap-2">
+                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={path.trim() === ''}
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    预览远程文件
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">仅支持 .json 文件</p>
               </Field>
             </>
@@ -839,7 +1011,15 @@ function AgentConfigFormDialog({
           onOpenChange={setPreviewOpen}
           title={recordName.trim()}
           subtitle={path.trim()}
-          loadContent={() => dashboardApi.readAgentConfigPath(path.trim())}
+          loadContent={() => {
+            const trimmed = path.trim()
+            if (mode === 'ssh') {
+              const { cfg, error } = buildSshConfigForProbe()
+              if (error) return Promise.reject(new Error(error))
+              return dashboardApi.readAgentConfigRemotePath(cfg, trimmed)
+            }
+            return dashboardApi.readAgentConfigPath(trimmed)
+          }}
         />
       )}
     </Dialog>

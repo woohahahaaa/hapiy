@@ -585,12 +585,25 @@ export type AgentJsonPaths = {
   readonly model: string
 }
 
+export type AgentRecommendationScope = 'provider' | 'model'
+export type AgentRecommendationType = 'string' | 'number' | 'boolean' | 'object' | 'array'
+
+export type AgentRecommendation = {
+  readonly scope: AgentRecommendationScope
+  readonly key: string
+  readonly description: string
+  readonly type: AgentRecommendationType
+  readonly recommended: unknown
+  readonly required: boolean
+}
+
 export type AgentTypeRule = {
   readonly id: string
   readonly name: string
   readonly os_paths: AgentOsPaths
   readonly json_paths: AgentJsonPaths
   readonly notes: string
+  readonly recommendations: readonly AgentRecommendation[]
   readonly created_at: string
   readonly updated_at: string
 }
@@ -602,6 +615,7 @@ export type AgentTypeRuleInput = {
   readonly provider_path?: string
   readonly model_path?: string
   readonly notes?: string
+  readonly recommendations?: readonly AgentRecommendation[]
 }
 
 export type AgentPathCheckResult = {
@@ -609,6 +623,12 @@ export type AgentPathCheckResult = {
   readonly size: number
   readonly current_os: string
   readonly expandedPath: string
+}
+
+export type AgentSshProbeResult = {
+  readonly ok: boolean
+  readonly error?: string
+  readonly detail?: string
 }
 
 export type AgentSshConfig = {
@@ -670,6 +690,7 @@ export type AgentModelProvider = {
 export type AgentModelSummary = {
   readonly agent_type: string
   readonly providers: readonly AgentModelProvider[]
+  readonly recommendations: readonly AgentRecommendation[]
 }
 
 export class DashboardApiError extends Error {
@@ -1801,6 +1822,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
+  const recs = Array.isArray(value.recommendations) ? value.recommendations : []
   return {
     id: readString(value.id, 'agent_type_rule.id'),
     name: readString(value.name, 'agent_type_rule.name'),
@@ -1813,8 +1835,27 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
     notes: typeof value.notes === 'string' ? value.notes : '',
+    recommendations: recs.map(parseAgentRecommendation),
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
+  }
+}
+
+function parseAgentRecommendation(value: unknown): AgentRecommendation {
+  if (!isRecord(value)) {
+    return { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false }
+  }
+  const scope = value.scope === 'model' ? 'model' : 'provider'
+  const t = value.type
+  const type: AgentRecommendationType =
+    t === 'number' || t === 'boolean' || t === 'object' || t === 'array' ? t : 'string'
+  return {
+    scope,
+    key: typeof value.key === 'string' ? value.key : '',
+    description: typeof value.description === 'string' ? value.description : '',
+    type,
+    recommended: value.recommended ?? null,
+    required: value.required === true,
   }
 }
 
@@ -1827,6 +1868,17 @@ function parseAgentPathCheckResult(value: unknown): AgentPathCheckResult {
     size: readNumber(value.size, 'path_check.size', 0),
     current_os: readString(value.current_os, 'path_check.current_os'),
     expandedPath: readString(value.expandedPath, 'path_check.expandedPath'),
+  }
+}
+
+function parseAgentSshProbeResult(value: unknown): AgentSshProbeResult {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 SSH 探测结果无效', null)
+  }
+  return {
+    ok: readBoolean(value.ok, 'ssh_probe.ok'),
+    error: typeof value.error === 'string' ? value.error : undefined,
+    detail: typeof value.detail === 'string' ? value.detail : undefined,
   }
 }
 
@@ -1860,6 +1912,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
     throw new DashboardApiError('服务端返回的模型摘要格式无效', null)
   }
   const providers = Array.isArray(value.providers) ? value.providers : []
+  const recs = Array.isArray(value.recommendations) ? value.recommendations : []
   return {
     agent_type: typeof value.agent_type === 'string' ? value.agent_type : '',
     providers: providers.map((raw) => {
@@ -1877,6 +1930,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
         }),
       }
     }),
+    recommendations: recs.map(parseAgentRecommendation),
   }
 }
 
@@ -2577,6 +2631,37 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return data.content
   },
+  async testAgentSshConnection(input: {
+    readonly ssh_config: AgentSshConfig
+    readonly path: string
+  }): Promise<{
+    readonly connect: AgentSshProbeResult
+    readonly read: AgentSshProbeResult
+    readonly write: AgentSshProbeResult
+  }> {
+    const data = await request('/agent-config-files/test-ssh', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    if (!isRecord(data)) {
+      throw new DashboardApiError('服务端返回的 SSH 测试结果格式无效', null)
+    }
+    return {
+      connect: parseAgentSshProbeResult(data.connect),
+      read: parseAgentSshProbeResult(data.read),
+      write: parseAgentSshProbeResult(data.write),
+    }
+  },
+  async readAgentConfigRemotePath(sshConfig: AgentSshConfig, path: string): Promise<string> {
+    const data = await request('/agent-config-files/read-remote', {
+      method: 'POST',
+      body: JSON.stringify({ ssh_config: sshConfig, path }),
+    })
+    if (!isRecord(data) || typeof data.content !== 'string') {
+      throw new DashboardApiError('服务端返回的远程文件内容格式无效', null)
+    }
+    return data.content
+  },
   async listAgentConfigFiles(params: AgentConfigListParams): Promise<{ readonly files: readonly AgentConfigFile[]; readonly total: number }> {
     const qp = new URLSearchParams()
     qp.set('limit', String(params.limit))
@@ -2622,5 +2707,21 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getAgentConfigFileModels(id: string): Promise<AgentModelSummary> {
     const data = await request(`/agent-config-files/${encodeURIComponent(id)}/models`)
     return parseAgentModelSummary(data)
+  },
+  async applyAgentRecommendations(
+    id: string,
+    input: { readonly provider_id: string; readonly model_id?: string },
+  ): Promise<{ readonly applied: number; readonly content: string }> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendations`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    if (!isRecord(data) || !isRecord(data.data)) {
+      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+    }
+    return {
+      applied: readNumber(data.data.applied, 'applied', 0),
+      content: typeof data.data.content === 'string' ? data.data.content : '',
+    }
   },
 }

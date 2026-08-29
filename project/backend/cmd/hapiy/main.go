@@ -237,11 +237,14 @@ func main() {
 			dashboardAuthed.POST("/agent-config-files", handler.CreateAgentConfigFile(db, encKey))
 			dashboardAuthed.GET("/agent-config-files/check", handler.CheckAgentConfigPath())
 			dashboardAuthed.GET("/agent-config-files/read", handler.ReadAgentConfigPath())
+			dashboardAuthed.POST("/agent-config-files/read-remote", handler.ReadAgentConfigRemotePath())
+			dashboardAuthed.POST("/agent-config-files/test-ssh", handler.TestAgentSshConnection())
 			dashboardAuthed.GET("/agent-config-files/:id/content", handler.GetAgentConfigFileContent(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id/content", handler.PutAgentConfigFileContent(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id", handler.UpdateAgentConfigFile(db, encKey))
 			dashboardAuthed.DELETE("/agent-config-files/:id", handler.DeleteAgentConfigFile(db))
 			dashboardAuthed.GET("/agent-config-files/:id/models", handler.GetAgentConfigFileModels(db, encKey))
+			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendations", handler.ApplyAgentRecommendations(db, encKey))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))

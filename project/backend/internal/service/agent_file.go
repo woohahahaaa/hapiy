@@ -376,3 +376,84 @@ func dialSSH(cfg SshConfig) (*sshClient, error) {
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+// SshProbeResult is the outcome of one capability probe against a remote
+// host. Detail is a short human-readable hint (e.g. read 文件大小) shown
+// next to a green OK; it is empty on failure.
+type SshProbeResult struct {
+	OK     bool   `json:"ok"`
+	Error  string `json:"error,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// TestSshConnection probes three independent capabilities against cfg:
+//   - connect: dials SSH (and the jump host when enabled)
+//   - read:    if path != "", runs `cat <path>` to confirm the file is reachable
+//   - write:   creates a remote mktemp file, writes a probe marker into it, then unlinks it.
+//     No user file is touched.
+//
+// Each probe is reported independently so the UI can highlight the exact
+// capability that failed. When connect fails, read/write are short-circuited
+// with the same connection error and no further commands are sent.
+func TestSshConnection(cfg SshConfig, path string) (connect, read, write SshProbeResult) {
+	client, err := dialSSH(cfg)
+	if err != nil {
+		errResult := SshProbeResult{OK: false, Error: err.Error()}
+		return errResult, errResult, errResult
+	}
+	defer client.Close()
+	connect = SshProbeResult{OK: true}
+	if strings.TrimSpace(path) == "" {
+		read = SshProbeResult{OK: false, Error: "未提供路径"}
+	} else {
+		read = probeSshRead(client, path)
+	}
+	write = probeSshWrite(client)
+	return
+}
+
+// probeSshRead runs `cat <path>` over an established SSH session and treats
+// any non-zero exit as a read failure. stderr is included in the error so
+// the operator sees why (permission denied, missing file, ...).
+func probeSshRead(client *sshClient, path string) SshProbeResult {
+	session, err := client.client.NewSession()
+	if err != nil {
+		return SshProbeResult{OK: false, Error: "创建 SSH 会话失败: " + err.Error()}
+	}
+	defer session.Close()
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	if err := session.Run("cat " + shellQuote(path)); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return SshProbeResult{OK: false, Error: "读取失败: " + err.Error() + " (" + detail + ")"}
+		}
+		return SshProbeResult{OK: false, Error: "读取失败: " + err.Error()}
+	}
+	return SshProbeResult{OK: true, Detail: fmt.Sprintf("已读取 %d 字节", stdout.Len())}
+}
+
+// probeSshWrite asks the remote shell to mktemp, consume stdin into the
+// temp file, and unlink it. The probe never touches any user-provided path,
+// so a successful run implies the account has write access somewhere on the
+// remote filesystem (typically $TMPDIR). stderr is surfaced on failure.
+func probeSshWrite(client *sshClient) SshProbeResult {
+	session, err := client.client.NewSession()
+	if err != nil {
+		return SshProbeResult{OK: false, Error: "创建 SSH 会话失败: " + err.Error()}
+	}
+	defer session.Close()
+	session.Stdin = strings.NewReader("__hapiy_probe__\n")
+	var stderr bytes.Buffer
+	session.Stderr = &stderr
+	const cmd = `sh -c 'tmp=$(mktemp) && cat > "$tmp" && rm -f "$tmp" && echo OK'`
+	if err := session.Run(cmd); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return SshProbeResult{OK: false, Error: "写入失败: " + err.Error() + " (" + detail + ")"}
+		}
+		return SshProbeResult{OK: false, Error: "写入失败: " + err.Error()}
+	}
+	return SshProbeResult{OK: true, Detail: "mktemp → 写入 → 临时文件已删除"}
+}

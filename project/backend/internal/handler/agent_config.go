@@ -11,6 +11,7 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"gorm.io/gorm"
 )
 
@@ -54,12 +55,13 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name         string `json:"name"`
-	Windows      string `json:"windows"`
-	Mac          string `json:"mac"`
-	ProviderPath string `json:"provider_path"`
-	ModelPath    string `json:"model_path"`
-	Notes        string `json:"notes"`
+	Name            string                 `json:"name"`
+	Windows         string                 `json:"windows"`
+	Mac             string                 `json:"mac"`
+	ProviderPath    string                 `json:"provider_path"`
+	ModelPath       string                 `json:"model_path"`
+	Notes           string                 `json:"notes"`
+	Recommendations []model.AgentRecommendation `json:"recommendations"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
@@ -102,6 +104,10 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		rule.Notes = strings.TrimSpace(req.Notes)
+		if err := rule.SetRecommendations(req.Recommendations); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -113,10 +119,11 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name         string `json:"name"`
-			ProviderPath string `json:"provider_path"`
-			ModelPath    string `json:"model_path"`
-			Notes        string `json:"notes"`
+			Name            string                    `json:"name"`
+			ProviderPath    string                    `json:"provider_path"`
+			ModelPath       string                    `json:"model_path"`
+			Notes           string                    `json:"notes"`
+			Recommendations []model.AgentRecommendation `json:"recommendations"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -144,6 +151,10 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Provider: strings.TrimSpace(req.ProviderPath),
 			Model:    strings.TrimSpace(req.ModelPath),
 		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := rule.SetRecommendations(req.Recommendations); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -552,6 +563,79 @@ func ReadAgentConfigPath() gin.HandlerFunc {
 	}
 }
 
+// ReadAgentConfigRemotePath returns the content of a remote file via SSH
+// using the supplied (unsaved) ssh_config. The path and credentials travel
+// in the POST body because the dashboard's takeover dialog builds them up
+// before the AgentConfigFile row exists.
+func ReadAgentConfigRemotePath() gin.HandlerFunc {
+	type request struct {
+		SshConfig json.RawMessage `json:"ssh_config"`
+		Path      string          `json:"path"`
+	}
+	return func(c *gin.Context) {
+		var req request
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		path := strings.TrimSpace(req.Path)
+		if path == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			return
+		}
+		var cfg service.SshConfig
+		if err := parseSshConfig(req.SshConfig, &cfg); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+			return
+		}
+		if msg := validateSshConfig(cfg); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
+		content, err := service.ReadRemoteFile(cfg, path)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": content}})
+	}
+}
+
+// TestAgentSshConnection probes an in-progress SSH config (i.e. one not
+// yet stored on an AgentConfigFile row) for connect / read / write. The
+// read probe runs only when path is non-empty; the write probe always
+// runs and uses a mktemp + rm sequence so no user file is touched. The
+// full capability report is always returned so the UI can flag exactly
+// which step failed.
+func TestAgentSshConnection() gin.HandlerFunc {
+	type request struct {
+		SshConfig json.RawMessage `json:"ssh_config"`
+		Path      string          `json:"path"`
+	}
+	return func(c *gin.Context) {
+		var req request
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		var cfg service.SshConfig
+		if err := parseSshConfig(req.SshConfig, &cfg); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+			return
+		}
+		if msg := validateSshConfig(cfg); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
+		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path))
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"connect": connect,
+			"read":    read,
+			"write":   write,
+		}})
+	}
+}
+
 // parseSshConfig accepts the ssh_config field either as a JSON object or
 // as a pre-serialized JSON string blob (both match how the field is
 // persisted on the row).
@@ -703,10 +787,12 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		recs, _ := rule.GetRecommendations()
 		c.JSON(http.StatusOK, gin.H{
 			"data": gin.H{
-				"agent_type": row.AgentType,
-				"providers":  providers,
+				"agent_type":      row.AgentType,
+				"providers":       providers,
+				"recommendations": recs,
 			},
 		})
 	}
@@ -801,6 +887,116 @@ func stripJSONKey(val gjson.Result, key string) gjson.Result {
 		return val
 	}
 	return gjson.Parse(string(raw))
+}
+
+// ApplyAgentRecommendations writes the rule's Recommended values back
+// into the live config file for the selected provider (and model, when
+// model_id is provided). Provider-scope recommendations are always
+// applied; model-scope recommendations only apply when a model_id is
+// given. Recommendations with a null Recommended value are skipped (the
+// user hasn't told us what to fill in). The file is rewritten
+// atomically; SSH files use the same write path as the editor endpoint.
+func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
+	type applyReq struct {
+		ProviderID string `json:"provider_id"`
+		ModelID    string `json:"model_id"`
+	}
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var rule model.AgentTypeRule
+		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			return
+		}
+		jpaths, err := rule.GetJsonPaths()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			return
+		}
+		var req applyReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		providerID := strings.TrimSpace(req.ProviderID)
+		if providerID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "provider_id 不能为空"})
+			return
+		}
+		recs, _ := rule.GetRecommendations()
+		if len(recs) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
+			return
+		}
+
+		content, err := readAgentConfigFileContent(&row, key)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		// sjson needs valid JSON, so strip JSON5 comments before mutating.
+		// The round-trip drops comments, which is fine — both opencode and
+		// openclaw accept plain JSON.
+		cleaned := stripJSON5Comments(content)
+		updated, applied, err := applyRecommendationsToContent(cleaned, jpaths.Provider, jpaths.Model, providerID, strings.TrimSpace(req.ModelID), recs)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if err := writeAgentConfigFileContent(&row, updated, key); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
+			return
+		}
+		if err := db.Model(&row).Update("content", updated).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
+	}
+}
+
+// applyRecommendationsToContent merges each rule's Recommended value at
+// its key path into the supplied JSON document, using sjson. Returns the
+// updated content and the count of fields applied.
+func applyRecommendationsToContent(content, providerPath, modelPath, providerID, modelID string, recs []model.AgentRecommendation) (string, int, error) {
+	buf := []byte(content)
+	applied := 0
+	for _, r := range recs {
+		if r.Recommended == nil {
+			continue
+		}
+		switch r.Scope {
+		case "provider":
+			full := providerPath + "." + providerID + "." + r.Key
+			next, err := sjson.SetBytes(buf, full, r.Recommended)
+			if err != nil {
+				return string(buf), applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
+			}
+			buf = next
+			applied++
+		case "model":
+			if modelID == "" {
+				continue
+			}
+			resolved := strings.ReplaceAll(modelPath, "{provider_id}", providerID)
+			full := resolved + "." + modelID + "." + r.Key
+			next, err := sjson.SetBytes(buf, full, r.Recommended)
+			if err != nil {
+				return string(buf), applied, fmt.Errorf("model %q 字段 %s: %v", modelID, r.Key, err)
+			}
+			buf = next
+			applied++
+		}
+	}
+	return string(buf), applied, nil
 }
 
 // stripJSON5Comments removes // and /* */ comments so gjson can parse

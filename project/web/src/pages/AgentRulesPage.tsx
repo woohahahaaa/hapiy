@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -12,14 +13,33 @@ import {
   DialogTitle,
 } from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { toast } from '@/components/ui/toast'
 import {
   dashboardApi,
   DashboardApiError,
+  type AgentRecommendation,
+  type AgentRecommendationScope,
+  type AgentRecommendationType,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+
+const RECOMMENDATION_SCOPES: readonly AgentRecommendationScope[] = ['provider', 'model']
+const RECOMMENDATION_TYPES: readonly AgentRecommendationType[] = [
+  'string',
+  'number',
+  'boolean',
+  'object',
+  'array',
+]
 
 function toErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof DashboardApiError) return err.message
@@ -217,6 +237,7 @@ function RuleDialog({
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
   const [notes, setNotes] = useState('')
+  const [recommendations, setRecommendations] = useState<AgentRecommendation[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -228,6 +249,7 @@ function RuleDialog({
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
       setNotes(editing?.notes ?? '')
+      setRecommendations((editing?.recommendations ?? []).map((r) => ({ ...r })))
       setError(null)
       setSaving(false)
     }
@@ -251,6 +273,7 @@ function RuleDialog({
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
           notes,
+          recommendations,
         })
       } else {
         await dashboardApi.createAgentTypeRule(trimmed)
@@ -267,7 +290,7 @@ function RuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="md">
+      <DialogContent width="lg">
         <DialogHeader>
           <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
         </DialogHeader>
@@ -319,14 +342,37 @@ function RuleDialog({
               </p>
             </Field>
             <Field>
-              <FieldLabel>备注</FieldLabel>
+              <FieldLabel>备注（自由文本，可选）</FieldLabel>
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="粘贴该 agent 官方文档里 provider 字段下支持的字段说明…"
-                rows={10}
-                className="min-h-[180px] font-mono text-xs leading-relaxed"
+                placeholder="自由补充该 agent 的 provider 字段说明…"
+                rows={3}
+                className="min-h-[60px] font-mono text-xs leading-relaxed"
               />
+            </Field>
+            <Field>
+              <div className="flex items-center justify-between">
+                <FieldLabel>推荐配置</FieldLabel>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() =>
+                    setRecommendations((prev) => [
+                      ...prev,
+                      { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false },
+                    ])
+                  }
+                >
+                  <AppIcon name="add" data-icon="inline-start" />
+                  添加行
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                列出官方支持的字段、类型与推荐值；下方会在「管理模型」里与实际配置对比，缺/错/多会有行内标记，可一键套用推荐值
+              </p>
+              <RecommendationTable rows={recommendations} onChange={setRecommendations} />
             </Field>
           </Group>
 
@@ -344,6 +390,206 @@ function RuleDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function RecommendationTable({
+  rows,
+  onChange,
+}: {
+  rows: AgentRecommendation[]
+  onChange: (rows: AgentRecommendation[]) => void
+}) {
+  const update = (idx: number, patch: Partial<AgentRecommendation>) => {
+    onChange(rows.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
+  }
+  const remove = (idx: number) => {
+    onChange(rows.filter((_, i) => i !== idx))
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+        暂无推荐配置，点上方「添加行」开始
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border">
+      <table className="w-full text-xs">
+        <thead className="bg-muted/40 text-muted-foreground">
+          <tr>
+            <th className="w-[26%] px-2 py-1.5 text-left font-medium">字段名</th>
+            <th className="w-[80px] px-2 py-1.5 text-left font-medium">作用域</th>
+            <th className="w-[100px] px-2 py-1.5 text-left font-medium">类型</th>
+            <th className="px-2 py-1.5 text-left font-medium">含义</th>
+            <th className="w-[22%] px-2 py-1.5 text-left font-medium">推荐值</th>
+            <th className="w-[60px] px-2 py-1.5 text-center font-medium">必填</th>
+            <th className="w-[36px] px-2 py-1.5" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((row, idx) => (
+            <tr key={idx} className="align-top">
+              <td className="px-2 py-1.5">
+                <Input
+                  value={row.key}
+                  onChange={(e) => update(idx, { key: e.target.value })}
+                  placeholder="例如：options.timeout"
+                  className="h-7 text-xs font-mono"
+                />
+              </td>
+              <td className="px-2 py-1.5">
+                <Select
+                  value={row.scope}
+                  onValueChange={(v) => update(idx, { scope: v as AgentRecommendationScope })}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECOMMENDATION_SCOPES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="px-2 py-1.5">
+                <Select
+                  value={row.type}
+                  onValueChange={(v) => update(idx, { type: v as AgentRecommendationType })}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECOMMENDATION_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="px-2 py-1.5">
+                <Input
+                  value={row.description}
+                  onChange={(e) => update(idx, { description: e.target.value })}
+                  placeholder="字段含义"
+                  className="h-7 text-xs"
+                />
+              </td>
+              <td className="px-2 py-1.5">
+                <RecommendationValueInput row={row} onChange={(v) => update(idx, { recommended: v })} />
+              </td>
+              <td className="px-2 py-1.5 text-center">
+                <Switch
+                  checked={row.required}
+                  onCheckedChange={(v) => update(idx, { required: v })}
+                />
+              </td>
+              <td className="px-2 py-1.5 text-right">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="删除"
+                  onClick={() => remove(idx)}
+                >
+                  <AppIcon name="delete" size={14} />
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function RecommendationValueInput({
+  row,
+  onChange,
+}: {
+  row: AgentRecommendation
+  onChange: (value: unknown) => void
+}) {
+  const raw = row.recommended
+  const empty = raw === null || raw === undefined
+
+  if (row.type === 'boolean') {
+    const v = raw === true
+    return (
+      <Select
+        value={empty ? '__empty__' : v ? 'true' : 'false'}
+        onValueChange={(val) => {
+          if (val === '__empty__') onChange(null)
+          else onChange(val === 'true')
+        }}
+      >
+        <SelectTrigger className="h-7 text-xs">
+          <SelectValue placeholder="（不填）" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__empty__">（不填）</SelectItem>
+          <SelectItem value="true">true</SelectItem>
+          <SelectItem value="false">false</SelectItem>
+        </SelectContent>
+      </Select>
+    )
+  }
+
+  if (row.type === 'number') {
+    const display = empty ? '' : String(raw)
+    return (
+      <Input
+        type="number"
+        value={display}
+        onChange={(e) => {
+          const t = e.target.value.trim()
+          if (t === '') onChange(null)
+          else onChange(Number(t))
+        }}
+        placeholder="（不填）"
+        className="h-7 text-xs font-mono"
+      />
+    )
+  }
+
+  if (row.type === 'object' || row.type === 'array') {
+    const display = empty ? '' : JSON.stringify(raw)
+    return (
+      <Input
+        value={display}
+        onChange={(e) => {
+          const t = e.target.value.trim()
+          if (t === '') {
+            onChange(null)
+            return
+          }
+          try {
+            onChange(JSON.parse(t))
+          } catch {
+            onChange(t)
+          }
+        }}
+        placeholder='例如 {"type":"enabled"}'
+        className="h-7 text-xs font-mono"
+      />
+    )
+  }
+
+  const display = empty ? '' : String(raw)
+  return (
+    <Input
+      value={display}
+      onChange={(e) => {
+        const t = e.target.value
+        if (t === '') onChange(null)
+        else onChange(t)
+      }}
+      placeholder="（不填）"
+      className="h-7 text-xs"
+    />
   )
 }
 
