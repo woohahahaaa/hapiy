@@ -39,6 +39,9 @@ func main() {
 	}
 
 	// Auto-migrate models
+	if err := model.DeduplicateAgentConfigRecordNames(db); err != nil {
+		log.Fatalf("Failed to deduplicate agent config records: %v", err)
+	}
 	if err := model.AutoMigrate(db); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

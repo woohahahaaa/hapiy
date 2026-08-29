@@ -163,6 +163,9 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 // RecordName unique index added by AutoMigrate can be created on databases
 // that already accumulated duplicates. Called from main before AutoMigrate.
 func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {
+	if !db.Migrator().HasTable(&AgentConfigFile{}) {
+		return nil
+	}
 	type dupGroup struct {
 		RecordName string
 		Count      int
@@ -184,7 +187,18 @@ func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {
 		}
 		// Keep the oldest as-is, rename the rest with a numeric suffix.
 		for i := 1; i < len(rows); i++ {
-			newName := fmt.Sprintf("%s (%d)", rows[i].RecordName, i+1)
+			var newName string
+			for suffix := i + 1; ; suffix++ {
+				candidate := fmt.Sprintf("%s (%d)", rows[i].RecordName, suffix)
+				var count int64
+				if err := db.Model(&AgentConfigFile{}).Where("record_name = ?", candidate).Count(&count).Error; err != nil {
+					return err
+				}
+				if count == 0 {
+					newName = candidate
+					break
+				}
+			}
 			if err := db.Model(&rows[i]).Update("record_name", newName).Error; err != nil {
 				return err
 			}

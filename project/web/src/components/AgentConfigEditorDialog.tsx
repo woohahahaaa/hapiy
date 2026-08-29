@@ -26,6 +26,22 @@ function toErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback
 }
 
+function jsonWarning(text: string): string | null {
+  try {
+    JSON.parse(text)
+    return null
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '无法解析 JSON'
+    const position = message.match(/position (\d+)/i)
+    if (!position) return `内容不是合法 JSON：${message}`
+    const index = Number(position[1])
+    const before = text.slice(0, index)
+    const line = before.split('\n').length
+    const column = index - before.lastIndexOf('\n')
+    return `第 ${line} 行第 ${column} 列附近可能存在 JSON 格式问题：${message}`
+  }
+}
+
 // BareJsonEditor — same in-memory layout as JsonLineEditor but without the
 // outer rounded/border wrapper so it can stretch edge-to-edge inside the
 // full-screen editor dialog.
@@ -44,6 +60,7 @@ function BareJsonEditor({
   const backdropRef = useRef<HTMLPreElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lines = splitJsonLines(value)
+  const isJson = jsonWarning(value) === null
 
   const syncScroll = () => {
     const textarea = textareaRef.current
@@ -68,7 +85,7 @@ function BareJsonEditor({
       <div
         ref={gutterRef}
         aria-hidden
-        className="w-14 shrink-0 select-none overflow-hidden border-r border-border bg-muted/40 py-3 text-right text-muted-foreground/70"
+        className="h-full w-14 shrink-0 select-none overflow-hidden border-r border-border bg-muted/40 py-1 text-right text-muted-foreground/70"
       >
         {lines.map((_, index) => (
           <div key={index} className="pr-2 leading-relaxed tabular-nums">
@@ -76,17 +93,20 @@ function BareJsonEditor({
           </div>
         ))}
       </div>
-      <div className="relative min-w-0 flex-1 overflow-hidden">
+        <div className="relative h-full min-w-0 flex-1 overflow-hidden">
         <pre
           ref={backdropRef}
           aria-hidden
-          className="pointer-events-none absolute inset-0 m-0 overflow-hidden text-transparent p-3"
+          className={cn(
+            'pointer-events-none absolute inset-0 m-0 overflow-hidden p-1',
+            isJson ? 'text-transparent' : 'text-foreground',
+          )}
         >
-          <JsonTokens text={value} />
+          {isJson ? <JsonTokens text={value} /> : value}
         </pre>
         <textarea
           ref={textareaRef}
-          className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent text-transparent caret-foreground outline-none p-3"
+          className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-1 text-transparent caret-foreground outline-none"
           value={value}
           onChange={(event) => onChange?.(event.target.value)}
           onScroll={syncScroll}
@@ -150,13 +170,10 @@ export function AgentConfigEditorDialog({
   }, [open, record.id])
 
   const dirty = content !== null && original !== null && content !== original
+  const warning = content === null ? null : jsonWarning(content)
 
   const requestSave = () => {
-    if (!dirty) {
-      void doSave()
-    } else {
-      setConfirmSave(true)
-    }
+    if (dirty) setConfirmSave(true)
   }
 
   const doSave = async () => {
@@ -196,7 +213,7 @@ export function AgentConfigEditorDialog({
           </span>
         </DialogHeader>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 py-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 py-1">
           {fetchError && (
             <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
@@ -231,7 +248,7 @@ export function AgentConfigEditorDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             取消
           </Button>
-          <Button onClick={requestSave} disabled={busy || content === null}>
+          <Button onClick={requestSave} disabled={busy || content === null || !dirty}>
             {saving ? '保存中...' : '保存'}
           </Button>
         </DialogFooter>
@@ -244,6 +261,14 @@ export function AgentConfigEditorDialog({
                 <DialogDescription>
                   检测到文件内容已修改，是否覆盖写入「{record.path}」？
                 </DialogDescription>
+                {warning && (
+                  <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 font-mono text-xs text-warning-foreground">
+                    {warning}
+                    <div className="mt-1 font-sans text-warning-foreground/80">
+                      这只是提示，不会阻止保存。某些软件可能使用非标准 JSON 或其他配置格式。
+                    </div>
+                  </div>
+                )}
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>

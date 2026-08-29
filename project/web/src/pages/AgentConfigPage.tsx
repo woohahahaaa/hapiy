@@ -137,7 +137,7 @@ export function AgentConfigPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="配置阶层" />
-      <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+      <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentConfigFilesTab />
       </div>
     </div>
@@ -230,37 +230,31 @@ function AgentConfigFilesTab() {
     {
       key: 'actions',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 280 },
+      defaultWidth: { kind: 'pixel', value: 240 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <Button
-            variant="link"
-            size="sm"
-            disabled={mutating}
-            className="!h-auto !px-0 !text-xs text-foreground underline-offset-4 hover:underline"
-            onClick={() => setEditing(row)}
-          >
+          <Button variant="outline" size="sm" disabled={mutating} onClick={() => setEditing(row)}>
             编辑配置文件
           </Button>
           <Button
-            variant="link"
-            size="sm"
+            variant="ghost"
+            size="icon"
             disabled={mutating}
-            className="!h-auto !px-0 !text-xs text-foreground underline-offset-4 hover:underline"
+            title="编辑记录"
             onClick={() => setEditingRecord(row)}
           >
-            编辑记录
+            <AppIcon name="edit" />
           </Button>
           <Button
-            variant="link"
-            size="sm"
+            variant="ghost"
+            size="icon"
             disabled={mutating}
-            className="!h-auto !px-0 !text-xs text-destructive underline-offset-4 hover:underline"
+            title="删除"
             onClick={() => setConfirmDelete(row)}
           >
-            删除
+            <AppIcon name="delete" />
           </Button>
         </div>
       ),
@@ -327,6 +321,69 @@ function AgentConfigFilesTab() {
         }}
       />
     </>
+  )
+}
+
+function EditRecordDialog({
+  record,
+  onClose,
+  onSaved,
+}: {
+  record: AgentConfigFile
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [name, setName] = useState(record.record_name)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSave = async () => {
+    if (saving) return
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setError('请填写记录名称')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await dashboardApi.updateAgentConfigFile(record.id, trimmed)
+      toast('已更新')
+      onClose()
+      onSaved()
+    } catch (err) {
+      setError(toErrorMessage(err, '更新失败'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
+      <DialogContent width="sm">
+        <DialogHeader>
+          <DialogTitle>编辑记录</DialogTitle>
+          <DialogDescription>调整这条接管记录的名称。</DialogDescription>
+        </DialogHeader>
+        <FieldGroup>
+          <Field>
+            <FieldLabel>记录名称</FieldLabel>
+            <Input value={name} onChange={(event) => setName(event.target.value)} />
+          </Field>
+          {error && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">{error}</div>
+            </div>
+          )}
+        </FieldGroup>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
+          <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
+            {saving ? '保存中...' : '保存'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
