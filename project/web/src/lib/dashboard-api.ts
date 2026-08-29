@@ -2714,12 +2714,12 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'POST',
       body: JSON.stringify(input),
     })
-    if (!isRecord(data) || !isRecord(data.data)) {
+    if (!isRecord(data)) {
       throw new DashboardApiError('服务端返回的套用结果格式无效', null)
     }
     return {
-      applied: readNumber(data.data.applied, 'applied', 0),
-      content: typeof data.data.content === 'string' ? data.data.content : '',
+      applied: readNumber(data.applied, 'applied', 0),
+      content: typeof data.content === 'string' ? data.content : '',
     }
   },
   async syncAgentConfigFileModelFields(
@@ -2734,12 +2734,12 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'POST',
       body: JSON.stringify(input),
     })
-    if (!isRecord(data) || !isRecord(data.data)) {
+    if (!isRecord(data)) {
       throw new DashboardApiError('服务端返回的同步结果格式无效', null)
     }
     return {
-      applied: readNumber(data.data.applied, 'applied', 0),
-      content: typeof data.data.content === 'string' ? data.data.content : '',
+      applied: readNumber(data.applied, 'applied', 0),
+      content: typeof data.content === 'string' ? data.content : '',
     }
   },
 }
