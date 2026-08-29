@@ -2553,10 +2553,10 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ content }),
     })
   },
-  async updateAgentConfigFile(id: string, recordName: string): Promise<AgentConfigFile> {
+  async updateAgentConfigFile(id: string, input: AgentConfigFileInput): Promise<AgentConfigFile> {
     return parseAgentConfigFile(await request(`/agent-config-files/${encodeURIComponent(id)}`, {
       method: 'PUT',
-      body: JSON.stringify({ record_name: recordName }),
+      body: JSON.stringify(input),
     }))
   },
   async deleteAgentConfigFile(id: string): Promise<void> {

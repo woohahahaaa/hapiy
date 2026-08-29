@@ -238,10 +238,6 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 				return
 			}
-			if err := sshCfg.EncryptSensitive(key); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH 凭据加密失败: " + err.Error()})
-				return
-			}
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "模式必须是 local 或 ssh"})
 			return
@@ -353,11 +349,9 @@ func DeleteAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-type updateAgentConfigFileRequest struct {
-	RecordName string `json:"record_name"`
-}
+type updateAgentConfigFileRequest createAgentConfigFileRequest
 
-func UpdateAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
+func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
@@ -369,15 +363,17 @@ func UpdateAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		name := strings.TrimSpace(req.RecordName)
-		if name == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称不能为空"})
+		req.RecordName = strings.TrimSpace(req.RecordName)
+		req.AgentType = strings.TrimSpace(req.AgentType)
+		req.TargetOS = strings.TrimSpace(req.TargetOS)
+		if req.RecordName == "" || req.AgentType == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
 			return
 		}
-		if name != row.RecordName {
+		if req.RecordName != row.RecordName {
 			var dupCount int64
 			if err := db.Model(&model.AgentConfigFile{}).
-				Where("record_name = ? AND id <> ?", name, row.ID).
+				Where("record_name = ? AND id <> ?", req.RecordName, row.ID).
 				Count(&dupCount).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -386,11 +382,104 @@ func UpdateAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在，请使用其他名称"})
 				return
 			}
-			row.RecordName = name
 		}
+
+		var sshCfg service.SshConfig
+		switch req.Mode {
+		case "local":
+			if req.TargetOS != "windows" && req.TargetOS != "mac" && req.TargetOS != "other" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "本机系统必须是 windows、mac 或 other"})
+				return
+			}
+		case "ssh":
+			if len(req.SshConfig) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置不能为空"})
+				return
+			}
+			if err := parseSshConfig(req.SshConfig, &sshCfg); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+				return
+			}
+			if row.Mode == "ssh" && row.SshConfig != "" {
+				var existing service.SshConfig
+				if err := existing.Unmarshal(row.SshConfig); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "现有 SSH 配置解析失败: " + err.Error()})
+					return
+				}
+				if err := existing.DecryptSensitive(key); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "现有 SSH 凭据解密失败: " + err.Error()})
+					return
+				}
+				if sshCfg.Password == "" {
+					sshCfg.Password = existing.Password
+				}
+				if sshCfg.PrivateKey == "" {
+					sshCfg.PrivateKey = existing.PrivateKey
+				}
+				if sshCfg.JumpPassword == "" {
+					sshCfg.JumpPassword = existing.JumpPassword
+				}
+				if sshCfg.JumpPrivateKey == "" {
+					sshCfg.JumpPrivateKey = existing.JumpPrivateKey
+				}
+			}
+			if msg := validateSshConfig(sshCfg); msg != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+				return
+			}
+			if err := sshCfg.EncryptSensitive(key); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH 凭据加密失败: " + err.Error()})
+				return
+			}
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "模式必须是 local 或 ssh"})
+			return
+		}
+
+		var content string
+		var err error
+		if req.Mode == "local" {
+			content, err = service.ReadLocalFile(service.ExpandPath(req.Path))
+		} else {
+			content, err = service.ReadRemoteFile(sshCfg, req.Path)
+		}
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+
+		var sshBlob string
+		if req.Mode == "ssh" {
+			if err := sshCfg.EncryptSensitive(key); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH 凭据加密失败: " + err.Error()})
+				return
+			}
+			sshBlob, err = sshCfg.Marshal()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		row.RecordName = req.RecordName
+		row.AgentType = req.AgentType
+		row.Mode = req.Mode
+		row.TargetOS = req.TargetOS
+		row.Path = req.Path
+		row.SshConfig = sshBlob
+		row.Content = content
 		if err := db.Save(&row).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		if row.Mode == "ssh" {
+			var sanitized service.SshConfig
+			if err := sanitized.Unmarshal(row.SshConfig); err != nil {
+				row.SshConfig = ""
+			} else if blob, err := sanitized.Sanitized().Marshal(); err != nil {
+				row.SshConfig = ""
+			} else {
+				row.SshConfig = blob
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{"data": row})
 	}

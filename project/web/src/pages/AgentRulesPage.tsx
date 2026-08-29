@@ -43,7 +43,7 @@ export function AgentRulesPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="接管Agent" />
-      <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
+      <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentTypeRulesTab />
       </div>
     </div>
@@ -157,10 +157,15 @@ function AgentTypeRulesTab() {
         emptyText="暂无规则，点击「添加规则」创建第一条"
         onRetry={() => void fetch()}
         actions={
-          <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
-            <AppIcon name="add" data-icon="inline-start" />
-            添加规则
-          </Button>
+          <div className="flex flex-col items-start gap-1">
+            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+              <AppIcon name="add" data-icon="inline-start" />
+              添加接管规则
+            </Button>
+            <p className="max-w-md text-xs whitespace-normal text-muted-foreground">
+              会在里面配置某个Agent在不同系统上的默认配置文件位置、配置文件修改以及配置文件解析方法等，一般为系统默认，用户无需自己手动添加。
+            </p>
+          </div>
         }
       />
 

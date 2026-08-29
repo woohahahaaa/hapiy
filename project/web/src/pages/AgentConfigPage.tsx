@@ -284,7 +284,7 @@ function AgentConfigFilesTab() {
         }
       />
 
-      <TakeoverDialog
+      <AgentConfigFormDialog
         open={takeoverOpen}
         onOpenChange={setTakeoverOpen}
         onCreated={() => void fetch()}
@@ -301,9 +301,12 @@ function AgentConfigFilesTab() {
       )}
 
       {editingRecord && (
-        <EditRecordDialog
+        <AgentConfigFormDialog
           record={editingRecord}
-          onClose={() => setEditingRecord(null)}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditingRecord(null)
+          }}
           onSaved={() => void fetch()}
         />
       )}
@@ -324,79 +327,20 @@ function AgentConfigFilesTab() {
   )
 }
 
-function EditRecordDialog({
-  record,
-  onClose,
-  onSaved,
-}: {
-  record: AgentConfigFile
-  onClose: () => void
-  onSaved: () => void
-}) {
-  const [name, setName] = useState(record.record_name)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const handleSave = async () => {
-    if (saving) return
-    const trimmed = name.trim()
-    if (!trimmed) {
-      setError('请填写记录名称')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      await dashboardApi.updateAgentConfigFile(record.id, trimmed)
-      toast('已更新')
-      onClose()
-      onSaved()
-    } catch (err) {
-      setError(toErrorMessage(err, '更新失败'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <DialogContent width="sm">
-        <DialogHeader>
-          <DialogTitle>编辑记录</DialogTitle>
-          <DialogDescription>调整这条接管记录的名称。</DialogDescription>
-        </DialogHeader>
-        <FieldGroup>
-          <Field>
-            <FieldLabel>记录名称</FieldLabel>
-            <Input value={name} onChange={(event) => setName(event.target.value)} />
-          </Field>
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">{error}</div>
-            </div>
-          )}
-        </FieldGroup>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
-          <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
-            {saving ? '保存中...' : '保存'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ── 接管新的配置文件 ──
 
-function TakeoverDialog({
+function AgentConfigFormDialog({
   open,
   onOpenChange,
   onCreated,
+  onSaved,
+  record,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreated: () => void
+  onCreated?: () => void
+  onSaved?: () => void
+  record?: AgentConfigFile
 }) {
   const [recordName, setRecordName] = useState('')
   const [mode, setMode] = useState<'local' | 'ssh'>('local')
@@ -428,23 +372,24 @@ function TakeoverDialog({
 
   useEffect(() => {
     if (!open) return
-    setRecordName('')
-    setMode('local')
-    setAgentType('')
-    setTargetOs('other')
+    const ssh = record?.ssh_config
+    setRecordName(record?.record_name ?? '')
+    setMode(record?.mode ?? 'local')
+    setAgentType(record?.agent_type ?? '')
+    setTargetOs(record?.target_os ?? 'other')
     setPresetSyncSuggested(false)
-    setPath('')
-    setHost('')
-    setPort('22')
-    setUsername('')
-    setAuthType('password')
+    setPath(record?.path ?? '')
+    setHost(ssh?.host ?? '')
+    setPort(String(ssh?.port ?? 22))
+    setUsername(ssh?.username ?? '')
+    setAuthType(ssh?.auth_type ?? 'password')
     setPassword('')
     setPrivateKey('')
-    setJumpEnabled(false)
-    setJumpHost('')
-    setJumpPort('22')
-    setJumpUsername('')
-    setJumpAuthType('password')
+    setJumpEnabled(ssh?.jump_enabled ?? false)
+    setJumpHost(ssh?.jump_host ?? '')
+    setJumpPort(String(ssh?.jump_port ?? 22))
+    setJumpUsername(ssh?.jump_username ?? '')
+    setJumpAuthType(ssh?.jump_auth_type ?? 'password')
     setJumpPassword('')
     setJumpPrivateKey('')
     setError(null)
@@ -469,7 +414,7 @@ function TakeoverDialog({
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, record])
 
   const ruleForType = useMemo(
     () => rules.find((rule) => rule.name === agentType) ?? null,
@@ -575,11 +520,11 @@ function TakeoverDialog({
         setError('请填写用户名')
         return
       }
-      if (authType === 'password' && password === '') {
+      if (!record && authType === 'password' && password === '') {
         setError('请填写密码')
         return
       }
-      if (authType === 'key' && privateKey.trim() === '') {
+      if (!record && authType === 'key' && privateKey.trim() === '') {
         setError('请填写私钥内容')
         return
       }
@@ -597,11 +542,11 @@ function TakeoverDialog({
           setError('请填写跳板机用户名')
           return
         }
-        if (jumpAuthType === 'password' && jumpPassword === '') {
+        if (!record && jumpAuthType === 'password' && jumpPassword === '') {
           setError('请填写跳板机密码')
           return
         }
-        if (jumpAuthType === 'key' && jumpPrivateKey.trim() === '') {
+        if (!record && jumpAuthType === 'key' && jumpPrivateKey.trim() === '') {
           setError('请填写跳板机私钥内容')
           return
         }
@@ -611,33 +556,39 @@ function TakeoverDialog({
         port: portNum,
         username: username.trim(),
         auth_type: authType,
-        password: authType === 'password' ? password : undefined,
-        private_key: authType === 'key' ? privateKey.trim() : undefined,
+        password: authType === 'password' && password !== '' ? password : undefined,
+        private_key: authType === 'key' && privateKey.trim() !== '' ? privateKey.trim() : undefined,
         jump_enabled: jumpEnabled,
         jump_host: jumpEnabled ? jumpHost.trim() : undefined,
         jump_port: jumpEnabled ? Number(jumpPort) : undefined,
         jump_username: jumpEnabled ? jumpUsername.trim() : undefined,
         jump_auth_type: jumpEnabled ? jumpAuthType : undefined,
-        jump_password: jumpEnabled && jumpAuthType === 'password' ? jumpPassword : undefined,
-        jump_private_key: jumpEnabled && jumpAuthType === 'key' ? jumpPrivateKey.trim() : undefined,
+        jump_password: jumpEnabled && jumpAuthType === 'password' && jumpPassword !== '' ? jumpPassword : undefined,
+        jump_private_key: jumpEnabled && jumpAuthType === 'key' && jumpPrivateKey.trim() !== '' ? jumpPrivateKey.trim() : undefined,
       }
     }
     setSaving(true)
     setError(null)
     try {
-      await dashboardApi.createAgentConfigFile({
+      const input = {
         record_name: trimmedName,
         agent_type: agentType,
         mode,
         target_os: mode === 'local' ? targetOs : null,
         path: trimmedPath,
         ssh_config: sshConfig,
-      })
-      toast('已接管配置')
+      }
+      if (record) {
+        await dashboardApi.updateAgentConfigFile(record.id, input)
+      } else {
+        await dashboardApi.createAgentConfigFile(input)
+      }
+      toast(record ? '已更新接管记录' : '已接管配置')
       onOpenChange(false)
-      onCreated()
+      if (record) onSaved?.()
+      else onCreated?.()
     } catch (err) {
-      setError(toErrorMessage(err, '接管失败'))
+      setError(toErrorMessage(err, record ? '更新失败' : '接管失败'))
     } finally {
       setSaving(false)
     }
@@ -647,7 +598,7 @@ function TakeoverDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="md">
         <DialogHeader>
-          <DialogTitle>接管新的配置文件</DialogTitle>
+          <DialogTitle>{record ? '编辑接管记录' : '接管新的配置文件'}</DialogTitle>
         </DialogHeader>
         <FieldGroup>
           <Field>
@@ -782,12 +733,12 @@ function TakeoverDialog({
               {authType === 'password' ? (
                 <Field>
                   <FieldLabel>密码</FieldLabel>
-                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="SSH 密码" />
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={record ? '如需修改请填入新的值，否则就不动' : 'SSH 密码'} />
                 </Field>
               ) : (
                 <Field>
                   <FieldLabel>私钥内容</FieldLabel>
-                  <Textarea value={privateKey} onChange={(e) => setPrivateKey(e.target.value)} rows={6} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+                  <Textarea value={privateKey} onChange={(e) => setPrivateKey(e.target.value)} rows={6} placeholder={record ? '如需修改请填入新的值，否则就不动' : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
                 </Field>
               )}
 
@@ -829,12 +780,12 @@ function TakeoverDialog({
                   {jumpAuthType === 'password' ? (
                     <Field>
                       <FieldLabel>跳板机密码</FieldLabel>
-                      <Input type="password" value={jumpPassword} onChange={(e) => setJumpPassword(e.target.value)} placeholder="跳板机 SSH 密码" />
+                      <Input type="password" value={jumpPassword} onChange={(e) => setJumpPassword(e.target.value)} placeholder={record ? '如需修改请填入新的值，否则就不动' : '跳板机 SSH 密码'} />
                     </Field>
                   ) : (
                     <Field>
                       <FieldLabel>跳板机私钥内容</FieldLabel>
-                      <Textarea value={jumpPrivateKey} onChange={(e) => setJumpPrivateKey(e.target.value)} rows={6} placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" />
+                      <Textarea value={jumpPrivateKey} onChange={(e) => setJumpPrivateKey(e.target.value)} rows={6} placeholder={record ? '如需修改请填入新的值，否则就不动' : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
                     </Field>
                   )}
                 </>
@@ -857,7 +808,7 @@ function TakeoverDialog({
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
           <Button onClick={() => void handleSave()} disabled={saving}>
-            {saving ? '保存中...' : '保存'}
+            {saving ? '保存中...' : record ? '保存修改' : '保存'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -870,17 +821,23 @@ function TakeoverDialog({
           subtitle={path.trim()}
           load={() => dashboardApi.readAgentConfigPath(path.trim())}
           onSave={async () => {
-            await dashboardApi.createAgentConfigFile({
+            const input = {
               record_name: recordName.trim(),
               agent_type: agentType,
               mode: 'local' as const,
               target_os: targetOs,
               path: path.trim(),
               ssh_config: null,
-            })
-            toast('已接管配置')
+            }
+            if (record) {
+              await dashboardApi.updateAgentConfigFile(record.id, input)
+            } else {
+              await dashboardApi.createAgentConfigFile(input)
+            }
+            toast(record ? '已更新接管记录' : '已接管配置')
             onOpenChange(false)
-            onCreated()
+            if (record) onSaved?.()
+            else onCreated?.()
           }}
         />
       )}
