@@ -109,7 +109,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
     <div
       ref={rootRef}
       className={cn(
-        'relative rounded-lg border bg-card text-card-foreground',
+        'relative rounded-lg border-2 bg-card text-card-foreground',
         data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
         !enabled && 'opacity-60',
       )}

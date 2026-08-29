@@ -37,7 +37,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
   return (
     <div
       className={cn(
-        'relative rounded-lg border border-border bg-card text-card-foreground',
+        'relative rounded-lg border-2 border-border bg-card text-card-foreground',
         allDisabled && 'opacity-60',
       )}
       style={{
