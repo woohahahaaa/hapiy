@@ -368,7 +368,22 @@ function JsonDiffHighlight({
   if (value === null || value === undefined) {
     return <Placeholder>为空</Placeholder>
   }
-  const lines = buildUnifiedDiff(value, markers)
+  // Convert DiffMarker → AgentRecommendation so buildUnifiedDiff can use
+  // the unified rec-key schema (with `.`-joined descendant paths). Only
+  // the missing/mismatch markers actually carry a `recommended` value
+  // worth surfacing; ok / no-recommendation markers contribute nothing
+  // to the diff but their presence is harmless.
+  const recs: AgentRecommendation[] = markers
+    .filter((m) => m.status === 'missing' || m.status === 'mismatch')
+    .map((m) => ({
+      scope: 'provider',
+      key: m.path,
+      description: '',
+      type: 'string',
+      recommended: m.recommended,
+      required: false,
+    }))
+  const lines = buildUnifiedDiff(value, recs)
   return (
     <div className="font-mono text-xs leading-relaxed">
       {lines.map((line, i) => (
