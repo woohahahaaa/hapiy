@@ -297,7 +297,9 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     setFetchError(null)
     setIsFetching(true)
     try {
-      setFetchedModels(await dashboardApi.fetchModelsFromEndpoint(fullUrl, useKey ? form.keys[0] : undefined))
+      const models = await dashboardApi.fetchModelsFromEndpoint(fullUrl, useKey ? form.keys[0] : undefined)
+      const sorted = [...models].sort((a, b) => a.id.localeCompare(b.id))
+      setFetchedModels(sorted)
     } catch (error) {
       setFetchError(toErrorMessage(error))
     } finally {
@@ -577,6 +579,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 <AppIcon name="settings" />
               </Button>
             </div>
+          </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>
           )}
@@ -778,9 +781,6 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
   )
   const [saving, setSaving] = useState(false)
 
-  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id))
-  const someSelected = models.some((model) => selected.has(model.id))
-
   const toggle = (id: string, checked: boolean) => {
     setSelected((current) => {
       const next = new Set(current)
@@ -788,6 +788,10 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
       else next.delete(id)
       return next
     })
+  }
+
+  const handleSelectAll = () => {
+    setSelected(new Set(models.map((model) => model.id)))
   }
 
   const handleConfirm = () => {
@@ -805,19 +809,6 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
       <DialogContent width="xs">
         <DialogHeader><DialogTitle>从上游获取模型</DialogTitle></DialogHeader>
         <div className="flex max-h-64 flex-col overflow-y-auto">
-          <label className="flex cursor-pointer items-center gap-2 border-b border-border py-1.5">
-            <Checkbox
-              checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-              onCheckedChange={(checked) => {
-                if (checked === true) {
-                  setSelected(new Set(models.map((model) => model.id)))
-                } else {
-                  setSelected(new Set())
-                }
-              }}
-            />
-            <span className="text-sm font-medium text-foreground">全选</span>
-          </label>
           {models.map((model) => (
             <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
               <Checkbox checked={selected.has(model.id)} onCheckedChange={(checked) => toggle(model.id, checked === true)} />
@@ -825,10 +816,12 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
             </label>
           ))}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>取消</Button>
-          <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
-          <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>
+        <DialogFooter className="sm:justify-between">
+          <Button variant="outline" disabled={saving} onClick={handleSelectAll}>全选</Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
+            <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
