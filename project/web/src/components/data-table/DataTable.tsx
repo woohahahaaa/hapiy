@@ -562,18 +562,18 @@ export function DataTable<T extends Record<string, unknown>>({
     <div className="flex flex-col">
       {/* Toolbar (filters + actions + magic wand + settings) */}
       {(filters || actions) && (
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="mb-4 flex flex-wrap items-start gap-3">
           {filters && (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               {filters}
             </div>
           )}
           {actions && (
-            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+            <div className="flex shrink-0 items-start gap-2 whitespace-nowrap">
               {actions}
             </div>
           )}
-          <div className="ml-auto flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex shrink-0 self-start items-center gap-2">
             {renderToolbarControls()}
           </div>
         </div>
@@ -607,6 +607,8 @@ export function DataTable<T extends Record<string, unknown>>({
                     data-slot="table-head"
                     className={cn(
                       "h-10 px-2 align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+                      i === 0 && 'pl-6',
+                      i === columns.length - 1 && 'pr-6',
                       cfg.align === 'right' ? 'text-right' : 'text-left',
                     )}
                     style={widthPx !== undefined ? { width: `${widthPx}px` } : undefined}
@@ -725,6 +727,8 @@ export function DataTable<T extends Record<string, unknown>>({
                           data-overflow={isEllipsis ? 'ellipsis' : 'wrap'}
                           className={cn(
                             "p-2 align-middle",
+                            idx === 0 && 'pl-6',
+                            idx === columns.length - 1 && 'pr-6',
                             overflowClass,
                             cfg.align === 'right' ? 'text-right' : 'text-left',
                           )}

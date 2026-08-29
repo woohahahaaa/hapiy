@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { AppIcon } from '@/components/AppIcon'
-import { JsonHighlight } from '@/components/JsonHighlight'
+import { DialogCodeEditor } from '@/components/dialog/code-editor'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -34,7 +34,7 @@ import {
   type AgentSshConfig,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
-import { AgentConfigEditorDialog } from '@/components/AgentConfigEditorDialog'
+import { AgentConfigEditorDialog } from '@/components/dialog/agent-config-editor'
 
 // ── Agent 接管 ──
 
@@ -814,31 +814,13 @@ function AgentConfigFormDialog({
       </DialogContent>
 
       {previewOpen && (
-        <ConfigFilePreviewDialog
+        <DialogCodeEditor
+          mode="preview"
           open={previewOpen}
           onOpenChange={setPreviewOpen}
           title={recordName.trim()}
           subtitle={path.trim()}
-          load={() => dashboardApi.readAgentConfigPath(path.trim())}
-          onSave={async () => {
-            const input = {
-              record_name: recordName.trim(),
-              agent_type: agentType,
-              mode: 'local' as const,
-              target_os: targetOs,
-              path: path.trim(),
-              ssh_config: null,
-            }
-            if (record) {
-              await dashboardApi.updateAgentConfigFile(record.id, input)
-            } else {
-              await dashboardApi.createAgentConfigFile(input)
-            }
-            toast(record ? '已更新接管记录' : '已接管配置')
-            onOpenChange(false)
-            if (record) onSaved?.()
-            else onCreated?.()
-          }}
+          loadContent={() => dashboardApi.readAgentConfigPath(path.trim())}
         />
       )}
     </Dialog>
@@ -846,133 +828,8 @@ function AgentConfigFormDialog({
 }
 
 // ── 文件预览（只读，始终读取磁盘最新版本）──
-
-function ConfigFilePreviewDialog({
-  open,
-  onOpenChange,
-  title,
-  subtitle,
-  load,
-  onSave,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  subtitle: string
-  load: () => Promise<string>
-  onSave?: () => Promise<void>
-}) {
-  const [content, setContent] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  // Always re-read the live file when the preview opens so the user sees
-  // the current disk version, not any stale/edited copy.
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    setContent(null)
-    setLoading(true)
-    setFetchError(null)
-    setSaveError(null)
-    load()
-      .then((text) => {
-        if (!cancelled) setContent(text)
-      })
-      .catch((err) => {
-        if (!cancelled) setFetchError(toErrorMessage(err, '读取失败'))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-    // load is captured per open; it is recreated by callers with fresh closures.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
-
-  const handleSave = async () => {
-    if (saving || !onSave) return
-    setSaving(true)
-    setSaveError(null)
-    try {
-      await onSave()
-    } catch (err) {
-      setSaveError(toErrorMessage(err, '保存失败'))
-      setSaving(false)
-      return
-    }
-    setSaving(false)
-  }
-
-  const busy = loading || saving
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen && !saving) onOpenChange(false)
-      }}
-    >
-      <DialogContent
-        width="full"
-        height="full"
-        bare className="flex flex-col overflow-hidden"
-      >
-        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
-          <DialogTitle className="text-base">预览 — {title}</DialogTitle>
-          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
-            {subtitle}
-          </span>
-        </DialogHeader>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
-          {fetchError && (
-            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
-                {fetchError}
-              </div>
-            </div>
-          )}
-          {saveError && (
-            <div className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">
-                {saveError}
-              </div>
-            </div>
-          )}
-          {loading ? (
-            <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-              正在加载文件内容…
-            </div>
-          ) : (
-            content !== null && (
-              <JsonHighlight
-                value={content}
-                className="min-h-0 flex-1"
-              />
-            )
-          )}
-        </div>
-
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            关闭
-          </Button>
-          {onSave && (
-            <Button onClick={() => void handleSave()} disabled={busy}>
-              {saving ? '保存中...' : '保存'}
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
+// 已迁移到 components/dialog/code-editor.tsx 的 DialogCodeEditor（mode="preview"）。
+// 旧 ConfigFilePreviewDialog 已删除，表单内预览和外部编辑都使用统一组件。
 
 // ── 删除确认 ──
 
