@@ -228,7 +228,7 @@ export function AgentModelsDialog({
                   title="从我们维护的模型信息（models.dev）同步到当前模型"
                 >
                   <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                  从模型信息同步模型基本配置
+                  同步模型信息
                 </Button>
               }
             >

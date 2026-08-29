@@ -771,6 +771,10 @@ function AgentConfigFormDialog({
   // the path field in both local and SSH modes so the operator can sync a
   // preset as soon as they pick the target OS. The sync button is hidden
   // for the "other" OS since the presets only cover windows / mac.
+  //
+  // In SSH mode the target OS also drives which probe commands the backend
+  // runs ("cat" / mktemp for POSIX, "type" / %TEMP% for Windows), so the
+  // hint highlights the choice so the operator doesn't leave it on "other".
   const targetOsField = (
     <Field>
       <FieldLabel>系统</FieldLabel>
@@ -801,6 +805,9 @@ function AgentConfigFormDialog({
           </>
         )}
       </div>
+      {mode === 'ssh' && targetOs === 'other' && (
+        <p className="text-xs text-warning">请选择目标机器的真实系统：选 Windows 走 cmd 命令，选 Mac/其他 走 POSIX 命令，否则测试会失败</p>
+      )}
       {(targetOs === 'windows' || targetOs === 'mac') && (
         <p className="text-xs text-muted-foreground">
           点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
@@ -988,7 +995,8 @@ function AgentConfigFormDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={sshTesting}
+                    disabled={sshTesting || targetOs === 'other'}
+                    title={targetOs === 'other' ? '请先在上方选择目标系统' : undefined}
                     onClick={() => void runSshTest()}
                   >
                     {sshTesting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '测试 SSH 读写能力'}
