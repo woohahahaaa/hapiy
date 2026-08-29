@@ -410,6 +410,17 @@ export function TopologyPage() {
     return { '--node-accent': 'var(--warning)' } as CSSProperties
   }
 
+  // 每个 slot 连进来的线数（驱动左侧 handlebar 长度）
+  const slotConnectionCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!tp) return counts
+    for (const w of tp.wires) {
+      const targetIsSlot = tp.nodes.some((n) => n.id === w.target && n.kind === 'slot')
+      if (targetIsSlot) counts.set(w.target, (counts.get(w.target) ?? 0) + 1)
+    }
+    return counts
+  }, [tp])
+
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()
     for (const p of providers ?? []) map.set(p.name, p)
@@ -839,6 +850,7 @@ export function TopologyPage() {
             title: '供应商',
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
+            connectionCount: slotConnectionCount.get(node.id) ?? 1,
             externallyDisabled: externallyDisabledSet.has(node.id),
             children,
             providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
@@ -867,6 +879,7 @@ export function TopologyPage() {
             slotType: node.slotType ?? '',
             enabled: node.enabled,
             isProviderSlot: false,
+            connectionCount: slotConnectionCount.get(node.id) ?? 1,
             externallyDisabled: externallyDisabledSet.has(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,

@@ -1,6 +1,7 @@
-import { Handle, Position } from '@xyflow/react'
-import { useState } from 'react'
+import { Handle, Position, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
+import { useEffect, useRef, useState } from 'react'
 import { SlotErrorBox } from '@/components/node/slot/slot-error-box'
+import { HandlesRail } from '@/components/node/handles-rail'
 import { topologyConfig } from '@/config/topology-config'
 import type {
   RequestModifySlotEntry,
@@ -32,6 +33,8 @@ export interface NodeSlotData {
   title: string
   slotType: string
   isProviderSlot?: boolean
+  /** 连进本节点的线数（驱动左侧 handlebar 长度）；缺省 1 */
+  connectionCount?: number
   externallyDisabled?: boolean
   enabled?: boolean
   children?: readonly FlatProviderChild[]
@@ -83,6 +86,7 @@ export function NodeSlot({ data }: NodeSlotProps) {
     title,
     slotType,
     isProviderSlot,
+    connectionCount,
     externallyDisabled = false,
     children = [],
     providers = [],
@@ -116,6 +120,37 @@ export function NodeSlot({ data }: NodeSlotProps) {
   // 供应商重命名不会破坏去重。
   const takenLabels = new Set(children.map((c) => c.providerId || c.label).filter(Boolean))
   const strategy = strategyProp ?? 'sequential'
+
+  // 节点高度测量：左侧 handlebar 需要跟随节点高度（与入口节点一致）。
+  const nodeId = useNodeId() ?? ''
+  const measureRef = useRef<HTMLDivElement>(null)
+  const updateNodeInternals = useUpdateNodeInternals()
+  const lastHeightRef = useRef(0)
+  const [nodeHeight, setNodeHeight] = useState(0)
+
+  useEffect(() => {
+    const el = measureRef.current
+    if (!el) return
+
+    let rafId: number | null = null
+    const applySize = () => {
+      rafId = null
+      const height = el.offsetHeight
+      if (Math.abs(height - lastHeightRef.current) <= 1) return
+      lastHeightRef.current = height
+      setNodeHeight(height)
+      updateNodeInternals(nodeId)
+    }
+    const ro = new ResizeObserver(() => {
+      if (rafId === null) rafId = requestAnimationFrame(applySize)
+    })
+    ro.observe(el)
+    applySize()
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
+      ro.disconnect()
+    }
+  }, [nodeId, updateNodeInternals])
 
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -283,35 +318,14 @@ export function NodeSlot({ data }: NodeSlotProps) {
     />
   ) : null
 
-  const targetHandle = topologyConfig.handles.provider.target
-  const segH = targetHandle.height
-  const total = segH
-  const start = -(total / 2)
-
   return (
     <>
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{
-          top: `calc(50% + ${start}px)`,
-          width: targetHandle.width,
-          height: segH,
-          transform: 'translate(-50%, 0)',
-          background: 'transparent',
-          border: 'none',
-          opacity: 0,
-        }}
+      <HandlesRail
+        height={nodeHeight}
+        segmentCount={connectionCount ?? 1}
+        flashLayers={flashLayers}
       />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-border bg-background"
-        style={{
-          width: targetHandle.width,
-          height: total,
-        }}
-      />
-      {body}
+      <div ref={measureRef} className="w-fit">{body}</div>
       {!isProviderSlot && <SlotErrorBox error={null} />}
       <Handle
         type="source"

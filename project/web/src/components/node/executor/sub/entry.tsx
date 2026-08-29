@@ -5,6 +5,7 @@ import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
+import { HandlesRail } from '@/components/node/handles-rail'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { createDebouncedCommit, type DebouncedCommit } from './debounce'
 import { WEIGHT_DEBOUNCE_MS, clampWeight } from './weight'
@@ -73,18 +74,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
     }
   }, [id, updateNodeInternals])
 
-  const targetHandle = topologyConfig.handles.provider.target
   const sourceHandle = topologyConfig.handles.slot.source
-  const baseSegH = targetHandle.height
-  const baseGap = topologyConfig.handles.provider.segmentGap
-  const baseTotal = models.length * baseSegH + Math.max(0, models.length - 1) * baseGap
-  // 上下留 padding（原 8px 的 3 倍），shrink 到节点高度内
-  const maxTotal = nodeHeight > 0 ? nodeHeight - 24 : 0
-  const scale = maxTotal > 0 && baseTotal > maxTotal ? maxTotal / baseTotal : 1
-  const segH = baseSegH * scale
-  const gap = baseGap * scale
-  const total = baseTotal * scale
-  const start = -(total / 2)
 
   const onChangeWeightRef = useRef(onChangeWeight)
   useEffect(() => {
@@ -126,33 +116,14 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
       style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
     >{flashLayers.map((layer) => (
         <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
-      ))}      {models.map((m, i) => (
-        <Handle
-          key={m.id}
-          type="target"
-          position={Position.Left}
-          id={m.id}
-          style={{
-            top: `calc(50% + ${start + i * (segH + gap)}px)`,
-            width: targetHandle.width,
-            height: segH,
-            transform: 'translate(-50%, 0)',
-            background: 'transparent',
-            border: 'none',
-            opacity: 0,
-          }}
-        />
       ))}
-      {models.length > 0 && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-solid border-border bg-background"
-          style={{
-            width: targetHandle.width,
-            height: total,
-          }}
-        />
-      )}
+      <HandlesRail
+        height={nodeHeight}
+        segmentCount={models.length}
+        segmentIds={models.map((m) => m.id)}
+        borderColor={data.accentColor}
+        flashLayers={flashLayers}
+      />
       <Handle
         type="source"
         position={Position.Right}
