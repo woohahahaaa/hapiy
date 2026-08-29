@@ -258,23 +258,18 @@ export function AgentConfigEditorDialog({
             <DialogContent width="sm">
               <DialogHeader>
                 <DialogTitle>{warning ? 'JSON 格式可能有误' : '确认保存'}</DialogTitle>
-                <DialogDescription>
+                <DialogDescription className={warning ? 'text-destructive' : undefined}>
                   {warning
                     ? `检测到 JSON 格式问题，是否仍要保存对「${record.path}」的修改？`
                     : `是否确认保存对「${record.path}」的修改？`}
                 </DialogDescription>
                 {warning && (
-                  <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 font-mono text-xs text-warning-foreground">
-                    {warning}
-                    <div className="mt-1 font-sans text-warning-foreground/80">
-                      这只是提示，不会阻止保存。某些软件可能使用非标准 JSON 或其他配置格式。
-                    </div>
-                  </div>
+                  <p className="text-destructive">{warning}</p>
                 )}
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>
-                <Button onClick={() => void doSave()} disabled={saving}>
+                <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>
                   {saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}
                 </Button>
               </DialogFooter>
