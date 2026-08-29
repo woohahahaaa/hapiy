@@ -186,7 +186,7 @@ export function AgentModelsDialog({
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,1fr)_minmax(360px,1.4fr)] divide-x divide-border">
           {/* Left: providers */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader>Provider</ColumnHeader>
+            <ColumnHeader>供应商</ColumnHeader>
             <div className="flex-1 overflow-y-auto p-2">
               {loading && <Placeholder>加载中…</Placeholder>}
               {error && <Placeholder tone="error">{error}</Placeholder>}
@@ -217,7 +217,7 @@ export function AgentModelsDialog({
           {/* Middle: provider other_fields + models */}
           <div className="flex min-h-0 flex-col">
             <ColumnHeader>
-              {selectedProvider ? `其他字段 · ${selectedProvider.provider_id}` : '其他字段'}
+              {selectedProvider ? `供应商配置 · ${selectedProvider.provider_id}` : '供应商配置'}
             </ColumnHeader>
             <div className="max-h-[40%] overflow-auto border-b border-border p-2">
               {selectedProvider ? (

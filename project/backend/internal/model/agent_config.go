@@ -55,7 +55,6 @@ type AgentTypeRule struct {
 	Name            string    `gorm:"uniqueIndex;not null" json:"name"`
 	OsPaths         string    `gorm:"type:text" json:"-"` // JSON blob of AgentOsPaths
 	JsonPaths       string    `gorm:"type:text" json:"-"` // JSON blob of AgentJsonPaths
-	Notes           string    `gorm:"type:text" json:"notes"`
 	Recommendations string    `gorm:"type:text" json:"-"` // JSON blob of []AgentRecommendation
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
@@ -181,15 +180,14 @@ func (f *AgentConfigFile) BeforeCreate(tx *gorm.DB) error {
 }
 
 // builtinAgentRules are the agent types seeded into agent_type_rules when
-// the table is empty. Operators can rename or edit them later; seeding only
-// fills os_paths, json_paths, notes, and recommendations for rows that
+// the table is empty. Operators can rename or edit them later; seeding
+// only fills os_paths, json_paths, and recommendations for rows that
 // lack them, so user edits are never lost.
 var builtinAgentRules = []struct {
-	Name             string
-	OsPaths          AgentOsPaths
-	JsonPaths        AgentJsonPaths
-	Notes            string
-	Recommendations  []AgentRecommendation
+	Name            string
+	OsPaths         AgentOsPaths
+	JsonPaths       AgentJsonPaths
+	Recommendations []AgentRecommendation
 }{
 	{
 		Name: "opencode",
@@ -201,7 +199,6 @@ var builtinAgentRules = []struct {
 			Provider: `provider`,
 			Model:    `provider.{provider_id}.models`,
 		},
-		Notes:           opencodeProviderNotes,
 		Recommendations: opencodeRecommendations,
 	},
 	{
@@ -214,7 +211,6 @@ var builtinAgentRules = []struct {
 		// gjson design only walks provider objects with a sibling models key,
 		// so the seeded paths stay empty until a vendor-grouping pass lands.
 		JsonPaths:       AgentJsonPaths{},
-		Notes:           "",
 		Recommendations: nil,
 	},
 	{
@@ -226,7 +222,6 @@ var builtinAgentRules = []struct {
 		// Codex stores its config in TOML with a [model_providers.*] table
 		// and no per-provider model list, so the seeded paths stay empty.
 		JsonPaths:       AgentJsonPaths{},
-		Notes:           "",
 		Recommendations: nil,
 	},
 	{
@@ -239,61 +234,31 @@ var builtinAgentRules = []struct {
 			Provider: `models.providers`,
 			Model:    `models.providers.{provider_id}.models`,
 		},
-		Notes:           "",
 		Recommendations: openclawRecommendations,
 	},
 }
-
-// opencodeProviderNotes is the default documentation for the provider
-// object in opencode.json/opencode.jsonc. It is pasted verbatim into the
-// rule's notes field so users have a reference for the schema. Format is
-// deliberately free-form until we settle on a richer structure.
-const opencodeProviderNotes = `provider.<id> 对象支持的字段（参考 opencode 官方文档）：
-
-- npm  string  AI SDK 适配器包名，决定下面 options / models 可用的字段
-    常用取值：
-      @ai-sdk/openai-compatible  任意兼容 OpenAI Chat Completions 的接口
-      @ai-sdk/openai             OpenAI 官方
-      @ai-sdk/anthropic          Anthropic Claude
-      @ai-sdk/google             Google Gemini
-      @ai-sdk/amazon-bedrock     AWS Bedrock
-      @ai-sdk/azure              Azure OpenAI
-
-- name  string  provider 在 UI 中的显示名（可省略，默认用 id）
-
-- options  object  调用参数；键名随 npm 适配器变化，下面列出通用键
-    baseURL        string   API 端点（不填则走适配器默认）
-    apiKey         string   认证密钥
-    maxConcurrency number   最大并发请求数
-    timeout        number   请求超时（毫秒）
-    thinking       object   思考模型配置：{ "type": "enabled" }
-    ...其它 npm 专属字段
-
-- models  object  model_id → 模型配置
-    name           string   模型显示名
-    limits         object   { context, output } token 上限
-    ...其它 npm 专属字段
-`
 
 // opencodeRecommendations are the recommended provider/model fields for
 // opencode. Each entry is checked against the live config in the
 // "管理模型" view and surfaced as a missing / mismatch / extra marker.
 // Clicking "一键套用推荐值" writes the Recommended value into the file.
 var opencodeRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名，决定下面 options / models 可用的字段", Required: true},
-	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点", Required: true},
+	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名，决定下面 options / models 可用的字段（@ai-sdk/openai-compatible / openai / anthropic / google / amazon-bedrock / azure）", Required: true},
+	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "options.maxConcurrency", Type: "number", Description: "最大并发请求数", Recommended: 5},
 	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）", Recommended: 30000},
+	{Scope: "provider", Key: "options.thinking", Type: "object", Description: "思考模型配置：{ type: enabled }", Recommended: map[string]any{"type": "enabled"}},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 	{Scope: "model", Key: "limits.context", Type: "number", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "limits.output", Type: "number", Description: "输出 token 上限"},
 }
 
 // openclawRecommendations covers the JSON5-shaped providers block.
 var openclawRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "API 端点", Required: true},
 	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "api", Type: "string", Description: "API 协议", Recommended: "openai-completions"},
+	{Scope: "provider", Key: "api", Type: "string", Description: "API 协议（openai-completions / anthropic-messages / ...）", Recommended: "openai-completions"},
 	{Scope: "model", Key: "id", Type: "string", Description: "模型 ID", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 }
