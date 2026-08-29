@@ -580,10 +580,16 @@ export type AgentOsPaths = {
   readonly mac: string
 }
 
+export type AgentJsonPaths = {
+  readonly provider: string
+  readonly model: string
+}
+
 export type AgentTypeRule = {
   readonly id: string
   readonly name: string
   readonly os_paths: AgentOsPaths
+  readonly json_paths: AgentJsonPaths
   readonly created_at: string
   readonly updated_at: string
 }
@@ -592,6 +598,8 @@ export type AgentTypeRuleInput = {
   readonly name?: string
   readonly windows?: string
   readonly mac?: string
+  readonly provider_path?: string
+  readonly model_path?: string
 }
 
 export type AgentPathCheckResult = {
@@ -644,6 +652,22 @@ export type AgentConfigFileInput = {
 export type AgentConfigListParams = {
   readonly limit: number
   readonly offset: number
+}
+
+export type AgentModelEntry = {
+  readonly id: string
+  readonly config: unknown
+}
+
+export type AgentModelProvider = {
+  readonly provider_id: string
+  readonly other_fields: unknown
+  readonly models: readonly AgentModelEntry[]
+}
+
+export type AgentModelSummary = {
+  readonly agent_type: string
+  readonly providers: readonly AgentModelProvider[]
 }
 
 export class DashboardApiError extends Error {
@@ -1774,12 +1798,17 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
     throw new DashboardApiError('服务端返回的软件类型规则格式无效', null)
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
+  const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
   return {
     id: readString(value.id, 'agent_type_rule.id'),
     name: readString(value.name, 'agent_type_rule.name'),
     os_paths: {
       windows: typeof osPaths.windows === 'string' ? osPaths.windows : '',
       mac: typeof osPaths.mac === 'string' ? osPaths.mac : '',
+    },
+    json_paths: {
+      provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
+      model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
@@ -1820,6 +1849,31 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
     ssh_config: parseAgentSshConfig(value.ssh_config),
     created_at: readString(value.created_at, 'agent_config.created_at'),
     updated_at: readString(value.updated_at, 'agent_config.updated_at'),
+  }
+}
+
+function parseAgentModelSummary(value: unknown): AgentModelSummary {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的模型摘要格式无效', null)
+  }
+  const providers = Array.isArray(value.providers) ? value.providers : []
+  return {
+    agent_type: typeof value.agent_type === 'string' ? value.agent_type : '',
+    providers: providers.map((raw) => {
+      if (!isRecord(raw)) return { provider_id: '', other_fields: null, models: [] }
+      const models = Array.isArray(raw.models) ? raw.models : []
+      return {
+        provider_id: typeof raw.provider_id === 'string' ? raw.provider_id : '',
+        other_fields: raw.other_fields ?? null,
+        models: models.map((m) => {
+          if (!isRecord(m)) return { id: '', config: null }
+          return {
+            id: typeof m.id === 'string' ? m.id : '',
+            config: m.config ?? null,
+          }
+        }),
+      }
+    }),
   }
 }
 
@@ -2561,5 +2615,9 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async deleteAgentConfigFile(id: string): Promise<void> {
     await request(`/agent-config-files/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  },
+  async getAgentConfigFileModels(id: string): Promise<AgentModelSummary> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/models`)
+    return parseAgentModelSummary(data)
   },
 }

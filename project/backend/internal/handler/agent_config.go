@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
+	"github.com/tidwall/gjson"
 	"gorm.io/gorm"
 )
 
@@ -53,13 +54,15 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name    string `json:"name"`
-	Windows string `json:"windows"`
-	Mac     string `json:"mac"`
+	Name         string `json:"name"`
+	Windows      string `json:"windows"`
+	Mac          string `json:"mac"`
+	ProviderPath string `json:"provider_path"`
+	ModelPath    string `json:"model_path"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
-// per-OS path templates. A duplicated name is rejected.
+// per-OS path templates and gjson paths. A duplicated name is rejected.
 func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var rule model.AgentTypeRule
@@ -89,6 +92,14 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		jpaths := model.AgentJsonPaths{
+			Provider: strings.TrimSpace(req.ProviderPath),
+			Model:    strings.TrimSpace(req.ModelPath),
+		}
+		if err := rule.SetJsonPaths(jpaths); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -100,7 +111,9 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name string `json:"name"`
+			Name         string `json:"name"`
+			ProviderPath string `json:"provider_path"`
+			ModelPath    string `json:"model_path"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -121,6 +134,13 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		rule := model.AgentTypeRule{Name: name}
+		if err := rule.SetJsonPaths(model.AgentJsonPaths{
+			Provider: strings.TrimSpace(req.ProviderPath),
+			Model:    strings.TrimSpace(req.ModelPath),
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		if err := db.Create(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -625,4 +645,193 @@ func writeAgentConfigFileContent(row *model.AgentConfigFile, content string, key
 	default:
 		return fmt.Errorf("未知模式 %q", row.Mode)
 	}
+}
+
+// modelSummary is the JSON sent to the frontend "管理模型" dialog. Each
+// provider carries its own non-model fields plus the parsed models list.
+type modelSummary struct {
+	ProviderID  string          `json:"provider_id"`
+	OtherFields json.RawMessage `json:"other_fields"`
+	Models      []modelEntry    `json:"models"`
+}
+
+type modelEntry struct {
+	ID     string          `json:"id"`
+	Config json.RawMessage `json:"config"`
+}
+
+// GetAgentConfigFileModels re-reads the live config file behind a row,
+// looks up the agent-type rule to fetch its provider_path / model_path
+// gjson expressions, and returns the parsed providers + models. The
+// provider_path must resolve to an object map; model_path is applied to
+// each provider value. Per-provider "other fields" is the provider object
+// with its model_path key stripped.
+func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var rule model.AgentTypeRule
+		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			return
+		}
+		jpaths, err := rule.GetJsonPaths()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径，请先在「接管Agent」中填写 provider/model gjson"})
+			return
+		}
+		content, err := readAgentConfigFileContent(&row, key)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		providers, err := parseAgentModels(content, jpaths.Provider, jpaths.Model)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"agent_type": row.AgentType,
+				"providers":  providers,
+			},
+		})
+	}
+}
+
+// parseAgentModels walks the config blob with two gjson expressions and
+// returns a flat list of provider summaries. provider_path must resolve
+// to an object whose keys are provider ids; model_path is applied to each
+// provider value (it may return an object map or an array). The per-
+// provider "other fields" is the provider object with the model_path key
+// removed so the UI can render the non-model config separately.
+func parseAgentModels(content, providerPath, modelPath string) ([]modelSummary, error) {
+	root := gjson.Parse(stripJSON5Comments(content))
+	provResult := root.Get(providerPath)
+	if !provResult.Exists() {
+		return nil, fmt.Errorf("provider 路径 %q 在配置文件中未命中", providerPath)
+	}
+	if provResult.Type != gjson.JSON {
+		return nil, fmt.Errorf("provider 路径 %q 必须解析为对象，实际类型为 %s", providerPath, provResult.Type)
+	}
+	out := make([]modelSummary, 0, len(provResult.Map()))
+	for id, provVal := range provResult.Map() {
+		ms := modelSummary{ProviderID: id, OtherFields: json.RawMessage("{}"), Models: []modelEntry{}}
+		if modelPath != "" {
+			if sub := provVal.Get(modelPath); sub.Exists() {
+				ms.Models = collectModels(sub)
+			}
+		}
+		other := stripJSONKey(provVal, modelPath)
+		ms.OtherFields = json.RawMessage(other.Raw)
+		out = append(out, ms)
+	}
+	return out, nil
+}
+
+// collectModels turns a gjson.Result (object map or array) into a list of
+// {id, config} entries. Object keys become ids; arrays fall back to the
+// element's "id" / "name" field, then to the array index.
+func collectModels(res gjson.Result) []modelEntry {
+	out := make([]modelEntry, 0)
+	switch res.Type {
+	case gjson.JSON:
+		for id, val := range res.Map() {
+			out = append(out, modelEntry{ID: id, Config: json.RawMessage(val.Raw)})
+		}
+	default:
+		for _, val := range res.Array() {
+			id := val.Get("id").String()
+			if id == "" {
+				id = val.Get("name").String()
+			}
+			if id == "" {
+				id = fmt.Sprintf("%d", val.Index)
+			}
+			out = append(out, modelEntry{ID: id, Config: json.RawMessage(val.Raw)})
+		}
+	}
+	return out
+}
+
+// stripJSONKey returns a copy of val with one top-level key removed so
+// callers can render the provider object minus its models subtree. Only
+// single-segment keys are supported (no dots / # / etc) — model_path is
+// expected to be a literal key like `models`. Returns val unchanged when
+// the key is composite or stripping fails.
+func stripJSONKey(val gjson.Result, key string) gjson.Result {
+	if key == "" || strings.ContainsAny(key, ".#") || !val.IsObject() {
+		return val
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(val.Raw), &m); err != nil {
+		return val
+	}
+	delete(m, key)
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return val
+	}
+	return gjson.Parse(string(raw))
+}
+
+// stripJSON5Comments removes // and /* */ comments so gjson can parse
+// JSON5 configs (e.g. openclaw). String contents are left alone so a
+// URL like "https://foo" or an embedded "// not a comment" survives.
+func stripJSON5Comments(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	escape := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			b.WriteByte(c)
+			if escape {
+				escape = false
+				continue
+			}
+			if c == '\\' {
+				escape = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '/' && i+1 < len(s) {
+			next := s[i+1]
+			if next == '/' {
+				end := strings.IndexByte(s[i:], '\n')
+				if end < 0 {
+					return b.String()
+				}
+				i += end
+				continue
+			}
+			if next == '*' {
+				end := strings.Index(s[i:], "*/")
+				if end < 0 {
+					return b.String()
+				}
+				i += end + 1
+				continue
+			}
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }

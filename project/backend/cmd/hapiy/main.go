@@ -239,6 +239,7 @@ func main() {
 			dashboardAuthed.PUT("/agent-config-files/:id/content", handler.PutAgentConfigFileContent(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id", handler.UpdateAgentConfigFile(db, encKey))
 			dashboardAuthed.DELETE("/agent-config-files/:id", handler.DeleteAgentConfigFile(db))
+			dashboardAuthed.GET("/agent-config-files/:id/models", handler.GetAgentConfigFileModels(db, encKey))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))

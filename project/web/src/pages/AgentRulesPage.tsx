@@ -213,6 +213,8 @@ function RuleDialog({
   const [name, setName] = useState('')
   const [windowsPath, setWindowsPath] = useState('')
   const [macPath, setMacPath] = useState('')
+  const [providerPath, setProviderPath] = useState('')
+  const [modelPath, setModelPath] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -221,6 +223,8 @@ function RuleDialog({
       setName(editing?.name ?? '')
       setWindowsPath(editing?.os_paths.windows ?? '')
       setMacPath(editing?.os_paths.mac ?? '')
+      setProviderPath(editing?.json_paths.provider ?? '')
+      setModelPath(editing?.json_paths.model ?? '')
       setError(null)
       setSaving(false)
     }
@@ -241,6 +245,8 @@ function RuleDialog({
           name: trimmed,
           windows: windowsPath.trim(),
           mac: macPath.trim(),
+          provider_path: providerPath.trim(),
+          model_path: modelPath.trim(),
         })
       } else {
         await dashboardApi.createAgentTypeRule(trimmed)
@@ -283,6 +289,30 @@ function RuleDialog({
               placeholder="例如：~/.config/opencode/opencode.json"
             />
             <p className="text-xs text-muted-foreground">支持 ~ 和 $HOME</p>
+          </Field>
+          <Field>
+            <FieldLabel className="font-medium">json路径</FieldLabel>
+            <div className="flex flex-col gap-2 pl-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">provider</span>
+                <Input
+                  value={providerPath}
+                  onChange={(e) => setProviderPath(e.target.value)}
+                  placeholder="例如：provider 或 models.providers"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">model</span>
+                <Input
+                  value={modelPath}
+                  onChange={(e) => setModelPath(e.target.value)}
+                  placeholder="例如：models（相对每个 provider）"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                gjson 路径：provider 命中对象后逐 key 列出，model 在每个 provider 内取模型列表/对象
+              </p>
+            </div>
           </Field>
           {error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">

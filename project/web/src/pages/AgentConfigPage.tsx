@@ -35,6 +35,7 @@ import {
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
 import { AgentConfigEditorDialog } from '@/components/dialog/agent-config-editor'
+import { AgentModelsDialog } from '@/components/dialog/agent-models'
 
 // ── Agent 接管 ──
 
@@ -158,6 +159,7 @@ function AgentConfigFilesTab() {
   const [editing, setEditing] = useState<AgentConfigFile | null>(null)
   const [editingRecord, setEditingRecord] = useState<AgentConfigFile | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<AgentConfigFile | null>(null)
+  const [managingModels, setManagingModels] = useState<AgentConfigFile | null>(null)
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -230,13 +232,21 @@ function AgentConfigFilesTab() {
     {
       key: 'actions',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 240 },
+      defaultWidth: { kind: 'pixel', value: 320 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={mutating} onClick={() => setEditing(row)}>
             编辑配置文件
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={mutating}
+            onClick={() => setManagingModels(row)}
+          >
+            管理模型
           </Button>
           <Button
             variant="ghost"
@@ -322,6 +332,15 @@ function AgentConfigFilesTab() {
         onConfirm={() => {
           if (confirmDelete) void handleDelete(confirmDelete)
         }}
+      />
+
+      <AgentModelsDialog
+        open={managingModels !== null}
+        onOpenChange={(open) => {
+          if (!open) setManagingModels(null)
+        }}
+        record={managingModels}
+        fetchModels={(id) => dashboardApi.getAgentConfigFileModels(id)}
       />
     </>
   )
@@ -658,16 +677,16 @@ function AgentConfigFormDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={presetSyncSuggested && canSyncPreset ? 'border-primary text-primary' : undefined}
+                    className={presetSyncSuggested && canSyncPreset ? '!border-primary !text-primary' : undefined}
                     disabled={!canSyncPreset}
                     onClick={syncPresetPath}
                   >
-                    从预设列同步信息
+                    同步预设Agent信息
                   </Button>
                 </div>
                 {(targetOs === 'windows' || targetOs === 'mac') && (
                   <p className="text-xs text-muted-foreground">
-                    点击「从预设列同步信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
+                    点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
                   </p>
                 )}
               </Field>

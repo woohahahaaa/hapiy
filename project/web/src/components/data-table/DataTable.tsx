@@ -560,20 +560,26 @@ export function DataTable<T extends Record<string, unknown>>({
 
   return (
     <div className="flex flex-col">
-      {/* Toolbar (filters + actions + magic wand + settings) */}
+      {/* Toolbar 区域布局约定（data-group 标记两个 region）：
+            data-group="active"  → 左侧：filters / actions 插槽
+              （筛选、添加、删除 —— 直接改数据集或查询条件）
+            data-group="passive" → 右侧：列设置弹窗 + 魔棒
+              （仅调整表格自身的展示形态，不动数据）
+          三个插槽里 filters、actions 视觉上都落在 active 侧；
+          renderToolbarControls 永远在 passive 侧。 */}
       {(filters || actions) && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           {filters && (
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <div data-group="active" className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               {filters}
             </div>
           )}
           {actions && (
-            <div className="flex shrink-0 items-start gap-2 whitespace-nowrap">
+            <div data-group="active" className="flex shrink-0 items-start gap-2 whitespace-nowrap">
               {actions}
             </div>
           )}
-          <div className="ml-auto flex shrink-0 self-end items-center gap-2">
+          <div data-group="passive" className="ml-auto flex shrink-0 self-end items-center gap-2">
             {renderToolbarControls()}
           </div>
         </div>
@@ -582,7 +588,7 @@ export function DataTable<T extends Record<string, unknown>>({
       {/* If no filters/actions, still show the controls above the table. */}
       {!filters && !actions && (
         <div className="mb-4 flex justify-end">
-          <div className="flex items-center gap-2">{renderToolbarControls()}</div>
+          <div data-group="passive" className="flex items-center gap-2">{renderToolbarControls()}</div>
         </div>
       )}
 
