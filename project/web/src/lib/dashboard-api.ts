@@ -618,12 +618,14 @@ export type AgentSshConfig = {
 }
 
 export type AgentConfigMode = 'local' | 'ssh'
+export type AgentTargetOS = 'windows' | 'mac' | 'other'
 
 export type AgentConfigFile = {
   readonly id: string
   readonly record_name: string
   readonly agent_type: string
   readonly mode: AgentConfigMode
+  readonly target_os: AgentTargetOS | null
   readonly path: string
   readonly ssh_config: AgentSshConfig | null
   readonly created_at: string
@@ -634,6 +636,7 @@ export type AgentConfigFileInput = {
   readonly record_name: string
   readonly agent_type: string
   readonly mode: AgentConfigMode
+  readonly target_os: AgentTargetOS | null
   readonly path: string
   readonly ssh_config: AgentSshConfig | null
 }
@@ -1803,11 +1806,16 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
   if (mode !== 'local' && mode !== 'ssh') {
     throw new DashboardApiError(`无效的接管模式: ${mode}`, null)
   }
+  const targetOs = value.target_os
+  if (targetOs !== null && targetOs !== '' && targetOs !== 'windows' && targetOs !== 'mac' && targetOs !== 'other') {
+    throw new DashboardApiError(`无效的目标系统: ${String(targetOs)}`, null)
+  }
   return {
     id: readString(value.id, 'agent_config.id'),
     record_name: readString(value.record_name, 'agent_config.record_name'),
     agent_type: readString(value.agent_type, 'agent_config.agent_type'),
     mode,
+    target_os: typeof targetOs === 'string' && targetOs !== '' ? targetOs : null,
     path: readString(value.path, 'agent_config.path'),
     ssh_config: parseAgentSshConfig(value.ssh_config),
     created_at: readString(value.created_at, 'agent_config.created_at'),

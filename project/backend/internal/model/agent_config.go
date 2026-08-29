@@ -77,6 +77,7 @@ type AgentConfigFile struct {
 	RecordName string    `gorm:"not null" json:"record_name"`
 	AgentType  string    `gorm:"not null" json:"agent_type"`
 	Mode       string    `gorm:"not null" json:"mode"` // "local" | "ssh"
+	TargetOS   string    `gorm:"not null;default:''" json:"target_os"`
 	Path       string    `gorm:"not null" json:"path"`
 	SshConfig  string    `gorm:"type:text" json:"ssh_config"` // JSON blob of service.SshConfig
 	Content    string    `gorm:"type:text" json:"-"`          // local content cache, never serialized

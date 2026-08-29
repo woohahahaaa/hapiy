@@ -39,12 +39,12 @@ import { AgentConfigEditorDialog } from '@/components/AgentConfigEditorDialog'
 
 // ── Agent 接管 ──
 
-export type AgentTargetOs = 'windows' | 'mac' | 'custom'
+export type AgentTargetOs = 'windows' | 'mac' | 'other'
 
 export const TARGET_OS_LABELS: Record<AgentTargetOs, string> = {
   windows: 'Windows',
   mac: 'Mac',
-  custom: '自定义',
+  other: '其他',
 }
 
 export function formatFileSize(size: number): string {
@@ -507,7 +507,8 @@ function TakeoverDialog({
   const [recordName, setRecordName] = useState('')
   const [mode, setMode] = useState<'local' | 'ssh'>('local')
   const [agentType, setAgentType] = useState('')
-  const [targetOs, setTargetOs] = useState<AgentTargetOs>('custom')
+  const [targetOs, setTargetOs] = useState<AgentTargetOs>('other')
+  const [presetSyncSuggested, setPresetSyncSuggested] = useState(false)
   const [path, setPath] = useState('')
   const [host, setHost] = useState('')
   const [port, setPort] = useState('22')
@@ -536,7 +537,8 @@ function TakeoverDialog({
     setRecordName('')
     setMode('local')
     setAgentType('')
-    setTargetOs('custom')
+    setTargetOs('other')
+    setPresetSyncSuggested(false)
     setPath('')
     setHost('')
     setPort('22')
@@ -588,6 +590,7 @@ function TakeoverDialog({
   const handleTargetOsChange = (value: AgentTargetOs) => {
     setTargetOs(value)
     setCheckResult(null)
+    setPresetSyncSuggested(value !== 'other')
   }
 
   // Manually pull the preset path template into the path field. Nothing is
@@ -595,16 +598,34 @@ function TakeoverDialog({
   const syncPresetPath = () => {
     setCheckResult(null)
     const preset = ruleForType?.os_paths
-    if (mode !== 'local' || targetOs === 'custom' || !preset) return
+    if (mode !== 'local' || targetOs === 'other' || !preset) return
     const template = targetOs === 'windows' ? preset.windows : preset.mac
     if (template.trim() === '') return
     setPath(template.trim())
+    setPresetSyncSuggested(false)
   }
 
   const canSyncPreset =
-    mode === 'local' && targetOs !== 'custom' &&
+    mode === 'local' && targetOs !== 'other' &&
     ruleForType != null &&
     osPathFor(ruleForType.os_paths, targetOs === 'windows' ? 'windows' : 'mac') !== ''
+
+  const runPathCheck = useCallback(async () => {
+    const trimmed = path.trim()
+    if (mode !== 'local' || trimmed === '') {
+      setDetecting(false)
+      setCheckResult(null)
+      return
+    }
+    setDetecting(true)
+    try {
+      setCheckResult(await dashboardApi.checkAgentConfigPath(trimmed))
+    } catch {
+      setCheckResult(null)
+    } finally {
+      setDetecting(false)
+    }
+  }, [mode, path])
 
   // Debounced path existence check, local mode only. If the user edited the
   // autofilled path it still triggers a normal check.
@@ -620,25 +641,14 @@ function TakeoverDialog({
       setCheckResult(null)
       return
     }
-    setDetecting(true)
     const timer = setTimeout(() => {
-      dashboardApi
-        .checkAgentConfigPath(trimmed)
-        .then((result) => {
-          setCheckResult(result)
-        })
-        .catch(() => {
-          setCheckResult(null)
-        })
-        .finally(() => {
-          setDetecting(false)
-        })
+      void runPathCheck()
     }, 400)
     return () => {
       clearTimeout(timer)
       setDetecting(false)
     }
-  }, [open, mode, path])
+  }, [open, mode, path, runPathCheck])
 
   const handleSave = async () => {
     if (saving) return
@@ -725,6 +735,7 @@ function TakeoverDialog({
         record_name: trimmedName,
         agent_type: agentType,
         mode,
+        target_os: mode === 'local' ? targetOs : null,
         path: trimmedPath,
         ssh_config: sshConfig,
       })
@@ -801,7 +812,7 @@ function TakeoverDialog({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="ml-auto"
+                    className={presetSyncSuggested && canSyncPreset ? 'ml-auto border-primary text-primary' : 'ml-auto'}
                     disabled={!canSyncPreset}
                     onClick={syncPresetPath}
                   >
@@ -817,7 +828,18 @@ function TakeoverDialog({
 
               <Field>
                 <FieldLabel>路径</FieldLabel>
-                <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                <div className="flex gap-2">
+                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={path.trim() === '' || detecting}
+                    onClick={() => void runPathCheck()}
+                  >
+                    {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
+                  </Button>
+                </div>
                 <div className="flex items-center gap-2 text-xs">
                   {detecting ? (
                     <>
@@ -957,6 +979,7 @@ function TakeoverDialog({
               record_name: recordName.trim(),
               agent_type: agentType,
               mode: 'local' as const,
+              target_os: targetOs,
               path: path.trim(),
               ssh_config: null,
             })

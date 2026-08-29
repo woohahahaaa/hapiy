@@ -184,7 +184,8 @@ func ListAgentConfigFiles(db *gorm.DB) gin.HandlerFunc {
 type createAgentConfigFileRequest struct {
 	RecordName string          `json:"record_name"`
 	AgentType  string          `json:"agent_type"`
-	Mode       string          `json:"mode"` // "local" | "ssh"
+	Mode       string          `json:"mode"`      // "local" | "ssh"
+	TargetOS   string          `json:"target_os"` // "windows" | "mac" | "other"
 	Path       string          `json:"path"`
 	SshConfig  json.RawMessage `json:"ssh_config"`
 }
@@ -198,6 +199,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		req.RecordName = strings.TrimSpace(req.RecordName)
 		req.AgentType = strings.TrimSpace(req.AgentType)
+		req.TargetOS = strings.TrimSpace(req.TargetOS)
 		if req.RecordName == "" || req.AgentType == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
 			return
@@ -208,6 +210,10 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		case "local":
 			// Any file extension is allowed (builtin templates include
 			// .json and .toml); existence is verified by caller.
+			if req.TargetOS != "windows" && req.TargetOS != "mac" && req.TargetOS != "other" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "本机系统必须是 windows、mac 或 other"})
+				return
+			}
 		case "ssh":
 			if len(req.SshConfig) == 0 {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置不能为空"})
@@ -235,7 +241,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		var content string
 		var err error
 		if req.Mode == "local" {
-			content, err = service.ReadLocalFile(req.Path)
+			content, err = service.ReadLocalFile(service.ExpandPath(req.Path))
 		} else {
 			content, err = service.ReadRemoteFile(sshCfg, req.Path)
 		}
@@ -256,6 +262,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			RecordName: req.RecordName,
 			AgentType:  req.AgentType,
 			Mode:       req.Mode,
+			TargetOS:   req.TargetOS,
 			Path:       req.Path,
 			SshConfig:  sshBlob,
 			Content:    content,
@@ -442,7 +449,7 @@ func validateSshConfig(cfg service.SshConfig) string {
 func readAgentConfigFileContent(row *model.AgentConfigFile, key []byte) (string, error) {
 	switch row.Mode {
 	case "local":
-		return service.ReadLocalFile(row.Path)
+		return service.ReadLocalFile(service.ExpandPath(row.Path))
 	case "ssh":
 		var cfg service.SshConfig
 		if err := cfg.Unmarshal(row.SshConfig); err != nil {
@@ -462,7 +469,7 @@ func readAgentConfigFileContent(row *model.AgentConfigFile, key []byte) (string,
 func writeAgentConfigFileContent(row *model.AgentConfigFile, content string, key []byte) error {
 	switch row.Mode {
 	case "local":
-		return service.WriteLocalFileAtomic(row.Path, content)
+		return service.WriteLocalFileAtomic(service.ExpandPath(row.Path), content)
 	case "ssh":
 		var cfg service.SshConfig
 		if err := cfg.Unmarshal(row.SshConfig); err != nil {
