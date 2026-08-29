@@ -17,6 +17,7 @@ import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
 import { TokenUsageSettingsPage } from '@/pages/TokenUsageSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AgentConfigPage } from '@/pages/AgentConfigPage'
+import { AgentRulesPage } from '@/pages/AgentRulesPage'
 import { AuthGate } from '@/components/AuthGate'
 import { Toaster } from '@/components/ui/toast'
 
@@ -47,6 +48,7 @@ function App() {
                   <Route path="/settings/debug" element={<DebugSettingsPage />} />
                   <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/agent" element={<AgentRulesPage />} />
                   <Route path="/agent/config" element={<AgentConfigPage />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

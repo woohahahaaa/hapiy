@@ -83,6 +83,7 @@ const navigation: NavItem[] = [
     id: 'agent',
     label: '接管Agent',
     icon: <AppIcon name="robot" />,
+    href: '/agent',
     children: [
       { id: 'agent-config', label: '配置文件', href: '/agent/config' },
     ],
@@ -116,108 +117,162 @@ function NavLink({
   item,
   isOpen,
   onToggle,
+  onExpand,
 }: {
   item: NavItem
   isOpen: boolean
   onToggle: () => void
+  onExpand: () => void
 }) {
   const { state } = useSidebar()
   const location = useLocation()
-  const isActive = item.href ? isPathActive(location.pathname, item.href) : false
   const hasActiveChild =
     item.children?.some((child) => isPathActive(location.pathname, child.href)) ?? false
+  // A clickable parent lights up only on its own page; when a child owns the
+  // current path the active indicator stays on the leaf.
+  const selfActive = item.href
+    ? location.pathname === item.href || (isPathActive(location.pathname, item.href) && !hasActiveChild)
+    : false
   const showLabel = state === 'expanded'
   const collapsed = state === 'collapsed'
   const hasChildren = item.children && item.children.length > 0
-
-  // Light up the icon in collapsed mode when this section contains the active
-  // path; in expanded mode the parent is intentionally never lit so the active
-  // indicator stays on the leaf only.
-  const triggerIsActive = collapsed && hasActiveChild
+  // A parent with both children and its own page: body navigates + expands,
+  // the chevron is a separate toggle-only hit area.
+  const parentClickable = Boolean(item.href) && hasChildren
 
   if (hasChildren) {
-    const trigger = (
-      <SidebarMenuButton
-        isActive={triggerIsActive}
-        onClick={collapsed ? undefined : onToggle}
-      >
-        {item.icon}
-        <span>{showLabel ? item.label : ''}</span>
-        {showLabel && (
-          <AppIcon
-            name="chevron_right"
-            className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
-          />
-        )}
-      </SidebarMenuButton>
-    )
-
-    const popoverContent = (closeFlyout: () => void) => (
-      <HoverCard.Portal>
-        <HoverCard.Content
-          side="right"
-          align="start"
-          sideOffset={20}
-          className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
-          onMouseEnter={(event) => event.stopPropagation()}
-          onMouseLeave={(event) => event.stopPropagation()}
-        >
-          <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-            {item.label}
-          </div>
-          {item.children!.map((child) => {
-            const childActive = isPathActive(location.pathname, child.href)
-            return (
-              <Link
-                key={child.id}
-                to={child.href}
-                onClick={closeFlyout}
-                className={cn(
-                  'flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none transition-colors',
-                  childActive
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
-                    : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
-                )}
-              >
+    const subMenu = isOpen && (
+      <SidebarMenuSub>
+        {item.children!.map((child) => (
+          <SidebarMenuSubItem key={child.id}>
+            <SidebarMenuSubButton
+              asChild
+              isActive={isPathActive(location.pathname, child.href)}
+            >
+              <Link to={child.href}>
                 <span>{child.label}</span>
               </Link>
-            )
-          })}
-        </HoverCard.Content>
-      </HoverCard.Portal>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+        ))}
+      </SidebarMenuSub>
+    )
+
+    if (collapsed) {
+      const trigger = parentClickable ? (
+        <SidebarMenuButton asChild isActive={selfActive || hasActiveChild}>
+          <Link to={item.href!}>
+            {item.icon}
+            <span>{showLabel ? item.label : ''}</span>
+          </Link>
+        </SidebarMenuButton>
+      ) : (
+        <SidebarMenuButton>
+          {item.icon}
+          <span>{showLabel ? item.label : ''}</span>
+        </SidebarMenuButton>
+      )
+
+      const popoverContent = (closeFlyout: () => void) => (
+        <HoverCard.Portal>
+          <HoverCard.Content
+            side="right"
+            align="start"
+            sideOffset={20}
+            className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+            onMouseEnter={(event) => event.stopPropagation()}
+            onMouseLeave={(event) => event.stopPropagation()}
+          >
+            {parentClickable ? (
+              <Link
+                to={item.href!}
+                onClick={closeFlyout}
+                className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+              >
+                <span>{item.label}</span>
+              </Link>
+            ) : (
+              <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
+                {item.label}
+              </div>
+            )}
+            {item.children!.map((child) => {
+              const childActive = isPathActive(location.pathname, child.href)
+              return (
+                <Link
+                  key={child.id}
+                  to={child.href}
+                  onClick={closeFlyout}
+                  className={cn(
+                    'flex h-8 items-center rounded-sm pl-3 pr-2 text-xs outline-none transition-colors',
+                    childActive
+                      ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
+                      : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                  )}
+                >
+                  <span>{child.label}</span>
+                </Link>
+              )
+            })}
+          </HoverCard.Content>
+        </HoverCard.Portal>
+      )
+
+      return (
+        <SidebarMenuItem>
+          <CollapsedNavItem trigger={trigger} content={popoverContent} />
+        </SidebarMenuItem>
+      )
+    }
+
+    if (parentClickable) {
+      return (
+        <SidebarMenuItem>
+          <div className="flex w-full items-center">
+            <SidebarMenuButton asChild isActive={selfActive}>
+              <Link to={item.href!} onClick={onExpand}>
+                {item.icon}
+                <span>{item.label}</span>
+              </Link>
+            </SidebarMenuButton>
+            <button
+              type="button"
+              aria-label={isOpen ? `折叠 ${item.label}` : `展开 ${item.label}`}
+              onClick={onToggle}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+            >
+              <AppIcon
+                name="chevron_right"
+                className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}
+              />
+            </button>
+          </div>
+          {subMenu}
+        </SidebarMenuItem>
+      )
+    }
+
+    const trigger = (
+      <SidebarMenuButton onClick={onToggle}>
+        {item.icon}
+        <span>{item.label}</span>
+        <AppIcon
+          name="chevron_right"
+          className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
+        />
+      </SidebarMenuButton>
     )
 
     return (
       <SidebarMenuItem>
-        {collapsed ? (
-          <CollapsedNavItem trigger={trigger} content={popoverContent} />
-        ) : (
-          <>
-            {trigger}
-            {showLabel && isOpen && (
-              <SidebarMenuSub>
-                {item.children!.map((child) => (
-                  <SidebarMenuSubItem key={child.id}>
-                    <SidebarMenuSubButton
-                      asChild
-                      isActive={isPathActive(location.pathname, child.href)}
-                    >
-                      <Link to={child.href}>
-                        <span>{child.label}</span>
-                      </Link>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                ))}
-              </SidebarMenuSub>
-            )}
-          </>
-        )}
+        {trigger}
+        {subMenu}
       </SidebarMenuItem>
     )
   }
 
   const trigger = (
-    <SidebarMenuButton asChild isActive={isActive}>
+    <SidebarMenuButton asChild isActive={selfActive}>
       <Link to={item.href ?? '/'}>
         {item.icon}
         <span>{showLabel ? item.label : ''}</span>
@@ -354,6 +409,14 @@ export function AppSidebar() {
                       const next = new Set(sections)
                       if (next.has(item.id)) next.delete(item.id)
                       else next.add(item.id)
+                      return next
+                    })
+                  }}
+                  onExpand={() => {
+                    setOpenSections((sections) => {
+                      if (sections.has(item.id)) return sections
+                      const next = new Set(sections)
+                      next.add(item.id)
                       return next
                     })
                   }}
