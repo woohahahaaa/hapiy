@@ -58,31 +58,43 @@ function CodeSurface({ value, onChange, readOnly }: {
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1 overflow-hidden font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
-      <div ref={gutterRef} aria-hidden className="h-full w-14 shrink-0 select-none overflow-hidden border-r border-border bg-muted/40 py-1 text-right text-muted-foreground/70">
-        {lines.map((_, index) => <div key={index} className="pr-2 leading-relaxed tabular-nums">{index + 1}</div>)}
+    <div className="flex min-h-0 flex-1 overflow-hidden font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+      <div
+        ref={gutterRef}
+        aria-hidden
+        className="flex w-14 shrink-0 select-none flex-col overflow-hidden border-r border-border bg-muted/40 text-right text-muted-foreground/70"
+      >
+        {lines.map((_, index) => (
+          <div key={index} className="flex-1 whitespace-nowrap pl-2 pr-2 pt-3 leading-relaxed tabular-nums">
+            {index + 1}
+          </div>
+        ))}
       </div>
-      <div className="relative h-full min-w-0 flex-1 overflow-hidden">
+      <div className="relative min-w-0 flex-1 overflow-hidden">
         {readOnly ? (
-          <pre className={cn('absolute inset-0 m-0 overflow-auto p-1', isJson ? undefined : 'text-foreground')}>
+          <pre className={cn('absolute inset-0 m-0 overflow-auto p-3', isJson ? undefined : 'text-foreground')}>
             {isJson ? <JsonTokens text={value} /> : value}
           </pre>
         ) : (
           <>
-        <pre ref={backdropRef} aria-hidden className={cn('pointer-events-none absolute inset-0 m-0 overflow-hidden p-1', isJson ? 'text-transparent' : 'text-foreground')}>
-          {isJson ? <JsonTokens text={value} /> : value}
-        </pre>
-        <textarea
-          ref={textareaRef}
-          className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-1 text-transparent caret-foreground outline-none"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onScroll={syncScroll}
-          spellCheck={false}
-          wrap="soft"
-          readOnly={readOnly}
-          aria-label="代码内容"
-        />
+            <pre
+              ref={backdropRef}
+              aria-hidden
+              className={cn('pointer-events-none absolute inset-0 m-0 overflow-hidden p-3', isJson ? 'text-transparent' : 'text-foreground')}
+            >
+              {isJson ? <JsonTokens text={value} /> : value}
+            </pre>
+            <textarea
+              ref={textareaRef}
+              className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-3 text-transparent caret-foreground outline-none"
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onScroll={syncScroll}
+              spellCheck={false}
+              wrap="soft"
+              readOnly={readOnly}
+              aria-label="代码内容"
+            />
           </>
         )}
       </div>
@@ -137,7 +149,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
 
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
-      <DialogContent width="full" height="full" bare className="flex flex-col overflow-hidden p-0">
+      <DialogContent width="full" height="full" bare className="flex flex-col !gap-0 overflow-hidden p-0">
         <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
           <DialogTitle className="text-base">{title}</DialogTitle>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
@@ -146,7 +158,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
           {error && <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}
           {loading ? <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">正在加载文件内容…</div> : content !== null && <CodeSurface value={content} onChange={setContent} readOnly={mode === 'preview' || saving} />}
         </div>
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
+<DialogFooter className="shrink-0 border-t border-border px-6 py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading || saving}>{mode === 'preview' ? '关闭' : '取消'}</Button>
           {mode === 'editable' && <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>}
         </DialogFooter>

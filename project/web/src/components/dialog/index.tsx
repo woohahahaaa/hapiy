@@ -90,7 +90,7 @@ function DialogContent({
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           sizeClass,
-          bare && 'rounded-none border-0 p-0',
+          bare && 'rounded-none border-0 p-0 !gap-0',
           className,
         )}
         style={{ minHeight, ...style }}

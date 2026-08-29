@@ -562,7 +562,7 @@ export function DataTable<T extends Record<string, unknown>>({
     <div className="flex flex-col">
       {/* Toolbar (filters + actions + magic wand + settings) */}
       {(filters || actions) && (
-        <div className="mb-4 flex flex-wrap items-start gap-3">
+        <div className="mb-4 flex flex-wrap items-end gap-3">
           {filters && (
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
               {filters}
@@ -573,7 +573,7 @@ export function DataTable<T extends Record<string, unknown>>({
               {actions}
             </div>
           )}
-          <div className="ml-auto flex shrink-0 self-start items-center gap-2">
+          <div className="ml-auto flex shrink-0 self-end items-center gap-2">
             {renderToolbarControls()}
           </div>
         </div>
