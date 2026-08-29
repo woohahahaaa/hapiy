@@ -827,10 +827,6 @@ function AgentConfigFormDialog({
   )
 }
 
-// ── 文件预览（只读，始终读取磁盘最新版本）──
-// 已迁移到 components/dialog/code-editor.tsx 的 DialogCodeEditor（mode="preview"）。
-// 旧 ConfigFilePreviewDialog 已删除，表单内预览和外部编辑都使用统一组件。
-
 // ── 删除确认 ──
 
 export function ConfirmDeleteDialog({
