@@ -155,8 +155,8 @@ function AgentConfigFilesTab() {
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
   const [takeoverOpen, setTakeoverOpen] = useState(false)
-  const [previewing, setPreviewing] = useState<AgentConfigFile | null>(null)
   const [editing, setEditing] = useState<AgentConfigFile | null>(null)
+  const [editingRecord, setEditingRecord] = useState<AgentConfigFile | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<AgentConfigFile | null>(null)
 
   const fetch = useCallback(async () => {
@@ -230,37 +230,37 @@ function AgentConfigFilesTab() {
     {
       key: 'actions',
       label: '操作',
-      defaultWidth: { kind: 'pixel', value: 100 },
+      defaultWidth: { kind: 'pixel', value: 280 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
           <Button
-            variant="ghost"
-            size="icon-sm"
+            variant="link"
+            size="sm"
             disabled={mutating}
-            title="预览文件"
-            onClick={() => setPreviewing(row)}
-          >
-            <AppIcon name="open_in_new" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            disabled={mutating}
-            title="编辑文件"
+            className="!h-auto !px-0 !text-xs text-foreground underline-offset-4 hover:underline"
             onClick={() => setEditing(row)}
           >
-            <AppIcon name="edit" />
+            编辑配置文件
           </Button>
           <Button
-            variant="ghost"
-            size="icon-sm"
+            variant="link"
+            size="sm"
             disabled={mutating}
-            title="删除"
+            className="!h-auto !px-0 !text-xs text-foreground underline-offset-4 hover:underline"
+            onClick={() => setEditingRecord(row)}
+          >
+            编辑记录
+          </Button>
+          <Button
+            variant="link"
+            size="sm"
+            disabled={mutating}
+            className="!h-auto !px-0 !text-xs text-destructive underline-offset-4 hover:underline"
             onClick={() => setConfirmDelete(row)}
           >
-            <AppIcon name="delete" />
+            删除
           </Button>
         </div>
       ),
@@ -296,18 +296,6 @@ function AgentConfigFilesTab() {
         onCreated={() => void fetch()}
       />
 
-      {previewing && (
-        <ConfigFilePreviewDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setPreviewing(null)
-          }}
-          title={previewing.record_name}
-          subtitle={previewing.path}
-          load={() => dashboardApi.getAgentConfigFileContent(previewing.id)}
-        />
-      )}
-
       {editing && (
         <AgentConfigEditorDialog
           open
@@ -315,6 +303,14 @@ function AgentConfigFilesTab() {
             if (!open) setEditing(null)
           }}
           record={editing}
+        />
+      )}
+
+      {editingRecord && (
+        <EditRecordDialog
+          record={editingRecord}
+          onClose={() => setEditingRecord(null)}
+          onSaved={() => void fetch()}
         />
       )}
 

@@ -353,6 +353,49 @@ func DeleteAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+type updateAgentConfigFileRequest struct {
+	RecordName string `json:"record_name"`
+}
+
+func UpdateAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var req updateAgentConfigFileRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		name := strings.TrimSpace(req.RecordName)
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称不能为空"})
+			return
+		}
+		if name != row.RecordName {
+			var dupCount int64
+			if err := db.Model(&model.AgentConfigFile{}).
+				Where("record_name = ? AND id <> ?", name, row.ID).
+				Count(&dupCount).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if dupCount > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在，请使用其他名称"})
+				return
+			}
+			row.RecordName = name
+		}
+		if err := db.Save(&row).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": row})
+	}
+}
+
 // CheckAgentConfigPath stats a local config path (with ~/$VAR/%VAR%
 // placeholders expanded) and reports existence, size, and the OS the
 // backend runs on. Used by the takeover dialog to validate paths before a
