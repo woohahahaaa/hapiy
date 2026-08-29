@@ -16,6 +16,7 @@ import type {
   AgentModelSummary,
   AgentRecommendation,
 } from '@/lib/dashboard-api'
+import { AgentModelInfoMatchDialog } from '@/components/dialog/agent-model-info-match'
 
 type DiffStatus = 'ok' | 'missing' | 'mismatch' | 'extra' | 'no-recommendation'
 
@@ -45,6 +46,7 @@ export function AgentModelsDialog({
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
+  const [syncingFromInfo, setSyncingFromInfo] = useState(false)
 
   const reload = () => {
     if (!record) return
@@ -155,28 +157,6 @@ export function AgentModelsDialog({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={applying || providerDiff.filter((d) => d.status !== 'ok').length === 0}
-              onClick={() => void handleApply('provider')}
-            >
-              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
-              一键套用 provider 推荐值
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={
-                applying ||
-                !selectedModel ||
-                modelDiff.filter((d) => d.status !== 'ok').length === 0
-              }
-              onClick={() => void handleApply('model')}
-            >
-              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
-              一键套用模型推荐值
-            </Button>
             <Button variant="ghost" size="icon-sm" onClick={() => onOpenChange(false)}>
               <AppIcon name="close" size={16} />
             </Button>
@@ -216,20 +196,47 @@ export function AgentModelsDialog({
 
           {/* Middle: provider other_fields + models */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader>
+            <ColumnHeader
+              action={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={applying || providerDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0}
+                  onClick={() => void handleApply('provider')}
+                >
+                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                  套用推荐值
+                </Button>
+              }
+            >
               {selectedProvider ? `供应商配置 · ${selectedProvider.provider_id}` : '供应商配置'}
             </ColumnHeader>
             <div className="max-h-[40%] overflow-auto border-b border-border p-2">
               {selectedProvider ? (
                 <JsonDiffHighlight value={selectedProvider.other_fields} markers={providerDiff} />
               ) : (
-                <Placeholder>未选择 provider</Placeholder>
+                <Placeholder>未选择供应商</Placeholder>
               )}
             </div>
-            <ColumnHeader>模型列表</ColumnHeader>
+            <ColumnHeader
+              action={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={!selectedProvider || !selectedModelId}
+                  onClick={() => setSyncingFromInfo(true)}
+                  title="从我们维护的模型信息（models.dev）同步到当前模型"
+                >
+                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                  从模型信息同步模型基本配置
+                </Button>
+              }
+            >
+              模型列表
+            </ColumnHeader>
             <div className="flex-1 overflow-y-auto p-2">
               {selectedProvider && selectedProvider.models.length === 0 && (
-                <Placeholder>该 provider 下没有模型</Placeholder>
+                <Placeholder>该供应商下没有模型</Placeholder>
               )}
               {selectedProvider?.models.map((m) => (
                 <button
@@ -252,7 +259,23 @@ export function AgentModelsDialog({
 
           {/* Right: model config */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader>
+            <ColumnHeader
+              action={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={
+                    applying ||
+                    !selectedModel ||
+                    modelDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
+                  }
+                  onClick={() => void handleApply('model')}
+                >
+                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                  套用推荐值
+                </Button>
+              }
+            >
               {selectedModel ? `模型配置 · ${selectedModel.id}` : '模型配置'}
             </ColumnHeader>
             <div className="flex-1 overflow-auto p-2">
@@ -264,6 +287,15 @@ export function AgentModelsDialog({
             </div>
           </div>
         </div>
+
+        <AgentModelInfoMatchDialog
+          open={syncingFromInfo}
+          onOpenChange={setSyncingFromInfo}
+          record={record}
+          providerId={selectedProviderId}
+          modelId={selectedModelId}
+          onApplied={reload}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -326,30 +358,6 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return false
 }
 
-const STATUS_CLASS: Record<DiffStatus, string> = {
-  ok: 'border-success/40 bg-success/5',
-  missing: 'border-warning/40 bg-warning/10',
-  mismatch: 'border-destructive/40 bg-destructive/10',
-  extra: 'border-border bg-muted/30',
-  'no-recommendation': '',
-}
-
-const STATUS_LABEL: Record<DiffStatus, string> = {
-  ok: '✓',
-  missing: '缺',
-  mismatch: '≠',
-  extra: '额外',
-  'no-recommendation': '',
-}
-
-const STATUS_TEXT_CLASS: Record<DiffStatus, string> = {
-  ok: 'text-success',
-  missing: 'text-warning',
-  mismatch: 'text-destructive',
-  extra: 'text-muted-foreground',
-  'no-recommendation': 'text-muted-foreground',
-}
-
 function JsonDiffHighlight({
   value,
   markers,
@@ -360,65 +368,183 @@ function JsonDiffHighlight({
   if (value === null || value === undefined) {
     return <Placeholder>为空</Placeholder>
   }
-  const byPath = new Map(markers.map((m) => [m.path, m]))
-  const lines = formatLines(value)
+  const lines = buildUnifiedDiff(value, markers)
   return (
     <div className="font-mono text-xs leading-relaxed">
-      {lines.map((line, i) => {
-        const key = topLevelKey(line)
-        const marker = key ? byPath.get(key) : undefined
-        const cls = marker ? STATUS_CLASS[marker.status] : ''
-        const label = marker ? STATUS_LABEL[marker.status] : ''
-        const textCls = marker ? STATUS_TEXT_CLASS[marker.status] : ''
-        const recommendedHint =
-          marker && marker.recommended !== null && marker.recommended !== undefined
-            ? String(marker.recommended)
-            : ''
-        return (
-          <div
-            key={i}
-            className={
-              'group flex items-start gap-2 rounded-none border-l-2 py-0.5 pl-2 pr-1 ' +
-              (cls || 'border-transparent')
-            }
-          >
-            <span className={'shrink-0 w-4 text-center font-bold ' + textCls}>
-              {label}
-            </span>
-            <span className="flex-1 whitespace-pre-wrap break-all">
-              <JsonTokens text={line} />
-              {marker?.status === 'missing' && recommendedHint && (
-                <span className="ml-2 text-[10px] text-muted-foreground">
-                  推荐: {recommendedHint}
-                </span>
-              )}
-              {marker?.status === 'mismatch' && recommendedHint && (
-                <span className="ml-2 text-[10px] text-muted-foreground">
-                  推荐: {recommendedHint}
-                </span>
-              )}
-            </span>
-          </div>
-        )
-      })}
+      {lines.map((line, i) => (
+        <DiffRow key={i} line={line} />
+      ))}
     </div>
   )
 }
 
-function formatLines(value: unknown): string[] {
-  const text = JSON.stringify(value, null, 2)
-  return text.split('\n')
+interface DiffRowData {
+  readonly prefix: ' ' | '-' | '+'
+  readonly text: string
+  readonly status?: DiffStatus
 }
 
-function topLevelKey(line: string): string | null {
-  const m = line.match(/^\s*"([^"\\]+)"\s*:/)
-  return m ? m[1] : null
+const PREFIX_BG: Record<DiffRowData['prefix'], string> = {
+  ' ': '',
+  '-': 'bg-destructive/10',
+  '+': 'bg-success/10',
 }
 
-function ColumnHeader({ children }: { children: React.ReactNode }) {
+const PREFIX_COLOR: Record<DiffRowData['prefix'], string> = {
+  ' ': 'text-muted-foreground/40',
+  '-': 'text-destructive',
+  '+': 'text-success',
+}
+
+function DiffRow({ line }: { line: DiffRowData }) {
+  const statusText =
+    line.status === 'missing'
+      ? '缺'
+      : line.status === 'mismatch'
+        ? '≠'
+        : line.status === 'ok'
+          ? '✓'
+          : ''
   return (
-    <div className="border-b border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-      {children}
+    <div className={'flex items-start gap-1 ' + PREFIX_BG[line.prefix]}>
+      <span
+        className={
+          'w-3 shrink-0 select-none text-center font-bold ' + PREFIX_COLOR[line.prefix]
+        }
+      >
+        {line.prefix === ' ' ? '' : line.prefix}
+      </span>
+      <span className="w-3 shrink-0 select-none text-center text-[10px] text-muted-foreground">
+        {statusText}
+      </span>
+      <span className="flex-1 whitespace-pre-wrap break-all">
+        <JsonTokens text={line.text} />
+      </span>
+    </div>
+  )
+}
+
+// buildUnifiedDiff produces a unified-diff-style rendering of an object
+// against a recommendation set. Each diff row has a prefix of ` ` (no
+// change), `-` (actual — to be removed), or `+` (recommended — to be
+// added). Nested objects are walked recursively so recommendations like
+// `options.timeout` can target a leaf inside the rendered tree.
+function buildUnifiedDiff(value: unknown, recs: readonly AgentRecommendation[]): DiffRowData[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return [
+      {
+        prefix: ' ',
+        text: JSON.stringify(value, null, 2),
+        status: 'no-recommendation',
+      },
+    ]
+  }
+  const out: DiffRowData[] = []
+  out.push({ prefix: ' ', text: '{' })
+  out.push(...renderObject(value as Record<string, unknown>, recs, 1))
+  out.push({ prefix: ' ', text: '}' })
+  return out
+}
+
+function renderObject(
+  obj: Record<string, unknown>,
+  recs: readonly AgentRecommendation[],
+  indent: number,
+): DiffRowData[] {
+  const pad = '  '.repeat(indent)
+  const out: DiffRowData[] = []
+
+  // Split recs by whether their key targets this scope directly or a
+  // descendant. Descendant recs are re-rooted with the first segment
+  // stripped so the recursive call can apply them at the right depth.
+  const directRecs = new Map<string, AgentRecommendation>()
+  const nestedByFirst = new Map<string, AgentRecommendation[]>()
+  for (const r of recs) {
+    const dot = r.key.indexOf('.')
+    if (dot < 0) {
+      directRecs.set(r.key, r)
+    } else {
+      const first = r.key.substring(0, dot)
+      const rest = r.key.substring(dot + 1)
+      const sub: AgentRecommendation = { ...r, key: rest }
+      const arr = nestedByFirst.get(first) ?? []
+      arr.push(sub)
+      nestedByFirst.set(first, arr)
+    }
+  }
+
+  for (const [k, v] of Object.entries(obj)) {
+    const directRec = directRecs.get(k)
+    const nestedRecs = nestedByFirst.get(k) ?? []
+
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      out.push({ prefix: ' ', text: `${pad}"${k}": {` })
+      out.push(...renderObject(v as Record<string, unknown>, nestedRecs, indent + 1))
+      out.push({ prefix: ' ', text: `${pad}}` })
+      if (directRec) {
+        const status = computeStatus(v, directRec)
+        if (status !== 'no-recommendation' && status !== 'ok') {
+          out[out.length - 2] = { ...out[out.length - 2], status }
+        }
+      }
+      continue
+    }
+
+    const valText = formatValue(v)
+    const status = directRec ? computeStatus(v, directRec) : 'no-recommendation'
+    if (status === 'mismatch') {
+      out.push({ prefix: '-', text: `${pad}"${k}": ${valText}`, status: 'mismatch' })
+      out.push({
+        prefix: '+',
+        text: `${pad}"${k}": ${formatValue(directRec!.recommended)}`,
+        status: 'mismatch',
+      })
+    } else {
+      out.push({ prefix: ' ', text: `${pad}"${k}": ${valText}`, status })
+    }
+  }
+
+  for (const [k, r] of directRecs) {
+    if (k in obj) continue
+    out.push({
+      prefix: '+',
+      text: `${pad}"${k}": ${formatValue(r.recommended)}`,
+      status: 'missing',
+    })
+  }
+
+  return out
+}
+
+function formatValue(v: unknown): string {
+  if (v === null || v === undefined) return 'null'
+  if (typeof v === 'string') return JSON.stringify(v)
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
+}
+
+function computeStatus(actual: unknown, rec: AgentRecommendation): DiffStatus {
+  if (rec.recommended === null || rec.recommended === undefined) {
+    return 'no-recommendation'
+  }
+  return deepEqual(rec.recommended, actual) ? 'ok' : 'mismatch'
+}
+
+function ColumnHeader({
+  children,
+  action,
+}: {
+  children: React.ReactNode
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{children}</span>
+      {action}
     </div>
   )
 }

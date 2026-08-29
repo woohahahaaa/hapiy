@@ -523,20 +523,29 @@ function AgentConfigFormDialog({
   // autofilled; the user decides when to sync from the rule. Works for both
   // local and SSH modes — the SSH path field is the only thing that uses
   // the preset, the rest of the SSH fields stay separate.
+  //
+  // The button stays clickable for every OS the user picked; missing
+  // software-type or missing template is reported as a toast so the user
+  // knows exactly why nothing happened. The "other" OS is hidden entirely
+  // (canSyncPreset).
   const syncPresetPath = () => {
-    setCheckResult(null)
-    const preset = ruleForType?.os_paths
-    if (targetOs === 'other' || !preset) return
+    if (targetOs === 'other') return
+    if (!ruleForType) {
+      toast.error('请先选择软件类型')
+      return
+    }
+    const preset = ruleForType.os_paths
     const template = targetOs === 'windows' ? preset.windows : preset.mac
-    if (template.trim() === '') return
+    if (template.trim() === '') {
+      toast.error(`当前软件类型「${ruleForType.name}」未配置 ${TARGET_OS_LABELS[targetOs]} 默认路径`)
+      return
+    }
+    setCheckResult(null)
     setPath(template.trim())
     setPresetSyncSuggested(false)
   }
 
-  const canSyncPreset =
-    targetOs !== 'other' &&
-    ruleForType != null &&
-    osPathFor(ruleForType.os_paths, targetOs === 'windows' ? 'windows' : 'mac') !== ''
+  const canSyncPreset = targetOs !== 'other'
 
   const runPathCheck = useCallback(async () => {
     const trimmed = path.trim()
@@ -663,7 +672,7 @@ function AgentConfigFormDialog({
         record_name: trimmedName,
         agent_type: agentType,
         mode,
-        target_os: mode === 'local' ? targetOs : null,
+        target_os: targetOs === 'other' ? null : targetOs,
         path: trimmedPath,
         ssh_config: sshConfig,
       }
@@ -747,6 +756,7 @@ function AgentConfigFormDialog({
       const result = await dashboardApi.testAgentSshConnection({
         ssh_config: cfg,
         path: path.trim(),
+        target_os: targetOs,
       })
       setSshTestResult(result)
     } catch (err) {
@@ -755,7 +765,59 @@ function AgentConfigFormDialog({
     } finally {
       setSshTesting(false)
     }
-  }, [buildSshConfigForProbe, path])
+  }, [buildSshConfigForProbe, path, targetOs])
+
+  // Shared "目标系统 + 同步预设Agent信息" row. Rendered immediately above
+  // the path field in both local and SSH modes so the operator can sync a
+  // preset as soon as they pick the target OS. The sync button is hidden
+  // for the "other" OS since the presets only cover windows / mac.
+  const targetOsField = (
+    <Field>
+      <FieldLabel>系统</FieldLabel>
+      <div className="flex items-center gap-2">
+        {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
+          <Button
+            key={os}
+            type="button"
+            variant={targetOs === os ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleTargetOsChange(os)}
+          >
+            {TARGET_OS_LABELS[os]}
+          </Button>
+        ))}
+        {canSyncPreset && (
+          <>
+            <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={presetSyncSuggested ? '!border-primary !text-primary' : undefined}
+              onClick={syncPresetPath}
+            >
+              同步预设Agent信息
+            </Button>
+          </>
+        )}
+      </div>
+      {(targetOs === 'windows' || targetOs === 'mac') && (
+        <p className="text-xs text-muted-foreground">
+          点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
+        </p>
+      )}
+    </Field>
+  )
+
+  // When all three SSH probes (connect/read/write) succeed, the operator
+  // gets one more action: open the remote file in the existing preview
+  // dialog. It stays hidden until then so an unreadable remote host can't
+  // be probed via "preview".
+  const sshAllOk =
+    sshTestResult !== null &&
+    sshTestResult.connect.ok &&
+    sshTestResult.read.ok &&
+    sshTestResult.write.ok
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -789,107 +851,75 @@ function AgentConfigFormDialog({
           </Field>
 
           <Field>
-            <FieldLabel>本机/非本机</FieldLabel>
+            <FieldLabel>连接方式</FieldLabel>
             <div className="flex items-center gap-2">
               <Button type="button" variant={mode === 'local' ? 'default' : 'outline'} size="sm" onClick={() => setMode('local')}>
                 本机
               </Button>
               <Button type="button" variant={mode === 'ssh' ? 'default' : 'outline'} size="sm" onClick={() => setMode('ssh')}>
-                非本机
+                SSH
               </Button>
             </div>
-          </Field>
-
-          <Field>
-            <FieldLabel>系统</FieldLabel>
-            <div className="flex items-center gap-2">
-              {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
-                <Button
-                  key={os}
-                  type="button"
-                  variant={targetOs === os ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => handleTargetOsChange(os)}
-                >
-                  {TARGET_OS_LABELS[os]}
-                </Button>
-              ))}
-              <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={presetSyncSuggested && canSyncPreset ? '!border-primary !text-primary' : undefined}
-                disabled={!canSyncPreset}
-                onClick={syncPresetPath}
-              >
-                同步预设Agent信息
-              </Button>
-            </div>
-            {(targetOs === 'windows' || targetOs === 'mac') && (
-              <p className="text-xs text-muted-foreground">
-                点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
-              </p>
-            )}
           </Field>
 
           {mode === 'local' && (
-            <Field>
-              <FieldLabel>路径</FieldLabel>
-              <div className="flex gap-2">
-                <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={path.trim() === '' || detecting}
-                  onClick={() => void runPathCheck()}
-                >
-                  {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
-                </Button>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                {detecting ? (
-                  <>
-                    <AppIcon name="progress_activity" size={14} className="animate-spin" />
-                    <span className="text-muted-foreground">正在检测文件…</span>
-                  </>
-                ) : checkResult ? (
-                  <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
-                ) : (
-                  <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
-                )}
-              </div>
-            </Field>
+            <>
+              {targetOsField}
+              <Field>
+                <FieldLabel>路径</FieldLabel>
+                <div className="flex gap-2">
+                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={path.trim() === '' || detecting}
+                    onClick={() => void runPathCheck()}
+                  >
+                    {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  {detecting ? (
+                    <>
+                      <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                      <span className="text-muted-foreground">正在检测文件…</span>
+                    </>
+                  ) : checkResult ? (
+                    <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
+                  ) : (
+                    <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
+                  )}
+                </div>
+              </Field>
+            </>
           )}
 
           {mode === 'ssh' && (
             <>
               <Field>
-                <FieldLabel>主机</FieldLabel>
-                <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="例如：192.168.1.100" />
+                <FieldLabel>主机（含端口）</FieldLabel>
+                <div className="flex gap-2">
+                  <Input className="flex-1" value={host} onChange={(e) => setHost(e.target.value)} placeholder="例如：192.168.1.100" />
+                  <Input className="w-24" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="端口" />
+                </div>
               </Field>
               <Field>
-                <FieldLabel>端口</FieldLabel>
-                <Input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="22" />
-              </Field>
-              <Field>
-                <FieldLabel>用户名</FieldLabel>
-                <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="例如：root" />
-              </Field>
-              <Field>
-                <FieldLabel>认证方式</FieldLabel>
-                <Select value={authType} onValueChange={(v) => setAuthType(v as 'password' | 'key')}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="password">密码</SelectItem>
-                      <SelectItem value="key">私钥</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
+                <FieldLabel>用户名 / 认证方式</FieldLabel>
+                <div className="flex gap-2">
+                  <Input className="flex-1" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="例如：root" />
+                  <Select value={authType} onValueChange={(v) => setAuthType(v as 'password' | 'key')}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="password">密码</SelectItem>
+                        <SelectItem value="key">私钥</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
               </Field>
               {authType === 'password' ? (
                 <Field>
@@ -903,40 +933,36 @@ function AgentConfigFormDialog({
                 </Field>
               )}
 
-              <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-                <FieldLabel>跳板模式</FieldLabel>
-                <div className="flex items-center gap-1.5">
-                  <span className={jumpEnabled ? 'text-sm font-medium' : 'text-sm text-muted-foreground'}>{jumpEnabled ? '已开启' : '已关闭'}</span>
-                  <Switch checked={jumpEnabled} onCheckedChange={setJumpEnabled} />
-                </div>
-              </Field>
+              <div className="flex items-center gap-2">
+                <Switch checked={jumpEnabled} onCheckedChange={setJumpEnabled} />
+                <span className="text-sm font-medium">跳板模式</span>
+              </div>
+
               {jumpEnabled && (
                 <>
                   <Field>
-                    <FieldLabel>跳板机主机</FieldLabel>
-                    <Input value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder="例如：192.168.1.100" />
+                    <FieldLabel>跳板机主机（含端口）</FieldLabel>
+                    <div className="flex gap-2">
+                      <Input className="flex-1" value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder="例如：192.168.1.100" />
+                      <Input className="w-24" type="number" min={1} max={65535} value={jumpPort} onChange={(e) => setJumpPort(e.target.value)} placeholder="端口" />
+                    </div>
                   </Field>
                   <Field>
-                    <FieldLabel>跳板机端口</FieldLabel>
-                    <Input type="number" min={1} max={65535} value={jumpPort} onChange={(e) => setJumpPort(e.target.value)} placeholder="22" />
-                  </Field>
-                  <Field>
-                    <FieldLabel>跳板机用户名</FieldLabel>
-                    <Input value={jumpUsername} onChange={(e) => setJumpUsername(e.target.value)} placeholder="例如：root" />
-                  </Field>
-                  <Field>
-                    <FieldLabel>跳板机认证方式</FieldLabel>
-                    <Select value={jumpAuthType} onValueChange={(v) => setJumpAuthType(v as 'password' | 'key')}>
-                      <SelectTrigger className="w-40">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="password">密码</SelectItem>
-                          <SelectItem value="key">私钥</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
+                    <FieldLabel>跳板机用户名 / 认证方式</FieldLabel>
+                    <div className="flex gap-2">
+                      <Input className="flex-1" value={jumpUsername} onChange={(e) => setJumpUsername(e.target.value)} placeholder="例如：root" />
+                      <Select value={jumpAuthType} onValueChange={(v) => setJumpAuthType(v as 'password' | 'key')}>
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectItem value="password">密码</SelectItem>
+                            <SelectItem value="key">私钥</SelectItem>
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </Field>
                   {jumpAuthType === 'password' ? (
                     <Field>
@@ -952,9 +978,12 @@ function AgentConfigFormDialog({
                 </>
               )}
 
+              {targetOsField}
+
               <Field>
-                <FieldLabel>测试 SSH 连接（连接/读/写）</FieldLabel>
-                <div className="flex items-center gap-2">
+                <FieldLabel>远程路径</FieldLabel>
+                <div className="flex gap-2">
+                  <Input className="flex-1" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
                   <Button
                     type="button"
                     variant="outline"
@@ -964,28 +993,20 @@ function AgentConfigFormDialog({
                   >
                     {sshTesting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '测试 SSH 读写能力'}
                   </Button>
-                  <span className="text-xs text-muted-foreground">
-                    用当前填写的 SSH 配置连接目标主机；连接成功后读取下方路径，并在临时目录写入一个测试文件后删除
-                  </span>
                 </div>
+                <p className="text-xs text-muted-foreground">仅支持 .json 文件</p>
                 {sshTestResult && <SshTestResultPanel result={sshTestResult} />}
-              </Field>
-
-              <Field>
-                <FieldLabel>远程路径</FieldLabel>
-                <div className="flex gap-2">
-                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                {sshAllOk && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={path.trim() === ''}
+                    className="!border-primary !text-primary w-fit"
                     onClick={() => setPreviewOpen(true)}
                   >
                     预览远程文件
                   </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">仅支持 .json 文件</p>
+                )}
               </Field>
             </>
           )}

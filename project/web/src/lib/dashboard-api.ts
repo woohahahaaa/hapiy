@@ -602,7 +602,6 @@ export type AgentTypeRule = {
   readonly name: string
   readonly os_paths: AgentOsPaths
   readonly json_paths: AgentJsonPaths
-  readonly notes: string
   readonly recommendations: readonly AgentRecommendation[]
   readonly created_at: string
   readonly updated_at: string
@@ -614,7 +613,6 @@ export type AgentTypeRuleInput = {
   readonly mac?: string
   readonly provider_path?: string
   readonly model_path?: string
-  readonly notes?: string
   readonly recommendations?: readonly AgentRecommendation[]
 }
 
@@ -1834,7 +1832,6 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
-    notes: typeof value.notes === 'string' ? value.notes : '',
     recommendations: recs.map(parseAgentRecommendation),
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
@@ -2634,6 +2631,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async testAgentSshConnection(input: {
     readonly ssh_config: AgentSshConfig
     readonly path: string
+    readonly target_os: AgentTargetOS
   }): Promise<{
     readonly connect: AgentSshProbeResult
     readonly read: AgentSshProbeResult
@@ -2718,6 +2716,26 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
     if (!isRecord(data) || !isRecord(data.data)) {
       throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+    }
+    return {
+      applied: readNumber(data.data.applied, 'applied', 0),
+      content: typeof data.data.content === 'string' ? data.data.content : '',
+    }
+  },
+  async syncAgentConfigFileModelFields(
+    id: string,
+    input: {
+      readonly provider_id: string
+      readonly model_id: string
+      readonly fields: Readonly<Record<string, unknown>>
+    },
+  ): Promise<{ readonly applied: number; readonly content: string }> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/sync-model-fields`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+    if (!isRecord(data) || !isRecord(data.data)) {
+      throw new DashboardApiError('服务端返回的同步结果格式无效', null)
     }
     return {
       applied: readNumber(data.data.applied, 'applied', 0),

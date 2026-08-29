@@ -290,10 +290,6 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				}
 				dirty = true
 			}
-			if rule.Notes == "" && want.Notes != "" {
-				rule.Notes = want.Notes
-				dirty = true
-			}
 			if rule.Recommendations == "" && want.Recommendations != nil {
 				if err := rule.SetRecommendations(want.Recommendations); err != nil {
 					return err
@@ -304,10 +300,9 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				continue
 			}
 			if err := db.Model(&rule).Updates(map[string]any{
-				"os_paths":         rule.OsPaths,
-				"json_paths":       rule.JsonPaths,
-				"notes":            rule.Notes,
-				"recommendations":  rule.Recommendations,
+				"os_paths":        rule.OsPaths,
+				"json_paths":      rule.JsonPaths,
+				"recommendations": rule.Recommendations,
 			}).Error; err != nil {
 				return err
 			}
@@ -316,8 +311,7 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 			return err
 		}
 		rule = AgentTypeRule{
-			Name:  want.Name,
-			Notes: want.Notes,
+			Name: want.Name,
 		}
 		if err := rule.SetOsPaths(want.OsPaths); err != nil {
 			return err

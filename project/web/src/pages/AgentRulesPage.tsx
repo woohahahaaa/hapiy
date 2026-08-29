@@ -3,7 +3,6 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -236,7 +235,6 @@ function RuleDialog({
   const [macPath, setMacPath] = useState('')
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
-  const [notes, setNotes] = useState('')
   const [recommendations, setRecommendations] = useState<AgentRecommendation[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -248,7 +246,6 @@ function RuleDialog({
       setMacPath(editing?.os_paths.mac ?? '')
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
-      setNotes(editing?.notes ?? '')
       setRecommendations((editing?.recommendations ?? []).map((r) => ({ ...r })))
       setError(null)
       setSaving(false)
@@ -272,7 +269,6 @@ function RuleDialog({
           mac: macPath.trim(),
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
-          notes,
           recommendations,
         })
       } else {
@@ -340,16 +336,6 @@ function RuleDialog({
               <p className="text-xs text-muted-foreground">
                 完整 gjson 路径，model 里用 {'{provider_id}'} 占位当前 provider 键名
               </p>
-            </Field>
-            <Field>
-              <FieldLabel>备注（自由文本，可选）</FieldLabel>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="自由补充该 agent 的 provider 字段说明…"
-                rows={3}
-                className="min-h-[60px] font-mono text-xs leading-relaxed"
-              />
             </Field>
             <Field>
               <div className="flex items-center justify-between">

@@ -60,7 +60,6 @@ type updateAgentTypeRuleRequest struct {
 	Mac             string                 `json:"mac"`
 	ProviderPath    string                 `json:"provider_path"`
 	ModelPath       string                 `json:"model_path"`
-	Notes           string                 `json:"notes"`
 	Recommendations []model.AgentRecommendation `json:"recommendations"`
 }
 
@@ -103,7 +102,6 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		rule.Notes = strings.TrimSpace(req.Notes)
 		if err := rule.SetRecommendations(req.Recommendations); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -122,7 +120,6 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Name            string                    `json:"name"`
 			ProviderPath    string                    `json:"provider_path"`
 			ModelPath       string                    `json:"model_path"`
-			Notes           string                    `json:"notes"`
 			Recommendations []model.AgentRecommendation `json:"recommendations"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -144,8 +141,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		rule := model.AgentTypeRule{
-			Name:  name,
-			Notes: strings.TrimSpace(req.Notes),
+			Name: name,
 		}
 		if err := rule.SetJsonPaths(model.AgentJsonPaths{
 			Provider: strings.TrimSpace(req.ProviderPath),
@@ -611,6 +607,7 @@ func TestAgentSshConnection() gin.HandlerFunc {
 	type request struct {
 		SshConfig json.RawMessage `json:"ssh_config"`
 		Path      string          `json:"path"`
+		TargetOS  string          `json:"target_os"` // "windows" | "mac" | "other"; selects the probe command family
 	}
 	return func(c *gin.Context) {
 		var req request
@@ -627,7 +624,12 @@ func TestAgentSshConnection() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 			return
 		}
-		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path))
+		targetOS := strings.TrimSpace(req.TargetOS)
+		if targetOS != "" && targetOS != "windows" && targetOS != "mac" && targetOS != "other" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "目标系统必须是 windows、mac 或 other"})
+			return
+		}
+		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path), targetOS)
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"connect": connect,
 			"read":    read,
@@ -951,6 +953,84 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		if err := writeAgentConfigFileContent(&row, updated, key); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
+			return
+		}
+		if err := db.Model(&row).Update("content", updated).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
+	}
+}
+
+// SyncAgentConfigFileModelFields writes caller-supplied fields into a
+// single model's config block in the live file. The path map is built
+// on the client (e.g. from models.dev → opencode paths) and merged via
+// sjson. Fields whose path matches the existing model keys overwrite;
+// new paths are inserted.
+func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
+	type syncReq struct {
+		ProviderID string            `json:"provider_id"`
+		ModelID    string            `json:"model_id"`
+		Fields     map[string]any    `json:"fields"`
+	}
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var rule model.AgentTypeRule
+		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			return
+		}
+		jpaths, err := rule.GetJsonPaths()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			return
+		}
+		var req syncReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(req.ProviderID) == "" || strings.TrimSpace(req.ModelID) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "provider_id 与 model_id 不能为空"})
+			return
+		}
+		if len(req.Fields) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "fields 不能为空"})
+			return
+		}
+
+		content, err := readAgentConfigFileContent(&row, key)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		cleaned := stripJSON5Comments(content)
+		resolvedModel := strings.ReplaceAll(jpaths.Model, "{provider_id}", req.ProviderID)
+		base := resolvedModel + "." + req.ModelID
+		buf := []byte(cleaned)
+		applied := 0
+		for path, val := range req.Fields {
+			full := base + "." + path
+			next, err := sjson.SetBytes(buf, full, val)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("写入字段 %s 失败: %v", path, err)})
+				return
+			}
+			buf = next
+			applied++
+		}
+		updated := string(buf)
 		if err := writeAgentConfigFileContent(&row, updated, key); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
 			return
