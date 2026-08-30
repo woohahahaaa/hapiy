@@ -345,13 +345,13 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		// its body was already consumed by relayNonStreaming/relayStreaming
 		// so we only record the error text.
 		if len(plan.LogOutputs) > 0 {
-			e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, nil)
-			e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, plan, req, nil)
 			writer := service.LogCapture()
 			if writer != nil && req != nil {
 				var failConnectMs *int
+				var failHeaders map[string]string
 				if resp != nil {
 					failConnectMs = msPtr(resp.ConnectMs)
+					failHeaders = resp.Headers
 				}
 				for _, assignment := range plan.LogOutputs {
 					if !assignment.Enabled {
@@ -367,7 +367,11 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 					if autoClosed(assignment, cfg) {
 						continue
 					}
-					writer.WriteLog(&service.LogCaptureData{
+					// A single response_after row carries the failure. We avoid
+					// the empty response_before/response_after placeholders
+					// (nil resp) that would otherwise inflate the pair's
+					// response count and render as blank nodes.
+					data := &service.LogCaptureData{
 						RequestID:    req.RequestID,
 						Stage:        string(topologyStageResponseAfter),
 						Type:         "response",
@@ -379,7 +383,13 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 						Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 						Error:        err.Error(),
 						ConnectMs:    failConnectMs,
-					})
+					}
+					if failHeaders != nil {
+						data.Response = &service.HTTPCapture{Headers: failHeaders, Body: err.Error()}
+					} else {
+						data.Response = &service.HTTPCapture{Body: err.Error()}
+					}
+					writer.WriteLog(data)
 				}
 			}
 		}
