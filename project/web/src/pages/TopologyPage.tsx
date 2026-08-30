@@ -1525,19 +1525,42 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   const [confirmDelete, setConfirmDelete] = useState<{ nodeCount: number; edgeCount: number; executorToken?: string } | null>(null)
 
+  // 把当前拾取中的 executor 解析成可删除的目标：可能是 provider 子节点
+  // （按节点 id 删除），也可能是普通插槽的 entry（按 entry.id 找到 index
+  // 后走 handleDeleteSlotEntry）。
+  const resolveExecutorTarget = useCallback((): { slotId: string; token: string } | null => {
+    if (!selectedExecutor || !canvas) return null
+    const slotNode = canvas.topLevel.find((n) => n.id === selectedExecutor.slotId && n.kind === 'slot')
+    if (!slotNode) return null
+    return selectedExecutor
+  }, [selectedExecutor, canvas])
+
   const executeDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes
       .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
       .map((n) => n.id)
     if (topLevelIds.length > 0) {
       handleDeleteNodes(topLevelIds)
-    } else if (confirmDelete?.executorToken) {
-      handleDeleteNode(confirmDelete.executorToken)
+    } else if (confirmDelete?.executorToken && canvas) {
+      // executor 拾取态：先看是不是 provider 子节点，否则按 slot entry 删除。
+      const isProvider = canvas.providers.some((p) => p.id === confirmDelete.executorToken)
+      if (isProvider) {
+        handleDeleteNode(confirmDelete.executorToken)
+      } else {
+        const slotNode = canvas.topLevel.find(
+          (n) => n.id === selectedExecutor?.slotId && n.kind === 'slot',
+        )
+        const slotType = slotNode?.slotType as SlotType | undefined
+        if (slotNode && slotType) {
+          const entry = (slotNode.entries ?? []).find((e) => e.id === confirmDelete.executorToken)
+          if (entry) handleDeleteSlotEntry(slotNode.id, slotType, entry.index)
+        }
+      }
       setSelectedExecutor(null)
     } else if (selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))) {
       handleDeleteSelectedEdges()
     }
-  }, [confirmDelete, handleDeleteNodes, handleDeleteNode, handleDeleteSelectedEdges])
+  }, [confirmDelete, canvas, selectedExecutor, handleDeleteNodes, handleDeleteNode, handleDeleteSlotEntry, handleDeleteSelectedEdges])
 
   const requestDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes.filter(
@@ -1548,11 +1571,21 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       setConfirmDelete({ nodeCount: topLevelIds.length, edgeCount })
       return
     }
-    // executor 拾取态：选中的是某张供应商卡片（token = provider 节点 id）
-    if (selectedExecutor && canvas?.providers.some((p) => p.id === selectedExecutor.token)) {
-      setConfirmDelete({ nodeCount: 1, edgeCount: 0, executorToken: selectedExecutor.token })
+    // executor 拾取态：可能是 provider 子节点，也可能是某个普通插槽里的 entry。
+    if (resolveExecutorTarget() && selectedExecutor && canvas) {
+      const isProvider = canvas.providers.some((p) => p.id === selectedExecutor.token)
+      if (isProvider) {
+        setConfirmDelete({ nodeCount: 1, edgeCount: 0, executorToken: selectedExecutor.token })
+      } else {
+        const slotNode = canvas.topLevel.find((n) => n.id === selectedExecutor.slotId && n.kind === 'slot')
+        const slotType = slotNode?.slotType as SlotType | undefined
+        const entry = slotNode ? (slotNode.entries ?? []).find((e) => e.id === selectedExecutor.token) : undefined
+        if (slotNode && slotType && entry) {
+          setConfirmDelete({ nodeCount: 1, edgeCount: 0, executorToken: selectedExecutor.token })
+        }
+      }
     }
-  }, [selectedExecutor, canvas])
+  }, [selectedExecutor, canvas, resolveExecutorTarget])
 
   const handleUndo = useCallback(() => {
     const cur = tpRef.current
@@ -1648,13 +1681,13 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         (n) => n.type === 'requestEntry' || n.type === 'slot',
       )
       const hasEdges = selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))
-      if (topLevelIds.length === 0 && !hasEdges) return
+      if (topLevelIds.length === 0 && !hasEdges && !selectedExecutor) return
       event.preventDefault()
       requestDeleteSelected()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [requestDeleteSelected, handleUndo, handleRedo, handleCopy, handlePaste])
+  }, [requestDeleteSelected, selectedExecutor, handleUndo, handleRedo, handleCopy, handlePaste])
 
   const handleNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {

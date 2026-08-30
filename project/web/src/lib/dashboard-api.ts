@@ -1806,11 +1806,11 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
   if (!isRecord(record)) {
     throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
   }
-  const authType = readString(value.auth_type, 'ssh_config.auth_type')
+  const authType = readString(record.auth_type, 'ssh_config.auth_type')
   if (authType !== 'password' && authType !== 'key') {
     throw new DashboardApiError(`无效的 SSH 认证方式: ${authType}`, null)
   }
-  const jumpAuthTypeValue = value.jump_auth_type
+  const jumpAuthTypeValue = record.jump_auth_type
   const jumpAuthType = jumpAuthTypeValue === undefined || jumpAuthTypeValue === null || jumpAuthTypeValue === ''
     ? undefined
     : readString(jumpAuthTypeValue, 'ssh_config.jump_auth_type')
@@ -1818,33 +1818,33 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
     throw new DashboardApiError(`无效的跳板机认证方式: ${jumpAuthType}`, null)
   }
   return {
-    host: readString(value.host, 'ssh_config.host'),
-    port: readNumber(value.port, 'ssh_config.port', 22),
-    username: readString(value.username, 'ssh_config.username'),
+    host: readString(record.host, 'ssh_config.host'),
+    port: readNumber(record.port, 'ssh_config.port', 22),
+    username: readString(record.username, 'ssh_config.username'),
     auth_type: authType,
-    password: value.password === undefined || value.password === null || value.password === ''
+    password: record.password === undefined || record.password === null || record.password === ''
       ? undefined
-      : readString(value.password, 'ssh_config.password'),
-    private_key: value.private_key === undefined || value.private_key === null || value.private_key === ''
+      : readString(record.password, 'ssh_config.password'),
+    private_key: record.private_key === undefined || record.private_key === null || record.private_key === ''
       ? undefined
-      : readString(value.private_key, 'ssh_config.private_key'),
-    jump_enabled: value.jump_enabled === undefined || value.jump_enabled === null
+      : readString(record.private_key, 'ssh_config.private_key'),
+    jump_enabled: record.jump_enabled === undefined || record.jump_enabled === null
       ? false
-      : readBoolean(value.jump_enabled, 'ssh_config.jump_enabled'),
-    jump_host: value.jump_host === undefined || value.jump_host === null || value.jump_host === ''
+      : readBoolean(record.jump_enabled, 'ssh_config.jump_enabled'),
+    jump_host: record.jump_host === undefined || record.jump_host === null || record.jump_host === ''
       ? undefined
-      : readString(value.jump_host, 'ssh_config.jump_host'),
-    jump_port: readNumber(value.jump_port, 'ssh_config.jump_port', 22),
-    jump_username: value.jump_username === undefined || value.jump_username === null || value.jump_username === ''
+      : readString(record.jump_host, 'ssh_config.jump_host'),
+    jump_port: readNumber(record.jump_port, 'ssh_config.jump_port', 22),
+    jump_username: record.jump_username === undefined || record.jump_username === null || record.jump_username === ''
       ? undefined
-      : readString(value.jump_username, 'ssh_config.jump_username'),
+      : readString(record.jump_username, 'ssh_config.jump_username'),
     jump_auth_type: jumpAuthType,
-    jump_password: value.jump_password === undefined || value.jump_password === null || value.jump_password === ''
+    jump_password: record.jump_password === undefined || record.jump_password === null || record.jump_password === ''
       ? undefined
-      : readString(value.jump_password, 'ssh_config.jump_password'),
-    jump_private_key: value.jump_private_key === undefined || value.jump_private_key === null || value.jump_private_key === ''
+      : readString(record.jump_password, 'ssh_config.jump_password'),
+    jump_private_key: record.jump_private_key === undefined || record.jump_private_key === null || record.jump_private_key === ''
       ? undefined
-      : readString(value.jump_private_key, 'ssh_config.jump_private_key'),
+      : readString(record.jump_private_key, 'ssh_config.jump_private_key'),
   }
 }
 
