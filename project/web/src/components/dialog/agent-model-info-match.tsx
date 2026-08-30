@@ -8,9 +8,8 @@ import {
   DialogTitle,
 } from '@/components/dialog'
 import { toast } from '@/components/ui/toast'
-import { loadModelsDevModels, type ModelsDevModel } from '@/lib/models-dev'
 import { dashboardApi } from '@/lib/dashboard-api'
-import type { AgentConfigFile } from '@/lib/dashboard-api'
+import type { AgentConfigFile, PriceConfig } from '@/lib/dashboard-api'
 
 interface AgentModelInfoMatchDialogProps {
   open: boolean
@@ -18,25 +17,25 @@ interface AgentModelInfoMatchDialogProps {
   record: AgentConfigFile | null
   providerId: string | null
   modelId: string | null
-  onApplied: () => void
+  onPreview: (input: { readonly content: string; readonly applied: number }) => void
 }
 
 // Field mapping for each supported agent_type. The dialog looks up the
 // entry that matches the takeover record's agent_type and uses it to
-// turn one ModelsDevModel into a {path: value} map.
+// turn one PriceConfig row into a {path: value} map. Reads from the
+// 模型信息 (PriceConfig) table we keep locally — NOT models.dev.
 const AGENT_FIELD_MAP: Record<
   string,
-  Array<{ readonly key: keyof ModelsDevModel; readonly path: string; readonly transform?: (v: unknown) => unknown }>
+  Array<{ readonly key: keyof PriceConfig; readonly path: string; readonly transform?: (v: unknown) => unknown }>
 > = {
   opencode: [
-    { key: 'contextLength', path: 'limits.context' },
-    { key: 'maxOutput', path: 'limits.output' },
-    { key: 'inputTypes', path: 'modalities.input' },
-    { key: 'outputTypes', path: 'modalities.output' },
+    { key: 'contextLength', path: 'limit.context' },
+    { key: 'maxToken', path: 'limit.output' },
+    { key: 'supportedTypes', path: 'modalities.input' },
     {
-      key: 'reasoning',
+      key: 'thinkingLevels',
       path: 'thinking',
-      transform: (v) => (v === true ? { type: 'enabled' } : undefined),
+      transform: (v) => (Array.isArray(v) && v.length > 0 ? { type: 'enabled' } : undefined),
     },
   ],
 }
@@ -47,30 +46,31 @@ export function AgentModelInfoMatchDialog({
   record,
   providerId,
   modelId,
-  onApplied,
+  onPreview,
 }: AgentModelInfoMatchDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [allModels, setAllModels] = useState<readonly ModelsDevModel[]>([])
+  const [allModels, setAllModels] = useState<readonly PriceConfig[]>([])
   const [applying, setApplying] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
     setError(null)
-    loadModelsDevModels()
-      .then((models) => setAllModels(models))
+    dashboardApi
+      .listPrices({ limit: 1000, offset: 0 })
+      .then((res) => setAllModels(res.prices))
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
       .finally(() => setLoading(false))
   }, [open])
 
-  const matches = useMemo<readonly ModelsDevModel[]>(() => {
+  const matches = useMemo<readonly PriceConfig[]>(() => {
     if (!modelId) return []
     const needle = modelId.toLowerCase()
     return allModels.filter((m) => {
-      const id = m.id.toLowerCase()
-      const name = m.name.toLowerCase()
-      return id === needle || id.includes(needle) || name.includes(needle)
+      const id = m.model.toLowerCase()
+      const aliasMatch = m.aliases.some((a) => a.toLowerCase().includes(needle))
+      return id === needle || id.includes(needle) || aliasMatch
     })
   }, [allModels, modelId])
 
@@ -111,13 +111,15 @@ export function AgentModelInfoMatchDialog({
     }
     setApplying(true)
     try {
+      // Preview only — backend computes and returns the new content
+      // without writing. Parent AgentModelsDialog stashes it in
+      // pendingContent and shows the save/cancel preview banner.
       const res = await dashboardApi.syncAgentConfigFileModelFields(record.id, {
         provider_id: providerId,
         model_id: modelId,
         fields,
       })
-      toast(`已写入 ${res.applied} 个字段`)
-      onApplied()
+      onPreview({ content: res.content, applied: res.applied })
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '同步失败')
@@ -135,7 +137,7 @@ export function AgentModelInfoMatchDialog({
 
         <div className="flex flex-col gap-2">
           <p className="text-xs text-muted-foreground">
-            从 models.dev 里挑选与「{modelId}」名称匹配（同 id / id 包含 / name 包含）的模型记录，点击应用把字段写回当前模型配置
+            从我们维护的「模型信息」表格里挑选与「{modelId}」匹配（按名称或别名包含）的模型记录，点击应用把字段写回当前模型配置
           </p>
           {loading && <Placeholder>加载中…</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
@@ -143,7 +145,7 @@ export function AgentModelInfoMatchDialog({
             <Placeholder>该 agent_type 暂未配置字段映射，请联系开发者补全</Placeholder>
           )}
           {!loading && !error && mapping.length > 0 && matches.length === 0 && (
-            <Placeholder>未找到匹配「{modelId}」的 models.dev 模型</Placeholder>
+            <Placeholder>未找到匹配「{modelId}」的模型信息记录</Placeholder>
           )}
           {matches.length > 0 && (
             <div className="overflow-x-auto rounded-md border border-border">
@@ -161,15 +163,18 @@ export function AgentModelInfoMatchDialog({
                     const fields = resolveFields(m)
                     const fieldCount = Object.keys(fields).length
                     return (
-                      <tr key={`${m.providerId}:${m.id}`} className="align-top">
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{m.name || m.id}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{m.id}</div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <div>{m.providerName || m.providerId}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{m.providerId}</div>
-                        </td>
+<tr key={m.id} className="align-top">
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{m.model}</div>
+                        {m.aliases.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground">
+                            别名：{m.aliases.join(', ')}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-mono">{m.providerId ?? '—'}</div>
+                      </td>
                         <td className="px-3 py-2">
                           {fieldCount === 0 ? (
                             <span className="text-muted-foreground">无可同步字段</span>

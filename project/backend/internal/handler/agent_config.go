@@ -360,16 +360,41 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := writeAgentConfigFileContent(&row, req.Content, key); err != nil {
+		formatted, err := prettifyJSON(req.Content)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "JSON 格式化失败: " + err.Error()})
+			return
+		}
+		if err := writeAgentConfigFileContent(&row, formatted, key); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "保存失败: " + err.Error()})
 			return
 		}
-		if err := db.Model(&row).Update("content", req.Content).Error; err != nil {
+		if err := db.Model(&row).Update("content", formatted).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true, "content": formatted}})
 	}
+}
+
+// prettifyJSON returns the supplied content indented with two spaces and
+// terminated by a newline. The raw blob must be valid JSON (or JSON5-
+// compatible — comments are tolerated via stripJSON5Comments so the
+// previewed content from apply/sync endpoints round-trips cleanly).
+// Inputs that already start as compact or non-standard JSON are still
+// reformatted; non-JSON inputs pass through untouched so a misconfigured
+// caller gets a readable error instead of silently mangled bytes.
+func prettifyJSON(content string) (string, error) {
+	cleaned := stripJSON5Comments(content)
+	var any any
+	if err := json.Unmarshal([]byte(cleaned), &any); err != nil {
+		return "", err
+	}
+	out, err := json.MarshalIndent(any, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out) + "\n", nil
 }
 
 func DeleteAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
@@ -891,13 +916,12 @@ func stripJSONKey(val gjson.Result, key string) gjson.Result {
 	return gjson.Parse(string(raw))
 }
 
-// ApplyAgentRecommendations writes the rule's Recommended values back
-// into the live config file for the selected provider (and model, when
-// model_id is provided). Provider-scope recommendations are always
-// applied; model-scope recommendations only apply when a model_id is
-// given. Recommendations with a null Recommended value are skipped (the
-// user hasn't told us what to fill in). The file is rewritten
-// atomically; SSH files use the same write path as the editor endpoint.
+// ApplyAgentRecommendations returns the file content it *would* write
+// when the rule's Recommended values were applied for the given
+// provider (and model, when model_id is provided). It does NOT touch
+// the file on disk — the caller previews, and on confirmation writes
+// the returned content back via PUT /:id/content. Recommendations
+// with a null Recommended value are skipped (no value to fill in).
 func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 	type applyReq struct {
 		ProviderID string `json:"provider_id"`
@@ -953,23 +977,18 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if err := writeAgentConfigFileContent(&row, updated, key); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
-			return
-		}
-		if err := db.Model(&row).Update("content", updated).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		// Preview only — do NOT write here. Caller writes via PUT /:id/content.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
 	}
 }
 
-// SyncAgentConfigFileModelFields writes caller-supplied fields into a
-// single model's config block in the live file. The path map is built
-// on the client (e.g. from models.dev → opencode paths) and merged via
-// sjson. Fields whose path matches the existing model keys overwrite;
-// new paths are inserted.
+// SyncAgentConfigFileModelFields returns the file content it *would*
+// write when caller-supplied fields were merged into a single model's
+// config block. The path map is built on the client (e.g. from
+// models.dev → opencode paths) and merged via sjson. The caller
+// previews, then writes the returned content via PUT /:id/content.
+// Fields whose path matches the existing model keys overwrite; new
+// paths are inserted.
 func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 	type syncReq struct {
 		ProviderID string            `json:"provider_id"`
@@ -1031,14 +1050,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			applied++
 		}
 		updated := string(buf)
-		if err := writeAgentConfigFileContent(&row, updated, key); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
-			return
-		}
-		if err := db.Model(&row).Update("content", updated).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
+		// Preview only — do NOT write here. Caller writes via PUT /:id/content.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
 	}
 }

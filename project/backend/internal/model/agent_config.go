@@ -247,11 +247,13 @@ var opencodeRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "options.maxConcurrency", Type: "number", Description: "最大并发请求数", Recommended: 5},
-	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）", Recommended: 30000},
+	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）。默认 300000，复杂任务建议拉长到 600000", Recommended: 600000},
+	{Scope: "provider", Key: "options.chunkTimeout", Type: "number", Description: "流式响应 chunk 之间间隔超时（毫秒）", Recommended: 30000},
+	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "是否强制为 provider 设置 cache key（开启可缓存优化）", Recommended: true},
 	{Scope: "provider", Key: "options.thinking", Type: "object", Description: "思考模型配置：{ type: enabled }", Recommended: map[string]any{"type": "enabled"}},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
-	{Scope: "model", Key: "limits.context", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "limits.output", Type: "number", Description: "输出 token 上限"},
+	{Scope: "model", Key: "limit.context", Type: "number", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限"},
 }
 
 // openclawRecommendations covers the JSON5-shaped providers block.
@@ -295,6 +297,16 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 					return err
 				}
 				dirty = true
+			} else if want.Recommendations != nil && recommendationsMissingLatestKeys(rule.Recommendations, want.Recommendations) {
+				// Existing recommendations on a built-in rule predate the
+				// current seed (e.g. a new field like setCacheKey was added).
+				// Overwrite so the rule picks up the latest keys; users who
+				// want to keep their old version can re-edit after the
+				// restart.
+				if err := rule.SetRecommendations(want.Recommendations); err != nil {
+					return err
+				}
+				dirty = true
 			}
 			if !dirty {
 				continue
@@ -333,6 +345,28 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 // (kept the oldest, appending " (2)", " (3)" … to the rest) so the
 // RecordName unique index added by AutoMigrate can be created on databases
 // that already accumulated duplicates. Called from main before AutoMigrate.
+// recommendationsMissingLatestKeys reports whether any of the keys from
+// `latest` are absent from `stored`. Used by EnsureDefaultAgentTypes to
+// detect outdated built-in recommendations on existing rows (e.g. when a
+// new field like setCacheKey is added to the seed) and refresh them
+// without losing user-added custom rules.
+func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendation) bool {
+	var parsed []AgentRecommendation
+	if err := json.Unmarshal([]byte(stored), &parsed); err != nil {
+		return true
+	}
+	have := make(map[string]bool, len(parsed))
+	for _, r := range parsed {
+		have[r.Key] = true
+	}
+	for _, r := range latest {
+		if !have[r.Key] {
+			return true
+		}
+	}
+	return false
+}
+
 func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {
 	if !db.Migrator().HasTable(&AgentConfigFile{}) {
 		return nil
