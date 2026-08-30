@@ -410,16 +410,19 @@ export function TopologyPage() {
     return { '--node-accent': 'var(--warning)' } as CSSProperties
   }
 
-  // 每个 slot 连进来的线数（驱动左侧 handlebar 长度）
+  // 每个 slot 连进来的线数（驱动左侧 handlebar 长度）：只数 canvas 上
+  // 真正连进 slot 节点的 top-level 线，避免把 provider slot 内部展开出来的
+  // `slot → primary → 下一 slot` 等 flat wire 也算进 slot 入线，导致 handle
+  // bar 被撑高。
   const slotConnectionCount = useMemo(() => {
     const counts = new Map<string, number>()
-    if (!tp) return counts
-    for (const w of tp.wires) {
-      const targetIsSlot = tp.nodes.some((n) => n.id === w.target && n.kind === 'slot')
+    if (!canvas) return counts
+    for (const w of canvas.canvasWires) {
+      const targetIsSlot = canvas.topLevel.some((n) => n.id === w.target && n.kind === 'slot')
       if (targetIsSlot) counts.set(w.target, (counts.get(w.target) ?? 0) + 1)
     }
     return counts
-  }, [tp])
+  }, [canvas])
 
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()

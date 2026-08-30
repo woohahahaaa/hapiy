@@ -1045,7 +1045,7 @@ function AgentConfigFormDialog({
             if (mode === 'ssh') {
               const { cfg, error } = buildSshConfigForProbe()
               if (error) return Promise.reject(new Error(error))
-              return dashboardApi.readAgentConfigRemotePath(cfg, trimmed)
+              return dashboardApi.readAgentConfigRemotePath(cfg, trimmed, targetOs)
             }
             return dashboardApi.readAgentConfigPath(trimmed)
           }}

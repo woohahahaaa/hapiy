@@ -88,11 +88,19 @@ function computeTypeLabel(pair: LogCapturePairFull): string {
   else if (hasRequest && n === 0) base = '请求'
   else if (n === 1) base = '请求+响应'
   else base = `请求+响应×${n}`
-  const hasError = pair.error !== '' || live.some((r) => r.status >= 400)
+  const hasError = pairHasError(pair)
   const isIncomplete = hasRequest && live.some((r) => r.before && !r.after)
   if (hasError) base += '+报错'
   if (isIncomplete) base += '+不完整'
   return base
+}
+
+// ── pairHasError mirrors the backend pairHasError: any captured error string
+// anywhere in the pair, or any response that surfaced a 4xx/5xx status. Kept
+// in sync so the dialog header badge matches the list view's destructive state.
+function pairHasError(pair: LogCapturePairFull): boolean {
+  if (pair.error !== '') return true
+  return pair.responses.some((r) => r.status >= 400)
 }
 
 // ── Inline hand-rolled collapsible Node (not exported) ──
@@ -190,6 +198,14 @@ type StageNode = {
   readonly modified: boolean
 }
 
+function StageErrorRow({ error }: { readonly error: string }) {
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive whitespace-pre-wrap break-words">
+      {error}
+    </div>
+  )
+}
+
 function renderStageBody(node: StageNode): ReactNode {
   const headersEl = renderHeaders(node.before?.headers ?? node.after?.headers ?? null, false)
   let bodyEl: ReactNode
@@ -198,9 +214,11 @@ function renderStageBody(node: StageNode): ReactNode {
   } else {
     bodyEl = <JsonHighlight value={node.before?.body ?? node.after?.body} />
   }
-  if (headersEl === null && bodyEl === null) return null
+  const stageError = node.after?.error ?? node.before?.error ?? ''
+  if (headersEl === null && bodyEl === null && stageError === '') return null
   return (
     <>
+      {stageError !== '' && <StageErrorRow error={stageError} />}
       {headersEl !== null && <Node label="请求头">{headersEl}</Node>}
       {bodyEl !== null && <Node label="请求体">{bodyEl}</Node>}
     </>
@@ -374,6 +392,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   if (!canMerge) {
     return (
       <div className="flex flex-col gap-1.5">
+        {stageRow.error && <StageErrorRow error={stageRow.error} />}
         {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
         <Node label="响应体">
           <JsonHighlight value={stageRow.body} />
@@ -384,6 +403,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
 
   return (
     <div className="flex flex-col gap-1.5">
+      {stageRow.error && <StageErrorRow error={stageRow.error} />}
       {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
       <Node
         label="响应体"
@@ -544,7 +564,7 @@ function PairDialog({ requestId, open, onClose }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{pair?.request_id ?? requestId}</span>
-            {pair && <Badge variant="default">{typeLabel}</Badge>}
+            {pair && <Badge variant={pairHasError(pair) ? 'destructive' : 'default'}>{typeLabel}</Badge>}
           </DialogTitle>
         </DialogHeader>
 

@@ -588,6 +588,26 @@ export type AgentJsonPaths = {
 export type AgentRecommendationScope = 'provider' | 'model'
 export type AgentRecommendationType = 'string' | 'number' | 'boolean' | 'object' | 'array'
 
+export const MODEL_INFO_FIELD_KEYS = ['max_context', 'max_output_token', 'input_types', 'thinking_levels'] as const
+export type ModelInfoFieldKey = typeof MODEL_INFO_FIELD_KEYS[number]
+
+// Unified shared vocabulary for the four model-info fields. Every
+// surface (rule table, sync dialog, model info editor) uses these
+// labels so naming stays consistent.
+export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
+  max_context: '最大上下文',
+  max_output_token: '最大输出token',
+  input_types: '支持的输入类型',
+  thinking_levels: '支持的思考程度',
+}
+
+export type AgentModelInfoFieldPaths = {
+  readonly max_context: string
+  readonly max_output_token: string
+  readonly input_types: string
+  readonly thinking_levels: string
+}
+
 export type AgentRecommendation = {
   readonly scope: AgentRecommendationScope
   readonly key: string
@@ -603,6 +623,7 @@ export type AgentTypeRule = {
   readonly os_paths: AgentOsPaths
   readonly json_paths: AgentJsonPaths
   readonly recommendations: readonly AgentRecommendation[]
+  readonly model_info_fields: AgentModelInfoFieldPaths
   readonly created_at: string
   readonly updated_at: string
 }
@@ -614,6 +635,7 @@ export type AgentTypeRuleInput = {
   readonly provider_path?: string
   readonly model_path?: string
   readonly recommendations?: readonly AgentRecommendation[]
+  readonly model_info_fields?: AgentModelInfoFieldPaths
 }
 
 export type AgentPathCheckResult = {
@@ -2650,10 +2672,10 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       write: parseAgentSshProbeResult(data.write),
     }
   },
-  async readAgentConfigRemotePath(sshConfig: AgentSshConfig, path: string): Promise<string> {
+  async readAgentConfigRemotePath(sshConfig: AgentSshConfig, path: string, target_os: AgentTargetOS): Promise<string> {
     const data = await request('/agent-config-files/read-remote', {
       method: 'POST',
-      body: JSON.stringify({ ssh_config: sshConfig, path }),
+      body: JSON.stringify({ ssh_config: sshConfig, path, target_os }),
     })
     if (!isRecord(data) || typeof data.content !== 'string') {
       throw new DashboardApiError('服务端返回的远程文件内容格式无效', null)

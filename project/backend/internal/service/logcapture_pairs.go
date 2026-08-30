@@ -450,7 +450,10 @@ func responseIsStream(rows []model.LogCapture) bool {
 
 // splitStages partitions rows by Stage, dropping system rows (Type=="system"
 // OR Stage not in the four known values). Each returned slice preserves the
-// input order (caller already sorted ASC).
+// input order (caller already sorted ASC). Response rows that are complete
+// placeholders — no headers, no body, no status, no error — are dropped so a
+// failed relay's empty capture rows never inflate the response count or render
+// as blank nodes.
 func splitStages(rows []model.LogCapture) (reqBefore, reqAfter, rspBefore, rspAfter []model.LogCapture) {
 	for i := range rows {
 		r := rows[i]
@@ -463,12 +466,31 @@ func splitStages(rows []model.LogCapture) (reqBefore, reqAfter, rspBefore, rspAf
 		case "request_after":
 			reqAfter = append(reqAfter, r)
 		case "response_before":
+			if emptyResponsePlaceholder(r) {
+				continue
+			}
 			rspBefore = append(rspBefore, r)
 		case "response_after":
+			if emptyResponsePlaceholder(r) {
+				continue
+			}
 			rspAfter = append(rspAfter, r)
 		}
 	}
 	return
+}
+
+// emptyResponsePlaceholder reports whether a response row carries no captured
+// data at all (no headers/body/status/error). Such rows are written by legacy
+// relays on failure and only serve to inflate the pair's response count.
+func emptyResponsePlaceholder(r model.LogCapture) bool {
+	if r.Error != "" || r.ResponseStatus != 0 {
+		return false
+	}
+	if len(r.Headers) > 0 || len(r.RequestBody) > 0 || len(r.ResponseBody) > 0 {
+		return false
+	}
+	return true
 }
 
 // stageRow maps a single LogCapture row to the stage-row shape used by the
