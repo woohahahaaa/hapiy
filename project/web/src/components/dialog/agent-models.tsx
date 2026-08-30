@@ -446,14 +446,20 @@ action={
           </div>
         </div>
 
-        <AgentModelInfoMatchDialog
+<AgentModelInfoMatchDialog
           open={syncingFromInfo}
           onOpenChange={setSyncingFromInfo}
           record={record}
           providerId={selectedProviderId}
-          modelId={selectedModelId}
+          provider={selectedProvider}
+          modelInfoFields={summary?.model_info_fields ?? {
+            max_context: '',
+            max_output_token: '',
+            input_types: '',
+            thinking_levels: '',
+          }}
           onPreview={({ content, applied }) => {
-setLiveContent(content)
+            setLiveContent(content)
             toast(`已生成预览：${applied} 处变更待保存`)
           }}
         />

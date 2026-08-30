@@ -711,6 +711,7 @@ export type AgentModelSummary = {
   readonly agent_type: string
   readonly providers: readonly AgentModelProvider[]
   readonly recommendations: readonly AgentRecommendation[]
+  readonly model_info_fields: AgentModelInfoFieldPaths
 }
 
 export class DashboardApiError extends Error {
@@ -1791,7 +1792,18 @@ function parseTopologyVersionList(value: unknown): TopologyVersionList {
 
 function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
   if (value === null || value === undefined || value === '') return null
-  if (!isRecord(value)) {
+  // The backend persists ssh_config as a JSON blob string on the row and
+  // re-sends that blob (sanitized) in list responses. Accept both the
+  // string form and a pre-decoded object.
+  let record = value
+  if (typeof value === 'string') {
+    try {
+      record = parseJson(value, 'ssh_config')
+    } catch {
+      throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
+    }
+  }
+  if (!isRecord(record)) {
     throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
   }
   const authType = readString(value.auth_type, 'ssh_config.auth_type')
@@ -1939,6 +1951,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
   }
   const providers = Array.isArray(value.providers) ? value.providers : []
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  const mif = isRecord(value.model_info_fields) ? value.model_info_fields : {}
   return {
     agent_type: typeof value.agent_type === 'string' ? value.agent_type : '',
     providers: providers.map((raw) => {
@@ -1957,6 +1970,12 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
       }
     }),
     recommendations: recs.map(parseAgentRecommendation),
+    model_info_fields: {
+      max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
+      max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
+      input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
+      thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
+    },
   }
 }
 

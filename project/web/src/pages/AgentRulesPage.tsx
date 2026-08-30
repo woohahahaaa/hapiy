@@ -24,6 +24,9 @@ import { toast } from '@/components/ui/toast'
 import {
   dashboardApi,
   DashboardApiError,
+  MODEL_INFO_FIELD_KEYS,
+  MODEL_INFO_FIELD_LABELS,
+  type AgentModelInfoFieldPaths,
   type AgentRecommendation,
   type AgentRecommendationScope,
   type AgentRecommendationType,
@@ -236,6 +239,12 @@ function RuleDialog({
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
   const [recommendations, setRecommendations] = useState<AgentRecommendation[]>([])
+  const [modelInfoFields, setModelInfoFields] = useState<AgentModelInfoFieldPaths>({
+    max_context: '',
+    max_output_token: '',
+    input_types: '',
+    thinking_levels: '',
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -247,6 +256,12 @@ function RuleDialog({
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
       setRecommendations((editing?.recommendations ?? []).map((r) => ({ ...r })))
+      setModelInfoFields({ ...(editing?.model_info_fields ?? {
+        max_context: '',
+        max_output_token: '',
+        input_types: '',
+        thinking_levels: '',
+      }) })
       setError(null)
       setSaving(false)
     }
@@ -270,6 +285,7 @@ function RuleDialog({
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
           recommendations,
+          model_info_fields: modelInfoFields,
         })
       } else {
         await dashboardApi.createAgentTypeRule(trimmed)
@@ -337,6 +353,9 @@ function RuleDialog({
                 完整 gjson 路径，model 里用 {'{provider_id}'} 占位当前 provider 键名
               </p>
             </Field>
+
+            <ModelInfoFieldsEditor value={modelInfoFields} onChange={setModelInfoFields} />
+
             <Field>
               <div className="flex items-center justify-between">
                 <FieldLabel>推荐配置</FieldLabel>
@@ -376,6 +395,50 @@ function RuleDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ModelInfoFieldsEditor({
+  value,
+  onChange,
+}: {
+  value: AgentModelInfoFieldPaths
+  onChange: (v: AgentModelInfoFieldPaths) => void
+}) {
+  return (
+    <Field>
+      <div className="flex items-center justify-between">
+        <FieldLabel>通用模型信息字段</FieldLabel>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        四个统一的模型信息字段在各 agent 配置里的写入路径；「同步模型信息」时按此映射写回
+      </p>
+      <div className="overflow-hidden rounded-md border border-border">
+        <table className="w-full text-xs">
+          <thead className="bg-muted/40 text-muted-foreground">
+            <tr>
+              <th className="w-[40%] px-2 py-1.5 text-left font-medium">模型信息</th>
+              <th className="px-2 py-1.5 text-left font-medium">字段名（gjson 路径）</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {MODEL_INFO_FIELD_KEYS.map((key) => (
+              <tr key={key}>
+                <td className="px-2 py-1.5">{MODEL_INFO_FIELD_LABELS[key]}</td>
+                <td className="px-2 py-1.5">
+                  <Input
+                    value={value[key]}
+                    onChange={(e) => onChange({ ...value, [key]: e.target.value })}
+                    placeholder="例如：limit.context"
+                    className="h-7 text-xs font-mono"
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Field>
   )
 }
 

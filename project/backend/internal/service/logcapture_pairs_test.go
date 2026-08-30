@@ -431,6 +431,98 @@ func TestReadPair_returns_full_bodies_and_404_for_unknown(t *testing.T) {
 	}
 }
 
+// TestListPairs_empty_response_placeholders_are_filtered: a failed relay can
+// leave empty response_before/response_after placeholder rows (no headers,
+// body, status, or error). These must not inflate the response count or the
+// type label. Rows carrying an error (e.g. the relay failure detail) are
+// kept.
+func TestListPairs_empty_response_placeholders_are_filtered(t *testing.T) {
+	w := newPairsTestWriter(t)
+	now := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	writeRow(t, w, "r1", "request", "request_before", map[string]any{"a": 1}, 0, nil, now)
+	writeRow(t, w, "r1", "response", "response_before", nil, 0, nil, now.Add(1*time.Second))
+	writeRow(t, w, "r1", "response", "response_after", nil, 0, nil, now.Add(2*time.Second))
+	writeRow(t, w, "r1", "response", "response_after", nil, 0, nil, now.Add(3*time.Second))
+
+	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListPairs: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("total = %d, want 1", total)
+	}
+	s := findSummaryByRequestID(t, summaries, "r1")
+	if s.ResponseCount != 0 {
+		t.Fatalf("ResponseCount = %d, want 0 (placeholders filtered)", s.ResponseCount)
+	}
+	if s.HasResponse {
+		t.Fatalf("HasResponse = true, want false (only empty placeholders present)")
+	}
+	if !s.IsIncomplete {
+		t.Fatalf("IsIncomplete = false, want true (no usable response left)")
+	}
+
+	// Full assembly drops the placeholder rows too.
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if len(full.Responses) != 0 {
+		t.Fatalf("Responses len = %d, want 0", len(full.Responses))
+	}
+}
+
+// TestReadPair_keeps_error_response_row: an errored relay writes a single
+// response_after row carrying the error. The assembler must keep it (not
+// treat it as an empty placeholder) so the error surfaces in the dialog.
+func TestReadPair_keeps_error_response_row(t *testing.T) {
+	w := newPairsTestWriter(t)
+	now := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	writeRow(t, w, "r1", "request", "request_before", map[string]any{"a": 1}, 0, nil, now)
+	writeRow(t, w, "r1", "response", "response_before", nil, 0, nil, now.Add(1*time.Second))
+	errRow := model.LogCapture{
+		RequestID: "r1",
+		Type:      "response",
+		Stage:     "response_after",
+		Error:     "upstream returned 401: {\"detail\":\"无效的 API Key\"}",
+		CreatedAt: now.Add(2 * time.Second),
+	}
+	if err := w.db.Create(&errRow).Error; err != nil {
+		t.Fatalf("create errRow: %v", err)
+	}
+
+	summaries, _, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListPairs: %v", err)
+	}
+	s := findSummaryByRequestID(t, summaries, "r1")
+	if !s.HasResponse {
+		t.Fatalf("HasResponse = false, want true (error response kept)")
+	}
+	if s.ResponseCount != 1 {
+		t.Fatalf("ResponseCount = %d, want 1", s.ResponseCount)
+	}
+	if !s.HasError {
+		t.Fatalf("HasError = false, want true")
+	}
+	if s.TypeLabel != "请求+响应+报错" {
+		t.Fatalf("TypeLabel = %q, want 请求+响应+报错", s.TypeLabel)
+	}
+
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if len(full.Responses) != 1 {
+		t.Fatalf("Responses len = %d, want 1", len(full.Responses))
+	}
+	if full.Error == "" {
+		t.Fatalf("full.Error = empty, want the upstream error text")
+	}
+}
+
 // TestListPairs_system_type_filtered_out: ridA has a real pair (request +
 // response) PLUS a system row sharing the same request_id. ListPairs with
 // Types=["request","response"] must count only the pair (system does not
