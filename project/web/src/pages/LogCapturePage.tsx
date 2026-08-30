@@ -340,6 +340,16 @@ export function LogCapturePage() {
           onRowClick={setPreview}
           emptyText="暂无抓取日志"
           onRetry={() => void fetchPage()}
+          rowBackgroundColor={(row) =>
+            row.kind === 'pair' && row.pair.has_rewrite
+              ? 'rgba(245, 158, 11, 0.10)'
+              : null
+          }
+          rowHoverBackgroundColor={(row) =>
+            row.kind === 'pair' && row.pair.has_rewrite
+              ? 'rgba(245, 158, 11, 0.16)'
+              : null
+          }
           filters={
             <>
               <DateRangeFilter

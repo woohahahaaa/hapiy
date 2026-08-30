@@ -1843,6 +1843,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  const mif = isRecord(value.model_info_fields) ? value.model_info_fields : {}
   return {
     id: readString(value.id, 'agent_type_rule.id'),
     name: readString(value.name, 'agent_type_rule.name'),
@@ -1855,6 +1856,12 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
     recommendations: recs.map(parseAgentRecommendation),
+    model_info_fields: {
+      max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
+      max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
+      input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
+      thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
+    },
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
   }
