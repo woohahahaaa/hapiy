@@ -751,8 +751,8 @@ interface DiffRowData {
 const ROW_BG: Record<DiffAction, string> = {
   '推荐新增': 'bg-success/15 hover:bg-success/25',
   '推荐修改': 'bg-warning/15 hover:bg-warning/25',
-  '推荐不填': 'bg-muted/50 hover:bg-muted/70',
-  '未查到该字段': 'bg-muted/40 hover:bg-muted/60',
+  '推荐不填': 'bg-muted hover:bg-muted/80',
+  '未查到该字段': 'bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700',
   context: 'hover:bg-muted/30',
   mismatch: 'bg-destructive/15 hover:bg-destructive/25',
 }

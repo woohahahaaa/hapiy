@@ -210,9 +210,12 @@ func WriteLocalFileAtomic(path, content string) error {
 }
 
 // ReadRemoteFile returns the raw content of a remote file via SSH by
-// running `cat <path>` on the host. Detailed errors (connection, auth,
-// missing file) are returned as-is because the frontend surfaces them.
-func ReadRemoteFile(cfg SshConfig, path string) (string, error) {
+// running an OS-appropriate read command on the host (cat for POSIX,
+// `type` for cmd.exe / Windows). targetOS chooses the command family so a
+// Windows host reached through OpenSSH doesn't break on the missing cat.
+// Detailed errors (connection, auth, missing file) are returned as-is
+// because the frontend surfaces them.
+func ReadRemoteFile(cfg SshConfig, path, targetOS string) (string, error) {
 	client, err := dialSSH(cfg)
 	if err != nil {
 		return "", err
@@ -228,7 +231,7 @@ func ReadRemoteFile(cfg SshConfig, path string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	session.Stdout = &stdout
 	session.Stderr = &stderr
-	if err := session.Run("cat " + shellQuote(path)); err != nil {
+	if err := session.Run(remoteReadCommand(targetOS, path)); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
 			return "", fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
@@ -238,11 +241,27 @@ func ReadRemoteFile(cfg SshConfig, path string) (string, error) {
 	return stdout.String(), nil
 }
 
+// remoteReadCommand returns the remote read command for the given target
+// OS: `type <path>` on cmd.exe / Windows (which prints the file to stdout),
+// `cat <path>` on POSIX shells.
+func remoteReadCommand(targetOS, path string) string {
+	if targetOS == "windows" {
+		// cmd.exe has no single-quoted strings; `type` on a double-quoted
+		// path prints the file contents to stdout.
+		return `type ` + cmdQuote(path)
+	}
+	return "cat " + shellQuote(path)
+}
+
 // WriteRemoteFileAtomic replaces a remote file via SSH using one session
-// that writes stdin to a mktemp file and renames it over the target. The
-// path is passed as $1 (a positional argument) so shell metacharacters in
-// the path cannot break the command. stderr is captured for error reports.
-func WriteRemoteFileAtomic(cfg SshConfig, path, content string) error {
+// that writes stdin to a temp file and moves it over the target.
+//
+// On POSIX targets it writes to a mktemp file and renames it over the
+// target; the path is passed as $1 (a positional argument) so shell
+// metacharacters in the path cannot break the command. On Windows targets
+// it writes stdin to %TEMP% and moves it over the target with cmd.exe.
+// stderr is captured for error reports.
+func WriteRemoteFileAtomic(cfg SshConfig, path, content, targetOS string) error {
 	client, err := dialSSH(cfg)
 	if err != nil {
 		return err
@@ -258,7 +277,7 @@ func WriteRemoteFileAtomic(cfg SshConfig, path, content string) error {
 	session.Stdin = strings.NewReader(content)
 	var stderr bytes.Buffer
 	session.Stderr = &stderr
-	cmd := "sh -c 'tmp=$(mktemp) && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"' sh " + shellQuote(path)
+	cmd := remoteWriteCommand(targetOS, path)
 	if err := session.Run(cmd); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
@@ -267,6 +286,19 @@ func WriteRemoteFileAtomic(cfg SshConfig, path, content string) error {
 		return fmt.Errorf("写入远程文件失败: %w", err)
 	}
 	return nil
+}
+
+// remoteWriteCommand returns the remote write command for the given
+// target OS. Both variants consume stdin (the new file content) and end in
+// a move so the target is replaced atomically-ish.
+func remoteWriteCommand(targetOS, path string) string {
+	if targetOS == "windows" {
+		// cmd.exe: `> %TEMP%` writes stdin into the temp file; `move /y`
+		// replaces the destination. The temp name is fixed; concurrent
+		// writers are extremely unlikely in this admin dialog.
+		return `cmd /c "more > %TEMP%\hapiy-write.tmp & move /y %TEMP%\hapiy-write.tmp "` + cmdQuote(path)
+	}
+	return "sh -c 'tmp=$(mktemp) && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"' sh " + shellQuote(path)
 }
 
 // sshClientConfig builds an *ssh.ClientConfig for one hop. AuthType selects

@@ -39,12 +39,47 @@ type AgentJsonPaths struct {
 // segment or dotted, no array wildcards); Recommended is the value to
 // fill in when the user clicks "一键套用推荐值".
 type AgentRecommendation struct {
-	Scope        string `json:"scope"`         // "provider" | "model"
-	Key          string `json:"key"`           // gjson path, e.g. "maxConcurrency" or "thinking.type"
-	Description  string `json:"description"`   // human-readable meaning
-	Type         string `json:"type"`          // "string" | "number" | "boolean" | "object" | "array"
-	Recommended  any    `json:"recommended"`   // recommended value, or null when not filled
-	Required     bool   `json:"required"`      // recommended to be present?
+	Scope       string `json:"scope"`        // "provider" | "model"
+	Key         string `json:"key"`          // gjson path, e.g. "maxConcurrency" or "thinking.type"
+	Description string `json:"description"`  // human-readable meaning
+	Type        string `json:"type"`         // "string" | "number" | "boolean" | "object" | "array"
+	Recommended any    `json:"recommended"`  // recommended value, or null when not filled
+	Required    bool   `json:"required"`     // recommended to be present?
+}
+
+// AgentModelInfoFieldPaths maps the four unified model-info fields to
+// their gjson paths inside each agent's model config object. Agents
+// name these fields differently (opencode: limit.context //
+// modalities.input; openclaw: contextWindow / input, ...), so the path
+// is stored per rule and the "同步模型信息" dialog uses it to write the
+// value back. Field names are the fixed shared vocabulary:
+//
+//	max_context       最大上下文
+//	max_output_token  最大输出token
+//	input_types       支持的输入类型
+//	thinking_levels   支持的思考程度
+type AgentModelInfoFieldPaths struct {
+	MaxContext     string `json:"max_context"`
+	MaxOutputToken string `json:"max_output_token"`
+	InputTypes     string `json:"input_types"`
+	ThinkingLevels string `json:"thinking_levels"`
+}
+
+const (
+	ModelInfoFieldMaxContext     = "max_context"
+	ModelInfoFieldMaxOutputToken = "max_output_token"
+	ModelInfoFieldInputTypes     = "input_types"
+	ModelInfoFieldThinkingLevels = "thinking_levels"
+)
+
+// ModelInfoFieldLabels is the canonical Chinese label for every unified
+// model-info field. All surfaces (rule table, sync dialog, model info
+// editor) share these strings so the vocabulary stays consistent.
+var ModelInfoFieldLabels = map[string]string{
+	ModelInfoFieldMaxContext:     "最大上下文",
+	ModelInfoFieldMaxOutputToken: "最大输出token",
+	ModelInfoFieldInputTypes:     "支持的输入类型",
+	ModelInfoFieldThinkingLevels: "支持的思考程度",
 }
 
 // AgentTypeRule — an agent software type (e.g. "opencode") that owns
@@ -56,24 +91,27 @@ type AgentTypeRule struct {
 	OsPaths         string    `gorm:"type:text" json:"-"` // JSON blob of AgentOsPaths
 	JsonPaths       string    `gorm:"type:text" json:"-"` // JSON blob of AgentJsonPaths
 	Recommendations string    `gorm:"type:text" json:"-"` // JSON blob of []AgentRecommendation
+	ModelInfoFields string    `gorm:"type:text" json:"-"` // JSON blob of AgentModelInfoFieldPaths
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// MarshalJSON embeds os_paths, json_paths and recommendations as parsed
-// objects in the API response so the frontend can read them without
-// re-parsing the blobs.
+// MarshalJSON embeds os_paths, json_paths, recommendations and
+// model_info_fields as parsed objects in the API response so the
+// frontend can read them without re-parsing the blobs.
 func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 	type alias AgentTypeRule
 	p, _ := r.GetOsPaths()
 	j, _ := r.GetJsonPaths()
 	recs, _ := r.GetRecommendations()
+	mif, _ := r.GetModelInfoFields()
 	return json.Marshal(struct {
 		alias
-		OsPaths         AgentOsPaths         `json:"os_paths"`
-		JsonPaths       AgentJsonPaths       `json:"json_paths"`
-		Recommendations []AgentRecommendation `json:"recommendations"`
-	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs})
+		OsPaths         AgentOsPaths            `json:"os_paths"`
+		JsonPaths       AgentJsonPaths          `json:"json_paths"`
+		Recommendations []AgentRecommendation   `json:"recommendations"`
+		ModelInfoFields AgentModelInfoFieldPaths `json:"model_info_fields"`
+	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs, ModelInfoFields: mif})
 }
 
 // GetOsPaths parses the stored JSON blob back into a struct. An empty blob
@@ -146,6 +184,37 @@ func (r *AgentTypeRule) SetRecommendations(recs []AgentRecommendation) error {
 	return nil
 }
 
+// GetModelInfoFields parses the stored JSON blob back into the unified
+// model-info field path struct. Empty blob yields zero values.
+func (r *AgentTypeRule) GetModelInfoFields() (AgentModelInfoFieldPaths, error) {
+	var p AgentModelInfoFieldPaths
+	if r.ModelInfoFields == "" {
+		return p, nil
+	}
+	return p, json.Unmarshal([]byte(r.ModelInfoFields), &p)
+}
+
+// SetModelInfoFields serializes the shared model-info field paths into
+// the JSON blob persisted on the rule row.
+func (r *AgentTypeRule) SetModelInfoFields(p AgentModelInfoFieldPaths) error {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	r.ModelInfoFields = string(data)
+	return nil
+}
+
+// SetModelInfoFieldsOrZero updates the persisted blob only when the
+// caller supplied a value; nil leaves the existing paths untouched so a
+// PUT that omits the field doesn't wipe user edits.
+func (r *AgentTypeRule) SetModelInfoFieldsOrZero(p *AgentModelInfoFieldPaths) error {
+	if p == nil {
+		return nil
+	}
+	return r.SetModelInfoFields(*p)
+}
+
 func (r *AgentTypeRule) BeforeCreate(tx *gorm.DB) error {
 	if r.ID == "" {
 		r.ID = uuid.New().String()
@@ -181,13 +250,14 @@ func (f *AgentConfigFile) BeforeCreate(tx *gorm.DB) error {
 
 // builtinAgentRules are the agent types seeded into agent_type_rules when
 // the table is empty. Operators can rename or edit them later; seeding
-// only fills os_paths, json_paths, and recommendations for rows that
-// lack them, so user edits are never lost.
+// only fills os_paths, json_paths, recommendations, and model_info_fields
+// for rows that lack them, so user edits are never lost.
 var builtinAgentRules = []struct {
 	Name            string
 	OsPaths         AgentOsPaths
 	JsonPaths       AgentJsonPaths
 	Recommendations []AgentRecommendation
+	ModelInfoFields AgentModelInfoFieldPaths
 }{
 	{
 		Name: "opencode",
@@ -200,6 +270,12 @@ var builtinAgentRules = []struct {
 			Model:    `provider.{provider_id}.models`,
 		},
 		Recommendations: opencodeRecommendations,
+		ModelInfoFields: AgentModelInfoFieldPaths{
+			MaxContext:     `limit.context`,
+			MaxOutputToken: `limit.output`,
+			InputTypes:     `modalities.input`,
+			ThinkingLevels: `reasoning`,
+		},
 	},
 	{
 		Name: "WorkBuddy",
@@ -212,6 +288,7 @@ var builtinAgentRules = []struct {
 		// so the seeded paths stay empty until a vendor-grouping pass lands.
 		JsonPaths:       AgentJsonPaths{},
 		Recommendations: nil,
+		ModelInfoFields: AgentModelInfoFieldPaths{},
 	},
 	{
 		Name: "ChatGPT",
@@ -223,6 +300,7 @@ var builtinAgentRules = []struct {
 		// and no per-provider model list, so the seeded paths stay empty.
 		JsonPaths:       AgentJsonPaths{},
 		Recommendations: nil,
+		ModelInfoFields: AgentModelInfoFieldPaths{},
 	},
 	{
 		Name: "openclaw",
@@ -235,6 +313,12 @@ var builtinAgentRules = []struct {
 			Model:    `models.providers.{provider_id}.models`,
 		},
 		Recommendations: openclawRecommendations,
+		ModelInfoFields: AgentModelInfoFieldPaths{
+			MaxContext:     `contextWindow`,
+			MaxOutputToken: `maxTokens`,
+			InputTypes:     `input`,
+			ThinkingLevels: `reasoning`,
+		},
 	},
 }
 
@@ -308,13 +392,20 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				}
 				dirty = true
 			}
+			if rule.ModelInfoFields == "" {
+				if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
+					return err
+				}
+				dirty = true
+			}
 			if !dirty {
 				continue
 			}
 			if err := db.Model(&rule).Updates(map[string]any{
-				"os_paths":        rule.OsPaths,
-				"json_paths":      rule.JsonPaths,
-				"recommendations": rule.Recommendations,
+				"os_paths":         rule.OsPaths,
+				"json_paths":       rule.JsonPaths,
+				"recommendations":  rule.Recommendations,
+				"model_info_fields": rule.ModelInfoFields,
 			}).Error; err != nil {
 				return err
 			}
@@ -332,6 +423,9 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 			return err
 		}
 		if err := rule.SetRecommendations(want.Recommendations); err != nil {
+			return err
+		}
+		if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
 			return err
 		}
 		if err := db.Create(&rule).Error; err != nil {

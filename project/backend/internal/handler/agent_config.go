@@ -55,12 +55,13 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name            string                 `json:"name"`
-	Windows         string                 `json:"windows"`
-	Mac             string                 `json:"mac"`
-	ProviderPath    string                 `json:"provider_path"`
-	ModelPath       string                 `json:"model_path"`
+	Name            string                     `json:"name"`
+	Windows         string                     `json:"windows"`
+	Mac             string                     `json:"mac"`
+	ProviderPath    string                     `json:"provider_path"`
+	ModelPath       string                     `json:"model_path"`
 	Recommendations []model.AgentRecommendation `json:"recommendations"`
+	ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
@@ -106,6 +107,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -117,10 +119,11 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name            string                    `json:"name"`
-			ProviderPath    string                    `json:"provider_path"`
-			ModelPath       string                    `json:"model_path"`
+			Name            string                     `json:"name"`
+			ProviderPath    string                     `json:"provider_path"`
+			ModelPath       string                     `json:"model_path"`
 			Recommendations []model.AgentRecommendation `json:"recommendations"`
+			ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -154,6 +157,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
 		if err := db.Create(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -283,7 +287,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		if req.Mode == "local" {
 			content, err = service.ReadLocalFile(service.ExpandPath(req.Path))
 		} else {
-			content, err = service.ReadRemoteFile(sshCfg, req.Path)
+			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
@@ -499,7 +503,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		if req.Mode == "local" {
 			content, err = service.ReadLocalFile(service.ExpandPath(req.Path))
 		} else {
-			content, err = service.ReadRemoteFile(sshCfg, req.Path)
+			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
@@ -871,16 +875,14 @@ func lastPathSegment(path string) string {
 }
 
 // collectModels turns a gjson.Result (object map or array) into a list of
-// {id, config} entries. Object keys become ids; arrays fall back to the
-// element's "id" / "name" field, then to the array index.
+// {id, config} entries. gjson returns Type=JSON for both objects and
+// arrays, so we branch on IsArray / IsObject explicitly — openclaw's
+// `models` is an array while opencode's is an object map. Object keys
+// become ids; arrays fall back to the element's "id" / "name" field,
+// then to the array index.
 func collectModels(res gjson.Result) []modelEntry {
 	out := make([]modelEntry, 0)
-	switch res.Type {
-	case gjson.JSON:
-		for id, val := range res.Map() {
-			out = append(out, modelEntry{ID: id, Config: json.RawMessage(val.Raw)})
-		}
-	default:
+	if res.IsArray() {
 		for _, val := range res.Array() {
 			id := val.Get("id").String()
 			if id == "" {
@@ -889,6 +891,12 @@ func collectModels(res gjson.Result) []modelEntry {
 			if id == "" {
 				id = fmt.Sprintf("%d", val.Index)
 			}
+			out = append(out, modelEntry{ID: id, Config: json.RawMessage(val.Raw)})
+		}
+		return out
+	}
+	if res.IsObject() {
+		for id, val := range res.Map() {
 			out = append(out, modelEntry{ID: id, Config: json.RawMessage(val.Raw)})
 		}
 	}
