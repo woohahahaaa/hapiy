@@ -309,7 +309,7 @@ export function AgentModelsDialog({
                     disabled={!selectedProvider}
                   >
                     <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                    {editingScope === 'provider' ? '推荐视图' : '编辑JSON'}
+                    {editingScope === 'provider' ? '完成编辑' : '编辑JSON'}
                   </Button>
                   <Button
                     variant="outline"
