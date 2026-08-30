@@ -55,12 +55,13 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name            string                     `json:"name"`
-	Windows         string                     `json:"windows"`
-	Mac             string                     `json:"mac"`
-	ProviderPath    string                     `json:"provider_path"`
-	ModelPath       string                     `json:"model_path"`
-	Recommendations []model.AgentRecommendation `json:"recommendations"`
+	Name            string                          `json:"name"`
+	Windows         string                          `json:"windows"`
+	Mac             string                          `json:"mac"`
+	ProviderPath    string                          `json:"provider_path"`
+	ModelPath       string                          `json:"model_path"`
+	Recommendations []model.AgentRecommendation     `json:"recommendations"`
+	Protocols       []model.AgentProtocol           `json:"protocols"`
 	ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
 }
 
@@ -107,6 +108,10 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if err := rule.SetProtocols(req.Protocols); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -119,10 +124,11 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req struct {
-			Name            string                     `json:"name"`
-			ProviderPath    string                     `json:"provider_path"`
-			ModelPath       string                     `json:"model_path"`
-			Recommendations []model.AgentRecommendation `json:"recommendations"`
+			Name            string                          `json:"name"`
+			ProviderPath    string                          `json:"provider_path"`
+			ModelPath       string                          `json:"model_path"`
+			Recommendations []model.AgentRecommendation     `json:"recommendations"`
+			Protocols       []model.AgentProtocol           `json:"protocols"`
 			ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -154,6 +160,10 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if err := rule.SetRecommendations(req.Recommendations); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := rule.SetProtocols(req.Protocols); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -820,12 +830,14 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		recs, _ := rule.GetRecommendations()
+		protocols, _ := rule.GetProtocols()
 		mif, _ := rule.GetModelInfoFields()
 		c.JSON(http.StatusOK, gin.H{
 			"data": gin.H{
 				"agent_type":        row.AgentType,
 				"providers":         providers,
 				"recommendations":   recs,
+				"protocols":         protocols,
 				"model_info_fields": mif,
 			},
 		})
@@ -969,7 +981,8 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		recs, _ := rule.GetRecommendations()
-		if len(recs) == 0 {
+		protocols, _ := rule.GetProtocols()
+		if len(recs) == 0 && len(protocols) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
 			return
 		}
@@ -983,7 +996,13 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 		// The round-trip drops comments, which is fine — both opencode and
 		// openclaw accept plain JSON.
 		cleaned := stripJSON5Comments(content)
-		updated, applied, err := applyRecommendationsToContent(cleaned, jpaths.Provider, jpaths.Model, providerID, strings.TrimSpace(req.ModelID), recs)
+		effective := append([]model.AgentRecommendation(nil), recs...)
+		for _, p := range protocols {
+			if protocolMatchesProvider(cleaned, jpaths, providerID, p) {
+				effective = append(effective, p.Recommendations...)
+			}
+		}
+		updated, applied, err := applyRecommendationsToContent(cleaned, jpaths.Provider, jpaths.Model, providerID, strings.TrimSpace(req.ModelID), effective)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -991,6 +1010,42 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 		// Preview only — do NOT write here. Caller writes via PUT /:id/content.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
 	}
+}
+
+// protocolMatchesProvider reports whether at least one condition of the
+// protocol matches the provider's config fields in the live document.
+// Conditions read provider-level gjson paths (e.g. "options.baseURL" or
+// "api") and are ORed. A protocol without conditions matches nothing,
+// so it never applies to an existing file provider.
+func protocolMatchesProvider(content string, jpaths model.AgentJsonPaths, providerID string, p model.AgentProtocol) bool {
+	prov := gjson.Parse(content).Get(jpaths.Provider + "." + providerID)
+	for _, cond := range p.Conditions {
+		field := strings.TrimSpace(cond.Field)
+		if field == "" {
+			continue
+		}
+		val := prov.Get(field).String()
+		want := strings.TrimSpace(cond.Value)
+		switch cond.Op {
+		case "equals":
+			if val == want {
+				return true
+			}
+		case "not_equals":
+			if val != want {
+				return true
+			}
+		case "contains":
+			if strings.Contains(val, want) {
+				return true
+			}
+		case "not_contains":
+			if !strings.Contains(val, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SyncAgentConfigFileModelFields returns the file content it *would*

@@ -27,6 +27,9 @@ import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   type AgentModelInfoFieldPaths,
+  type AgentProtocol,
+  type AgentProtocolCondition,
+  type AgentProtocolConditionOp,
   type AgentRecommendation,
   type AgentRecommendationScope,
   type AgentRecommendationType,
@@ -239,6 +242,7 @@ function RuleDialog({
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
   const [recommendations, setRecommendations] = useState<AgentRecommendation[]>([])
+  const [protocols, setProtocols] = useState<AgentProtocol[]>([])
   const [modelInfoFields, setModelInfoFields] = useState<AgentModelInfoFieldPaths>({
     max_context: '',
     max_output_token: '',
@@ -256,6 +260,12 @@ function RuleDialog({
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
       setRecommendations((editing?.recommendations ?? []).map((r) => ({ ...r })))
+      setProtocols((editing?.protocols ?? []).map((p) => ({
+        name: p.name,
+        conditions: p.conditions.map((c) => ({ ...c })),
+        endpoint_tags: [...p.endpoint_tags],
+        recommendations: p.recommendations.map((r) => ({ ...r })),
+      })))
       setModelInfoFields({ ...(editing?.model_info_fields ?? {
         max_context: '',
         max_output_token: '',
@@ -285,6 +295,7 @@ function RuleDialog({
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
           recommendations,
+          protocols,
           model_info_fields: modelInfoFields,
         })
       } else {
@@ -379,6 +390,8 @@ function RuleDialog({
               </p>
               <RecommendationTable rows={recommendations} onChange={setRecommendations} />
             </Field>
+
+            <ProtocolsEditor protocols={protocols} onChange={setProtocols} />
           </Group>
 
           {error && (
@@ -439,6 +452,243 @@ function ModelInfoFieldsEditor({
         </table>
       </div>
     </Field>
+  )
+}
+
+const PROTOCOL_CONDITION_OPS: readonly { value: AgentProtocolConditionOp; label: string }[] = [
+  { value: 'equals', label: '等于' },
+  { value: 'contains', label: '包含' },
+  { value: 'not_contains', label: '不包含' },
+  { value: 'not_equals', label: '不等于' },
+]
+
+function ProtocolsEditor({
+  protocols,
+  onChange,
+}: {
+  protocols: AgentProtocol[]
+  onChange: (protocols: AgentProtocol[]) => void
+}) {
+  const update = (idx: number, patch: Partial<AgentProtocol>) => {
+    onChange(protocols.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
+  }
+  const remove = (idx: number) => {
+    onChange(protocols.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <Field>
+      <div className="flex items-center justify-between">
+        <FieldLabel>请求协议区分部分（SDK）</FieldLabel>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() =>
+            onChange([
+              ...protocols,
+              { name: '', conditions: [{ field: '', op: 'contains', value: '' }], endpoint_tags: [], recommendations: [] },
+            ])
+          }
+        >
+          <AppIcon name="add" data-icon="inline-start" />
+          添加协议
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        不同请求协议（SDK）的字段不同：这里的推荐只在协议命中时生效。每个协议可配多条判断条件（或关系）以及固定的「根据 endpoint 来判断」标签（必填）
+      </p>
+      {protocols.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
+          暂无请求协议，点上方「添加协议」开始
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {protocols.map((p, idx) => (
+            <div key={idx} className="rounded-md border border-border bg-muted/10">
+              <div className="flex items-center gap-2 border-b border-border p-2">
+                <Input
+                  value={p.name}
+                  onChange={(e) => update(idx, { name: e.target.value })}
+                  placeholder="协议名称（例如：OpenAI SDK / OpenAI 兼容）"
+                  className="h-7 flex-1 text-xs"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  title="删除该协议"
+                  onClick={() => remove(idx)}
+                >
+                  <AppIcon name="delete" size={14} />
+                </Button>
+              </div>
+              <div className="space-y-2 p-2">
+                <ConditionRows
+                  conditions={p.conditions}
+                  onChange={(conditions) => update(idx, { conditions })}
+                />
+                <EndpointTagsInput
+                  tags={p.endpoint_tags}
+                  onChange={(endpoint_tags) => update(idx, { endpoint_tags })}
+                />
+                <div className="rounded-md border border-border bg-background p-2">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">该协议的推荐配置</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      onClick={() =>
+                        update(idx, {
+                          recommendations: [
+                            ...p.recommendations,
+                            { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false },
+                          ],
+                        })
+                      }
+                    >
+                      <AppIcon name="add" data-icon="inline-start" />
+                      添加行
+                    </Button>
+                  </div>
+                  <RecommendationTable
+                    rows={p.recommendations}
+                    onChange={(recommendations) => update(idx, { recommendations })}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Field>
+  )
+}
+
+function ConditionRows({
+  conditions,
+  onChange,
+}: {
+  conditions: AgentProtocolCondition[]
+  onChange: (conditions: AgentProtocolCondition[]) => void
+}) {
+  const update = (idx: number, patch: Partial<AgentProtocolCondition>) => {
+    onChange(conditions.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">判断条件（多条件为“或”关系）</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() => onChange([...conditions, { field: '', op: 'contains', value: '' }])}
+        >
+          <AppIcon name="add" data-icon="inline-start" />
+          添加条件
+        </Button>
+      </div>
+      {conditions.map((c, idx) => (
+        <div key={idx} className="flex items-center gap-1.5">
+          <Input
+            value={c.field}
+            onChange={(e) => update(idx, { field: e.target.value })}
+            placeholder="provider 配置字段，例如 options.baseURL"
+            className="h-7 flex-1 text-xs font-mono"
+          />
+          <Select
+            value={c.op}
+            onValueChange={(v) => update(idx, { op: v as AgentProtocolConditionOp })}
+          >
+            <SelectTrigger className="h-7 w-[92px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROTOCOL_CONDITION_OPS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            value={c.value}
+            onChange={(e) => update(idx, { value: e.target.value })}
+            placeholder="值"
+            className="h-7 flex-1 text-xs font-mono"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => onChange(conditions.filter((_, i) => i !== idx))}
+          >
+            <AppIcon name="close" size={12} />
+          </Button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// EndpointTagsInput is the fixed "根据 endpoint 来判断" field. Typing a
+// value and pressing space commits it as a tag; enter also commits.
+// Tags are matched against model endpoints by suffix-contains during
+// managed-provider sync (the SDK auto-selection hook).
+function EndpointTagsInput({
+  tags,
+  onChange,
+}: {
+  tags: readonly string[]
+  onChange: (tags: readonly string[]) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const commit = () => {
+    const t = draft.trim()
+    if (t === '') return
+    if (!tags.includes(t)) onChange([...tags, t])
+    setDraft('')
+  }
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-destructive">
+          根据 endpoint 来判断
+          <span className="ml-1 text-muted-foreground">（必填，输入后按空格/回车变成标签）</span>
+        </span>
+      </div>
+      <div className="flex min-h-[34px] flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+        {tags.map((t) => (
+          <span
+            key={t}
+            className="group inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary"
+          >
+            {t}
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onChange(tags.filter((x) => x !== t))}
+            >
+              <AppIcon name="close" size={10} />
+            </button>
+          </span>
+        ))}
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault()
+              commit()
+            }
+          }}
+          onBlur={commit}
+          placeholder={tags.length === 0 ? '例如：/completions，末尾匹配模型的 endpoint' : ''}
+          className="w-40 min-w-[110px] flex-1 bg-transparent py-0.5 text-xs outline-none placeholder:text-muted-foreground"
+          spellCheck={false}
+        />
+      </div>
+    </div>
   )
 }
 

@@ -608,6 +608,31 @@ export type AgentModelInfoFieldPaths = {
   readonly thinking_levels: string
 }
 
+export type AgentProtocolConditionOp = 'equals' | 'contains' | 'not_contains' | 'not_equals'
+
+export type AgentProtocolCondition = {
+  readonly field: string
+  readonly op: AgentProtocolConditionOp
+  readonly value: string
+}
+
+// AgentProtocol — one "请求协议 (SDK)" block in a rule. Conditions are
+// ORed provider-level gjson paths; EndpointTags is the required fixed
+// "根据 endpoint 来判断" field.
+export type AgentProtocol = {
+  readonly name: string
+  readonly conditions: readonly AgentProtocolCondition[]
+  readonly endpoint_tags: readonly string[]
+  readonly recommendations: readonly AgentRecommendation[]
+}
+
+export type AgentProtocolInput = {
+  readonly name?: string
+  readonly conditions?: readonly AgentProtocolCondition[]
+  readonly endpoint_tags?: readonly string[]
+  readonly recommendations?: readonly AgentRecommendation[]
+}
+
 export type AgentRecommendation = {
   readonly scope: AgentRecommendationScope
   readonly key: string
@@ -623,6 +648,7 @@ export type AgentTypeRule = {
   readonly os_paths: AgentOsPaths
   readonly json_paths: AgentJsonPaths
   readonly recommendations: readonly AgentRecommendation[]
+  readonly protocols: readonly AgentProtocol[]
   readonly model_info_fields: AgentModelInfoFieldPaths
   readonly created_at: string
   readonly updated_at: string
@@ -635,6 +661,7 @@ export type AgentTypeRuleInput = {
   readonly provider_path?: string
   readonly model_path?: string
   readonly recommendations?: readonly AgentRecommendation[]
+  readonly protocols?: readonly AgentProtocol[]
   readonly model_info_fields?: AgentModelInfoFieldPaths
 }
 
@@ -711,7 +738,52 @@ export type AgentModelSummary = {
   readonly agent_type: string
   readonly providers: readonly AgentModelProvider[]
   readonly recommendations: readonly AgentRecommendation[]
+  readonly protocols: readonly AgentProtocol[]
   readonly model_info_fields: AgentModelInfoFieldPaths
+}
+
+export type ManagedProviderOption = {
+  readonly id: string
+  readonly name: string
+  readonly status: boolean
+  readonly endpoints: readonly string[]
+  readonly models: readonly string[]
+  readonly endpointCount: number
+  readonly modelCount: number
+}
+
+export type ManagedAgentGroup = {
+  readonly endpoint: string
+  readonly suffix: string
+  readonly model_sources: Readonly<Record<string, string>>
+}
+
+export type ManagedGroupView = {
+  readonly endpoint: string
+  readonly suffix: string
+  readonly provider_names: readonly string[]
+  readonly model_count: number
+  readonly model_names: readonly string[]
+  readonly model_sources: Readonly<Record<string, string>>
+  readonly generated: Readonly<Record<string, unknown>>
+  readonly file_provider: Readonly<Record<string, unknown>> | null
+  readonly pending: boolean
+}
+
+export type ManagedProviderView = {
+  readonly id: string
+  readonly name: string
+  readonly provider_ids: readonly string[]
+  readonly stale_provider_ids: readonly string[]
+  readonly groups: readonly ManagedGroupView[]
+  readonly hidden_groups: readonly ManagedAgentGroup[]
+  readonly pending_sync: boolean
+}
+
+export type ManagedProviderInput = {
+  readonly name: string
+  readonly provider_ids: readonly string[]
+  readonly groups: readonly ManagedAgentGroup[]
 }
 
 export class DashboardApiError extends Error {
@@ -1855,6 +1927,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  const protocols = Array.isArray(value.protocols) ? value.protocols : []
   const mif = isRecord(value.model_info_fields) ? value.model_info_fields : {}
   return {
     id: readString(value.id, 'agent_type_rule.id'),
@@ -1868,6 +1941,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
     },
     recommendations: recs.map(parseAgentRecommendation),
+    protocols: protocols.map(parseAgentProtocol),
     model_info_fields: {
       max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
       max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
@@ -1876,6 +1950,30 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
     },
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
+  }
+}
+
+function parseAgentProtocol(value: unknown): AgentProtocol {
+  if (!isRecord(value)) {
+    return { name: '', conditions: [], endpoint_tags: [], recommendations: [] }
+  }
+  const conditions = Array.isArray(value.conditions) ? value.conditions : []
+  const tags = Array.isArray(value.endpoint_tags) ? value.endpoint_tags : []
+  const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  return {
+    name: typeof value.name === 'string' ? value.name : '',
+    conditions: conditions.map((c) => {
+      if (!isRecord(c)) return { field: '', op: 'contains' as const, value: '' }
+      const op = c.op
+      const valid: readonly AgentProtocolConditionOp[] = ['equals', 'contains', 'not_contains', 'not_equals']
+      return {
+        field: typeof c.field === 'string' ? c.field : '',
+        op: valid.includes(op as AgentProtocolConditionOp) ? (op as AgentProtocolConditionOp) : 'contains',
+        value: typeof c.value === 'string' ? c.value : '',
+      }
+    }),
+    endpoint_tags: tags.filter((t): t is string => typeof t === 'string'),
+    recommendations: recs.map(parseAgentRecommendation),
   }
 }
 
@@ -1951,6 +2049,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
   }
   const providers = Array.isArray(value.providers) ? value.providers : []
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  const protocols = Array.isArray(value.protocols) ? value.protocols : []
   const mif = isRecord(value.model_info_fields) ? value.model_info_fields : {}
   return {
     agent_type: typeof value.agent_type === 'string' ? value.agent_type : '',
@@ -1970,6 +2069,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
       }
     }),
     recommendations: recs.map(parseAgentRecommendation),
+    protocols: protocols.map(parseAgentProtocol),
     model_info_fields: {
       max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
       max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
@@ -2787,6 +2887,111 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
+      content: typeof data.content === 'string' ? data.content : '',
+    }
+  },
+  async listManagedProviderOptions(): Promise<readonly ManagedProviderOption[]> {
+    const data = await request('/agent-config-files/managed-options')
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的供应商选项格式无效', null)
+    }
+    return data.map((raw) => {
+      if (!isRecord(raw)) {
+        return { id: '', name: '', status: true, endpoints: [], models: [], endpointCount: 0, modelCount: 0 }
+      }
+      const eps = Array.isArray(raw.endpoints) ? raw.endpoints : []
+      const mods = Array.isArray(raw.models) ? raw.models : []
+      return {
+        id: typeof raw.id === 'string' ? raw.id : '',
+        name: typeof raw.name === 'string' ? raw.name : '',
+        status: typeof raw.status === 'boolean' ? raw.status : true,
+        endpoints: eps.filter((e): e is string => typeof e === 'string'),
+        models: mods.filter((m): m is string => typeof m === 'string'),
+        endpointCount: readNumber(raw.endpoint_count, 'endpoint_count', 0),
+        modelCount: readNumber(raw.model_count, 'model_count', 0),
+      }
+    })
+  },
+  async listManagedProviders(id: string): Promise<readonly ManagedProviderView[]> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`)
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError('服务端返回的托管 provider 列表格式无效', null)
+    }
+    return data.map((raw) => {
+      if (!isRecord(raw)) {
+        return { id: '', name: '', provider_ids: [], stale_provider_ids: [], groups: [], hidden_groups: [], pending_sync: false }
+      }
+      const groups = Array.isArray(raw.groups) ? raw.groups : []
+      const hidden = Array.isArray(raw.hidden_groups) ? raw.hidden_groups : []
+      return {
+        id: typeof raw.id === 'string' ? raw.id : '',
+        name: typeof raw.name === 'string' ? raw.name : '',
+        provider_ids: Array.isArray(raw.provider_ids)
+          ? raw.provider_ids.filter((x): x is string => typeof x === 'string')
+          : [],
+        stale_provider_ids: Array.isArray(raw.stale_provider_ids)
+          ? raw.stale_provider_ids.filter((x): x is string => typeof x === 'string')
+          : [],
+        groups: groups.map((g) => {
+          const gr = isRecord(g) ? g : {}
+          const modelNames = Array.isArray(gr.model_names) ? gr.model_names : []
+          return {
+            endpoint: typeof gr.endpoint === 'string' ? gr.endpoint : '',
+            suffix: typeof gr.suffix === 'string' ? gr.suffix : '',
+            provider_names: Array.isArray(gr.provider_names)
+              ? gr.provider_names.filter((x): x is string => typeof x === 'string')
+              : [],
+            model_count: readNumber(gr.model_count, 'model_count', 0),
+            model_names: modelNames.filter((x): x is string => typeof x === 'string'),
+            model_sources: toStrMap(gr.model_sources),
+            generated: isRecord(gr.generated) ? gr.generated : {},
+            file_provider: isRecord(gr.file_provider) ? gr.file_provider : null,
+            pending: gr.pending === true,
+          }
+        }),
+        hidden_groups: hidden.map((h) => {
+          const hg = isRecord(h) ? h : {}
+          return {
+            endpoint: typeof hg.endpoint === 'string' ? hg.endpoint : '',
+            suffix: typeof hg.suffix === 'string' ? hg.suffix : '',
+            model_sources: toStrMap(hg.model_sources),
+          }
+        }),
+        pending_sync: raw.pending_sync === true,
+      }
+    })
+  },
+  async createManagedProvider(id: string, input: ManagedProviderInput): Promise<void> {
+    await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    })
+  },
+  async updateManagedProvider(id: string, mid: string, input: ManagedProviderInput): Promise<void> {
+    await request(
+      `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}`,
+      { method: 'PUT', body: JSON.stringify(input) },
+    )
+  },
+  async deleteManagedProvider(id: string, mid: string): Promise<void> {
+    await request(
+      `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}`,
+      { method: 'DELETE' },
+    )
+  },
+  async syncManagedProvider(
+    id: string,
+    mid: string,
+  ): Promise<{ readonly synced: number; readonly content: string }> {
+    const data = await request(
+      `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}/sync`,
+      { method: 'POST' },
+    )
+    if (!isRecord(data)) {
+      throw new DashboardApiError('服务端返回的同步结果格式无效', null)
+    }
+    return {
+      synced: readNumber(data.synced, 'synced', 0),
       content: typeof data.content === 'string' ? data.content : '',
     }
   },

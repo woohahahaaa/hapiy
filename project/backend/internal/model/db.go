@@ -49,6 +49,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&FailoverHitCounter{},
 		&AgentTypeRule{},
 		&AgentConfigFile{},
+		&ManagedAgentProvider{},
 	)
 }
 

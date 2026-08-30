@@ -15,9 +15,13 @@ import type {
   AgentConfigFile,
   AgentModelProvider,
   AgentModelSummary,
+  AgentProtocol,
   AgentRecommendation,
+  ManagedProviderView,
 } from '@/lib/dashboard-api'
 import { AgentModelInfoMatchDialog } from '@/components/dialog/agent-model-info-match'
+import { ManagedProviderDialog } from '@/components/dialog/agent-managed-dialog'
+import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 
 type DiffStatus = 'ok' | 'missing' | 'mismatch' | 'extra' | 'no-recommendation'
 
@@ -43,7 +47,7 @@ export function AgentModelsDialog({
 }: AgentModelsDialogProps) {
   const [summary, setSummary] = useState<AgentModelSummary | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+const [error, setError] = useState<string | null>(null)
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
@@ -60,12 +64,32 @@ export function AgentModelsDialog({
   // boxes show the diff recommendation view.
   const [editingScope, setEditingScope] = useState<'provider' | 'model' | null>(null)
 
+  // Managed (托管) providers bound to this file + their selection state.
+  const [managed, setManaged] = useState<readonly ManagedProviderView[]>([])
+  // selectedManaged: { mid, endpoint } when viewing a managed group's
+  // generated block (read-only), null otherwise.
+  const [selectedManaged, setSelectedManaged] = useState<{ mid: string; endpoint: string } | null>(null)
+  const [selectedManagedModelId, setSelectedManagedModelId] = useState<string | null>(null)
+  const [expandedManaged, setExpandedManaged] = useState<Set<string>>(new Set())
+  const [renamingProvider, setRenamingProvider] = useState<string | null>(null)
+  const [confirmingDeleteProvider, setConfirmingDeleteProvider] = useState<string | null>(null)
+  const [confirmingSync, setConfirmingSync] = useState<ManagedProviderView | null>(null)
+  const [managedDialogOpen, setManagedDialogOpen] = useState(false)
+  const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
+  const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
+
   const reload = () => {
     if (!record) return
     setLoading(true)
     setError(null)
-    fetchModels(record.id)
-      .then((res) => setSummary(res))
+    Promise.all([
+      fetchModels(record.id),
+      dashboardApi.listManagedProviders(record.id),
+    ])
+      .then(([res, managedRes]) => {
+        setSummary(res)
+        setManaged(managedRes)
+      })
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
       .finally(() => setLoading(false))
   }
@@ -76,14 +100,19 @@ export function AgentModelsDialog({
     setError(null)
     setSelectedProviderId(null)
     setSelectedModelId(null)
+    setSelectedManaged(null)
+    setManaged([])
+    setExpandedManaged(new Set())
     setLiveContent(null)
     setConfirmingCancel(false)
     reload()
   }, [open, record]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-select the first provider/model whenever summary arrives/changes.
+  // Managed selection is entirely separate and never auto-selected.
   useEffect(() => {
     if (!summary) return
+    if (selectedManaged) return
     if (selectedProviderId && summary.providers.some((p) => p.provider_id === selectedProviderId)) {
       const provider = summary.providers.find((p) => p.provider_id === selectedProviderId)!
       if (selectedModelId && provider.models.some((m) => m.id === selectedModelId)) return
@@ -93,7 +122,17 @@ export function AgentModelsDialog({
     const first = summary.providers[0]
     setSelectedProviderId(first?.provider_id ?? null)
     setSelectedModelId(first?.models[0]?.id ?? null)
-  }, [summary, selectedProviderId, selectedModelId])
+  }, [summary, selectedProviderId, selectedModelId, selectedManaged])
+
+  // The managed view backing the current selection: { view, group }.
+  const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: (typeof view.groups)[number] } | null>(() => {
+    if (!selectedManaged) return null
+    const view = managed.find((m) => m.id === selectedManaged.mid) ?? null
+    if (!view) return null
+    const group = view.groups.find((g) => g.endpoint === selectedManaged.endpoint) ?? view.groups[0]
+    if (!group) return null
+    return { view, group }
+  }, [selectedManaged, managed])
 
   const selectedProvider = useMemo<AgentModelProvider | null>(() => {
     if (!summary || !selectedProviderId) return null
@@ -114,6 +153,38 @@ export function AgentModelsDialog({
     () => (summary?.recommendations ?? []).filter((r) => r.scope === 'model'),
     [summary],
   )
+
+  // Provider-level effective recommendations = common + protocols whose
+  // conditions match the selected provider's actual config fields.
+  const effectiveProviderRecs = useMemo(() => {
+    const base = providerRecs
+    if (!selectedProvider || !summary) return base
+    const matched = (summary.protocols ?? []).filter((p) =>
+      protocolMatchesConditions(selectedProvider.other_fields, p),
+    )
+    const extra: AgentRecommendation[] = []
+    for (const p of matched) {
+      for (const r of p.recommendations) {
+        if (r.scope === 'provider') extra.push(r)
+      }
+    }
+    return [...base, ...extra]
+  }, [providerRecs, selectedProvider, summary])
+
+  const effectiveModelRecs = useMemo(() => {
+    const base = modelRecs
+    if (!selectedProvider || !summary) return base
+    const matched = (summary.protocols ?? []).filter((p) =>
+      protocolMatchesConditions(selectedProvider.other_fields, p),
+    )
+    const extra: AgentRecommendation[] = []
+    for (const p of matched) {
+      for (const r of p.recommendations) {
+        if (r.scope === 'model') extra.push(r)
+      }
+    }
+    return [...base, ...extra]
+  }, [modelRecs, selectedProvider, summary])
 
   // activeProviderValue / activeModelValue are what the JSON view shows
   // right now. They are the actual file content until the user clicks
@@ -143,12 +214,12 @@ export function AgentModelsDialog({
   }, [liveContent, selectedModel, selectedProviderId, selectedModelId, summary])
 
   const providerDiff = useMemo(
-    () => computeDiff(activeProviderValue, providerRecs),
-    [activeProviderValue, providerRecs],
+    () => computeDiff(activeProviderValue, effectiveProviderRecs),
+    [activeProviderValue, effectiveProviderRecs],
   )
   const modelDiff = useMemo(
-    () => computeDiff(activeModelValue, modelRecs),
-    [activeModelValue, modelRecs],
+    () => computeDiff(activeModelValue, effectiveModelRecs),
+    [activeModelValue, effectiveModelRecs],
   )
 
   const liveDiffCount = useMemo(() => {
@@ -226,9 +297,76 @@ export function AgentModelsDialog({
   }
 
   const handleSelectProvider = (id: string) => {
+    setSelectedManaged(null)
     setSelectedProviderId(id)
     const provider = summary?.providers.find((p) => p.provider_id === id)
     setSelectedModelId(provider?.models[0]?.id ?? null)
+  }
+
+  // Rename/delete of a regular (file-driven) provider stage changes into
+  // liveContent so the top 保存 bar saves them together.
+  const handleRenameProvider = (oldId: string, newId: string) => {
+    const target = newId.trim()
+    if (!target || target === oldId) return
+    const base = liveContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    try {
+      setLiveContent(renameProviderInContent(base, oldId, target, summary))
+      toast('已生成预览：provider 改名待保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '改名失败')
+    }
+  }
+
+  const handleDeleteProvider = (id: string) => {
+    const base = liveContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    try {
+      setLiveContent(deleteProviderFromContent(base, id, summary))
+      toast('已生成预览：删除 provider 待保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
+  const toggleManagedExpand = (id: string) => {
+    setExpandedManaged((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleSelectManaged = (mid: string, endpoint: string) => {
+    setSelectedProviderId(null)
+    setSelectedModelId(null)
+    setSelectedManagedModelId(null)
+    setSelectedManaged({ mid, endpoint })
+  }
+
+  const handleSyncManaged = async (view: ManagedProviderView) => {
+    if (!record) return
+    try {
+      const res = await dashboardApi.syncManagedProvider(record.id, view.id)
+      toast(`已同步：${res.synced} 处字段已写入配置文件`)
+      setConfirmingSync(null)
+      reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '同步失败')
+    }
+  }
+
+  const handleDeleteManaged = async (view: ManagedProviderView) => {
+    if (!record) return
+    try {
+      await dashboardApi.deleteManagedProvider(record.id, view.id)
+      toast('已删除托管 provider')
+      setConfirmingDeleteManaged(null)
+      setManagedDialogOpen(false)
+      setSelectedManaged(null)
+      reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    }
   }
 
   return (
@@ -267,33 +405,178 @@ export function AgentModelsDialog({
         )}
 
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,1fr)_minmax(360px,1.4fr)] divide-x divide-border">
-          {/* Left: providers */}
+          {/* Left: providers (regular + managed) */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader>供应商</ColumnHeader>
+            <ColumnHeader
+              action={
+                <Button
+                  variant="outline"
+                  size="xs"
+                  title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
+                  onClick={() => {
+                    setManagedEditing(null)
+                    setManagedDialogOpen(true)
+                  }}
+                >
+                  <AppIcon name="add" size={12} data-icon="inline-start" />
+                  添加托管provider
+                </Button>
+              }
+            >
+              供应商
+            </ColumnHeader>
             <div className="flex-1 overflow-y-auto p-2">
               {loading && <Placeholder>加载中…</Placeholder>}
               {error && <Placeholder tone="error">{error}</Placeholder>}
-              {!loading && !error && summary && summary.providers.length === 0 && (
+              {!loading && !error && summary && summary.providers.length === 0 && managed.length === 0 && (
                 <Placeholder>未解析到任何 provider</Placeholder>
               )}
+
+              {/* Regular providers (hover → 改名/删除) */}
               {summary?.providers.map((p) => (
-                <button
+                <ProviderRow
                   key={p.provider_id}
-                  type="button"
+                  name={p.provider_id}
+                  info={`${p.models.length} 模型`}
+                  selected={selectedProviderId === p.provider_id}
                   onClick={() => handleSelectProvider(p.provider_id)}
-                  className={
-                    'flex w-full items-center justify-between gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
-                    (selectedProviderId === p.provider_id
-                      ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-muted')
+                  actions={
+                    <>
+                      <NameEditButton
+                        title="改名"
+                        onClick={() => setRenamingProvider(p.provider_id)}
+                      />
+                      <IconHoverButton
+                        title="删除"
+                        icon="delete"
+                        tone="destructive"
+                        disabled={false}
+                        onClick={() => setConfirmingDeleteProvider(p.provider_id)}
+                      />
+                    </>
                   }
-                >
-                  <span className="truncate font-medium">{p.provider_id}</span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {p.models.length} 模型
-                  </span>
-                </button>
+                />
               ))}
+
+              {/* Managed providers: parent rows (expand) + child group rows */}
+              {managed.map((mv) => {
+                const expandable = mv.groups.length > 1
+                const expanded = expandedManaged.has(mv.id)
+                return (
+                  <div key={mv.id}>
+                    {expandable ? (
+                      <>
+                        <ProviderRow
+                          name={
+                            <>
+                              {mv.pending_sync && (
+                                <span className="mr-1 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">
+                                  待同步
+                                </span>
+                              )}
+                              <span className="truncate font-medium">{mv.name}</span>
+                            </>
+                          }
+                          info={`${mv.groups.length} 分组`}
+                          selected={false}
+                          onClick={() => toggleManagedExpand(mv.id)}
+                          actions={
+                            <>
+                              {mv.pending_sync && (
+                                <IconHoverButton
+                                  title="同步到配置文件"
+                                  icon="auto_fix_high"
+                                  tone="success"
+                                  disabled={false}
+                                  onClick={() => setConfirmingSync(mv)}
+                                />
+                              )}
+                              <IconHoverButton
+                                title="设置"
+                                icon="settings"
+                                tone="default"
+                                disabled={false}
+                                onClick={() => {
+                                  setManagedEditing(mv)
+                                  setManagedDialogOpen(true)
+                                }}
+                              />
+                            </>
+                          }
+                          leading={
+                            <AppIcon
+                              name="chevron_right"
+                              size={12}
+                              className={'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')}
+                            />
+                          }
+                        />
+                        {expanded && (
+                          <div className="ml-4 space-y-0.5 border-l border-border pl-1.5">
+                            {mv.groups.map((g) => (
+                              <ProviderRow
+                                key={g.endpoint}
+                                name={mv.name + g.suffix}
+                                info={`${g.model_count} 模型`}
+                                selected={
+                                  selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
+                                }
+                                onClick={() => handleSelectManaged(mv.id, g.endpoint)}
+                                actions={null}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      // Single group: rendered as a direct row.
+                      mv.groups.map((g) => (
+                        <ProviderRow
+                          key={g.endpoint}
+                          name={
+                            <>
+                              {mv.pending_sync && (
+                                <span className="mr-1 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">
+                                  待同步
+                                </span>
+                              )}
+                              <span className="truncate font-medium">{mv.name + g.suffix}</span>
+                            </>
+                          }
+                          info={`${g.model_count} 模型`}
+                          selected={
+                            selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
+                          }
+                          onClick={() => handleSelectManaged(mv.id, g.endpoint)}
+                          actions={
+                            <>
+                              {mv.pending_sync && (
+                                <IconHoverButton
+                                  title="同步到配置文件"
+                                  icon="auto_fix_high"
+                                  tone="success"
+                                  disabled={false}
+                                  onClick={() => setConfirmingSync(mv)}
+                                />
+                              )}
+                              <IconHoverButton
+                                title="设置"
+                                icon="settings"
+                                tone="default"
+                                disabled={false}
+                                onClick={() => {
+                                  setManagedEditing(mv)
+                                  setManagedDialogOpen(true)
+                                }}
+                              />
+                            </>
+                          }
+                        />
+                      ))
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
 
@@ -301,36 +584,49 @@ export function AgentModelsDialog({
           <div className="flex min-h-0 flex-col">
 <ColumnHeader
               action={
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
-                    disabled={!selectedProvider}
-                  >
-                    <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                    {editingScope === 'provider' ? '完成编辑' : '编辑JSON'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={
-                      applying ||
-                      editingScope === 'provider' ||
-                      providerDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
-                    }
-                    onClick={() => void handleApply('provider')}
-                  >
-                    <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                    使用推荐值
-                  </Button>
-                </div>
+                selectedManagedGroup ? null : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
+                      disabled={!selectedProvider}
+                    >
+                      <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
+                      {editingScope === 'provider' ? '完成编辑' : '编辑JSON'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      disabled={
+                        applying ||
+                        editingScope === 'provider' ||
+                        providerDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
+                      }
+                      onClick={() => void handleApply('provider')}
+                    >
+                      <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                      使用推荐值
+                    </Button>
+                  </div>
+                )
               }
             >
-              {selectedProvider ? `供应商配置 · ${selectedProvider.provider_id}` : '供应商配置'}
+              {selectedManagedGroup
+                ? `托管 · ${selectedManagedGroup.view.name}${selectedManagedGroup.group.suffix}`
+                : selectedProvider
+                  ? `供应商配置 · ${selectedProvider.provider_id}`
+                  : '供应商配置'}
             </ColumnHeader>
             <div className="max-h-[40%] overflow-auto border-b border-border p-2">
-              {selectedProvider ? (
+              {selectedManagedGroup ? (
+                <ReadOnlyJson
+                  value={
+                    (selectedManagedGroup.group.generated as { provider?: unknown } | undefined)?.provider
+                  }
+                  note="由系统最优值生成，不允许编辑"
+                />
+              ) : selectedProvider ? (
                 editingScope === 'provider' ? (
                   <JsonEditor
                     value={activeProviderValue}
@@ -341,7 +637,7 @@ export function AgentModelsDialog({
                     value={activeProviderValue}
                     markers={providerDiff}
                     onApplyOne={(path) => {
-                      const rec = providerRecs.find((r) => r.key === path)
+                      const rec = effectiveProviderRecs.find((r) => r.key === path)
                       if (rec) applyOneField(path, rec.recommended)
                     }}
                   />
@@ -367,63 +663,103 @@ export function AgentModelsDialog({
               模型列表
             </ColumnHeader>
             <div className="flex-1 overflow-y-auto p-2">
-              {selectedProvider && selectedProvider.models.length === 0 && (
+              {selectedManagedGroup ? (
+                <>
+                  {Object.keys(
+                    (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
+                  ).length === 0 && <Placeholder>该分组没有可同步的模型</Placeholder>}
+                  {Object.entries(
+                    (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
+                  ).map(([mid, cfg]) => (
+                    <button
+                      key={mid}
+                      type="button"
+                      onClick={() => setSelectedManagedModelId(mid)}
+                      className={
+                        'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
+                        (selectedManagedModelId === mid
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-muted')
+                      }
+                    >
+                      <AppIcon name="robot" size={12} className="shrink-0 text-muted-foreground" />
+                      <span className="truncate">{mid}</span>
+                    </button>
+                  ))}
+                </>
+              ) : selectedProvider && selectedProvider.models.length === 0 ? (
                 <Placeholder>该供应商下没有模型</Placeholder>
+              ) : (
+                selectedProvider?.models.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedModelId(m.id)}
+                    className={
+                      'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
+                      (selectedModelId === m.id
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-muted')
+                    }
+                  >
+                    <AppIcon name="robot" size={12} className="shrink-0 text-muted-foreground" />
+                    <span className="truncate">{m.id}</span>
+                  </button>
+                ))
               )}
-              {selectedProvider?.models.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setSelectedModelId(m.id)}
-                  className={
-                    'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
-                    (selectedModelId === m.id
-                      ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-muted')
-                  }
-                >
-                  <AppIcon name="robot" size={12} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate">{m.id}</span>
-                </button>
-              ))}
             </div>
           </div>
 
           {/* Right: model config */}
           <div className="flex min-h-0 flex-col">
             <ColumnHeader
-action={
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={() => setEditingScope(editingScope === 'model' ? null : 'model')}
-                    disabled={!selectedModel}
-                  >
-                    <AppIcon name={editingScope === 'model' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                    {editingScope === 'model' ? '推荐视图' : '编辑JSON'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    disabled={
-                      applying ||
-                      editingScope === 'model' ||
-                      !selectedModel ||
-                      modelDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
-                    }
-                    onClick={() => void handleApply('model')}
-                  >
-                    <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                    使用推荐值
-                  </Button>
-                </div>
+              action={
+                selectedManagedGroup ? null : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setEditingScope(editingScope === 'model' ? null : 'model')}
+                      disabled={!selectedModel}
+                    >
+                      <AppIcon name={editingScope === 'model' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
+                      {editingScope === 'model' ? '推荐视图' : '编辑JSON'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      disabled={
+                        applying ||
+                        editingScope === 'model' ||
+                        !selectedModel ||
+                        modelDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
+                      }
+                      onClick={() => void handleApply('model')}
+                    >
+                      <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                      使用推荐值
+                    </Button>
+                  </div>
+                )
               }
             >
-              {selectedModel ? `模型配置 · ${selectedModel.id}` : '模型配置'}
+              {selectedManagedGroup
+                ? `模型配置 · ${selectedManagedModelId ?? ''}（只读）`
+                : selectedModel
+                  ? `模型配置 · ${selectedModel.id}`
+                  : '模型配置'}
             </ColumnHeader>
             <div className="flex-1 overflow-auto p-2">
-              {selectedModel ? (
+              {selectedManagedGroup ? (
+                <ReadOnlyJson
+                  value={
+                    selectedManagedModelId
+                      ? (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models?.[selectedManagedModelId]
+                      : undefined
+                  }
+                  note="由系统最优值生成，不允许编辑"
+                />
+              ) : selectedModel ? (
                 editingScope === 'model' ? (
                   <JsonEditor
                     value={activeModelValue}
@@ -434,7 +770,7 @@ action={
                     value={activeModelValue}
                     markers={modelDiff}
                     onApplyOne={(path) => {
-                      const rec = modelRecs.find((r) => r.key === path)
+                      const rec = effectiveModelRecs.find((r) => r.key === path)
                       if (rec) applyOneField(path, rec.recommended)
                     }}
                   />
@@ -474,8 +810,272 @@ action={
           }}
           onSave={() => void handleSavePending().then(() => onOpenChange(false))}
         />
+      {/* Managed provider add/edit dialog (also carries the delete action) */}
+        <ManagedProviderDialog
+          open={managedDialogOpen}
+          onOpenChange={setManagedDialogOpen}
+          record={record}
+          editing={managedEditing}
+          onSaved={() => reload()}
+        />
+
+        {/* Rename provider dialog (regular providers) */}
+        <RenameProviderDialog
+          open={renamingProvider !== null}
+          currentName={renamingProvider ?? ''}
+          onOpenChange={(open) => {
+            if (!open) setRenamingProvider(null)
+          }}
+          onConfirm={(newName) => {
+            if (renamingProvider) handleRenameProvider(renamingProvider, newName)
+            setRenamingProvider(null)
+          }}
+        />
+
+        {/* Delete regular provider confirm */}
+        <ConfirmDeleteDialog
+          open={confirmingDeleteProvider !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmingDeleteProvider(null)
+          }}
+          title="删除 provider"
+          description={`确认删除配置文件中的 provider「${confirmingDeleteProvider ?? ''}」？删除会随预览一起提交，点右上角保存后生效。`}
+          onConfirm={() => {
+            if (confirmingDeleteProvider) handleDeleteProvider(confirmingDeleteProvider)
+            setConfirmingDeleteProvider(null)
+          }}
+        />
+
+        {/* Sync managed provider confirm */}
+        <ConfirmSyncDialog
+          open={confirmingSync !== null}
+          view={confirmingSync}
+          onOpenChange={(open) => {
+            if (!open) setConfirmingSync(null)
+          }}
+          onConfirm={() => confirmingSync && void handleSyncManaged(confirmingSync)}
+        />
+
+        {/* Delete managed provider confirm */}
+        <ConfirmDeleteDialog
+          open={confirmingDeleteManaged !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmingDeleteManaged(null)
+          }}
+          title="删除托管 provider"
+          description={`确认删除托管 provider「${confirmingDeleteManaged?.name ?? ''}」？删除会立即生效。`}
+          onConfirm={() => confirmingDeleteManaged && void handleDeleteManaged(confirmingDeleteManaged)}
+        />
       </DialogContent>
     </Dialog>
+  )
+}
+
+function RenameProviderDialog({
+  open,
+  currentName,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean
+  currentName: string
+  onOpenChange: (open: boolean) => void
+  onConfirm: (newName: string) => void
+}) {
+  const [value, setValue] = useState(currentName)
+  useEffect(() => {
+    if (open) setValue(currentName)
+  }, [open, currentName])
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent width="sm">
+        <DialogHeader>
+          <DialogTitle>修改 provider 名称</DialogTitle>
+        </DialogHeader>
+        <div className="px-4 pb-4">
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && value.trim() && value.trim() !== currentName) {
+                onConfirm(value.trim())
+              }
+            }}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            修改会作为预览的一部分，点右上角「保存」后才会写入配置文件。
+          </p>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button
+            disabled={!value.trim() || value.trim() === currentName}
+            onClick={() => onConfirm(value.trim())}
+          >
+            确认
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ConfirmSyncDialog({
+  open,
+  view,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean
+  view: ManagedProviderView | null
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent width="sm">
+        <DialogHeader>
+          <DialogTitle>同步托管 provider</DialogTitle>
+        </DialogHeader>
+        <p className="px-4 text-xs text-muted-foreground">
+          确认将托管 provider 「{view?.name ?? ''}」生成的内容写入配置文件？同步会立即写入并原子保存。
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
+          <Button
+            variant="default"
+            onClick={() => {
+              setBusy(true)
+              onConfirm()
+            }}
+            disabled={busy}
+          >
+            {busy ? '同步中...' : '确认同步'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ProviderRow is a single sidebar row with a leading slot, label and a
+// trailing actions slot rendered on hover.
+function ProviderRow({
+  name,
+  info,
+  selected,
+  onClick,
+  actions,
+  leading,
+}: {
+  name: React.ReactNode
+  info: string
+  selected: boolean
+  onClick: () => void
+  actions: React.ReactNode | null
+  leading?: React.ReactNode
+}) {
+  return (
+    <div
+      className={
+        'group flex w-full items-center gap-1 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
+        (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
+      }
+    >
+      {leading}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+      >
+        <span className="flex min-w-0 items-center truncate font-medium">{name}</span>
+        <span className="shrink-0 text-[10px] text-muted-foreground">{info}</span>
+      </button>
+      {actions && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {actions}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function IconHoverButton({
+  title,
+  icon,
+  tone,
+  disabled,
+  onClick,
+}: {
+  title: string
+  icon: string
+  tone: 'default' | 'destructive' | 'success'
+  disabled: boolean
+  onClick: () => void
+}) {
+  const toneClass =
+    tone === 'destructive'
+      ? 'text-muted-foreground hover:text-destructive'
+      : tone === 'success'
+        ? 'text-muted-foreground hover:text-success'
+        : 'text-muted-foreground hover:text-primary'
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      title={title}
+      disabled={disabled}
+      className={'h-5 w-5 ' + toneClass}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+    >
+      <AppIcon name={icon} size={11} />
+    </Button>
+  )
+}
+
+function NameEditButton({
+  title,
+  onClick,
+}: {
+  title: string
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      title={title}
+      className="h-5 w-5 text-muted-foreground hover:text-primary"
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+    >
+      <AppIcon name="edit" size={11} />
+    </Button>
+  )
+}
+
+// ReadOnlyJson renders a generated managed-provider block in a
+// monospace pre — no edit affordances, just view.
+function ReadOnlyJson({ value, note }: { value: unknown; note: string }) {
+  if (value === null || value === undefined) {
+    return <Placeholder>{note}</Placeholder>
+  }
+  return (
+    <div className="rounded-md border border-border bg-muted/10 p-2">
+      <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+      <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>
+    </div>
   )
 }
 
@@ -576,6 +1176,98 @@ function readPath(obj: Record<string, unknown>, segments: readonly string[]): un
     cur = (cur as Record<string, unknown>)[seg]
   }
   return cur
+}
+
+// protocolMatchesConditions reports whether any OR-branch of a protocol
+// matches the provider's config fields (provider-level gjson paths).
+function protocolMatchesConditions(
+  providerFields: unknown,
+  protocol: AgentProtocol,
+): boolean {
+  if (!protocol.conditions || protocol.conditions.length === 0) return false
+  if (!providerFields || typeof providerFields !== 'object') return false
+  for (const cond of protocol.conditions) {
+    const field = cond.field.trim()
+    if (!field) continue
+    const val = readPath(providerFields as Record<string, unknown>, field.split('.'))
+    const actual = val === null || val === undefined ? '' : String(val)
+    const want = cond.value.trim()
+    switch (cond.op) {
+      case 'equals':
+        if (actual === want) return true
+        break
+      case 'not_equals':
+        if (actual !== want) return true
+        break
+      case 'contains':
+        if (actual.includes(want)) return true
+        break
+      case 'not_contains':
+        if (!actual.includes(want)) return true
+        break
+    }
+  }
+  return false
+}
+
+// providerRootOfContent detects whether the config file keeps providers
+// under "provider" (opencode) or "models.providers" (openclaw) and
+// returns the segments to the provider map plus the leaf path to write.
+function providerRootOfContent(parsed: Record<string, unknown>): readonly string[] | null {
+  if (parsed.provider && typeof parsed.provider === 'object') return ['provider']
+  if (parsed.models && typeof parsed.models === 'object') {
+    const models = parsed.models as Record<string, unknown>
+    if (models.providers && typeof models.providers === 'object') return ['models', 'providers']
+  }
+  return null
+}
+
+// renameProviderInContent re-keys a provider within the live content,
+// preserving the provider object verbatim under the new id.
+function renameProviderInContent(
+  content: string,
+  oldId: string,
+  newId: string,
+  summary: AgentModelSummary | null,
+): string {
+  void summary
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const root = providerRootOfContent(parsed)
+  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  let cur: Record<string, unknown> = parsed
+  for (const seg of root) {
+    const next = cur[seg]
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    cur = next as Record<string, unknown>
+  }
+  const map = cur as Record<string, unknown>
+  if (!(oldId in map)) throw new Error(`provider ${oldId} 不存在`)
+  if (newId in map) throw new Error(`provider ${newId} 已存在`)
+  map[newId] = map[oldId]
+  delete map[oldId]
+  return JSON.stringify(parsed)
+}
+
+// deleteProviderFromContent removes a provider key from the live content.
+function deleteProviderFromContent(
+  content: string,
+  id: string,
+  summary: AgentModelSummary | null,
+): string {
+  void summary
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const root = providerRootOfContent(parsed)
+  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  let cur: Record<string, unknown> = parsed
+  for (const seg of root) {
+    const next = cur[seg]
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    cur = next as Record<string, unknown>
+  }
+  const map = cur as Record<string, unknown>
+  if (!(id in map)) throw new Error(`provider ${id} 不存在`)
+  delete map[id]
+  return JSON.stringify(parsed)
 }
 
 // wrapRootScope rebuilds a full file content string from summary +

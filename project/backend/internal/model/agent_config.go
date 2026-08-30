@@ -65,6 +65,31 @@ type AgentModelInfoFieldPaths struct {
 	ThinkingLevels string `json:"thinking_levels"`
 }
 
+// AgentProtocolCondition — one OR-branch of a request-protocol's match
+// rule. The condition reads a provider-level config field (a gjson path
+// inside the agent's provider config block, e.g. opencode's
+// "options.baseURL" or openclaw's "api") and compares it against Value
+// using the operator. Multiple conditions on a protocol are ORed.
+type AgentProtocolCondition struct {
+	Field string `json:"field"` // provider-level gjson path inside the agent config
+	Op    string `json:"op"`    // "equals" | "contains" | "not_contains" | "not_equals"
+	Value string `json:"value"`
+}
+
+// AgentProtocol — one "请求协议 (SDK)" block of an agent-type rule.
+// Name is free text. The block applies when ANY of its Conditions match
+// the provider's config fields. EndpointTags is the fixed "根据 endpoint
+// 来判断" field: every tag is a suffix (e.g. "/completions") matched
+// against model endpoints by suffix-contains; at least one tag is
+// required. Recommendations only take effect when the protocol matches,
+// and override/supplement the rule's common recommendations.
+type AgentProtocol struct {
+	Name            string               `json:"name"`
+	Conditions      []AgentProtocolCondition `json:"conditions"`
+	EndpointTags    []string             `json:"endpoint_tags"`
+	Recommendations []AgentRecommendation `json:"recommendations"`
+}
+
 const (
 	ModelInfoFieldMaxContext     = "max_context"
 	ModelInfoFieldMaxOutputToken = "max_output_token"
@@ -91,27 +116,30 @@ type AgentTypeRule struct {
 	OsPaths         string    `gorm:"type:text" json:"-"` // JSON blob of AgentOsPaths
 	JsonPaths       string    `gorm:"type:text" json:"-"` // JSON blob of AgentJsonPaths
 	Recommendations string    `gorm:"type:text" json:"-"` // JSON blob of []AgentRecommendation
+	Protocols       string    `gorm:"type:text" json:"-"` // JSON blob of []AgentProtocol
 	ModelInfoFields string    `gorm:"type:text" json:"-"` // JSON blob of AgentModelInfoFieldPaths
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// MarshalJSON embeds os_paths, json_paths, recommendations and
-// model_info_fields as parsed objects in the API response so the
+// MarshalJSON embeds os_paths, json_paths, recommendations, protocols
+// and model_info_fields as parsed objects in the API response so the
 // frontend can read them without re-parsing the blobs.
 func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 	type alias AgentTypeRule
 	p, _ := r.GetOsPaths()
 	j, _ := r.GetJsonPaths()
 	recs, _ := r.GetRecommendations()
+	protocols, _ := r.GetProtocols()
 	mif, _ := r.GetModelInfoFields()
 	return json.Marshal(struct {
 		alias
-		OsPaths         AgentOsPaths            `json:"os_paths"`
-		JsonPaths       AgentJsonPaths          `json:"json_paths"`
-		Recommendations []AgentRecommendation   `json:"recommendations"`
+		OsPaths         AgentOsPaths             `json:"os_paths"`
+		JsonPaths       AgentJsonPaths           `json:"json_paths"`
+		Recommendations []AgentRecommendation    `json:"recommendations"`
+		Protocols       []AgentProtocol          `json:"protocols"`
 		ModelInfoFields AgentModelInfoFieldPaths `json:"model_info_fields"`
-	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs, ModelInfoFields: mif})
+	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs, Protocols: protocols, ModelInfoFields: mif})
 }
 
 // GetOsPaths parses the stored JSON blob back into a struct. An empty blob
@@ -181,6 +209,34 @@ func (r *AgentTypeRule) SetRecommendations(recs []AgentRecommendation) error {
 		return err
 	}
 	r.Recommendations = string(data)
+	return nil
+}
+
+// GetProtocols parses the stored JSON blob back into a slice of
+// request-protocol blocks. An empty blob yields a nil slice.
+func (r *AgentTypeRule) GetProtocols() ([]AgentProtocol, error) {
+	if r.Protocols == "" {
+		return nil, nil
+	}
+	var out []AgentProtocol
+	if err := json.Unmarshal([]byte(r.Protocols), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetProtocols serializes the request-protocol blocks into the JSON
+// blob persisted on the rule row.
+func (r *AgentTypeRule) SetProtocols(protocols []AgentProtocol) error {
+	if protocols == nil {
+		r.Protocols = ""
+		return nil
+	}
+	data, err := json.Marshal(protocols)
+	if err != nil {
+		return err
+	}
+	r.Protocols = string(data)
 	return nil
 }
 
@@ -347,6 +403,98 @@ var openclawRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "api", Type: "string", Description: "API 协议（openai-completions / anthropic-messages / ...）", Recommended: "openai-completions"},
 	{Scope: "model", Key: "id", Type: "string", Description: "模型 ID", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+}
+
+// ManagedAgentGroup — one endpoint group of a managed provider. The
+// endpoint string is the group's identity: identical system-provider
+// endpoints are merged into one group, its Suffix names the agent-config
+// provider block (root name + suffix), and ModelSources remembers which
+// model-info source (PriceConfig row id, "" = none) the user picked for
+// each model name so sync can fill the four unified fields.
+type ManagedAgentGroup struct {
+	Endpoint     string            `json:"endpoint"`
+	Suffix       string            `json:"suffix"`
+	ModelSources map[string]string `json:"model_sources"`
+}
+
+// ManagedAgentProvider — a "托管 provider" bound to one agent config
+// file (接管配置文件). It links system Provider rows (模型管理菜单) and
+// groups their endpoints into per-endpoint agent provider blocks. The
+// blocks themselves are generated from the agent-type rule's common +
+// matched-protocol recommendations and the chosen model-info sources,
+// so they are read-only in the 管理模型 view — users can only toggle
+// between the generated views, never edit or "使用推荐值" them.
+type ManagedAgentProvider struct {
+	ID                string    `gorm:"primaryKey;type:uuid" json:"id"`
+	AgentConfigFileID string    `gorm:"not null;index" json:"agent_config_file_id"`
+	Name              string    `gorm:"not null" json:"name"`   // 根名，例如 HAPIY
+	ProviderIDs       string    `gorm:"type:text" json:"-"`     // JSON array of system Provider ids
+	Groups            string    `gorm:"type:text" json:"-"`     // JSON blob of []ManagedAgentGroup
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+func (m *ManagedAgentProvider) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return nil
+}
+
+// GetProviderIDs parses the stored JSON blob back into a slice. An
+// empty blob yields a nil slice.
+func (m *ManagedAgentProvider) GetProviderIDs() ([]string, error) {
+	if m.ProviderIDs == "" {
+		return nil, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(m.ProviderIDs), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetProviderIDs serializes the linked system provider ids into the
+// JSON blob persisted on the row.
+func (m *ManagedAgentProvider) SetProviderIDs(ids []string) error {
+	if ids == nil {
+		m.ProviderIDs = ""
+		return nil
+	}
+	data, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	m.ProviderIDs = string(data)
+	return nil
+}
+
+// GetGroups parses the stored JSON blob back into a slice of endpoint
+// groups. An empty blob yields a nil slice.
+func (m *ManagedAgentProvider) GetGroups() ([]ManagedAgentGroup, error) {
+	if m.Groups == "" {
+		return nil, nil
+	}
+	var out []ManagedAgentGroup
+	if err := json.Unmarshal([]byte(m.Groups), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetGroups serializes the endpoint groups into the JSON blob persisted
+// on the row.
+func (m *ManagedAgentProvider) SetGroups(groups []ManagedAgentGroup) error {
+	if groups == nil {
+		m.Groups = ""
+		return nil
+	}
+	data, err := json.Marshal(groups)
+	if err != nil {
+		return err
+	}
+	m.Groups = string(data)
+	return nil
 }
 
 // EnsureDefaultAgentTypes seeds the agent_type_rules table with the

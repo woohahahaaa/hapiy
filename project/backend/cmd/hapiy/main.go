@@ -246,6 +246,12 @@ func main() {
 			dashboardAuthed.GET("/agent-config-files/:id/models", handler.GetAgentConfigFileModels(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendations", handler.ApplyAgentRecommendations(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/sync-model-fields", handler.SyncAgentConfigFileModelFields(db, encKey))
+			dashboardAuthed.GET("/agent-config-files/managed-options", handler.ManagedProviderOptions(db))
+			dashboardAuthed.GET("/agent-config-files/:id/managed-providers", handler.ListManagedProviders(db, encKey))
+			dashboardAuthed.POST("/agent-config-files/:id/managed-providers", handler.CreateManagedProvider(db, encKey))
+			dashboardAuthed.PUT("/agent-config-files/:id/managed-providers/:mid", handler.UpdateManagedProvider(db, encKey))
+			dashboardAuthed.DELETE("/agent-config-files/:id/managed-providers/:mid", handler.DeleteManagedProvider(db))
+			dashboardAuthed.POST("/agent-config-files/:id/managed-providers/:mid/sync", handler.SyncManagedProvider(db, encKey))
 
 			// Tokens
 			dashboardAuthed.GET("/tokens", handler.ListTokens(db))
