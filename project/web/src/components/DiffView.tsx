@@ -30,16 +30,16 @@ export function DiffView({ before, after }: DiffViewProps) {
 
   const parts = diffLines(beforeText, afterText)
   return (
-    <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre">
+    <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre relative">
       {parts.map((part, i) => {
         const lines = part.value.split('\n')
         const lastIndex = lines.length - 1
         const hasTrailingNewline = part.value.endsWith('\n')
         const containerClass = part.added
-          ? 'bg-emerald-500/15'
+          ? 'block w-full bg-emerald-500/15'
           : part.removed
-            ? 'bg-rose-500/15'
-            : ''
+            ? 'block w-full bg-rose-500/15'
+            : 'block w-full'
         return lines.map((line, j) => {
           if (j === lastIndex && line === '' && hasTrailingNewline) return null
           const prefix = part.added ? '+' : part.removed ? '-' : ' '
@@ -47,7 +47,6 @@ export function DiffView({ before, after }: DiffViewProps) {
             <span key={`${i}-${j}`} className={containerClass}>
               {prefix}{' '}
               <JsonTokens text={line} />
-              {'\n'}
             </span>
           )
         })

@@ -589,13 +589,14 @@ func ReadAgentConfigPath() gin.HandlerFunc {
 }
 
 // ReadAgentConfigRemotePath returns the content of a remote file via SSH
-// using the supplied (unsaved) ssh_config. The path and credentials travel
-// in the POST body because the dashboard's takeover dialog builds them up
-// before the AgentConfigFile row exists.
+// using the supplied (unsaved) ssh_config. The path, credentials and target
+// OS travel in the POST body because the dashboard's takeover dialog builds
+// them up before the AgentConfigFile row exists.
 func ReadAgentConfigRemotePath() gin.HandlerFunc {
 	type request struct {
 		SshConfig json.RawMessage `json:"ssh_config"`
 		Path      string          `json:"path"`
+		TargetOS  string          `json:"target_os"`
 	}
 	return func(c *gin.Context) {
 		var req request
@@ -617,7 +618,7 @@ func ReadAgentConfigRemotePath() gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 			return
 		}
-		content, err := service.ReadRemoteFile(cfg, path)
+		content, err := service.ReadRemoteFile(cfg, path, strings.TrimSpace(req.TargetOS))
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
 			return
@@ -742,7 +743,7 @@ func readAgentConfigFileContent(row *model.AgentConfigFile, key []byte) (string,
 		if err := cfg.DecryptSensitive(key); err != nil {
 			return "", fmt.Errorf("SSH 凭据解密失败: %v", err)
 		}
-		return service.ReadRemoteFile(cfg, row.Path)
+		return service.ReadRemoteFile(cfg, row.Path, row.TargetOS)
 	default:
 		return "", fmt.Errorf("未知模式 %q", row.Mode)
 	}
@@ -762,7 +763,7 @@ func writeAgentConfigFileContent(row *model.AgentConfigFile, content string, key
 		if err := cfg.DecryptSensitive(key); err != nil {
 			return fmt.Errorf("SSH 凭据解密失败: %v", err)
 		}
-		return service.WriteRemoteFileAtomic(cfg, row.Path, content)
+		return service.WriteRemoteFileAtomic(cfg, row.Path, content, row.TargetOS)
 	default:
 		return fmt.Errorf("未知模式 %q", row.Mode)
 	}
@@ -819,11 +820,13 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		recs, _ := rule.GetRecommendations()
+		mif, _ := rule.GetModelInfoFields()
 		c.JSON(http.StatusOK, gin.H{
 			"data": gin.H{
-				"agent_type":      row.AgentType,
-				"providers":       providers,
-				"recommendations": recs,
+				"agent_type":        row.AgentType,
+				"providers":         providers,
+				"recommendations":   recs,
+				"model_info_fields": mif,
 			},
 		})
 	}
