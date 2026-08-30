@@ -39,12 +39,39 @@ type AgentJsonPaths struct {
 // segment or dotted, no array wildcards); Recommended is the value to
 // fill in when the user clicks "一键套用推荐值".
 type AgentRecommendation struct {
-	Scope       string `json:"scope"`        // "provider" | "model"
-	Key         string `json:"key"`          // gjson path, e.g. "maxConcurrency" or "thinking.type"
-	Description string `json:"description"`  // human-readable meaning
-	Type        string `json:"type"`         // "string" | "number" | "boolean" | "object" | "array"
-	Recommended any    `json:"recommended"`  // recommended value, or null when not filled
-	Required    bool   `json:"required"`     // recommended to be present?
+	Name        string            `json:"name,omitempty"`      // 字段名（官方配置里）
+	Scope       string            `json:"scope"`               // "provider" | "model"
+	Key         string            `json:"key"`                 // gjson path, e.g. "maxConcurrency" or "thinking.type"
+	Description string            `json:"description"`         // human-readable meaning
+	Type        string            `json:"type"`                // "string" | "number" | "boolean" | "object" | "array"
+	Recommended any               `json:"recommended"`         // recommended value, or null when not filled
+	Candidates  map[string]string `json:"candidates,omitempty"` // 多候选值说明 key→含义
+	Required    bool              `json:"required"`            // recommended to be present?
+}
+
+// InferRecommendationType infers the type field from the recommended
+// value's concrete JSON type so the JSONC editor does not need a manual
+// type column. nil recommended resolves via Candidates keys else "".
+func InferRecommendationType(rec AgentRecommendation) string {
+	switch rec.Recommended.(type) {
+	case float64:
+		return "number"
+	case json.Number:
+		return "number"
+	case string:
+		return "string"
+	case bool:
+		return "boolean"
+	case []any:
+		return "array"
+	case map[string]any:
+		return "object"
+	default:
+		if len(rec.Candidates) > 0 {
+			return "string"
+		}
+		return ""
+	}
 }
 
 // AgentModelInfoFieldPaths maps the four unified model-info fields to
@@ -118,13 +145,32 @@ type AgentTypeRule struct {
 	Recommendations string    `gorm:"type:text" json:"-"` // JSON blob of []AgentRecommendation
 	Protocols       string    `gorm:"type:text" json:"-"` // JSON blob of []AgentProtocol
 	ModelInfoFields string    `gorm:"type:text" json:"-"` // JSON blob of AgentModelInfoFieldPaths
+	ConfigJsonc     string    `gorm:"type:text" json:"-"` // 原始 JSONC（含注释）
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// MarshalJSON embeds os_paths, json_paths, recommendations, protocols
-// and model_info_fields as parsed objects in the API response so the
-// frontend can read them without re-parsing the blobs.
+// AgentRuleConfigJsonc is the JSONC document shape users edit directly
+// in the rule dialog. Common holds the SDK-independent fields; Protocols
+// holds per-SDK blocks (each with its own field list + endpoint tags).
+type AgentRuleConfigJsonc struct {
+	Common    []AgentRecommendation  `json:"common"`
+	Protocols []AgentProtocolJsonc   `json:"protocols"`
+}
+
+// AgentProtocolJsonc is the JSONC representation of a protocol block.
+// It matches AgentProtocol except the SDK-specific field list uses the
+// friendlier "fields" key instead of "recommendations".
+type AgentProtocolJsonc struct {
+	Name            string               `json:"name"`
+	Conditions      []AgentProtocolCondition `json:"conditions"`
+	EndpointTags    []string             `json:"endpoint_tags"`
+	Fields          []AgentRecommendation `json:"fields"`
+}
+
+// MarshalJSON embeds os_paths, json_paths, recommendations, protocols,
+// model_info_fields and config_jsonc as parsed values so the frontend
+// can read them without re-parsing the blobs.
 func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 	type alias AgentTypeRule
 	p, _ := r.GetOsPaths()
@@ -132,6 +178,7 @@ func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 	recs, _ := r.GetRecommendations()
 	protocols, _ := r.GetProtocols()
 	mif, _ := r.GetModelInfoFields()
+	jsonc, _ := r.GetConfigJsonc()
 	return json.Marshal(struct {
 		alias
 		OsPaths         AgentOsPaths             `json:"os_paths"`
@@ -139,7 +186,8 @@ func (r AgentTypeRule) MarshalJSON() ([]byte, error) {
 		Recommendations []AgentRecommendation    `json:"recommendations"`
 		Protocols       []AgentProtocol          `json:"protocols"`
 		ModelInfoFields AgentModelInfoFieldPaths `json:"model_info_fields"`
-	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs, Protocols: protocols, ModelInfoFields: mif})
+		ConfigJsonc     string                   `json:"config_jsonc"`
+	}{alias: alias(r), OsPaths: p, JsonPaths: j, Recommendations: recs, Protocols: protocols, ModelInfoFields: mif, ConfigJsonc: jsonc})
 }
 
 // GetOsPaths parses the stored JSON blob back into a struct. An empty blob
@@ -238,6 +286,87 @@ func (r *AgentTypeRule) SetProtocols(protocols []AgentProtocol) error {
 	}
 	r.Protocols = string(data)
 	return nil
+}
+
+// SetConfigJsonc persists the raw JSONC text verbatim (comments and
+// whitespace preserved) so the rule dialog round-trips user edits.
+func (r *AgentTypeRule) SetConfigJsonc(text string) {
+	r.ConfigJsonc = text
+}
+
+// GetConfigJsonc returns the stored JSONC text. When a legacy/seed row
+// predates the JSONC column, it builds the document from the derived
+// recommendations + protocols and returns pretty JSON without comments.
+func (r *AgentTypeRule) GetConfigJsonc() (string, error) {
+	if r.ConfigJsonc != "" {
+		return r.ConfigJsonc, nil
+	}
+	recs, err := r.GetRecommendations()
+	if err != nil {
+		return "", err
+	}
+	protocols, err := r.GetProtocols()
+	if err != nil {
+		return "", err
+	}
+	return BuildRuleConfigJsonc(recs, protocols)
+}
+
+// BuildRuleConfigJsonc marshals a rule's recommendations + protocols
+// into the {common, protocols} JSONC document pretty-printed with two
+// spaces, with a trailing newline. Recs are NormalizedTypes first so the
+// document carries the inferred type field.
+func BuildRuleConfigJsonc(recs []AgentRecommendation, protocols []AgentProtocol) (string, error) {
+	common := make([]AgentRecommendation, 0, len(recs))
+	for _, r := range recs {
+		if r.Type == "" {
+			r.Type = InferRecommendationType(r)
+		}
+		common = append(common, r)
+	}
+	protocolJsonc := make([]AgentProtocolJsonc, 0, len(protocols))
+	for _, p := range protocols {
+		protocolJsonc = append(protocolJsonc, AgentProtocolJsonc{
+			Name: p.Name, Conditions: p.Conditions, EndpointTags: p.EndpointTags, Fields: p.Recommendations,
+		})
+	}
+	doc := AgentRuleConfigJsonc{Common: common, Protocols: protocolJsonc}
+	out, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out) + "\n", nil
+}
+
+// ParseRuleConfigJsonc parses a JSONC document (comments already
+// stripped by the caller) back into its recommendations + protocols.
+// Types are inferred from the recommended value when absent.
+func ParseRuleConfigJsonc(data []byte) ([]AgentRecommendation, []AgentProtocol, error) {
+	var doc AgentRuleConfigJsonc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, nil, err
+	}
+	common := make([]AgentRecommendation, 0, len(doc.Common))
+	for _, r := range doc.Common {
+		if r.Type == "" {
+			r.Type = InferRecommendationType(r)
+		}
+		common = append(common, r)
+	}
+	protocols := make([]AgentProtocol, 0, len(doc.Protocols))
+	for _, p := range doc.Protocols {
+		recs := make([]AgentRecommendation, 0, len(p.Fields))
+		for _, r := range p.Fields {
+			if r.Type == "" {
+				r.Type = InferRecommendationType(r)
+			}
+			recs = append(recs, r)
+		}
+		protocols = append(protocols, AgentProtocol{
+			Name: p.Name, Conditions: p.Conditions, EndpointTags: p.EndpointTags, Recommendations: recs,
+		})
+	}
+	return common, protocols, nil
 }
 
 // GetModelInfoFields parses the stored JSON blob back into the unified

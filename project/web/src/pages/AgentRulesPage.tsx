@@ -3,7 +3,6 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -12,13 +11,7 @@ import {
   DialogTitle,
 } from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { toast } from '@/components/ui/toast'
 import {
@@ -28,27 +21,228 @@ import {
   MODEL_INFO_FIELD_LABELS,
   type AgentModelInfoFieldPaths,
   type AgentProtocol,
-  type AgentProtocolCondition,
   type AgentProtocolConditionOp,
   type AgentRecommendation,
-  type AgentRecommendationScope,
   type AgentRecommendationType,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 
-const RECOMMENDATION_SCOPES: readonly AgentRecommendationScope[] = ['provider', 'model']
-const RECOMMENDATION_TYPES: readonly AgentRecommendationType[] = [
-  'string',
-  'number',
-  'boolean',
-  'object',
-  'array',
-]
-
 function toErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof DashboardApiError) return err.message
   return err instanceof Error ? err.message : fallback
+}
+
+const JSONC_SEED = `{
+  // 通用部分：与请求协议 / SDK 无关的官方字段
+  "common": [
+    {
+      "name": "timeout",
+      "key": "options.timeout",
+      "scope": "provider",
+      "description": "请求超时（毫秒）。默认 300000，复杂任务建议拉长到 600000",
+      "required": false,
+      "recommended": 600000,
+      "candidates": {
+        "300000": "官方默认，常规任务够用",
+        "600000": "复杂任务建议，流式响应更稳"
+      }
+    }
+  ],
+  // 请求协议（SDK）区分部分：每个 SDK 一个块
+  "protocols": [
+    {
+      "name": "OpenAI 兼容",
+      // 命中条件（provider 配置块里的字段），多个条件为“或”关系
+      "conditions": [
+        { "field": "options.baseURL", "op": "contains", "value": "/v1" }
+      ],
+      // 必填：根据 endpoint 来判断（模型 endpoint 以标签结尾归属本协议）
+      "endpoint_tags": ["/v1/chat/completions"],
+      "fields": [
+        {
+          "name": "extraBody",
+          "key": "options.extraBody",
+          "scope": "provider",
+          "description": "仅 OpenAI 兼容协议自带附加请求体",
+          "required": false,
+          "recommended": null
+        }
+      ]
+    }
+  ]
+}
+`
+
+// stripJsoncComments removes // and /* */ comments so JSON.parse can
+// read JSONC documents; string contents are left alone.
+function stripJsoncComments(s: string): string {
+  const out: string[] = []
+  let inString = false
+  let escape = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inString) {
+      out.push(c)
+      if (escape) {
+        escape = false
+        continue
+      }
+      if (c === '\\') {
+        escape = true
+        continue
+      }
+      if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      out.push(c)
+      continue
+    }
+    if (c === '/' && s[i + 1] === '/') {
+      const end = s.indexOf('\n', i)
+      if (end < 0) return out.join('')
+      i = end
+      continue
+    }
+    if (c === '/' && s[i + 1] === '*') {
+      const end = s.indexOf('*/', i + 2)
+      if (end < 0) return out.join('')
+      i = end + 1
+      continue
+    }
+    out.push(c)
+  }
+  return out.join('')
+}
+
+// parseRuleConfigJsonc validates + parses the {common, protocols} JSONC
+// doc. Throws on invalid JSON / wrong shape.
+function parseRuleConfigJsonc(text: string): {
+  readonly common: AgentRecommendation[]
+  readonly protocols: AgentProtocol[]
+} {
+  const cleaned = stripJsoncComments(text)
+  const parsed: unknown = JSON.parse(cleaned)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('顶层必须是 { common, protocols } 对象')
+  }
+  const rec = parsed as Record<string, unknown>
+  const common = Array.isArray(rec.common) ? (rec.common as unknown[]) : []
+  const protocols = Array.isArray(rec.protocols) ? (rec.protocols as unknown[]) : []
+  return {
+    common: common.map((c) => normalizeAgentRecommendation(c)),
+    protocols: protocols.map((p) => normalizeAgentProtocol(p)),
+  }
+}
+
+// normalizeAgentRecommendation coerces a JSONC field entry into the
+// structured shape, inferring the type from recommended when absent.
+function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('common 里每一项必须是对象')
+  }
+  const v = value as Record<string, unknown>
+  const key = typeof v.key === 'string' ? v.key : ''
+  if (!key.trim()) throw new Error('字段缺少 key（字段路径）')
+  const scope = v.scope === 'model' ? 'model' : 'provider'
+  const recommended = v.recommended ?? null
+  const type = inferRecommendationType(recommended)
+  const candidates = v.candidates && typeof v.candidates === 'object' && !Array.isArray(v.candidates)
+    ? (v.candidates as Record<string, unknown>)
+    : undefined
+  const cand: Record<string, string> = {}
+  if (candidates) {
+    for (const k of Object.keys(candidates)) {
+      const val = candidates[k]
+      if (typeof val === 'string') cand[k] = val
+    }
+  }
+  return {
+    name: typeof v.name === 'string' ? v.name : undefined,
+    scope,
+    key,
+    description: typeof v.description === 'string' ? v.description : '',
+    type,
+    recommended,
+    candidates: Object.keys(cand).length > 0 ? cand : undefined,
+    required: v.required === true,
+  }
+}
+
+function normalizeAgentProtocol(value: unknown): AgentProtocol {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('protocols 里每一项必须是对象')
+  }
+  const v = value as Record<string, unknown>
+  if (typeof v.name !== 'string' || !v.name.trim()) {
+    throw new Error('协议块缺少 name')
+  }
+  const conditions = Array.isArray(v.conditions) ? v.conditions : []
+  const tags = Array.isArray(v.endpoint_tags) ? v.endpoint_tags : []
+  if (tags.length === 0) {
+    throw new Error(`协议「${v.name}」缺少 endpoint_tags（根据 endpoint 来判断，必填）`)
+  }
+  const fields = Array.isArray(v.fields) ? v.fields : []
+  return {
+    name: v.name,
+    conditions: conditions.map((c) => {
+      if (!c || typeof c !== 'object' || Array.isArray(c)) {
+        throw new Error(`协议「${v.name}」的 conditions 项格式错误`)
+      }
+      const cv = c as Record<string, unknown>
+      const op = cv.op
+      const valid = ['equals', 'contains', 'not_contains', 'not_equals']
+      return {
+        field: typeof cv.field === 'string' ? cv.field : '',
+        op: typeof op === 'string' && valid.includes(op) ? (op as AgentProtocolConditionOp) : 'contains',
+        value: typeof cv.value === 'string' ? cv.value : '',
+      }
+    }),
+    endpoint_tags: tags.filter((t): t is string => typeof t === 'string'),
+    recommendations: fields.map((f) => normalizeAgentRecommendation(f)),
+  }
+}
+
+function inferRecommendationType(recommended: unknown): AgentRecommendationType {
+  if (recommended === null || recommended === undefined) return 'string'
+  if (typeof recommended === 'number') return 'number'
+  if (typeof recommended === 'boolean') return 'boolean'
+  if (Array.isArray(recommended)) return 'array'
+  if (typeof recommended === 'object') return 'object'
+  return 'string'
+}
+
+// buildRuleConfigJsonc constructs the JSONC document from the parsed
+// recommendations + protocols (used as a fallback before the column
+// exists, e.g. legacy seed rows).
+function buildRuleConfigJsonc(
+  recs: readonly AgentRecommendation[],
+  protocols: readonly AgentProtocol[],
+): string {
+  const common = recs.map((r) => ({
+    ...r,
+    type: inferRecommendationType(r.recommended),
+  }))
+  const doc = {
+    common,
+    protocols: protocols.map((p) => ({
+      name: p.name,
+      conditions: p.conditions,
+      endpoint_tags: p.endpoint_tags,
+      fields: p.recommendations,
+    })),
+  }
+  if (common.length === 0 && protocols.length === 0) return JSONC_SEED
+  return JSON.stringify(doc, null, 2)
+}
+
+// formatRuleConfigJsonc strips comments + whitespace then re-pretty
+// prints so users can tidy their JSONC.
+function formatRuleConfigJsonc(text: string): string {
+  const { common, protocols } = parseRuleConfigJsonc(text)
+  return buildRuleConfigJsonc(common, protocols)
 }
 
 function formatDate(iso: string): string {
@@ -241,8 +435,8 @@ function RuleDialog({
   const [macPath, setMacPath] = useState('')
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
-  const [recommendations, setRecommendations] = useState<AgentRecommendation[]>([])
-  const [protocols, setProtocols] = useState<AgentProtocol[]>([])
+  const [configJsonc, setConfigJsonc] = useState('')
+  const [jsoncError, setJsoncError] = useState<string | null>(null)
   const [modelInfoFields, setModelInfoFields] = useState<AgentModelInfoFieldPaths>({
     max_context: '',
     max_output_token: '',
@@ -259,13 +453,12 @@ function RuleDialog({
       setMacPath(editing?.os_paths.mac ?? '')
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
-      setRecommendations((editing?.recommendations ?? []).map((r) => ({ ...r })))
-      setProtocols((editing?.protocols ?? []).map((p) => ({
-        name: p.name,
-        conditions: p.conditions.map((c) => ({ ...c })),
-        endpoint_tags: [...p.endpoint_tags],
-        recommendations: p.recommendations.map((r) => ({ ...r })),
-      })))
+      setConfigJsonc(
+        editing?.config_jsonc && editing.config_jsonc.trim() !== ''
+          ? editing.config_jsonc
+          : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
+      )
+      setJsoncError(null)
       setModelInfoFields({ ...(editing?.model_info_fields ?? {
         max_context: '',
         max_output_token: '',
@@ -284,6 +477,18 @@ function RuleDialog({
       setError('请填写名称')
       return
     }
+    // Validate + parse the JSONC doc up front so the client gives
+    // immediate feedback; the backend re-validates on write.
+    let common: AgentRecommendation[]
+    let protocols: AgentProtocol[]
+    try {
+      const parsed = parseRuleConfigJsonc(configJsonc)
+      common = parsed.common
+      protocols = parsed.protocols
+    } catch (err) {
+      setError('JSONC 解析失败：' + (err instanceof Error ? err.message : String(err)))
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -294,9 +499,10 @@ function RuleDialog({
           mac: macPath.trim(),
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
-          recommendations,
+          recommendations: common,
           protocols,
           model_info_fields: modelInfoFields,
+          config_jsonc: configJsonc,
         })
       } else {
         await dashboardApi.createAgentTypeRule(trimmed)
@@ -369,29 +575,67 @@ function RuleDialog({
 
             <Field>
               <div className="flex items-center justify-between">
-                <FieldLabel>推荐配置</FieldLabel>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() =>
-                    setRecommendations((prev) => [
-                      ...prev,
-                      { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false },
-                    ])
-                  }
-                >
-                  <AppIcon name="add" data-icon="inline-start" />
-                  添加行
-                </Button>
+                <FieldLabel>字段推荐配置（JSONC）</FieldLabel>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => {
+                      try {
+                        setConfigJsonc(formatRuleConfigJsonc(configJsonc))
+                        setJsoncError(null)
+                      } catch (err) {
+                        setJsoncError(err instanceof Error ? err.message : '格式化失败')
+                      }
+                    }}
+                  >
+                    <AppIcon name="content_copy" data-icon="inline-start" />
+                    格式化
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    title="恢复为编辑前的 JSONC 文本"
+                    onClick={() =>
+                      setConfigJsonc(
+                        editing?.config_jsonc && editing.config_jsonc.trim() !== ''
+                          ? editing.config_jsonc
+                          : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
+                      )
+                    }
+                  >
+                    还原
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                列出官方支持的字段、类型与推荐值；下方会在「管理模型」里与实际配置对比，缺/错/多会有行内标记，可一键套用推荐值
+                用 JSONC 直接编辑：上方「common」是通用字段；下方「protocols」按请求协议（SDK）区分。支持 // 与 /* */ 注释。字段格式：
+                name（字段名）/ key（路径）/ description（含义）/ scope（provider|model）/ required（必填）/
+                recommended（推荐值，null=推荐不填）/ candidates（多候选值说明，可选，type 由 recommended 自动推断）
               </p>
-              <RecommendationTable rows={recommendations} onChange={setRecommendations} />
+              <Textarea
+                value={configJsonc}
+                onChange={(e) => {
+                  setConfigJsonc(e.target.value)
+                  try {
+                    parseRuleConfigJsonc(e.target.value)
+                    setJsoncError(null)
+                  } catch (err) {
+                    setJsoncError(err instanceof Error ? err.message : String(err))
+                  }
+                }}
+                className={
+                  'h-[360px] resize-y font-mono text-xs leading-relaxed ' +
+                  (jsoncError ? 'border-destructive focus-visible:ring-destructive' : '')
+                }
+                spellCheck={false}
+              />
+              {jsoncError && (
+                <p className="text-[11px] text-destructive">{jsoncError}</p>
+              )}
             </Field>
-
-            <ProtocolsEditor protocols={protocols} onChange={setProtocols} />
           </Group>
 
           {error && (
@@ -455,442 +699,6 @@ function ModelInfoFieldsEditor({
   )
 }
 
-const PROTOCOL_CONDITION_OPS: readonly { value: AgentProtocolConditionOp; label: string }[] = [
-  { value: 'equals', label: '等于' },
-  { value: 'contains', label: '包含' },
-  { value: 'not_contains', label: '不包含' },
-  { value: 'not_equals', label: '不等于' },
-]
-
-function ProtocolsEditor({
-  protocols,
-  onChange,
-}: {
-  protocols: AgentProtocol[]
-  onChange: (protocols: AgentProtocol[]) => void
-}) {
-  const update = (idx: number, patch: Partial<AgentProtocol>) => {
-    onChange(protocols.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
-  }
-  const remove = (idx: number) => {
-    onChange(protocols.filter((_, i) => i !== idx))
-  }
-
-  return (
-    <Field>
-      <div className="flex items-center justify-between">
-        <FieldLabel>请求协议区分部分（SDK）</FieldLabel>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          onClick={() =>
-            onChange([
-              ...protocols,
-              { name: '', conditions: [{ field: '', op: 'contains', value: '' }], endpoint_tags: [], recommendations: [] },
-            ])
-          }
-        >
-          <AppIcon name="add" data-icon="inline-start" />
-          添加协议
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        不同请求协议（SDK）的字段不同：这里的推荐只在协议命中时生效。每个协议可配多条判断条件（或关系）以及固定的「根据 endpoint 来判断」标签（必填）
-      </p>
-      {protocols.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-          暂无请求协议，点上方「添加协议」开始
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {protocols.map((p, idx) => (
-            <div key={idx} className="rounded-md border border-border bg-muted/10">
-              <div className="flex items-center gap-2 border-b border-border p-2">
-                <Input
-                  value={p.name}
-                  onChange={(e) => update(idx, { name: e.target.value })}
-                  placeholder="协议名称（例如：OpenAI SDK / OpenAI 兼容）"
-                  className="h-7 flex-1 text-xs"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="删除该协议"
-                  onClick={() => remove(idx)}
-                >
-                  <AppIcon name="delete" size={14} />
-                </Button>
-              </div>
-              <div className="space-y-2 p-2">
-                <ConditionRows
-                  conditions={p.conditions}
-                  onChange={(conditions) => update(idx, { conditions })}
-                />
-                <EndpointTagsInput
-                  tags={p.endpoint_tags}
-                  onChange={(endpoint_tags) => update(idx, { endpoint_tags })}
-                />
-                <div className="rounded-md border border-border bg-background p-2">
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">该协议的推荐配置</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() =>
-                        update(idx, {
-                          recommendations: [
-                            ...p.recommendations,
-                            { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false },
-                          ],
-                        })
-                      }
-                    >
-                      <AppIcon name="add" data-icon="inline-start" />
-                      添加行
-                    </Button>
-                  </div>
-                  <RecommendationTable
-                    rows={p.recommendations}
-                    onChange={(recommendations) => update(idx, { recommendations })}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Field>
-  )
-}
-
-function ConditionRows({
-  conditions,
-  onChange,
-}: {
-  conditions: readonly AgentProtocolCondition[]
-  onChange: (conditions: AgentProtocolCondition[]) => void
-}) {
-  const update = (idx: number, patch: Partial<AgentProtocolCondition>) => {
-    onChange(conditions.map((c, i) => (i === idx ? { ...c, ...patch } : c)))
-  }
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">判断条件（多条件为“或”关系）</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          onClick={() => onChange([...conditions, { field: '', op: 'contains', value: '' }])}
-        >
-          <AppIcon name="add" data-icon="inline-start" />
-          添加条件
-        </Button>
-      </div>
-      {conditions.map((c, idx) => (
-        <div key={idx} className="flex items-center gap-1.5">
-          <Input
-            value={c.field}
-            onChange={(e) => update(idx, { field: e.target.value })}
-            placeholder="provider 配置字段，例如 options.baseURL"
-            className="h-7 flex-1 text-xs font-mono"
-          />
-          <Select
-            value={c.op}
-            onValueChange={(v) => update(idx, { op: v as AgentProtocolConditionOp })}
-          >
-            <SelectTrigger className="h-7 w-[92px] text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PROTOCOL_CONDITION_OPS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input
-            value={c.value}
-            onChange={(e) => update(idx, { value: e.target.value })}
-            placeholder="值"
-            className="h-7 flex-1 text-xs font-mono"
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onChange(conditions.filter((_, i) => i !== idx))}
-          >
-            <AppIcon name="close" size={12} />
-          </Button>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// EndpointTagsInput is the fixed "根据 endpoint 来判断" field. Typing a
-// value and pressing space commits it as a tag; enter also commits.
-// Tags are matched against model endpoints by suffix-contains during
-// managed-provider sync (the SDK auto-selection hook).
-function EndpointTagsInput({
-  tags,
-  onChange,
-}: {
-  tags: readonly string[]
-  onChange: (tags: readonly string[]) => void
-}) {
-  const [draft, setDraft] = useState('')
-  const commit = () => {
-    const t = draft.trim()
-    if (t === '') return
-    if (!tags.includes(t)) onChange([...tags, t])
-    setDraft('')
-  }
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-destructive">
-          根据 endpoint 来判断
-          <span className="ml-1 text-muted-foreground">（必填，输入后按空格/回车变成标签）</span>
-        </span>
-      </div>
-      <div className="flex min-h-[34px] flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
-        {tags.map((t) => (
-          <span
-            key={t}
-            className="group inline-flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs text-primary"
-          >
-            {t}
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => onChange(tags.filter((x) => x !== t))}
-            >
-              <AppIcon name="close" size={10} />
-            </button>
-          </span>
-        ))}
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault()
-              commit()
-            }
-          }}
-          onBlur={commit}
-          placeholder={tags.length === 0 ? '例如：/completions，末尾匹配模型的 endpoint' : ''}
-          className="w-40 min-w-[110px] flex-1 bg-transparent py-0.5 text-xs outline-none placeholder:text-muted-foreground"
-          spellCheck={false}
-        />
-      </div>
-    </div>
-  )
-}
-
-function RecommendationTable({
-  rows,
-  onChange,
-}: {
-  rows: readonly AgentRecommendation[]
-  onChange: (rows: AgentRecommendation[]) => void
-}) {
-  const update = (idx: number, patch: Partial<AgentRecommendation>) => {
-    onChange(rows.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
-  }
-  const remove = (idx: number) => {
-    onChange(rows.filter((_, i) => i !== idx))
-  }
-
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground">
-        暂无推荐配置，点上方「添加行」开始
-      </div>
-    )
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-md border border-border">
-      <table className="w-full text-xs">
-        <thead className="bg-muted/40 text-muted-foreground">
-          <tr>
-            <th className="w-[26%] px-2 py-1.5 text-left font-medium">字段名</th>
-            <th className="w-[80px] px-2 py-1.5 text-left font-medium">作用域</th>
-            <th className="w-[100px] px-2 py-1.5 text-left font-medium">类型</th>
-            <th className="px-2 py-1.5 text-left font-medium">含义</th>
-            <th className="w-[22%] px-2 py-1.5 text-left font-medium">推荐值</th>
-            <th className="w-[60px] px-2 py-1.5 text-center font-medium">必填</th>
-            <th className="w-[36px] px-2 py-1.5" />
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((row, idx) => (
-            <tr key={idx} className="align-top">
-              <td className="px-2 py-1.5">
-                <Input
-                  value={row.key}
-                  onChange={(e) => update(idx, { key: e.target.value })}
-                  placeholder="例如：options.timeout"
-                  className="h-7 text-xs font-mono"
-                />
-              </td>
-              <td className="px-2 py-1.5">
-                <Select
-                  value={row.scope}
-                  onValueChange={(v) => update(idx, { scope: v as AgentRecommendationScope })}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RECOMMENDATION_SCOPES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </td>
-              <td className="px-2 py-1.5">
-                <Select
-                  value={row.type}
-                  onValueChange={(v) => update(idx, { type: v as AgentRecommendationType })}
-                >
-                  <SelectTrigger className="h-7 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RECOMMENDATION_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </td>
-              <td className="px-2 py-1.5">
-                <Input
-                  value={row.description}
-                  onChange={(e) => update(idx, { description: e.target.value })}
-                  placeholder="字段含义"
-                  className="h-7 text-xs"
-                />
-              </td>
-              <td className="px-2 py-1.5">
-                <RecommendationValueInput row={row} onChange={(v) => update(idx, { recommended: v })} />
-              </td>
-              <td className="px-2 py-1.5 text-center">
-                <Switch
-                  checked={row.required}
-                  onCheckedChange={(v) => update(idx, { required: v })}
-                />
-              </td>
-              <td className="px-2 py-1.5 text-right">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="删除"
-                  onClick={() => remove(idx)}
-                >
-                  <AppIcon name="delete" size={14} />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function RecommendationValueInput({
-  row,
-  onChange,
-}: {
-  row: AgentRecommendation
-  onChange: (value: unknown) => void
-}) {
-  const raw = row.recommended
-  const empty = raw === null || raw === undefined
-
-  if (row.type === 'boolean') {
-    const v = raw === true
-    return (
-      <Select
-        value={empty ? '__empty__' : v ? 'true' : 'false'}
-        onValueChange={(val) => {
-          if (val === '__empty__') onChange(null)
-          else onChange(val === 'true')
-        }}
-      >
-        <SelectTrigger className="h-7 text-xs">
-          <SelectValue placeholder="（不填）" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__empty__">（不填）</SelectItem>
-          <SelectItem value="true">true</SelectItem>
-          <SelectItem value="false">false</SelectItem>
-        </SelectContent>
-      </Select>
-    )
-  }
-
-  if (row.type === 'number') {
-    const display = empty ? '' : String(raw)
-    return (
-      <Input
-        type="number"
-        value={display}
-        onChange={(e) => {
-          const t = e.target.value.trim()
-          if (t === '') onChange(null)
-          else onChange(Number(t))
-        }}
-        placeholder="（不填）"
-        className="h-7 text-xs font-mono"
-      />
-    )
-  }
-
-  if (row.type === 'object' || row.type === 'array') {
-    const display = empty ? '' : JSON.stringify(raw)
-    return (
-      <Input
-        value={display}
-        onChange={(e) => {
-          const t = e.target.value.trim()
-          if (t === '') {
-            onChange(null)
-            return
-          }
-          try {
-            onChange(JSON.parse(t))
-          } catch {
-            onChange(t)
-          }
-        }}
-        placeholder='例如 {"type":"enabled"}'
-        className="h-7 text-xs font-mono"
-      />
-    )
-  }
-
-  const display = empty ? '' : String(raw)
-  return (
-    <Input
-      value={display}
-      onChange={(e) => {
-        const t = e.target.value
-        if (t === '') onChange(null)
-        else onChange(t)
-      }}
-      placeholder="（不填）"
-      className="h-7 text-xs"
-    />
-  )
-}
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (

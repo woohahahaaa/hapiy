@@ -11,6 +11,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type {
@@ -67,6 +73,20 @@ const [error, setError] = useState<string | null>(null)
   // boxes show the diff recommendation view.
   const [editingScope, setEditingScope] = useState<'provider' | 'model' | null>(null)
 
+  // rawContent is the true file content fetched alongside the summary so
+  // local provider/model rename/delete mutations operate on the real
+  // document shape (opencode's "provider" or openclaw's
+  // "models.providers"), not a re-synthesized {provider} root.
+  const [rawContent, setRawContent] = useState<string | null>(null)
+  // templateTally: after "使用推荐模板", per-provider and per-model
+  // change counts for the green "N 处修改" preview labels.
+  const [templateTally, setTemplateTally] = useState<
+    Readonly<Map<string, { count: number; models: Readonly<Record<string, number>> }>>
+  >(new Map())
+  const [confirmingTemplate, setConfirmingTemplate] = useState(false)
+  const [renamingModel, setRenamingModel] = useState<{ providerId: string; modelId: string } | null>(null)
+  const [confirmingDeleteModel, setConfirmingDeleteModel] = useState<{ providerId: string; modelId: string } | null>(null)
+
   // Managed (托管) providers bound to this file + their selection state.
   const [managed, setManaged] = useState<readonly ManagedProviderView[]>([])
   // selectedManaged: { mid, endpoint } when viewing a managed group's
@@ -88,10 +108,12 @@ const [error, setError] = useState<string | null>(null)
     Promise.all([
       fetchModels(record.id),
       dashboardApi.listManagedProviders(record.id),
+      dashboardApi.getAgentConfigFileContent(record.id).catch(() => null),
     ])
-      .then(([res, managedRes]) => {
+      .then(([res, managedRes, raw]) => {
         setSummary(res)
         setManaged(managedRes)
+        setRawContent(raw)
       })
       .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
       .finally(() => setLoading(false))
@@ -106,6 +128,8 @@ const [error, setError] = useState<string | null>(null)
     setSelectedManaged(null)
     setManaged([])
     setExpandedManaged(new Set())
+    setRawContent(null)
+    setTemplateTally(new Map())
     setLiveContent(null)
     setConfirmingCancel(false)
     reload()
@@ -238,25 +262,6 @@ const [error, setError] = useState<string | null>(null)
     providerDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length +
     modelDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length
 
-  const handleApply = async (scope: 'provider' | 'model') => {
-    if (!record || !selectedProviderId) return
-    setApplying(true)
-    try {
-      const res = await dashboardApi.applyAgentRecommendations(record.id, {
-        provider_id: selectedProviderId,
-        ...(scope === 'model' && selectedModelId ? { model_id: selectedModelId } : {}),
-      })
-      // Preview only — stash the proposed content; do NOT touch the
-      // file. The user reviews and clicks the bottom-right 保存 button.
-      setLiveContent(res.content)
-      toast(`已生成预览：${res.applied} 处变更待保存`)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '套用失败')
-    } finally {
-      setApplying(false)
-    }
-  }
-
   // applyOneField is the client-side single-field apply used by the
   // "使用推荐值" hover button on each diff row. It mutates the working
   // copy in liveContent; nothing is written to disk until the user
@@ -278,6 +283,7 @@ const [error, setError] = useState<string | null>(null)
       await dashboardApi.saveAgentConfigFileContent(record.id, liveContent)
       toast('已保存预览中的变更')
       setLiveContent(null)
+      setTemplateTally(new Map())
       reload()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存失败')
@@ -288,6 +294,7 @@ const [error, setError] = useState<string | null>(null)
 
   const handleCancelPending = () => {
     setLiveContent(null)
+    setTemplateTally(new Map())
     setConfirmingCancel(false)
   }
 
@@ -372,6 +379,52 @@ const [error, setError] = useState<string | null>(null)
     }
   }
 
+  // 使用推荐模板：对页面上所有非托管供应商 + 其模型批量生成预览，
+  // 记录每供应商 / 每模型改动数（绿色提示），右上角出现保存。
+  const handleApplyTemplate = async () => {
+    if (!record) return
+    setConfirmingTemplate(false)
+    setApplying(true)
+    try {
+      const res = await dashboardApi.applyRecommendationTemplate(record.id)
+      const tally = new Map<string, { count: number; models: Readonly<Record<string, number>> }>()
+      for (const p of res.providers) {
+        tally.set(p.provider_id, { count: p.count, models: p.models ?? {} })
+      }
+      setTemplateTally(tally)
+      setLiveContent(res.content)
+      toast(`已生成预览：${res.applied} 处变更待保存`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '套用失败')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  // Model rename / delete (both route through liveContent for the
+  // preview-save flow).
+  const handleRenameModel = (providerId: string, oldId: string, newId: string) => {
+    const target = newId.trim()
+    if (!target || target === oldId) return
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    try {
+      setLiveContent(renameModelInContent(base, providerId, oldId, target))
+      toast('已生成预览：模型改名待保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '改名失败')
+    }
+  }
+
+  const handleDeleteModel = (providerId: string, modelId: string) => {
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    try {
+      setLiveContent(deleteModelFromContent(base, providerId, modelId))
+      toast('已生成预览：删除模型待保存')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -392,6 +445,16 @@ const [error, setError] = useState<string | null>(null)
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="xs"
+              disabled={applying}
+              onClick={() => setConfirmingTemplate(true)}
+              title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
+            >
+              <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+              使用推荐模板
+            </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
               <AppIcon name="close" size={16} />
             </Button>
@@ -408,60 +471,68 @@ const [error, setError] = useState<string | null>(null)
         )}
 
         <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,1fr)_minmax(360px,1.4fr)] divide-x divide-border">
-          {/* Left: providers (regular + managed) */}
+          {/* Left: 非托管供应商 (adaptive) + 托管供应商 module */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader
-              action={
-                <Button
-                  variant="outline"
-                  size="xs"
-                  title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
-                  onClick={() => {
-                    setManagedEditing(null)
-                    setManagedDialogOpen(true)
-                  }}
-                >
-                  <AppIcon name="add" size={12} data-icon="inline-start" />
-                  添加托管provider
-                </Button>
-              }
-            >
-              供应商
-            </ColumnHeader>
-            <div className="flex-1 overflow-y-auto p-2">
+            <ColumnHeader>供应商</ColumnHeader>
+            {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
+            <div className="max-h-[40%] flex-1 overflow-y-auto p-2">
               {loading && <Placeholder>加载中…</Placeholder>}
               {error && <Placeholder tone="error">{error}</Placeholder>}
-              {!loading && !error && summary && summary.providers.length === 0 && managed.length === 0 && (
+              {!loading && !error && summary && summary.providers.length === 0 && (
                 <Placeholder>未解析到任何 provider</Placeholder>
               )}
-
-              {/* Regular providers (hover → 改名/删除) */}
-              {summary?.providers.map((p) => (
-                <ProviderRow
-                  key={p.provider_id}
-                  name={p.provider_id}
-                  info={`${p.models.length} 模型`}
-                  selected={selectedProviderId === p.provider_id}
-                  onClick={() => handleSelectProvider(p.provider_id)}
-                  actions={
-                    <>
-                      <NameEditButton
-                        title="改名"
-                        onClick={() => setRenamingProvider(p.provider_id)}
+              {summary?.providers.map((p) => {
+                const tally = templateTally.get(p.provider_id)
+                return (
+                  <ProviderRow
+                    key={p.provider_id}
+                    name={p.provider_id}
+                    info={
+                      tally && tally.count > 0
+                        ? { text: `${tally.count} 处修改`, green: true }
+                        : { text: `${p.models.length} 模型`, green: false }
+                    }
+                    selected={selectedProviderId === p.provider_id}
+                    onClick={() => handleSelectProvider(p.provider_id)}
+                    actions={
+                      <RowMenu
+                        items={[
+                          { key: 'rename', label: '修改名字', icon: 'edit' },
+                          { key: 'delete', label: '删除', icon: 'delete', destructive: true },
+                        ]}
+                        onSelect={(k) => {
+                          if (k === 'rename') setRenamingProvider(p.provider_id)
+                          else setConfirmingDeleteProvider(p.provider_id)
+                        }}
                       />
-                      <IconHoverButton
-                        title="删除"
-                        icon="delete"
-                        tone="destructive"
-                        disabled={false}
-                        onClick={() => setConfirmingDeleteProvider(p.provider_id)}
-                      />
-                    </>
-                  }
-                />
-              ))}
+                    }
+                  />
+                )
+              })}
+            </div>
 
-              {/* Managed providers: parent rows (expand) + child group rows */}
+            <div className="h-px shrink-0 bg-border" />
+
+            {/* 托管供应商 module */}
+            <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
+              <span className="text-xs font-medium text-muted-foreground">托管供应商</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
+                onClick={() => {
+                  setManagedEditing(null)
+                  setManagedDialogOpen(true)
+                }}
+              >
+                <AppIcon name="add" size={14} />
+              </Button>
+            </div>
+            <div className="shrink-0 overflow-y-auto p-2">
+              {managed.length === 0 && (
+                <Placeholder>暂无托管供应商</Placeholder>
+              )}
               {managed.map((mv) => {
                 const expandable = mv.groups.length > 1
                 const expanded = expandedManaged.has(mv.id)
@@ -480,7 +551,7 @@ const [error, setError] = useState<string | null>(null)
                               <span className="truncate font-medium">{mv.name}</span>
                             </>
                           }
-                          info={`${mv.groups.length} 分组`}
+                          info={{ text: `${mv.groups.length} 分组`, green: false }}
                           selected={false}
                           onClick={() => toggleManagedExpand(mv.id)}
                           actions={
@@ -520,7 +591,7 @@ const [error, setError] = useState<string | null>(null)
                               <ProviderRow
                                 key={g.endpoint}
                                 name={mv.name + g.suffix}
-                                info={`${g.model_count} 模型`}
+                                info={{ text: `${g.model_count} 模型`, green: false }}
                                 selected={
                                   selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                 }
@@ -546,7 +617,7 @@ const [error, setError] = useState<string | null>(null)
                               <span className="truncate font-medium">{mv.name + g.suffix}</span>
                             </>
                           }
-                          info={`${g.model_count} 模型`}
+                          info={{ text: `${g.model_count} 模型`, green: false }}
                           selected={
                             selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                           }
@@ -590,36 +661,19 @@ const [error, setError] = useState<string | null>(null)
                 selectedManagedGroup ? null : (
                   <div className="flex items-center gap-1">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="xs"
                       onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
                       disabled={!selectedProvider}
                     >
                       <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                      {editingScope === 'provider' ? '完成编辑' : '编辑JSON'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      disabled={
-                        applying ||
-                        editingScope === 'provider' ||
-                        providerDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
-                      }
-                      onClick={() => void handleApply('provider')}
-                    >
-                      <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                      使用推荐值
+                      {editingScope === 'provider' ? '完成编辑' : '编辑'}
                     </Button>
                   </div>
                 )
               }
             >
-              {selectedManagedGroup
-                ? `托管 · ${selectedManagedGroup.view.name}${selectedManagedGroup.group.suffix}`
-                : selectedProvider
-                  ? `供应商配置 · ${selectedProvider.provider_id}`
-                  : '供应商配置'}
+              供应商配置
             </ColumnHeader>
             <div className="max-h-[40%] overflow-auto border-b border-border p-2">
               {selectedManagedGroup ? (
@@ -674,41 +728,45 @@ const [error, setError] = useState<string | null>(null)
                   {Object.entries(
                     (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
                   ).map(([mid]) => (
-                    <button
+                    <ModelRow
                       key={mid}
-                      type="button"
+                      name={mid}
+                      info={null}
+                      selected={selectedManagedModelId === mid}
                       onClick={() => setSelectedManagedModelId(mid)}
-                      className={
-                        'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
-                        (selectedManagedModelId === mid
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-muted')
-                      }
-                    >
-                      <AppIcon name="robot" size={12} className="shrink-0 text-muted-foreground" />
-                      <span className="truncate">{mid}</span>
-                    </button>
+                      actions={null}
+                    />
                   ))}
                 </>
               ) : selectedProvider && selectedProvider.models.length === 0 ? (
                 <Placeholder>该供应商下没有模型</Placeholder>
               ) : (
-                selectedProvider?.models.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedModelId(m.id)}
-                    className={
-                      'flex w-full items-center gap-2 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
-                      (selectedModelId === m.id
-                        ? 'bg-primary/10 text-primary'
-                        : 'hover:bg-muted')
-                    }
-                  >
-                    <AppIcon name="robot" size={12} className="shrink-0 text-muted-foreground" />
-                    <span className="truncate">{m.id}</span>
-                  </button>
-                ))
+                selectedProvider?.models.map((m) => {
+                  const tally = templateTally.get(selectedProviderId ?? '')
+                  const modelCount = tally?.models?.[m.id] ?? 0
+                  return (
+                    <ModelRow
+                      key={m.id}
+                      name={m.id}
+                      info={modelCount > 0 ? { text: `${modelCount} 处修改`, green: true } : null}
+                      selected={selectedModelId === m.id}
+                      onClick={() => setSelectedModelId(m.id)}
+                      actions={
+                        <RowMenu
+                          items={[
+                            { key: 'rename', label: '修改名字', icon: 'edit' },
+                            { key: 'delete', label: '删除', icon: 'delete', destructive: true },
+                          ]}
+                          onSelect={(k) => {
+                            if (!selectedProviderId) return
+                            if (k === 'rename') setRenamingModel({ providerId: selectedProviderId, modelId: m.id })
+                            else setConfirmingDeleteModel({ providerId: selectedProviderId, modelId: m.id })
+                          }}
+                        />
+                      }
+                    />
+                  )
+                })
               )}
             </div>
           </div>
@@ -720,37 +778,19 @@ const [error, setError] = useState<string | null>(null)
                 selectedManagedGroup ? null : (
                   <div className="flex items-center gap-1">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="xs"
                       onClick={() => setEditingScope(editingScope === 'model' ? null : 'model')}
                       disabled={!selectedModel}
                     >
                       <AppIcon name={editingScope === 'model' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                      {editingScope === 'model' ? '推荐视图' : '编辑JSON'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      disabled={
-                        applying ||
-                        editingScope === 'model' ||
-                        !selectedModel ||
-                        modelDiff.filter((d) => d.status !== 'ok' && d.status !== 'no-recommendation').length === 0
-                      }
-                      onClick={() => void handleApply('model')}
-                    >
-                      <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                      使用推荐值
+                      {editingScope === 'model' ? '完成编辑' : '编辑'}
                     </Button>
                   </div>
                 )
               }
             >
-              {selectedManagedGroup
-                ? `模型配置 · ${selectedManagedModelId ?? ''}（只读）`
-                : selectedModel
-                  ? `模型配置 · ${selectedModel.id}`
-                  : '模型配置'}
+              模型配置
             </ColumnHeader>
             <div className="flex-1 overflow-auto p-2">
               {selectedManagedGroup ? (
@@ -869,6 +909,52 @@ const [error, setError] = useState<string | null>(null)
           description={`确认删除托管 provider「${confirmingDeleteManaged?.name ?? ''}」？删除会立即生效。`}
           onConfirm={() => confirmingDeleteManaged && void handleDeleteManaged(confirmingDeleteManaged)}
         />
+
+        {/* 使用推荐模板 confirm */}
+        <Dialog open={confirmingTemplate} onOpenChange={setConfirmingTemplate}>
+          <DialogContent width="sm">
+            <DialogHeader>
+              <DialogTitle>使用推荐模板</DialogTitle>
+            </DialogHeader>
+            <p className="px-4 text-xs text-muted-foreground">
+              我们会根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）及其模型的字段进行调整，使其达到官方推荐的效果。点击「确认」后系统会生成预览，应用后不会马上入库，请在右上角点击「保存」后生效。
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmingTemplate(false)} disabled={applying}>取消</Button>
+              <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
+                {applying ? '生成中...' : '确认'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Rename model dialog */}
+        <RenameProviderDialog
+          open={renamingModel !== null}
+          currentName={renamingModel?.modelId ?? ''}
+          onOpenChange={(open) => {
+            if (!open) setRenamingModel(null)
+          }}
+          title="修改模型名称"
+          onConfirm={(newName) => {
+            if (renamingModel) handleRenameModel(renamingModel.providerId, renamingModel.modelId, newName)
+            setRenamingModel(null)
+          }}
+        />
+
+        {/* Delete model confirm */}
+        <ConfirmDeleteDialog
+          open={confirmingDeleteModel !== null}
+          onOpenChange={(open) => {
+            if (!open) setConfirmingDeleteModel(null)
+          }}
+          title="删除模型"
+          description={`确认删除配置文件中的模型「${confirmingDeleteModel?.modelId ?? ''}」？删除会随预览一起提交，点右上角保存后生效。`}
+          onConfirm={() => {
+            if (confirmingDeleteModel) handleDeleteModel(confirmingDeleteModel.providerId, confirmingDeleteModel.modelId)
+            setConfirmingDeleteModel(null)
+          }}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -879,11 +965,13 @@ function RenameProviderDialog({
   currentName,
   onOpenChange,
   onConfirm,
+  title = '修改 provider 名称',
 }: {
   open: boolean
   currentName: string
   onOpenChange: (open: boolean) => void
   onConfirm: (newName: string) => void
+  title?: string
 }) {
   const [value, setValue] = useState(currentName)
   useEffect(() => {
@@ -893,7 +981,7 @@ function RenameProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm">
         <DialogHeader>
-          <DialogTitle>修改 provider 名称</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="px-4 pb-4">
           <Input
@@ -965,6 +1053,8 @@ function ConfirmSyncDialog({
 
 // ProviderRow is a single sidebar row with a leading slot, label and a
 // trailing actions slot rendered on hover.
+type RowInfo = string | { text: string; green: boolean } | null
+
 function ProviderRow({
   name,
   info,
@@ -974,7 +1064,7 @@ function ProviderRow({
   leading,
 }: {
   name: React.ReactNode
-  info: string
+  info: RowInfo
   selected: boolean
   onClick: () => void
   actions: React.ReactNode | null
@@ -983,7 +1073,7 @@ function ProviderRow({
   return (
     <div
       className={
-        'group flex w-full items-center gap-1 rounded-none px-2 py-1.5 text-left text-xs transition-colors ' +
+        'group flex w-full items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
         (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
       }
     >
@@ -991,17 +1081,101 @@ function ProviderRow({
       <button
         type="button"
         onClick={onClick}
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+        className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
       >
-        <span className="flex min-w-0 items-center truncate font-medium">{name}</span>
-        <span className="shrink-0 text-[10px] text-muted-foreground">{info}</span>
+        <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
+        {info && (
+          <span
+            className={
+              'shrink-0 truncate text-[11px] ' +
+              (typeof info === 'object' && info.green ? 'text-success' : 'text-muted-foreground')
+            }
+          >
+            {typeof info === 'object' ? info.text : info}
+          </span>
+        )}
       </button>
       {actions && (
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div
+          className={
+            'flex shrink-0 items-center gap-0.5 transition-opacity ' +
+            (selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }
+        >
           {actions}
         </div>
       )}
     </div>
+  )
+}
+
+// ModelRow mirrors ProviderRow's two-line height + vertical centering so
+// model rows look identical to provider rows.
+function ModelRow({
+  name,
+  info,
+  selected,
+  onClick,
+  actions,
+}: {
+  name: React.ReactNode
+  info: RowInfo
+  selected: boolean
+  onClick: () => void
+  actions: React.ReactNode | null
+}) {
+  return (
+    <ProviderRow
+      name={
+        <span className="flex items-center gap-2">
+          <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
+          {name}
+        </span>
+      }
+      info={info}
+      selected={selected}
+      onClick={onClick}
+      actions={actions}
+    />
+  )
+}
+
+// RowMenu renders the single three-dot trigger with a small dropdown
+// (修改名字 / 删除 …). Visible on hover or when the row is selected
+// (the parent row handles opacity; trigger itself is always rendered).
+function RowMenu({
+  items,
+  onSelect,
+}: {
+  items: readonly { key: string; label: string; icon: string; destructive?: boolean }[]
+  onSelect: (key: string) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="h-5 w-5 text-muted-foreground hover:text-primary"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <AppIcon name="more_horiz" size={14} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        {items.map((it) => (
+          <DropdownMenuItem
+            key={it.key}
+            variant={it.destructive ? 'destructive' : 'default'}
+            onSelect={() => onSelect(it.key)}
+          >
+            <AppIcon name={it.icon} size={12} />
+            {it.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -1038,30 +1212,6 @@ function IconHoverButton({
       }}
     >
       <AppIcon name={icon} size={11} />
-    </Button>
-  )
-}
-
-function NameEditButton({
-  title,
-  onClick,
-}: {
-  title: string
-  onClick: () => void
-}) {
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      title={title}
-      className="h-5 w-5 text-muted-foreground hover:text-primary"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-    >
-      <AppIcon name="edit" size={11} />
     </Button>
   )
 }
@@ -1270,6 +1420,75 @@ function deleteProviderFromContent(
   const map = cur as Record<string, unknown>
   if (!(id in map)) throw new Error(`provider ${id} 不存在`)
   delete map[id]
+  return JSON.stringify(parsed)
+}
+
+// findModelsContainer returns the provider's models container, supporting
+// both the object-map shape ({modelId: cfg}) and the array shape
+// ([{id, ...}]). Returns the provider object (for mutation) + how to
+// interpret it.
+function modelsContainerOf(
+  parsed: Record<string, unknown>,
+  providerId: string,
+): { container: unknown; provider: Record<string, unknown> } {
+  const root = providerRootOfContent(parsed)
+  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  let cur: Record<string, unknown> = parsed
+  for (const seg of root) {
+    const next = cur[seg]
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    cur = next as Record<string, unknown>
+  }
+  const provider = cur[providerId] as Record<string, unknown> | undefined
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+    throw new Error(`provider ${providerId} 不存在`)
+  }
+  const models = provider.models
+  if (models === undefined || models === null) throw new Error(`provider ${providerId} 下没有 models`)
+  return { container: models, provider }
+}
+
+// renameModelInContent re-keys a model inside its provider's models. For
+// the object-map shape the key is renamed; for the array shape the id / 
+// name field is updated in place.
+function renameModelInContent(content: string, providerId: string, oldId: string, newId: string): string {
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const { container } = modelsContainerOf(parsed, providerId)
+  if (Array.isArray(container)) {
+    const target = container.find((m) => {
+      const mr = m as Record<string, unknown>
+      return mr.id === oldId || mr.name === oldId
+    }) as Record<string, unknown> | undefined
+    if (!target) throw new Error(`模型 ${oldId} 不存在`)
+    if (target.id === oldId) target.id = newId
+    else if (target.name === oldId) target.name = newId
+    return JSON.stringify(parsed)
+  }
+  const map = container as Record<string, unknown>
+  if (!(oldId in map)) throw new Error(`模型 ${oldId} 不存在`)
+  if (newId in map) throw new Error(`模型 ${newId} 已存在`)
+  map[newId] = map[oldId]
+  delete map[oldId]
+  return JSON.stringify(parsed)
+}
+
+// deleteModelFromContent removes a model from its provider's models
+// (object key or array element).
+function deleteModelFromContent(content: string, providerId: string, modelId: string): string {
+  const parsed = JSON.parse(content) as Record<string, unknown>
+  const { container } = modelsContainerOf(parsed, providerId)
+  if (Array.isArray(container)) {
+    const idx = container.findIndex((m) => {
+      const mr = m as Record<string, unknown>
+      return mr.id === modelId || mr.name === modelId
+    })
+    if (idx < 0) throw new Error(`模型 ${modelId} 不存在`)
+    container.splice(idx, 1)
+    return JSON.stringify(parsed)
+  }
+  const map = container as Record<string, unknown>
+  if (!(modelId in map)) throw new Error(`模型 ${modelId} 不存在`)
+  delete map[modelId]
   return JSON.stringify(parsed)
 }
 

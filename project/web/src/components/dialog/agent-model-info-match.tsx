@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,72 @@ interface FieldChange {
   readonly newValue: unknown
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readPathValue(obj: Record<string, unknown>, segments: readonly string[]): unknown {
+  let cur: unknown = obj
+  for (const seg of segments) {
+    if (!cur || typeof cur !== 'object') return undefined
+    cur = (cur as Record<string, unknown>)[seg]
+  }
+  return cur
+}
+
+// mergeSyncContent accumulates the per-model sync previews into a single
+// document. Each sync call re-reads the file from disk and only carries
+// that one model's changes, so we walk each returned content, locate the
+// model this round wrote (opencode `provider.<id>` or openclaw
+// `models.providers.<id>` shape), and copy it into the merged document at
+// the same spot. The first round's full content becomes the skeleton, so
+// every checked model's fields end up in the final preview.
+function mergeSyncContent(
+  merged: Record<string, unknown> | null,
+  content: string,
+  modelId: string,
+): Record<string, unknown> | null {
+  let parsed: Record<string, unknown>
+  try {
+    const raw = JSON.parse(content) as unknown
+    if (!isRecord(raw)) return merged
+    parsed = raw
+  } catch {
+    return merged
+  }
+  const roots: ReadonlyArray<[string, readonly string[]]> = [
+    ['models', ['models', 'providers']],
+    ['provider', ['provider']],
+  ]
+  for (const [rootKey, prefix] of roots) {
+    const providers = readPathValue(parsed, prefix)
+    if (!isRecord(providers)) continue
+    const providerKey = Object.keys(providers).find((k) => {
+      const p = providers[k]
+      return isRecord(p) && isRecord(p.models) && Object.prototype.hasOwnProperty.call(p.models, modelId)
+    })
+    if (!providerKey) continue
+    const p = providers[providerKey] as Record<string, unknown>
+    const models = p.models as Record<string, unknown>
+    const modelValue = models[modelId]
+    if (merged === null) merged = {}
+    const root = (merged[rootKey] ?? {}) as Record<string, unknown>
+    merged[rootKey] = root
+    const provider = (root[providerKey] ?? {}) as Record<string, unknown>
+    root[providerKey] = provider
+    const nextModels = (provider.models ?? {}) as Record<string, unknown>
+    provider.models = nextModels
+    nextModels[modelId] = modelValue
+    return merged
+  }
+  return merged
+}
+
+// displayValue renders a field value for the diff column.
+function displayValue(value: unknown): string {
+  return value === undefined || value === null ? '(无)' : JSON.stringify(value)
+}
+
 export function AgentModelInfoMatchDialog({
   open,
   onOpenChange,
@@ -92,8 +159,8 @@ export function AgentModelInfoMatchDialog({
   // sourceByModelId holds the currently chosen model-info source per
   // config-model id.
   const [sourceByModelId, setSourceByModelId] = useState<Record<string, string>>({})
-  // selectedModelId drives the "right side" change preview.
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
+  // checkedByModelId tracks which rows the 保存 button should sync.
+  const [checkedByModelId, setCheckedByModelId] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!open) return
@@ -109,7 +176,8 @@ export function AgentModelInfoMatchDialog({
 
   const models = useMemo(() => provider?.models ?? [], [provider])
 
-  // Auto-pick the first match per model once sources load.
+  // Auto-pick the first match per model once sources load, and default
+  // every row to checked.
   useEffect(() => {
     if (!open || sources.length === 0 || models.length === 0) return
     const picks: Record<string, string> = {}
@@ -124,7 +192,7 @@ export function AgentModelInfoMatchDialog({
       }
       return merged
     })
-    setSelectedModelId(models[0]?.id ?? null)
+    setCheckedByModelId(Object.fromEntries(models.map((m) => [m.id, true])))
   }, [open, sources, models])
 
   const candidatesFor = (modelId: string): readonly PriceConfig[] => {
@@ -164,45 +232,46 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  const handleApply = async (modelId: string) => {
+  const checkedCount = models.filter((m) => checkedByModelId[m.id]).length
+  const allChecked = models.length > 0 && checkedCount === models.length
+
+  const toggleAll = () => {
+    const next = !allChecked
+    setCheckedByModelId(Object.fromEntries(models.map((m) => [m.id, next])))
+  }
+
+  // handleSave syncs every checked row. The endpoint always re-reads the
+  // file from disk and returns a preview of only that model's changes, so
+  // we loop per model and merge the returned contents locally into one
+  // document before handing it to the parent for preview.
+  const handleSave = async () => {
     if (!record || !providerId) return
-    const chosenId = sourceByModelId[modelId]
-    if (!chosenId) return
-    const src = sources.find((s) => s.id === chosenId)
-    const cfg = provider?.models.find((m) => m.id === modelId)?.config
-    if (!src || !cfg || typeof cfg !== 'object') return
-    const fields: Record<string, unknown> = {}
-    const sourceMap: Record<string, unknown> = {
-      max_context: src.contextLength,
-      max_output_token: src.maxToken,
-      input_types: src.supportedTypes,
-      thinking_levels: src.thinkingLevels,
-    }
-    let count = 0
-    for (const key of MODEL_INFO_FIELD_KEYS) {
-      const path = modelInfoFields[key]
-      if (!path) continue
-      const raw = sourceMap[key]
-      if (raw === undefined || raw === null) continue
-      const current = fieldValue(cfg, path)
-      const next = coerceToShape(raw, current)
-      if (next === undefined) continue
-      if (valuesEqual(current, next)) continue
-      fields[path] = next
-      count++
-    }
-    if (count === 0) {
-      toast('该模型与所选项无字段差异')
+    const rows = models
+      .filter((m) => checkedByModelId[m.id])
+      .map((m) => ({ modelId: m.id, changes: changesFor(m.id) }))
+      .filter((r) => r.changes.length > 0)
+    if (rows.length === 0) {
+      toast('没有勾选的模型存在字段差异')
       return
     }
     setApplying(true)
     try {
-      const res = await dashboardApi.syncAgentConfigFileModelFields(record.id, {
-        provider_id: providerId,
-        model_id: modelId,
-        fields,
-      })
-      onPreview({ content: res.content, applied: res.applied })
+      let applied = 0
+      let merged: Record<string, unknown> | null = null
+      let lastRaw = ''
+      for (const { modelId, changes } of rows) {
+        const fields: Record<string, unknown> = {}
+        for (const c of changes) fields[c.path] = c.newValue
+        const res = await dashboardApi.syncAgentConfigFileModelFields(record.id, {
+          provider_id: providerId,
+          model_id: modelId,
+          fields,
+        })
+        applied += res.applied
+        lastRaw = res.content
+        merged = mergeSyncContent(merged, res.content, modelId)
+      }
+      onPreview({ content: merged ? JSON.stringify(merged) : lastRaw, applied })
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '同步失败')
@@ -211,125 +280,119 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
-  const selectedChanges = selectedModelId ? changesFor(selectedModelId) : []
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="lg" height="full" className="flex flex-col">
+      <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
         <DialogHeader>
           <DialogTitle>从模型信息同步模型</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-auto">
           {loading && <Placeholder>加载中…</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
           {!loading && !error && models.length === 0 && (
             <Placeholder>该供应商下没有可同步的模型</Placeholder>
           )}
           {!loading && !error && models.length > 0 && (
-            <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(260px,380px)] gap-3">
-              <div className="flex min-h-0 flex-col">
-                <div className="overflow-auto rounded-md border border-border">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/40 text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left font-medium">模型</th>
-                        <th className="px-3 py-2 text-left font-medium">数据源选择</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {models.map((m) => {
-                        const candidates = candidatesFor(m.id)
-                        const chosen = sourceByModelId[m.id]
-                        return (
-                          <tr
-                            key={m.id}
-                            className={
-                              'cursor-pointer ' +
-                              (selectedModelId === m.id ? 'bg-primary/10' : 'hover:bg-muted')
+            <div className="overflow-auto rounded-md border border-border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="w-10 px-3 py-2">
+                      <Checkbox
+                        checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
+                        onCheckedChange={toggleAll}
+                        aria-label="全选"
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium">模型</th>
+                    <th className="min-w-[180px] px-3 py-2 text-left font-medium">数据源选择</th>
+                    <th className="px-3 py-2 text-left font-medium">字段调整</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {models.map((m) => {
+                    const candidates = candidatesFor(m.id)
+                    const chosen = sourceByModelId[m.id]
+                    const changes = changesFor(m.id)
+                    return (
+                      <tr key={m.id} className="align-top hover:bg-muted">
+                        <td className="px-3 py-2">
+                          <Checkbox
+                            checked={!!checkedByModelId[m.id]}
+                            onCheckedChange={(v) =>
+                              setCheckedByModelId((prev) => ({ ...prev, [m.id]: v === true }))
                             }
-                            onClick={() => setSelectedModelId(m.id)}
+                            aria-label={`选择 ${m.id}`}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{m.id}</div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Select
+                            value={chosen}
+                            disabled={candidates.length === 0}
+                            onValueChange={(v) =>
+                              setSourceByModelId((prev) => ({ ...prev, [m.id]: v }))
+                            }
                           >
-                            <td className="px-3 py-2">
-                              <div className="font-medium">{m.id}</div>
-                            </td>
-                            <td className="px-3 py-2">
+                            <SelectTrigger className="h-7 text-xs">
+                              <SelectValue
+                                placeholder={candidates.length === 0 ? '暂无可选' : '选择数据源'}
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
                               {candidates.length === 0 ? (
-                                <span className="text-muted-foreground">暂无匹配模型</span>
+                                <SelectItem value="__none__" disabled>
+                                  暂无可选
+                                </SelectItem>
                               ) : (
-                                <Select
-                                  value={chosen}
-                                  onValueChange={(v) =>
-                                    setSourceByModelId((prev) => ({ ...prev, [m.id]: v }))
-                                  }
-                                >
-                                  <SelectTrigger className="h-7 text-xs">
-                                    <SelectValue placeholder="选择数据源" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {candidates.map((s) => (
-                                      <SelectItem key={s.id} value={s.id}>
-                                        {s.model}
-                                        {s.providerId ? ` · ${s.providerId}` : ''}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                candidates.map((s) => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.model}
+                                    {s.providerId ? ` · ${s.providerId}` : ''}
+                                  </SelectItem>
+                                ))
                               )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="flex min-h-0 flex-col gap-2">
-                <div className="border-b border-border pb-1 text-xs font-medium text-muted-foreground">
-                  将改动的字段
-                </div>
-                <div className="flex-1 overflow-auto">
-                  {!selectedModelId ? (
-                    <Placeholder>请选择左侧模型查看变更</Placeholder>
-                  ) : selectedChanges.length === 0 ? (
-                    <Placeholder>所选数据源与当前配置无字段差异</Placeholder>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {selectedChanges.map((c) => (
-                        <li
-                          key={c.key}
-                          className="rounded-none border border-warning/30 bg-warning/10 p-2"
-                        >
-                          <div className="font-medium">{c.label}</div>
-                          <div className="mt-0.5 font-mono text-[11px] text-warning">
-                            {c.path}
-                          </div>
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">
-                            <span className="line-through">{JSON.stringify(c.oldValue)}</span>
-                            <span className="mx-1">→</span>
-                            <span>{JSON.stringify(c.newValue)}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={applying || !selectedModelId || !sourceByModelId[selectedModelId] || selectedChanges.length === 0}
-                  onClick={() => selectedModelId && void handleApply(selectedModelId)}
-                >
-                  {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '应用所选模型'}
-                </Button>
-              </div>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="px-3 py-2">
+                          {changes.length === 0 ? (
+                            <div className="text-muted-foreground">—</div>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {changes.map((c) => (
+                                <li key={c.key} className="text-[11px] leading-snug">
+                                  <div className="font-medium">{c.label}</div>
+                                  <div className="mt-0.5 text-muted-foreground">
+                                    <span className="line-through">{displayValue(c.oldValue)}</span>
+                                    <span className="mx-1">→</span>
+                                    <span>{displayValue(c.newValue)}</span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border pt-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
+          <Button
+            variant="outline"
+            disabled={applying || models.length === 0 || checkedCount === 0}
+            onClick={() => void handleSave()}
+          >
+            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

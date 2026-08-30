@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import {
@@ -93,10 +93,10 @@ export function ManagedProviderDialog({
   }, [open, record, editing])
 
   // Derived groups: identical endpoints merge; models union by name.
-  const groups = useMemo<readonly EndpointGroup[]>(() => {
+  const deriveGroups = (checkedValue: ReadonlySet<string>): readonly EndpointGroup[] => {
     const byEndpoint = new Map<string, { providers: string[]; models: string[] }>()
     for (const opt of options) {
-      if (!checked.has(opt.id) || !opt.status) continue
+      if (!checkedValue.has(opt.id) || !opt.status) continue
       if (opt.endpoints.length === 0) continue
       for (const ep of opt.endpoints) {
         const cur = byEndpoint.get(ep) ?? { providers: [], models: [] }
@@ -112,7 +112,17 @@ export function ManagedProviderDialog({
       providerNames: v.providers,
       modelNames: v.models,
     }))
-  }, [options, checked])
+  }
+
+  // groups (from `checked`) is authoritative for submit; deferredGroups is for
+  // rendering only, so toggling suppliers updates tags immediately and the
+  // heavier endpoint/模型 sub-tables below catch up without blocking the clicks.
+  const groups = useMemo(() => deriveGroups(checked), [options, checked])
+  const deferredChecked = useDeferredValue(checked)
+  const deferredGroups = useMemo(
+    () => deriveGroups(deferredChecked),
+    [options, deferredChecked],
+  )
 
   const stale = useMemo(() => {
     if (!editing) return []
@@ -230,71 +240,18 @@ export function ManagedProviderDialog({
               <Field>
                 <FieldLabel>
                   选择要托管的供应商
-                  <span className="ml-1 font-normal text-muted-foreground">（每个 provider 显示名称 / endpoint 数 / 模型数）</span>
+                  <span className="ml-1 font-normal text-muted-foreground">（每个 provider 显示名称 / 模型数 / endpoint 数）</span>
                 </FieldLabel>
-                <div className="max-h-[220px] overflow-auto rounded-md border border-border">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted/40 text-muted-foreground">
-                      <tr>
-                        <th className="w-[32px] px-2 py-1.5" />
-                        <th className="px-2 py-1.5 text-left font-medium">名称</th>
-                        <th className="w-[80px] px-2 py-1.5 text-center font-medium">endpoint</th>
-                        <th className="w-[80px] px-2 py-1.5 text-center font-medium">模型</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {options.map((opt) => (
-                        <tr
-                          key={opt.id}
-                          className={
-                            'select-none ' +
-                            (opt.status ? 'cursor-pointer hover:bg-muted' : 'opacity-40')
-                          }
-                          onClick={() => opt.status && toggleProvider(opt.id)}
-                        >
-                          <td className="px-2 py-1.5 text-center">
-                            <input
-                              type="checkbox"
-                              checked={checked.has(opt.id)}
-                              disabled={!opt.status}
-                              onChange={() => opt.status && toggleProvider(opt.id)}
-                            />
-                          </td>
-                          <td className="px-2 py-1.5 font-medium">
-                            {opt.name}
-                            {opt.status ? '' : <span className="ml-1 text-muted-foreground">（禁用）</span>}
-                          </td>
-                          <td className="px-2 py-1.5 text-center">{opt.endpointCount}</td>
-                          <td className="px-2 py-1.5 text-center">{opt.modelCount}</td>
-                        </tr>
-                      ))}
-                      {editing &&
-                        stale.length > 0 &&
-                        stale.map((id) => {
-                          const gm = [...(editing.groups ?? []), ...(editing.hidden_groups ?? [])]
-                          const linked = editing.provider_ids.includes(id)
-                          if (!linked) return null
-                          void gm
-                          return (
-                            <tr key={id} className="opacity-40">
-                              <td className="px-2 py-1.5 text-center">
-                                <input type="checkbox" checked disabled />
-                              </td>
-                              <td className="px-2 py-1.5">
-                                {id.slice(0, 8)}…
-                                <span className="ml-1 text-muted-foreground">（已删除）</span>
-                              </td>
-                              <td className="px-2 py-1.5 text-center">-</td>
-                              <td className="px-2 py-1.5 text-center">-</td>
-                            </tr>
-                          )
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+                <ProviderMultiSelect
+                  loading={loading}
+                  options={options}
+                  checked={checked}
+                  staleChecked={editing ? stale.filter((id) => editing.provider_ids.includes(id)) : []}
+                  onToggle={toggleProvider}
+                />
               </Field>
 
-              {groups.length > 0 && (
+              {deferredGroups.length > 0 && (
                 <Field>
                   <FieldLabel>
                     endpoint 分组
@@ -303,7 +260,7 @@ export function ManagedProviderDialog({
                     </span>
                   </FieldLabel>
                   <div className="space-y-2">
-                    {groups.map((g) => (
+                    {deferredGroups.map((g) => (
                       <GroupCard
                         key={g.endpoint}
                         group={g}
@@ -336,6 +293,156 @@ export function ManagedProviderDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function ProviderMultiSelect({
+  loading,
+  options,
+  checked,
+  staleChecked,
+  onToggle,
+}: {
+  loading: boolean
+  options: readonly ManagedProviderOption[]
+  checked: ReadonlySet<string>
+  staleChecked: readonly string[]
+  onToggle: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDocMousedown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    const onDocKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDocMousedown)
+    document.addEventListener('keydown', onDocKeydown)
+    return () => {
+      document.removeEventListener('mousedown', onDocMousedown)
+      document.removeEventListener('keydown', onDocKeydown)
+    }
+  }, [open])
+
+  const checkedOptions = options.filter((o) => checked.has(o.id))
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={
+          'flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 ' +
+          (open ? 'border-ring ring-1 ring-ring/50' : 'hover:bg-muted/40')
+        }
+      >
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+          {checkedOptions.length === 0 && staleChecked.length === 0 ? (
+            <span className="text-muted-foreground">点击展开选择要托管的供应商</span>
+          ) : (
+            <>
+              {checkedOptions.map((o) => (
+                <span
+                  key={o.id}
+                  className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5"
+                >
+                  <span className="truncate font-medium">{o.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`移除 ${o.name}`}
+                    title="移除"
+                    onClick={() => onToggle(o.id)}
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <AppIcon name="close" size={12} />
+                  </button>
+                </span>
+              ))}
+              {staleChecked.map((id) => (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 opacity-40"
+                >
+                  <span className="truncate">{id.slice(0, 8)}…</span>
+                  <span className="text-muted-foreground">（已删除）</span>
+                </span>
+              ))}
+            </>
+          )}
+        </span>
+        <AppIcon
+          name="expand_more"
+          size={16}
+          className={'shrink-0 text-muted-foreground transition-transform ' + (open ? 'rotate-180' : '')}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-10 mt-1 max-h-[220px] w-full overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md">
+          {loading ? (
+            <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
+          ) : (
+            <ul role="listbox" aria-multiselectable="true">
+              {options.map((opt) => {
+                const selected = checked.has(opt.id)
+                const disabled = !opt.status
+                return (
+                  <li key={opt.id}>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => onToggle(opt.id)}
+                      role="option"
+                      aria-selected={selected}
+                      className={
+                        'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs select-none ' +
+                        (disabled
+                          ? 'cursor-not-allowed opacity-40'
+                          : selected
+                            ? 'bg-muted/60'
+                            : 'hover:bg-muted/40')
+                      }
+                    >
+                      <span
+                        className={
+                          'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ' +
+                          (selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
+                        }
+                      >
+                        {selected && <AppIcon name="check" size={12} />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
+                        {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {opt.modelCount} 模型 · {opt.endpointCount} endpoint
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+              {staleChecked.map((id) => (
+                <li key={id} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs opacity-40">
+                  <span className="h-4 w-4 shrink-0 rounded-sm border border-input">
+                    <AppIcon name="check" size={12} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    {id.slice(0, 8)}…
+                    <span className="ml-1 text-muted-foreground">（已删除）</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

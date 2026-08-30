@@ -63,6 +63,7 @@ type updateAgentTypeRuleRequest struct {
 	Recommendations []model.AgentRecommendation     `json:"recommendations"`
 	Protocols       []model.AgentProtocol           `json:"protocols"`
 	ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
+	ConfigJsonc     string                          `json:"config_jsonc"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
@@ -112,6 +113,26 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		rule.SetConfigJsonc(req.ConfigJsonc)
+		// When the dialog edits via JSONC, the parsed doc is authoritative;
+		// re-derive recommendations / protocols from it so the two stay in
+		// sync even if the client didn't send explicit arrays.
+		if strings.TrimSpace(req.ConfigJsonc) != "" {
+			cleaned := stripJSON5Comments(req.ConfigJsonc)
+			common, protocols, err := model.ParseRuleConfigJsonc([]byte(cleaned))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "JSONC 解析失败: " + err.Error()})
+				return
+			}
+			if err := rule.SetRecommendations(common); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if err := rule.SetProtocols(protocols); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
 		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -130,6 +151,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Recommendations []model.AgentRecommendation     `json:"recommendations"`
 			Protocols       []model.AgentProtocol           `json:"protocols"`
 			ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
+			ConfigJsonc     string                          `json:"config_jsonc"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -166,6 +188,23 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 		if err := rule.SetProtocols(req.Protocols); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		rule.SetConfigJsonc(req.ConfigJsonc)
+		if strings.TrimSpace(req.ConfigJsonc) != "" {
+			cleaned := stripJSON5Comments(req.ConfigJsonc)
+			common, protocols, err := model.ParseRuleConfigJsonc([]byte(cleaned))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "JSONC 解析失败: " + err.Error()})
+				return
+			}
+			if err := rule.SetRecommendations(common); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			if err := rule.SetProtocols(protocols); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
 		if err := db.Create(&rule).Error; err != nil {
@@ -1010,6 +1049,164 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 		// Preview only — do NOT write here. Caller writes via PUT /:id/content.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
 	}
+}
+
+// ApplyRecommendationTemplate applies the rule's recommendations (common +
+// matched protocols) to every NON-managed provider and every model under
+// it in the config file, returning the previewed content plus a
+// per-provider / per-model change tally. Providers whose names belong to
+// a managed provider group (托管供应商) are skipped — their blocks are
+// system-generated and read-only. Preview only; caller writes via PUT.
+func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
+	type tally struct {
+		ProviderID string         `json:"provider_id"`
+		Count      int            `json:"count"` // provider fields + all models' fields
+		Models     map[string]int `json:"models"`
+	}
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var rule model.AgentTypeRule
+		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			return
+		}
+		jpaths, err := rule.GetJsonPaths()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			return
+		}
+		recs, _ := rule.GetRecommendations()
+		protocols, _ := rule.GetProtocols()
+		if len(recs) == 0 && len(protocols) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
+			return
+		}
+		content, err := readAgentConfigFileContent(&row, key)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		cleaned := stripJSON5Comments(content)
+
+		// Managed provider block names to skip.
+		skip := map[string]bool{}
+		var managed []model.ManagedAgentProvider
+		if err := db.Where("agent_config_file_id = ?", row.ID).Find(&managed).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, m := range managed {
+			groups, _ := m.GetGroups()
+			for _, g := range groups {
+				skip[strings.TrimSpace(m.Name)+strings.TrimSpace(g.Suffix)] = true
+			}
+		}
+
+		provResult := gjson.Parse(cleaned).Get(jpaths.Provider)
+		var providerIDs []string
+		if provResult.IsObject() {
+			for id := range provResult.Map() {
+				if !skip[id] {
+					providerIDs = append(providerIDs, id)
+				}
+			}
+		}
+		buf := []byte(cleaned)
+		total := 0
+		tallies := make([]tally, 0, len(providerIDs))
+		for _, pid := range providerIDs {
+			effective := append([]model.AgentRecommendation(nil), recs...)
+			for _, p := range protocols {
+				if protocolMatchesProvider(string(buf), jpaths, pid, p) {
+					effective = append(effective, p.Recommendations...)
+				}
+			}
+			// provider scope
+			providerFields := 0
+			for _, r := range effective {
+				if r.Scope != "provider" || r.Recommended == nil {
+					continue
+				}
+				full := jpaths.Provider + "." + pid + "." + r.Key
+				next, err := sjson.SetBytes(buf, full, r.Recommended)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err)})
+					return
+				}
+				buf = next
+				providerFields++
+			}
+			// model scope
+			modelTally := map[string]int{}
+			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
+			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
+				for _, me := range modelsFromResult(sub) {
+					count := 0
+					for _, r := range effective {
+						if r.Scope != "model" || r.Recommended == nil {
+							continue
+						}
+						full := resolved + "." + me + "." + r.Key
+						next, err := sjson.SetBytes(buf, full, r.Recommended)
+						if err != nil {
+							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
+							return
+						}
+						buf = next
+						count++
+					}
+					if count > 0 {
+						modelTally[me] = count
+						providerFields += count
+					}
+				}
+			}
+			if providerFields > 0 || len(modelTally) > 0 {
+				tallies = append(tallies, tally{ProviderID: pid, Count: providerFields, Models: modelTally})
+			}
+			total += providerFields
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"applied":   total,
+			"content":   string(buf),
+			"providers": tallies,
+		}})
+	}
+}
+
+// modelsFromResult lists model ids for an object map or array result.
+func modelsFromResult(res gjson.Result) []string {
+	if !res.Exists() {
+		return nil
+	}
+	var out []string
+	if res.IsArray() {
+		for _, v := range res.Array() {
+			id := v.Get("id").String()
+			if id == "" {
+				id = v.Get("name").String()
+			}
+			if id == "" {
+				id = fmt.Sprintf("%d", v.Index)
+			}
+			out = append(out, id)
+		}
+		return out
+	}
+	if res.IsObject() {
+		for id := range res.Map() {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // protocolMatchesProvider reports whether at least one condition of the

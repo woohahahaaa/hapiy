@@ -634,11 +634,13 @@ export type AgentProtocolInput = {
 }
 
 export type AgentRecommendation = {
+  readonly name?: string
   readonly scope: AgentRecommendationScope
   readonly key: string
   readonly description: string
   readonly type: AgentRecommendationType
   readonly recommended: unknown
+  readonly candidates?: Readonly<Record<string, string>>
   readonly required: boolean
 }
 
@@ -650,6 +652,7 @@ export type AgentTypeRule = {
   readonly recommendations: readonly AgentRecommendation[]
   readonly protocols: readonly AgentProtocol[]
   readonly model_info_fields: AgentModelInfoFieldPaths
+  readonly config_jsonc: string
   readonly created_at: string
   readonly updated_at: string
 }
@@ -663,6 +666,7 @@ export type AgentTypeRuleInput = {
   readonly recommendations?: readonly AgentRecommendation[]
   readonly protocols?: readonly AgentProtocol[]
   readonly model_info_fields?: AgentModelInfoFieldPaths
+  readonly config_jsonc?: string
 }
 
 export type AgentPathCheckResult = {
@@ -1960,6 +1964,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
       thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
     },
+    config_jsonc: typeof value.config_jsonc === 'string' ? value.config_jsonc : '',
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
   }
@@ -1997,12 +2002,20 @@ function parseAgentRecommendation(value: unknown): AgentRecommendation {
   const t = value.type
   const type: AgentRecommendationType =
     t === 'number' || t === 'boolean' || t === 'object' || t === 'array' ? t : 'string'
+  const candidates = isRecord(value.candidates) ? value.candidates : {}
+  const out: Record<string, string> = {}
+  for (const k of Object.keys(candidates)) {
+    const v = candidates[k]
+    out[k] = typeof v === 'string' ? v : ''
+  }
   return {
+    name: typeof value.name === 'string' ? value.name : undefined,
     scope,
     key: typeof value.key === 'string' ? value.key : '',
     description: typeof value.description === 'string' ? value.description : '',
     type,
     recommended: value.recommended ?? null,
+    candidates: Object.keys(out).length > 0 ? out : undefined,
     required: value.required === true,
   }
 }
@@ -2880,6 +2893,43 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return {
       applied: readNumber(data.applied, 'applied', 0),
       content: typeof data.content === 'string' ? data.content : '',
+    }
+  },
+  async applyRecommendationTemplate(
+    id: string,
+  ): Promise<{
+    readonly applied: number
+    readonly content: string
+    readonly providers: readonly {
+      readonly provider_id: string
+      readonly count: number
+      readonly models: Readonly<Record<string, number>>
+    }[]
+  }> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-template`, {
+      method: 'POST',
+    })
+    if (!isRecord(data)) {
+      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+    }
+    const providers = Array.isArray(data.providers) ? data.providers : []
+    return {
+      applied: readNumber(data.applied, 'applied', 0),
+      content: typeof data.content === 'string' ? data.content : '',
+      providers: providers.map((raw) => {
+        if (!isRecord(raw)) return { provider_id: '', count: 0, models: {} }
+        const rawModels = isRecord(raw.models) ? raw.models : {}
+        const models: Record<string, number> = {}
+        for (const k of Object.keys(rawModels)) {
+          const v = rawModels[k]
+          models[k] = typeof v === 'number' ? v : Number(v) || 0
+        }
+        return {
+          provider_id: typeof raw.provider_id === 'string' ? raw.provider_id : '',
+          count: readNumber(raw.count, 'count', 0),
+          models,
+        }
+      }),
     }
   },
   async syncAgentConfigFileModelFields(

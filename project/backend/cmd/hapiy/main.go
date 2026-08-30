@@ -245,6 +245,7 @@ func main() {
 			dashboardAuthed.DELETE("/agent-config-files/:id", handler.DeleteAgentConfigFile(db))
 			dashboardAuthed.GET("/agent-config-files/:id/models", handler.GetAgentConfigFileModels(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendations", handler.ApplyAgentRecommendations(db, encKey))
+			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendation-template", handler.ApplyRecommendationTemplate(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/sync-model-fields", handler.SyncAgentConfigFileModelFields(db, encKey))
 			dashboardAuthed.GET("/agent-config-files/managed-options", handler.ManagedProviderOptions(db))
 			dashboardAuthed.GET("/agent-config-files/:id/managed-providers", handler.ListManagedProviders(db, encKey))
