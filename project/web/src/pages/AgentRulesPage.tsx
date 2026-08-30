@@ -570,7 +570,7 @@ function ConditionRows({
   conditions,
   onChange,
 }: {
-  conditions: AgentProtocolCondition[]
+  conditions: readonly AgentProtocolCondition[]
   onChange: (conditions: AgentProtocolCondition[]) => void
 }) {
   const update = (idx: number, patch: Partial<AgentProtocolCondition>) => {
@@ -696,7 +696,7 @@ function RecommendationTable({
   rows,
   onChange,
 }: {
-  rows: AgentRecommendation[]
+  rows: readonly AgentRecommendation[]
   onChange: (rows: AgentRecommendation[]) => void
 }) {
   const update = (idx: number, patch: Partial<AgentRecommendation>) => {

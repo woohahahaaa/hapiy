@@ -802,6 +802,18 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+// toStrMap narrows an unknown-keyed record into the string-keyed map
+// shape used by managed-provider model_sources.
+function toStrMap(value: unknown): Readonly<Record<string, string>> {
+  if (!isRecord(value)) return {}
+  const out: Record<string, string> = {}
+  for (const k of Object.keys(value)) {
+    const v = value[k]
+    out[k] = typeof v === 'string' ? v : ''
+  }
+  return out
+}
+
 function readString(value: unknown, field: string): string {
   if (typeof value !== 'string') {
     throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
@@ -1867,7 +1879,7 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
   // The backend persists ssh_config as a JSON blob string on the row and
   // re-sends that blob (sanitized) in list responses. Accept both the
   // string form and a pre-decoded object.
-  let record = value
+  let record: unknown = value
   if (typeof value === 'string') {
     try {
       record = parseJson(value, 'ssh_config')

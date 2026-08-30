@@ -205,7 +205,7 @@ export function ManagedProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="xl" height="lg" className="flex flex-col">
+      <DialogContent width="lg" height="full" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
         </DialogHeader>

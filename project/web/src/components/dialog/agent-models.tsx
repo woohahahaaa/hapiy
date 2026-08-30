@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { JsonTokens } from '@/components/JsonHighlight'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
@@ -17,6 +19,7 @@ import type {
   AgentModelSummary,
   AgentProtocol,
   AgentRecommendation,
+  ManagedGroupView,
   ManagedProviderView,
 } from '@/lib/dashboard-api'
 import { AgentModelInfoMatchDialog } from '@/components/dialog/agent-model-info-match'
@@ -125,7 +128,7 @@ const [error, setError] = useState<string | null>(null)
   }, [summary, selectedProviderId, selectedModelId, selectedManaged])
 
   // The managed view backing the current selection: { view, group }.
-  const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: (typeof view.groups)[number] } | null>(() => {
+  const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: ManagedGroupView } | null>(() => {
     if (!selectedManaged) return null
     const view = managed.find((m) => m.id === selectedManaged.mid) ?? null
     if (!view) return null
@@ -670,7 +673,7 @@ const [error, setError] = useState<string | null>(null)
                   ).length === 0 && <Placeholder>该分组没有可同步的模型</Placeholder>}
                   {Object.entries(
                     (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
-                  ).map(([mid, cfg]) => (
+                  ).map(([mid]) => (
                     <button
                       key={mid}
                       type="button"
@@ -1165,7 +1168,7 @@ function extractFromLiveContent(
     return (models as Record<string, unknown>)[modelId] ?? null
   }
   const copy: Record<string, unknown> = { ...(providerObj as Record<string, unknown>) }
-  delete(copy, 'models')
+  delete copy.models
   return copy
 }
 
