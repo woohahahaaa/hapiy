@@ -39,7 +39,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&TopologyState{},
 		&TopologySlotAssignment{},
 		&TopologyVersion{},
-		&PriceConfig{},
 		&LogCapture{},
 		&Setting{},
 		&BaseUrlPath{},
@@ -183,20 +182,20 @@ func MigrateAutoDisableState(db *gorm.DB) error {
 	return nil
 }
 
-// MigratePriceConfigSchema drops the legacy per-model unique index
-// (idx_price_configs_model) that AutoMigrate cannot remove, so the new
-// (model, provider) composite uniqueness takes effect on upgraded databases.
-func MigratePriceConfigSchema(db *gorm.DB) error {
-	if db.Migrator().HasIndex(&PriceConfig{}, "idx_price_configs_model") {
-		if err := db.Migrator().DropIndex(&PriceConfig{}, "idx_price_configs_model"); err != nil {
-			return fmt.Errorf("drop legacy price_configs model index: %w", err)
+// upsertAutoDisableState inserts an AutoDisableState row unless one already
+// exists for the (provider_id, dimension, value) triple.
+
+// DropPriceConfigTable removes the retired 模型信息 table (per-model pricing
+// & capability rows) from upgraded databases. The feature was replaced by
+// per-provider models.dev references, so the table is intentionally dropped.
+func DropPriceConfigTable(db *gorm.DB) error {
+	if db.Migrator().HasTable("price_configs") {
+		if err := db.Migrator().DropTable("price_configs"); err != nil {
+			return fmt.Errorf("drop price_configs table: %w", err)
 		}
 	}
 	return nil
 }
-
-// upsertAutoDisableState inserts an AutoDisableState row unless one already
-// exists for the (provider_id, dimension, value) triple.
 func upsertAutoDisableState(db *gorm.DB, state AutoDisableState) error {
 	var existing AutoDisableState
 	err := db.Where("provider_id = ? AND dimension = ? AND value = ?", state.ProviderID, state.Dimension, state.Value).First(&existing).Error

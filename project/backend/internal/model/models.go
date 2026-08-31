@@ -462,42 +462,6 @@ func (h *RequestChannelHistory) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// PriceRule is a JSON sub-struct stored inside PriceConfig.Rules (not a table).
-type PriceRule struct {
-	Pattern    string  `json:"pattern"`
-	Multiplier float64 `json:"multiplier"`
-}
-
-// PriceConfig model — per-model pricing; units are per 1M tokens. Multiple
-// rows may share the same model name as long as (model, provider) differs;
-// the upstream-supplier text lives in ProviderID ("" is stored by the client
-// as the "默认" sentinel).
-type PriceConfig struct {
-	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Model           string    `gorm:"not null;uniqueIndex:idx_price_model_provider,priority:1" json:"model"`
-	ProviderID      string    `gorm:"uniqueIndex:idx_price_model_provider,priority:2" json:"provider_id,omitempty"` // 上游供应商文本（默认「默认」）
-	InputPrice      float64   `gorm:"default:0" json:"input_price"`
-	OutputPrice     float64   `gorm:"default:0" json:"output_price"`
-	CacheWritePrice float64   `gorm:"default:0" json:"cache_write_price"`
-	CacheReadPrice  float64   `gorm:"default:0" json:"cache_read_price"`
-	ContextLength   int       `gorm:"default:0" json:"context_length"`
-	MaxToken        int       `gorm:"default:0" json:"max_token"`
-	SupportedTypes  string    `gorm:"type:text" json:"supported_types"` // JSON array
-	Aliases         string    `gorm:"type:text" json:"aliases"`         // JSON array
-	Endpoints       string    `gorm:"type:text" json:"endpoints"`       // JSON array
-	ThinkingLevels  string    `gorm:"type:text" json:"thinking_levels"` // JSON array
-	Rate            string    `gorm:"type:text" json:"rate"`            // JSON array of PriceRule
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-}
-
-func (p *PriceConfig) BeforeCreate(tx *gorm.DB) error {
-	if p.ID == "" {
-		p.ID = uuid.New().String()
-	}
-	return nil
-}
-
 // Setting model — key/value system settings
 type Setting struct {
 	Key   string `gorm:"primaryKey" json:"key"`

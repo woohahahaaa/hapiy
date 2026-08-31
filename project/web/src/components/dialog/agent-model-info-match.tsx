@@ -8,38 +8,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
-import {
-  findModelsDevProviderRow,
-  loadModelsDevModels,
-  providersForModel,
-  type ModelsDevModel,
-} from '@/lib/models-dev'
+import { findModelsDevModel, loadModelsDevModels, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   type AgentConfigFile,
-  type AgentModelConfigSource,
-  type AgentModelConfigSources,
   type AgentModelInfoFieldPaths,
   type AgentModelProvider,
-  type Provider,
 } from '@/lib/dashboard-api'
 
 interface AgentModelInfoMatchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   record: AgentConfigFile | null
-  providerId: string | null
-  provider: AgentModelProvider | null
+  /** 全文件模式：文件里全部 provider（含各自 models），跨 provider 聚合展示。 */
+  providers: readonly AgentModelProvider[]
   modelInfoFields: AgentModelInfoFieldPaths
   onPreview: (input: { readonly content: string; readonly applied: number }) => void
 }
@@ -89,81 +74,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function readPathValue(obj: Record<string, unknown>, segments: readonly string[]): unknown {
-  let cur: unknown = obj
-  for (const seg of segments) {
-    if (!cur || typeof cur !== 'object') return undefined
-    cur = (cur as Record<string, unknown>)[seg]
-  }
-  return cur
-}
-
-// mergeSyncContent accumulates the per-model sync previews into a single
-// document. Each sync call re-reads the file from disk and only carries
-// that one model's changes, so we walk each returned content, locate the
-// model this round wrote (opencode `provider.<id>` or openclaw
-// `models.providers.<id>` shape), and copy it into the merged document at
-// the same spot. The first round's full content becomes the skeleton, so
-// every checked model's fields end up in the final preview.
-function mergeSyncContent(
-  merged: Record<string, unknown> | null,
-  content: string,
-  modelId: string,
-): Record<string, unknown> | null {
-  let parsed: Record<string, unknown>
-  try {
-    const raw = JSON.parse(content) as unknown
-    if (!isRecord(raw)) return merged
-    parsed = raw
-  } catch {
-    return merged
-  }
-  const roots: ReadonlyArray<[string, readonly string[]]> = [
-    ['models', ['models', 'providers']],
-    ['provider', ['provider']],
-  ]
-  for (const [rootKey, prefix] of roots) {
-    const providers = readPathValue(parsed, prefix)
-    if (!isRecord(providers)) continue
-    const providerKey = Object.keys(providers).find((k) => {
-      const p = providers[k]
-      if (!isRecord(p)) return false
-      if (isRecord(p.models)) return Object.prototype.hasOwnProperty.call(p.models, modelId)
-      if (Array.isArray(p.models)) {
-        return p.models.some((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
-      }
-      return false
-    })
-    if (!providerKey) continue
-    const p = providers[providerKey] as Record<string, unknown>
-    const models = p.models
-    let modelValue: unknown
-    if (isRecord(models)) {
-      modelValue = models[modelId]
-    } else {
-      const arr = Array.isArray(models) ? (models as unknown[]) : []
-      const idx = arr.findIndex((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
-      if (idx < 0) continue
-      modelValue = arr[idx]
-    }
-    if (merged === null) merged = {}
-    const root = (merged[rootKey] ?? {}) as Record<string, unknown>
-    merged[rootKey] = root
-    const provRoot = (root[providerKey] ?? { ...p }) as Record<string, unknown>
-    if (isRecord(provRoot.models)) {
-      provRoot.models = { ...{ ...(isRecord(provRoot.models) ? provRoot.models : {}) }, [modelId]: modelValue }
-    } else {
-      const arr = Array.isArray(provRoot.models) ? [...provRoot.models] : []
-      const idx = arr.findIndex((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
-      if (idx >= 0) arr[idx] = modelValue
-      provRoot.models = arr
-    }
-    root[providerKey] = provRoot
-    break
-  }
-  return merged
-}
-
 function displayValue(value: unknown): string {
   if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
   if (value === null || value === undefined) return '—'
@@ -171,151 +81,70 @@ function displayValue(value: unknown): string {
   return String(value)
 }
 
-// A 模型配置参考供应商 option for one config model. Options are built fresh
-// on every open: 不同步 (none), each models.dev supplier for the model (self),
-// and one entry per our provider carrying the same-named model with a
-// reference set (link, kept separate on purpose — no dedup). Only the
-// *reference* is carried; linked values resolve to nothing persisted.
-type SourceOption =
-  | { readonly kind: 'none'; readonly key: string }
-  | { readonly kind: 'self'; readonly key: string; readonly supplier: string }
-  | { readonly kind: 'link'; readonly key: string; readonly sourceProviderId: string; readonly sourceProviderName: string; readonly referenceName: string }
+// SyncRow = 一个 (provider × model) 组合。
+interface SyncRow {
+  readonly providerId: string
+  readonly modelId: string
+  readonly config: unknown
+}
 
-type ResolvedStatus =
-  | { readonly status: 'none' }
-  | { readonly status: 'row'; readonly row: ModelsDevModel }
-  | { readonly status: 'lost' }
-  | { readonly status: 'unknown' }
+// 同一模型出现于多个 provider 时聚合为一组，模型名列 rowspan。
+interface ModelGroup {
+  readonly modelId: string
+  readonly rows: readonly SyncRow[]
+}
 
 export function AgentModelInfoMatchDialog({
   open,
   onOpenChange,
   record,
-  providerId,
-  provider,
+  providers,
   modelInfoFields,
   onPreview,
 }: AgentModelInfoMatchDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
-  const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
-  const [persisted, setPersisted] = useState<AgentModelConfigSources>({})
-  const [optionByModelId, setOptionByModelId] = useState<Record<string, string>>({})
-  const [checkedByModelId, setCheckedByModelId] = useState<Record<string, boolean>>({})
+  const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [applying, setApplying] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
     setError(null)
-    setOptionByModelId({})
-    setCheckedByModelId({})
-    const load = async () => {
-      try {
-        const [models, providers, sources] = await Promise.all([
-          loadModelsDevModels(),
-          dashboardApi.listProviders({ limit: 10000, offset: 0 }),
-          record ? dashboardApi.getAgentModelConfigSources(record.id) : Promise.resolve({}),
-        ])
-        setSnapshot(models)
-        setAllProviders(providers.providers)
-        setPersisted(sources)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '加载失败')
-      } finally {
-        setLoading(false)
+    setChecked({})
+    let cancelled = false
+    loadModelsDevModels()
+      .then((models) => {
+        if (!cancelled) setSnapshot(models)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [open])
+
+  // 聚合：模型名 → 多个 (provider, config)。
+  const groups = useMemo<readonly ModelGroup[]>(() => {
+    const byModel = new Map<string, SyncRow[]>()
+    for (const p of providers) {
+      for (const m of p.models) {
+        const list = byModel.get(m.id) ?? []
+        list.push({ providerId: p.provider_id, modelId: m.id, config: m.config })
+        byModel.set(m.id, list)
       }
     }
-    void load()
-  }, [open, record])
+    return [...byModel.entries()].map(([modelId, rows]) => ({ modelId, rows }))
+  }, [providers])
 
-  const models = useMemo(() => provider?.models ?? [], [provider])
+  const rowCount = groups.reduce((n, g) => n + g.rows.length, 0)
 
-  // Candidate options for one config model. Self options are the models.dev
-  // suppliers carrying the model; link options are one entry per our
-  // provider whose same-named model has a 模型价格参考供应商 set.
-  const buildOptions = useMemo(() => (modelId: string): readonly SourceOption[] => {
-    const opts: SourceOption[] = [{ kind: 'none', key: 'none' }]
-    for (const candidate of providersForModel(snapshot ?? [], modelId)) {
-      opts.push({ kind: 'self', key: `self:${candidate.providerName}`, supplier: candidate.providerName })
-    }
-    for (const p of allProviders) {
-      const match = p.models.find((m) =>
-        m.referenceProvider !== null &&
-        m.model.trim().toLowerCase() === modelId.trim().toLowerCase(),
-      )
-      if (match) {
-        opts.push({
-          kind: 'link',
-          key: `link:${p.id}`,
-          sourceProviderId: p.id,
-          sourceProviderName: p.name,
-          referenceName: match.referenceProvider ?? '',
-        })
-      }
-    }
-    return opts
-  }, [snapshot, allProviders])
-
-  const isEmptyLifetime = (obj: Record<string, unknown>): boolean => Object.keys(obj).length === 0
-
-  // Prefill each row from the persisted selection (kept even when its target
-  // vanished so the 丢失 state can render), else the first link candidate,
-  // else the first models.dev match, else 不同步. In-session edits are never
-  // overwritten; the checkbox set defaults to checked once.
-  useEffect(() => {
-    if (!open || snapshot === null || models.length === 0) return
-    setOptionByModelId((prev) => {
-      const merged = { ...prev }
-      for (const m of models) {
-        if (merged[m.id] !== undefined) continue
-        const opts = buildOptions(m.id)
-        const sourcesForProvider = persisted[providerId ?? ''] ?? {}
-        const saved = sourcesForProvider[m.id]
-        let picked: string | null = null
-        if (saved) {
-          if (saved.mode === 'self') {
-            picked = opts.find((o) => o.kind === 'self' && saved.self_supplier !== '' && o.supplier.toLowerCase() === saved.self_supplier.toLowerCase())?.key ?? null
-            if (!picked && saved.self_supplier) picked = `self:${saved.self_supplier}`
-          } else if (saved.mode === 'link') {
-            picked = opts.find((o) => o.kind === 'link' && saved.link_provider_id !== '' && o.sourceProviderId === saved.link_provider_id)?.key ?? null
-            if (!picked && saved.link_provider_id) picked = `link:${saved.link_provider_id}`
-          } else {
-            picked = 'none'
-          }
-        }
-        if (!picked) {
-          picked = opts.find((o) => o.kind === 'link')?.key
-            ?? opts.find((o) => o.kind === 'self')?.key
-            ?? 'none'
-        }
-        merged[m.id] = picked
-      }
-      return merged
-    })
-    setCheckedByModelId((prev) => (isEmptyLifetime(prev) ? Object.fromEntries(models.map((m) => [m.id, true])) : prev))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, snapshot, models, persisted, providerId, buildOptions])
-
-  // Resolve a selected option against live data. Link options report lost
-  // when our provider no longer carries it (or its reference supplier is no
-  // longer on models.dev for the model); self options report unknown when
-  // models.dev has no (model, supplier) row.
-  const resolvedFor = (modelId: string, option: string | undefined): ResolvedStatus => {
-    const opt = buildOptions(modelId).find((o) => o.key === option)
-    if (!opt || opt.kind === 'none') {
-      if (option && option.startsWith('link:')) return { status: 'lost' }
-      if (option && option.startsWith('self:')) return { status: 'unknown' }
-      return { status: 'none' }
-    }
-    if (opt.kind === 'self') {
-      const row = findModelsDevProviderRow(snapshot ?? [], modelId, opt.supplier)
-      return row ? { status: 'row', row } : { status: 'unknown' }
-    }
-    const row = findModelsDevProviderRow(snapshot ?? [], modelId, opt.referenceName)
-    return row ? { status: 'row', row } : { status: 'lost' }
-  }
+  // 自动源：每模型取 models.dev 首个匹配行（不再手动选供应商）。
+  const resolvedRow = (modelId: string): ModelsDevModel | null =>
+    findModelsDevModel(snapshot ?? [], modelId)
 
   const sourceMapFor = (row: ModelsDevModel): Record<string, unknown> => {
     const types = [...new Set([...row.inputTypes, ...row.outputTypes])]
@@ -327,13 +156,12 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
-  const changesFor = (modelId: string): readonly FieldChange[] => {
-    const chosen = optionByModelId[modelId]
-    const resolved = resolvedFor(modelId, chosen)
-    if (resolved.status !== 'row') return []
-    const cfg = provider?.models.find((m) => m.id === modelId)?.config
+  const changesFor = (row: SyncRow): readonly FieldChange[] => {
+    const source = resolvedRow(row.modelId)
+    if (!source) return []
+    const cfg = row.config
     if (!cfg || typeof cfg !== 'object') return []
-    const sourceMap = sourceMapFor(resolved.row)
+    const sourceMap = sourceMapFor(source)
     const changes: FieldChange[] = []
     for (const key of MODEL_INFO_FIELD_KEYS) {
       const path = modelInfoFields[key]
@@ -350,41 +178,41 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  const checkedCount = models.filter((m) => !!checkedByModelId[m.id]).length
-  const allChecked = models.length > 0 && checkedCount === models.length
+  const rowKey = (providerId: string, modelId: string): string => `${providerId}\u0000${modelId}`
+  const checkedCount = groups.reduce(
+    (n, g) => n + g.rows.filter((r) => !!checked[rowKey(r.providerId, r.modelId)]).length,
+    0,
+  )
+  const allChecked = rowCount > 0 && checkedCount === rowCount
 
   const toggleAll = () => {
     const next = !allChecked
-    setCheckedByModelId(Object.fromEntries(models.map((m) => [m.id, next])))
-  }
-
-  const persistable = (option: string): { mode: 'none' | 'self' | 'link'; self_supplier: string; link_provider_id: string } => {
-    if (option === 'none') return { mode: 'none', self_supplier: '', link_provider_id: '' }
-    if (option.startsWith('link:')) return { mode: 'link', self_supplier: '', link_provider_id: option.slice('link:'.length) }
-    return { mode: 'self', self_supplier: option.slice('self:'.length), link_provider_id: '' }
+    const map: Record<string, boolean> = {}
+    for (const g of groups) {
+      for (const r of g.rows) map[rowKey(r.providerId, r.modelId)] = next
+    }
+    setChecked(map)
   }
 
   const handleSave = async () => {
-    if (!record || !providerId) return
-    const perModel: Record<string, AgentModelConfigSource> = {}
-    for (const m of models) {
-      perModel[m.id] = persistable(optionByModelId[m.id] ?? 'none')
-    }
-    const sources: AgentModelConfigSources = { [providerId]: perModel }
-    const rows = models
-      .filter((m) => !!checkedByModelId[m.id] && changesFor(m.id).length > 0)
-      .map((m) => ({ modelId: m.id, changes: changesFor(m.id) }))
-    if (rows.length === 0) {
+    if (!record) return
+    const targets = groups.flatMap((g) => g.rows)
+      .filter((r) => {
+        if (!checked[rowKey(r.providerId, r.modelId)]) return false
+        return changesFor(r).length > 0
+      })
+      .map((r) => ({ providerId: r.providerId, modelId: r.modelId, changes: changesFor(r) }))
+    if (targets.length === 0) {
       toast('没有勾选的模型存在可应用的字段差异')
       return
     }
     setApplying(true)
     try {
-      await dashboardApi.saveAgentModelConfigSources(record.id, sources)
       let applied = 0
-      let merged: Record<string, unknown> | null = null
+      // 每次 sync 返回的都是完整文件内容；最后一次快照已包含全部被同步
+      // 的 provider×model，直接作为预览即可。
       let lastRaw = ''
-      for (const { modelId, changes } of rows) {
+      for (const { providerId, modelId, changes } of targets) {
         const fields: Record<string, unknown> = {}
         for (const c of changes) fields[c.path] = c.newValue
         const res = await dashboardApi.syncAgentConfigFileModelFields(record.id, {
@@ -394,9 +222,8 @@ export function AgentModelInfoMatchDialog({
         })
         applied += res.applied
         lastRaw = res.content
-        merged = mergeSyncContent(merged, res.content, modelId)
       }
-      onPreview({ content: merged ? JSON.stringify(merged) : lastRaw, applied })
+      onPreview({ content: lastRaw, applied })
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '同步失败')
@@ -405,136 +232,130 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
+  // config 概览：把对象拍平成 "k: v" 串供模型名下方展示。
+  const flattenConfig = (config: unknown): string => {
+    if (!isRecord(config)) return ''
+    const parts: string[] = []
+    for (const [k, v] of Object.entries(config)) {
+      if (v === null || v === undefined) continue
+      const s = typeof v === 'object'
+        ? (Array.isArray(v) ? v.join(', ') : JSON.stringify(v))
+        : String(v)
+      if (s !== '' && s !== '{}' && s !== '[]') parts.push(`${k}: ${s}`)
+    }
+    return parts.join(' · ')
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
         <DialogHeader>
-          <DialogTitle>同步模型参考配置</DialogTitle>
+          <DialogTitle>同步模型基本信息</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="flex min-h-0 flex-1 flex-col">
           {loading && <Placeholder>加载中…</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
-          {!loading && !error && models.length === 0 && (
-            <Placeholder>该供应商下没有可同步的模型</Placeholder>
+          {!loading && !error && rowCount === 0 && (
+            <Placeholder>该配置文件下没有可同步的模型</Placeholder>
           )}
-          {!loading && !error && models.length > 0 && (
-            <div className="overflow-auto rounded-md border border-border">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/40 text-muted-foreground">
-                  <tr>
-                    <th className="w-10 px-3 py-2">
-                      <Checkbox
-                        checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
-                        onCheckedChange={toggleAll}
-                        aria-label="全选"
-                      />
-                    </th>
-                    <th className="px-3 py-2 text-left font-medium">模型</th>
-                    <th className="min-w-[220px] px-3 py-2 text-left font-medium">模型配置参考供应商</th>
-                    <th className="min-w-[260px] px-3 py-2 text-left font-medium">将应用的修改</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {models.map((m) => {
-                    const opts = buildOptions(m.id)
-                    const chosen = optionByModelId[m.id] ?? 'none'
-                    const changes = changesFor(m.id)
-                    const resolved = resolvedFor(m.id, chosen)
-                    const staleLink = chosen.startsWith('link:') && !opts.some((o) => o.kind === 'link' && o.key === chosen)
-                    const staleSelf = chosen.startsWith('self:') && !opts.some((o) => o.kind === 'self' && o.key === chosen)
-                    const staleSelfName = chosen.slice('self:'.length)
-                    return (
-                      <tr key={m.id} className="align-top hover:bg-muted">
-                        <td className="px-3 py-2">
+          {!loading && !error && rowCount > 0 && (
+            <>
+              <div className="overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr>
+                      <th className="min-w-[240px] px-2 py-2 text-left font-medium">模型</th>
+                      <th className="min-w-[200px] px-2 py-2 text-left font-medium">
+                        <div className="flex items-center gap-2">
                           <Checkbox
-                            checked={!!checkedByModelId[m.id]}
-                            onCheckedChange={(v) =>
-                              setCheckedByModelId((prev) => ({ ...prev, [m.id]: v === true }))
-                            }
-                            aria-label={`选择 ${m.id}`}
+                            checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
+                            onCheckedChange={toggleAll}
+                            aria-label="全选"
                           />
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{m.id}</div>
-                        </td>
-                        <td className="px-3 py-2">
-                          <Select
-                            value={chosen}
-                            onValueChange={(v) =>
-                              setOptionByModelId((prev) => ({ ...prev, [m.id]: v }))
-                            }
-                          >
-                            <SelectTrigger
-                              className={`h-7 text-xs ${staleLink ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
-                            >
-                              <SelectValue placeholder="不同步" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {staleSelf && (
-                                <SelectItem value={chosen}>{staleSelfName}（自选的供应商已失效）</SelectItem>
+                          所属供应商
+                        </div>
+                      </th>
+                      <th className="min-w-[260px] px-2 py-2 text-left font-medium">将应用的修改</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {groups.map((g) => {
+                      const source = resolvedRow(g.modelId)
+                      return g.rows.map((r, idx) => {
+                        const changes = changesFor(r)
+                        const isFirstRow = idx === 0
+                        return (
+                          <tr key={rowKey(r.providerId, r.modelId)} className="align-top hover:bg-muted">
+                            {isFirstRow && (
+                              <td rowSpan={g.rows.length} className="px-2 py-2 align-top">
+                                <div className="font-medium">{g.modelId}</div>
+                                <div className="mt-1 space-y-1">
+                                  {g.rows.map((cr) => (
+                                    <div key={rowKey(cr.providerId, cr.modelId)} className="text-[11px] leading-snug text-muted-foreground">
+                                      <span className="font-medium text-foreground">{cr.providerId}</span>
+                                      <div className="truncate" title={flattenConfig(cr.config) || '—'}>
+                                        {flattenConfig(cr.config) || '—'}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            )}
+                            <td className="px-2 py-2">
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={!!checked[rowKey(r.providerId, r.modelId)]}
+                                  onCheckedChange={(v) =>
+                                    setChecked((prev) => ({
+                                      ...prev,
+                                      [rowKey(r.providerId, r.modelId)]: v === true,
+                                    }))
+                                  }
+                                  aria-label={`选择 ${g.modelId} · ${r.providerId}`}
+                                />
+                                <span className="font-mono">{r.providerId}</span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-2">
+                              {!source ? (
+                                <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
+                              ) : changes.length === 0 ? (
+                                <div className="text-muted-foreground">—</div>
+                              ) : (
+                                <ul className="space-y-1.5">
+                                  {changes.map((c) => (
+                                    <li key={c.key} className="text-[11px] leading-snug">
+                                      <div className="font-medium">{c.label}</div>
+                                      <div className="mt-0.5 text-muted-foreground">
+                                        <span className="line-through">{displayValue(c.oldValue)}</span>
+                                        <span className="mx-1">→</span>
+                                        <span>{displayValue(c.newValue)}</span>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
                               )}
-                              {staleLink && (
-                                <SelectItem value={chosen}>同步的供应商信息丢失</SelectItem>
-                              )}
-                              {opts.map((o) => (
-                                <SelectItem key={o.key} value={o.key}>
-                                  {o.kind === 'none'
-                                    ? '不同步'
-                                    : o.kind === 'self'
-                                      ? o.supplier
-                                      : `${o.referenceName}（同步于我们的${o.sourceProviderName}配置）`}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {staleLink && (
-                            <p className="mt-1 text-[11px] text-destructive">
-                              该联动来源已丢失，右侧不会产生可应用的修改。
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {resolved.status === 'none' ? (
-                            <div className="text-muted-foreground">—</div>
-                          ) : resolved.status === 'lost' ? (
-                            <div className="text-[11px] text-destructive">同步的供应商信息丢失</div>
-                          ) : resolved.status === 'unknown' ? (
-                            <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
-                          ) : changes.length === 0 ? (
-                            <div className="text-muted-foreground">—</div>
-                          ) : (
-                            <ul className="space-y-1.5">
-                              {changes.map((c) => (
-                                <li key={c.key} className="text-[11px] leading-snug">
-                                  <div className="font-medium">{c.label}</div>
-                                  <div className="mt-0.5 text-muted-foreground">
-                                    <span className="line-through">{displayValue(c.oldValue)}</span>
-                                    <span className="mx-1">→</span>
-                                    <span>{displayValue(c.newValue)}</span>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-        <div className="flex justify-end gap-2 border-t border-border pt-2">
-          <Button
-            variant="default"
-            disabled={applying || loading || models.length === 0 || checkedCount === 0}
-            onClick={() => void handleSave()}
-          >
-            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认应用'}
-          </Button>
+              <div className="flex justify-end gap-2 border-t border-border pt-2">
+                <Button
+                  variant="default"
+                  disabled={applying || loading || rowCount === 0 || checkedCount === 0}
+                  onClick={() => void handleSave()}
+                >
+                  {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认应用'}
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </DialogContent>
     </Dialog>

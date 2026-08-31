@@ -6,85 +6,23 @@ import (
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
-func TestComputeQuota_legacyRateModeResolvesToZero(t *testing.T) {
-	db := newPriceTestDB(t)
-	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
-		t.Fatalf("set currency: %v", err)
+// newQuotaTestDB returns an in-memory DB migrated with the current schema
+// so quota tests can store settings (billing currency / exchange rate).
+func newQuotaTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
 	}
-	price := model.PriceConfig{
-		Model:           "deepseek-v4-flash",
-		InputPrice:      0.14,
-		OutputPrice:     0.28,
-		CacheWritePrice: 0.56,
-		CacheReadPrice:  0.07,
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
 	}
-	if err := db.Create(&price).Error; err != nil {
-		t.Fatalf("create price: %v", err)
-	}
-	// Legacy rate-mode row (rate=1/7, no prices, no reference). It used to
-	// fall through to the global PriceConfig × rate path; the 模型信息 table
-	// is now retired so these models bill as 0.
-	provider := &model.Provider{Models: `[{"model":"deepseek-v4-flash","rate":"1/7"}]`}
-	usage := &relay.UsageInfo{
-		PromptTokens:     1000000,
-		CompletionTokens: 1000000,
-		CacheWriteTokens: 1000000,
-		CacheReadTokens:  1000000,
-	}
-
-	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: price.Model, usage: usage})
-	if quota != 0 {
-		t.Fatalf("quota: want 0, got %v", quota)
-	}
-	if currency != "" {
-		t.Fatalf("currency: want empty, got %v", currency)
-	}
-}
-
-func TestComputeQuota_legacyAliasRateModeResolvesToZero(t *testing.T) {
-	db := newPriceTestDB(t)
-	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
-		t.Fatalf("set currency: %v", err)
-	}
-	price := model.PriceConfig{Model: "canonical-model", InputPrice: 2, Aliases: `["alias-model"]`}
-	if err := db.Create(&price).Error; err != nil {
-		t.Fatalf("create price: %v", err)
-	}
-	provider := &model.Provider{Models: `[{"model":"alias-model","rate":"1/2"}]`}
-	usage := &relay.UsageInfo{PromptTokens: 1000000}
-
-	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "ALIAS-MODEL", usage: usage})
-	if quota != 0 {
-		t.Fatalf("quota: want 0, got %v", quota)
-	}
-	if currency != "" {
-		t.Fatalf("currency: want empty, got %v", currency)
-	}
-}
-
-func TestComputeQuota_legacyGlobalPriceConfigResolvesToZero(t *testing.T) {
-	db := newPriceTestDB(t)
-	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "CNY"}).Error; err != nil {
-		t.Fatalf("set currency: %v", err)
-	}
-	if err := db.Create(&model.Setting{Key: "exchange_rate_usd_cny", Value: "7.2"}).Error; err != nil {
-		t.Fatalf("set rate: %v", err)
-	}
-	price := model.PriceConfig{Model: "m", InputPrice: 1, OutputPrice: 1, CacheWritePrice: 1, CacheReadPrice: 1}
-	if err := db.Create(&price).Error; err != nil {
-		t.Fatalf("create price: %v", err)
-	}
-	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 1000000, CacheWriteTokens: 1000000, CacheReadTokens: 1000000}
-
-	quota, currency := computeQuota(db, quotaRequest{provider: nil, modelName: "m", usage: usage})
-	if quota != 0 {
-		t.Fatalf("quota: want 0 (legacy global PriceConfig is retired), got %v", quota)
-	}
-	if currency != "" {
-		t.Fatalf("currency: want empty, got %v", currency)
-	}
+	return db
 }
 
 func TestParseFraction_whenInvalidRate(t *testing.T) {
@@ -94,7 +32,7 @@ func TestParseFraction_whenInvalidRate(t *testing.T) {
 }
 
 func TestComputeQuota_explicitUsdPrices(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	provider := &model.Provider{Models: `[{"model":"gpt-4o","rate":"1","prices":{"input":"$5","cacheWrite":"$1","cacheRead":"$0.5","output":"$15"}}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 500000, CacheWriteTokens: 200000, CacheReadTokens: 300000}
 
@@ -111,7 +49,7 @@ func TestComputeQuota_explicitUsdPrices(t *testing.T) {
 }
 
 func TestComputeQuota_explicitCnyPrices(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	provider := &model.Provider{Models: `[{"model":"deepseek","prices":{"input":"¥2","cacheWrite":"¥0.5","cacheRead":"¥0.25","output":"¥6"}}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 500000, CacheWriteTokens: 200000, CacheReadTokens: 300000}
 
@@ -127,12 +65,9 @@ func TestComputeQuota_explicitCnyPrices(t *testing.T) {
 }
 
 func TestComputeQuota_explicitPricesOverrideGlobalCurrency(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "CNY"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
-	}
-	if err := db.Create(&model.PriceConfig{Model: "gpt-4o", InputPrice: 100, OutputPrice: 100}).Error; err != nil {
-		t.Fatalf("create price: %v", err)
 	}
 	// Explicit USD prices must win over the CNY global setting and skip the
 	// exchange-rate multiplication entirely.
@@ -151,12 +86,9 @@ func TestComputeQuota_explicitPricesOverrideGlobalCurrency(t *testing.T) {
 }
 
 func TestComputeQuota_emptyPricesFallBackToZero(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
-	}
-	if err := db.Create(&model.PriceConfig{Model: "gpt-4o", InputPrice: 5, OutputPrice: 15}).Error; err != nil {
-		t.Fatalf("create price: %v", err)
 	}
 	// A prices object with all-empty strings has no currency and must fall
 	// through to 0 (the 模型信息 table no longer drives billing).
@@ -174,7 +106,7 @@ func TestComputeQuota_emptyPricesFallBackToZero(t *testing.T) {
 }
 
 func TestComputeQuota_noMatchReturnsZeroAndEmptyCurrency(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	provider := &model.Provider{Models: `[{"model":"gpt-4o"}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000}
 
@@ -189,7 +121,7 @@ func TestComputeQuota_noMatchReturnsZeroAndEmptyCurrency(t *testing.T) {
 }
 
 func TestComputeQuota_ignoresRateForAnotherModelEntry(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	// Two models; requesting the one without prices/config yields 0.
 	provider := &model.Provider{Models: `[{"model":"a","rate":"2"},{"model":"b","prices":{"input":"$1","cacheWrite":"$1","cacheRead":"$1","output":"$1"}}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000}
@@ -202,7 +134,7 @@ func TestComputeQuota_ignoresRateForAnotherModelEntry(t *testing.T) {
 }
 
 func TestComputeQuota_referenceModeSnapshot(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
 	}
@@ -222,7 +154,7 @@ func TestComputeQuota_referenceModeSnapshot(t *testing.T) {
 }
 
 func TestComputeQuota_referenceModeAppliesGlobalCNY(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "CNY"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
 	}
@@ -244,12 +176,9 @@ func TestComputeQuota_referenceModeAppliesGlobalCNY(t *testing.T) {
 }
 
 func TestComputeQuota_referenceModeWithoutSnapshotResolvesToZero(t *testing.T) {
-	db := newPriceTestDB(t)
+	db := newQuotaTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
-	}
-	if err := db.Create(&model.PriceConfig{Model: "gpt-4o", InputPrice: 5, OutputPrice: 15}).Error; err != nil {
-		t.Fatalf("create price: %v", err)
 	}
 	// referenceProvider set but no snapshot → the 模型信息 table no longer
 	// fills the gap, so the row bills as 0 until the user refreshes the

@@ -555,8 +555,8 @@ type AgentModelConfigSource struct {
 // endpoint string is the group's identity: identical system-provider
 // endpoints are merged into one group, its Suffix names the agent-config
 // provider block (root name + suffix), and ModelSources remembers which
-// model-info source (PriceConfig row id, "" = none) the user picked for
-// each model name so sync can fill the four unified fields.
+// models.dev reference supplier ("", none) the user picked for
+// each model name so generation can fill the four unified fields.
 type ManagedAgentGroup struct {
 	Endpoint     string            `json:"endpoint"`
 	Suffix       string            `json:"suffix"`

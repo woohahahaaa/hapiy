@@ -63,7 +63,6 @@ const navigation: NavItem[] = [
     children: [
       { id: 'token', label: '令牌', href: '/token' },
       { id: 'provider', label: '供应商', href: '/provider' },
-      { id: 'price', label: '模型信息', href: '/model' },
     ],
   },
   {

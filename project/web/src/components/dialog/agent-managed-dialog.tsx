@@ -275,30 +275,32 @@ export function ManagedProviderDialog({
             <p className="text-xs text-muted-foreground">加载供应商列表…</p>
           ) : (
             <>
-              <Field>
-                <FieldLabel>供应商名字</FieldLabel>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="例如：HAPIY"
-                />
-                <p className="text-xs text-muted-foreground">
-                  各组最终 provider 名 = 供应商名字 + 后缀（只有一个分组时后缀可选）
-                </p>
-              </Field>
+              <div className="grid grid-cols-2 items-start gap-4">
+                <Field>
+                  <FieldLabel>供应商名字</FieldLabel>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="例如：HAPIY"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    各组最终 provider 名 = 供应商名字 + 后缀（只有一个分组时后缀可选）
+                  </p>
+                </Field>
 
-              <Field>
-                <FieldLabel>
-                  选择要托管的供应商
-                  <span className="ml-1 font-normal text-muted-foreground">（每个 provider 显示名称 / 模型数 / endpoint 数）</span>
-                </FieldLabel>
-                <ProviderMultiSelect
-                  loading={loading}
-                  options={options}
-                  checked={checked}
-                  onToggle={toggleProvider}
-                />
-              </Field>
+                <Field>
+                  <FieldLabel>
+                    选择要托管的供应商
+                    <span className="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span>
+                  </FieldLabel>
+                  <ProviderMultiSelect
+                    loading={loading}
+                    options={options}
+                    checked={checked}
+                    onToggle={toggleProvider}
+                  />
+                </Field>
+              </div>
 
               {deferredGroups.length > 0 && (
                 <Field>
@@ -363,11 +365,16 @@ function ProviderMultiSelect({
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const onDocMousedown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const inRoot = rootRef.current?.contains(e.target as Node)
+      // 面板经 createPortal 渲染到 body，不包含在 rootRef 内；点击面板
+      // 内选项不能当成“点击外部”而关闭。
+      const inPanel = panelRef.current?.contains(e.target as Node)
+      if (!inRoot && !inPanel) setOpen(false)
     }
     const onDocKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -444,6 +451,7 @@ function ProviderMultiSelect({
         anchor &&
         createPortal(
           <div
+            ref={panelRef}
             style={{ position: 'fixed', top: anchor.top + 4, left: anchor.left, width: anchor.width }}
             className="z-[70] max-h-[220px] overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
           >
@@ -576,7 +584,7 @@ function GroupCard({
           <div className="rounded-md border border-border">
             <div className="grid grid-cols-2 gap-x-4 px-2 py-1 text-[11px] text-muted-foreground">
               <span>模型</span>
-              <span>同步模型配置</span>
+              <span>从 models.dev 同步模型配置</span>
             </div>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border p-1 text-xs">
               {group.modelNames.map((m) => (

@@ -16,7 +16,7 @@ import (
 // 托管 provider（添加托管provider）：把系统 Provider 表的供应商按
 // endpoint 分组后生成 agent 配置文件里的 provider 块。生成的块来自
 // agent-type 规则的公共推荐 + 按 endpoint 标签命中的协议推荐 + 用户
-// 选择的模型信息来源（PriceConfig 行），因此在管理模型视图里只读。
+// 选择的 models.dev 参考供应商（生成四统一字段），因此只读。
 
 // managedGroupView is the display state of one endpoint group, derived
 // from the live system providers + the persisted group config.

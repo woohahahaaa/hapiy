@@ -61,10 +61,10 @@ func main() {
 		log.Fatalf("Failed to migrate auto-disable state: %v", err)
 	}
 
-	// Drop the legacy per-model unique index so (model, provider) composite
-	// uniqueness can apply on upgraded databases.
-	if err := model.MigratePriceConfigSchema(db); err != nil {
-		log.Fatalf("Failed to migrate price config schema: %v", err)
+	// The 模型信息 module is retired — drop its table so the schema no
+	// longer advertises a feature with no UI or handler backing it.
+	if err := model.DropPriceConfigTable(db); err != nil {
+		log.Fatalf("Failed to drop retired price_configs table: %v", err)
 	}
 
 	// Drop archived topology versions stored in the legacy nested-document
@@ -294,12 +294,6 @@ func main() {
 			dashboard.DELETE("/rules/:type/:id", handler.DeleteRule(db))
 			dashboard.POST("/rules/:type/:id/test", handler.TestRewriteRule(db))
 
-			// Models (per-model pricing & info)
-			dashboard.GET("/models", handler.ListPrices(db))
-			dashboard.POST("/models", handler.CreatePrice(db))
-			dashboard.PUT("/models/:id", handler.UpdatePrice(db))
-			dashboard.DELETE("/models/:id", handler.DeletePrice(db))
-			dashboard.GET("/models/:id/references", handler.PriceReferences(db))
 			dashboardAuthed.GET("/models-dev", handler.ModelsDevList())
 
 			// Settings

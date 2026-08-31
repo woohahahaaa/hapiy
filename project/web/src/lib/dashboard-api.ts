@@ -368,6 +368,8 @@ export type SystemSetting = {
   readonly value: string
 }
 
+// PriceRule — 一条转发计费倍率规则（请求改写/倍率编辑器用），与已退休的
+// 模型信息价格表无关。
 export type PriceRule = {
   readonly pattern: string
   readonly multiplier: number
@@ -376,36 +378,6 @@ export type PriceRule = {
 export type FetchedModel = {
   readonly id: string
   readonly name: string
-}
-
-export type PriceConfig = {
-  readonly id: string
-  readonly model: string
-  readonly providerId?: string
-  readonly inputPrice: number
-  readonly outputPrice: number
-  readonly cacheWritePrice: number
-  readonly cacheReadPrice: number
-  readonly contextLength: number
-  readonly maxToken: number
-  readonly supportedTypes: readonly string[]
-  readonly aliases: readonly string[]
-  readonly endpoints: readonly string[]
-  readonly thinkingLevels: readonly string[]
-  readonly rate: readonly PriceRule[]
-}
-
-export type PriceConfigInput = Omit<PriceConfig, 'id'>
-
-export type PriceReference = {
-  readonly providerId: string
-  readonly providerName: string
-  readonly model: string
-}
-
-export type PriceListParams = {
-  readonly limit: number
-  readonly offset: number
 }
 
 export type CurrentUser = {
@@ -900,56 +872,6 @@ function toRFC3339Date(date: string | undefined, endOfDay: boolean): string | un
   const pad = (n: number) => String(Math.abs(n)).padStart(2, '0')
   const tz = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`
   return `${date}${suffix}${tz}`
-}
-
-export function parsePrice(value: unknown): PriceConfig {
-  if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的价格格式无效', null)
-  }
-  return {
-    id: readString(value.id, 'price.id'),
-    model: readString(value.model, 'price.model'),
-    providerId: typeof value.provider_id === 'string' ? value.provider_id : undefined,
-    inputPrice: readNumber(value.input_price, 'price.input_price', 0),
-    outputPrice: readNumber(value.output_price, 'price.output_price', 0),
-    cacheWritePrice: readNumber(value.cache_write_price, 'price.cache_write_price', 0),
-    cacheReadPrice: readNumber(value.cache_read_price, 'price.cache_read_price', 0),
-    contextLength: readNumber(value.context_length, 'price.context_length', 0),
-    maxToken: readNumber(value.max_token, 'price.max_token', 0),
-    supportedTypes: readStringArray(value.supported_types, 'price.supported_types'),
-    aliases: readStringArray(value.aliases, 'price.aliases'),
-    endpoints: readStringArray(value.endpoints, 'price.endpoints'),
-    thinkingLevels: readStringArray(value.thinking_levels, 'price.thinking_levels'),
-    rate: readObjectArray(value.rate, 'price.rate', parsePriceRule),
-  }
-}
-
-function parsePriceRule(value: unknown): PriceRule {
-  if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 price.rate 格式无效', null)
-  }
-  return {
-    pattern: readString(value.pattern, 'price.rate.pattern'),
-    multiplier: readNumber(value.multiplier, 'price.rate.multiplier'),
-  }
-}
-
-export function serializePrice(input: PriceConfigInput): JsonRecord {
-  return {
-    model: input.model,
-    provider_id: input.providerId ?? undefined,
-    input_price: input.inputPrice,
-    output_price: input.outputPrice,
-    cache_write_price: input.cacheWritePrice,
-    cache_read_price: input.cacheReadPrice,
-    context_length: input.contextLength,
-    max_token: input.maxToken,
-    supported_types: JSON.stringify(input.supportedTypes),
-    aliases: JSON.stringify(input.aliases),
-    endpoints: JSON.stringify(input.endpoints),
-    thinking_levels: JSON.stringify(input.thinkingLevels),
-    rate: JSON.stringify(input.rate),
-  }
 }
 
 function parseSystemSetting(value: unknown): SystemSetting {
@@ -2573,20 +2495,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
   },
 
-  async listPrices(params: PriceListParams): Promise<{ readonly prices: readonly PriceConfig[]; readonly total: number }> {
-    const qp = new URLSearchParams()
-    qp.set('limit', String(params.limit))
-    qp.set('offset', String(params.offset))
-    const body = await requestFull(`/models?${qp.toString()}`)
-    const data = body.data
-    if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
-    }
-    return {
-      prices: data.map(parsePrice),
-      total: readNumber(body.total, 'total', 0),
-    }
-  },
   async login(username: string, password: string): Promise<void> {
     const response = await fetch(`${apiBaseUrl}/v1/dashboard/users/login`, {
       method: 'POST',
@@ -2610,35 +2518,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     } catch {
       // ignore — logout must always succeed client-side
     }
-  },
-  async createPrice(input: PriceConfigInput): Promise<PriceConfig> {
-    return parsePrice(await request('/models', { method: 'POST', body: JSON.stringify(serializePrice(input)) }))
-  },
-  async updatePrice(id: string, input: PriceConfigInput): Promise<PriceConfig> {
-    return parsePrice(await request(`/models/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(serializePrice(input)),
-    }))
-  },
-  async deletePrice(id: string): Promise<void> {
-    await request(`/models/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  },
-  async priceReferences(id: string): Promise<readonly PriceReference[]> {
-    const body = await requestFull(`/models/${encodeURIComponent(id)}/references`)
-    const data = body.data
-    if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的模型引用列表格式无效', null)
-    }
-    return data.map((item) => {
-      if (!isRecord(item)) {
-        throw new DashboardApiError('服务端返回的引用格式无效', null)
-      }
-      return {
-        providerId: readString(item.provider_id, 'reference.provider_id'),
-        providerName: readString(item.provider_name, 'reference.provider_name'),
-        model: readString(item.model, 'reference.model'),
-      }
-    })
   },
 
   // ── Settings ──

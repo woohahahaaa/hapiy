@@ -72,8 +72,7 @@ type modelRefPrices struct {
 // referenceModePrices returns the models.dev snapshot and multiplier for a
 // provider model configured in 模型价格参考供应商 mode (referenceProvider
 // plus a captured referencePrices snapshot). ok is false when the mode is
-// not set or the snapshot is missing, so callers fall through to the legacy
-// global PriceConfig path during the transition.
+// not set or the snapshot is missing, so callers fall through to 0.
 func referenceModePrices(provider *model.Provider, modelName string) (*modelRefPrices, float64, bool) {
 	if provider == nil || strings.TrimSpace(provider.Models) == "" {
 		return nil, 0, false
@@ -102,8 +101,7 @@ func referenceModePrices(provider *model.Provider, modelName string) (*modelRefP
 // modelPrices are explicit per-model prices, stored as strings with a "$" or
 // "¥" symbol prefix (e.g. "$1.50"), in units of per 1M tokens. The presence of
 // a non-null prices object switches the model to fixed-price billing: the
-// amounts replace the global PriceConfig and the symbol selects the billing
-// currency, overriding the system-wide billing currency.
+// symbol selects the billing currency, overriding the system-wide one.
 type modelPrices struct {
 	Input      string `json:"input"`
 	CacheWrite string `json:"cacheWrite"`

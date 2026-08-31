@@ -467,12 +467,22 @@ const [error, setError] = useState<string | null>(null)
             <Button
               variant="outline"
               size="xs"
+              disabled={!summary || !record}
+              onClick={() => setSyncingFromInfo(true)}
+              title="从 models.dev 同步文件里全部模型的模型配置"
+            >
+              <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+              同步模型基本信息
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
               disabled={applying}
               onClick={() => setConfirmingTemplate(true)}
               title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
             >
               <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-              使用推荐模板
+              使用推荐配置模板
             </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
               <AppIcon name="close" size={16} />
@@ -722,22 +732,7 @@ const [error, setError] = useState<string | null>(null)
                 <Placeholder>未选择供应商</Placeholder>
               )}
             </div>
-            <ColumnHeader
-              action={
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={!selectedProvider || !selectedModelId}
-                  onClick={() => setSyncingFromInfo(true)}
-                  title="从我们维护的模型信息表格同步到当前模型"
-                >
-                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                  同步模型信息
-                </Button>
-              }
-            >
-              模型列表
-            </ColumnHeader>
+            <ColumnHeader>模型列表</ColumnHeader>
             <div className="flex-1 overflow-y-auto p-2">
               {selectedManagedGroup ? (
                 <>
@@ -848,8 +843,7 @@ const [error, setError] = useState<string | null>(null)
           open={syncingFromInfo}
           onOpenChange={setSyncingFromInfo}
           record={record}
-          providerId={selectedProviderId}
-          provider={selectedProvider}
+          providers={summary?.providers ?? []}
           modelInfoFields={summary?.model_info_fields ?? {
             max_context: '',
             max_output_token: '',
@@ -2093,8 +2087,8 @@ function ColumnHeader({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-[34px] items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
-      <span className="text-xs font-medium text-muted-foreground">{children}</span>
+    <div className="flex h-[34px] items-center justify-between border-b border-border bg-muted/30 px-3">
+      <span className="truncate text-xs font-medium text-muted-foreground">{children}</span>
       {action}
     </div>
   )

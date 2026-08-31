@@ -920,7 +920,7 @@ function ModelPriceCell({
         <SelectTrigger className="h-7 w-36 px-2 text-xs"><SelectPrimitive.Value /></SelectTrigger>
         <SelectContent>
           <SelectItem value="prices">单独设置价格</SelectItem>
-          <SelectItem value="reference">模型价格参考供应商</SelectItem>
+          <SelectItem value="reference">从 models.dev 同步价格</SelectItem>
           <SelectItem value="unset">不设置</SelectItem>
         </SelectContent>
       </Select>
@@ -960,7 +960,7 @@ function ModelPriceCell({
                     {model.referenceProvider ?? ''}
                   </SelectPrimitive.Value>
                   {model.referenceProvider === null || model.referenceProvider === '' ? (
-                    <span className="text-muted-foreground">请选择</span>
+                    <span className="text-muted-foreground">选择要同步的 models.dev 供应商</span>
                   ) : (
                     <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
                       <span className="min-w-0 truncate">{model.referenceProvider}</span>
