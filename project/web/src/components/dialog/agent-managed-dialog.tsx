@@ -215,7 +215,12 @@ export function ManagedProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="lg" height="full" className="flex flex-col">
+      <DialogContent
+        width="lg"
+        height="auto"
+        minHeight={420}
+        className="flex max-h-[85vh] flex-col"
+      >
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
         </DialogHeader>
@@ -521,27 +526,29 @@ function GroupCard({
                     <tr key={m}>
                       <td className="px-2 py-1 font-mono">{m}</td>
                       <td className="px-2 py-1">
-                        {cands.length === 0 ? (
-                          <span className="text-muted-foreground">（无匹配，不填）</span>
-                        ) : (
-                          <Select
-                            value={sources[m] ?? ''}
-                            onValueChange={(v) => onSourceChange(m, v)}
-                          >
-                            <SelectTrigger className="h-7 w-full text-xs">
-                              <SelectValue placeholder="选择数据源" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">（不填）</SelectItem>
-                              {cands.map((c) => (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.model}
-                                  {c.providerId ? ` · ${c.providerId}` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <Select
+                          value={sources[m] ?? ''}
+                          onValueChange={cands.length === 0 ? undefined : (v) => onSourceChange(m, v)}
+                        >
+                          <SelectTrigger className="h-7 w-full text-xs" disabled={cands.length === 0}>
+                            <SelectValue placeholder={cands.length === 0 ? '无数据' : '选择数据源'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {cands.length === 0 ? (
+                              <SelectItem value="" disabled>无数据</SelectItem>
+                            ) : (
+                              <>
+                                <SelectItem value="">（不填）</SelectItem>
+                                {cands.map((c) => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    {c.model}
+                                    {c.providerId ? ` · ${c.providerId}` : ''}
+                                  </SelectItem>
+                                ))}
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
                       </td>
                     </tr>
                   )

@@ -878,6 +878,7 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 				"recommendations":   recs,
 				"protocols":         protocols,
 				"model_info_fields": mif,
+				"json_paths":        jpaths,
 			},
 		})
 	}

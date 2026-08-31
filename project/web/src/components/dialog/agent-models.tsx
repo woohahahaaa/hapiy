@@ -83,6 +83,7 @@ const [error, setError] = useState<string | null>(null)
   const [templateTally, setTemplateTally] = useState<
     Readonly<Map<string, { count: number; models: Readonly<Record<string, number>> }>>
   >(new Map())
+  const [templateApplied, setTemplateApplied] = useState(0)
   const [confirmingTemplate, setConfirmingTemplate] = useState(false)
   const [renamingModel, setRenamingModel] = useState<{ providerId: string; modelId: string } | null>(null)
   const [confirmingDeleteModel, setConfirmingDeleteModel] = useState<{ providerId: string; modelId: string } | null>(null)
@@ -129,27 +130,40 @@ const [error, setError] = useState<string | null>(null)
     setManaged([])
     setExpandedManaged(new Set())
     setRawContent(null)
-    setTemplateTally(new Map())
+    setTemplateTally(new Map()); setTemplateApplied(0)
     setLiveContent(null)
     setConfirmingCancel(false)
     reload()
   }, [open, record]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-select the first provider/model whenever summary arrives/changes.
+  // workingProviders: the provider list currently shown. Reflects staged
+  // deletes/renames in liveContent when present; otherwise the summary.
+  const workingProviders = useMemo<readonly AgentModelProvider[]>(() => {
+    if (liveContent === null) return summary?.providers ?? []
+    const parsed = parseWorkingProviderList(liveContent, summary)
+    return parsed ?? summary?.providers ?? []
+  }, [liveContent, summary])
+
+  // Re-select the first provider/model whenever the working provider set
+  // changes (deletions/renames staged in liveContent reflect here). The
   // Managed selection is entirely separate and never auto-selected.
   useEffect(() => {
-    if (!summary) return
+    const working = workingProviders
     if (selectedManaged) return
-    if (selectedProviderId && summary.providers.some((p) => p.provider_id === selectedProviderId)) {
-      const provider = summary.providers.find((p) => p.provider_id === selectedProviderId)!
+    if (
+      selectedProviderId &&
+      working.some((p) => p.provider_id === selectedProviderId)
+    ) {
+      const provider = working.find((p) => p.provider_id === selectedProviderId)!
       if (selectedModelId && provider.models.some((m) => m.id === selectedModelId)) return
       setSelectedModelId(provider.models[0]?.id ?? null)
       return
     }
-    const first = summary.providers[0]
+    const first = working[0]
     setSelectedProviderId(first?.provider_id ?? null)
     setSelectedModelId(first?.models[0]?.id ?? null)
-  }, [summary, selectedProviderId, selectedModelId, selectedManaged])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workingProviders, selectedProviderId, selectedModelId, selectedManaged])
 
   // The managed view backing the current selection: { view, group }.
   const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: ManagedGroupView } | null>(() => {
@@ -162,9 +176,9 @@ const [error, setError] = useState<string | null>(null)
   }, [selectedManaged, managed])
 
   const selectedProvider = useMemo<AgentModelProvider | null>(() => {
-    if (!summary || !selectedProviderId) return null
-    return summary.providers.find((p) => p.provider_id === selectedProviderId) ?? null
-  }, [summary, selectedProviderId])
+    if (!summary) return null
+    return workingProviders.find((p) => p.provider_id === selectedProviderId) ?? null
+  }, [workingProviders, selectedProviderId, summary])
 
   const selectedModel = useMemo(() => {
     if (!selectedProvider) return null
@@ -268,7 +282,7 @@ const [error, setError] = useState<string | null>(null)
   // hits 保存. Recomputing the diff afterwards naturally drops the
   // resolved row from the diff list.
   const applyOneField = (path: string, value: unknown) => {
-    const base = liveContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
       setLiveContent(setJsonPath(base, path, value))
     } catch (err) {
@@ -283,7 +297,7 @@ const [error, setError] = useState<string | null>(null)
       await dashboardApi.saveAgentConfigFileContent(record.id, liveContent)
       toast('已保存预览中的变更')
       setLiveContent(null)
-      setTemplateTally(new Map())
+      setTemplateTally(new Map()); setTemplateApplied(0)
       reload()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存失败')
@@ -294,7 +308,7 @@ const [error, setError] = useState<string | null>(null)
 
   const handleCancelPending = () => {
     setLiveContent(null)
-    setTemplateTally(new Map())
+    setTemplateTally(new Map()); setTemplateApplied(0)
     setConfirmingCancel(false)
   }
 
@@ -318,7 +332,7 @@ const [error, setError] = useState<string | null>(null)
   const handleRenameProvider = (oldId: string, newId: string) => {
     const target = newId.trim()
     if (!target || target === oldId) return
-    const base = liveContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
       setLiveContent(renameProviderInContent(base, oldId, target, summary))
       toast('已生成预览：provider 改名待保存')
@@ -328,7 +342,7 @@ const [error, setError] = useState<string | null>(null)
   }
 
   const handleDeleteProvider = (id: string) => {
-    const base = liveContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
       setLiveContent(deleteProviderFromContent(base, id, summary))
       toast('已生成预览：删除 provider 待保存')
@@ -392,6 +406,7 @@ const [error, setError] = useState<string | null>(null)
         tally.set(p.provider_id, { count: p.count, models: p.models ?? {} })
       }
       setTemplateTally(tally)
+      setTemplateApplied(res.applied)
       setLiveContent(res.content)
       toast(`已生成预览：${res.applied} 处变更待保存`)
     } catch (err) {
@@ -406,7 +421,7 @@ const [error, setError] = useState<string | null>(null)
   const handleRenameModel = (providerId: string, oldId: string, newId: string) => {
     const target = newId.trim()
     if (!target || target === oldId) return
-    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
       setLiveContent(renameModelInContent(base, providerId, oldId, target))
       toast('已生成预览：模型改名待保存')
@@ -416,7 +431,7 @@ const [error, setError] = useState<string | null>(null)
   }
 
   const handleDeleteModel = (providerId: string, modelId: string) => {
-    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary), null, 2)
+    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
       setLiveContent(deleteModelFromContent(base, providerId, modelId))
       toast('已生成预览：删除模型待保存')
@@ -439,8 +454,12 @@ const [error, setError] = useState<string | null>(null)
             <DialogTitle>管理模型 · {record?.record_name ?? ''}</DialogTitle>
             <p className="text-xs text-muted-foreground">
               {record?.agent_type ?? ''} · {record?.path ?? ''}
-              {problemCount > 0 && (
-                <span className="ml-2 text-destructive">· {problemCount} 处与推荐值不符</span>
+              {templateTally.size > 0 ? (
+                <span className="ml-2 text-destructive">· 共 {templateApplied} 处修改待保存</span>
+              ) : (
+                problemCount > 0 && (
+                  <span className="ml-2 text-destructive">· {problemCount} 处与推荐值不符</span>
+                )
               )}
             </p>
           </div>
@@ -463,7 +482,7 @@ const [error, setError] = useState<string | null>(null)
 
         {liveContent !== null && (
           <PreviewBanner
-            applied={liveDiffCount}
+            applied={templateTally.size > 0 ? templateApplied : liveDiffCount}
             saving={saving}
             onSave={() => void handleSavePending()}
             onCancel={handleCancelPending}
@@ -481,7 +500,7 @@ const [error, setError] = useState<string | null>(null)
               {!loading && !error && summary && summary.providers.length === 0 && (
                 <Placeholder>未解析到任何 provider</Placeholder>
               )}
-              {summary?.providers.map((p) => {
+              {workingProviders.map((p) => {
                 const tally = templateTally.get(p.provider_id)
                 return (
                   <ProviderRow
@@ -687,7 +706,7 @@ const [error, setError] = useState<string | null>(null)
                 editingScope === 'provider' ? (
                   <JsonEditor
                     value={activeProviderValue}
-                    onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId))}
+                    onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
                   />
                 ) : (
                   <JsonDiffHighlight
@@ -806,7 +825,7 @@ const [error, setError] = useState<string | null>(null)
                 editingScope === 'model' ? (
                   <JsonEditor
                     value={activeModelValue}
-                    onChange={(text) => setLiveContent(wrapRootScope('model', text, summary, selectedProviderId, selectedModelId))}
+                    onChange={(text) => setLiveContent(wrapRootScope('model', text, summary, selectedProviderId, selectedModelId, rawContent))}
                   />
                 ) : (
                   <JsonDiffHighlight
@@ -1125,18 +1144,50 @@ function ModelRow({
   actions: React.ReactNode | null
 }) {
   return (
-    <ProviderRow
-      name={
-        <span className="flex items-center gap-2">
-          <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
-          {name}
-        </span>
+    <div
+      className={
+        'group flex min-h-[48px] w-full items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
+        (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
       }
-      info={info}
-      selected={selected}
-      onClick={onClick}
-      actions={actions}
-    />
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 text-left"
+      >
+        {info ? (
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2 truncate text-sm font-medium">
+              <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
+              {name}
+            </span>
+            <span
+              className={
+                'truncate text-[11px] ' +
+                (typeof info === 'object' && info.green ? 'text-success' : 'text-muted-foreground')
+              }
+            >
+              {typeof info === 'object' ? info.text : info}
+            </span>
+          </span>
+        ) : (
+          <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm font-medium">
+            <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
+            {name}
+          </span>
+        )}
+      </button>
+      {actions && (
+        <div
+          className={
+            'flex shrink-0 items-center gap-0.5 transition-opacity ' +
+            (selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
+          }
+        >
+          {actions}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1384,7 +1435,7 @@ function renameProviderInContent(
   summary: AgentModelSummary | null,
 ): string {
   void summary
-  const parsed = JSON.parse(content) as Record<string, unknown>
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const root = providerRootOfContent(parsed)
   if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
   let cur: Record<string, unknown> = parsed
@@ -1408,7 +1459,7 @@ function deleteProviderFromContent(
   summary: AgentModelSummary | null,
 ): string {
   void summary
-  const parsed = JSON.parse(content) as Record<string, unknown>
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const root = providerRootOfContent(parsed)
   if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
   let cur: Record<string, unknown> = parsed
@@ -1452,7 +1503,7 @@ function modelsContainerOf(
 // the object-map shape the key is renamed; for the array shape the id / 
 // name field is updated in place.
 function renameModelInContent(content: string, providerId: string, oldId: string, newId: string): string {
-  const parsed = JSON.parse(content) as Record<string, unknown>
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const { container } = modelsContainerOf(parsed, providerId)
   if (Array.isArray(container)) {
     const target = container.find((m) => {
@@ -1475,7 +1526,7 @@ function renameModelInContent(content: string, providerId: string, oldId: string
 // deleteModelFromContent removes a model from its provider's models
 // (object key or array element).
 function deleteModelFromContent(content: string, providerId: string, modelId: string): string {
-  const parsed = JSON.parse(content) as Record<string, unknown>
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const { container } = modelsContainerOf(parsed, providerId)
   if (Array.isArray(container)) {
     const idx = container.findIndex((m) => {
@@ -1492,6 +1543,64 @@ function deleteModelFromContent(content: string, providerId: string, modelId: st
   return JSON.stringify(parsed)
 }
 
+// parseWorkingProviderList derives the current provider list from a
+// staged liveContent document (after delete/rename previews), preserving
+// model ids/config from liveContent where present and filling gaps from
+// the summary. Returns null when the live content can't be parsed.
+function parseWorkingProviderList(
+  content: string,
+  summary: AgentModelSummary | null,
+): readonly AgentModelProvider[] | null {
+  try {
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
+    const root = providerRootOfContent(parsed)
+    if (!root) return null
+    let container: Record<string, unknown> = parsed
+    for (const seg of root) {
+      const next = container[seg]
+      if (!next || typeof next !== 'object' || Array.isArray(next)) return null
+      container = next as Record<string, unknown>
+    }
+    const byId = new Map((summary?.providers ?? []).map((p) => [p.provider_id, p]))
+    const modelLeaf = lastPathSegment((summary?.json_paths?.model ?? 'models') || 'models')
+    const out: AgentModelProvider[] = []
+    for (const id of Object.keys(container)) {
+      const prov = container[id] as Record<string, unknown>
+      const modelsRaw = prov?.[modelLeaf]
+      const models: { id: string; config: unknown }[] = []
+      if (Array.isArray(modelsRaw)) {
+        modelsRaw.forEach((m, i) => {
+          const mr = m as Record<string, unknown>
+          const mid = typeof mr.id === 'string' ? mr.id : typeof mr.name === 'string' ? String(mr.name) : String(i)
+          models.push({ id: mid, config: m })
+        })
+      } else if (modelsRaw && typeof modelsRaw === 'object') {
+        for (const mid of Object.keys(modelsRaw as Record<string, unknown>)) {
+          models.push({ id: mid, config: (modelsRaw as Record<string, unknown>)[mid] })
+        }
+      }
+      const prev = byId.get(id)
+      const merged: AgentModelProvider = {
+        provider_id: id,
+        other_fields: prev?.other_fields ?? null,
+        models: models.length > 0 ? models : (prev?.models ?? []),
+      }
+      out.push(merged)
+    }
+    return out
+  } catch {
+    return null
+  }
+}
+
+// lastPathSegment returns the trailing key of a dotted path so the
+// caller can locate the models container leaf ("provider.{id}.models").
+function lastPathSegment(path: string): string {
+  if (!path) return 'models'
+  const i = path.lastIndexOf('.')
+  return i >= 0 ? path.slice(i + 1) : path
+}
+
 // wrapRootScope rebuilds a full file content string from summary +
 // the edited scope value, so we always have a complete document in
 // liveContent (the save endpoint writes the whole file in one go).
@@ -1503,11 +1612,15 @@ function wrapRootScope(
   summary: AgentModelSummary | null,
   providerId: string | null,
   modelId: string | null,
+  rawContent?: string | null,
 ): string {
   if (!summary || !providerId) return edited
-  const root = currentActualContent(summary) as Record<string, unknown>
-  const providers = (root.provider ?? {}) as Record<string, unknown>
-  const provider = (providers[providerId] ?? {}) as Record<string, unknown>
+  const root = currentActualContent(summary, rawContent) as Record<string, unknown>
+  const providerMapContainer =
+    root.models && typeof root.models === 'object'
+      ? ((root.models as Record<string, unknown>).providers ?? {}) as Record<string, unknown>
+      : (root.provider ?? {}) as Record<string, unknown>
+  const provider = (providerMapContainer[providerId] ?? {}) as Record<string, unknown>
   let parsed: unknown
   try {
     parsed = JSON.parse(edited)
@@ -1517,13 +1630,13 @@ function wrapRootScope(
   if (scope === 'provider') {
     const next = { ...(parsed as Record<string, unknown>) }
     next.models = provider.models
-    providers[providerId] = next
+    providerMapContainer[providerId] = next
   } else if (scope === 'model' && modelId) {
     const next = { ...(parsed as Record<string, unknown>) }
     const models = { ...((provider.models ?? {}) as Record<string, unknown>) }
     models[modelId] = parsed
     next.models = models
-    providers[providerId] = next
+    providerMapContainer[providerId] = next
   }
   return JSON.stringify(root)
 }
@@ -1587,11 +1700,33 @@ function JsonEditor({
 // currentActualContent rebuilds the live JSON from the loaded
 // summary — used when the user has no liveContent yet but triggers a
 // single-field apply, so we have a fresh base to mutate.
-function currentActualContent(summary: AgentModelSummary | null): Record<string, unknown> {
-  if (!summary) return {}
+function currentActualContent(
+  summary: AgentModelSummary | null,
+  rawContent?: string | null,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
+
+  // Detect the real root shape from the raw file when available: opencode
+  // puts providers under "provider", openclaw under "models.providers".
+  // Building from the wrong shape corrupts openclaw's file on save.
+  let rootKey: string = 'provider'
+  if (rawContent && rawContent.trim() !== '') {
+    try {
+      const parsed = JSON.parse(rawContent) as Record<string, unknown>
+      if (parsed.models && typeof parsed.models === 'object') {
+        const models = parsed.models as Record<string, unknown>
+        if (models.providers && typeof models.providers === 'object') {
+          rootKey = 'models'
+        }
+      }
+    } catch {
+      // fall through to the default provider shape
+    }
+  }
+
   const providers: Record<string, unknown> = {}
-  for (const p of summary.providers) {
+  const summaryProviders = summary?.providers ?? []
+  for (const p of summaryProviders) {
     const other = (p.other_fields ?? {}) as Record<string, unknown>
     const models: Record<string, unknown> = {}
     for (const m of p.models) {
@@ -1599,18 +1734,65 @@ function currentActualContent(summary: AgentModelSummary | null): Record<string,
     }
     providers[p.provider_id] = { ...other, models }
   }
-  // The shape matches opencode (provider.<id>) by default; openclaw's
-  // shape (models.providers.<id>) is handled at extract-time, so this
-  // minimal shape works for both.
-  out.provider = providers
+
+  if (rootKey === 'provider') {
+    out.provider = providers
+    return out
+  }
+  const modelsObj: Record<string, unknown> = {}
+  modelsObj.providers = providers
+  out.models = modelsObj
   return out
+}
+
+// stripJsoncComments removes // and /* */ comments so JSON.parse can
+// read JSONC / JSON5 config files; string contents are untouched.
+function stripJsoncComments(s: string): string {
+  const out: string[] = []
+  let inString = false
+  let escape = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inString) {
+      out.push(c)
+      if (escape) {
+        escape = false
+        continue
+      }
+      if (c === '\\') {
+        escape = true
+        continue
+      }
+      if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') {
+      inString = true
+      out.push(c)
+      continue
+    }
+    if (c === '/' && s[i + 1] === '/') {
+      const end = s.indexOf('\n', i)
+      if (end < 0) return out.join('')
+      i = end
+      continue
+    }
+    if (c === '/' && s[i + 1] === '*') {
+      const end = s.indexOf('*/', i + 2)
+      if (end < 0) return out.join('')
+      i = end + 1
+      continue
+    }
+    out.push(c)
+  }
+  return out.join('')
 }
 
 // setJsonPath walks a dotted path inside the parsed content and writes
 // value at the leaf, creating intermediate objects as needed. Returns
 // the re-serialized content. Throws if content is not valid JSON.
 function setJsonPath(content: string, path: string, value: unknown): string {
-  const parsed = JSON.parse(content) as Record<string, unknown>
+  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const segments = path.split('.')
   let cur: Record<string, unknown> = parsed
   for (let i = 0; i < segments.length - 1; i++) {
@@ -1911,7 +2093,7 @@ function ColumnHeader({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
+    <div className="flex min-h-[34px] items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
       <span className="text-xs font-medium text-muted-foreground">{children}</span>
       {action}
     </div>

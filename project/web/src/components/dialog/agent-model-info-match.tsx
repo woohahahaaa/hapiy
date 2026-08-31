@@ -387,11 +387,11 @@ export function AgentModelInfoMatchDialog({
 
         <div className="flex justify-end gap-2 border-t border-border pt-2">
           <Button
-            variant="outline"
+            variant="default"
             disabled={applying || models.length === 0 || checkedCount === 0}
             onClick={() => void handleSave()}
           >
-            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
+            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认同步'}
           </Button>
         </div>
       </DialogContent>

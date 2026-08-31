@@ -744,6 +744,7 @@ export type AgentModelSummary = {
   readonly recommendations: readonly AgentRecommendation[]
   readonly protocols: readonly AgentProtocol[]
   readonly model_info_fields: AgentModelInfoFieldPaths
+  readonly json_paths: AgentJsonPaths
 }
 
 export type ManagedProviderOption = {
@@ -2101,6 +2102,13 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
       input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
       thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
     },
+    json_paths: (() => {
+      const jp = isRecord(value.json_paths) ? value.json_paths : {}
+      return {
+        provider: typeof jp.provider === 'string' ? jp.provider : '',
+        model: typeof jp.model === 'string' ? jp.model : '',
+      }
+    })(),
   }
 }
 
