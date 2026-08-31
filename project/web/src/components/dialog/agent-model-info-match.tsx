@@ -244,77 +244,82 @@ export function AgentModelInfoMatchDialog({
           {!loading && !error && rowCount > 0 && (
             <>
               <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full table-fixed text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground">
-                    <tr>
-                      <th className="w-[30%] px-2 py-2 text-left font-medium">模型</th>
-                      <th className="w-[30%] px-2 py-2 text-left font-medium">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
-                            onCheckedChange={toggleAll}
-                            aria-label="全选"
-                          />
-                          所属供应商
-                        </div>
-                      </th>
-                      <th className="w-[40%] px-2 py-2 text-left font-medium">将应用的修改</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {groups.map((g) => {
-                      const source = resolvedRow(g.modelId)
-                      return g.rows.map((r, idx) => {
-                        const changes = changesFor(r)
-                        const isFirstRow = idx === 0
-                        return (
-                          <tr key={rowKey(r.providerId, r.modelId)} className="align-top hover:bg-muted">
-                            {isFirstRow && (
-                              <td rowSpan={g.rows.length} className="px-2 py-2 align-top">
-                                <div className="break-words font-medium">{g.modelId}</div>
-                              </td>
-                            )}
-                            <td className="px-2 py-2">
-                              <div className="flex items-center gap-2">
-                                <Checkbox
-                                  checked={!!checked[rowKey(r.providerId, r.modelId)]}
-                                  onCheckedChange={(v) =>
-                                    setChecked((prev) => ({
-                                      ...prev,
-                                      [rowKey(r.providerId, r.modelId)]: v === true,
-                                    }))
-                                  }
-                                  aria-label={`选择 ${g.modelId} · ${r.providerId}`}
-                                />
-                                <span className="break-words font-mono">{r.providerId}</span>
-                              </div>
-                            </td>
-                            <td className="px-2 py-2">
-                              {!source ? (
-                                <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
-                              ) : changes.length === 0 ? (
-                                <div className="text-muted-foreground">—</div>
-                              ) : (
-                                <ul className="space-y-1.5">
-                                  {changes.map((c) => (
-                                    <li key={c.key} className="text-[11px] leading-snug">
-                                      <div className="font-medium">{c.label}</div>
-                                      <div className="mt-0.5 text-muted-foreground">
-                                        <span className="line-through">{displayValue(c.oldValue)}</span>
-                                        <span className="mx-1">→</span>
-                                        <span>{displayValue(c.newValue)}</span>
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
+                {/* 表头行：与卡片内列用同一比例，保证对齐 */}
+                <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
+                  <div className="w-[30%]">模型</div>
+                  <div className="flex w-[30%] items-center gap-2">
+                    <Checkbox
+                      checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
+                      onCheckedChange={toggleAll}
+                      aria-label="全选"
+                    />
+                    所属供应商
+                  </div>
+                  <div className="w-[40%]">将应用的修改</div>
+                </div>
+
+                {/* 每个模型一张卡片：组内 rowspan 表格，组间分隔线不穿过模型列 */}
+                <div className="divide-y divide-border">
+                  {groups.map((g) => {
+                    const source = resolvedRow(g.modelId)
+                    return (
+                      <table key={g.modelId} className="w-full table-fixed text-xs">
+                        <tbody>
+                          {g.rows.map((r, idx) => {
+                            const changes = changesFor(r)
+                            return (
+                            <tr
+                              key={rowKey(r.providerId, r.modelId)}
+                              className={idx > 0 ? 'border-t border-border/50' : undefined}
+                            >
+                              {idx === 0 && (
+                                <td rowSpan={g.rows.length} className="w-[30%] border-r border-border px-2 py-2 align-top">
+                                  <div className="break-words font-medium">{g.modelId}</div>
+                                </td>
                               )}
-                            </td>
-                          </tr>
-                        )
-                      })
-                    })}
-                  </tbody>
-                </table>
+                              <td className="w-[30%] px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    checked={!!checked[rowKey(r.providerId, r.modelId)]}
+                                    onCheckedChange={(v) =>
+                                      setChecked((prev) => ({
+                                        ...prev,
+                                        [rowKey(r.providerId, r.modelId)]: v === true,
+                                      }))
+                                    }
+                                    aria-label={`选择 ${g.modelId} · ${r.providerId}`}
+                                  />
+                                  <span className="break-words font-mono">{r.providerId}</span>
+                                </div>
+                              </td>
+                              <td className="w-[40%] px-2 py-2">
+                                {!source ? (
+                                  <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
+                                ) : changes.length === 0 ? (
+                                  <div className="text-muted-foreground">—</div>
+                                ) : (
+                                  <ul className="space-y-1.5">
+                                    {changes.map((c) => (
+                                      <li key={c.key} className="text-[11px] leading-snug">
+                                        <div className="font-medium">{c.label}</div>
+                                        <div className="mt-0.5 text-muted-foreground">
+                                          <span className="line-through">{displayValue(c.oldValue)}</span>
+                                          <span className="mx-1">→</span>
+                                          <span>{displayValue(c.newValue)}</span>
+                                        </div>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
+                            </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 border-t border-border pt-2">

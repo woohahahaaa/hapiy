@@ -45,15 +45,30 @@ export function HandlesRail({
       style={{ width: target.width, height: total, borderRadius: target.width / 3 }}
     >
       {segmentCount > 0 && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-[inherit] border-2 border-solid bg-background"
-          style={{
-            width: target.width,
-            height: total,
-            borderColor: borderColor ?? 'var(--color-border)',
-          }}
-        />
+        <>
+          {/* 右半边（压在节点本体上）保持实心 pill；左半边悬空在外只画描边，
+              否则 bg 会盖住从左侧连进来的线最后一截。fill 放进一个带 overflow-hidden
+              的 pill 形容器里，让直角左缘被圆角裁掉，与描边的弧线对齐。 */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 overflow-hidden rounded-[inherit]"
+            style={{ width: target.width, height: total }}
+          >
+            <div
+              className="absolute left-1/2 top-0 h-full bg-background"
+              style={{ width: target.width / 2 }}
+            />
+          </div>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-[inherit] border-2 border-solid"
+            style={{
+              width: target.width,
+              height: total,
+              borderColor: borderColor ?? 'var(--color-border)',
+            }}
+          />
+        </>
       )}
       {Array.from({ length: segmentCount }, (_, i) => (
         <Handle
