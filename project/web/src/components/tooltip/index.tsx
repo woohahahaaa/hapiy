@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// 主题化 tooltip：复用系统组件，仅把配色改为主题背景色打底、前景反色 15% 描边，箭头随底色。
+// 主题化 tooltip：复用系统组件，把配色改为主题背景色打底、前景描边。
 export function Tooltip(props: ComponentProps<typeof UITooltip>) {
   return <UITooltip {...props} />
 }
@@ -24,7 +24,7 @@ export function TooltipContent({ className, ...props }: ComponentProps<typeof UI
   return (
     <UITooltipContent
       className={cn(
-        'border border-foreground/15 bg-background text-foreground [&_[data-slot=tooltip-arrow]]:bg-background [&_[data-slot=tooltip-arrow]]:fill-background',
+        'border border-foreground/15 bg-background text-foreground',
         className,
       )}
       {...props}

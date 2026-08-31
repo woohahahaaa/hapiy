@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
@@ -950,25 +951,36 @@ function ModelPriceCell({
               if (value !== '__none__') onPickReference(value)
             }}
           >
-            <SelectTrigger
-              className={`h-7 min-w-0 flex-1 px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
-            >
-              <SelectPrimitive.Value className="sr-only">
-                {model.referenceProvider ?? ''}
-              </SelectPrimitive.Value>
-              {model.referenceProvider === null || model.referenceProvider === '' ? (
-                <span className="text-muted-foreground">请选择</span>
-              ) : (
-                <span className="flex min-w-0 items-center gap-1">
-                  <span className="truncate">{model.referenceProvider}</span>
-                  {ref ? (
-                    <span className="shrink-0 text-muted-foreground tabular-nums">（输 {fmt(ref.input)}写 {fmt(ref.cacheWrite)}读 {fmt(ref.cacheRead)}出 {fmt(ref.output)}）</span>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SelectTrigger
+                  className={`h-7 min-w-0 flex-1 overflow-hidden px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
+                >
+                  <SelectPrimitive.Value className="sr-only">
+                    {model.referenceProvider ?? ''}
+                  </SelectPrimitive.Value>
+                  {model.referenceProvider === null || model.referenceProvider === '' ? (
+                    <span className="text-muted-foreground">请选择</span>
                   ) : (
-                    <span className="shrink-0 text-destructive">（尚未获取快照）</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+                      <span className="min-w-0 truncate">{model.referenceProvider}</span>
+                      {ref ? (
+                        <span className="shrink-0 text-muted-foreground tabular-nums">输{fmt(ref.input)}写{fmt(ref.cacheWrite)}读{fmt(ref.cacheRead)}出{fmt(ref.output)}</span>
+                      ) : (
+                        <span className="shrink-0 text-destructive">尚未获取快照</span>
+                      )}
+                    </span>
                   )}
-                </span>
+                </SelectTrigger>
+              </TooltipTrigger>
+              {refTooltip && (
+                <TooltipContent side="bottom" align="start">
+                  {refTooltip}
+                </TooltipContent>
               )}
-            </SelectTrigger>
+            </Tooltip>
+          </TooltipProvider>
             <SelectContent>
               {stale && model.referenceProvider !== null && (
                 <SelectItem value={model.referenceProvider}>参考供应商已从 models.dev 下架</SelectItem>
