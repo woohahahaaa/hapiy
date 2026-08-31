@@ -40,6 +40,21 @@ func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 			return quota, currency
 		}
 	}
+	if ref, rate, ok := referenceModePrices(request.provider, request.modelName); ok {
+		// 模型价格参考供应商: the stored models.dev snapshot × the editable
+		// multiplier, converted through the global billing currency — this
+		// replaces the old rate-mode PriceConfig row binding path.
+		total := float64(usage.PromptTokens)/tokensPerMillion*ref.Input +
+			float64(usage.CompletionTokens)/tokensPerMillion*ref.Output +
+			float64(usage.CacheWriteTokens)/tokensPerMillion*ref.CacheWrite +
+			float64(usage.CacheReadTokens)/tokensPerMillion*ref.CacheRead
+		quota := total * rate
+		currency := service.GetBillingCurrency(db)
+		if currency == "CNY" {
+			quota *= service.GetExchangeRate(db)
+		}
+		return quota, currency
+	}
 	price, found := findPriceConfig(db, request.modelName)
 	if !found {
 		return 0, ""
@@ -68,6 +83,47 @@ func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 		quota *= service.GetExchangeRate(db)
 	}
 	return quota, currency
+}
+
+// modelRefPrices are the read-only models.dev price snapshot captured when a
+// provider model uses 模型价格参考供应商 mode. Amounts are USD per 1M
+// tokens; billing applies the model's multiplier and the global
+// currency/exchange rules.
+type modelRefPrices struct {
+	Input      float64 `json:"input"`
+	CacheWrite float64 `json:"cacheWrite"`
+	CacheRead  float64 `json:"cacheRead"`
+	Output     float64 `json:"output"`
+}
+
+// referenceModePrices returns the models.dev snapshot and multiplier for a
+// provider model configured in 模型价格参考供应商 mode (referenceProvider
+// plus a captured referencePrices snapshot). ok is false when the mode is
+// not set or the snapshot is missing, so callers fall through to the legacy
+// global PriceConfig path during the transition.
+func referenceModePrices(provider *model.Provider, modelName string) (*modelRefPrices, float64, bool) {
+	if provider == nil || strings.TrimSpace(provider.Models) == "" {
+		return nil, 0, false
+	}
+	var entries []struct {
+		Model             string          `json:"model"`
+		ReferenceProvider string          `json:"referenceProvider"`
+		ReferencePrices   *modelRefPrices `json:"referencePrices"`
+		Rate              string          `json:"rate"`
+	}
+	if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
+		return nil, 0, false
+	}
+	for _, entry := range entries {
+		if !strings.EqualFold(strings.TrimSpace(entry.Model), strings.TrimSpace(modelName)) {
+			continue
+		}
+		if entry.ReferenceProvider == "" || entry.ReferencePrices == nil {
+			return nil, 0, false
+		}
+		return entry.ReferencePrices, parseFraction(entry.Rate), true
+	}
+	return nil, 0, false
 }
 
 // modelRateBinding returns the model-info row a rate-mode provider model is

@@ -177,3 +177,17 @@ export function findModelsDevProviderRow(
   )
   return found ?? null
 }
+
+// resetModelsDevCache drops the module-level snapshot so the next
+// loadModelsDevModels() call re-fetches from upstream. Used by the
+// per-model 刷新 action which must always check the live state of the
+// reference supplier before overwriting the stored price snapshot.
+export function resetModelsDevCache(): void {
+  cached = null
+  loadPromise = null
+}
+
+export async function refreshModelsDevModels(): Promise<readonly ModelsDevModel[]> {
+  resetModelsDevCache()
+  return loadModelsDevModels()
+}

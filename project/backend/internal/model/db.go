@@ -50,6 +50,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&AgentTypeRule{},
 		&AgentConfigFile{},
 		&ManagedAgentProvider{},
+		&AgentModelConfigSource{},
 	)
 }
 

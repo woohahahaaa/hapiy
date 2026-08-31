@@ -534,6 +534,23 @@ var openclawRecommendations = []AgentRecommendation{
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 }
 
+// AgentModelConfigSource — persisted 模型配置参考供应商 selection for one
+// config-file provider model. Mode is "none" (不同步), "self" (a models.dev
+// supplier picked directly) or "link" (follow the same-named model's
+// reference on one of our providers). Only the reference is stored, never a
+// resolved result: every sync-dialog open re-resolves from models.dev and
+// our provider table, and a link whose target provider/model evaporated
+// shows 同步的供应商信息丢失 with no storage change.
+type AgentModelConfigSource struct {
+	AgentConfigFileID string    `gorm:"primaryKey" json:"-"`
+	ProviderID        string    `gorm:"primaryKey" json:"-"`
+	ModelID           string    `gorm:"primaryKey" json:"-"`
+	Mode              string    `gorm:"not null;default:'none'" json:"mode"`
+	SelfSupplier      string    `gorm:"type:text" json:"self_supplier"`   // models.dev supplier name in "self" mode
+	LinkProviderID    string    `gorm:"type:text" json:"link_provider_id"` // our provider bound in "link" mode
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 // ManagedAgentGroup — one endpoint group of a managed provider. The
 // endpoint string is the group's identity: identical system-provider
 // endpoints are merged into one group, its Suffix names the agent-config

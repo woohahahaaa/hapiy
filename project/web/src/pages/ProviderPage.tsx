@@ -11,7 +11,14 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, PriceConfig } from '@/lib/dashboard-api'
+import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
+import {
+  findModelsDevProviderRow,
+  loadModelsDevModels,
+  providersForModel,
+  refreshModelsDevModels,
+  type ModelsDevModel,
+} from '@/lib/models-dev'
 
 type ProviderFormProps = {
   readonly provider: Provider | null
@@ -26,6 +33,33 @@ type ProviderFormProps = {
 
 const emptyProvider: ProviderInput = {
   name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
+}
+
+// emptyProviderModel builds the serializable form of a model row with all
+// price-mode fields nulled out; the 模型价格参考供应商 mode gets its supplier
+// and price snapshot filled on demand when the user picks a reference.
+function emptyProviderModel(model = ''): ProviderModel {
+  return {
+    model,
+    endpoints: [],
+    rate: '1',
+    ratePriceConfigId: null,
+    referenceProvider: null,
+    referencePrices: null,
+    referenceAt: null,
+    prices: null,
+  }
+}
+
+// refPricesOf converts a models.dev row's per-1M-token USD prices into the
+// stored read-only snapshot shape.
+function refPricesOf(row: { readonly inputPrice: number; readonly outputPrice: number; readonly cacheWritePrice: number; readonly cacheReadPrice: number }): ModelReferencePrices {
+  return {
+    input: row.inputPrice,
+    cacheWrite: row.cacheWritePrice,
+    cacheRead: row.cacheReadPrice,
+    output: row.outputPrice,
+  }
 }
 
 // Prices in 单独设置价格 mode are strings that must start with "$", "¥" or
@@ -223,27 +257,129 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [priceErrorPos, setPriceErrorPos] = useState<{ left: number; top: number } | null>(null)
   const priceErrorTimer = useRef<number | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
-  // Model-info rows from the 模型信息 page: rate-mode models bind an upstream
-  // supplier entry by its internal PriceConfig ID as the price source.
-  const [priceConfigs, setPriceConfigs] = useState<readonly PriceConfig[]>([])
+  // models.dev snapshot backing 模型价格参考供应商: candidates for the
+  // reference-supplier dropdown, snapshot fill on pick, and the on-open
+  // liveness check (stale supplier → red borders, data untouched).
+  const [refSnapshot, setRefSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
+  const [refSnapshotError, setRefSnapshotError] = useState<string | null>(null)
+  // All providers are loaded once so the per-model 同步 action can rewrite
+  // the equal-named models of the other providers in the same dialog flow.
+  const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
+  const [refRefreshing, setRefRefreshing] = useState(false)
+  const [refSyncing, setRefSyncing] = useState(false)
+  const [syncTarget, setSyncTarget] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    void dashboardApi.listPrices({ limit: 10000, offset: 0 })
-      .then((result) => {
-        if (!cancelled) setPriceConfigs(result.prices)
+    setRefSnapshotError(null)
+    loadModelsDevModels()
+      .then((models) => {
+        if (!cancelled) setRefSnapshot(models)
       })
       .catch(() => {
-        if (!cancelled) setPriceConfigs([])
+        if (!cancelled) setRefSnapshotError('models.dev 数据加载失败，请检查网络')
+      })
+    void dashboardApi.listProviders({ limit: 10000, offset: 0 })
+      .then((result) => {
+        if (!cancelled) setAllProviders(result.providers)
+      })
+      .catch(() => {
+        if (!cancelled) setAllProviders([])
       })
     return () => { cancelled = true }
   }, [])
 
-  const supplierCandidatesFor = (modelName: string): readonly PriceConfig[] => {
-    const needle = modelName.trim().toLowerCase()
-    if (!needle) return []
-    return priceConfigs.filter((config) => config.model.toLowerCase() === needle)
+  // Reference-supplier candidates for a model: the distinct models.dev
+  // providers that carry the model name (case-insensitive).
+  const referenceCandidatesFor = (modelName: string): ReadonlyArray<{ readonly providerId: string; readonly providerName: string }> =>
+    providersForModel(refSnapshot ?? [], modelName)
+
+  // Liveness check: shown only when the snapshot is available AND the row is
+  // in reference mode AND its supplier no longer appears for the model.
+  const referenceStaleFor = (model: ProviderModel): boolean =>
+    refSnapshot !== null &&
+    model.referenceProvider !== null &&
+    !providersForModel(refSnapshot, model.model)
+      .some((p) => p.providerName.toLowerCase() === model.referenceProvider!.toLowerCase())
+
+  const refreshReference = async (index: number) => {
+    const model = form.models[index]
+    if (!model || model.referenceProvider === null) return
+    setRefRefreshing(true)
+    setRefSnapshotError(null)
+    try {
+      const fresh = await refreshModelsDevModels()
+      setRefSnapshot(fresh)
+      const row = findModelsDevProviderRow(fresh, model.model, model.referenceProvider)
+      if (!row) {
+        setRefSnapshotError(`参考供应商「${model.referenceProvider}」已不在 models.dev 的「${model.model}」供应商列表中，价格快照未更新`)
+        return
+      }
+      patchModel(index, {
+        referencePrices: refPricesOf(row),
+        referenceAt: new Date().toISOString(),
+      })
+      toast('已从 models.dev 更新价格快照')
+    } catch {
+      setRefSnapshotError('models.dev 数据拉取失败，价格快照未被覆盖')
+    } finally {
+      setRefRefreshing(false)
+    }
   }
+
+  const pickReference = (index: number, providerName: string) => {
+    const model = form.models[index]
+    if (!model) return
+    const snapshot = refSnapshot ?? []
+    const row = findModelsDevProviderRow(snapshot, model.model, providerName)
+    setRefSnapshotError(null)
+    patchModel(index, {
+      referenceProvider: providerName,
+      prices: null,
+      referencePrices: row ? refPricesOf(row) : null,
+      referenceAt: row ? new Date().toISOString() : null,
+    })
+    if (!row) {
+      setRefSnapshotError(`models.dev 中未查到「${model.model}」在「${providerName}」下的价格，请点刷新重试`)
+    }
+  }
+
+  const syncReference = async () => {
+    if (!syncTarget) return
+    const src = form.models.find((m) => m.model.trim() === syncTarget.trim())
+    if (!src) return
+    setRefSyncing(true)
+    setRefSnapshotError(null)
+    try {
+      const needle = src.model.trim().toLowerCase()
+      let applied = 0
+      for (const target of allProviders) {
+        if (provider && target.id === provider.id) continue
+        if (target.models.every((m) => m.model.trim().toLowerCase() !== needle)) continue
+        const nextModels = target.models.map((m) =>
+          m.model.trim().toLowerCase() === needle
+            ? { ...m, rate: src.rate, referenceProvider: src.referenceProvider, referencePrices: src.referencePrices, referenceAt: src.referenceAt, prices: src.prices }
+            : m,
+        )
+        await dashboardApi.updateProvider(target.id, { ...target, models: nextModels })
+        applied++
+      }
+      const reloaded = await dashboardApi.listProviders({ limit: 10000, offset: 0 })
+      setAllProviders(reloaded.providers)
+      setSyncTarget(null)
+      toast(`已同步到 ${applied} 个其他供应商的同名模型`)
+    } catch (err) {
+      setRefSnapshotError(`同步失败：${err instanceof Error ? err.message : '未知错误'}`)
+    } finally {
+      setRefSyncing(false)
+    }
+  }
+
+  const syncTargetsFor = (modelName: string): number =>
+    allProviders.filter((p) =>
+      !(provider && p.id === provider.id) &&
+      p.models.some((m) => m.model.trim().toLowerCase() === modelName.trim().toLowerCase()),
+    ).length
 
   // Floating tooltip near the offending input, auto-dismissed after ~4 seconds.
   const showPriceError = (anchor?: HTMLElement | null) => {
@@ -323,7 +459,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const patchModel = (index: number, patch: Partial<ProviderModel>) => {
     setForm((current) => {
       if (current.models.length === 0 && index === 0) {
-        return { ...current, models: [{ model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null, ...patch }] }
+        return { ...current, models: [{ ...emptyProviderModel(), ...patch }] }
       }
       return {
         ...current,
@@ -395,7 +531,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   // One phantom editable row while the array is empty.
   const endpointRows = form.endpoints.length === 0 ? [{ pathSuffix: '' }] : form.endpoints
   const modelRows = form.models.length === 0
-    ? [{ model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }]
+    ? [emptyProviderModel()]
     : form.models
 
   const handleSave = () => {
@@ -432,7 +568,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   }
 
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
-    const additions: ProviderModel[] = ids.map((id) => ({ model: id, endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }))
+    const additions: ProviderModel[] = ids.map((id) => ({ ...emptyProviderModel(id) }))
     if (replace) {
       setForm((current) => ({ ...current, models: additions }))
     } else {
@@ -547,10 +683,24 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
             {modelRows.map((model, index) => {
               const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__all__'
               const isPhantom = form.models.length === 0
+              const referenceCandidates = referenceCandidatesFor(model.model)
               return (
                 <div key={index} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
                   <Input value={model.model} onChange={(event) => patchModel(index, { model: event.target.value })} className="w-full" placeholder="模型名称" />
-                  <ModelPriceCell model={model} onPatch={(patch) => patchModel(index, patch)} onInvalid={(anchor) => showPriceError(anchor)} supplierCandidates={supplierCandidatesFor(model.model)} />
+                  <ModelPriceCell
+                    model={model}
+                    onPatch={(patch) => patchModel(index, patch)}
+                    onInvalid={(anchor) => showPriceError(anchor)}
+                    referenceCandidates={referenceCandidates}
+                    stale={referenceStaleFor(model)}
+                    snapshotLoading={refSnapshot === null}
+                    syncing={refSyncing}
+                    refreshing={refRefreshing}
+                    syncable={syncTargetsFor(model.model) > 0}
+                    onPickReference={(name) => pickReference(index, name)}
+                    onRefresh={() => void refreshReference(index)}
+                    onSync={() => setSyncTarget(model.model)}
+                  />
                   <Select
                     value={endpointValue}
                     onValueChange={(value) => patchModel(index, { endpoints: value === '__all__' ? [] : [value] })}
@@ -568,7 +718,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               )
             })}
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setForm((current) => ({ ...current, models: [...current.models, { model: '', endpoints: [], rate: '1', ratePriceConfigId: null, prices: null }] }))}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setForm((current) => ({ ...current, models: [...current.models, emptyProviderModel()] }))}>
                 <AppIcon name="add" data-icon="inline-start" />添加一行
               </Button>
               <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
@@ -582,6 +732,9 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </div>
           {fetchError && (
             <p role="alert" className="text-xs text-destructive">{fetchError}</p>
+          )}
+          {refSnapshotError && (
+            <p role="alert" className="text-xs text-destructive">{refSnapshotError}</p>
           )}
         </div>
       </Field>
@@ -618,6 +771,21 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           onConfirm={handleConfirmAddModels}
         />
       )}
+      <Dialog open={syncTarget !== null} onOpenChange={(open) => { if (!open) setSyncTarget(null) }}>
+        <DialogContent width="xs">
+          <DialogHeader><DialogTitle>同步价格设置</DialogTitle></DialogHeader>
+          <p>
+            确认将模型「{syncTarget ?? ''}」的当前价格设置同步到其他供应商的同名模型？
+          </p>
+          <p className="text-xs text-muted-foreground">
+            会将价格模式、参考供应商、价格快照和倍率一起写入其他供应商的同名模型。
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSyncTarget(null)} disabled={refSyncing}>取消</Button>
+            <Button onClick={() => void syncReference()} disabled={refSyncing}>{refSyncing ? '同步中...' : '确认同步'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </FieldGroup>
   )
 }
@@ -674,22 +842,50 @@ type ModelPriceCellProps = {
   readonly model: ProviderModel
   readonly onPatch: (patch: Partial<ProviderModel>) => void
   readonly onInvalid: (anchor: HTMLElement | null) => void
-  readonly supplierCandidates: readonly PriceConfig[]
+  readonly referenceCandidates: ReadonlyArray<{ readonly providerId: string; readonly providerName: string }>
+  readonly stale: boolean
+  readonly snapshotLoading: boolean
+  readonly refreshing: boolean
+  readonly syncing: boolean
+  readonly syncable: boolean
+  readonly onPickReference: (providerName: string) => void
+  readonly onRefresh: () => void
+  readonly onSync: () => void
 }
 
-// Price cell: a dropdown switching between 设置倍率 (rate multiplier input,
-// bound to a 模型信息 upstream-supplier entry) and 单独设置价格 (four
-// per-1M-token price inputs). When typing in prices mode, whitespace is
-// stripped automatically once the value starts with a currency symbol; a
-// non-empty value without a symbol is rejected on blur and on save via the
-// outer floating tooltip.
-function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: ModelPriceCellProps) {
-  const usePrices = model.prices !== null
-  const setMode = (next: 'rate' | 'prices') => {
+type PriceMode = 'prices' | 'reference' | 'legacy'
+
+// Price cell: a dropdown choosing between 单独设置价格 (four per-1M-token
+// price inputs), 模型价格参考供应商 (a models.dev reference supplier whose
+// price snapshot is read-only, with an editable multiplier), and the legacy
+// 设置倍率 state kept for pre-migration rows. The row's right side carries
+// 刷新 (re-check the reference supplier upstream and re-snapshot) and 同步
+// (copy this model's pricing to the same-named models of the other
+// providers). When the dialog opens and a reference supplier no longer
+// exists on models.dev for the model, both dropdowns turn red (stale) while
+// the stored data stays untouched.
+function ModelPriceCell({
+  model,
+  onPatch,
+  onInvalid,
+  referenceCandidates,
+  stale,
+  snapshotLoading,
+  refreshing,
+  syncing,
+  syncable,
+  onPickReference,
+  onRefresh,
+  onSync,
+}: ModelPriceCellProps) {
+  const mode: PriceMode = model.referenceProvider !== null ? 'reference' : model.prices !== null ? 'prices' : 'legacy'
+  const setMode = (next: PriceMode) => {
     if (next === 'prices') {
-      onPatch({ prices: { input: '', cacheWrite: '', cacheRead: '', output: '' } })
+      onPatch({ prices: { input: '', cacheWrite: '', cacheRead: '', output: '' }, referenceProvider: null, referencePrices: null, referenceAt: null })
+    } else if (next === 'reference') {
+      onPatch({ prices: null, referenceProvider: model.referenceProvider ?? '', referencePrices: model.referencePrices ?? null, referenceAt: model.referenceAt ?? null })
     } else {
-      onPatch({ prices: null })
+      onPatch({ prices: null, referenceProvider: null, referencePrices: null, referenceAt: null })
     }
   }
   const handlePriceChange = (key: keyof ModelPrices, raw: string) => {
@@ -708,19 +904,20 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
     }
   }
 
-  const unbound = supplierCandidates.length === 0
-  const bound = !unbound && model.ratePriceConfigId !== null
+  const ref = model.referencePrices
+  const fmt = (v: number): string => (Number.isFinite(v) && v > 0 ? `$${Number(v.toFixed(4)).toString()}` : '$0')
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-      <Select value={usePrices ? 'prices' : 'rate'} onValueChange={(value) => setMode(value as 'rate' | 'prices')}>
-        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+      <Select value={mode} onValueChange={(value) => setMode(value as PriceMode)}>
+        <SelectTrigger className={`w-36 ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="rate">设置倍率</SelectItem>
           <SelectItem value="prices">单独设置价格</SelectItem>
+          <SelectItem value="reference">模型价格参考供应商</SelectItem>
+          {mode === 'legacy' && <SelectItem value="legacy">设置倍率（旧）</SelectItem>}
         </SelectContent>
       </Select>
-      {usePrices ? (
+      {mode === 'prices' ? (
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {PRICE_FIELDS.map(({ key, placeholder }) => (
             <Input
@@ -735,35 +932,57 @@ function ModelPriceCell({ model, onPatch, onInvalid, supplierCandidates }: Model
           ))}
         </div>
       ) : (
-        <>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <Select
-            value={unbound ? '__unfound__' : (model.ratePriceConfigId ?? '')}
-            disabled={unbound}
-            onValueChange={(value) => onPatch({ ratePriceConfigId: value === '' || value === '__unfound__' ? null : value })}
+            value={model.referenceProvider ?? '__none__'}
+            disabled={snapshotLoading}
+            onValueChange={(value) => {
+              if (value !== '__none__') onPickReference(value)
+            }}
           >
-            <SelectTrigger className="w-40"><SelectValue placeholder="请选择" /></SelectTrigger>
+            <SelectTrigger className={`w-full ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}><SelectValue placeholder="请选择参考供应商" /></SelectTrigger>
             <SelectContent>
-              {unbound ? (
-                <SelectItem value="__unfound__">未在模型信息模块查到对应该模型的数据</SelectItem>
-              ) : (
-                supplierCandidates.map((config) => (
-                  <SelectItem key={config.id} value={config.id}>
-                    {config.model} · {config.providerId || '默认'}
-                  </SelectItem>
-                ))
+              {stale && model.referenceProvider !== null && (
+                <SelectItem value={model.referenceProvider}>参考供应商已从 models.dev 下架</SelectItem>
               )}
+              {snapshotLoading ? (
+                <SelectItem value="__none__" disabled>加载中…</SelectItem>
+              ) : referenceCandidates.length === 0 ? (
+                <SelectItem value="__none__" disabled>未在 models.dev 查到该模型</SelectItem>
+              ) : referenceCandidates.map((provider) => (
+                <SelectItem key={provider.providerId} value={provider.providerName}>{provider.providerName}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <Input
-            value={model.rate}
-            onChange={(event) => onPatch({ rate: event.target.value })}
-            disabled={!bound}
-            className="min-w-0 w-16 flex-1 px-2 text-xs"
-            placeholder="1"
-            title="倍率，支持分数，如 1/2"
-          />
-        </>
+          <div className="flex items-center gap-1.5">
+            {model.referenceProvider !== null && ref === null ? (
+              <span className="truncate text-xs text-destructive">尚未获取价格快照，请点刷新</span>
+            ) : model.referenceProvider !== null && ref ? (
+              <span className="truncate text-xs tabular-nums text-muted-foreground">
+                输入 {fmt(ref.input)} · 缓存写 {fmt(ref.cacheWrite)} · 缓存读 {fmt(ref.cacheRead)} · 输出 {fmt(ref.output)}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground/50">选择参考供应商后自动获取价格</span>
+            )}
+            <Input
+              value={model.rate}
+              onChange={(event) => onPatch({ rate: event.target.value })}
+              disabled={model.referenceProvider === null}
+              className="ml-auto w-14 px-2 text-xs"
+              placeholder="1"
+              title="倍率，支持分数，如 1/2"
+            />
+          </div>
+        </div>
       )}
+      <div className="flex items-center gap-0.5">
+        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={model.referenceProvider === null || refreshing || snapshotLoading} onClick={onRefresh} aria-label="刷新参考价格">
+          {refreshing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="refresh" />}
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={syncing || !syncable} onClick={onSync} aria-label="同步到其他供应商">
+          {syncing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="sync" />}
+        </Button>
+      </div>
     </div>
   )
 }

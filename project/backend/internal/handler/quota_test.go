@@ -198,6 +198,72 @@ func TestComputeQuota_ignoresRateForAnotherModelEntry(t *testing.T) {
 	}
 }
 
+func TestComputeQuota_referenceModeSnapshot(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
+		t.Fatalf("set currency: %v", err)
+	}
+	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 1000000, CacheWriteTokens: 1000000, CacheReadTokens: 1000000}
+	// 模型价格参考供应商: snapshot USD prices with an editable multiplier.
+	provider := &model.Provider{Models: `[{"model":"deepseek-chat","referenceProvider":"DeepInfra","referencePrices":{"input":0.27,"cacheWrite":0.27,"cacheRead":0.27,"output":1.1},"rate":"2"}]`}
+
+	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "DEEPSEEK-CHAT", usage: usage})
+
+	expected := (0.27 + 1.1 + 0.27 + 0.27) * 2
+	if math.Abs(quota-expected) > 0.000000001 {
+		t.Fatalf("quota: want %.12f, got %.12f", expected, quota)
+	}
+	if currency != "USD" {
+		t.Fatalf("currency: want USD, got %v", currency)
+	}
+}
+
+func TestComputeQuota_referenceModeAppliesGlobalCNY(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "CNY"}).Error; err != nil {
+		t.Fatalf("set currency: %v", err)
+	}
+	if err := db.Create(&model.Setting{Key: "exchange_rate_usd_cny", Value: "7.2"}).Error; err != nil {
+		t.Fatalf("set rate: %v", err)
+	}
+	usage := &relay.UsageInfo{PromptTokens: 1000000}
+	provider := &model.Provider{Models: `[{"model":"m","referenceProvider":"OpenRouter","referencePrices":{"input":1,"cacheWrite":1,"cacheRead":1,"output":1},"rate":"1/2"}]`}
+
+	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "m", usage: usage})
+
+	expected := 1 * 0.5 * 7.2
+	if math.Abs(quota-expected) > 0.000000001 {
+		t.Fatalf("quota: want %.12f, got %.12f", expected, quota)
+	}
+	if currency != "CNY" {
+		t.Fatalf("currency: want CNY, got %v", currency)
+	}
+}
+
+func TestComputeQuota_referenceModeWithoutSnapshotFallsBack(t *testing.T) {
+	db := newPriceTestDB(t)
+	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
+		t.Fatalf("set currency: %v", err)
+	}
+	if err := db.Create(&model.PriceConfig{Model: "gpt-4o", InputPrice: 5, OutputPrice: 15}).Error; err != nil {
+		t.Fatalf("create price: %v", err)
+	}
+	// referenceProvider set but no snapshot → the legacy global path applies
+	// with the model's rate (stale/missing snapshot must never bill as $0).
+	provider := &model.Provider{Models: `[{"model":"gpt-4o","referenceProvider":"OpenRouter","rate":"2"}]`}
+	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 500000}
+
+	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "gpt-4o", usage: usage})
+
+	want := (5 + 7.5) * 2
+	if math.Abs(quota-want) > 0.000000001 {
+		t.Fatalf("quota: want %v, got %v", want, quota)
+	}
+	if currency != "USD" {
+		t.Fatalf("currency: want USD, got %v", currency)
+	}
+}
+
 func TestResolveModelPrices_caseInsensitiveMatch(t *testing.T) {
 	provider := &model.Provider{Models: `[{"model":"GPT-4O","prices":{"input":"$1","cacheWrite":"$2","cacheRead":"$3","output":"$4"}}]`}
 

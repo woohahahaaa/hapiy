@@ -46,11 +46,32 @@ export type ModelPrices = {
   readonly output: string
 }
 
+// ModelReferencePrices are the READ-ONLY price snapshot captured from
+// models.dev when a model uses 模型价格参考供应商 mode. Amounts are USD per
+// 1M tokens (numeric); billing applies the multiplier and the global
+// currency/exchange rules. Only the multiplier is editable by the user.
+export type ModelReferencePrices = {
+  readonly input: number
+  readonly cacheWrite: number
+  readonly cacheRead: number
+  readonly output: number
+}
+
+// ProviderModel pricing modes:
+//   - prices present        → 单独设置价格
+//   - referenceProvider set → 模型价格参考供应商 (referencePrices snapshot is
+//                             read-only; rate is the editable multiplier)
+//   - neither               → legacy rate mode without a source (bill rate
+//                             against the global 模型信息 fallback, stage 3
+//                             removes this branch)
 export type ProviderModel = {
   readonly model: string
   readonly endpoints: readonly string[]
   readonly rate: string
   readonly ratePriceConfigId: string | null
+  readonly referenceProvider: string | null
+  readonly referencePrices: ModelReferencePrices | null
+  readonly referenceAt: string | null
   readonly prices: ModelPrices | null
 }
 
@@ -608,6 +629,21 @@ export type AgentModelInfoFieldPaths = {
   readonly thinking_levels: string
 }
 
+// AgentModelConfigSource — one persisted 模型配置参考供应商 selection for a
+// config-file provider model, stored per sync-dialog open. Mode is "none"
+// (不同步), "self" (a models.dev supplier picked directly, kept in
+// self_supplier) or "link" (follow the same-named model's reference on one
+// of our providers, kept in link_provider_id). Only the reference is
+// persisted, never a resolved result; each open re-resolves it from
+// models.dev and our provider table.
+export type AgentModelConfigSource = {
+  readonly mode: 'none' | 'self' | 'link'
+  readonly self_supplier: string
+  readonly link_provider_id: string
+}
+
+export type AgentModelConfigSources = Readonly<Record<string, Readonly<Record<string, AgentModelConfigSource>>>>
+
 export type AgentProtocolConditionOp = 'equals' | 'contains' | 'not_contains' | 'not_equals'
 
 export type AgentProtocolCondition = {
@@ -967,6 +1003,18 @@ function parseModelPrices(value: unknown): ModelPrices {
   }
 }
 
+function parseModelReferencePrices(value: unknown): ModelReferencePrices {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的 models.referencePrices 格式无效', null)
+  }
+  return {
+    input: readNumber(value.input ?? value.input_price ?? 0, 'models.referencePrices.input'),
+    cacheWrite: readNumber(value.cacheWrite ?? value.cache_write ?? 0, 'models.referencePrices.cacheWrite'),
+    cacheRead: readNumber(value.cacheRead ?? value.cache_read ?? 0, 'models.referencePrices.cacheRead'),
+    output: readNumber(value.output ?? 0, 'models.referencePrices.output'),
+  }
+}
+
 function parseModel(value: unknown): ProviderModel {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的 models 格式无效', null)
@@ -979,6 +1027,13 @@ function parseModel(value: unknown): ProviderModel {
     endpoints: readStringArray(value.endpoints ?? [], 'models.endpoints'),
     rate: readString(value.rate ?? legacyRate ?? '1', 'models.rate'),
     ratePriceConfigId: typeof value.priceConfigId === 'string' ? value.priceConfigId : null,
+    referenceProvider: typeof value.referenceProvider === 'string' && value.referenceProvider.trim() !== ''
+      ? value.referenceProvider
+      : null,
+    referencePrices: value.referencePrices === null || value.referencePrices === undefined
+      ? null
+      : parseModelReferencePrices(value.referencePrices),
+    referenceAt: typeof value.referenceAt === 'string' ? value.referenceAt : null,
     prices: value.prices === null || value.prices === undefined ? null : parseModelPrices(value.prices),
   }
 }
@@ -2959,6 +3014,33 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       applied: readNumber(data.applied, 'applied', 0),
       content: typeof data.content === 'string' ? data.content : '',
     }
+  },
+  async getAgentModelConfigSources(id: string): Promise<AgentModelConfigSources> {
+    const data = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`)
+    if (!isRecord(data.data)) {
+      throw new DashboardApiError('服务端返回的模型配置参考供应商格式无效', null)
+    }
+    const out: Record<string, Record<string, AgentModelConfigSource>> = {}
+    for (const [providerId, rawModels] of Object.entries(data.data as Record<string, unknown>)) {
+      if (!isRecord(rawModels)) continue
+      for (const [modelId, rawSource] of Object.entries(rawModels as Record<string, unknown>)) {
+        if (!isRecord(rawSource)) continue
+        const mode = rawSource.mode === 'self' || rawSource.mode === 'link' ? rawSource.mode : 'none'
+        out[providerId] = out[providerId] ?? {}
+        out[providerId][modelId] = {
+          mode,
+          self_supplier: typeof rawSource.self_supplier === 'string' ? rawSource.self_supplier : '',
+          link_provider_id: typeof rawSource.link_provider_id === 'string' ? rawSource.link_provider_id : '',
+        }
+      }
+    }
+    return out
+  },
+  async saveAgentModelConfigSources(id: string, sources: AgentModelConfigSources): Promise<void> {
+    await request(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`, {
+      method: 'PUT',
+      body: JSON.stringify({ sources }),
+    })
   },
   async listManagedProviderOptions(): Promise<readonly ManagedProviderOption[]> {
     const data = await request('/agent-config-files/managed-options')

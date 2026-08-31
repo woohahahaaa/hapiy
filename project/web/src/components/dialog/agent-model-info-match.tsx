@@ -18,12 +18,20 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
 import {
+  findModelsDevProviderRow,
+  loadModelsDevModels,
+  providersForModel,
+  type ModelsDevModel,
+} from '@/lib/models-dev'
+import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   type AgentConfigFile,
+  type AgentModelConfigSource,
+  type AgentModelConfigSources,
   type AgentModelInfoFieldPaths,
   type AgentModelProvider,
-  type PriceConfig,
+  type Provider,
 } from '@/lib/dashboard-api'
 
 interface AgentModelInfoMatchDialogProps {
@@ -128,20 +136,36 @@ function mergeSyncContent(
     if (merged === null) merged = {}
     const root = (merged[rootKey] ?? {}) as Record<string, unknown>
     merged[rootKey] = root
-    const provider = (root[providerKey] ?? {}) as Record<string, unknown>
-    root[providerKey] = provider
-    const nextModels = (provider.models ?? {}) as Record<string, unknown>
-    provider.models = nextModels
-    nextModels[modelId] = modelValue
-    return merged
+    const provRoot = (root[providerKey] ?? { ...p }) as Record<string, unknown>
+    provRoot.models = { ...(isRecord(provRoot.models) ? provRoot.models : {}), [modelId]: modelValue }
+    root[providerKey] = provRoot
+    break
   }
   return merged
 }
 
-// displayValue renders a field value for the diff column.
 function displayValue(value: unknown): string {
-  return value === undefined || value === null ? '(无)' : JSON.stringify(value)
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  return String(value)
 }
+
+// A 模型配置参考供应商 option for one config model. Options are built fresh
+// on every open: 不同步 (none), each models.dev supplier for the model (self),
+// and one entry per our provider carrying the same-named model with a
+// reference set (link, kept separate on purpose — no dedup). Only the
+// *reference* is carried; linked values resolve to nothing persisted.
+type SourceOption =
+  | { readonly kind: 'none'; readonly key: string }
+  | { readonly kind: 'self'; readonly key: string; readonly supplier: string }
+  | { readonly kind: 'link'; readonly key: string; readonly sourceProviderId: string; readonly sourceProviderName: string; readonly referenceName: string }
+
+type ResolvedStatus =
+  | { readonly status: 'none' }
+  | { readonly status: 'row'; readonly row: ModelsDevModel }
+  | { readonly status: 'lost' }
+  | { readonly status: 'unknown' }
 
 export function AgentModelInfoMatchDialog({
   open,
@@ -154,69 +178,143 @@ export function AgentModelInfoMatchDialog({
 }: AgentModelInfoMatchDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sources, setSources] = useState<readonly PriceConfig[]>([])
-  const [applying, setApplying] = useState(false)
-  // sourceByModelId holds the currently chosen model-info source per
-  // config-model id.
-  const [sourceByModelId, setSourceByModelId] = useState<Record<string, string>>({})
-  // checkedByModelId tracks which rows the 保存 button should sync.
+  const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
+  const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
+  const [persisted, setPersisted] = useState<AgentModelConfigSources>({})
+  const [optionByModelId, setOptionByModelId] = useState<Record<string, string>>({})
   const [checkedByModelId, setCheckedByModelId] = useState<Record<string, boolean>>({})
+  const [applying, setApplying] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
     setError(null)
-    setSourceByModelId({})
-    dashboardApi
-      .listPrices({ limit: 1000, offset: 0 })
-      .then((res) => setSources(res.prices))
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
-      .finally(() => setLoading(false))
-  }, [open])
+    setOptionByModelId({})
+    setCheckedByModelId({})
+    const load = async () => {
+      try {
+        const [models, providers, sources] = await Promise.all([
+          loadModelsDevModels(),
+          dashboardApi.listProviders({ limit: 10000, offset: 0 }),
+          record ? dashboardApi.getAgentModelConfigSources(record.id) : Promise.resolve({}),
+        ])
+        setSnapshot(models)
+        setAllProviders(providers.providers)
+        setPersisted(sources)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '加载失败')
+      } finally {
+        setLoading(false)
+      }
+    }
+    void load()
+  }, [open, record])
 
   const models = useMemo(() => provider?.models ?? [], [provider])
 
-  // Auto-pick the first match per model once sources load, and default
-  // every row to checked.
-  useEffect(() => {
-    if (!open || sources.length === 0 || models.length === 0) return
-    const picks: Record<string, string> = {}
-    for (const m of models) {
-      const match = findBestMatch(m.id, sources)
-      if (match) picks[m.id] = match.id
+  // Candidate options for one config model. Self options are the models.dev
+  // suppliers carrying the model; link options are one entry per our
+  // provider whose same-named model has a 模型价格参考供应商 set.
+  const buildOptions = useMemo(() => (modelId: string): readonly SourceOption[] => {
+    const opts: SourceOption[] = [{ kind: 'none', key: 'none' }]
+    for (const candidate of providersForModel(snapshot ?? [], modelId)) {
+      opts.push({ kind: 'self', key: `self:${candidate.providerName}`, supplier: candidate.providerName })
     }
-    setSourceByModelId((prev) => {
+    for (const p of allProviders) {
+      const match = p.models.find((m) =>
+        m.referenceProvider !== null &&
+        m.model.trim().toLowerCase() === modelId.trim().toLowerCase(),
+      )
+      if (match) {
+        opts.push({
+          kind: 'link',
+          key: `link:${p.id}`,
+          sourceProviderId: p.id,
+          sourceProviderName: p.name,
+          referenceName: match.referenceProvider ?? '',
+        })
+      }
+    }
+    return opts
+  }, [snapshot, allProviders])
+
+  const isEmptyLifetime = (obj: Record<string, unknown>): boolean => Object.keys(obj).length === 0
+
+  // Prefill each row from the persisted selection (kept even when its target
+  // vanished so the 丢失 state can render), else the first link candidate,
+  // else the first models.dev match, else 不同步. In-session edits are never
+  // overwritten; the checkbox set defaults to checked once.
+  useEffect(() => {
+    if (!open || snapshot === null || models.length === 0) return
+    setOptionByModelId((prev) => {
       const merged = { ...prev }
-      for (const [k, v] of Object.entries(picks)) {
-        if (!merged[k]) merged[k] = v
+      for (const m of models) {
+        if (merged[m.id] !== undefined) continue
+        const opts = buildOptions(m.id)
+        const sourcesForProvider = persisted[providerId ?? ''] ?? {}
+        const saved = sourcesForProvider[m.id]
+        let picked: string | null = null
+        if (saved) {
+          if (saved.mode === 'self') {
+            picked = opts.find((o) => o.kind === 'self' && saved.self_supplier !== '' && o.supplier.toLowerCase() === saved.self_supplier.toLowerCase())?.key ?? null
+            if (!picked && saved.self_supplier) picked = `self:${saved.self_supplier}`
+          } else if (saved.mode === 'link') {
+            picked = opts.find((o) => o.kind === 'link' && saved.link_provider_id !== '' && o.sourceProviderId === saved.link_provider_id)?.key ?? null
+            if (!picked && saved.link_provider_id) picked = `link:${saved.link_provider_id}`
+          } else {
+            picked = 'none'
+          }
+        }
+        if (!picked) {
+          picked = opts.find((o) => o.kind === 'link')?.key
+            ?? opts.find((o) => o.kind === 'self')?.key
+            ?? 'none'
+        }
+        merged[m.id] = picked
       }
       return merged
     })
-    setCheckedByModelId(Object.fromEntries(models.map((m) => [m.id, true])))
-  }, [open, sources, models])
+    setCheckedByModelId((prev) => (isEmptyLifetime(prev) ? Object.fromEntries(models.map((m) => [m.id, true])) : prev))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, snapshot, models, persisted, providerId, buildOptions])
 
-  const candidatesFor = (modelId: string): readonly PriceConfig[] => {
-    const needle = modelId.toLowerCase()
-    return sources.filter((s) => {
-      const id = s.model.toLowerCase()
-      const aliasMatch = s.aliases.some((a) => a.toLowerCase().includes(needle))
-      return id === needle || id.includes(needle) || aliasMatch
-    })
+  // Resolve a selected option against live data. Link options report lost
+  // when our provider no longer carries it (or its reference supplier is no
+  // longer on models.dev for the model); self options report unknown when
+  // models.dev has no (model, supplier) row.
+  const resolvedFor = (modelId: string, option: string | undefined): ResolvedStatus => {
+    const opt = buildOptions(modelId).find((o) => o.key === option)
+    if (!opt || opt.kind === 'none') {
+      if (option && option.startsWith('link:')) return { status: 'lost' }
+      if (option && option.startsWith('self:')) return { status: 'unknown' }
+      return { status: 'none' }
+    }
+    if (opt.kind === 'self') {
+      const row = findModelsDevProviderRow(snapshot ?? [], modelId, opt.supplier)
+      return row ? { status: 'row', row } : { status: 'unknown' }
+    }
+    const row = findModelsDevProviderRow(snapshot ?? [], modelId, opt.referenceName)
+    return row ? { status: 'row', row } : { status: 'lost' }
+  }
+
+  const sourceMapFor = (row: ModelsDevModel): Record<string, unknown> => {
+    const types = [...new Set([...row.inputTypes, ...row.outputTypes])]
+    return {
+      max_context: row.contextLength > 0 ? row.contextLength : undefined,
+      max_output_token: row.maxOutput > 0 ? row.maxOutput : undefined,
+      input_types: types.length > 0 ? types : undefined,
+      thinking_levels: row.reasoning ? ['high'] : [],
+    }
   }
 
   const changesFor = (modelId: string): readonly FieldChange[] => {
-    const chosenId = sourceByModelId[modelId]
-    if (!chosenId) return []
-    const src = sources.find((s) => s.id === chosenId)
+    const chosen = optionByModelId[modelId]
+    const resolved = resolvedFor(modelId, chosen)
+    if (resolved.status !== 'row') return []
     const cfg = provider?.models.find((m) => m.id === modelId)?.config
-    if (!src || !cfg || typeof cfg !== 'object') return []
+    if (!cfg || typeof cfg !== 'object') return []
+    const sourceMap = sourceMapFor(resolved.row)
     const changes: FieldChange[] = []
-    const sourceMap: Record<string, unknown> = {
-      max_context: src.contextLength,
-      max_output_token: src.maxToken,
-      input_types: src.supportedTypes,
-      thinking_levels: src.thinkingLevels,
-    }
     for (const key of MODEL_INFO_FIELD_KEYS) {
       const path = modelInfoFields[key]
       if (!path) continue
@@ -232,7 +330,7 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  const checkedCount = models.filter((m) => checkedByModelId[m.id]).length
+  const checkedCount = models.filter((m) => !!checkedByModelId[m.id]).length
   const allChecked = models.length > 0 && checkedCount === models.length
 
   const toggleAll = () => {
@@ -240,22 +338,29 @@ export function AgentModelInfoMatchDialog({
     setCheckedByModelId(Object.fromEntries(models.map((m) => [m.id, next])))
   }
 
-  // handleSave syncs every checked row. The endpoint always re-reads the
-  // file from disk and returns a preview of only that model's changes, so
-  // we loop per model and merge the returned contents locally into one
-  // document before handing it to the parent for preview.
+  const persistable = (option: string): { mode: 'none' | 'self' | 'link'; self_supplier: string; link_provider_id: string } => {
+    if (option === 'none') return { mode: 'none', self_supplier: '', link_provider_id: '' }
+    if (option.startsWith('link:')) return { mode: 'link', self_supplier: '', link_provider_id: option.slice('link:'.length) }
+    return { mode: 'self', self_supplier: option.slice('self:'.length), link_provider_id: '' }
+  }
+
   const handleSave = async () => {
     if (!record || !providerId) return
+    const perModel: Record<string, AgentModelConfigSource> = {}
+    for (const m of models) {
+      perModel[m.id] = persistable(optionByModelId[m.id] ?? 'none')
+    }
+    const sources: AgentModelConfigSources = { [providerId]: perModel }
     const rows = models
-      .filter((m) => checkedByModelId[m.id])
+      .filter((m) => !!checkedByModelId[m.id] && changesFor(m.id).length > 0)
       .map((m) => ({ modelId: m.id, changes: changesFor(m.id) }))
-      .filter((r) => r.changes.length > 0)
     if (rows.length === 0) {
-      toast('没有勾选的模型存在字段差异')
+      toast('没有勾选的模型存在可应用的字段差异')
       return
     }
     setApplying(true)
     try {
+      await dashboardApi.saveAgentModelConfigSources(record.id, sources)
       let applied = 0
       let merged: Record<string, unknown> | null = null
       let lastRaw = ''
@@ -284,7 +389,7 @@ export function AgentModelInfoMatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
         <DialogHeader>
-          <DialogTitle>从模型信息同步模型</DialogTitle>
+          <DialogTitle>同步模型参考配置</DialogTitle>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -306,15 +411,19 @@ export function AgentModelInfoMatchDialog({
                       />
                     </th>
                     <th className="px-3 py-2 text-left font-medium">模型</th>
-                    <th className="min-w-[180px] px-3 py-2 text-left font-medium">数据源选择</th>
-                    <th className="px-3 py-2 text-left font-medium">字段调整</th>
+                    <th className="min-w-[220px] px-3 py-2 text-left font-medium">模型配置参考供应商</th>
+                    <th className="min-w-[260px] px-3 py-2 text-left font-medium">将应用的修改</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {models.map((m) => {
-                    const candidates = candidatesFor(m.id)
-                    const chosen = sourceByModelId[m.id]
+                    const opts = buildOptions(m.id)
+                    const chosen = optionByModelId[m.id] ?? 'none'
                     const changes = changesFor(m.id)
+                    const resolved = resolvedFor(m.id, chosen)
+                    const staleLink = chosen.startsWith('link:') && !opts.some((o) => o.kind === 'link' && o.key === chosen)
+                    const staleSelf = chosen.startsWith('self:') && !opts.some((o) => o.kind === 'self' && o.key === chosen)
+                    const staleSelfName = chosen.slice('self:'.length)
                     return (
                       <tr key={m.id} className="align-top hover:bg-muted">
                         <td className="px-3 py-2">
@@ -332,34 +441,47 @@ export function AgentModelInfoMatchDialog({
                         <td className="px-3 py-2">
                           <Select
                             value={chosen}
-                            disabled={candidates.length === 0}
                             onValueChange={(v) =>
-                              setSourceByModelId((prev) => ({ ...prev, [m.id]: v }))
+                              setOptionByModelId((prev) => ({ ...prev, [m.id]: v }))
                             }
                           >
-                            <SelectTrigger className="h-7 text-xs">
-                              <SelectValue
-                                placeholder={candidates.length === 0 ? '暂无可选' : '选择数据源'}
-                              />
+                            <SelectTrigger
+                              className={`h-7 text-xs ${staleLink ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
+                            >
+                              <SelectValue placeholder="不同步" />
                             </SelectTrigger>
                             <SelectContent>
-                              {candidates.length === 0 ? (
-                                <SelectItem value="__none__" disabled>
-                                  暂无可选
-                                </SelectItem>
-                              ) : (
-                                candidates.map((s) => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.model}
-                                    {s.providerId ? ` · ${s.providerId}` : ''}
-                                  </SelectItem>
-                                ))
+                              {staleSelf && (
+                                <SelectItem value={chosen}>{staleSelfName}（自选的供应商已失效）</SelectItem>
                               )}
+                              {staleLink && (
+                                <SelectItem value={chosen}>同步的供应商信息丢失</SelectItem>
+                              )}
+                              {opts.map((o) => (
+                                <SelectItem key={o.key} value={o.key}>
+                                  {o.kind === 'none'
+                                    ? '不同步'
+                                    : o.kind === 'self'
+                                      ? o.supplier
+                                      : `${o.referenceName}（同步于我们的${o.sourceProviderName}配置）`}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
+                          {staleLink && (
+                            <p className="mt-1 text-[11px] text-destructive">
+                              该联动来源已丢失，右侧不会产生可应用的修改。
+                            </p>
+                          )}
                         </td>
                         <td className="px-3 py-2">
-                          {changes.length === 0 ? (
+                          {resolved.status === 'none' ? (
+                            <div className="text-muted-foreground">—</div>
+                          ) : resolved.status === 'lost' ? (
+                            <div className="text-[11px] text-destructive">同步的供应商信息丢失</div>
+                          ) : resolved.status === 'unknown' ? (
+                            <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
+                          ) : changes.length === 0 ? (
                             <div className="text-muted-foreground">—</div>
                           ) : (
                             <ul className="space-y-1.5">
@@ -388,26 +510,15 @@ export function AgentModelInfoMatchDialog({
         <div className="flex justify-end gap-2 border-t border-border pt-2">
           <Button
             variant="default"
-            disabled={applying || models.length === 0 || checkedCount === 0}
+            disabled={applying || loading || models.length === 0 || checkedCount === 0}
             onClick={() => void handleSave()}
           >
-            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认同步'}
+            {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认应用'}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
   )
-}
-
-function findBestMatch(modelId: string, sources: readonly PriceConfig[]): PriceConfig | null {
-  const needle = modelId.toLowerCase()
-  const exact = sources.find((s) => s.model.toLowerCase() === needle)
-  if (exact) return exact
-  const contains = sources.find((s) => s.model.toLowerCase().includes(needle) || needle.includes(s.model.toLowerCase()))
-  if (contains) return contains
-  const alias = sources.find((s) => s.aliases.some((a) => a.toLowerCase() === needle))
-  if (alias) return alias
-  return null
 }
 
 function Placeholder({
