@@ -2087,7 +2087,7 @@ function ColumnHeader({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex h-[34px] items-center justify-between border-b border-border bg-muted/30 px-3">
+    <div className="flex h-9 items-center justify-between border-b border-border bg-muted/30 px-3">
       <span className="truncate text-xs font-medium text-muted-foreground">{children}</span>
       {action}
     </div>

@@ -60,7 +60,9 @@ export function HandlesRail({
           key={segmentIds && segmentIds[i] != null ? segmentIds[i] : `seg-${i}`}
           type="target"
           position={Position.Left}
-          id={segmentIds && segmentIds[i] != null ? segmentIds[i]! : undefined}
+          // 匿名段也要有稳定 id：React Flow 对无 targetHandle 的 edge 取
+          // handleBounds[0]，多线入同一节点时会全部挤到第一个 handle 上。
+          id={segmentIds && segmentIds[i] != null ? segmentIds[i]! : `seg-${i}`}
           style={{
             top: centerOffset + i * step,
             width: target.width,

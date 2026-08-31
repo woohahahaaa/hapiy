@@ -951,12 +951,20 @@ export function TopologyPage() {
   const baseEdges = useMemo<Edge[]>(() => {
     if (!canvas) return []
     const edges: Edge[] = []
+    // slot 入线按 canvasWires 顺序分配 targetHandle（= HandlesRail 匿名段的
+    // `seg-i` id）：无 targetHandle 的 edge 会被 React Flow 锚到第一个 handle，
+    // 导致多线入同一个 slot 时全部挤在第一个点上。
+    const slotIds = new Set(canvas.topLevel.filter((n) => n.kind === 'slot').map((n) => n.id))
+    const segIndexOf = new Map<string, number>()
     for (const w of canvas.canvasWires) {
+      const segIndex = segIndexOf.get(w.target) ?? 0
+      segIndexOf.set(w.target, segIndex + 1)
       edges.push({
         id: wiringEdgeId(w.source, w.target),
         source: w.source,
         target: w.target,
         type: 'flowLight',
+        targetHandle: slotIds.has(w.target) ? `seg-${segIndex}` : undefined,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
       })

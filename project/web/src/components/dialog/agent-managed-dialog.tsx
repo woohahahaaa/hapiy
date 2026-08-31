@@ -369,17 +369,24 @@ function ProviderMultiSelect({
 
   useEffect(() => {
     if (!open) return
+    const inFloat = (target: EventTarget | null): boolean => {
+      const node = target as Node | null
+      if (!node) return false
+      return Boolean(rootRef.current?.contains(node) || panelRef.current?.contains(node))
+    }
     const onDocMousedown = (e: MouseEvent) => {
-      const inRoot = rootRef.current?.contains(e.target as Node)
       // 面板经 createPortal 渲染到 body，不包含在 rootRef 内；点击面板
       // 内选项不能当成“点击外部”而关闭。
-      const inPanel = panelRef.current?.contains(e.target as Node)
-      if (!inRoot && !inPanel) setOpen(false)
+      if (!inFloat(e.target)) setOpen(false)
     }
     const onDocKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    const onScroll = () => setOpen(false)
+    const onScroll = (e: Event) => {
+      // 面板/触发器内部的滚动（尤其触屏设备点击选项 / 滚动列表）不能把
+      // 下拉关掉；只有外部页面滚动才关闭。
+      if (!inFloat(e.target)) setOpen(false)
+    }
     document.addEventListener('mousedown', onDocMousedown)
     document.addEventListener('keydown', onDocKeydown)
     document.addEventListener('scroll', onScroll, true)

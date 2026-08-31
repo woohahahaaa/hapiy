@@ -70,10 +70,6 @@ interface FieldChange {
   readonly newValue: unknown
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function displayValue(value: unknown): string {
   if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : '—'
   if (value === null || value === undefined) return '—'
@@ -232,20 +228,6 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
-  // config 概览：把对象拍平成 "k: v" 串供模型名下方展示。
-  const flattenConfig = (config: unknown): string => {
-    if (!isRecord(config)) return ''
-    const parts: string[] = []
-    for (const [k, v] of Object.entries(config)) {
-      if (v === null || v === undefined) continue
-      const s = typeof v === 'object'
-        ? (Array.isArray(v) ? v.join(', ') : JSON.stringify(v))
-        : String(v)
-      if (s !== '' && s !== '{}' && s !== '[]') parts.push(`${k}: ${s}`)
-    }
-    return parts.join(' · ')
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
@@ -261,12 +243,12 @@ export function AgentModelInfoMatchDialog({
           )}
           {!loading && !error && rowCount > 0 && (
             <>
-              <div className="overflow-auto">
-                <table className="w-full text-xs">
+              <div className="overflow-hidden rounded-md border border-border">
+                <table className="w-full table-fixed text-xs">
                   <thead className="bg-muted/40 text-muted-foreground">
                     <tr>
-                      <th className="min-w-[240px] px-2 py-2 text-left font-medium">模型</th>
-                      <th className="min-w-[200px] px-2 py-2 text-left font-medium">
+                      <th className="w-[30%] px-2 py-2 text-left font-medium">模型</th>
+                      <th className="w-[30%] px-2 py-2 text-left font-medium">
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
@@ -276,7 +258,7 @@ export function AgentModelInfoMatchDialog({
                           所属供应商
                         </div>
                       </th>
-                      <th className="min-w-[260px] px-2 py-2 text-left font-medium">将应用的修改</th>
+                      <th className="w-[40%] px-2 py-2 text-left font-medium">将应用的修改</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -289,17 +271,7 @@ export function AgentModelInfoMatchDialog({
                           <tr key={rowKey(r.providerId, r.modelId)} className="align-top hover:bg-muted">
                             {isFirstRow && (
                               <td rowSpan={g.rows.length} className="px-2 py-2 align-top">
-                                <div className="font-medium">{g.modelId}</div>
-                                <div className="mt-1 space-y-1">
-                                  {g.rows.map((cr) => (
-                                    <div key={rowKey(cr.providerId, cr.modelId)} className="text-[11px] leading-snug text-muted-foreground">
-                                      <span className="font-medium text-foreground">{cr.providerId}</span>
-                                      <div className="truncate" title={flattenConfig(cr.config) || '—'}>
-                                        {flattenConfig(cr.config) || '—'}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                                <div className="break-words font-medium">{g.modelId}</div>
                               </td>
                             )}
                             <td className="px-2 py-2">
@@ -314,7 +286,7 @@ export function AgentModelInfoMatchDialog({
                                   }
                                   aria-label={`选择 ${g.modelId} · ${r.providerId}`}
                                 />
-                                <span className="font-mono">{r.providerId}</span>
+                                <span className="break-words font-mono">{r.providerId}</span>
                               </div>
                             </td>
                             <td className="px-2 py-2">
