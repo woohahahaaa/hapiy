@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -167,6 +168,29 @@ func itoa(v int) string {
 		v /= 10
 	}
 	return string(buf[i:])
+}
+
+// findModelsDevRow returns the models.dev row whose model name matches
+// modelValue (id / name, case-insensitive, falling back to a fully
+// qualified id whose trailing segment equals modelValue) AND whose
+// provider equals supplierName (case-insensitive).
+func findModelsDevRow(models []modelsDevModel, modelValue, supplierName string) (modelsDevModel, bool) {
+	needle := strings.ToLower(strings.TrimSpace(modelValue))
+	supplier := strings.ToLower(strings.TrimSpace(supplierName))
+	if needle == "" || supplier == "" {
+		return modelsDevModel{}, false
+	}
+	for _, m := range models {
+		if strings.ToLower(m.ProviderName) != supplier {
+			continue
+		}
+		id := strings.ToLower(m.ID)
+		name := strings.ToLower(m.Name)
+		if id == needle || name == needle || strings.HasSuffix(id, "/"+needle) {
+			return m, true
+		}
+	}
+	return modelsDevModel{}, false
 }
 
 func ModelsDevList() gin.HandlerFunc {

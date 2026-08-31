@@ -55,13 +55,14 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		type option struct {
-			ID            string   `json:"id"`
-			Name          string   `json:"name"`
-			Status        bool     `json:"status"`
-			Endpoints     []string `json:"endpoints"`
-			Models        []string `json:"models"`
-			EndpointCount int      `json:"endpoint_count"`
-			ModelCount    int      `json:"model_count"`
+			ID             string              `json:"id"`
+			Name           string              `json:"name"`
+			Status         bool                `json:"status"`
+			Endpoints      []string            `json:"endpoints"`
+			Models         []string            `json:"models"`
+			ModelEndpoints map[string][]string `json:"model_endpoints"`
+			EndpointCount  int                 `json:"endpoint_count"`
+			ModelCount     int                 `json:"model_count"`
 		}
 		out := make([]option, 0, len(providers))
 		for _, p := range providers {
@@ -70,7 +71,8 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 			out = append(out, option{
 				ID: p.ID, Name: p.Name, Status: p.Status,
 				Endpoints: eps, Models: mods,
-				EndpointCount: len(eps), ModelCount: len(mods),
+				ModelEndpoints: parseProviderModelEndpoints(p.Models),
+				EndpointCount:  len(eps), ModelCount: len(mods),
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"data": out})
@@ -98,11 +100,6 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		prices, err := loadAllPrices(db)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 		rule, ok := loadRuleForRow(c, db, row)
 		if !ok {
 			return
@@ -114,7 +111,7 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		out := make([]managedProviderView, 0, len(managed))
 		for _, m := range managed {
-			view := deriveManagedProvider(rule, row, liveProviders, prices, content, m)
+			view := deriveManagedProvider(rule, row, liveProviders, content, m)
 			out = append(out, view)
 		}
 		c.JSON(http.StatusOK, gin.H{"data": out})
@@ -237,11 +234,6 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		prices, err := loadAllPrices(db)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
@@ -267,13 +259,32 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		ids, _ := m.GetProviderIDs()
 		live, _ := liveProvision(ids, liveProviders)
+		byID := map[string]model.Provider{}
+		for _, p := range liveProviders {
+			byID[p.ID] = p
+		}
+		membersOf := func(g model.ManagedAgentGroup) []model.Provider {
+			if members := live[g.Endpoint]; len(members) > 0 {
+				return members
+			}
+			var out []model.Provider
+			for _, pid := range g.ProviderIDs {
+				if p, ok := byID[pid]; ok {
+					out = append(out, p)
+				}
+			}
+			return out
+		}
 
 		cleaned := stripJSON5Comments(content)
 		buf := []byte(cleaned)
 		synced := 0
-		for endpoint, members := range live {
-			stored := groupsByEndpoint[endpoint]
-			gen := buildGeneratedBlock(rule, jpaths, stored, members, prices)
+		for _, stored := range groupsByEndpoint {
+			members := membersOf(stored)
+			if len(members) == 0 {
+				continue
+			}
+			gen := buildGeneratedBlock(rule, jpaths, stored, members)
 			fullName := providerBlockName(m.Name, stored.Suffix)
 			providerIDPath := jpaths.Provider + "." + fullName
 			for k, v := range gen["provider"].(map[string]any) {
@@ -341,21 +352,42 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		return err.Error()
 	}
 	live, _ := liveProvision(req.ProviderIDs, liveProviders)
-	if len(live) == 0 {
+	byID := map[string]model.Provider{}
+	for _, p := range liveProviders {
+		byID[p.ID] = p
+	}
+	groupActive := func(g model.ManagedAgentGroup) bool {
+		if len(live[g.Endpoint]) > 0 {
+			return true
+		}
+		for _, pid := range g.ProviderIDs {
+			if _, ok := byID[pid]; ok {
+				return true
+			}
+		}
+		return false
+	}
+	activeGroups := make([]model.ManagedAgentGroup, 0, len(req.Groups))
+	for _, g := range req.Groups {
+		if groupActive(g) {
+			activeGroups = append(activeGroups, g)
+		}
+	}
+	if len(activeGroups) == 0 {
 		return "所选供应商没有可用的 endpoint"
 	}
 
-	// 1. suffix rules: required + unique when more than one group.
-	groupsByEndpoint := make(map[string]model.ManagedAgentGroup, len(req.Groups))
-	for _, g := range req.Groups {
+	// 1. suffix rules: required + unique when more than one active group.
+	groupsByEndpoint := make(map[string]model.ManagedAgentGroup, len(activeGroups))
+	for _, g := range activeGroups {
 		groupsByEndpoint[g.Endpoint] = g
 	}
-	if len(live) > 1 {
-		seen := make(map[string]bool, len(live))
-		for endpoint := range live {
-			suffix := strings.TrimSpace(groupsByEndpoint[endpoint].Suffix)
+	if len(activeGroups) > 1 {
+		seen := make(map[string]bool, len(activeGroups))
+		for _, g := range activeGroups {
+			suffix := strings.TrimSpace(g.Suffix)
 			if suffix == "" {
-				return fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", endpoint)
+				return fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", g.Endpoint)
 			}
 			if seen[suffix] {
 				return fmt.Sprintf("后缀 %q 重复", suffix)
@@ -383,9 +415,8 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 			}
 		}
 	}
-	for endpoint := range live {
-		suffix := strings.TrimSpace(groupsByEndpoint[endpoint].Suffix)
-		full := providerBlockName(name, suffix)
+	for _, g := range activeGroups {
+		full := providerBlockName(name, strings.TrimSpace(g.Suffix))
 		if existing[full] {
 			return fmt.Sprintf("名称 %q 与配置文件里已有的 provider 同名，请更换名字或后缀", full)
 		}
@@ -414,8 +445,8 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 			if blockName == name {
 				return fmt.Sprintf("名称 %q 与其他托管 provider 同名", name)
 			}
-			for endpoint := range live {
-				full := providerBlockName(name, strings.TrimSpace(groupsByEndpoint[endpoint].Suffix))
+			for _, ag := range activeGroups {
+				full := providerBlockName(name, strings.TrimSpace(ag.Suffix))
 				if blockName == full && full != "" {
 					return fmt.Sprintf("名称 %q 与其他托管 provider 的分组同名", full)
 				}
@@ -429,30 +460,47 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 // linked providers, merges persisted suffix / model sources by exact
 // endpoint, marks hidden groups and stale ids, and computes pending
 // sync per group by comparing the generated block with the file.
-func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, liveProviders []model.Provider, prices []model.PriceConfig, content string, m model.ManagedAgentProvider) managedProviderView {
+func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, liveProviders []model.Provider, content string, m model.ManagedAgentProvider) managedProviderView {
 	view := managedProviderView{ID: m.ID, Name: m.Name}
 	view.ProviderIDs, _ = m.GetProviderIDs()
 	live, deletedIDs := liveProvision(view.ProviderIDs, liveProviders)
 	view.StaleProviderIDs = deletedIDs
 	storedGroups, _ := m.GetGroups()
-	storedByEndpoint := make(map[string]model.ManagedAgentGroup, len(storedGroups))
-	for _, g := range storedGroups {
-		storedByEndpoint[g.Endpoint] = g
+	byID := map[string]model.Provider{}
+	for _, p := range liveProviders {
+		byID[p.ID] = p
+	}
+	membersOf := func(g model.ManagedAgentGroup) []model.Provider {
+		if members := live[g.Endpoint]; len(members) > 0 {
+			return members
+		}
+		var out []model.Provider
+		for _, pid := range g.ProviderIDs {
+			if p, ok := byID[pid]; ok {
+				out = append(out, p)
+			}
+		}
+		return out
 	}
 	jpaths, _ := rule.GetJsonPaths()
 	provResult := gjson.Parse(stripJSON5Comments(content)).Get(jpaths.Provider)
 
-	// Hidden = persisted groups whose endpoint has no live members.
+	// Hidden = persisted groups that resolve no live members (deleted or
+	// paused providers for ordinary endpoint groups; dangling ids for the
+	// 未配置 endpoint group).
 	for _, stored := range storedGroups {
-		if _, ok := live[stored.Endpoint]; !ok {
+		if len(membersOf(stored)) == 0 {
 			view.HiddenGroups = append(view.HiddenGroups, stored)
 		}
 	}
 
-	for endpoint, members := range live {
-		stored := storedByEndpoint[endpoint]
+	for _, stored := range storedGroups {
+		members := membersOf(stored)
+		if len(members) == 0 {
+			continue
+		}
 		mv := managedGroupView{
-			Endpoint:     endpoint,
+			Endpoint:     stored.Endpoint,
 			Suffix:       stored.Suffix,
 			ModelSources: stored.ModelSources,
 		}
@@ -461,7 +509,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		}
 		mv.ModelNames = uniqueSorted(membersModelNames(members))
 		mv.ModelCount = len(mv.ModelNames)
-		gen := buildGeneratedBlock(rule, jpaths, stored, members, prices)
+		gen := buildGeneratedBlock(rule, jpaths, stored, members)
 		mv.Generated = gen
 		fullName := providerBlockName(m.Name, stored.Suffix)
 		actual := normalizeFileProvider(provResult.Get(fullName), jpaths)
@@ -482,7 +530,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 // itself (written into the protocol's/provider baseURL-ish field when
 // present), and the model list with the four unified fields filled from
 // the chosen model-info sources.
-func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, prices []model.PriceConfig) map[string]any {
+func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider) map[string]any {
 	recs, _ := rule.GetRecommendations()
 	protocols, _ := rule.GetProtocols()
 	mif, _ := rule.GetModelInfoFields()
@@ -494,6 +542,12 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 		providerRecs = append(providerRecs, recsForScope(protocol.Recommendations, "provider")...)
 		modelRecs = append(modelRecs, recsForScope(protocol.Recommendations, "model")...)
 	}
+
+	// models.dev snapshot for the reference-supplier capability lookup.
+	// Fetch failures degrade to "no model info" rather than failing the
+	// whole view/sync: the snapshot endpoint served the UI already, and a
+	// transient network error must not break config generation.
+	mdModels, _ := modelsDev.load()
 
 	block := map[string]any{}
 	for _, r := range providerRecs {
@@ -525,9 +579,9 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 			}
 			_ = setDottedValue(cfg, r.Key, r.Recommended)
 		}
-		if priceID := group.ModelSources[name]; priceID != "" {
-			if price, ok := findPriceByID(prices, priceID); ok {
-				applyModelInfo(price, mif, cfg)
+		if supplier := group.ModelSources[name]; supplier != "" {
+			if row, ok := findModelsDevRow(mdModels, name, supplier); ok {
+				applyModelInfoFromModelsDev(row, mif, cfg)
 			}
 		}
 		// Only carry models that would actually be written into the file
@@ -605,24 +659,28 @@ func firstKeyOf(members []model.Provider) string {
 // applyModelInfo writes the four unified model-info fields at their
 // rule-configured paths. Numbers are stored when > 0; array fields
 // (supported types / thinking levels) keep their array shape.
-func applyModelInfo(price model.PriceConfig, mif model.AgentModelInfoFieldPaths, cfg map[string]any) {
-	if strings.TrimSpace(mif.MaxContext) != "" && price.ContextLength > 0 {
-		_ = setDottedValue(cfg, mif.MaxContext, price.ContextLength)
+// applyModelInfoFromModelsDev fills the four unified model-config fields
+// from a models.dev row (matched by the model name + the reference
+// supplier stored in the group's ModelSources). Nothing is persisted
+// here: the view / generation reads the live snapshot each time.
+func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFieldPaths, cfg map[string]any) {
+	if strings.TrimSpace(mif.MaxContext) != "" && row.ContextLength > 0 {
+		_ = setDottedValue(cfg, mif.MaxContext, row.ContextLength)
 	}
-	if strings.TrimSpace(mif.MaxOutputToken) != "" && price.MaxToken > 0 {
-		_ = setDottedValue(cfg, mif.MaxOutputToken, price.MaxToken)
+	if strings.TrimSpace(mif.MaxOutputToken) != "" && row.MaxOutput > 0 {
+		_ = setDottedValue(cfg, mif.MaxOutputToken, row.MaxOutput)
 	}
-	if arr := parseStringArray(price.SupportedTypes); len(arr) > 0 && strings.TrimSpace(mif.InputTypes) != "" {
-		vals := make([]any, len(arr))
-		for i, s := range arr {
+	if len(row.InputTypes) > 0 && strings.TrimSpace(mif.InputTypes) != "" {
+		vals := make([]any, len(row.InputTypes))
+		for i, s := range row.InputTypes {
 			vals[i] = s
 		}
 		_ = setDottedValue(cfg, mif.InputTypes, vals)
 	}
-	if arr := parseStringArray(price.ThinkingLevels); len(arr) > 0 && strings.TrimSpace(mif.ThinkingLevels) != "" {
-		vals := make([]any, len(arr))
-		for i, s := range arr {
-			vals[i] = s
+	if strings.TrimSpace(mif.ThinkingLevels) != "" {
+		vals := []any{}
+		if row.Reasoning {
+			vals = append(vals, "high")
 		}
 		_ = setDottedValue(cfg, mif.ThinkingLevels, vals)
 	}
@@ -906,29 +964,51 @@ func parseProviderModelNames(raw string) []string {
 	return out
 }
 
+// parseProviderModelEndpoints extracts each model's endpoint list from a
+// system Provider row (object-array shape [{"model":"x","endpoints":[...]}])
+// keyed by model name. Plain string arrays and rows without a models array
+// yield an empty map (front end then treats every model as 不限). This
+// powers the managed-provider dialog's endpoint grouping: a model whose
+// endpoints are empty (不限) is matched against the supplier's first
+// endpoint, while explicit endpoints land in their own groups.
+func parseProviderModelEndpoints(raw string) map[string][]string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var plain []string
+	if err := json.Unmarshal([]byte(raw), &plain); err == nil {
+		return nil // no per-model endpoint info
+	}
+	var objs []struct {
+		Model     string   `json:"model"`
+		Endpoints []string `json:"endpoints"`
+	}
+	if err := json.Unmarshal([]byte(raw), &objs); err != nil {
+		return nil
+	}
+	out := make(map[string][]string, len(objs))
+	for _, o := range objs {
+		name := strings.TrimSpace(o.Model)
+		if name == "" {
+			continue
+		}
+		var eps []string
+		for _, e := range o.Endpoints {
+			if e = strings.TrimSpace(e); e != "" {
+				eps = append(eps, e)
+			}
+		}
+		out[name] = eps
+	}
+	return out
+}
+
 func loadLiveProviders(db *gorm.DB) ([]model.Provider, error) {
 	var providers []model.Provider
 	if err := db.Find(&providers).Error; err != nil {
 		return nil, err
 	}
 	return providers, nil
-}
-
-func loadAllPrices(db *gorm.DB) ([]model.PriceConfig, error) {
-	var prices []model.PriceConfig
-	if err := db.Find(&prices).Error; err != nil {
-		return nil, err
-	}
-	return prices, nil
-}
-
-func findPriceByID(prices []model.PriceConfig, id string) (model.PriceConfig, bool) {
-	for _, p := range prices {
-		if p.ID == id {
-			return p, true
-		}
-	}
-	return model.PriceConfig{}, false
 }
 
 func loadRule(db *gorm.DB, name string) (model.AgentTypeRule, error) {

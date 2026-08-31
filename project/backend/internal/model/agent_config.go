@@ -561,6 +561,11 @@ type ManagedAgentGroup struct {
 	Endpoint     string            `json:"endpoint"`
 	Suffix       string            `json:"suffix"`
 	ModelSources map[string]string `json:"model_sources"`
+	// ProviderIDs holds the system Provider ids backing this group. It is
+	// only populated for the 未配置 endpoint group (providers with no
+	// endpoints), whose members cannot be derived by matching the hand-typed
+	// endpoint against any provider's endpoint list.
+	ProviderIDs []string `json:"provider_ids,omitempty"`
 }
 
 // ManagedAgentProvider — a "托管 provider" bound to one agent config

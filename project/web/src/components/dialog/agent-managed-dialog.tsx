@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,14 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
-import {
-  dashboardApi,
-  type AgentConfigFile,
-  type ManagedAgentGroup,
-  type ManagedProviderOption,
-  type ManagedProviderView,
-  type PriceConfig,
-} from '@/lib/dashboard-api'
+import { dashboardApi, type AgentConfigFile, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView } from '@/lib/dashboard-api'
+import { loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 
 interface ManagedProviderDialogProps {
   open: boolean
@@ -41,6 +36,7 @@ interface EndpointGroup {
   readonly endpoint: string
   readonly providerNames: readonly string[]
   readonly modelNames: readonly string[]
+  readonly noEndpointProviderIds?: readonly string[] // 未配置 endpoint 组成员 app provider ids
 }
 
 export function ManagedProviderDialog({
@@ -51,7 +47,7 @@ export function ManagedProviderDialog({
   onSaved,
 }: ManagedProviderDialogProps) {
   const [options, setOptions] = useState<readonly ManagedProviderOption[]>([])
-  const [prices, setPrices] = useState<readonly PriceConfig[]>([])
+  const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -59,6 +55,9 @@ export function ManagedProviderDialog({
   // so re-derivation (e.g. after toggling a supplier) keeps their edits.
   const [suffixByEndpoint, setSuffixByEndpoint] = useState<Record<string, string>>({})
   const [sourceByEndpoint, setSourceByEndpoint] = useState<Record<string, Record<string, string>>>({})
+  // endpointByEndpoint lets the 未配置 endpoint group accept a manual
+  // endpoint that replaces the sentinel on submit.
+  const [manualEndpoint, setManualEndpoint] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!open || !record) return
@@ -67,10 +66,11 @@ export function ManagedProviderDialog({
     setChecked(new Set())
     setSuffixByEndpoint({})
     setSourceByEndpoint({})
-    Promise.all([dashboardApi.listManagedProviderOptions(), dashboardApi.listPrices({ limit: 1000, offset: 0 })])
-      .then(([opts, pricesRes]) => {
+    setManualEndpoint({})
+    Promise.all([dashboardApi.listManagedProviderOptions(), loadModelsDevModels()])
+      .then(([opts, models]) => {
         setOptions(opts)
-        setPrices(pricesRes.prices)
+        setSnapshot(models)
         if (editing) {
           setName(editing.name)
           setChecked(new Set(editing.provider_ids))
@@ -93,25 +93,58 @@ export function ManagedProviderDialog({
   }, [open, record, editing])
 
   // Derived groups: identical endpoints merge; models union by name.
+  // Providers without any endpoint form a special 未配置 endpoint group;
+  // a model whose endpoints list is empty (不限) is matched against the
+  // supplier's first endpoint.
   const deriveGroups = (checkedValue: ReadonlySet<string>): readonly EndpointGroup[] => {
-    const byEndpoint = new Map<string, { providers: string[]; models: string[] }>()
+    interface Acc {
+      providers: string[]
+      models: string[]
+    }
+    const byEndpoint = new Map<string, Acc>()
+    const noEndpoint: Acc = { providers: [], models: [] }
+    const noEndpointIds: string[] = []
     for (const opt of options) {
       if (!checkedValue.has(opt.id) || !opt.status) continue
-      if (opt.endpoints.length === 0) continue
+      if (opt.endpoints.length === 0) {
+        for (const m of opt.models) {
+          if (!noEndpoint.models.includes(m)) noEndpoint.models.push(m)
+        }
+        if (!noEndpoint.providers.includes(opt.name)) noEndpoint.providers.push(opt.name)
+        if (!noEndpointIds.includes(opt.id)) noEndpointIds.push(opt.id)
+        continue
+      }
       for (const ep of opt.endpoints) {
         const cur = byEndpoint.get(ep) ?? { providers: [], models: [] }
         if (!cur.providers.includes(opt.name)) cur.providers.push(opt.name)
+        const mep = opt.model_endpoints ?? {}
         for (const m of opt.models) {
+          const modelEps = mep[m] ?? []
+          // 模型设了明确 endpoint 才进对应组；空（不限）归入供应商第一个 endpoint
+          if (modelEps.length > 0) {
+            if (!modelEps.includes(ep)) continue
+          } else if (ep !== opt.endpoints[0]) {
+            continue
+          }
           if (!cur.models.includes(m)) cur.models.push(m)
         }
         byEndpoint.set(ep, cur)
       }
     }
-    return [...byEndpoint.entries()].map(([endpoint, v]) => ({
+    const groups: EndpointGroup[] = [...byEndpoint.entries()].map(([endpoint, v]) => ({
       endpoint,
       providerNames: v.providers,
       modelNames: v.models,
     }))
+    if (noEndpoint.providers.length > 0) {
+      groups.push({
+        endpoint: '__none__',
+        providerNames: noEndpoint.providers,
+        modelNames: noEndpoint.models,
+        noEndpointProviderIds: noEndpointIds,
+      })
+    }
+    return groups
   }
 
   // groups (from `checked`) is authoritative for submit; deferredGroups is for
@@ -124,22 +157,8 @@ export function ManagedProviderDialog({
     [options, deferredChecked],
   )
 
-  const stale = useMemo(() => {
-    if (!editing) return []
-    const live = new Set(options.map((o) => o.id))
-    return (editing.stale_provider_ids ?? []).filter((id) => !live.has(id))
-  }, [editing, options])
-
-  // candidates for model info source: price rows matching the model name
-  const priceCandidates = (model: string): readonly PriceConfig[] => {
-    const needle = model.toLowerCase()
-    return prices.filter((p) => {
-      const id = p.model.toLowerCase()
-      const alias = p.aliases.some((a) => a.toLowerCase() === needle)
-      return id === needle || id.includes(needle) || needle.includes(id) || alias
-    })
-  }
-  // first candidate prefilled once a group's model sources are empty
+  // First candidate prefilled once a group's model sources are empty:
+  // the first models.dev supplier for the model, else nothing.
   const ensurePrefill = (endpoint: string, modelNames: readonly string[]) => {
     setSourceByEndpoint((prev) => {
       const cur = prev[endpoint] ?? {}
@@ -147,9 +166,9 @@ export function ManagedProviderDialog({
       const next = { ...cur }
       for (const m of modelNames) {
         if (next[m] !== undefined) continue
-        const c = priceCandidates(m)
+        const c = providersForModel(snapshot ?? [], m)
         if (c.length > 0) {
-          next[m] = c[0].id
+          next[m] = c[0].providerName
           changed = true
         }
       }
@@ -185,16 +204,42 @@ export function ManagedProviderDialog({
         }
       }
     }
-    const payload: ManagedAgentGroup[] = groups.map((g) => ({
-      endpoint: g.endpoint,
-      suffix: (suffixByEndpoint[g.endpoint] ?? '').trim(),
-      model_sources: sourceByEndpoint[g.endpoint] ?? {},
-    }))
+    const payload: ManagedAgentGroup[] = groups.map((g) => {
+      const endpoint = g.endpoint === '__none__'
+        ? (manualEndpoint['__none__'] ?? '').trim()
+        : g.endpoint
+      return {
+        endpoint,
+        suffix: (suffixByEndpoint[g.endpoint] ?? '').trim(),
+        model_sources: sourceByEndpoint[g.endpoint] ?? {},
+        ...(g.endpoint === '__none__' && g.noEndpointProviderIds ? { provider_ids: [...g.noEndpointProviderIds] } : {}),
+      }
+    })
+
+    // 供应商字段保留逻辑：比较「本次可用的供应商集合」与「编辑前可用的
+    // 供应商集合」。两者相等（例如用户把 D 改成了不可用，但只是重新保存）
+    // 时保持 DB 里的原始 provider_ids 不动，这样被删除供应商的记录依然
+    // 保留 —— 万一同一个 ID 日后复用能自动带回来。集合不同（增/减）才
+    // 全量重写，旧的已删记录随之消失。
+    let providerIds: readonly string[] = [...checked]
+    if (editing) {
+      const usableOf = (ids: readonly string[]): string[] =>
+        ids
+          .filter((id) => options.some((o) => o.id === id && o.status))
+          .sort()
+      const before = usableOf(editing.provider_ids)
+      const now = [...checked].sort()
+      const same = before.length === now.length && before.every((id, i) => id === now[i])
+      if (same) {
+        providerIds = editing.provider_ids
+      }
+    }
+
     try {
       if (editing) {
         await dashboardApi.updateManagedProvider(record.id, editing.id, {
           name: trimmed,
-          provider_ids: [...checked],
+          provider_ids: [...providerIds],
           groups: payload,
         })
         toast('已保存托管 provider')
@@ -219,7 +264,7 @@ export function ManagedProviderDialog({
         width="lg"
         height="auto"
         minHeight={420}
-        className="flex max-h-[85vh] flex-col"
+        className="flex max-h-[70vh] flex-col"
       >
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
@@ -251,7 +296,6 @@ export function ManagedProviderDialog({
                   loading={loading}
                   options={options}
                   checked={checked}
-                  staleChecked={editing ? stale.filter((id) => editing.provider_ids.includes(id)) : []}
                   onToggle={toggleProvider}
                 />
               </Field>
@@ -273,14 +317,18 @@ export function ManagedProviderDialog({
                         onSuffixChange={(v) =>
                           setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: v }))
                         }
-                        prices={prices}
+                        snapshot={snapshot}
                         sources={sourceByEndpoint[g.endpoint] ?? {}}
-                        onSourceChange={(model, priceId) => {
+                        onSourceChange={(model, supplier) => {
                           setSourceByEndpoint((prev) => ({
                             ...prev,
-                            [g.endpoint]: { ...(prev[g.endpoint] ?? {}), [model]: priceId },
+                            [g.endpoint]: { ...(prev[g.endpoint] ?? {}), [model]: supplier },
                           }))
                         }}
+                        manualEndpoint={manualEndpoint[g.endpoint] ?? ''}
+                        onManualEndpoint={(v) =>
+                          setManualEndpoint((prev) => ({ ...prev, [g.endpoint]: v }))
+                        }
                         onPrefill={() => ensurePrefill(g.endpoint, g.modelNames)}
                         hidden={false}
                       />
@@ -305,16 +353,15 @@ function ProviderMultiSelect({
   loading,
   options,
   checked,
-  staleChecked,
   onToggle,
 }: {
   loading: boolean
   options: readonly ManagedProviderOption[]
   checked: ReadonlySet<string>
-  staleChecked: readonly string[]
   onToggle: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -325,13 +372,28 @@ function ProviderMultiSelect({
     const onDocKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
+    const onScroll = () => setOpen(false)
     document.addEventListener('mousedown', onDocMousedown)
     document.addEventListener('keydown', onDocKeydown)
+    document.addEventListener('scroll', onScroll, true)
     return () => {
       document.removeEventListener('mousedown', onDocMousedown)
       document.removeEventListener('keydown', onDocKeydown)
+      document.removeEventListener('scroll', onScroll, true)
     }
   }, [open])
+
+  const toggleOpen = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const el = rootRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    setAnchor({ top: r.bottom, left: r.left, width: r.width })
+    setOpen(true)
+  }
 
   const checkedOptions = options.filter((o) => checked.has(o.id))
 
@@ -339,7 +401,7 @@ function ProviderMultiSelect({
     <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
         aria-expanded={open}
         className={
           'flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 ' +
@@ -347,7 +409,7 @@ function ProviderMultiSelect({
         }
       >
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {checkedOptions.length === 0 && staleChecked.length === 0 ? (
+          {checkedOptions.length === 0 ? (
             <span className="text-muted-foreground">点击展开选择要托管的供应商</span>
           ) : (
             <>
@@ -368,15 +430,6 @@ function ProviderMultiSelect({
                   </button>
                 </span>
               ))}
-              {staleChecked.map((id) => (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 opacity-40"
-                >
-                  <span className="truncate">{id.slice(0, 8)}…</span>
-                  <span className="text-muted-foreground">（已删除）</span>
-                </span>
-              ))}
             </>
           )}
         </span>
@@ -387,66 +440,61 @@ function ProviderMultiSelect({
         />
       </button>
 
-      {open && (
-        <div className="absolute z-10 mt-1 max-h-[220px] w-full overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md">
-          {loading ? (
-            <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
-          ) : (
-            <ul role="listbox" aria-multiselectable="true">
-              {options.map((opt) => {
-                const selected = checked.has(opt.id)
-                const disabled = !opt.status
-                return (
-                  <li key={opt.id}>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => onToggle(opt.id)}
-                      role="option"
-                      aria-selected={selected}
-                      className={
-                        'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs select-none ' +
-                        (disabled
-                          ? 'cursor-not-allowed opacity-40'
-                          : selected
-                            ? 'bg-muted/60'
-                            : 'hover:bg-muted/40')
-                      }
-                    >
-                      <span
+      {open &&
+        anchor &&
+        createPortal(
+          <div
+            style={{ position: 'fixed', top: anchor.top + 4, left: anchor.left, width: anchor.width }}
+            className="z-[70] max-h-[220px] overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+          >
+            {loading ? (
+              <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
+            ) : (
+              <ul role="listbox" aria-multiselectable="true">
+                {options.map((opt) => {
+                  const selected = checked.has(opt.id)
+                  const disabled = !opt.status
+                  return (
+                    <li key={opt.id}>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => onToggle(opt.id)}
+                        role="option"
+                        aria-selected={selected}
                         className={
-                          'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ' +
-                          (selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
+                          'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs select-none ' +
+                          (disabled
+                            ? 'cursor-not-allowed opacity-40'
+                            : selected
+                              ? 'bg-muted/60'
+                              : 'hover:bg-muted/40')
                         }
                       >
-                        {selected && <AppIcon name="check" size={12} />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
-                        {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
-                      </span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {opt.modelCount} 模型 · {opt.endpointCount} endpoint
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-              {staleChecked.map((id) => (
-                <li key={id} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs opacity-40">
-                  <span className="h-4 w-4 shrink-0 rounded-sm border border-input">
-                    <AppIcon name="check" size={12} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    {id.slice(0, 8)}…
-                    <span className="ml-1 text-muted-foreground">（已删除）</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+                        <span
+                          className={
+                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ' +
+                            (selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
+                          }
+                        >
+                          {selected && <AppIcon name="check" size={12} />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
+                          {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {opt.modelCount} 模型 · {opt.endpointCount} endpoint
+                        </span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -455,18 +503,22 @@ function GroupCard({
   group,
   suffix,
   onSuffixChange,
-  prices,
+  snapshot,
   sources,
   onSourceChange,
+  manualEndpoint,
+  onManualEndpoint,
   onPrefill,
   hidden,
 }: {
   group: EndpointGroup
   suffix: string
   onSuffixChange: (v: string) => void
-  prices: readonly PriceConfig[]
+  snapshot: readonly ModelsDevModel[] | null
   sources: Record<string, string>
-  onSourceChange: (model: string, priceId: string) => void
+  onSourceChange: (model: string, supplier: string) => void
+  manualEndpoint: string
+  onManualEndpoint: (v: string) => void
   onPrefill: () => void
   hidden: boolean
 }) {
@@ -475,14 +527,7 @@ function GroupCard({
     onPrefill()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group.endpoint, group.modelNames.length])
-  const priceCandidates = (model: string): readonly PriceConfig[] => {
-    const needle = model.toLowerCase()
-    return prices.filter((p) => {
-      const id = p.model.toLowerCase()
-      const alias = p.aliases.some((a) => a.toLowerCase() === needle)
-      return id === needle || id.includes(needle) || needle.includes(id) || alias
-    })
-  }
+  const isNoEndpoint = group.endpoint === '__none__'
   return (
     <div className={'rounded-md border border-border ' + (hidden ? 'opacity-40' : '')}>
       <button
@@ -495,7 +540,13 @@ function GroupCard({
           size={12}
           className={'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')}
         />
-        <span className="flex-1 truncate font-mono font-medium">{group.endpoint}</span>
+        <span className="flex-1 truncate font-mono font-medium">
+          {isNoEndpoint ? (
+            <span className="text-warning">未配置 endpoint</span>
+          ) : (
+            group.endpoint
+          )}
+        </span>
         <span className="shrink-0 text-muted-foreground">
           {group.modelNames.length} 个合并模型 · {group.providerNames.join('、')}
         </span>
@@ -511,50 +562,52 @@ function GroupCard({
               className="h-7 flex-1 text-xs font-mono"
             />
           </div>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-1 text-left font-medium">模型</th>
-                  <th className="w-[46%] px-2 py-1 text-left font-medium">模型信息数据源</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {group.modelNames.map((m) => {
-                  const cands = priceCandidates(m)
-                  return (
-                    <tr key={m}>
-                      <td className="px-2 py-1 font-mono">{m}</td>
-                      <td className="px-2 py-1">
-                        <Select
-                          value={sources[m] ?? ''}
-                          onValueChange={cands.length === 0 ? undefined : (v) => onSourceChange(m, v)}
-                        >
-                          <SelectTrigger className="h-7 w-full text-xs" disabled={cands.length === 0}>
-                            <SelectValue placeholder={cands.length === 0 ? '无数据' : '选择数据源'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cands.length === 0 ? (
-                              <SelectItem value="" disabled>无数据</SelectItem>
-                            ) : (
-                              <>
-                                <SelectItem value="">（不填）</SelectItem>
-                                {cands.map((c) => (
-                                  <SelectItem key={c.id} value={c.id}>
-                                    {c.model}
-                                    {c.providerId ? ` · ${c.providerId}` : ''}
-                                  </SelectItem>
-                                ))}
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          {isNoEndpoint && (
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-xs text-muted-foreground">endpoint</span>
+              <Input
+                value={manualEndpoint}
+                onChange={(e) => onManualEndpoint(e.target.value)}
+                placeholder="该供应商未配置 endpoint，可手动输入，例如 /v1/chat/completions"
+                className="h-7 flex-1 text-xs font-mono"
+              />
+            </div>
+          )}
+          <div className="rounded-md border border-border">
+            <div className="grid grid-cols-2 gap-x-4 px-2 py-1 text-[11px] text-muted-foreground">
+              <span>模型</span>
+              <span>同步模型配置</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border p-1 text-xs">
+              {group.modelNames.map((m) => (
+                <div key={m} className="flex min-w-0 items-center gap-2 px-1 py-0.5">
+                  <span className="min-w-0 flex-1 truncate font-mono">{m}</span>
+                  <Select
+                    value={sources[m] ?? ''}
+                    onValueChange={(v) => onSourceChange(m, v)}
+                  >
+                    <SelectTrigger
+                      className="h-7 w-[210px] shrink-0 text-xs"
+                      disabled={snapshot === null}
+                    >
+                      <SelectValue placeholder={snapshot === null ? '加载中…' : '模型配置参考供应商'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {snapshot !== null && (
+                        <>
+                          <SelectItem value="">不同步</SelectItem>
+                          {providersForModel(snapshot, m).map((p) => (
+                            <SelectItem key={p.providerId} value={p.providerName}>
+                              {p.providerName}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

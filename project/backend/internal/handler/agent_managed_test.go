@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
@@ -88,10 +89,18 @@ func seedManagedDB(t *testing.T) *gorm.DB {
 		}
 	}
 
-	price := model.PriceConfig{Model: "gpt-x", ContextLength: 131072, MaxToken: 16384, SupportedTypes: `["text"]`, ThinkingLevels: `["off"]`}
-	if err := db.Create(&price).Error; err != nil {
-		t.Fatal(err)
+	// Seed the models.dev capability snapshot so the reference-supplier
+	// model-config lookup (group.ModelSources → supplier name) resolves
+	// without a real network call.
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{
+		models: []modelsDevModel{
+			{ID: "gpt-x", Name: "gpt-x", ProviderName: "OpenRouter", ContextLength: 131072, MaxOutput: 16384, InputTypes: []string{"text"}},
+			{ID: "gpt-x", Name: "gpt-x", ProviderName: "Together", ContextLength: 100000, MaxOutput: 8192, InputTypes: []string{"text"}},
+		},
+		fetchedAt: time.Now(),
 	}
+	modelsDev.mu.Unlock()
 	return db
 }
 
@@ -137,10 +146,8 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 	for _, p := range providers {
 		ids = append(ids, p.ID)
 	}
-	var price model.PriceConfig
-	db.Where("model = ?", "gpt-x").First(&price)
 
-	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"` + price.ID + `","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
+	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -231,6 +238,85 @@ func fileID(db *gorm.DB) string {
 	var f model.AgentConfigFile
 	db.First(&f)
 	return f.ID
+}
+
+func TestManagedProviderNoEndpointGroup(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	rule := model.AgentTypeRule{Name: "opencode"}
+	if err := rule.SetJsonPaths(model.AgentJsonPaths{Provider: "provider", Model: "provider.{provider_id}.models"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetRecommendations([]model.AgentRecommendation{
+		{Scope: "provider", Key: "options.baseURL", Type: "string", Required: true},
+		{Scope: "provider", Key: "options.apiKey", Type: "string", Required: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetProtocols([]model.AgentProtocol{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "t", AgentType: "opencode", Mode: "local", TargetOS: "mac",
+		Path: "/tmp/hapiy-test-noep.json", Content: `{"provider":{}}`,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTempFile("/tmp/hapiy-test-noep.json", file.Content); err != nil {
+		t.Fatal(err)
+	}
+	// A supplier with NO endpoints at all.
+	p := model.Provider{Name: "NO-EP", Endpoints: `[]`, Models: `[{"model":"m1"},{"model":"m2"}]`, Keys: `["sk-x"]`}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{models: []modelsDevModel{{ID: "m1", Name: "m1", ProviderName: "OpenRouter"}}, fetchedAt: time.Now()}
+	modelsDev.mu.Unlock()
+
+	// 未配置 endpoint 组：endpoint 手填 /manual/v1，provider_ids 指向无 endpoint 供应商。
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON([]string{p.ID}) + `,"groups":[{"endpoint":"/manual/v1","suffix":"","model_sources":{"m1":"OpenRouter"},"provider_ids":` + idsJSON([]string{p.ID}) + `}]}`
+	r := newRouterForManaged(db)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers/"+managedProviderID(db)+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+	syncOut := w.Body.String()
+	if !strings.Contains(syncOut, `/manual/v1`) {
+		// members resolved from provider_ids: baseUrl=/manual/v1
+		t.Fatalf("no-endpoint group did not resolve its hand-typed endpoint: %s", syncOut)
+	}
+	if !strings.Contains(syncOut, `sk-x`) {
+		t.Fatalf("expected apiKey from linked provider: %s", syncOut)
+	}
+}
+
+func managedProviderID(db *gorm.DB) string {
+	var m model.ManagedAgentProvider
+	db.First(&m)
+	return m.ID
 }
 
 func TestManagedProviderNameConflict(t *testing.T) {

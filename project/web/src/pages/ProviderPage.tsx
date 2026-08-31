@@ -683,7 +683,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               <span />
             </div>
             {modelRows.map((model, index) => {
-              const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__all__'
+              const endpointValue = model.endpoints[0] && form.endpoints.some((item) => item.pathSuffix === model.endpoints[0]) ? model.endpoints[0] : '__unset__'
               const isPhantom = form.models.length === 0
               const referenceCandidates = referenceCandidatesFor(model.model)
               return (
@@ -705,11 +705,10 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                   />
                   <Select
                     value={endpointValue}
-                    onValueChange={(value) => patchModel(index, { endpoints: value === '__all__' ? [] : [value] })}
+                    onValueChange={(value) => patchModel(index, { endpoints: value === '__unset__' ? [] : [value] })}
                   >
-                    <SelectTrigger className="w-full"><SelectPrimitive.Value /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectPrimitive.Value placeholder="未设置" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__all__">不限</SelectItem>
                       {form.endpoints.map((endpoint) => (
                         <SelectItem key={endpoint.pathSuffix} value={endpoint.pathSuffix}>{endpoint.pathSuffix}</SelectItem>
                       ))}

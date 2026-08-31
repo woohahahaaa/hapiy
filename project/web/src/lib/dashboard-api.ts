@@ -789,6 +789,7 @@ export type ManagedProviderOption = {
   readonly status: boolean
   readonly endpoints: readonly string[]
   readonly models: readonly string[]
+  readonly model_endpoints?: Readonly<Record<string, readonly string[]>>
   readonly endpointCount: number
   readonly modelCount: number
 }
@@ -797,6 +798,7 @@ export type ManagedAgentGroup = {
   readonly endpoint: string
   readonly suffix: string
   readonly model_sources: Readonly<Record<string, string>>
+  readonly provider_ids?: readonly string[]
 }
 
 export type ManagedGroupView = {
@@ -3049,16 +3051,25 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return data.map((raw) => {
       if (!isRecord(raw)) {
-        return { id: '', name: '', status: true, endpoints: [], models: [], endpointCount: 0, modelCount: 0 }
+        return { id: '', name: '', status: true, endpoints: [], models: [], model_endpoints: {}, endpointCount: 0, modelCount: 0 }
       }
       const eps = Array.isArray(raw.endpoints) ? raw.endpoints : []
       const mods = Array.isArray(raw.models) ? raw.models : []
+      const modelEndpoints: Record<string, readonly string[]> = {}
+      if (isRecord(raw.model_endpoints)) {
+        for (const [name, list] of Object.entries(raw.model_endpoints as Record<string, unknown>)) {
+          modelEndpoints[name] = Array.isArray(list)
+            ? list.filter((e): e is string => typeof e === 'string')
+            : []
+        }
+      }
       return {
         id: typeof raw.id === 'string' ? raw.id : '',
         name: typeof raw.name === 'string' ? raw.name : '',
         status: typeof raw.status === 'boolean' ? raw.status : true,
         endpoints: eps.filter((e): e is string => typeof e === 'string'),
         models: mods.filter((m): m is string => typeof m === 'string'),
+        model_endpoints: modelEndpoints,
         endpointCount: readNumber(raw.endpoint_count, 'endpoint_count', 0),
         modelCount: readNumber(raw.model_count, 'model_count', 0),
       }
