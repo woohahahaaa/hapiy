@@ -8,9 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
-import { findModelsDevModel, loadModelsDevModels, type ModelsDevModel } from '@/lib/models-dev'
+import { findModelsDevProviderRow, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
@@ -109,6 +116,7 @@ export function AgentModelInfoMatchDialog({
     setLoading(true)
     setError(null)
     setChecked({})
+    setSupplierByModelId({})
     let cancelled = false
     loadModelsDevModels()
       .then((models) => {
@@ -138,9 +146,8 @@ export function AgentModelInfoMatchDialog({
 
   const rowCount = groups.reduce((n, g) => n + g.rows.length, 0)
 
-  // 自动源：每模型取 models.dev 首个匹配行（不再手动选供应商）。
-  const resolvedRow = (modelId: string): ModelsDevModel | null =>
-    findModelsDevModel(snapshot ?? [], modelId)
+  // 每模型选择的 models.dev 参考供应商（数据只从所选供应商来）。
+  const [supplierByModelId, setSupplierByModelId] = useState<Record<string, string>>({})
 
   const sourceMapFor = (row: ModelsDevModel): Record<string, unknown> => {
     const types = [...new Set([...row.inputTypes, ...row.outputTypes])]
@@ -152,8 +159,15 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
+  // diff 依据：该模型被选中的 models.dev 供应商行；未选 → 无源数据。
+  const sourceFor = (modelId: string): ModelsDevModel | null => {
+    const supplier = supplierByModelId[modelId]
+    if (!supplier) return null
+    return findModelsDevProviderRow(snapshot ?? [], modelId, supplier)
+  }
+
   const changesFor = (row: SyncRow): readonly FieldChange[] => {
-    const source = resolvedRow(row.modelId)
+    const source = sourceFor(row.modelId)
     if (!source) return []
     const cfg = row.config
     if (!cfg || typeof cfg !== 'object') return []
@@ -195,6 +209,8 @@ export function AgentModelInfoMatchDialog({
     const targets = groups.flatMap((g) => g.rows)
       .filter((r) => {
         if (!checked[rowKey(r.providerId, r.modelId)]) return false
+        // 未选择 models.dev 供应商的模型不参与同步
+        if (!supplierByModelId[r.modelId]) return false
         return changesFor(r).length > 0
       })
       .map((r) => ({ providerId: r.providerId, modelId: r.modelId, changes: changesFor(r) }))
@@ -246,8 +262,9 @@ export function AgentModelInfoMatchDialog({
               <div className="overflow-hidden rounded-md border border-border">
                 {/* 表头行：与卡片内列用同一比例，保证对齐 */}
                 <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
-                  <div className="w-[30%]">模型</div>
-                  <div className="flex w-[30%] items-center gap-2">
+                  <div className="w-[18%]">模型</div>
+                  <div className="w-[26%] border-l border-border pl-2">从 models.dev 同步模型配置</div>
+                  <div className="flex w-[22%] items-center gap-2 border-l border-border pl-2">
                     <Checkbox
                       checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
                       onCheckedChange={toggleAll}
@@ -255,13 +272,14 @@ export function AgentModelInfoMatchDialog({
                     />
                     所属供应商
                   </div>
-                  <div className="w-[40%]">将应用的修改</div>
+                  <div className="w-[34%] border-l border-border pl-2">将应用的修改</div>
                 </div>
 
                 {/* 每个模型一张卡片：组内 rowspan 表格，组间分隔线不穿过模型列 */}
                 <div className="divide-y divide-border">
                   {groups.map((g) => {
-                    const source = resolvedRow(g.modelId)
+                    const supplier = supplierByModelId[g.modelId] ?? ''
+                    const source = supplier ? findModelsDevProviderRow(snapshot ?? [], g.modelId, supplier) : null
                     return (
                       <table key={g.modelId} className="w-full table-fixed text-xs">
                         <tbody>
@@ -273,11 +291,32 @@ export function AgentModelInfoMatchDialog({
                               className={idx > 0 ? 'border-t border-border/50' : undefined}
                             >
                               {idx === 0 && (
-                                <td rowSpan={g.rows.length} className="w-[30%] border-r border-border px-2 py-2 align-top">
-                                  <div className="break-words font-medium">{g.modelId}</div>
-                                </td>
+                                <>
+                                  <td rowSpan={g.rows.length} className="w-[18%] border-r border-border px-2 py-2 align-top">
+                                    <div className="break-words font-medium">{g.modelId}</div>
+                                  </td>
+                                  <td rowSpan={g.rows.length} className="w-[26%] border-r border-border px-2 py-2 align-top">
+                                    <Select
+                                      value={supplier}
+                                      onValueChange={(v) =>
+                                        setSupplierByModelId((prev) => ({ ...prev, [g.modelId]: v }))
+                                      }
+                                    >
+                                      <SelectTrigger className="h-7 w-full text-xs">
+                                        <SelectValue placeholder="选择要同步的 models.dev 供应商" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {providersForModel(snapshot ?? [], g.modelId).map((p) => (
+                                          <SelectItem key={p.providerId} value={p.providerName}>
+                                            {p.providerName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                </>
                               )}
-                              <td className="w-[30%] px-2 py-2">
+                              <td className="w-[22%] border-r border-border px-2 py-2">
                                 <div className="flex items-center gap-2">
                                   <Checkbox
                                     checked={!!checked[rowKey(r.providerId, r.modelId)]}
@@ -292,9 +331,11 @@ export function AgentModelInfoMatchDialog({
                                   <span className="break-words font-mono">{r.providerId}</span>
                                 </div>
                               </td>
-                              <td className="w-[40%] px-2 py-2">
+                              <td className="w-[34%] px-2 py-2">
                                 {!source ? (
-                                  <div className="text-[11px] text-muted-foreground">未在 models.dev 查到该模型信息</div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {supplier ? '未在 models.dev 查到该模型信息' : '请先选择要同步的 models.dev 供应商'}
+                                  </div>
                                 ) : changes.length === 0 ? (
                                   <div className="text-muted-foreground">—</div>
                                 ) : (

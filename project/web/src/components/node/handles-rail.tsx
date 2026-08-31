@@ -79,6 +79,12 @@ export function HandlesRail({
           // handleBounds[0]，多线入同一节点时会全部挤到第一个 handle 上。
           id={segmentIds && segmentIds[i] != null ? segmentIds[i]! : `seg-${i}`}
           style={{
+            // rail 容器本身向左偏了 target.width/2，CSS 默认的 left:0 会让
+            // handle 中心落在 rail 左缘（= 节点左缘外 target.width/2），线
+            // 终点就比 pill 左缘再左 target.width/2，看起来"差几像素才到
+            // bar"。left:50% + translate(-50%,0) 把 handle 中心拉回节点左
+            // 缘，Position.Left 的接线点（handle 左缘）正好落在 pill 左边。
+            left: '50%',
             top: centerOffset + i * step,
             width: target.width,
             height: segH,
