@@ -127,17 +127,37 @@ function mergeSyncContent(
     if (!isRecord(providers)) continue
     const providerKey = Object.keys(providers).find((k) => {
       const p = providers[k]
-      return isRecord(p) && isRecord(p.models) && Object.prototype.hasOwnProperty.call(p.models, modelId)
+      if (!isRecord(p)) return false
+      if (isRecord(p.models)) return Object.prototype.hasOwnProperty.call(p.models, modelId)
+      if (Array.isArray(p.models)) {
+        return p.models.some((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
+      }
+      return false
     })
     if (!providerKey) continue
     const p = providers[providerKey] as Record<string, unknown>
-    const models = p.models as Record<string, unknown>
-    const modelValue = models[modelId]
+    const models = p.models
+    let modelValue: unknown
+    if (isRecord(models)) {
+      modelValue = models[modelId]
+    } else {
+      const arr = Array.isArray(models) ? (models as unknown[]) : []
+      const idx = arr.findIndex((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
+      if (idx < 0) continue
+      modelValue = arr[idx]
+    }
     if (merged === null) merged = {}
     const root = (merged[rootKey] ?? {}) as Record<string, unknown>
     merged[rootKey] = root
     const provRoot = (root[providerKey] ?? { ...p }) as Record<string, unknown>
-    provRoot.models = { ...(isRecord(provRoot.models) ? provRoot.models : {}), [modelId]: modelValue }
+    if (isRecord(provRoot.models)) {
+      provRoot.models = { ...{ ...(isRecord(provRoot.models) ? provRoot.models : {}) }, [modelId]: modelValue }
+    } else {
+      const arr = Array.isArray(provRoot.models) ? [...provRoot.models] : []
+      const idx = arr.findIndex((m) => isRecord(m) && String((m as Record<string, unknown>).id) === modelId)
+      if (idx >= 0) arr[idx] = modelValue
+      provRoot.models = arr
+    }
     root[providerKey] = provRoot
     break
   }

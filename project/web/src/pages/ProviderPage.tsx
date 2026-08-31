@@ -8,7 +8,8 @@ import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import * as SelectPrimitive from '@radix-ui/react-select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
@@ -705,7 +706,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                     value={endpointValue}
                     onValueChange={(value) => patchModel(index, { endpoints: value === '__all__' ? [] : [value] })}
                   >
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full"><SelectPrimitive.Value /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">不限</SelectItem>
                       {form.endpoints.map((endpoint) => (
@@ -853,17 +854,18 @@ type ModelPriceCellProps = {
   readonly onSync: () => void
 }
 
-type PriceMode = 'prices' | 'reference' | 'legacy'
+type PriceMode = 'prices' | 'reference' | 'unset'
 
 // Price cell: a dropdown choosing between 单独设置价格 (four per-1M-token
 // price inputs), 模型价格参考供应商 (a models.dev reference supplier whose
-// price snapshot is read-only, with an editable multiplier), and the legacy
-// 设置倍率 state kept for pre-migration rows. The row's right side carries
-// 刷新 (re-check the reference supplier upstream and re-snapshot) and 同步
+// price snapshot is read-only, with an editable multiplier) and 不设置
+// (legacy rows fall here and bill as 0). The row's right side carries 刷新
+// (re-check the reference supplier upstream and re-snapshot) and 同步
 // (copy this model's pricing to the same-named models of the other
-// providers). When the dialog opens and a reference supplier no longer
-// exists on models.dev for the model, both dropdowns turn red (stale) while
-// the stored data stays untouched.
+// providers). Both icons are hidden in 不设置 mode since the row carries no
+// price data to act on. When the dialog opens and a reference supplier no
+// longer exists on models.dev for the model, the dropdown turns red (stale)
+// while the stored data stays untouched.
 function ModelPriceCell({
   model,
   onPatch,
@@ -878,14 +880,14 @@ function ModelPriceCell({
   onRefresh,
   onSync,
 }: ModelPriceCellProps) {
-  const mode: PriceMode = model.referenceProvider !== null ? 'reference' : model.prices !== null ? 'prices' : 'legacy'
+  const mode: PriceMode = model.referenceProvider !== null ? 'reference' : model.prices !== null ? 'prices' : 'unset'
   const setMode = (next: PriceMode) => {
     if (next === 'prices') {
-      onPatch({ prices: { input: '', cacheWrite: '', cacheRead: '', output: '' }, referenceProvider: null, referencePrices: null, referenceAt: null })
+      onPatch({ prices: { input: '', cacheWrite: '', cacheRead: '', output: '' }, referenceProvider: null, referencePrices: null, referenceAt: null, ratePriceConfigId: null })
     } else if (next === 'reference') {
-      onPatch({ prices: null, referenceProvider: model.referenceProvider ?? '', referencePrices: model.referencePrices ?? null, referenceAt: model.referenceAt ?? null })
+      onPatch({ prices: null, referenceProvider: model.referenceProvider ?? '', referencePrices: model.referencePrices ?? null, referenceAt: model.referenceAt ?? null, ratePriceConfigId: null })
     } else {
-      onPatch({ prices: null, referenceProvider: null, referencePrices: null, referenceAt: null })
+      onPatch({ prices: null, referenceProvider: null, referencePrices: null, referenceAt: null, ratePriceConfigId: null })
     }
   }
   const handlePriceChange = (key: keyof ModelPrices, raw: string) => {
@@ -906,15 +908,20 @@ function ModelPriceCell({
 
   const ref = model.referencePrices
   const fmt = (v: number): string => (Number.isFinite(v) && v > 0 ? `$${Number(v.toFixed(4)).toString()}` : '$0')
+  const refTooltip = model.referenceProvider !== null
+    ? (ref
+        ? `${model.referenceProvider} · 输入 ${fmt(ref.input)} · 缓存写 ${fmt(ref.cacheWrite)} · 缓存读 ${fmt(ref.cacheRead)} · 输出 ${fmt(ref.output)} · 倍率 ${model.rate || '1'}`
+        : `${model.referenceProvider} · 尚未获取价格快照，请点刷新`)
+    : ''
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Select value={mode} onValueChange={(value) => setMode(value as PriceMode)}>
-        <SelectTrigger className={`w-36 ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-7 w-36 px-2 text-xs"><SelectPrimitive.Value /></SelectTrigger>
         <SelectContent>
           <SelectItem value="prices">单独设置价格</SelectItem>
           <SelectItem value="reference">模型价格参考供应商</SelectItem>
-          {mode === 'legacy' && <SelectItem value="legacy">设置倍率（旧）</SelectItem>}
+          <SelectItem value="unset">不设置</SelectItem>
         </SelectContent>
       </Select>
       {mode === 'prices' ? (
@@ -931,8 +938,11 @@ function ModelPriceCell({
             />
           ))}
         </div>
-      ) : (
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+      ) : mode === 'reference' ? (
+        <div
+          className="flex min-w-0 flex-1 items-center gap-1.5"
+          title={refTooltip || undefined}
+        >
           <Select
             value={model.referenceProvider ?? '__none__'}
             disabled={snapshotLoading}
@@ -940,7 +950,25 @@ function ModelPriceCell({
               if (value !== '__none__') onPickReference(value)
             }}
           >
-            <SelectTrigger className={`w-full ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}><SelectValue placeholder="请选择参考供应商" /></SelectTrigger>
+            <SelectTrigger
+              className={`h-7 min-w-0 flex-1 px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
+            >
+              <SelectPrimitive.Value className="sr-only">
+                {model.referenceProvider ?? ''}
+              </SelectPrimitive.Value>
+              {model.referenceProvider === null || model.referenceProvider === '' ? (
+                <span className="text-muted-foreground">请选择</span>
+              ) : (
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate">{model.referenceProvider}</span>
+                  {ref ? (
+                    <span className="shrink-0 text-muted-foreground tabular-nums">（输 {fmt(ref.input)}写 {fmt(ref.cacheWrite)}读 {fmt(ref.cacheRead)}出 {fmt(ref.output)}）</span>
+                  ) : (
+                    <span className="shrink-0 text-destructive">（尚未获取快照）</span>
+                  )}
+                </span>
+              )}
+            </SelectTrigger>
             <SelectContent>
               {stale && model.referenceProvider !== null && (
                 <SelectItem value={model.referenceProvider}>参考供应商已从 models.dev 下架</SelectItem>
@@ -954,35 +982,30 @@ function ModelPriceCell({
               ))}
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-1.5">
-            {model.referenceProvider !== null && ref === null ? (
-              <span className="truncate text-xs text-destructive">尚未获取价格快照，请点刷新</span>
-            ) : model.referenceProvider !== null && ref ? (
-              <span className="truncate text-xs tabular-nums text-muted-foreground">
-                输入 {fmt(ref.input)} · 缓存写 {fmt(ref.cacheWrite)} · 缓存读 {fmt(ref.cacheRead)} · 输出 {fmt(ref.output)}
-              </span>
-            ) : (
-              <span className="text-xs text-muted-foreground/50">选择参考供应商后自动获取价格</span>
-            )}
-            <Input
-              value={model.rate}
-              onChange={(event) => onPatch({ rate: event.target.value })}
-              disabled={model.referenceProvider === null}
-              className="ml-auto w-14 px-2 text-xs"
-              placeholder="1"
-              title="倍率，支持分数，如 1/2"
-            />
-          </div>
+          <Input
+            value={model.rate}
+            onChange={(event) => onPatch({ rate: event.target.value })}
+            disabled={model.referenceProvider === null}
+            className="w-14 shrink-0 px-2 text-xs"
+            placeholder="1"
+            title="倍率，支持分数，如 1/2"
+          />
+        </div>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          未设置价格，计费按 0
+        </span>
+      )}
+      {mode !== 'unset' && (
+        <div className="flex items-center gap-0.5">
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={model.referenceProvider === null || refreshing || snapshotLoading} onClick={onRefresh} aria-label="刷新参考价格">
+            {refreshing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="refresh" />}
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={syncing || !syncable} onClick={onSync} aria-label="同步到其他供应商">
+            {syncing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="sync" />}
+          </Button>
         </div>
       )}
-      <div className="flex items-center gap-0.5">
-        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={model.referenceProvider === null || refreshing || snapshotLoading} onClick={onRefresh} aria-label="刷新参考价格">
-          {refreshing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="refresh" />}
-        </Button>
-        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={syncing || !syncable} onClick={onSync} aria-label="同步到其他供应商">
-          {syncing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="sync" />}
-        </Button>
-      </div>
     </div>
   )
 }

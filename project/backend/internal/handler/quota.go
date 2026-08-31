@@ -24,8 +24,11 @@ type quotaRequest struct {
 // computed in ("USD" or "CNY"). A model with explicit per-model prices
 // (provider.Models entry "prices") is billed with those prices in the model's
 // own currency, which overrides the global billing currency; otherwise the
-// global PriceConfig × model rate × [exchange when global currency is CNY]
-// path applies. An empty currency (with zero quota) means no pricing matched.
+// 模型价格参考供应商 path (stored models.dev snapshot × the model's
+// multiplier, converted through the global billing currency) applies. Any
+// provider model not in either mode — legacy "rate mode" rows, providers
+// missing a price reference, rows where the snapshot could not be captured —
+// resolves to 0 so the 模型信息 table does not silently take over billing.
 func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 	if db == nil || request.usage == nil {
 		return 0, ""
@@ -41,9 +44,6 @@ func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 		}
 	}
 	if ref, rate, ok := referenceModePrices(request.provider, request.modelName); ok {
-		// 模型价格参考供应商: the stored models.dev snapshot × the editable
-		// multiplier, converted through the global billing currency — this
-		// replaces the old rate-mode PriceConfig row binding path.
 		total := float64(usage.PromptTokens)/tokensPerMillion*ref.Input +
 			float64(usage.CompletionTokens)/tokensPerMillion*ref.Output +
 			float64(usage.CacheWriteTokens)/tokensPerMillion*ref.CacheWrite +
@@ -55,34 +55,7 @@ func computeQuota(db *gorm.DB, request quotaRequest) (float64, string) {
 		}
 		return quota, currency
 	}
-	price, found := findPriceConfig(db, request.modelName)
-	if !found {
-		return 0, ""
-	}
-	total := float64(usage.PromptTokens)/tokensPerMillion*price.InputPrice +
-		float64(usage.CompletionTokens)/tokensPerMillion*price.OutputPrice +
-		float64(usage.CacheWriteTokens)/tokensPerMillion*price.CacheWritePrice +
-		float64(usage.CacheReadTokens)/tokensPerMillion*price.CacheReadPrice
-	if bound, rate, ok := modelRateBinding(db, request.provider, request.modelName); ok {
-		// Rate mode is bound to a specific model-info row: price = that row's
-		// prices × the configured multiplier. A deleted binding resolves to 0.
-		total = float64(usage.PromptTokens)/tokensPerMillion*bound.InputPrice +
-			float64(usage.CompletionTokens)/tokensPerMillion*bound.OutputPrice +
-			float64(usage.CacheWriteTokens)/tokensPerMillion*bound.CacheWritePrice +
-			float64(usage.CacheReadTokens)/tokensPerMillion*bound.CacheReadPrice
-		quota := total * rate
-		currency := service.GetBillingCurrency(db)
-		if currency == "CNY" {
-			quota *= service.GetExchangeRate(db)
-		}
-		return quota, currency
-	}
-	quota := total * parseModelRate(request.provider, request.modelName)
-	currency := service.GetBillingCurrency(db)
-	if currency == "CNY" {
-		quota *= service.GetExchangeRate(db)
-	}
-	return quota, currency
+	return 0, ""
 }
 
 // modelRefPrices are the read-only models.dev price snapshot captured when a
@@ -122,41 +95,6 @@ func referenceModePrices(provider *model.Provider, modelName string) (*modelRefP
 			return nil, 0, false
 		}
 		return entry.ReferencePrices, parseFraction(entry.Rate), true
-	}
-	return nil, 0, false
-}
-
-// modelRateBinding returns the model-info row a rate-mode provider model is
-// bound to (by PriceConfig ID) together with its multiplier. ok is false when
-// the model has no binding (rate mode without an upstream supplier selected,
-// resolved by the legacy global PriceConfig × rate path instead) or when the
-// provider is explicit-pricing. A binding whose row was deleted still resolves:
-// the row is missing so it contributes zero prices (ok stays true, zero rows).
-func modelRateBinding(db *gorm.DB, provider *model.Provider, modelName string) (*model.PriceConfig, float64, bool) {
-	if db == nil || provider == nil || strings.TrimSpace(provider.Models) == "" {
-		return nil, 0, false
-	}
-	var entries []struct {
-		Model         string `json:"model"`
-		Rate          string `json:"rate"`
-		PriceConfigID string `json:"priceConfigId"`
-	}
-	if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
-		return nil, 0, false
-	}
-	for _, entry := range entries {
-		if !strings.EqualFold(strings.TrimSpace(entry.Model), strings.TrimSpace(modelName)) {
-			continue
-		}
-		if entry.PriceConfigID == "" {
-			return nil, 0, false
-		}
-		var bound model.PriceConfig
-		err := db.First(&bound, "id = ?", entry.PriceConfigID).Error
-		if err != nil {
-			bound = model.PriceConfig{}
-		}
-		return &bound, parseFraction(entry.Rate), true
 	}
 	return nil, 0, false
 }
@@ -237,54 +175,6 @@ func parsePriceValue(value string) float64 {
 		return 0
 	}
 	return amount
-}
-
-func findPriceConfig(db *gorm.DB, modelName string) (model.PriceConfig, bool) {
-	var prices []model.PriceConfig
-	if err := db.Find(&prices).Error; err != nil {
-		return model.PriceConfig{}, false
-	}
-	for _, price := range prices {
-		if matchesPriceConfig(price, modelName) {
-			return price, true
-		}
-	}
-	return model.PriceConfig{}, false
-}
-
-func matchesPriceConfig(price model.PriceConfig, modelName string) bool {
-	if strings.EqualFold(strings.TrimSpace(price.Model), strings.TrimSpace(modelName)) {
-		return true
-	}
-	var aliases []string
-	if err := json.Unmarshal([]byte(price.Aliases), &aliases); err != nil {
-		return false
-	}
-	for _, alias := range aliases {
-		if strings.EqualFold(strings.TrimSpace(alias), strings.TrimSpace(modelName)) {
-			return true
-		}
-	}
-	return false
-}
-
-func parseModelRate(provider *model.Provider, modelName string) float64 {
-	if provider == nil || strings.TrimSpace(provider.Models) == "" {
-		return 1
-	}
-	var entries []struct {
-		Model string `json:"model"`
-		Rate  string `json:"rate"`
-	}
-	if err := json.Unmarshal([]byte(provider.Models), &entries); err != nil {
-		return 1
-	}
-	for _, entry := range entries {
-		if strings.EqualFold(strings.TrimSpace(entry.Model), strings.TrimSpace(modelName)) {
-			return parseFraction(entry.Rate)
-		}
-	}
-	return 1
 }
 
 // parseFraction preserves the supplier UI's supported rate forms: decimals

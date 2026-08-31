@@ -8,7 +8,7 @@ import (
 	"github.com/hapiy/hapiy/internal/relay"
 )
 
-func TestComputeQuota_whenPriceAndFractionRate(t *testing.T) {
+func TestComputeQuota_legacyRateModeResolvesToZero(t *testing.T) {
 	db := newPriceTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
@@ -23,6 +23,9 @@ func TestComputeQuota_whenPriceAndFractionRate(t *testing.T) {
 	if err := db.Create(&price).Error; err != nil {
 		t.Fatalf("create price: %v", err)
 	}
+	// Legacy rate-mode row (rate=1/7, no prices, no reference). It used to
+	// fall through to the global PriceConfig × rate path; the 模型信息 table
+	// is now retired so these models bill as 0.
 	provider := &model.Provider{Models: `[{"model":"deepseek-v4-flash","rate":"1/7"}]`}
 	usage := &relay.UsageInfo{
 		PromptTokens:     1000000,
@@ -32,16 +35,15 @@ func TestComputeQuota_whenPriceAndFractionRate(t *testing.T) {
 	}
 
 	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: price.Model, usage: usage})
-	expected := (0.14 + 0.28 + 0.56 + 0.07) / 7
-	if math.Abs(quota-expected) > 0.000000001 {
-		t.Fatalf("quota: want %.12f, got %.12f", expected, quota)
+	if quota != 0 {
+		t.Fatalf("quota: want 0, got %v", quota)
 	}
-	if currency != "USD" {
-		t.Fatalf("currency: want USD, got %v", currency)
+	if currency != "" {
+		t.Fatalf("currency: want empty, got %v", currency)
 	}
 }
 
-func TestComputeQuota_whenRequestUsesAlias(t *testing.T) {
+func TestComputeQuota_legacyAliasRateModeResolvesToZero(t *testing.T) {
 	db := newPriceTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
@@ -53,13 +55,16 @@ func TestComputeQuota_whenRequestUsesAlias(t *testing.T) {
 	provider := &model.Provider{Models: `[{"model":"alias-model","rate":"1/2"}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000}
 
-	quota, _ := computeQuota(db, quotaRequest{provider: provider, modelName: "ALIAS-MODEL", usage: usage})
-	if quota != 1 {
-		t.Fatalf("quota: want 1, got %v", quota)
+	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "ALIAS-MODEL", usage: usage})
+	if quota != 0 {
+		t.Fatalf("quota: want 0, got %v", quota)
+	}
+	if currency != "" {
+		t.Fatalf("currency: want empty, got %v", currency)
 	}
 }
 
-func TestComputeQuota_whenCurrencyCNY(t *testing.T) {
+func TestComputeQuota_legacyGlobalPriceConfigResolvesToZero(t *testing.T) {
 	db := newPriceTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "CNY"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
@@ -74,12 +79,11 @@ func TestComputeQuota_whenCurrencyCNY(t *testing.T) {
 	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 1000000, CacheWriteTokens: 1000000, CacheReadTokens: 1000000}
 
 	quota, currency := computeQuota(db, quotaRequest{provider: nil, modelName: "m", usage: usage})
-	expected := 4 * 7.2
-	if math.Abs(quota-expected) > 0.000000001 {
-		t.Fatalf("quota: want %.12f, got %.12f", expected, quota)
+	if quota != 0 {
+		t.Fatalf("quota: want 0 (legacy global PriceConfig is retired), got %v", quota)
 	}
-	if currency != "CNY" {
-		t.Fatalf("currency: want CNY, got %v", currency)
+	if currency != "" {
+		t.Fatalf("currency: want empty, got %v", currency)
 	}
 }
 
@@ -146,7 +150,7 @@ func TestComputeQuota_explicitPricesOverrideGlobalCurrency(t *testing.T) {
 	}
 }
 
-func TestComputeQuota_emptyPricesFallBackToGlobal(t *testing.T) {
+func TestComputeQuota_emptyPricesFallBackToZero(t *testing.T) {
 	db := newPriceTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
@@ -155,18 +159,17 @@ func TestComputeQuota_emptyPricesFallBackToGlobal(t *testing.T) {
 		t.Fatalf("create price: %v", err)
 	}
 	// A prices object with all-empty strings has no currency and must fall
-	// back to the global path (rate multiplier applies).
+	// through to 0 (the 模型信息 table no longer drives billing).
 	provider := &model.Provider{Models: `[{"model":"gpt-4o","rate":"2","prices":{"input":"","cacheWrite":"","cacheRead":"","output":""}}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 500000}
 
 	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "gpt-4o", usage: usage})
 
-	want := (5 + 7.5) * 2
-	if math.Abs(quota-want) > 0.000000001 {
-		t.Fatalf("quota: want %v, got %v", want, quota)
+	if quota != 0 {
+		t.Fatalf("quota: want 0, got %v", quota)
 	}
-	if currency != "USD" {
-		t.Fatalf("currency: want USD, got %v", currency)
+	if currency != "" {
+		t.Fatalf("currency: want empty, got %v", currency)
 	}
 }
 
@@ -240,7 +243,7 @@ func TestComputeQuota_referenceModeAppliesGlobalCNY(t *testing.T) {
 	}
 }
 
-func TestComputeQuota_referenceModeWithoutSnapshotFallsBack(t *testing.T) {
+func TestComputeQuota_referenceModeWithoutSnapshotResolvesToZero(t *testing.T) {
 	db := newPriceTestDB(t)
 	if err := db.Create(&model.Setting{Key: "billing_currency", Value: "USD"}).Error; err != nil {
 		t.Fatalf("set currency: %v", err)
@@ -248,19 +251,19 @@ func TestComputeQuota_referenceModeWithoutSnapshotFallsBack(t *testing.T) {
 	if err := db.Create(&model.PriceConfig{Model: "gpt-4o", InputPrice: 5, OutputPrice: 15}).Error; err != nil {
 		t.Fatalf("create price: %v", err)
 	}
-	// referenceProvider set but no snapshot → the legacy global path applies
-	// with the model's rate (stale/missing snapshot must never bill as $0).
+	// referenceProvider set but no snapshot → the 模型信息 table no longer
+	// fills the gap, so the row bills as 0 until the user refreshes the
+	// snapshot.
 	provider := &model.Provider{Models: `[{"model":"gpt-4o","referenceProvider":"OpenRouter","rate":"2"}]`}
 	usage := &relay.UsageInfo{PromptTokens: 1000000, CompletionTokens: 500000}
 
 	quota, currency := computeQuota(db, quotaRequest{provider: provider, modelName: "gpt-4o", usage: usage})
 
-	want := (5 + 7.5) * 2
-	if math.Abs(quota-want) > 0.000000001 {
-		t.Fatalf("quota: want %v, got %v", want, quota)
+	if quota != 0 {
+		t.Fatalf("quota: want 0 (no snapshot), got %v", quota)
 	}
-	if currency != "USD" {
-		t.Fatalf("currency: want USD, got %v", currency)
+	if currency != "" {
+		t.Fatalf("currency: want empty, got %v", currency)
 	}
 }
 

@@ -1299,8 +1299,12 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		cleaned := stripJSON5Comments(content)
-		resolvedModel := strings.ReplaceAll(jpaths.Model, "{provider_id}", req.ProviderID)
-		base := resolvedModel + "." + req.ModelID
+		resolvedModels := strings.ReplaceAll(jpaths.Model, "{provider_id}", escapeSjsonKey(req.ProviderID))
+		base, ok := modelEntryPath([]byte(cleaned), resolvedModels, req.ModelID)
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未在配置文件的 " + resolvedModels + " 中找到模型 " + req.ModelID})
+			return
+		}
 		buf := []byte(cleaned)
 		applied := 0
 		for path, val := range req.Fields {
@@ -1331,7 +1335,7 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 		}
 		switch r.Scope {
 		case "provider":
-			full := providerPath + "." + providerID + "." + r.Key
+			full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
 			next, err := sjson.SetBytes(buf, full, r.Recommended)
 			if err != nil {
 				return string(buf), applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
@@ -1342,8 +1346,15 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 			if modelID == "" {
 				continue
 			}
-			resolved := strings.ReplaceAll(modelPath, "{provider_id}", providerID)
-			full := resolved + "." + modelID + "." + r.Key
+			resolved := strings.ReplaceAll(modelPath, "{provider_id}", escapeSjsonKey(providerID))
+			base, found := modelEntryPath(buf, resolved, modelID)
+			if !found {
+				if gjson.GetBytes(buf, resolved).IsArray() {
+					continue // cannot fabricate an array element
+				}
+				base = resolved + "." + escapeSjsonKey(modelID)
+			}
+			full := base + "." + r.Key
 			next, err := sjson.SetBytes(buf, full, r.Recommended)
 			if err != nil {
 				return string(buf), applied, fmt.Errorf("model %q 字段 %s: %v", modelID, r.Key, err)
@@ -1358,6 +1369,47 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 // stripJSON5Comments removes // and /* */ comments so gjson can parse
 // JSON5 configs (e.g. openclaw). String contents are left alone so a
 // URL like "https://foo" or an embedded "// not a comment" survives.
+// escapeSjsonKey makes a JSON object key with arbitrary characters safe to
+// embed in an sjson path: dots become `\.` (the sjson escape for a literal
+// dot) and backslashes are doubled. Field paths in the rule stay untouched
+// — they are authored gjson paths whose dots are real nesting.
+func escapeSjsonKey(s string) string {
+	if s == "" {
+		return s
+	}
+	r := strings.NewReplacer(`\`, `\\`, `.`, `\.`)
+	return r.Replace(s)
+}
+
+// modelEntryPath locates a model inside a resolved models container by its
+// actual JSON shape. When the container is an object map the model is a key
+// (e.g. opencode `provider.<id>.models.<modelId>`); when it is an array each
+// element carries an `id` field (e.g. openclaw), so the array index of the
+// element whose id matches is returned. The absolute sjson path of the model
+// entry is the result; ok is false when the container is missing or the
+// model cannot be found.
+func modelEntryPath(content []byte, resolvedModels string, modelID string) (string, bool) {
+	res := gjson.GetBytes(content, resolvedModels)
+	if !res.Exists() {
+		return "", false
+	}
+	if res.IsArray() {
+		idx := int64(-1)
+		res.ForEach(func(key, value gjson.Result) bool {
+			if strings.EqualFold(strings.TrimSpace(value.Get("id").String()), strings.TrimSpace(modelID)) {
+				idx = key.Int()
+				return false
+			}
+			return true
+		})
+		if idx < 0 {
+			return "", false
+		}
+		return fmt.Sprintf("%s.%d", resolvedModels, idx), true
+	}
+	return resolvedModels + "." + escapeSjsonKey(modelID), true
+}
+
 func stripJSON5Comments(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
