@@ -259,7 +259,7 @@ export function AgentModelInfoMatchDialog({
           )}
           {!loading && !error && rowCount > 0 && (
             <>
-              <div className="overflow-hidden rounded-md border border-border">
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
                 {/* 表头行：与卡片内列用同一比例，保证对齐 */}
                 <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
                   <div className="w-[18%]">模型</div>

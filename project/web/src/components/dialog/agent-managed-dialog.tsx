@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
-import { dashboardApi, type AgentConfigFile, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView } from '@/lib/dashboard-api'
+import { dashboardApi, type AgentConfigFile, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView, type Token } from '@/lib/dashboard-api'
 import { loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 
 interface ManagedProviderDialogProps {
@@ -48,9 +49,14 @@ export function ManagedProviderDialog({
 }: ManagedProviderDialogProps) {
   const [options, setOptions] = useState<readonly ManagedProviderOption[]>([])
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
+  const [tokens, setTokens] = useState<readonly Token[]>([])
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
   const [checked, setChecked] = useState<Set<string>>(new Set())
+  // 接入 Key（令牌）与 BaseURL 来源标记选项。
+  const [apiKey, setApiKey] = useState('')
+  const [useSourceMark, setUseSourceMark] = useState(false)
+  const [sourceName, setSourceName] = useState('')
   // suffixByEndpoint / sourceByEndpoint persist user input per endpoint
   // so re-derivation (e.g. after toggling a supplier) keeps their edits.
   const [suffixByEndpoint, setSuffixByEndpoint] = useState<Record<string, string>>({})
@@ -67,13 +73,24 @@ export function ManagedProviderDialog({
     setSuffixByEndpoint({})
     setSourceByEndpoint({})
     setManualEndpoint({})
-    Promise.all([dashboardApi.listManagedProviderOptions(), loadModelsDevModels()])
-      .then(([opts, models]) => {
+    setApiKey('')
+    setUseSourceMark(false)
+    setSourceName('')
+    Promise.all([
+      dashboardApi.listManagedProviderOptions(),
+      loadModelsDevModels(),
+      dashboardApi.listTokens({ limit: 1000, offset: 0 }).catch(() => ({ tokens: [] as readonly Token[], total: 0 })),
+    ])
+      .then(([opts, models, tokensRes]) => {
         setOptions(opts)
         setSnapshot(models)
+        setTokens(tokensRes.tokens)
         if (editing) {
           setName(editing.name)
           setChecked(new Set(editing.provider_ids))
+          setApiKey(editing.api_key)
+          setUseSourceMark(editing.use_source_mark)
+          setSourceName(editing.source_name || editing.name)
           const suffix: Record<string, string> = {}
           const sources: Record<string, Record<string, string>> = {}
           for (const g of editing.groups) {
@@ -236,11 +253,17 @@ export function ManagedProviderDialog({
     }
 
     try {
+      const authFields = {
+        api_key: apiKey,
+        use_source_mark: useSourceMark,
+        source_name: sourceName.trim(),
+      }
       if (editing) {
         await dashboardApi.updateManagedProvider(record.id, editing.id, {
           name: trimmed,
           provider_ids: [...providerIds],
           groups: payload,
+          ...authFields,
         })
         toast('已保存托管 provider')
       } else {
@@ -248,6 +271,7 @@ export function ManagedProviderDialog({
           name: trimmed,
           provider_ids: [...checked],
           groups: payload,
+          ...authFields,
         })
         toast('已创建托管 provider')
       }
@@ -299,6 +323,55 @@ export function ManagedProviderDialog({
                     checked={checked}
                     onToggle={toggleProvider}
                   />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-2 items-start gap-4">
+                <Field>
+                  <FieldLabel>
+                    接入 Key
+                    <span className="ml-1 font-normal text-muted-foreground">（令牌页创建的 Key）</span>
+                  </FieldLabel>
+                  <Select value={apiKey} onValueChange={setApiKey}>
+                    <SelectTrigger className="h-9 w-full text-xs">
+                      <SelectValue placeholder="选择接入用的令牌 Key" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tokens.length === 0 ? (
+                        <SelectItem value="__none__" disabled>暂无令牌，请先到令牌页创建</SelectItem>
+                      ) : (
+                        tokens.map((t) => (
+                          <SelectItem key={t.id} value={t.key}>
+                            {t.name}
+                            {!t.status && '（已禁用）'}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    写入生成配置的 apiKey，Agent 用它接入本系统
+                  </p>
+                </Field>
+
+                <Field>
+                  <FieldLabel>BaseURL 标记来源</FieldLabel>
+                  <label className="flex cursor-pointer items-center gap-2 py-1.5">
+                    <Checkbox
+                      checked={useSourceMark}
+                      onCheckedChange={(v) => setUseSourceMark(v === true)}
+                    />
+                    <span className="text-foreground">在 BaseURL 后追加 __来源 段</span>
+                  </label>
+                  <Input
+                    value={sourceName}
+                    onChange={(e) => setSourceName(e.target.value)}
+                    disabled={!useSourceMark}
+                    placeholder={name.trim() || '来源名，默认为托管名字'}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    与 BaseURL 设置页的标记来源逻辑一致；不开启则直接使用最终 BaseURL
+                  </p>
                 </Field>
               </div>
 

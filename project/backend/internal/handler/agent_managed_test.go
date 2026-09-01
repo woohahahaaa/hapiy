@@ -147,7 +147,7 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 		ids = append(ids, p.ID)
 	}
 
-	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
+	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","use_source_mark":true,"source_name":"SRC","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
@@ -200,8 +200,16 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 	if !strings.Contains(syncOut, `/v1/chat/completions`) {
 		t.Fatalf("sync should include the endpoint in baseURL: %s", syncOut)
 	}
-	if !strings.Contains(syncOut, `sk-a`) {
-		t.Fatalf("sync should fill apiKey from linked provider: %s", syncOut)
+	// baseURL = 系统 BaseURL（请求 Host + proxy 后缀）+ /__SRC 来源段 + endpoint
+	if !strings.Contains(syncOut, `http://example.com/proxy/__SRC/v1/chat/completions`) {
+		t.Fatalf("sync should build the full baseURL with source mark: %s", syncOut)
+	}
+	// 令牌 Key 优先于上游供应商的 key
+	if !strings.Contains(syncOut, `sk-token-1`) {
+		t.Fatalf("sync should write the chosen token key: %s", syncOut)
+	}
+	if strings.Contains(syncOut, `sk-a`) {
+		t.Fatalf("upstream provider key must not win over the token key: %s", syncOut)
 	}
 
 	// list again → pending_sync should be false now (and content written)

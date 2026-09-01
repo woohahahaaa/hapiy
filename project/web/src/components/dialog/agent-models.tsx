@@ -599,8 +599,12 @@ const [error, setError] = useState<string | null>(null)
                             </>
                           }
                           info={{ text: `${mv.groups.length} 分组`, green: false }}
-                          selected={false}
-                          onClick={() => toggleManagedExpand(mv.id)}
+                          selected={selectedManaged?.mid === mv.id}
+                          onClick={() => {
+                            toggleManagedExpand(mv.id)
+                            // 点击一级行同时选中，让操作按钮在触屏设备上常显
+                            handleSelectManaged(mv.id, mv.groups[0]?.endpoint ?? '')
+                          }}
                           actions={
                             <>
                               {mv.pending_sync && (
@@ -643,7 +647,18 @@ const [error, setError] = useState<string | null>(null)
                                   selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                 }
                                 onClick={() => handleSelectManaged(mv.id, g.endpoint)}
-                                actions={null}
+                                actions={
+                                  <IconHoverButton
+                                    title="设置"
+                                    icon="settings"
+                                    tone="default"
+                                    disabled={false}
+                                    onClick={() => {
+                                      setManagedEditing(mv)
+                                      setManagedDialogOpen(true)
+                                    }}
+                                  />
+                                }
                               />
                             ))}
                           </div>

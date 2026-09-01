@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	"gorm.io/gorm"
@@ -40,6 +41,9 @@ type managedProviderView struct {
 	Groups           []managedGroupView       `json:"groups"`
 	HiddenGroups     []model.ManagedAgentGroup `json:"hidden_groups"`
 	PendingSync      bool                     `json:"pending_sync"`
+	APIKey           string                   `json:"api_key"`
+	UseSourceMark    bool                     `json:"use_source_mark"`
+	SourceName       string                   `json:"source_name"`
 }
 
 // ManagedProviderOptions lists the system Provider rows with endpoint /
@@ -110,8 +114,9 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		out := make([]managedProviderView, 0, len(managed))
+		basePrefix := systemBaseURLPrefix(c, db)
 		for _, m := range managed {
-			view := deriveManagedProvider(rule, row, liveProviders, content, m)
+			view := deriveManagedProvider(rule, row, liveProviders, content, m, basePrefix+managedSourceMarkSuffix(m))
 			out = append(out, view)
 		}
 		c.JSON(http.StatusOK, gin.H{"data": out})
@@ -137,10 +142,11 @@ func CreateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 			return
 		}
-		m := model.ManagedAgentProvider{
+			m := model.ManagedAgentProvider{
 			AgentConfigFileID: row.ID,
 			Name:              strings.TrimSpace(req.Name),
 		}
+		applyManagedAuthFields(&m, req)
 		if err := m.SetProviderIDs(req.ProviderIDs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -182,6 +188,7 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		m.Name = strings.TrimSpace(req.Name)
+		applyManagedAuthFields(&m, req)
 		if err := m.SetProviderIDs(req.ProviderIDs); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -278,13 +285,14 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 
 		cleaned := stripJSON5Comments(content)
 		buf := []byte(cleaned)
+		basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(m)
 		synced := 0
 		for _, stored := range groupsByEndpoint {
 			members := membersOf(stored)
 			if len(members) == 0 {
 				continue
 			}
-			gen := buildGeneratedBlock(rule, jpaths, stored, members)
+			gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
 			fullName := providerBlockName(m.Name, stored.Suffix)
 			providerIDPath := jpaths.Provider + "." + fullName
 			for k, v := range gen["provider"].(map[string]any) {
@@ -328,9 +336,20 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 // ── request / helpers ──────────────────────────────────────────────
 
 type managedProviderRequest struct {
-	Name        string                    `json:"name"`
-	ProviderIDs []string                  `json:"provider_ids"`
-	Groups      []model.ManagedAgentGroup `json:"groups"`
+	Name          string                    `json:"name"`
+	ProviderIDs   []string                  `json:"provider_ids"`
+	Groups        []model.ManagedAgentGroup `json:"groups"`
+	APIKey        string                    `json:"api_key"`
+	UseSourceMark bool                      `json:"use_source_mark"`
+	SourceName    string                    `json:"source_name"`
+}
+
+// applyManagedAuthFields copies the access-key / source-mark options from
+// the request onto the row (shared by create & update).
+func applyManagedAuthFields(m *model.ManagedAgentProvider, req managedProviderRequest) {
+	m.APIKey = strings.TrimSpace(req.APIKey)
+	m.UseSourceMark = req.UseSourceMark
+	m.SourceName = strings.TrimSpace(req.SourceName)
 }
 
 // validateManagedProviderRequest enforces the shared creation rules:
@@ -460,8 +479,8 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 // linked providers, merges persisted suffix / model sources by exact
 // endpoint, marks hidden groups and stale ids, and computes pending
 // sync per group by comparing the generated block with the file.
-func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, liveProviders []model.Provider, content string, m model.ManagedAgentProvider) managedProviderView {
-	view := managedProviderView{ID: m.ID, Name: m.Name}
+func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, liveProviders []model.Provider, content string, m model.ManagedAgentProvider, basePrefix string) managedProviderView {
+	view := managedProviderView{ID: m.ID, Name: m.Name, APIKey: m.APIKey, UseSourceMark: m.UseSourceMark, SourceName: m.SourceName}
 	view.ProviderIDs, _ = m.GetProviderIDs()
 	live, deletedIDs := liveProvision(view.ProviderIDs, liveProviders)
 	view.StaleProviderIDs = deletedIDs
@@ -509,7 +528,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		}
 		mv.ModelNames = uniqueSorted(membersModelNames(members))
 		mv.ModelCount = len(mv.ModelNames)
-		gen := buildGeneratedBlock(rule, jpaths, stored, members)
+		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
 		mv.Generated = gen
 		fullName := providerBlockName(m.Name, stored.Suffix)
 		actual := normalizeFileProvider(provResult.Get(fullName), jpaths)
@@ -526,11 +545,13 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 
 // buildGeneratedBlock assembles the normalized provider block for one
 // endpoint group: provider-level fields from the rule's common recs plus
-// the protocol matched by this endpoint's suffix tags, the endpoint
-// itself (written into the protocol's/provider baseURL-ish field when
-// present), and the model list with the four unified fields filled from
-// the chosen model-info sources.
-func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider) map[string]any {
+// the protocol matched by this endpoint's suffix tags, the full access URL
+// (system base URL [+/__来源] + endpoint, written into the protocol's /
+// provider baseURL-ish field when present), and the model list with the
+// four unified fields filled from the chosen models.dev reference
+// suppliers. apiKeyOverride is the 令牌 key chosen in the 托管 dialog;
+// empty falls back to the first linked provider's key (legacy rows).
+func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, apiKeyOverride string, basePrefix string) map[string]any {
 	recs, _ := rule.GetRecommendations()
 	protocols, _ := rule.GetProtocols()
 	mif, _ := rule.GetModelInfoFields()
@@ -556,16 +577,20 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 		}
 		_ = setDottedValue(block, r.Key, r.Recommended)
 	}
-	// Endpoint → baseURL-ish field: prefer the protocol's first
-	// condition field ending in baseURL/baseUrl/url, then any common
+	// baseURL = 系统 BaseURL [+ /__来源] + endpoint：prefer the protocol's
+	// first condition field ending in baseURL/baseUrl/url, then any common
 	// provider rec key that looks like a URL field.
 	if field := endpointFieldFor(protocol, providerRecs); field != "" {
-		_ = setDottedValue(block, field, group.Endpoint)
+		_ = setDottedValue(block, field, strings.TrimSuffix(basePrefix, "/")+group.Endpoint)
 	}
-	// apiKey from the first linked provider when a required provider rec
-	// demands one (managed providers are used with OUR keys).
+	// apiKey: the dialog-chosen 令牌 key wins; legacy rows fall back to the
+	// first linked provider's key.
 	if key := apiKeyFieldFor(providerRecs); key != "" {
-		if k := firstKeyOf(members); k != "" {
+		k := apiKeyOverride
+		if k == "" {
+			k = firstKeyOf(members)
+		}
+		if k != "" {
 			_ = setDottedValue(block, key, k)
 		}
 	}
@@ -689,6 +714,47 @@ func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFie
 // providerBlockName joins the root name and the group suffix.
 func providerBlockName(name, suffix string) string {
 	return strings.TrimSpace(name) + strings.TrimSpace(suffix)
+}
+
+// systemBaseURLPrefix builds the对外 BaseURL the BaseURL settings page
+// shows: scheme://host/{suffix}. The suffix lives in the base_url_suffix
+// setting (default "proxy"); scheme/host come from the current dashboard
+// request so the generated agent config points at the same origin the
+// operator is browsing.
+func systemBaseURLPrefix(c *gin.Context, db *gorm.DB) string {
+	scheme := "http"
+	if c != nil && c.Request != nil {
+		if proto := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); proto == "https" {
+			scheme = "https"
+		} else if c.Request.TLS != nil {
+			scheme = "https"
+		}
+	}
+	host := ""
+	if c != nil && c.Request != nil {
+		host = strings.TrimSpace(c.Request.Host)
+	}
+	suffix := "proxy"
+	if v, err := service.GetSetting(db, "base_url_suffix"); err == nil && strings.TrimSpace(v) != "" {
+		suffix = strings.TrimSpace(v)
+	}
+	return scheme + "://" + host + "/" + suffix
+}
+
+// managedSourceMarkSuffix returns the "/__来源" segment to append after the
+// system base URL when the managed provider has 标记来源 enabled.
+func managedSourceMarkSuffix(m model.ManagedAgentProvider) string {
+	if !m.UseSourceMark {
+		return ""
+	}
+	name := strings.TrimSpace(m.SourceName)
+	if name == "" {
+		name = strings.TrimSpace(m.Name)
+	}
+	if name == "" {
+		return ""
+	}
+	return "/__" + name
 }
 
 // liveProvision splits the system providers referenced by the managed

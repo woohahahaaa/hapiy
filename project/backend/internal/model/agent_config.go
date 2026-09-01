@@ -578,11 +578,19 @@ type ManagedAgentGroup struct {
 type ManagedAgentProvider struct {
 	ID                string    `gorm:"primaryKey;type:uuid" json:"id"`
 	AgentConfigFileID string    `gorm:"not null;index" json:"agent_config_file_id"`
-	Name              string    `gorm:"not null" json:"name"`   // 根名，例如 HAPIY
-	ProviderIDs       string    `gorm:"type:text" json:"-"`     // JSON array of system Provider ids
-	Groups            string    `gorm:"type:text" json:"-"`     // JSON blob of []ManagedAgentGroup
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	Name              string    `gorm:"not null" json:"name"` // 根名，例如 HAPIY
+	ProviderIDs       string    `gorm:"type:text" json:"-"`   // JSON array of system Provider ids
+	Groups            string    `gorm:"type:text" json:"-"`   // JSON blob of []ManagedAgentGroup
+	// APIKey is the 令牌 (downstream relay token) key the agent uses to
+	// authenticate against the hapiy relay; chosen in the 托管 dialog.
+	// Empty falls back to the first linked provider's key (legacy rows).
+	APIKey string `gorm:"type:text" json:"api_key"`
+	// UseSourceMark appends the `__来源名` segment after the system base
+	// URL (see the BaseURL settings page) before the endpoint.
+	UseSourceMark bool   `gorm:"default:false" json:"use_source_mark"`
+	SourceName    string `gorm:"type:text" json:"source_name"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func (m *ManagedAgentProvider) BeforeCreate(tx *gorm.DB) error {
