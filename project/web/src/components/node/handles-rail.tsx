@@ -16,6 +16,12 @@ export interface HandlesRailProps {
   /** bar 颜色 = 所在节点自身的外边框颜色；不传则中性边框色 */
   borderColor?: string
   flashLayers?: readonly FlowLayerOverlay[]
+  /**
+   * 右半边填充的 Tailwind 背景类：要跟节点本体背景一致，否则 pill 会在
+   * executor/entry（bg-card）上变成一个跟卡片底色对不上的色块，暴露出节点
+   * 的边框/底色；slot 容器是 bg-background。缺省 bg-card。
+   */
+  fillBgClass?: string
 }
 
 /** 上下各 12px 的 padding（原 8px 的 3 倍） */
@@ -27,6 +33,7 @@ export function HandlesRail({
   segmentIds,
   borderColor,
   flashLayers = [],
+  fillBgClass = 'bg-card',
 }: HandlesRailProps) {
   const target = topologyConfig.handles.provider.target
   const gap = topologyConfig.handles.provider.segmentGap
@@ -55,7 +62,7 @@ export function HandlesRail({
             style={{ width: target.width, height: total }}
           >
             <div
-              className="absolute left-1/2 top-0 h-full bg-background"
+              className={`absolute left-1/2 top-0 h-full ${fillBgClass}`}
               style={{ width: target.width / 2 }}
             />
           </div>

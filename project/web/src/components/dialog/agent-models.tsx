@@ -144,11 +144,28 @@ const [error, setError] = useState<string | null>(null)
     return parsed ?? summary?.providers ?? []
   }, [liveContent, summary])
 
+  // 托管供应商识别：配置文件里的 provider 块名与托管模板生成的块名
+  // （根名，或根名+后缀）相同 → 该块归托管，不再显示在普通供应商列表。
+  const managedBlockNames = useMemo(() => {
+    const names = new Set<string>()
+    for (const mv of managed) {
+      names.add(mv.name)
+      for (const g of mv.groups) names.add(`${mv.name}${g.suffix}`)
+    }
+    return names
+  }, [managed])
+
+  // 普通供应商 = 名字不命中任何托管块名。
+  const normalProviders = useMemo(
+    () => workingProviders.filter((p) => !managedBlockNames.has(p.provider_id)),
+    [workingProviders, managedBlockNames],
+  )
+
   // Re-select the first provider/model whenever the working provider set
   // changes (deletions/renames staged in liveContent reflect here). The
   // Managed selection is entirely separate and never auto-selected.
   useEffect(() => {
-    const working = workingProviders
+    const working = normalProviders
     if (selectedManaged) return
     if (
       selectedProviderId &&
@@ -163,7 +180,7 @@ const [error, setError] = useState<string | null>(null)
     setSelectedProviderId(first?.provider_id ?? null)
     setSelectedModelId(first?.models[0]?.id ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workingProviders, selectedProviderId, selectedModelId, selectedManaged])
+  }, [normalProviders, selectedProviderId, selectedModelId, selectedManaged])
 
   // The managed view backing the current selection: { view, group }.
   const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: ManagedGroupView } | null>(() => {
@@ -294,7 +311,15 @@ const [error, setError] = useState<string | null>(null)
     if (!record || liveContent === null) return
     setSaving(true)
     try {
-      await dashboardApi.saveAgentConfigFileContent(record.id, liveContent)
+      // 每次保存都把 JSON 重新格式化（2 空格缩进），避免编辑/合并后出现
+      // 排版混乱；解析失败则原样提交。
+      let pretty = liveContent
+      try {
+        pretty = JSON.stringify(JSON.parse(liveContent), null, 2)
+      } catch {
+        // keep as-is
+      }
+      await dashboardApi.saveAgentConfigFileContent(record.id, pretty)
       toast('已保存预览中的变更')
       setLiveContent(null)
       setTemplateTally(new Map()); setTemplateApplied(0)
@@ -454,13 +479,6 @@ const [error, setError] = useState<string | null>(null)
             <DialogTitle>管理模型 · {record?.record_name ?? ''}</DialogTitle>
             <p className="text-xs text-muted-foreground">
               {record?.agent_type ?? ''} · {record?.path ?? ''}
-              {templateTally.size > 0 ? (
-                <span className="ml-2 text-destructive">· 共 {templateApplied} 处修改待保存</span>
-              ) : (
-                problemCount > 0 && (
-                  <span className="ml-2 text-destructive">· {problemCount} 处与推荐值不符</span>
-                )
-              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -482,7 +500,7 @@ const [error, setError] = useState<string | null>(null)
               title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
             >
               <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-              使用推荐配置模板
+              使用推荐配置模板{problemCount > 0 && `（${problemCount} 处不同）`}
             </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
               <AppIcon name="close" size={16} />
@@ -510,7 +528,7 @@ const [error, setError] = useState<string | null>(null)
               {!loading && !error && summary && summary.providers.length === 0 && (
                 <Placeholder>未解析到任何 provider</Placeholder>
               )}
-              {workingProviders.map((p) => {
+              {normalProviders.map((p) => {
                 const tally = templateTally.get(p.provider_id)
                 return (
                   <ProviderRow

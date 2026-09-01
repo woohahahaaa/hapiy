@@ -324,6 +324,7 @@ export function NodeSlot({ data }: NodeSlotProps) {
         height={nodeHeight}
         segmentCount={connectionCount ?? 1}
         flashLayers={flashLayers}
+        fillBgClass="bg-background"
       />
       <div ref={measureRef} className="w-fit">{body}</div>
       {!isProviderSlot && <SlotErrorBox error={null} />}

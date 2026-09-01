@@ -263,7 +263,7 @@ export function AgentModelInfoMatchDialog({
                 {/* 表头行：与卡片内列用同一比例，保证对齐 */}
                 <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
                   <div className="w-[18%]">模型</div>
-                  <div className="w-[26%] border-l border-border pl-2">从 models.dev 同步模型配置</div>
+                  <div className="w-[26%] border-l border-border pl-2">从 models.dev 同步</div>
                   <div className="flex w-[22%] items-center gap-2 border-l border-border pl-2">
                     <Checkbox
                       checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
@@ -303,7 +303,7 @@ export function AgentModelInfoMatchDialog({
                                       }
                                     >
                                       <SelectTrigger className="h-7 w-full text-xs">
-                                        <SelectValue placeholder="选择要同步的 models.dev 供应商" />
+                                        <SelectValue placeholder="选择参考厂商" />
                                       </SelectTrigger>
                                       <SelectContent>
                                         {providersForModel(snapshot ?? [], g.modelId).map((p) => (
@@ -334,7 +334,7 @@ export function AgentModelInfoMatchDialog({
                               <td className="w-[34%] px-2 py-2">
                                 {!source ? (
                                   <div className="text-[11px] text-muted-foreground">
-                                    {supplier ? '未在 models.dev 查到该模型信息' : '请先选择要同步的 models.dev 供应商'}
+                                    {supplier ? '未在 models.dev 查到该模型信息' : '请先选择参考厂商'}
                                   </div>
                                 ) : changes.length === 0 ? (
                                   <div className="text-muted-foreground">—</div>
