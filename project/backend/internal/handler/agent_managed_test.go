@@ -147,7 +147,7 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 		ids = append(ids, p.ID)
 	}
 
-	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","use_source_mark":true,"source_name":"SRC","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
+	createBody := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","source_name":"SRC","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]}`
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")

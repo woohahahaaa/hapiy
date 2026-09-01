@@ -585,12 +585,15 @@ type ManagedAgentProvider struct {
 	// authenticate against the hapiy relay; chosen in the 托管 dialog.
 	// Empty falls back to the first linked provider's key (legacy rows).
 	APIKey string `gorm:"type:text" json:"api_key"`
-	// UseSourceMark appends the `__来源名` segment after the system base
-	// URL (see the BaseURL settings page) before the endpoint.
-	UseSourceMark bool   `gorm:"default:false" json:"use_source_mark"`
-	SourceName    string `gorm:"type:text" json:"source_name"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	// BaseURL overrides the system base URL prefix when non-empty; empty
+	// lets generation derive it from the current request + base_url_suffix
+	// setting (BaseURL settings page logic).
+	BaseURL string `gorm:"type:text" json:"base_url"`
+	// SourceName, when non-empty, appends the `__来源` segment after the
+	// base URL (BaseURL settings page 标记来源 logic); empty = no mark.
+	SourceName string    `gorm:"type:text" json:"source_name"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (m *ManagedAgentProvider) BeforeCreate(tx *gorm.DB) error {

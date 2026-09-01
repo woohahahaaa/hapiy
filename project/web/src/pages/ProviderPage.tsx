@@ -908,6 +908,7 @@ function ModelPriceCell({
 
   const ref = model.referencePrices
   const fmt = (v: number): string => (Number.isFinite(v) && v > 0 ? `$${Number(v.toFixed(4)).toString()}` : '$0')
+  const num = (v: number): string => (Number.isFinite(v) && v > 0 ? Number(v.toFixed(4)).toString() : '0')
   const refTooltip = model.referenceProvider !== null
     ? (ref
         ? `${model.referenceProvider} · 输入 ${fmt(ref.input)} · 缓存写 ${fmt(ref.cacheWrite)} · 缓存读 ${fmt(ref.cacheRead)} · 输出 ${fmt(ref.output)} · 倍率 ${model.rate || '1'}`
@@ -965,9 +966,9 @@ function ModelPriceCell({
                     <span className="text-muted-foreground">选择参考厂商</span>
                   ) : (
                     <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-                      <span className="min-w-0 truncate">{model.referenceProvider}</span>
+                      <span className="min-w-[10px] shrink truncate">{model.referenceProvider}</span>
                       {ref ? (
-                        <span className="shrink-0 text-muted-foreground tabular-nums">输{fmt(ref.input)}写{fmt(ref.cacheWrite)}读{fmt(ref.cacheRead)}出{fmt(ref.output)}</span>
+                        <span className="shrink-0 text-muted-foreground tabular-nums">{num(ref.input)}/{num(ref.cacheWrite)}/{num(ref.cacheRead)}/{num(ref.output)}</span>
                       ) : (
                         <span className="shrink-0 text-destructive">尚未获取快照</span>
                       )}

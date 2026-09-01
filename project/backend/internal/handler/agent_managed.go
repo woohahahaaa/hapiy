@@ -42,7 +42,7 @@ type managedProviderView struct {
 	HiddenGroups     []model.ManagedAgentGroup `json:"hidden_groups"`
 	PendingSync      bool                     `json:"pending_sync"`
 	APIKey           string                   `json:"api_key"`
-	UseSourceMark    bool                     `json:"use_source_mark"`
+	BaseURL          string                   `json:"base_url"`
 	SourceName       string                   `json:"source_name"`
 }
 
@@ -336,19 +336,19 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 // ── request / helpers ──────────────────────────────────────────────
 
 type managedProviderRequest struct {
-	Name          string                    `json:"name"`
-	ProviderIDs   []string                  `json:"provider_ids"`
-	Groups        []model.ManagedAgentGroup `json:"groups"`
-	APIKey        string                    `json:"api_key"`
-	UseSourceMark bool                      `json:"use_source_mark"`
-	SourceName    string                    `json:"source_name"`
+	Name        string                    `json:"name"`
+	ProviderIDs []string                  `json:"provider_ids"`
+	Groups      []model.ManagedAgentGroup `json:"groups"`
+	APIKey      string                    `json:"api_key"`
+	BaseURL     string                    `json:"base_url"`
+	SourceName  string                    `json:"source_name"`
 }
 
-// applyManagedAuthFields copies the access-key / source-mark options from
-// the request onto the row (shared by create & update).
+// applyManagedAuthFields copies the access-key / base-url / source options
+// from the request onto the row (shared by create & update).
 func applyManagedAuthFields(m *model.ManagedAgentProvider, req managedProviderRequest) {
 	m.APIKey = strings.TrimSpace(req.APIKey)
-	m.UseSourceMark = req.UseSourceMark
+	m.BaseURL = strings.TrimSpace(req.BaseURL)
 	m.SourceName = strings.TrimSpace(req.SourceName)
 }
 
@@ -480,7 +480,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 // endpoint, marks hidden groups and stale ids, and computes pending
 // sync per group by comparing the generated block with the file.
 func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, liveProviders []model.Provider, content string, m model.ManagedAgentProvider, basePrefix string) managedProviderView {
-	view := managedProviderView{ID: m.ID, Name: m.Name, APIKey: m.APIKey, UseSourceMark: m.UseSourceMark, SourceName: m.SourceName}
+	view := managedProviderView{ID: m.ID, Name: m.Name, APIKey: m.APIKey, BaseURL: m.BaseURL, SourceName: m.SourceName}
 	view.ProviderIDs, _ = m.GetProviderIDs()
 	live, deletedIDs := liveProvision(view.ProviderIDs, liveProviders)
 	view.StaleProviderIDs = deletedIDs
@@ -741,16 +741,21 @@ func systemBaseURLPrefix(c *gin.Context, db *gorm.DB) string {
 	return scheme + "://" + host + "/" + suffix
 }
 
-// managedSourceMarkSuffix returns the "/__来源" segment to append after the
-// system base URL when the managed provider has 标记来源 enabled.
+// managedBasePrefix resolves the base URL prefix for a managed provider:
+// its explicit BaseURL override when set, else the system base URL derived
+// from the current request + the base_url_suffix setting.
+func managedBasePrefix(c *gin.Context, db *gorm.DB, m model.ManagedAgentProvider) string {
+	if override := strings.TrimSpace(m.BaseURL); override != "" {
+		return strings.TrimSuffix(override, "/")
+	}
+	return systemBaseURLPrefix(c, db)
+}
+
+// managedSourceMarkSuffix returns the "/__来源" segment appended after the
+// base URL when the managed provider has a 来源名 filled in (BaseURL
+// settings page 标记来源 logic); empty 来源名 = no mark.
 func managedSourceMarkSuffix(m model.ManagedAgentProvider) string {
-	if !m.UseSourceMark {
-		return ""
-	}
 	name := strings.TrimSpace(m.SourceName)
-	if name == "" {
-		name = strings.TrimSpace(m.Name)
-	}
 	if name == "" {
 		return ""
 	}

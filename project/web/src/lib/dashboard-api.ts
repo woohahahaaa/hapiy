@@ -794,7 +794,7 @@ export type ManagedProviderView = {
   readonly hidden_groups: readonly ManagedAgentGroup[]
   readonly pending_sync: boolean
   readonly api_key: string
-  readonly use_source_mark: boolean
+  readonly base_url: string
   readonly source_name: string
 }
 
@@ -803,7 +803,7 @@ export type ManagedProviderInput = {
   readonly provider_ids: readonly string[]
   readonly groups: readonly ManagedAgentGroup[]
   readonly api_key?: string
-  readonly use_source_mark?: boolean
+  readonly base_url?: string
   readonly source_name?: string
 }
 
@@ -2967,7 +2967,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return data.map((raw) => {
       if (!isRecord(raw)) {
-        return { id: '', name: '', provider_ids: [], stale_provider_ids: [], groups: [], hidden_groups: [], pending_sync: false, api_key: '', use_source_mark: false, source_name: '' }
+        return { id: '', name: '', provider_ids: [], stale_provider_ids: [], groups: [], hidden_groups: [], pending_sync: false, api_key: '', base_url: '', source_name: '' }
       }
       const groups = Array.isArray(raw.groups) ? raw.groups : []
       const hidden = Array.isArray(raw.hidden_groups) ? raw.hidden_groups : []
@@ -3007,7 +3007,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         }),
         pending_sync: raw.pending_sync === true,
         api_key: typeof raw.api_key === 'string' ? raw.api_key : '',
-        use_source_mark: raw.use_source_mark === true,
+        base_url: typeof raw.base_url === 'string' ? raw.base_url : '',
         source_name: typeof raw.source_name === 'string' ? raw.source_name : '',
       }
     })

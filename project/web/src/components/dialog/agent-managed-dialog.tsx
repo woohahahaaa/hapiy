@@ -2,7 +2,6 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -53,9 +52,10 @@ export function ManagedProviderDialog({
   const [loading, setLoading] = useState(false)
   const [name, setName] = useState('')
   const [checked, setChecked] = useState<Set<string>>(new Set())
-  // 接入 Key（令牌）与 BaseURL 来源标记选项。
+  // 接入 Key（令牌）、BaseURL（留空跟随系统）与来源标记选项。
   const [apiKey, setApiKey] = useState('')
-  const [useSourceMark, setUseSourceMark] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [autoBaseUrl, setAutoBaseUrl] = useState('')
   const [sourceName, setSourceName] = useState('')
   // suffixByEndpoint / sourceByEndpoint persist user input per endpoint
   // so re-derivation (e.g. after toggling a supplier) keeps their edits.
@@ -74,23 +74,29 @@ export function ManagedProviderDialog({
     setSourceByEndpoint({})
     setManualEndpoint({})
     setApiKey('')
-    setUseSourceMark(false)
+    setBaseUrl('')
     setSourceName('')
     Promise.all([
       dashboardApi.listManagedProviderOptions(),
       loadModelsDevModels(),
       dashboardApi.listTokens({ limit: 1000, offset: 0 }).catch(() => ({ tokens: [] as readonly Token[], total: 0 })),
+      dashboardApi.getSettings().catch(() => [] as ReadonlyArray<{ key: string; value: string }>),
     ])
-      .then(([opts, models, tokensRes]) => {
+      .then(([opts, models, tokensRes, settings]) => {
         setOptions(opts)
         setSnapshot(models)
         setTokens(tokensRes.tokens)
+        // 系统 BaseURL：当前前端域名 + base_url_suffix 设置（BaseURL 设置页逻辑）
+        const suffix = settings.find((s) => s.key === 'base_url_suffix')?.value ?? ''
+        const auto = `${window.location.origin}/${(suffix.trim() || 'proxy')}`
+        setAutoBaseUrl(auto)
         if (editing) {
           setName(editing.name)
           setChecked(new Set(editing.provider_ids))
           setApiKey(editing.api_key)
-          setUseSourceMark(editing.use_source_mark)
-          setSourceName(editing.source_name || editing.name)
+          // 存量为空（跟随系统）时直接把自动值填进正文，用户可编辑
+          setBaseUrl(editing.base_url || auto)
+          setSourceName(editing.source_name)
           const suffix: Record<string, string> = {}
           const sources: Record<string, Record<string, string>> = {}
           for (const g of editing.groups) {
@@ -103,6 +109,9 @@ export function ManagedProviderDialog({
           }
           setSuffixByEndpoint(suffix)
           setSourceByEndpoint(sources)
+        } else {
+          // 新建：直接把系统自动值填进正文，用户可编辑
+          setBaseUrl(auto)
         }
       })
       .catch((err) => toast.error(err instanceof Error ? err.message : '加载失败'))
@@ -253,9 +262,11 @@ export function ManagedProviderDialog({
     }
 
     try {
+      // BaseURL 与系统自动值一致 → 存空（生成时实时跟随系统设置）
+      const storedBaseUrl = baseUrl.trim() === '' || baseUrl.trim() === autoBaseUrl.trim() ? '' : baseUrl.trim()
       const authFields = {
         api_key: apiKey,
-        use_source_mark: useSourceMark,
+        base_url: storedBaseUrl,
         source_name: sourceName.trim(),
       }
       if (editing) {
@@ -301,32 +312,17 @@ export function ManagedProviderDialog({
             <>
               <div className="grid grid-cols-2 items-start gap-4">
                 <Field>
-                  <FieldLabel>供应商名字</FieldLabel>
+                  <FieldLabel>规则名称</FieldLabel>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="例如：HAPIY"
                   />
                   <p className="text-xs text-muted-foreground">
-                    各组最终 provider 名 = 供应商名字 + 后缀（只有一个分组时后缀可选）
+                    各组最终 provider 名 = 规则名称 + 后缀（只有一个分组时后缀可选）
                   </p>
                 </Field>
 
-                <Field>
-                  <FieldLabel>
-                    选择要托管的供应商
-                    <span className="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span>
-                  </FieldLabel>
-                  <ProviderMultiSelect
-                    loading={loading}
-                    options={options}
-                    checked={checked}
-                    onToggle={toggleProvider}
-                  />
-                </Field>
-              </div>
-
-              <div className="grid grid-cols-2 items-start gap-4">
                 <Field>
                   <FieldLabel>
                     接入 Key
@@ -353,27 +349,47 @@ export function ManagedProviderDialog({
                     写入生成配置的 apiKey，Agent 用它接入本系统
                   </p>
                 </Field>
+              </div>
+
+              <div className="grid grid-cols-[minmax(0,1fr)_12rem] items-start gap-4">
+                <Field>
+                  <FieldLabel>BaseURL</FieldLabel>
+                  <Input
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="http://host:port/proxy"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    默认填入系统识别的 BaseURL，可直接编辑；清空则恢复系统默认
+                  </p>
+                </Field>
 
                 <Field>
-                  <FieldLabel>BaseURL 标记来源</FieldLabel>
-                  <label className="flex cursor-pointer items-center gap-2 py-1.5">
-                    <Checkbox
-                      checked={useSourceMark}
-                      onCheckedChange={(v) => setUseSourceMark(v === true)}
-                    />
-                    <span className="text-foreground">在 BaseURL 后追加 __来源 段</span>
-                  </label>
+                  <FieldLabel>来源</FieldLabel>
                   <Input
                     value={sourceName}
                     onChange={(e) => setSourceName(e.target.value)}
-                    disabled={!useSourceMark}
-                    placeholder={name.trim() || '来源名，默认为托管名字'}
+                    placeholder="可留空"
                   />
                   <p className="text-xs text-muted-foreground">
-                    与 BaseURL 设置页的标记来源逻辑一致；不开启则直接使用最终 BaseURL
+                    填写后在 BaseURL 后追加 __来源 段；可留空
                   </p>
                 </Field>
               </div>
+
+              <Field>
+                <FieldLabel>
+                  选择要托管的供应商
+                  <span className="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span>
+                </FieldLabel>
+                <ProviderMultiSelect
+                  loading={loading}
+                  options={options}
+                  checked={checked}
+                  onToggle={toggleProvider}
+                />
+              </Field>
 
               {deferredGroups.length > 0 && (
                 <Field>
