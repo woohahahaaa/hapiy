@@ -1,434 +1,559 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>托管供应商 Endpoint 分组 UI 重构方案对比</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
-  <style>
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
-      vertical-align: middle;
-      font-size: 18px;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background-color: #09090b;
-      color: #f4f4f5;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>托管供应商 · endpoint 分组重构原型（系统真实样式）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* ===== 忠实复制项目 src/index.css 的令牌 ===== */
+  :root {
+    --background: oklch(0.967 0.001 0);
+    --foreground: oklch(0.067 0.001 0);
+    --card: oklch(0.976 0.001 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.653 0.186 274.621);
+    --primary-foreground: oklch(1 0.001 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.097 0.001 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.5 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.072 0.007 18.809);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(1.0000 0 0);
+    --success: oklch(0.627 0.194 149.214);
+    --success-foreground: oklch(0.982 0.018 155.826);
+    --warning: oklch(0.769 0.188 70.08);
+    --warning-foreground: oklch(0.205 0 0);
+    --border: oklch(0.786 0.001 0);
+    --input: oklch(0.8 0.001 0);
+    --ring: oklch(0.708 0 0);
+  }
+  .dark {
+    --background: oklch(0.000 0.000 0.000);
+    --foreground: oklch(0.949 0.001 0);
+    --card: oklch(0.173 0.001 0);
+    --card-foreground: oklch(1.000 0.000 263.283);
+    --popover: oklch(0.14 0.001 0);
+    --popover-foreground: oklch(1.000 0.000 263.283);
+    --primary: oklch(0.909 0.24 130.988);
+    --primary-foreground: oklch(0.053 0.022 29.234);
+    --secondary: oklch(0.949 0.001 0);
+    --secondary-foreground: oklch(0.109 0.003 17.623);
+    --muted: oklch(0.132 0.003 145.386);
+    --muted-foreground: oklch(0.65 0 0);
+    --accent: oklch(0.653 0.186 274.621);
+    --accent-foreground: oklch(1 0.001 0);
+    --destructive: oklch(0.545 0.191 24.274);
+    --destructive-foreground: oklch(1.0000 0 0);
+    --success: oklch(0.696 0.17 162.48);
+    --success-foreground: oklch(0.393 0.095 152.535);
+    --warning: oklch(0.769 0.188 70.08);
+    --warning-foreground: oklch(0.205 0 0);
+    --border: oklch(0.321 0.001 0);
+    --input: oklch(0.273 0.001 0);
+    --ring: oklch(0.909 0.24 130.988);
+  }
+  * { border-color: var(--border); }
+  html, body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: 0;
+  }
+  .heading-font { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif; }
+
+  /* ===== IconPark outline 主题：strokeWidth 3、round cap/join、currentColor ===== */
+  .ip {
+    width: 16px; height: 16px; flex-shrink: 0;
+    stroke: currentColor; stroke-width: 3;
+    stroke-linecap: round; stroke-linejoin: round;
+    fill: none;
+  }
+  .ip-sm { width: 12px; height: 12px; }
+
+  /* ===== 与 Input 组件一致的样式（h-7 等效 size=sm） ===== */
+  .input-sm {
+    width: 100%; min-width: 0;
+    border: 1px solid var(--input);
+    background: var(--input); background: color-mix(in oklab, var(--input) 30%, transparent);
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem; line-height: 1rem;
+    color: var(--foreground);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    height: 1.75rem;
+  }
+  .input-sm::placeholder { color: var(--muted-foreground); }
+  .input-sm:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring) 50%, transparent); }
+
+  /* ===== SelectTrigger 组件样式（h-7 等效 size=sm） ===== */
+  .select-sm {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.375rem;
+    border: 1px solid var(--input);
+    background: transparent;
+    border-radius: 0.375rem;
+    height: 1.75rem;
+    padding: 0.5rem 0.5rem 0.5rem 0.625rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    color: var(--foreground);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .dark .select-sm, .select-sm { }
+  .dark .select-sm { background: color-mix(in oklab, var(--input) 30%, transparent); }
+  .dark .select-sm:hover { background: color-mix(in oklab, var(--input) 50%, transparent); }
+  .select-sm:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring) 50%, transparent); }
+
+  /* ===== 按钮（Button 组件：rounded-none、text-xs、h-8） ===== */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 0.375rem; flex-shrink: 0;
+    font-size: 0.75rem; font-weight: 500;
+    border: 1px solid transparent;
+    border-radius: 0;
+    outline: none; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+    height: 2rem; padding: 0 0.625rem;
+    background-clip: padding-box;
+  }
+  .btn:disabled { opacity: 0.5; pointer-events: none; }
+  .btn:focus-visible { border-color: var(--ring); box-shadow: 0 0 0 1px color-mix(in oklab, var(--ring) 50%, transparent); }
+  .btn-sm { height: 1.75rem; padding: 0 0.625rem; gap: 0.25rem; }
+  .btn-primary { background: var(--primary); color: var(--primary-foreground); }
+  .btn-primary:hover { background: color-mix(in oklab, var(--primary) 80%, transparent); }
+  .btn-outline { border-color: var(--border); background: var(--background); color: var(--foreground); }
+  .btn-outline:hover { background: var(--muted); }
+  .dark .btn-outline { border-color: var(--input); background: color-mix(in oklab, var(--input) 30%, transparent); }
+  .dark .btn-outline:hover { background: color-mix(in oklab, var(--input) 50%, transparent); }
+  .btn-ghost { background: transparent; color: var(--foreground); }
+  .btn-ghost:hover { background: var(--muted); }
+
+  /* ===== 折叠动画 ===== */
+  .collapse-body { overflow: hidden; }
+  .chev { transition: transform 0.15s; }
+  .open .chev { transform: rotate(90deg); }
+  .group-card .chev { transition: transform 0.15s; }
+
+  /* 模型行 filter 高亮 */
+  .row-hidden { display: none !important; }
+</style>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        background: 'var(--background)', foreground: 'var(--foreground)',
+        card: 'var(--card)', 'card-foreground': 'var(--card-foreground)',
+        popover: 'var(--popover)', 'popover-foreground': 'var(--popover-foreground)',
+        primary: 'var(--primary)', 'primary-foreground': 'var(--primary-foreground)',
+        secondary: 'var(--secondary)', 'secondary-foreground': 'var(--secondary-foreground)',
+        muted: 'var(--muted)', 'muted-foreground': 'var(--muted-foreground)',
+        accent: 'var(--accent)', 'accent-foreground': 'var(--accent-foreground)',
+        destructive: 'var(--destructive)', 'destructive-foreground': 'var(--destructive-foreground)',
+        success: 'var(--success)', 'success-foreground': 'var(--success-foreground)',
+        warning: 'var(--warning)', 'warning-foreground': 'var(--warning-foreground)',
+        border: 'var(--border)', input: 'var(--input)', ring: 'var(--ring)',
+      },
+    } }
+  }
+</script>
 </head>
-<body class="p-6 md:p-10 max-w-7xl mx-auto space-y-10">
+<body class="text-xs/relaxed antialiased md:text-xs">
 
-  <!-- Header / Intro -->
-  <header class="border-b border-zinc-800 pb-6 space-y-3">
-    <div class="flex items-center gap-3">
-      <span class="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
-        <span class="material-symbols-outlined text-2xl">tune</span>
-      </span>
-      <div>
-        <h1 class="text-2xl font-bold text-zinc-100 tracking-tight">托管供应商 Endpoint 分组 UI 重构原型</h1>
-        <p class="text-sm text-zinc-400 mt-0.5">对比现状问题与全新改进方案：结构化清晰展示、一键批量映射、视觉层次分明</p>
-      </div>
+<!-- 顶部工具栏：主题 + 说明 -->
+<div class="sticky top-0 z-40 border-b border-border bg-card">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2">
+    <div class="flex min-w-0 items-center gap-2 text-xs font-medium">
+      <span class="truncate text-muted-foreground">原型 · 添加托管 provider 弹窗</span>
+      <span class="shrink-0 rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-muted-foreground">endpoint 分组区 · 现状 vs 重构</span>
     </div>
-  </header>
-
-  <!-- Problem Analysis Card -->
-  <section class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 space-y-4">
-    <h2 class="text-base font-semibold text-zinc-200 flex items-center gap-2">
-      <span class="material-symbols-outlined text-amber-400">report_problem</span>
-      现有设计的问题诊断（为什么会觉得乱？）
-    </h2>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
-        <div class="font-medium text-amber-300">1. 双列布局混乱拥挤</div>
-        <p class="text-zinc-400 leading-relaxed">
-          把模型列表硬塞成两列，下拉框（SelectTrigger）与模型名宽度严重受限，长模型名被截断，且双列横向换行导致视觉跳跃，找模型非常累。
-        </p>
+    <div class="flex shrink-0 items-center gap-2">
+      <div class="flex rounded-md border border-border p-0.5">
+        <button data-theme="light" class="theme-btn rounded-sm px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted">浅色</button>
+        <button data-theme="dark" class="theme-btn rounded-sm px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted">深色</button>
       </div>
-      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
-        <div class="font-medium text-amber-300">2. 参数设置与列表混杂</div>
-        <p class="text-zinc-400 leading-relaxed">
-          “分组后缀”输入框直接浮在列表上方，无明确分组上下文；若是未配置 endpoint 供应商，还会多出一个 endpoint 手动输入框，层级关系模糊。
-        </p>
-      </div>
-      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
-        <div class="font-medium text-amber-300">3. 缺乏批量操作与搜索</div>
-        <p class="text-zinc-400 leading-relaxed">
-          当勾选了多个供应商，一个 Endpoint 下包含数十个模型时，用户只能逐个点击下拉框选来源，缺乏一键统一绑定与快速过滤检索能力。
-        </p>
-      </div>
+      <span class="text-[10px] text-muted-foreground">D 键切换</span>
     </div>
-  </section>
+  </div>
+</div>
 
-  <!-- Comparison Section -->
-  <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
-    
-    <!-- Left: Before (现状仿真) -->
-    <div class="xl:col-span-5 space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-red-950/50 text-red-400 border border-red-800/40">
-          ❌ 现状设计（问题示意）
-        </span>
-        <span class="text-xs text-zinc-500">拥挤 / 紧凑双列 / 缺乏检索</span>
+<div class="mx-auto max-w-6xl px-4 py-6 pb-40">
+
+  <!-- 遮罩 + 对话框（模拟 DialogContent width=lg / bg-popover / ring-foreground/10 / rounded-none） -->
+  <div class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/10 p-4 backdrop-blur-xs">
+    <div class="relative grid w-full max-w-[1024px] max-h-[85vh] min-h-[420px] flex-col gap-4 overflow-y-auto rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 outline-none">
+      <button title="关闭" class="absolute top-2 right-2 inline-flex size-7 items-center justify-center rounded-none text-xs outline-none transition-all hover:bg-muted hover:text-foreground">
+        <svg class="ip" viewBox="0 0 48 48"><path d="M8 8L40 40"/><path d="M8 40L40 8"/></svg>
+      </button>
+
+      <!-- DialogHeader -->
+      <div class="pr-8">
+        <div class="heading-font text-sm font-medium">添加托管 provider</div>
       </div>
 
-      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3 opacity-80">
-        <div class="text-xs text-zinc-400">
-          <label class="block font-medium text-zinc-300 mb-1">endpoint 分组</label>
-          <p class="text-[11px] text-zinc-500 mb-2">（完全相同才分到一组；点击行可折叠/展开子表格）</p>
+      <!-- 正文 -->
+      <div class="min-h-0 flex-1 space-y-4 overflow-y-auto">
 
-          <!-- Group Card 1 -->
-          <div class="rounded-md border border-zinc-700/60 bg-zinc-950/50">
-            <div class="flex items-center gap-2 px-2 py-1.5 bg-zinc-800/50 text-xs font-mono font-medium text-zinc-200 cursor-pointer">
-              <span class="material-symbols-outlined text-zinc-400 !text-sm">expand_more</span>
-              /v1/chat/completions
-            </div>
-            <div class="p-2.5 space-y-3 border-t border-zinc-800 text-xs">
-              <div class="flex items-center gap-2">
-                <span class="text-zinc-400 shrink-0">分组后缀</span>
-                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-36 font-mono text-zinc-200" value="-Chat" />
-              </div>
-              <div class="border border-zinc-800 rounded overflow-hidden">
-                <div class="flex bg-zinc-800/40 px-2 py-1 text-[11px] text-zinc-400 border-b border-zinc-800">
-                  <div class="flex-1 flex gap-2"><span>模型</span><span class="w-36 border-l border-zinc-800 pl-2">models.dev 参考</span></div>
-                  <div class="flex-1 flex gap-2 border-l border-zinc-800 pl-2"><span>模型</span><span class="w-36 border-l border-zinc-800 pl-2">models.dev 参考</span></div>
-                </div>
-                <div class="divide-y divide-zinc-800/60 font-mono text-[11px]">
-                  <div class="flex">
-                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1">
-                      <span class="truncate flex-1">gpt-4o</span>
-                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>openai</option></select>
-                    </div>
-                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1 border-l border-zinc-800">
-                      <span class="truncate flex-1">gpt-4o-mini</span>
-                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>openai</option></select>
-                    </div>
-                  </div>
-                  <div class="flex">
-                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1">
-                      <span class="truncate flex-1">claude-3-5-sonnet</span>
-                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>anthropic</option></select>
-                    </div>
-                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1 border-l border-zinc-800">
-                      <span class="truncate flex-1">deepseek-chat</span>
-                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>deepseek</option></select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <!-- 规则名称 / 接入 Key -->
+        <div class="grid grid-cols-2 items-start gap-4">
+          <div class="flex w-full flex-col gap-2">
+            <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">规则名称</label>
+            <input class="input-sm !h-8" placeholder="例如：HAPIY" value="HAPIY" />
+            <p class="text-xs text-muted-foreground">各组最终 provider 名 = 规则名称 + 后缀（只有一个分组时后缀可选）</p>
           </div>
-
-          <!-- Group Card 2 (Unconfigured) -->
-          <div class="rounded-md border border-amber-900/40 bg-zinc-950/50 mt-2">
-            <div class="flex items-center gap-2 px-2 py-1.5 bg-amber-950/20 text-xs font-mono font-medium text-amber-400">
-              <span class="material-symbols-outlined !text-sm">expand_more</span>
-              未分配 endpoint
-            </div>
-            <div class="p-2.5 space-y-2 border-t border-zinc-800 text-xs">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-zinc-400">endpoint</span>
-                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-48 font-mono text-zinc-200" placeholder="/v1/responses" />
-                <span class="text-zinc-400">后缀</span>
-                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-28 font-mono text-zinc-200" placeholder="-Res" />
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <!-- Right: After (建议的重构方案) -->
-    <div class="xl:col-span-7 space-y-3">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 flex items-center gap-1.5">
-          <span class="material-symbols-outlined !text-sm">verified</span>
-          ✨ 推荐新设计（卡片分组 + 头部配置 + 紧凑单列清单 + 批量操作）
-        </span>
-        <span class="text-xs text-indigo-400">支持快速搜索 & 一键同步</span>
-      </div>
-
-      <!-- Main Container for Endpoint Groups -->
-      <div class="bg-zinc-900/90 border border-zinc-800 rounded-xl p-5 space-y-5 shadow-2xl">
-
-        <!-- Info alert explaining group rules clearly -->
-        <div class="flex items-start gap-3 bg-zinc-950/70 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300">
-          <span class="material-symbols-outlined text-indigo-400 shrink-0 !text-base mt-0.5">info</span>
-          <div class="space-y-1">
-            <div class="font-medium text-zinc-200">Endpoint 分组规则说明</div>
-            <p class="text-zinc-400 text-[11px] leading-relaxed">
-              系统已根据所选供应商自动按路径归并。多个 Endpoint 分组时，生成的最终供应商名称为：<code class="text-indigo-300 font-mono px-1 py-0.5 bg-zinc-800 rounded">[规则名称] + [分组后缀]</code>。
-            </p>
+          <div class="flex w-full flex-col gap-2">
+            <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">接入 Key<span class="ml-1 font-normal text-muted-foreground">（令牌页创建的 Key）</span></label>
+            <button class="select-sm w-full justify-between !h-8">
+              <span class="truncate">hk-hapiy-9f3a…2c</span>
+              <svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg>
+            </button>
+            <p class="text-xs text-muted-foreground">写入生成配置的 apiKey，Agent 用它接入本系统</p>
           </div>
         </div>
 
-        <!-- Dynamic Groups List -->
-        <div class="space-y-4">
+        <!-- BaseURL / 标记来源 -->
+        <div class="grid grid-cols-2 items-start gap-4">
+          <div class="flex w-full flex-col gap-2">
+            <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">BaseURL</label>
+            <input class="input-sm font-mono !h-8" value="https://demo.hapiy.io/proxy" />
+            <p class="text-xs text-muted-foreground">默认填入系统识别的 BaseURL，可直接编辑；清空则恢复系统默认</p>
+          </div>
+          <div class="flex w-full flex-col gap-2">
+            <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">标记来源</label>
+            <input class="input-sm !h-8" placeholder="可留空" />
+            <p class="text-xs text-muted-foreground">填写后在 BaseURL 后追加 __来源 段；可留空</p>
+          </div>
+        </div>
 
-          <!-- Group Card 1: Standard Group -->
-          <div class="bg-zinc-950 border border-zinc-800/90 hover:border-zinc-700/80 transition-colors rounded-xl overflow-hidden shadow-sm">
-            
-            <!-- Group Header Bar -->
-            <div class="bg-zinc-900/70 px-4 py-3 border-b border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <button class="text-zinc-400 hover:text-zinc-200 transition-colors">
-                  <span class="material-symbols-outlined !text-lg">expand_more</span>
-                </button>
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-mono font-semibold text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded">
-                    /v1/chat/completions
-                  </span>
-                  <span class="text-[11px] text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full">
-                    包含 3 个供应商 · 6 个模型
-                  </span>
+        <!-- 选择要托管的供应商 -->
+        <div class="flex w-full flex-col gap-2">
+          <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">选择要托管的供应商<span class="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span></label>
+          <button class="flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none transition-colors select-none hover:bg-muted/40">
+            <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+              <span class="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5">
+                <button title="移除 OpenAI" class="flex size-4 shrink-0 items-center justify-center p-0 leading-none text-muted-foreground transition-colors hover:text-foreground"><svg class="ip-sm ip" viewBox="0 0 48 48"><path d="M8 8L40 40"/><path d="M8 40L40 8"/></svg></button>
+                <span class="min-w-0 truncate font-medium leading-none">OpenAI</span>
+              </span>
+              <span class="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5">
+                <button title="移除 DeepSeek" class="flex size-4 shrink-0 items-center justify-center p-0 leading-none text-muted-foreground transition-colors hover:text-foreground"><svg class="ip-sm ip" viewBox="0 0 48 48"><path d="M8 8L40 40"/><path d="M8 40L40 8"/></svg></button>
+                <span class="min-w-0 truncate font-medium leading-none">DeepSeek</span>
+              </span>
+              <span class="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5">
+                <button title="移除 LiteLLM 本地" class="flex size-4 shrink-0 items-center justify-center p-0 leading-none text-muted-foreground transition-colors hover:text-foreground"><svg class="ip-sm ip" viewBox="0 0 48 48"><path d="M8 8L40 40"/><path d="M8 40L40 8"/></svg></button>
+                <span class="min-w-0 truncate font-medium leading-none">LiteLLM 本地</span>
+              </span>
+            </span>
+            <svg class="ip shrink-0 text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg>
+          </button>
+        </div>
+
+        <!-- ==================== endpoint 分组（焦点区域） ==================== -->
+        <div class="flex w-full flex-col gap-2">
+          <label class="flex w-fit text-xs font-medium leading-snug text-muted-foreground">
+            endpoint 分组
+            <span class="ml-1 font-normal text-muted-foreground">（完全相同才分到一组；点击行可折叠/展开子表格）</span>
+          </label>
+
+          <!-- 原型对比切换：现状 / 重构建议 -->
+          <div class="flex w-full justify-start gap-6 border-b border-border">
+            <button data-tab="before" class="tab-btn relative -mb-px border-b-2 border-transparent px-1 pb-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">现状</button>
+            <button data-tab="after" class="tab-btn relative -mb-px border-b-2 border-transparent px-1 pb-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">重构建议</button>
+          </div>
+
+          <!-- ========== 现状（当前实现的等效还原） ========== -->
+          <div id="tab-before" class="panel hidden space-y-2 pt-2">
+
+            <div class="rounded-md border border-border">
+              <button class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted">
+                <svg class="ip text-muted-foreground" viewBox="0 0 48 48" style="transform:rotate(90deg)"><path d="M19 12L31 24L19 36"/></svg>
+                <span class="min-w-0 flex-1 truncate font-mono font-medium">/v1/chat/completions</span>
+              </button>
+              <div class="space-y-3 border-t border-border p-2.5">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span class="text-xs text-muted-foreground">分组后缀</span>
+                  <input class="input-sm w-44 font-mono" value="-Chat" />
                 </div>
-              </div>
 
-              <!-- Top-level quick config for this group -->
-              <div class="flex items-center gap-2 text-xs">
-                <span class="text-zinc-400 font-medium shrink-0">分组后缀</span>
-                <div class="relative">
-                  <input 
-                    type="text" 
-                    class="h-7 w-32 bg-zinc-900 border border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded px-2 font-mono text-xs text-zinc-100 placeholder-zinc-500 transition-all" 
-                    value="-Chat"
-                    placeholder="例如：-Chat"
-                  />
+                <!-- 双列模型子表：模型 + 210px 下拉 -->
+                <div class="overflow-hidden rounded-md border border-border">
+                  <div class="flex items-center border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <div class="flex min-w-0 flex-1 items-center gap-2">
+                      <span class="min-w-0 flex-1 truncate">模型</span>
+                      <span class="w-[210px] shrink-0 border-l border-border pl-2">从 models.dev 同步模型配置</span>
+                    </div>
+                    <div class="flex min-w-0 flex-1 items-center gap-2 border-l border-border pl-2">
+                      <span class="min-w-0 flex-1 truncate">模型</span>
+                      <span class="w-[210px] shrink-0 border-l border-border pl-2">从 models.dev 同步模型配置</span>
+                    </div>
+                  </div>
+                  <div class="divide-y divide-border">
+                    <div class="flex">
+                      <div class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">gpt-4o</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                      <div class="flex min-w-0 flex-1 items-center gap-2 border-l border-border px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">gpt-4o-mini</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                    </div>
+                    <div class="flex">
+                      <div class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">claude-3-5-sonnet-20241022</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">anthropic</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                      <div class="flex min-w-0 flex-1 items-center gap-2 border-l border-border px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">claude-3-5-haiku</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">anthropic</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                    </div>
+                    <div class="flex">
+                      <div class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">deepseek-chat</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">deepseek</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                      <div class="flex min-w-0 flex-1 items-center gap-2 border-l border-border px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">deepseek-reasoner</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">deepseek</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                    </div>
+                    <div class="flex">
+                      <div class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">gpt-4-turbo</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                      <div class="flex min-w-0 flex-1 items-center gap-2 border-l border-border px-2 py-1.5">
+                        <span class="min-w-0 flex-1 truncate font-mono">gpt-3.5-turbo</span>
+                        <button class="select-sm w-[210px] shrink-0"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Card Body: Controls + Models List -->
-            <div class="p-4 space-y-3">
-              
-              <!-- Sub-header toolbar: Search + Batch Action -->
-              <div class="flex items-center justify-between gap-3 text-xs">
-                <div class="relative flex-1 max-w-xs">
-                  <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 !text-sm">search</span>
-                  <input 
-                    type="text" 
-                    placeholder="过滤当前组内的模型..." 
-                    class="h-7 w-full bg-zinc-900/80 border border-zinc-800 rounded pl-7 pr-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
-                  />
+            <!-- 现状：未配置 endpoint 组 -->
+            <div class="rounded-md border border-border">
+              <button class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted">
+                <svg class="ip text-muted-foreground" viewBox="0 0 48 48" style="transform:rotate(90deg)"><path d="M19 12L31 24L19 36"/></svg>
+                <span class="min-w-0 flex-1 truncate font-mono font-medium text-warning">未分配 endpoint</span>
+              </button>
+              <div class="space-y-3 border-t border-border p-2.5">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <span class="text-xs text-muted-foreground">endpoint</span>
+                  <input class="input-sm w-64 font-mono" placeholder="/v1/responses" />
+                  <span class="text-xs text-muted-foreground">分组后缀</span>
+                  <input class="input-sm w-44 font-mono" placeholder="-Res" />
                 </div>
-                
-                <!-- Batch sync tool -->
-                <div class="flex items-center gap-2">
-                  <span class="text-[11px] text-zinc-400">批量套用来源:</span>
-                  <select class="h-7 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded px-2 text-[11px] text-zinc-300 focus:outline-none">
-                    <option>默认推荐 (智能匹配)</option>
-                    <option>全部设为 openai</option>
-                    <option>全部设为 anthropic</option>
-                    <option>全部设为 deepseek</option>
-                    <option>清空全部 (不同步)</option>
-                  </select>
-                  <button class="h-7 px-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[11px] font-medium transition-colors">
-                    应用
-                  </button>
+                <div class="overflow-hidden rounded-md border border-border">
+                  <div class="flex items-center border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <span class="min-w-0 flex-1 truncate">模型</span><span class="w-[210px] shrink-0 border-l border-border pl-2">从 models.dev 同步</span>
+                  </div>
+                  <div class="divide-y divide-border">
+                    <div class="flex items-center gap-2 px-2 py-1.5">
+                      <span class="min-w-0 flex-1 truncate font-mono">o3-mini</span>
+                      <button class="select-sm w-[210px] shrink-0"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <!-- Models Table / List -->
-              <div class="border border-zinc-800/80 rounded-lg overflow-hidden bg-zinc-900/30">
-                <div class="grid grid-cols-12 bg-zinc-900/90 px-3 py-2 text-[11px] font-medium text-zinc-400 border-b border-zinc-800">
-                  <div class="col-span-6">模型名称 (Model ID)</div>
-                  <div class="col-span-6 flex items-center justify-between">
-                    <span>models.dev 配置来源供应商</span>
-                    <span class="text-[10px] text-zinc-500">用于拉取默认上下文/计费参数</span>
-                  </div>
-                </div>
-
-                <!-- Model Rows -->
-                <div class="divide-y divide-zinc-800/60 text-xs">
-                  
-                  <!-- Item 1 -->
-                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
-                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
-                      <span class="font-mono font-medium text-zinc-200 truncate" title="gpt-4o">gpt-4o</span>
-                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">OpenAI</span>
-                    </div>
-                    <div class="col-span-6 flex items-center gap-2">
-                      <div class="relative flex-1">
-                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
-                          <option value="openai" selected>openai (推荐匹配)</option>
-                          <option value="azure">azure</option>
-                          <option value="openrouter">openrouter</option>
-                          <option value="">不同步配置</option>
-                        </select>
-                      </div>
-                      <span class="material-symbols-outlined text-emerald-400 !text-sm" title="已自动关联 models.dev">check_circle</span>
-                    </div>
-                  </div>
-
-                  <!-- Item 2 -->
-                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
-                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
-                      <span class="font-mono font-medium text-zinc-200 truncate" title="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022</span>
-                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">Anthropic</span>
-                    </div>
-                    <div class="col-span-6 flex items-center gap-2">
-                      <div class="relative flex-1">
-                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
-                          <option value="anthropic" selected>anthropic (推荐匹配)</option>
-                          <option value="aws-bedrock">aws-bedrock</option>
-                          <option value="">不同步配置</option>
-                        </select>
-                      </div>
-                      <span class="material-symbols-outlined text-emerald-400 !text-sm" title="已自动关联 models.dev">check_circle</span>
-                    </div>
-                  </div>
-
-                  <!-- Item 3 -->
-                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
-                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
-                      <span class="font-mono font-medium text-zinc-200 truncate" title="deepseek-v3">deepseek-v3</span>
-                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">DeepSeek</span>
-                    </div>
-                    <div class="col-span-6 flex items-center gap-2">
-                      <div class="relative flex-1">
-                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
-                          <option value="deepseek" selected>deepseek (推荐匹配)</option>
-                          <option value="siliconflow">siliconflow</option>
-                          <option value="">不同步配置</option>
-                        </select>
-                      </div>
-                      <span class="material-symbols-outlined text-emerald-400 !text-sm">check_circle</span>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
+            <!-- 现状问题注记 -->
+            <div class="rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+              问题：① 双列网格把下拉框挤到固定 210px，长模型名被截断；② 后缀输入与子表格混排、层级不分；③ 模型一多（10+）只能逐个手选，无过滤 / 批量操作。
             </div>
           </div>
 
-          <!-- Group Card 2: Unconfigured / Special Group -->
-          <div class="bg-zinc-950 border border-amber-900/50 hover:border-amber-800/70 transition-colors rounded-xl overflow-hidden shadow-sm">
-            
-            <!-- Group Header Bar (Special Warning State) -->
-            <div class="bg-amber-950/20 px-4 py-3 border-b border-amber-900/40 flex flex-wrap items-center justify-between gap-3">
-              <div class="flex items-center gap-2.5">
-                <span class="material-symbols-outlined text-amber-400 !text-lg">warning</span>
-                <div class="flex items-center gap-2">
-                  <span class="font-semibold text-xs text-amber-300">
-                    未分配 Endpoint 的供应商
-                  </span>
-                  <span class="text-[11px] text-amber-400/80 bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded-full">
-                    包含 1 个供应商 · 2 个模型
-                  </span>
-                </div>
-              </div>
-              <span class="text-[11px] text-amber-300/70">需要补全路径或合并入已有分组</span>
-            </div>
+          <!-- ========== 重构建议 ========== -->
+          <div id="tab-after" class="panel hidden space-y-2 pt-2">
 
-            <!-- Custom Endpoint Config area -->
-            <div class="p-4 space-y-4 bg-zinc-950/40">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/60 p-3.5 rounded-lg border border-zinc-800">
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-zinc-300">
-                    指定 Endpoint 路径
-                    <span class="text-[10px] text-zinc-500 ml-1">（填已有路径将自动合并）</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    class="h-8 w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500" 
-                    placeholder="例如：/v1/chat/completions 或 /v1/embeddings"
-                  />
+            <!-- 组 1：普通 endpoint 组 -->
+            <div class="group-card overflow-hidden rounded-md border border-border">
+              <!-- 组头：路径 + 统计 + 后缀（可折叠） -->
+              <button class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted" data-collapse="body1">
+                <svg class="chev ip text-muted-foreground" viewBox="0 0 48 48"><path d="M19 12L31 24L19 36"/></svg>
+                <span class="min-w-0 flex-1 truncate font-mono font-medium">/v1/chat/completions</span>
+                <span class="shrink-0 rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-muted-foreground">8 模型 · 3 供应商</span>
+              </button>
+              <div id="body1">
+                <!-- 组工具条：过滤 + 批量套用 -->
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border bg-muted/20 px-2.5 py-2">
+                  <input data-filter="rows1" class="input-sm max-w-60 flex-1 font-mono" placeholder="过滤模型…" />
+                  <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
+                    <span class="shrink-0 text-muted-foreground">批量套用</span>
+                    <button data-batch-select="rows1" class="select-sm w-40">
+                      <span class="truncate">智能推荐（按来源补齐）</span>
+                      <svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg>
+                    </button>
+                    <button class="btn btn-outline btn-sm" data-batch-apply="rows1">应用</button>
+                  </div>
                 </div>
-                <div class="space-y-1.5">
-                  <label class="block text-xs font-medium text-zinc-300">
-                    分组后缀
-                    <span class="text-[10px] text-zinc-500 ml-1">（若合并入已有组可留空）</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    class="h-8 w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500" 
-                    placeholder="例如：-Emb"
-                  />
-                </div>
-              </div>
-
-              <!-- Models List inside unconfigured -->
-              <div class="border border-zinc-800/80 rounded-lg overflow-hidden bg-zinc-900/30">
-                <div class="grid grid-cols-12 bg-zinc-900/90 px-3 py-2 text-[11px] font-medium text-zinc-400 border-b border-zinc-800">
-                  <div class="col-span-6">模型名称</div>
-                  <div class="col-span-6">models.dev 配置来源供应商</div>
-                </div>
-                <div class="divide-y divide-zinc-800/60 text-xs">
-                  <div class="grid grid-cols-12 items-center px-3 py-2">
-                    <div class="col-span-6 font-mono text-zinc-300">text-embedding-3-small</div>
-                    <div class="col-span-6">
-                      <select class="w-full h-7 bg-zinc-900 border border-zinc-700 rounded px-2 text-xs text-zinc-200 font-mono">
-                        <option>openai</option>
-                      </select>
+                <!-- 单列模型表 -->
+                <div class="border-t border-border">
+                  <div class="flex items-center border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <span class="min-w-0 flex-1 truncate">模型</span>
+                    <span class="w-64 shrink-0 border-l border-border pl-2">从 models.dev 同步模型配置</span>
+                  </div>
+                  <div class="divide-y divide-border">
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">gpt-4o</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">gpt-4o-mini</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">claude-3-5-sonnet-20241022</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">anthropic</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">claude-3-5-haiku</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">anthropic</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">deepseek-chat</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">deepseek</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">deepseek-reasoner</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">deepseek</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">gpt-4-turbo</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">gpt-3.5-turbo</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
 
+            <!-- 组 2：未配置 endpoint 组（warning 强调） -->
+            <div class="group-card overflow-hidden rounded-md border border-warning/40">
+              <button class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-muted/40" data-collapse="body2">
+                <svg class="chev ip text-warning" viewBox="0 0 48 48" style="transform:rotate(90deg)"><path d="M19 12L31 24L19 36"/></svg>
+                <svg class="ip text-warning" viewBox="0 0 48 48">
+                  <path d="M24 44C29.5228 44 34.5228 41.7614 38.1421 38.1421C41.7614 34.5228 44 29.5228 44 24C44 18.4772 41.7614 13.4772 38.1421 9.85786C34.5228 6.23858 29.5228 4 24 4C18.4772 4 13.4772 6.23858 9.85786 9.85786C6.23858 13.4772 4 18.4772 4 24C4 29.5228 6.23858 34.5228 9.85786 38.1421C13.4772 41.7614 18.4772 44 24 44Z"/>
+                  <path d="M24 13v15" stroke-linecap="round"/>
+                  <path d="M24 35.5a1.75 1.75 0 1 0 0 3.5 1.75 1.75 0 0 0 0-3.5" fill="currentColor"/>
+                </svg>
+                <span class="min-w-0 flex-1 truncate font-mono font-medium text-warning">未分配 endpoint</span>
+                <span class="shrink-0 rounded-md border border-warning/30 bg-muted/40 px-1.5 py-0.5 text-warning">1 供应商 · 1 模型</span>
+              </button>
+              <div id="body2">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border px-2.5 py-2">
+                  <span class="text-xs text-muted-foreground">endpoint</span>
+                  <input class="input-sm w-64 font-mono" placeholder="例如：/v1/responses（填已有路径自动合并）" />
+                  <span class="text-xs text-muted-foreground">分组后缀</span>
+                  <input class="input-sm w-44 font-mono" placeholder="例如：-Res（合并时留空）" />
+                </div>
+                <div class="border-t border-border">
+                  <div class="flex items-center border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    <span class="min-w-0 flex-1 truncate">模型</span>
+                    <span class="w-64 shrink-0 border-l border-border pl-2">从 models.dev 同步模型配置</span>
+                  </div>
+                  <div class="divide-y divide-border">
+                    <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-muted/20" data-row>
+                      <span class="min-w-0 flex-1 truncate font-mono">o3-mini</span>
+                      <button class="select-sm w-64 shrink-0" data-row-sel="1"><span class="truncate">openai</span><svg class="ip text-muted-foreground" viewBox="0 0 48 48"><path d="M36 18L24 30L12 18"/></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 重构注记 -->
+            <div class="rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground">
+              改进：① 单列表格，模型名完整展示，下拉框宽度统一（w-64）；② 组头集成路径 + 统计 + 折叠；③ 组工具条支持「过滤模型」+「批量套用 models.dev 来源」；④ 未配置组用 warning 色整卡强调，并提示「填已有路径自动合并」。
             </div>
 
           </div>
+        </div>
+        <!-- ==================== /endpoint 分组 ==================== -->
 
+        <!-- 保存按钮演示 -->
+        <div class="flex justify-end gap-2">
+          <button class="btn btn-outline">取消</button>
+          <button class="btn btn-primary">保存</button>
         </div>
 
       </div>
-
     </div>
-
   </div>
 
-  <!-- Detailed Feature Recommendations Section -->
-  <section class="border-t border-zinc-800 pt-8 space-y-6">
-    <div class="flex items-center gap-2">
-      <span class="material-symbols-outlined text-indigo-400">lightbulb</span>
-      <h3 class="text-lg font-semibold text-zinc-100">具体重构与设计改进点建议</h3>
-    </div>
+</div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
-        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-emerald-400 !text-sm">grid_view</span>
-          1. 放弃双列，改用表格清单
-        </div>
-        <p class="text-zinc-400 leading-relaxed">
-          双列虽然省空间，但在表单场景下阅读节奏极其混乱，且严重挤压下拉框空间。改用单列清晰表格，模型名有足够宽度显示，右侧下拉框尺寸统一规整。
-        </p>
-      </div>
+<script>
+  // ---- 标签页切换 ----
+  const tabs = document.querySelectorAll('[data-tab]')
+  const selectTab = (name) => {
+    tabs.forEach((b) => {
+      const active = b.dataset.tab === name
+      const isAfter = b.dataset.tab === 'after'
+      b.classList.toggle('border-primary', active)
+      b.classList.toggle('text-foreground', active)
+      b.classList.toggle('text-muted-foreground', !active)
+    })
+    document.getElementById('tab-before').classList.toggle('hidden', name !== 'before')
+    document.getElementById('tab-after').classList.toggle('hidden', name !== 'after')
+  }
+  tabs.forEach((b) => b.addEventListener('click', () => selectTab(b.dataset.tab)))
+  selectTab('after')
 
-      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
-        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-indigo-400 !text-sm">dock_to_right</span>
-          2. 分组头部卡片化
-        </div>
-        <p class="text-zinc-400 leading-relaxed">
-          把「Endpoint 路径标签」、「包含供应商/模型数统计」和「分组后缀输入」整合到 Card 头部。一眼能看清这一组的配置和作用。
-        </p>
-      </div>
+  // ---- 分组折叠 ----
+  document.querySelectorAll('[data-collapse]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const body = document.getElementById(btn.dataset.collapse)
+      body.classList.toggle('hidden')
+      btn.querySelector('.chev').style.transform = body.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(90deg)'
+    })
+  })
 
-      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
-        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-purple-400 !text-sm">auto_fix_high</span>
-          3. 增加批量套用 & 过滤
-        </div>
-        <p class="text-zinc-400 leading-relaxed">
-          模型较多时（例如勾选了 5+ 供应商，合并了几十个模型），提供上方快速过滤框和「一键将当前组全部模型映射为某供应商」的快捷操作。
-        </p>
-      </div>
+  // ---- 模型过滤 ----
+  document.querySelectorAll('[data-filter]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase()
+      const scope = document.getElementById(input.dataset.filter)
+      scope.querySelectorAll('[data-row]').forEach((row) => {
+        const name = row.querySelector('span.font-mono').textContent.toLowerCase()
+        row.classList.toggle('row-hidden', q !== '' && !name.includes(q))
+      })
+    })
+  })
 
-      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
-        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
-          <span class="material-symbols-outlined text-amber-400 !text-sm">warning_amber</span>
-          4. 明确“未配置 Endpoint”引导
-        </div>
-        <p class="text-zinc-400 leading-relaxed">
-          用琥珀色警告卡片明确提示“该供应商未配置 endpoint”，并清晰引导用户是“新建独立 Endpoint”还是“填写已有 Endpoint 自动合并”。
-        </p>
-      </div>
-    </div>
-  </section>
+  // ---- 批量套用（把「应用」前选中的选项写到组内所有模型下拉） ----
+  document.querySelectorAll('[data-batch-apply]').forEach((applyBtn) => {
+    applyBtn.addEventListener('click', () => {
+      const scope = document.getElementById(applyBtn.dataset.batchApply)
+      const sel = document.querySelector(`[data-batch-select="${applyBtn.dataset.batchApply}"]`)
+      const chosen = sel.querySelector('span:not(.ip)').textContent.trim().replace('（按来源补齐）', '')
+      scope.querySelectorAll('[data-row] [data-row-sel]').forEach((s) => {
+        const label = s.querySelector('span')
+        if (chosen && chosen !== '不同步') label.textContent = chosen
+      })
+    })
+  })
 
+  // ---- 主题切换（浅色 / 深色，快捷键 D 与 app 一致） ----
+  const applyTheme = (t) => document.documentElement.classList.toggle('dark', t === 'dark')
+  document.querySelectorAll('.theme-btn').forEach((b) =>
+    b.addEventListener('click', () => applyTheme(b.dataset.theme))
+  )
+  window.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return
+    if ((e.metaKey || e.ctrlKey || e.altKey)) return
+    if (e.key.toLowerCase() === 'd') applyTheme(!document.documentElement.classList.contains('dark'))
+  })
+</script>
 </body>
 </html>

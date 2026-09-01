@@ -97,10 +97,9 @@ const [error, setError] = useState<string | null>(null)
   const [expandedManaged, setExpandedManaged] = useState<Set<string>>(new Set())
   const [renamingProvider, setRenamingProvider] = useState<string | null>(null)
   const [confirmingDeleteProvider, setConfirmingDeleteProvider] = useState<string | null>(null)
-  const [confirmingSync, setConfirmingSync] = useState<ManagedProviderView | null>(null)
+  const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
   const [managedDialogOpen, setManagedDialogOpen] = useState(false)
   const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
-  const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
   const [syncingAllManaged, setSyncingAllManaged] = useState(false)
 
   const reload = () => {
@@ -393,18 +392,6 @@ const [error, setError] = useState<string | null>(null)
     setSelectedManaged({ mid, endpoint })
   }
 
-  const handleSyncManaged = async (view: ManagedProviderView) => {
-    if (!record) return
-    try {
-      const res = await dashboardApi.syncManagedProvider(record.id, view.id)
-      toast(`已同步：${res.synced} 处字段已写入配置文件`)
-      setConfirmingSync(null)
-      reload()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '同步失败')
-    }
-  }
-
   // 同步所有待同步的托管供应商（顺序执行，失败即中断提示）。
   const handleSyncAllManaged = async () => {
     if (!record) return
@@ -509,22 +496,22 @@ const [error, setError] = useState<string | null>(null)
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="xs"
+              size="sm"
               disabled={!summary || !record}
               onClick={() => setSyncingFromInfo(true)}
               title="从 models.dev 同步文件里全部模型的模型配置"
             >
-              <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
               同步模型基本信息
             </Button>
             <Button
               variant="outline"
-              size="xs"
+              size="sm"
               disabled={applying}
               onClick={() => setConfirmingTemplate(true)}
               title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
             >
-              <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
               使用推荐配置模板{problemCount > 0 && `（${problemCount} 处不同）`}
             </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
@@ -547,7 +534,7 @@ const [error, setError] = useState<string | null>(null)
           <div className="flex min-h-0 flex-col">
             <ColumnHeader>供应商</ColumnHeader>
             {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
-            <div className="max-h-[40%] flex-1 overflow-y-auto p-2">
+            <div className="max-h-[40%] flex-1 overflow-y-auto p-0">
               {loading && <Placeholder>加载中…</Placeholder>}
               {error && <Placeholder tone="error">{error}</Placeholder>}
               {!loading && !error && summary && summary.providers.length === 0 && (
@@ -591,7 +578,7 @@ const [error, setError] = useState<string | null>(null)
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="xs"
                   disabled={syncingAllManaged}
                   title="把待同步的托管供应商全部写入配置文件"
@@ -614,7 +601,7 @@ const [error, setError] = useState<string | null>(null)
                 </Button>
               </div>
             </div>
-            <div className="shrink-0 overflow-y-auto p-2">
+            <div className="shrink-0 overflow-y-auto p-0">
               {managed.length === 0 && (
                 <Placeholder>暂无托管供应商</Placeholder>
               )}
@@ -639,15 +626,6 @@ const [error, setError] = useState<string | null>(null)
                           }}
                           actions={
                             <>
-                              {mv.pending_sync && (
-                                <IconHoverButton
-                                  title="同步到配置文件"
-                                  icon="auto_fix_high"
-                                  tone="success"
-                                  disabled={false}
-                                  onClick={() => setConfirmingSync(mv)}
-                                />
-                              )}
                               <IconHoverButton
                                 title="设置"
                                 icon="settings"
@@ -701,15 +679,6 @@ const [error, setError] = useState<string | null>(null)
                           onClick={() => handleSelectManaged(mv.id, g.endpoint)}
                           actions={
                             <>
-                              {mv.pending_sync && (
-                                <IconHoverButton
-                                  title="同步到配置文件"
-                                  icon="auto_fix_high"
-                                  tone="success"
-                                  disabled={false}
-                                  onClick={() => setConfirmingSync(mv)}
-                                />
-                              )}
                               <IconHoverButton
                                 title="设置"
                                 icon="settings"
@@ -731,57 +700,10 @@ const [error, setError] = useState<string | null>(null)
             </div>
           </div>
 
-          {/* Middle: provider other_fields + models */}
+          {/* Middle: models list only */}
           <div className="flex min-h-0 flex-col">
-<ColumnHeader
-              action={
-                selectedManagedGroup ? null : (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
-                      disabled={!selectedProvider}
-                    >
-                      <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                      {editingScope === 'provider' ? '完成编辑' : '编辑'}
-                    </Button>
-                  </div>
-                )
-              }
-            >
-              供应商配置
-            </ColumnHeader>
-            <div className="max-h-[40%] overflow-auto border-b border-border p-2">
-              {selectedManagedGroup ? (
-                <ReadOnlyJson
-                  value={
-                    (selectedManagedGroup.group.generated as { provider?: unknown } | undefined)?.provider
-                  }
-                  note="由系统最优值生成，不允许编辑"
-                />
-              ) : selectedProvider ? (
-                editingScope === 'provider' ? (
-                  <JsonEditor
-                    value={activeProviderValue}
-                    onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
-                  />
-                ) : (
-                  <JsonDiffHighlight
-                    value={activeProviderValue}
-                    markers={providerDiff}
-                    onApplyOne={(path) => {
-                      const rec = effectiveProviderRecs.find((r) => r.key === path)
-                      if (rec) applyOneField(path, rec.recommended)
-                    }}
-                  />
-                )
-              ) : (
-                <Placeholder>未选择供应商</Placeholder>
-              )}
-            </div>
             <ColumnHeader>模型列表</ColumnHeader>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto p-0">
               {selectedManagedGroup ? (
                 <>
                   {selectedManagedGroup.group.model_names.length === 0 && (
@@ -831,8 +753,55 @@ const [error, setError] = useState<string | null>(null)
             </div>
           </div>
 
-          {/* Right: model config */}
+          {/* Right: provider config (top) + model config (below) */}
           <div className="flex min-h-0 flex-col">
+            <ColumnHeader
+              action={
+                selectedManagedGroup ? null : (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
+                      disabled={!selectedProvider}
+                    >
+                      <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
+                      {editingScope === 'provider' ? '完成编辑' : '编辑'}
+                    </Button>
+                  </div>
+                )
+              }
+            >
+              供应商配置
+            </ColumnHeader>
+            <div className="max-h-[40%] overflow-auto border-b border-border p-0">
+              {selectedManagedGroup ? (
+                <ReadOnlyJson
+                  value={
+                    (selectedManagedGroup.group.generated as { provider?: unknown } | undefined)?.provider
+                  }
+                  note="由系统最优值生成，不允许编辑"
+                />
+              ) : selectedProvider ? (
+                editingScope === 'provider' ? (
+                  <JsonEditor
+                    value={activeProviderValue}
+                    onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
+                  />
+                ) : (
+                  <JsonDiffHighlight
+                    value={activeProviderValue}
+                    markers={providerDiff}
+                    onApplyOne={(path) => {
+                      const rec = effectiveProviderRecs.find((r) => r.key === path)
+                      if (rec) applyOneField(path, rec.recommended)
+                    }}
+                  />
+                )
+              ) : (
+                <Placeholder>未选择供应商</Placeholder>
+              )}
+            </div>
             <ColumnHeader
               action={
                 selectedManagedGroup ? null : (
@@ -852,7 +821,7 @@ const [error, setError] = useState<string | null>(null)
             >
               模型配置
             </ColumnHeader>
-            <div className="flex-1 overflow-auto p-2">
+            <div className="flex-1 overflow-auto p-0">
               {selectedManagedGroup ? (
                 <ReadOnlyJson
                   value={
@@ -948,17 +917,7 @@ const [error, setError] = useState<string | null>(null)
           }}
         />
 
-        {/* Sync managed provider confirm */}
-        <ConfirmSyncDialog
-          open={confirmingSync !== null}
-          view={confirmingSync}
-          onOpenChange={(open) => {
-            if (!open) setConfirmingSync(null)
-          }}
-          onConfirm={() => confirmingSync && void handleSyncManaged(confirmingSync)}
-        />
-
-        {/* Delete managed provider confirm */}
+                {/* Delete managed provider confirm */}
         <ConfirmDeleteDialog
           open={confirmingDeleteManaged !== null}
           onOpenChange={(open) => {
@@ -1064,45 +1023,6 @@ function RenameProviderDialog({
             onClick={() => onConfirm(value.trim())}
           >
             确认
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function ConfirmSyncDialog({
-  open,
-  view,
-  onOpenChange,
-  onConfirm,
-}: {
-  open: boolean
-  view: ManagedProviderView | null
-  onOpenChange: (open: boolean) => void
-  onConfirm: () => void
-}) {
-  const [busy, setBusy] = useState(false)
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
-        <DialogHeader>
-          <DialogTitle>同步托管 provider</DialogTitle>
-        </DialogHeader>
-        <p className="px-4 text-xs text-muted-foreground">
-          确认将托管 provider 「{view?.name ?? ''}」生成的内容写入配置文件？同步会立即写入并原子保存。
-        </p>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
-          <Button
-            variant="default"
-            onClick={() => {
-              setBusy(true)
-              onConfirm()
-            }}
-            disabled={busy}
-          >
-            {busy ? '同步中...' : '确认同步'}
           </Button>
         </DialogFooter>
       </DialogContent>

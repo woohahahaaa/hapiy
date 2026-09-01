@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -400,10 +401,10 @@ export function ManagedProviderDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        width="sm"
+        width="lg"
         height="auto"
         minHeight={420}
-        className="flex max-h-[70vh] flex-col"
+        className="flex max-h-[70vh] flex-col gap-0"
       >
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
@@ -750,7 +751,7 @@ function GroupCard({
   mergePlaceholder?: string
   onPrefill: () => void
 }) {
-  const [expanded, setExpanded] = useState(true)
+  const [expanded, setExpanded] = useState(group.endpoint === '__none__')
   const [filter, setFilter] = useState('')
   useEffect(() => {
     onPrefill()
@@ -765,9 +766,9 @@ function GroupCard({
   const chevronClass =
     'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')
   const stats = (
-    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground whitespace-nowrap">
-      包含 {group.providerNames.length} 个供应商 · {group.modelNames.length} 个模型
-    </span>
+    <Badge variant="secondary" className="shrink-0 font-normal">
+      {group.providerNames.length} 个供应商 · {group.modelNames.length} 个模型
+    </Badge>
   )
   const suffixRow = (
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -825,9 +826,9 @@ function GroupCard({
               onClick={() => setExpanded(!expanded)}
             >
               <AppIcon name="chevron_right" size={14} className={chevronClass} />
-              <span className="min-w-0 max-w-[55%] truncate rounded border border-border bg-card px-1.5 py-0.5 font-mono text-xs font-medium">
+              <Badge variant="outline" className="min-w-0 max-w-[55%] truncate font-mono text-xs">
                 {group.endpoint}
-              </span>
+              </Badge>
               {stats}
             </button>
             {suffixRow}
