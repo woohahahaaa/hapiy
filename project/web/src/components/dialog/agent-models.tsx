@@ -637,7 +637,7 @@ const [error, setError] = useState<string | null>(null)
                           }
                         />
                         {expanded && (
-                          <div className="ml-4 space-y-0.5 border-l border-border pl-1.5">
+                          <div className="space-y-0.5 bg-muted/40">
                             {mv.groups.map((g) => (
                               <ProviderRow
                                 key={g.endpoint}
@@ -647,18 +647,7 @@ const [error, setError] = useState<string | null>(null)
                                   selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                 }
                                 onClick={() => handleSelectManaged(mv.id, g.endpoint)}
-                                actions={
-                                  <IconHoverButton
-                                    title="设置"
-                                    icon="settings"
-                                    tone="default"
-                                    disabled={false}
-                                    onClick={() => {
-                                      setManagedEditing(mv)
-                                      setManagedDialogOpen(true)
-                                    }}
-                                  />
-                                }
+                                actions={null}
                               />
                             ))}
                           </div>
@@ -769,12 +758,10 @@ const [error, setError] = useState<string | null>(null)
             <div className="flex-1 overflow-y-auto p-2">
               {selectedManagedGroup ? (
                 <>
-                  {Object.keys(
-                    (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
-                  ).length === 0 && <Placeholder>该分组没有可同步的模型</Placeholder>}
-                  {Object.entries(
-                    (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models ?? {},
-                  ).map(([mid]) => (
+                  {selectedManagedGroup.group.model_names.length === 0 && (
+                    <Placeholder>该分组没有可同步的模型</Placeholder>
+                  )}
+                  {selectedManagedGroup.group.model_names.map((mid) => (
                     <ModelRow
                       key={mid}
                       name={mid}
@@ -1118,17 +1105,14 @@ function ProviderRow({
 }) {
   return (
     <div
+      onClick={onClick}
       className={
-        'group flex w-full items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
+        'group flex w-full cursor-pointer items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
         (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
       }
     >
       {leading}
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
-      >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
         <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
         {info && (
           <span
@@ -1140,9 +1124,10 @@ function ProviderRow({
             {typeof info === 'object' ? info.text : info}
           </span>
         )}
-      </button>
+      </div>
       {actions && (
         <div
+          onClick={(e) => e.stopPropagation()}
           className={
             'flex shrink-0 items-center gap-0.5 transition-opacity ' +
             (selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')
