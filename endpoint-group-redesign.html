@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>托管供应商 Endpoint 分组 UI 重构方案对比</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      vertical-align: middle;
+      font-size: 18px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #09090b;
+      color: #f4f4f5;
+    }
+  </style>
+</head>
+<body class="p-6 md:p-10 max-w-7xl mx-auto space-y-10">
+
+  <!-- Header / Intro -->
+  <header class="border-b border-zinc-800 pb-6 space-y-3">
+    <div class="flex items-center gap-3">
+      <span class="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg border border-indigo-500/20">
+        <span class="material-symbols-outlined text-2xl">tune</span>
+      </span>
+      <div>
+        <h1 class="text-2xl font-bold text-zinc-100 tracking-tight">托管供应商 Endpoint 分组 UI 重构原型</h1>
+        <p class="text-sm text-zinc-400 mt-0.5">对比现状问题与全新改进方案：结构化清晰展示、一键批量映射、视觉层次分明</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Problem Analysis Card -->
+  <section class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 space-y-4">
+    <h2 class="text-base font-semibold text-zinc-200 flex items-center gap-2">
+      <span class="material-symbols-outlined text-amber-400">report_problem</span>
+      现有设计的问题诊断（为什么会觉得乱？）
+    </h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
+        <div class="font-medium text-amber-300">1. 双列布局混乱拥挤</div>
+        <p class="text-zinc-400 leading-relaxed">
+          把模型列表硬塞成两列，下拉框（SelectTrigger）与模型名宽度严重受限，长模型名被截断，且双列横向换行导致视觉跳跃，找模型非常累。
+        </p>
+      </div>
+      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
+        <div class="font-medium text-amber-300">2. 参数设置与列表混杂</div>
+        <p class="text-zinc-400 leading-relaxed">
+          “分组后缀”输入框直接浮在列表上方，无明确分组上下文；若是未配置 endpoint 供应商，还会多出一个 endpoint 手动输入框，层级关系模糊。
+        </p>
+      </div>
+      <div class="bg-zinc-950/60 p-3.5 rounded-lg border border-zinc-800/80 space-y-1.5">
+        <div class="font-medium text-amber-300">3. 缺乏批量操作与搜索</div>
+        <p class="text-zinc-400 leading-relaxed">
+          当勾选了多个供应商，一个 Endpoint 下包含数十个模型时，用户只能逐个点击下拉框选来源，缺乏一键统一绑定与快速过滤检索能力。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison Section -->
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+    
+    <!-- Left: Before (现状仿真) -->
+    <div class="xl:col-span-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-red-950/50 text-red-400 border border-red-800/40">
+          ❌ 现状设计（问题示意）
+        </span>
+        <span class="text-xs text-zinc-500">拥挤 / 紧凑双列 / 缺乏检索</span>
+      </div>
+
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3 opacity-80">
+        <div class="text-xs text-zinc-400">
+          <label class="block font-medium text-zinc-300 mb-1">endpoint 分组</label>
+          <p class="text-[11px] text-zinc-500 mb-2">（完全相同才分到一组；点击行可折叠/展开子表格）</p>
+
+          <!-- Group Card 1 -->
+          <div class="rounded-md border border-zinc-700/60 bg-zinc-950/50">
+            <div class="flex items-center gap-2 px-2 py-1.5 bg-zinc-800/50 text-xs font-mono font-medium text-zinc-200 cursor-pointer">
+              <span class="material-symbols-outlined text-zinc-400 !text-sm">expand_more</span>
+              /v1/chat/completions
+            </div>
+            <div class="p-2.5 space-y-3 border-t border-zinc-800 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="text-zinc-400 shrink-0">分组后缀</span>
+                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-36 font-mono text-zinc-200" value="-Chat" />
+              </div>
+              <div class="border border-zinc-800 rounded overflow-hidden">
+                <div class="flex bg-zinc-800/40 px-2 py-1 text-[11px] text-zinc-400 border-b border-zinc-800">
+                  <div class="flex-1 flex gap-2"><span>模型</span><span class="w-36 border-l border-zinc-800 pl-2">models.dev 参考</span></div>
+                  <div class="flex-1 flex gap-2 border-l border-zinc-800 pl-2"><span>模型</span><span class="w-36 border-l border-zinc-800 pl-2">models.dev 参考</span></div>
+                </div>
+                <div class="divide-y divide-zinc-800/60 font-mono text-[11px]">
+                  <div class="flex">
+                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1">
+                      <span class="truncate flex-1">gpt-4o</span>
+                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>openai</option></select>
+                    </div>
+                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1 border-l border-zinc-800">
+                      <span class="truncate flex-1">gpt-4o-mini</span>
+                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>openai</option></select>
+                    </div>
+                  </div>
+                  <div class="flex">
+                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1">
+                      <span class="truncate flex-1">claude-3-5-sonnet</span>
+                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>anthropic</option></select>
+                    </div>
+                    <div class="flex-1 flex items-center gap-1.5 px-2 py-1 border-l border-zinc-800">
+                      <span class="truncate flex-1">deepseek-chat</span>
+                      <select class="w-32 bg-zinc-900 border border-zinc-700 rounded px-1 text-[11px] h-6"><option>deepseek</option></select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Group Card 2 (Unconfigured) -->
+          <div class="rounded-md border border-amber-900/40 bg-zinc-950/50 mt-2">
+            <div class="flex items-center gap-2 px-2 py-1.5 bg-amber-950/20 text-xs font-mono font-medium text-amber-400">
+              <span class="material-symbols-outlined !text-sm">expand_more</span>
+              未分配 endpoint
+            </div>
+            <div class="p-2.5 space-y-2 border-t border-zinc-800 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-zinc-400">endpoint</span>
+                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-48 font-mono text-zinc-200" placeholder="/v1/responses" />
+                <span class="text-zinc-400">后缀</span>
+                <input class="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs w-28 font-mono text-zinc-200" placeholder="-Res" />
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: After (建议的重构方案) -->
+    <div class="xl:col-span-7 space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 flex items-center gap-1.5">
+          <span class="material-symbols-outlined !text-sm">verified</span>
+          ✨ 推荐新设计（卡片分组 + 头部配置 + 紧凑单列清单 + 批量操作）
+        </span>
+        <span class="text-xs text-indigo-400">支持快速搜索 & 一键同步</span>
+      </div>
+
+      <!-- Main Container for Endpoint Groups -->
+      <div class="bg-zinc-900/90 border border-zinc-800 rounded-xl p-5 space-y-5 shadow-2xl">
+
+        <!-- Info alert explaining group rules clearly -->
+        <div class="flex items-start gap-3 bg-zinc-950/70 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-300">
+          <span class="material-symbols-outlined text-indigo-400 shrink-0 !text-base mt-0.5">info</span>
+          <div class="space-y-1">
+            <div class="font-medium text-zinc-200">Endpoint 分组规则说明</div>
+            <p class="text-zinc-400 text-[11px] leading-relaxed">
+              系统已根据所选供应商自动按路径归并。多个 Endpoint 分组时，生成的最终供应商名称为：<code class="text-indigo-300 font-mono px-1 py-0.5 bg-zinc-800 rounded">[规则名称] + [分组后缀]</code>。
+            </p>
+          </div>
+        </div>
+
+        <!-- Dynamic Groups List -->
+        <div class="space-y-4">
+
+          <!-- Group Card 1: Standard Group -->
+          <div class="bg-zinc-950 border border-zinc-800/90 hover:border-zinc-700/80 transition-colors rounded-xl overflow-hidden shadow-sm">
+            
+            <!-- Group Header Bar -->
+            <div class="bg-zinc-900/70 px-4 py-3 border-b border-zinc-800/80 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <button class="text-zinc-400 hover:text-zinc-200 transition-colors">
+                  <span class="material-symbols-outlined !text-lg">expand_more</span>
+                </button>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-mono font-semibold text-xs text-emerald-400 bg-emerald-950/40 border border-emerald-800/50 px-2 py-0.5 rounded">
+                    /v1/chat/completions
+                  </span>
+                  <span class="text-[11px] text-zinc-400 bg-zinc-800/80 px-2 py-0.5 rounded-full">
+                    包含 3 个供应商 · 6 个模型
+                  </span>
+                </div>
+              </div>
+
+              <!-- Top-level quick config for this group -->
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-zinc-400 font-medium shrink-0">分组后缀</span>
+                <div class="relative">
+                  <input 
+                    type="text" 
+                    class="h-7 w-32 bg-zinc-900 border border-zinc-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded px-2 font-mono text-xs text-zinc-100 placeholder-zinc-500 transition-all" 
+                    value="-Chat"
+                    placeholder="例如：-Chat"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Card Body: Controls + Models List -->
+            <div class="p-4 space-y-3">
+              
+              <!-- Sub-header toolbar: Search + Batch Action -->
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <div class="relative flex-1 max-w-xs">
+                  <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 !text-sm">search</span>
+                  <input 
+                    type="text" 
+                    placeholder="过滤当前组内的模型..." 
+                    class="h-7 w-full bg-zinc-900/80 border border-zinc-800 rounded pl-7 pr-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+                  />
+                </div>
+                
+                <!-- Batch sync tool -->
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-zinc-400">批量套用来源:</span>
+                  <select class="h-7 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded px-2 text-[11px] text-zinc-300 focus:outline-none">
+                    <option>默认推荐 (智能匹配)</option>
+                    <option>全部设为 openai</option>
+                    <option>全部设为 anthropic</option>
+                    <option>全部设为 deepseek</option>
+                    <option>清空全部 (不同步)</option>
+                  </select>
+                  <button class="h-7 px-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-[11px] font-medium transition-colors">
+                    应用
+                  </button>
+                </div>
+              </div>
+
+              <!-- Models Table / List -->
+              <div class="border border-zinc-800/80 rounded-lg overflow-hidden bg-zinc-900/30">
+                <div class="grid grid-cols-12 bg-zinc-900/90 px-3 py-2 text-[11px] font-medium text-zinc-400 border-b border-zinc-800">
+                  <div class="col-span-6">模型名称 (Model ID)</div>
+                  <div class="col-span-6 flex items-center justify-between">
+                    <span>models.dev 配置来源供应商</span>
+                    <span class="text-[10px] text-zinc-500">用于拉取默认上下文/计费参数</span>
+                  </div>
+                </div>
+
+                <!-- Model Rows -->
+                <div class="divide-y divide-zinc-800/60 text-xs">
+                  
+                  <!-- Item 1 -->
+                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
+                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
+                      <span class="font-mono font-medium text-zinc-200 truncate" title="gpt-4o">gpt-4o</span>
+                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">OpenAI</span>
+                    </div>
+                    <div class="col-span-6 flex items-center gap-2">
+                      <div class="relative flex-1">
+                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
+                          <option value="openai" selected>openai (推荐匹配)</option>
+                          <option value="azure">azure</option>
+                          <option value="openrouter">openrouter</option>
+                          <option value="">不同步配置</option>
+                        </select>
+                      </div>
+                      <span class="material-symbols-outlined text-emerald-400 !text-sm" title="已自动关联 models.dev">check_circle</span>
+                    </div>
+                  </div>
+
+                  <!-- Item 2 -->
+                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
+                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
+                      <span class="font-mono font-medium text-zinc-200 truncate" title="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022</span>
+                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">Anthropic</span>
+                    </div>
+                    <div class="col-span-6 flex items-center gap-2">
+                      <div class="relative flex-1">
+                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
+                          <option value="anthropic" selected>anthropic (推荐匹配)</option>
+                          <option value="aws-bedrock">aws-bedrock</option>
+                          <option value="">不同步配置</option>
+                        </select>
+                      </div>
+                      <span class="material-symbols-outlined text-emerald-400 !text-sm" title="已自动关联 models.dev">check_circle</span>
+                    </div>
+                  </div>
+
+                  <!-- Item 3 -->
+                  <div class="grid grid-cols-12 items-center px-3 py-2 hover:bg-zinc-800/30 transition-colors">
+                    <div class="col-span-6 flex items-center gap-2 min-w-0 pr-2">
+                      <span class="font-mono font-medium text-zinc-200 truncate" title="deepseek-v3">deepseek-v3</span>
+                      <span class="text-[10px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.2 rounded border border-zinc-700/40">DeepSeek</span>
+                    </div>
+                    <div class="col-span-6 flex items-center gap-2">
+                      <div class="relative flex-1">
+                        <select class="w-full h-7 bg-zinc-900 border border-zinc-700/80 hover:border-zinc-600 rounded px-2 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono">
+                          <option value="deepseek" selected>deepseek (推荐匹配)</option>
+                          <option value="siliconflow">siliconflow</option>
+                          <option value="">不同步配置</option>
+                        </select>
+                      </div>
+                      <span class="material-symbols-outlined text-emerald-400 !text-sm">check_circle</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Group Card 2: Unconfigured / Special Group -->
+          <div class="bg-zinc-950 border border-amber-900/50 hover:border-amber-800/70 transition-colors rounded-xl overflow-hidden shadow-sm">
+            
+            <!-- Group Header Bar (Special Warning State) -->
+            <div class="bg-amber-950/20 px-4 py-3 border-b border-amber-900/40 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-amber-400 !text-lg">warning</span>
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-xs text-amber-300">
+                    未分配 Endpoint 的供应商
+                  </span>
+                  <span class="text-[11px] text-amber-400/80 bg-amber-950/60 border border-amber-800/40 px-2 py-0.5 rounded-full">
+                    包含 1 个供应商 · 2 个模型
+                  </span>
+                </div>
+              </div>
+              <span class="text-[11px] text-amber-300/70">需要补全路径或合并入已有分组</span>
+            </div>
+
+            <!-- Custom Endpoint Config area -->
+            <div class="p-4 space-y-4 bg-zinc-950/40">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/60 p-3.5 rounded-lg border border-zinc-800">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-zinc-300">
+                    指定 Endpoint 路径
+                    <span class="text-[10px] text-zinc-500 ml-1">（填已有路径将自动合并）</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    class="h-8 w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500" 
+                    placeholder="例如：/v1/chat/completions 或 /v1/embeddings"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-zinc-300">
+                    分组后缀
+                    <span class="text-[10px] text-zinc-500 ml-1">（若合并入已有组可留空）</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    class="h-8 w-full bg-zinc-900 border border-zinc-700 rounded px-2.5 font-mono text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500" 
+                    placeholder="例如：-Emb"
+                  />
+                </div>
+              </div>
+
+              <!-- Models List inside unconfigured -->
+              <div class="border border-zinc-800/80 rounded-lg overflow-hidden bg-zinc-900/30">
+                <div class="grid grid-cols-12 bg-zinc-900/90 px-3 py-2 text-[11px] font-medium text-zinc-400 border-b border-zinc-800">
+                  <div class="col-span-6">模型名称</div>
+                  <div class="col-span-6">models.dev 配置来源供应商</div>
+                </div>
+                <div class="divide-y divide-zinc-800/60 text-xs">
+                  <div class="grid grid-cols-12 items-center px-3 py-2">
+                    <div class="col-span-6 font-mono text-zinc-300">text-embedding-3-small</div>
+                    <div class="col-span-6">
+                      <select class="w-full h-7 bg-zinc-900 border border-zinc-700 rounded px-2 text-xs text-zinc-200 font-mono">
+                        <option>openai</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Detailed Feature Recommendations Section -->
+  <section class="border-t border-zinc-800 pt-8 space-y-6">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-indigo-400">lightbulb</span>
+      <h3 class="text-lg font-semibold text-zinc-100">具体重构与设计改进点建议</h3>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
+        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-emerald-400 !text-sm">grid_view</span>
+          1. 放弃双列，改用表格清单
+        </div>
+        <p class="text-zinc-400 leading-relaxed">
+          双列虽然省空间，但在表单场景下阅读节奏极其混乱，且严重挤压下拉框空间。改用单列清晰表格，模型名有足够宽度显示，右侧下拉框尺寸统一规整。
+        </p>
+      </div>
+
+      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
+        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-indigo-400 !text-sm">dock_to_right</span>
+          2. 分组头部卡片化
+        </div>
+        <p class="text-zinc-400 leading-relaxed">
+          把「Endpoint 路径标签」、「包含供应商/模型数统计」和「分组后缀输入」整合到 Card 头部。一眼能看清这一组的配置和作用。
+        </p>
+      </div>
+
+      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
+        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-purple-400 !text-sm">auto_fix_high</span>
+          3. 增加批量套用 & 过滤
+        </div>
+        <p class="text-zinc-400 leading-relaxed">
+          模型较多时（例如勾选了 5+ 供应商，合并了几十个模型），提供上方快速过滤框和「一键将当前组全部模型映射为某供应商」的快捷操作。
+        </p>
+      </div>
+
+      <div class="bg-zinc-900/70 border border-zinc-800 p-4 rounded-xl space-y-2">
+        <div class="font-semibold text-zinc-200 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-amber-400 !text-sm">warning_amber</span>
+          4. 明确“未配置 Endpoint”引导
+        </div>
+        <p class="text-zinc-400 leading-relaxed">
+          用琥珀色警告卡片明确提示“该供应商未配置 endpoint”，并清晰引导用户是“新建独立 Endpoint”还是“填写已有 Endpoint 自动合并”。
+        </p>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>

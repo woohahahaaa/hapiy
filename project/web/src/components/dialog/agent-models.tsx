@@ -101,6 +101,7 @@ const [error, setError] = useState<string | null>(null)
   const [managedDialogOpen, setManagedDialogOpen] = useState(false)
   const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
   const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
+  const [syncingAllManaged, setSyncingAllManaged] = useState(false)
 
   const reload = () => {
     if (!record) return
@@ -404,6 +405,30 @@ const [error, setError] = useState<string | null>(null)
     }
   }
 
+  // 同步所有待同步的托管供应商（顺序执行，失败即中断提示）。
+  const handleSyncAllManaged = async () => {
+    if (!record) return
+    const pending = managed.filter((m) => m.pending_sync)
+    if (pending.length === 0) {
+      toast('没有需要同步的托管供应商')
+      return
+    }
+    setSyncingAllManaged(true)
+    try {
+      let total = 0
+      for (const view of pending) {
+        const res = await dashboardApi.syncManagedProvider(record.id, view.id)
+        total += res.synced
+      }
+      toast(`已同步全部 ${pending.length} 个托管供应商，共 ${total} 处字段写入配置文件`)
+      reload()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '同步失败')
+    } finally {
+      setSyncingAllManaged(false)
+    }
+  }
+
   const handleDeleteManaged = async (view: ManagedProviderView) => {
     if (!record) return
     try {
@@ -563,18 +588,31 @@ const [error, setError] = useState<string | null>(null)
             {/* 托管供应商 module */}
             <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
               <span className="text-xs font-medium text-muted-foreground">托管供应商</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
-                onClick={() => {
-                  setManagedEditing(null)
-                  setManagedDialogOpen(true)
-                }}
-              >
-                <AppIcon name="add" size={14} />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  disabled={syncingAllManaged}
+                  title="把待同步的托管供应商全部写入配置文件"
+                  onClick={() => void handleSyncAllManaged()}
+                >
+                  <AppIcon name="auto_fix_high" size={14} />
+                  同步所有
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
+                  onClick={() => {
+                    setManagedEditing(null)
+                    setManagedDialogOpen(true)
+                  }}
+                >
+                  <AppIcon name="add" size={14} />
+                </Button>
+              </div>
             </div>
             <div className="shrink-0 overflow-y-auto p-2">
               {managed.length === 0 && (
@@ -588,17 +626,11 @@ const [error, setError] = useState<string | null>(null)
                     {expandable ? (
                       <>
                         <ProviderRow
-                          name={
-                            <>
-                              {mv.pending_sync && (
-                                <span className="mr-1 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">
-                                  待同步
-                                </span>
-                              )}
-                              <span className="truncate font-medium">{mv.name}</span>
-                            </>
-                          }
+                          name={<span className="truncate font-medium">{mv.name}</span>}
                           info={{ text: `${mv.groups.length} 分组`, green: false }}
+                          badge={mv.pending_sync ? (
+                            <span className="shrink-0 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">待同步</span>
+                          ) : null}
                           selected={selectedManaged?.mid === mv.id}
                           onClick={() => {
                             toggleManagedExpand(mv.id)
@@ -637,7 +669,7 @@ const [error, setError] = useState<string | null>(null)
                           }
                         />
                         {expanded && (
-                          <div className="space-y-0.5 bg-muted/40">
+                          <div className="space-y-0.5 rounded-md bg-muted/60 py-1 pl-3 pr-1">
                             {mv.groups.map((g) => (
                               <ProviderRow
                                 key={g.endpoint}
@@ -658,17 +690,11 @@ const [error, setError] = useState<string | null>(null)
                       mv.groups.map((g) => (
                         <ProviderRow
                           key={g.endpoint}
-                          name={
-                            <>
-                              {mv.pending_sync && (
-                                <span className="mr-1 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">
-                                  待同步
-                                </span>
-                              )}
-                              <span className="truncate font-medium">{mv.name + g.suffix}</span>
-                            </>
-                          }
+                          name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
                           info={{ text: `${g.model_count} 模型`, green: false }}
+                          badge={mv.pending_sync ? (
+                            <span className="shrink-0 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">待同步</span>
+                          ) : null}
                           selected={
                             selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                           }
@@ -1091,6 +1117,7 @@ type RowInfo = string | { text: string; green: boolean } | null
 function ProviderRow({
   name,
   info,
+  badge,
   selected,
   onClick,
   actions,
@@ -1098,6 +1125,7 @@ function ProviderRow({
 }: {
   name: React.ReactNode
   info: RowInfo
+  badge?: React.ReactNode
   selected: boolean
   onClick: () => void
   actions: React.ReactNode | null
@@ -1114,14 +1142,17 @@ function ProviderRow({
       {leading}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
         <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
-        {info && (
+        {(info || badge) && (
           <span
             className={
-              'shrink-0 truncate text-[11px] ' +
+              'flex min-w-0 items-center gap-1 text-[11px] ' +
               (typeof info === 'object' && info.green ? 'text-success' : 'text-muted-foreground')
             }
           >
-            {typeof info === 'object' ? info.text : info}
+            {badge}
+            <span className="truncate">
+              {typeof info === 'object' ? info.text : info}
+            </span>
           </span>
         )}
       </div>
@@ -1844,7 +1875,7 @@ function JsonDiffHighlight({
 // Each diff row carries an action label that drives the row's
 // background color, plus the field path it applies to. The label is
 // always rendered as a Chinese action phrase (推荐新增 / 推荐修改 / 推荐
-// 不填 / 未查到该字段), so the user reads it as guidance rather than a
+// 不填 / 模板无此字段), so the user reads it as guidance rather than a
 // raw status code.
 type DiffAction =
   | '推荐新增'
@@ -1893,7 +1924,7 @@ const ACTION_LABEL: Record<DiffAction, string> = {
   '推荐新增': '推荐新增',
   '推荐修改': '推荐修改',
   '推荐不填': '推荐不填',
-  '未查到该字段': '未查到该字段',
+  '未查到该字段': '模板无此字段',
   context: '',
   mismatch: '推荐修改',
 }
