@@ -3,7 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 
-import { Checkbox } from '@/components/ui/checkbox'
+import { Checkbox } from '@/components/checkbox'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'

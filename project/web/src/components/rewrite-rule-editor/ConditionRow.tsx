@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Checkbox } from '@/components/checkbox'
 import { AppIcon } from '@/components/AppIcon'
 import { COND_OPS, SCOPE_OPTIONS } from './modes'
 import type { LeafCondition } from './serializer'

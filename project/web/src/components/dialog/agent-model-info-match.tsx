@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Checkbox } from '@/components/checkbox'
 import {
   Dialog,
   DialogContent,
