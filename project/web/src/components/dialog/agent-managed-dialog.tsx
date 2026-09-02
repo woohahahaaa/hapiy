@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
+import { Checkbox } from '@/components/checkbox'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -830,14 +831,12 @@ function ProviderMultiSelect({
                               : 'hover:bg-muted/40')
                         }
                       >
-                        <span
-                          className={
-                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border ' +
-                            (selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
-                          }
-                        >
-                          {selected && <AppIcon name="check" size={12} />}
-                        </span>
+                        <Checkbox
+                          checked={selected}
+                          aria-hidden
+                          tabIndex={-1}
+                          className="pointer-events-none"
+                        />
                         <span className="min-w-0 flex-1">
                           <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
                           {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
