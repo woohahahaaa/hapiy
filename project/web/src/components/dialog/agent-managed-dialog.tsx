@@ -1,5 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Checkbox } from '@/components/checkbox'
 import { Button } from '@/components/ui/button'
@@ -12,6 +11,11 @@ import {
 } from '@/components/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -460,8 +464,8 @@ export function ManagedProviderDialog({
       <DialogContent
         width="lg"
         height="auto"
-        minHeight={420}
-        className="flex max-h-[70vh] flex-col gap-0"
+        minHeight={840}
+        className="flex max-h-[85vh] flex-col gap-0"
       >
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
@@ -739,148 +743,87 @@ function ProviderMultiSelect({
   checked: ReadonlySet<string>
   onToggle: (id: string) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [anchor, setAnchor] = useState<{ top: number; left: number; width: number } | null>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const inFloat = (target: EventTarget | null): boolean => {
-      const node = target as Node | null
-      if (!node) return false
-      return Boolean(rootRef.current?.contains(node) || panelRef.current?.contains(node))
-    }
-    // 触屏/桌面都生效：pointerdown 统一代替 mousedown，并校验 composedPath 兜底（portal 跨根场景）。
-    const onDocPointerdown = (e: PointerEvent) => {
-      const path = (e.composedPath?.() ?? []) as readonly EventTarget[]
-      if (path.some((n) => rootRef.current?.contains(n) || panelRef.current?.contains(n))) return
-      if (inFloat(e.target)) return
-      setOpen(false)
-    }
-    const onDocKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    const onScroll = (e: Event) => {
-      // 面板/触发器内部的滚动（尤其触屏设备点击选项 / 滚动列表）不能把
-      // 下拉关掉；只有外部页面滚动才关闭。
-      if (!inFloat(e.target)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', onDocPointerdown, true)
-    document.addEventListener('keydown', onDocKeydown)
-    document.addEventListener('scroll', onScroll, true)
-    return () => {
-      document.removeEventListener('pointerdown', onDocPointerdown, true)
-      document.removeEventListener('keydown', onDocKeydown)
-      document.removeEventListener('scroll', onScroll, true)
-    }
-  }, [open])
-
-  const toggleOpen = () => {
-    if (open) {
-      setOpen(false)
-      return
-    }
-    const el = rootRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    setAnchor({ top: r.bottom, left: r.left, width: r.width })
-    setOpen(true)
-  }
-
   const checkedOptions = options.filter((o) => checked.has(o.id))
 
   return (
-    <div ref={rootRef} className="relative">
-      <button
-        type="button"
-        onClick={toggleOpen}
-        aria-expanded={open}
-        style={{ touchAction: 'manipulation' }}
-        className={
-          'flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 ' +
-          (open ? 'border-ring ring-1 ring-ring/50' : 'hover:bg-muted/40')
-        }
-      >
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {checkedOptions.length === 0 ? (
-            <span className="text-muted-foreground">点击展开，勾选系统配置的供应商</span>
-          ) : (
-            <>
-              {checkedOptions.map((o) => (
-                <RemovableTag
-                  key={o.id}
-                  label={<span className="font-medium">{o.name}</span>}
-                  onRemove={() => onToggle(o.id)}
-                  removeTitle={`移除 ${o.name}`}
-                />
-              ))}
-            </>
-          )}
-        </span>
-        <AppIcon
-          name="expand_more"
-          size={16}
-          className={'shrink-0 text-muted-foreground transition-transform ' + (open ? 'rotate-180' : '')}
-        />
-      </button>
-
-      {open &&
-        anchor &&
-        createPortal(
-          <div
-            ref={panelRef}
-            style={{ position: 'fixed', top: anchor.top + 4, left: anchor.left, width: anchor.width }}
-            className="pointer-events-auto z-[70] max-h-[220px] overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
-          >
-            {loading ? (
-              <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
+        >
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            {checkedOptions.length === 0 ? (
+              <span className="text-muted-foreground">点击展开，勾选系统配置的供应商</span>
             ) : (
-              <ul role="listbox" aria-multiselectable="true">
-                {options.map((opt) => {
-                  const selected = checked.has(opt.id)
-                  const disabled = !opt.status
-                  return (
-                    <li key={opt.id}>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onToggle(opt.id)}
-                        role="option"
-                        aria-selected={selected}
-                        style={{ touchAction: 'manipulation' }}
-                        className={
-                          'flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-xs select-none touch-manipulation ' +
-                          (disabled
-                            ? 'cursor-not-allowed opacity-40'
-                            : selected
-                              ? 'bg-muted/60'
-                              : 'hover:bg-muted/40')
-                        }
-                      >
-                        <Checkbox
-                          checked={selected}
-                          aria-hidden
-                          tabIndex={-1}
-                          className="pointer-events-none"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
-                          {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
-                        </span>
-                        <span className="shrink-0 text-muted-foreground">
-                          {opt.modelCount} 模型 · {opt.endpointCount} endpoint
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+              <>
+                {checkedOptions.map((o) => (
+                  <RemovableTag
+                    key={o.id}
+                    label={<span className="font-medium">{o.name}</span>}
+                    onRemove={() => onToggle(o.id)}
+                    removeTitle={`移除 ${o.name}`}
+                  />
+                ))}
+              </>
             )}
-          </div>,
-          document.body,
+          </span>
+          <AppIcon
+            name="expand_more"
+            size={16}
+            className="shrink-0 text-muted-foreground"
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="max-h-[220px] w-[--radix-popover-trigger-width] overflow-auto p-0"
+      >
+        {loading ? (
+          <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
+        ) : (
+          <ul role="listbox" aria-multiselectable="true">
+            {options.map((opt) => {
+              const selected = checked.has(opt.id)
+              const disabled = !opt.status
+              return (
+                <li key={opt.id}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onToggle(opt.id)}
+                    role="option"
+                    aria-selected={selected}
+                    className={
+                      'flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-xs select-none ' +
+                      (disabled
+                        ? 'cursor-not-allowed opacity-40'
+                        : selected
+                          ? 'bg-muted/60'
+                          : 'hover:bg-muted/40')
+                    }
+                  >
+                    <Checkbox
+                      checked={selected}
+                      aria-hidden
+                      tabIndex={-1}
+                      className="pointer-events-none"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
+                      {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
+                    </span>
+                    <span className="shrink-0 text-muted-foreground">
+                      {opt.modelCount} 模型 · {opt.endpointCount} endpoint
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
-    </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 

@@ -421,10 +421,11 @@ function AgentTypeRulesTab() {
 
 // ── 添加 / 编辑规则 ──
 
-// modelInfoSpecToText renders a stored spec value as editor text: plain
-// paths stay bare; op specs become compact JSON so they round-trip.
+// modelInfoSpecToText renders a stored spec value as editor text. Legacy
+// plain paths are wrapped into the 值写法 object form so the editor
+// only ever shows（and saves）that form; op specs are emitted as-is.
 function modelInfoSpecToText(v: AgentModelInfoFieldSpecValue): string {
-  return typeof v === 'string' ? v : JSON.stringify(v)
+  return typeof v === 'string' ? JSON.stringify({ path: v }) : JSON.stringify(v)
 }
 
 // buildModelInfoFieldsPayload parses the editor text map back into the
@@ -443,8 +444,7 @@ function buildModelInfoFieldsPayload(
     const text = texts[key].trim()
     if (text === '') continue
     if (!text.startsWith('{')) {
-      fields[key] = text
-      continue
+      return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请使用值&写法（JSON 对象），不允许只填路径` }
     }
     try {
       const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown }
@@ -721,12 +721,12 @@ function ModelInfoFieldsEditor({
   return (
     <Field>
       <div className="flex items-center justify-between">
-        <FieldLabel>通用模型信息字段</FieldLabel>
+        <FieldLabel>模型通用信息</FieldLabel>
       </div>
       <p className="text-xs text-muted-foreground">
-        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。支持两种写法：
-        纯路径 <code className="font-mono">"limit.context"</code>（统一值原样写入），或对象{' '}
-        <code className="font-mono">{'{"path":"reasoning","op":"bool"}'}</code>。op 可选：
+        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。只允许值&写法（JSON 对象）：
+        <code className="font-mono">{'{"path":"reasoning","op":"bool"}'}</code>
+        ，不允许只填路径。path 为写入位置，op 可选：
         raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，sep 可选，默认逗号）。
       </p>
       <div className="overflow-hidden rounded-md border border-border">
@@ -734,7 +734,7 @@ function ModelInfoFieldsEditor({
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
               <th className="w-[40%] px-2 py-1.5 text-left font-medium">模型信息</th>
-              <th className="px-2 py-1.5 text-left font-medium">字段名（gjson 路径 / 值写法）</th>
+              <th className="px-2 py-1.5 text-left font-medium">值&写法</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -745,7 +745,7 @@ function ModelInfoFieldsEditor({
                   <Input
                     value={value[key]}
                     onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-                    placeholder={`例如：limit.context 或 {"path":"reasoning","op":"bool"}`}
+                    placeholder={`例如：{"path":"reasoning","op":"bool"}`}
                     className="h-7 text-xs font-mono"
                   />
                 </td>
