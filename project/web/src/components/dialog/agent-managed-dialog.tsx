@@ -803,7 +803,7 @@ function ProviderMultiSelect({
           <div
             ref={panelRef}
             style={{ position: 'fixed', top: anchor.top + 4, left: anchor.left, width: anchor.width }}
-            className="z-[70] max-h-[220px] overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+            className="pointer-events-auto z-[70] max-h-[220px] overflow-auto rounded-md border border-border bg-popover text-popover-foreground shadow-md"
           >
             {loading ? (
               <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>

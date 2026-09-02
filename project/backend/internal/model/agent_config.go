@@ -74,22 +74,163 @@ func InferRecommendationType(rec AgentRecommendation) string {
 	}
 }
 
+// AgentModelInfoFieldSpec — one unified model-info field's write spec.
+// A plain string ("limit.context") writes the unified value at that gjson
+// path unchanged (legacy form, op raw). The object form additionally names
+// an op that reshapes the unified value before writing, because agents
+// disagree on the value shape — e.g. opencode's `reasoning` must be a
+// boolean while the unified 思考程度 value is a level array:
+//
+//	"thinking_levels": {"path": "reasoning", "op": "bool"}
+//
+// Ops: raw (default, value as-is), bool (non-empty → true, empty →
+// false), first (first element; skipped when empty), join (elements
+// joined with Sep, default ","; skipped when empty).
+type AgentModelInfoFieldSpec struct {
+	Path string `json:"path"`
+	Op   string `json:"op,omitempty"`
+	Sep  string `json:"sep,omitempty"`
+}
+
+// UnmarshalJSON accepts the legacy string form and the object form.
+func (s *AgentModelInfoFieldSpec) UnmarshalJSON(b []byte) error {
+	trimmed := strings.TrimSpace(string(b))
+	if trimmed == "null" || trimmed == `""` {
+		*s = AgentModelInfoFieldSpec{}
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		return json.Unmarshal(b, &s.Path)
+	}
+	type plain AgentModelInfoFieldSpec
+	var p plain
+	if err := json.Unmarshal(b, &p); err != nil {
+		return err
+	}
+	*s = AgentModelInfoFieldSpec(p)
+	return nil
+}
+
+// MarshalJSON writes the plain-path string form unless an op (other than
+// raw) or a separator is configured, keeping stored blobs and API
+// payloads readable for the common case.
+func (s AgentModelInfoFieldSpec) MarshalJSON() ([]byte, error) {
+	if (s.Op == "" || s.Op == "raw") && s.Sep == "" {
+		return json.Marshal(s.Path)
+	}
+	type plain AgentModelInfoFieldSpec
+	return json.Marshal(plain(s))
+}
+
+// Shape converts the unified model-info value into the concrete value to
+// write. ok is false when the op semantics say the field must be skipped
+// (empty raw / first / join values), so agents never receive e.g. an
+// empty array where a boolean is expected.
+func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
+	switch s.Op {
+	case "bool":
+		if v == nil {
+			return nil, false
+		}
+		return valueTruthy(v), true
+	case "first":
+		switch arr := v.(type) {
+		case []any:
+			if len(arr) > 0 {
+				return arr[0], true
+			}
+		case []string:
+			if len(arr) > 0 {
+				return arr[0], true
+			}
+		}
+		return nil, false
+	case "join":
+		sep := s.Sep
+		if sep == "" {
+			sep = ","
+		}
+		switch arr := v.(type) {
+		case []any:
+			if len(arr) == 0 {
+				return nil, false
+			}
+			parts := make([]string, 0, len(arr))
+			for _, item := range arr {
+				parts = append(parts, fmt.Sprintf("%v", item))
+			}
+			return strings.Join(parts, sep), true
+		case []string:
+			if len(arr) == 0 {
+				return nil, false
+			}
+			return strings.Join(arr, sep), true
+		}
+		return nil, false
+	default: // "" | raw
+		switch val := v.(type) {
+		case nil:
+			return nil, false
+		case string:
+			if val == "" {
+				return nil, false
+			}
+		case []any:
+			if len(val) == 0 {
+				return nil, false
+			}
+		case []string:
+			if len(val) == 0 {
+				return nil, false
+			}
+		}
+		return v, true
+	}
+}
+
+func valueTruthy(v any) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val != ""
+	case []any:
+		return len(val) > 0
+	case []string:
+		return len(val) > 0
+	case nil:
+		return false
+	}
+	return true
+}
+
+// ModelInfoPath is the plain-path (raw) spec shorthand used by seeds.
+func ModelInfoPath(p string) AgentModelInfoFieldSpec {
+	return AgentModelInfoFieldSpec{Path: p}
+}
+
+// ModelInfoOp is the op-carrying spec shorthand used by seeds.
+func ModelInfoOp(p, op string) AgentModelInfoFieldSpec {
+	return AgentModelInfoFieldSpec{Path: p, Op: op}
+}
+
 // AgentModelInfoFieldPaths maps the four unified model-info fields to
-// their gjson paths inside each agent's model config object. Agents
-// name these fields differently (opencode: limit.context //
-// modalities.input; openclaw: contextWindow / input, ...), so the path
-// is stored per rule and the "同步模型信息" dialog uses it to write the
-// value back. Field names are the fixed shared vocabulary:
+// their write specs inside each agent's model config object (see
+// AgentModelInfoFieldSpec for the syntax). Agents name these fields
+// differently (opencode: limit.context // modalities.input; openclaw:
+// contextWindow / input, ...), so the spec is stored per rule and both
+// the "同步模型信息" dialog and managed-provider generation use it to
+// write values back. Field names are the fixed shared vocabulary:
 //
 //	max_context       最大上下文
 //	max_output_token  最大输出token
 //	input_types       支持的输入类型
 //	thinking_levels   支持的思考程度
 type AgentModelInfoFieldPaths struct {
-	MaxContext     string `json:"max_context"`
-	MaxOutputToken string `json:"max_output_token"`
-	InputTypes     string `json:"input_types"`
-	ThinkingLevels string `json:"thinking_levels"`
+	MaxContext     AgentModelInfoFieldSpec `json:"max_context"`
+	MaxOutputToken AgentModelInfoFieldSpec `json:"max_output_token"`
+	InputTypes     AgentModelInfoFieldSpec `json:"input_types"`
+	ThinkingLevels AgentModelInfoFieldSpec `json:"thinking_levels"`
 }
 
 // AgentProtocolCondition — one OR-branch of a request-protocol's match
@@ -456,10 +597,11 @@ var builtinAgentRules = []struct {
 		},
 		Recommendations: opencodeRecommendations,
 		ModelInfoFields: AgentModelInfoFieldPaths{
-			MaxContext:     `limit.context`,
-			MaxOutputToken: `limit.output`,
-			InputTypes:     `modalities.input`,
-			ThinkingLevels: `reasoning`,
+			MaxContext:     ModelInfoPath(`limit.context`),
+			MaxOutputToken: ModelInfoPath(`limit.output`),
+			InputTypes:     ModelInfoPath(`modalities.input`),
+			// opencode 的 reasoning 字段要求 boolean，而统一值是思考档位数组。
+			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
 	},
 	{
@@ -499,10 +641,11 @@ var builtinAgentRules = []struct {
 		},
 		Recommendations: openclawRecommendations,
 		ModelInfoFields: AgentModelInfoFieldPaths{
-			MaxContext:     `contextWindow`,
-			MaxOutputToken: `maxTokens`,
-			InputTypes:     `input`,
-			ThinkingLevels: `reasoning`,
+			MaxContext:     ModelInfoPath(`contextWindow`),
+			MaxOutputToken: ModelInfoPath(`maxTokens`),
+			InputTypes:     ModelInfoPath(`input`),
+			// openclaw 的 reasoning 字段同样要求 boolean。
+			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
 	},
 }
@@ -707,6 +850,12 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 					return err
 				}
 				dirty = true
+			} else if upgraded, changed := upgradeLegacyThinkingLevels(rule.ModelInfoFields); changed {
+				// 内置规则仍存着旧版纯路径 thinking_levels（写入数组形状，
+				// opencode/openclaw 会因 boolean 校验失败启动不了），原位
+				// 升级为 {"path":"reasoning","op":"bool"}，不动其他自定义路径。
+				rule.ModelInfoFields = upgraded
+				dirty = true
 			}
 			if !dirty {
 				continue
@@ -754,8 +903,7 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 // detect outdated built-in recommendations on existing rows (e.g. when a
 // new field like setCacheKey is added to the seed) and refresh them
 // without losing user-added custom rules.
-func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendation) bool {
-	var parsed []AgentRecommendation
+func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendation) bool {	var parsed []AgentRecommendation
 	if err := json.Unmarshal([]byte(stored), &parsed); err != nil {
 		return true
 	}
@@ -769,6 +917,28 @@ func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendatio
 		}
 	}
 	return false
+}
+
+// upgradeLegacyThinkingLevels reports-and-fixes the pre-spec blob shape:
+// when thinking_levels is still the old plain-path default ("reasoning",
+// which writes the unified level array and breaks boolean-validated
+// agents), it is rewritten in place to the bool-op spec. Other paths are
+// left untouched so user-customized rules only get the one fix. changed
+// is false for already-upgraded or unparseable blobs.
+func upgradeLegacyThinkingLevels(blob string) (string, bool) {
+	var p AgentModelInfoFieldPaths
+	if err := json.Unmarshal([]byte(blob), &p); err != nil {
+		return blob, false
+	}
+	if p.ThinkingLevels.Path != "reasoning" || p.ThinkingLevels.Op != "" {
+		return blob, false
+	}
+	p.ThinkingLevels = AgentModelInfoFieldSpec{Path: "reasoning", Op: "bool"}
+	data, err := json.Marshal(p)
+	if err != nil {
+		return blob, false
+	}
+	return string(data), true
 }
 
 func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {

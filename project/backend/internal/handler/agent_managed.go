@@ -348,7 +348,12 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 				}
 			}
 		}
+		// sjson 只原地改写已有行，新增的 provider/模型块会被压成一行；
+		// 写盘前整体重新缩进，保证同步后的文件始终是标准 pretty JSON。
 		formatted := string(buf)
+		if pretty, err := prettifyJSON(string(buf)); err == nil {
+			formatted = pretty
+		}
 		if err := writeAgentConfigFileContent(&row, formatted, key); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
 			return
@@ -722,33 +727,40 @@ func firstKeyOf(members []model.Provider) string {
 	return ""
 }
 
-// applyModelInfo writes the four unified model-info fields at their
-// rule-configured paths. Numbers are stored when > 0; array fields
-// (supported types / thinking levels) keep their array shape.
 // applyModelInfoFromModelsDev fills the four unified model-config fields
 // from a models.dev row (matched by the model name + the reference
-// supplier stored in the group's ModelSources). Nothing is persisted
-// here: the view / generation reads the live snapshot each time.
+// supplier stored in the group's ModelSources), writing each value at its
+// rule-configured path after shaping it with the field spec's op (e.g.
+// opencode's `reasoning` boolean). Nothing is persisted here: the view /
+// generation reads the live snapshot each time.
 func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFieldPaths, cfg map[string]any) {
-	if strings.TrimSpace(mif.MaxContext) != "" && row.ContextLength > 0 {
-		_ = setDottedValue(cfg, mif.MaxContext, row.ContextLength)
+	if mif.MaxContext.Path != "" && row.ContextLength > 0 {
+		if v, ok := mif.MaxContext.Shape(row.ContextLength); ok {
+			_ = setDottedValue(cfg, mif.MaxContext.Path, v)
+		}
 	}
-	if strings.TrimSpace(mif.MaxOutputToken) != "" && row.MaxOutput > 0 {
-		_ = setDottedValue(cfg, mif.MaxOutputToken, row.MaxOutput)
+	if mif.MaxOutputToken.Path != "" && row.MaxOutput > 0 {
+		if v, ok := mif.MaxOutputToken.Shape(row.MaxOutput); ok {
+			_ = setDottedValue(cfg, mif.MaxOutputToken.Path, v)
+		}
 	}
-	if len(row.InputTypes) > 0 && strings.TrimSpace(mif.InputTypes) != "" {
+	if len(row.InputTypes) > 0 && mif.InputTypes.Path != "" {
 		vals := make([]any, len(row.InputTypes))
 		for i, s := range row.InputTypes {
 			vals[i] = s
 		}
-		_ = setDottedValue(cfg, mif.InputTypes, vals)
-	}
-	if strings.TrimSpace(mif.ThinkingLevels) != "" {
-		vals := []any{}
-		if row.Reasoning {
-			vals = append(vals, "high")
+		if v, ok := mif.InputTypes.Shape(vals); ok {
+			_ = setDottedValue(cfg, mif.InputTypes.Path, v)
 		}
-		_ = setDottedValue(cfg, mif.ThinkingLevels, vals)
+	}
+	if mif.ThinkingLevels.Path != "" {
+		levels := []any{}
+		if row.Reasoning {
+			levels = append(levels, "high")
+		}
+		if v, ok := mif.ThinkingLevels.Shape(levels); ok {
+			_ = setDottedValue(cfg, mif.ThinkingLevels.Path, v)
+		}
 	}
 }
 
