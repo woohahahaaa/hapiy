@@ -19,12 +19,14 @@ import {
   DashboardApiError,
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
-  type AgentModelInfoFieldPaths,
+  AGENT_MODEL_INFO_FIELD_OPS,
+  type AgentModelInfoFieldSpecValue,
   type AgentProtocol,
   type AgentProtocolConditionOp,
   type AgentRecommendation,
   type AgentRecommendationType,
   type AgentTypeRule,
+  type ModelInfoFieldKey,
 } from '@/lib/dashboard-api'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 
@@ -419,6 +421,59 @@ function AgentTypeRulesTab() {
 
 // ── 添加 / 编辑规则 ──
 
+// modelInfoSpecToText renders a stored spec value as editor text: plain
+// paths stay bare; op specs become compact JSON so they round-trip.
+function modelInfoSpecToText(v: AgentModelInfoFieldSpecValue): string {
+  return typeof v === 'string' ? v : JSON.stringify(v)
+}
+
+// buildModelInfoFieldsPayload parses the editor text map back into the
+// API payload. Returns an error message when an object-form value is not
+// valid JSON or carries an unknown op.
+function buildModelInfoFieldsPayload(
+  texts: Record<ModelInfoFieldKey, string>,
+): { fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>; error: string | null } {
+  const fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue> = {
+    max_context: '',
+    max_output_token: '',
+    input_types: '',
+    thinking_levels: '',
+  }
+  for (const key of MODEL_INFO_FIELD_KEYS) {
+    const text = texts[key].trim()
+    if (text === '') continue
+    if (!text.startsWith('{')) {
+      fields[key] = text
+      continue
+    }
+    try {
+      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown }
+      if (typeof parsed.path !== 'string' || parsed.path.trim() === '') {
+        return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」写法缺少 path 字段` }
+      }
+      const spec: { path: string; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string } = { path: parsed.path.trim() }
+      if (parsed.op !== undefined) {
+        if (!AGENT_MODEL_INFO_FIELD_OPS.includes(parsed.op as never)) {
+          return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」不支持的 op: ${String(parsed.op)}（可选 ${AGENT_MODEL_INFO_FIELD_OPS.join(' / ')}）` }
+        }
+        spec.op = parsed.op as (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]
+      }
+      if (typeof parsed.sep === 'string' && parsed.sep !== '') spec.sep = parsed.sep
+      fields[key] = spec
+    } catch (err) {
+      return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」JSON 解析失败：` + (err instanceof Error ? err.message : String(err)) }
+    }
+  }
+  return { fields, error: null }
+}
+
+const EMPTY_MODEL_INFO_TEXTS: Record<ModelInfoFieldKey, string> = {
+  max_context: '',
+  max_output_token: '',
+  input_types: '',
+  thinking_levels: '',
+}
+
 function RuleDialog({
   open,
   onOpenChange,
@@ -437,12 +492,7 @@ function RuleDialog({
   const [modelPath, setModelPath] = useState('')
   const [configJsonc, setConfigJsonc] = useState('')
   const [jsoncError, setJsoncError] = useState<string | null>(null)
-  const [modelInfoFields, setModelInfoFields] = useState<AgentModelInfoFieldPaths>({
-    max_context: '',
-    max_output_token: '',
-    input_types: '',
-    thinking_levels: '',
-  })
+  const [modelInfoTexts, setModelInfoTexts] = useState<Record<ModelInfoFieldKey, string>>(EMPTY_MODEL_INFO_TEXTS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -459,12 +509,13 @@ function RuleDialog({
           : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
       )
       setJsoncError(null)
-      setModelInfoFields({ ...(editing?.model_info_fields ?? {
-        max_context: '',
-        max_output_token: '',
-        input_types: '',
-        thinking_levels: '',
-      }) })
+      const mif = editing?.model_info_fields
+      setModelInfoTexts(mif ? {
+        max_context: modelInfoSpecToText(mif.max_context),
+        max_output_token: modelInfoSpecToText(mif.max_output_token),
+        input_types: modelInfoSpecToText(mif.input_types),
+        thinking_levels: modelInfoSpecToText(mif.thinking_levels),
+      } : { ...EMPTY_MODEL_INFO_TEXTS })
       setError(null)
       setSaving(false)
     }
@@ -487,6 +538,11 @@ function RuleDialog({
       protocols = parsed.protocols
     } catch (err) {
       setError('JSONC 解析失败：' + (err instanceof Error ? err.message : String(err)))
+      return
+    }
+    const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoTexts)
+    if (mifError) {
+      setError(mifError)
       return
     }
     setSaving(true)
@@ -571,7 +627,7 @@ function RuleDialog({
               </p>
             </Field>
 
-            <ModelInfoFieldsEditor value={modelInfoFields} onChange={setModelInfoFields} />
+            <ModelInfoFieldsEditor value={modelInfoTexts} onChange={setModelInfoTexts} />
 
             <Field>
               <div className="flex items-center justify-between">
@@ -659,8 +715,8 @@ function ModelInfoFieldsEditor({
   value,
   onChange,
 }: {
-  value: AgentModelInfoFieldPaths
-  onChange: (v: AgentModelInfoFieldPaths) => void
+  value: Record<ModelInfoFieldKey, string>
+  onChange: (v: Record<ModelInfoFieldKey, string>) => void
 }) {
   return (
     <Field>
@@ -668,14 +724,17 @@ function ModelInfoFieldsEditor({
         <FieldLabel>通用模型信息字段</FieldLabel>
       </div>
       <p className="text-xs text-muted-foreground">
-        四个统一的模型信息字段在各 agent 配置里的写入路径；「同步模型信息」时按此映射写回
+        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。支持两种写法：
+        纯路径 <code className="font-mono">"limit.context"</code>（统一值原样写入），或对象{' '}
+        <code className="font-mono">{'{"path":"reasoning","op":"bool"}'}</code>。op 可选：
+        raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，sep 可选，默认逗号）。
       </p>
       <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
               <th className="w-[40%] px-2 py-1.5 text-left font-medium">模型信息</th>
-              <th className="px-2 py-1.5 text-left font-medium">字段名（gjson 路径）</th>
+              <th className="px-2 py-1.5 text-left font-medium">字段名（gjson 路径 / 值写法）</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -686,7 +745,7 @@ function ModelInfoFieldsEditor({
                   <Input
                     value={value[key]}
                     onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-                    placeholder="例如：limit.context"
+                    placeholder={`例如：limit.context 或 {"path":"reasoning","op":"bool"}`}
                     className="h-7 text-xs font-mono"
                   />
                 </td>

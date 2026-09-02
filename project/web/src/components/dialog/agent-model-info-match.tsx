@@ -23,6 +23,7 @@ import {
   MODEL_INFO_FIELD_LABELS,
   type AgentConfigFile,
   type AgentModelInfoFieldPaths,
+  type AgentModelInfoFieldSpec,
   type AgentModelProvider,
 } from '@/lib/dashboard-api'
 
@@ -52,7 +53,9 @@ function fieldValue(obj: unknown, path: string): unknown {
 }
 
 // coerceToShape adapts a model-info raw value to the shape the agent's
-// config expects (boolean field → boolean; number field → number).
+// config expects (boolean field → boolean; number field → number). Only
+// used for legacy plain-path rules; explicit {path, op} specs use
+// applySpecOp instead.
 function coerceToShape(raw: unknown, targetShape: unknown): unknown {
   if (typeof targetShape === 'boolean') {
     const has = Array.isArray(raw) ? raw.length > 0 : raw !== undefined && raw !== null
@@ -63,6 +66,27 @@ function coerceToShape(raw: unknown, targetShape: unknown): unknown {
     return Number.isFinite(n) ? n : undefined
   }
   return raw
+}
+
+// applySpecOp shapes the unified value per an explicit {path, op} spec.
+// Returns undefined when the op semantics say the field must be skipped
+// (empty raw / first / join), so agents never receive e.g. an empty array
+// where a boolean is expected.
+function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
+  switch (spec.op) {
+    case 'bool': {
+      if (raw === undefined || raw === null) return undefined
+      return Array.isArray(raw) ? raw.length > 0 : Boolean(raw)
+    }
+    case 'first':
+      return Array.isArray(raw) && raw.length > 0 ? raw[0] : undefined
+    case 'join':
+      return Array.isArray(raw) && raw.length > 0 ? raw.join(spec.sep ?? ',') : undefined
+    default:
+      if (raw === undefined || raw === null) return undefined
+      if (Array.isArray(raw) && raw.length === 0) return undefined
+      return raw
+  }
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
@@ -174,12 +198,13 @@ export function AgentModelInfoMatchDialog({
     const sourceMap = sourceMapFor(source)
     const changes: FieldChange[] = []
     for (const key of MODEL_INFO_FIELD_KEYS) {
-      const path = modelInfoFields[key]
+      const spec = modelInfoFields[key]
+      const path = typeof spec === 'string' ? spec : spec.path
       if (!path) continue
       const raw = sourceMap[key]
       if (raw === undefined || raw === null) continue
       const current = fieldValue(cfg, path)
-      const next = coerceToShape(raw, current)
+      const next = typeof spec === 'string' ? coerceToShape(raw, current) : applySpecOp(raw, spec)
       if (next === undefined) continue
       if (!valuesEqual(current, next)) {
         changes.push({ key, label: MODEL_INFO_FIELD_LABELS[key], path, oldValue: current, newValue: next })

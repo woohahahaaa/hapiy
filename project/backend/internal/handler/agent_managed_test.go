@@ -57,8 +57,8 @@ func seedManagedDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{
-		MaxContext: "limit.context", MaxOutputToken: "limit.output",
-		InputTypes: "modalities.input", ThinkingLevels: "reasoning",
+		MaxContext: model.ModelInfoPath("limit.context"), MaxOutputToken: model.ModelInfoPath("limit.output"),
+		InputTypes: model.ModelInfoPath("modalities.input"), ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -315,6 +315,90 @@ func TestManagedProviderSyncConverges(t *testing.T) {
 	}
 }
 
+// TestManagedRealRuleConverges 用真实内置 opencode 规则（含 bool 形状的
+// reasoning、真实 rec 集合）验证「同步后待同步必须消失」，不掺任何手工
+// 编辑——对应「刚点了全部同步还是显示待同步」的线上现象。
+func TestManagedRealRuleConverges(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+	var rule model.AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	file := model.AgentConfigFile{
+		RecordName: "real-open", AgentType: "opencode",
+		Mode: "local", TargetOS: "mac", Path: "/tmp/hapiy-real-open.json",
+		Content: `{"$schema":"https://opencode.ai/config.json","theme":"opencode"}`,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTempFile("/tmp/hapiy-real-open.json", file.Content); err != nil {
+		t.Fatal(err)
+	}
+
+	p1 := model.Provider{Name: "HAPIY-A", Endpoints: `[{"pathSuffix":"/v1/chat/completions"}]`, Models: `[{"model":"gpt-x"}]`, Keys: `["sk-a"]`}
+	p2 := model.Provider{Name: "HAPIY-B", Endpoints: `[{"pathSuffix":"/v1/chat/completions"}]`, Models: `[{"model":"gpt-y"}]`, Keys: `["sk-b"]`}
+	for _, p := range []model.Provider{p1, p2} {
+		if err := db.Create(&p).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{
+		models: []modelsDevModel{
+			{ID: "gpt-x", Name: "gpt-x", ProviderName: "OpenRouter", ContextLength: 131072, MaxOutput: 16384, InputTypes: []string{"text", "images"}, Reasoning: true},
+			{ID: "gpt-y", Name: "gpt-y", ProviderName: "OpenRouter", ContextLength: 262144, MaxOutput: 32768, InputTypes: []string{"text"}},
+		},
+		fetchedAt: time.Now(),
+	}
+	modelsDev.mu.Unlock()
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","source_name":"SRC","groups":[{"endpoint":"/v1/chat/completions","suffix":"","model_sources":{"gpt-x":"OpenRouter","gpt-y":"OpenRouter"}}]}`
+	r := newRouterForManaged(db)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+
+	// 连续两轮「同步 → 列表」，模拟用户点「同步所有」后看徽标。
+	for round := 1; round <= 2; round++ {
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers/"+managedProviderID(db)+"/sync", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("sync round %d: %d %s", round, w.Code, w.Body.String())
+		}
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-providers", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("list round %d: %d %s", round, w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+			t.Fatalf("round %d: expected pending_sync false right after sync, got: %s", round, w.Body.String())
+		}
+	}
+}
+
 func TestManagedProviderNoEndpointGroup(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
@@ -392,6 +476,99 @@ func managedProviderID(db *gorm.DB) string {
 	var m model.ManagedAgentProvider
 	db.First(&m)
 	return m.ID
+}
+
+// TestManagedProviderSyncModelInfoSpec covers the two managed-sync fixes:
+// the bool-op model-info spec (opencode `reasoning` must be a boolean,
+// not ["high"]) and the pretty re-indent after sjson inserts a new
+// provider block on a single line.
+func TestManagedProviderSyncModelInfoSpec(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	rule := model.AgentTypeRule{Name: "opencode"}
+	if err := rule.SetJsonPaths(model.AgentJsonPaths{Provider: "provider", Model: "provider.{provider_id}.models"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetRecommendations([]model.AgentRecommendation{
+		{Scope: "provider", Key: "options.baseURL", Type: "string", Required: true},
+		{Scope: "provider", Key: "options.apiKey", Type: "string", Required: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{
+		MaxContext:     model.ModelInfoPath("limit.context"),
+		MaxOutputToken: model.ModelInfoPath("limit.output"),
+		InputTypes:     model.ModelInfoPath("modalities.input"),
+		ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "t", AgentType: "opencode", Mode: "local", TargetOS: "mac",
+		Path: "/tmp/hapiy-test-spec.json", Content: `{"provider":{}}`,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTempFile("/tmp/hapiy-test-spec.json", file.Content); err != nil {
+		t.Fatal(err)
+	}
+	p := model.Provider{Name: "HAPIY-A", Endpoints: `[{"pathSuffix":"/v1/chat/completions"}]`, Models: `[{"model":"gpt-x"}]`, Keys: `["sk-a"]`}
+	if err := db.Create(&p).Error; err != nil {
+		t.Fatal(err)
+	}
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{models: []modelsDevModel{
+		{ID: "gpt-x", Name: "gpt-x", ProviderName: "OpenRouter", ContextLength: 131072, MaxOutput: 16384, InputTypes: []string{"text"}, Reasoning: true},
+	}, fetchedAt: time.Now()}
+	modelsDev.mu.Unlock()
+
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON([]string{p.ID}) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"","model_sources":{"gpt-x":"OpenRouter"}}]}`
+	r := newRouterForManaged(db)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers/"+managedProviderID(db)+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+
+	// Inspect the file actually written to disk.
+	content, err := os.ReadFile("/tmp/hapiy-test-spec.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := string(content)
+	if !strings.Contains(out, `"reasoning": true`) {
+		t.Fatalf("bool-op spec must write a boolean, got: %s", out)
+	}
+	if strings.Contains(out, `"reasoning":[]`) || strings.Contains(out, `"reasoning":["high"]`) {
+		t.Fatalf("reasoning must not be an array: %s", out)
+	}
+	// Pretty format: the new provider block must span indented lines
+	// instead of one compact line.
+	if !strings.Contains(out, "\n  \"provider\": {\n") {
+		t.Fatalf("synced file must be pretty-printed, got: %s", out)
+	}
+	if !strings.Contains(out, `"limit": {
+        "context": 131072`) && !strings.Contains(out, `"context": 131072`) {
+		t.Fatalf("model info numbers missing: %s", out)
+	}
 }
 
 func TestManagedProviderNameConflict(t *testing.T) {

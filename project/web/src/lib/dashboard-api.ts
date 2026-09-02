@@ -594,11 +594,43 @@ export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
   thinking_levels: '支持的思考程度',
 }
 
+// AgentModelInfoFieldSpec — 显式的「值写法」对象：path 是模型配置对象内
+// 的 gjson 路径，op 决定统一值写入前如何变形（各 agent 字段形状不同，
+// 如 opencode 的 reasoning 要求 boolean 而统一值是档位数组）。
+// op: raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个）
+//     / join（拼接，sep 可选，默认 ","）。
+export type AgentModelInfoFieldOp = 'raw' | 'bool' | 'first' | 'join'
+
+export type AgentModelInfoFieldSpec = {
+  readonly path: string
+  readonly op?: AgentModelInfoFieldOp
+  readonly sep?: string
+}
+
+// 每个字段既接受纯路径字符串（等价 raw），也接受上面的对象写法。
+export type AgentModelInfoFieldSpecValue = string | AgentModelInfoFieldSpec
+
+export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['raw', 'bool', 'first', 'join']
+
+// parseAgentModelInfoSpec 把服务端返回的字段值归一为 string | spec。
+export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpecValue {
+  if (typeof value === 'string') return value
+  if (isRecord(value) && typeof value.path === 'string') {
+    const spec: { path: string; op?: AgentModelInfoFieldOp; sep?: string } = { path: value.path }
+    if (AGENT_MODEL_INFO_FIELD_OPS.includes(value.op as AgentModelInfoFieldOp)) {
+      spec.op = value.op as AgentModelInfoFieldOp
+    }
+    if (typeof value.sep === 'string' && value.sep !== '') spec.sep = value.sep
+    return spec
+  }
+  return ''
+}
+
 export type AgentModelInfoFieldPaths = {
-  readonly max_context: string
-  readonly max_output_token: string
-  readonly input_types: string
-  readonly thinking_levels: string
+  readonly max_context: AgentModelInfoFieldSpecValue
+  readonly max_output_token: AgentModelInfoFieldSpecValue
+  readonly input_types: AgentModelInfoFieldSpecValue
+  readonly thinking_levels: AgentModelInfoFieldSpecValue
 }
 
 // AgentModelConfigSource — one persisted 模型配置参考供应商 selection for a
@@ -1945,10 +1977,10 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
     recommendations: recs.map(parseAgentRecommendation),
     protocols: protocols.map(parseAgentProtocol),
     model_info_fields: {
-      max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
-      max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
-      input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
-      thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
+      max_context: parseAgentModelInfoSpec(mif.max_context),
+      max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
+      input_types: parseAgentModelInfoSpec(mif.input_types),
+      thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
     },
     config_jsonc: typeof value.config_jsonc === 'string' ? value.config_jsonc : '',
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
@@ -2082,10 +2114,10 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
     recommendations: recs.map(parseAgentRecommendation),
     protocols: protocols.map(parseAgentProtocol),
     model_info_fields: {
-      max_context: typeof mif.max_context === 'string' ? mif.max_context : '',
-      max_output_token: typeof mif.max_output_token === 'string' ? mif.max_output_token : '',
-      input_types: typeof mif.input_types === 'string' ? mif.input_types : '',
-      thinking_levels: typeof mif.thinking_levels === 'string' ? mif.thinking_levels : '',
+      max_context: parseAgentModelInfoSpec(mif.max_context),
+      max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
+      input_types: parseAgentModelInfoSpec(mif.input_types),
+      thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
     },
     json_paths: (() => {
       const jp = isRecord(value.json_paths) ? value.json_paths : {}

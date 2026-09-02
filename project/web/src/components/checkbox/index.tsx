@@ -1,0 +1,39 @@
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
+import type { ComponentProps } from "react"
+
+import { cn } from "@/lib/utils"
+import { renderIcon } from "@/config/icons"
+
+const CHECKBOX_DEFAULT_SIZE = 16
+const CHECKBOX_MARK_INSET = 1
+const CHECKBOX_MARK_MIN_SIZE = 4
+
+interface CheckboxProps extends ComponentProps<typeof CheckboxPrimitive.Root> {
+  size?: number
+}
+
+function Checkbox({ className, size, ...props }: CheckboxProps) {
+  const box = size ?? CHECKBOX_DEFAULT_SIZE
+  const mark = Math.max(box - CHECKBOX_MARK_INSET * 2, CHECKBOX_MARK_MIN_SIZE)
+  return (
+    <CheckboxPrimitive.Root
+      data-slot="checkbox"
+      style={size ? { width: box, height: box } : undefined}
+      className={cn(
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-sm border border-input transition-colors outline-none group-has-disabled/field:opacity-50 after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary",
+        className
+      )}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator
+        data-slot="checkbox-indicator"
+        className="grid place-content-center text-current transition-none"
+      >
+        {renderIcon('check', { size: mark, strokeWidth: 5 })}
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
+  )
+}
+
+export { Checkbox }
+export type { CheckboxProps }

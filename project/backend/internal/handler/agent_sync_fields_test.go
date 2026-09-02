@@ -35,10 +35,10 @@ func seedSyncFieldsDB(t *testing.T) (*gorm.DB, string) {
 		t.Fatal(err)
 	}
 	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{
-		MaxContext:     "limit.context",
-		MaxOutputToken: "limit.output",
-		InputTypes:     "modalities.input",
-		ThinkingLevels: "reasoning",
+		MaxContext:     model.ModelInfoPath("limit.context"),
+		MaxOutputToken: model.ModelInfoPath("limit.output"),
+		InputTypes:     model.ModelInfoPath("modalities.input"),
+		ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -136,10 +136,10 @@ func TestSyncAgentConfigFileModelFields_arrayModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{
-		MaxContext:     "contextWindow",
-		MaxOutputToken: "maxTokens",
-		InputTypes:     "input",
-		ThinkingLevels: "reasoning",
+		MaxContext:     model.ModelInfoPath("contextWindow"),
+		MaxOutputToken: model.ModelInfoPath("maxTokens"),
+		InputTypes:     model.ModelInfoPath("input"),
+		ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestSyncAgentConfigFileModelFields_providerIDWithDot(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rule.SetModelInfoFields(model.AgentModelInfoFieldPaths{
-		MaxContext: "limit.context",
+		MaxContext: model.ModelInfoPath("limit.context"),
 	}); err != nil {
 		t.Fatal(err)
 	}

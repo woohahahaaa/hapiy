@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Checkbox } from '@/components/checkbox'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import type { LogOutputSlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
 import { createDebouncedCommit, shouldNotifyOnDisable, type DebouncedCommit } from './debounce'
