@@ -333,18 +333,18 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 				synced++
 			}
 			if strings.TrimSpace(jpaths.Model) != "" {
-				for modelName, modelCfg := range gen["models"].(map[string]any) {
-					resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
-					for k, v := range modelCfg.(map[string]any) {
-						full := resolved + "." + modelName + "." + k
-						next, err := sjson.SetBytes(buf, full, v)
-						if err != nil {
-							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("模型 %s 字段 %s 写入失败: %v", modelName, k, err)})
-							return
-						}
-						buf = next
-						synced++
+				resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
+				// 模型名可能自带点（gpt-5.6-sol），逐字段拼 gjson 路径会把
+				// 名字拆成嵌套对象，pending 平铺比较永远失败；整个 models
+				// 子树一次写入，模型名按字面量落盘。
+				if len(modelCfgs) > 0 {
+					next, err := sjson.SetBytes(buf, resolved, modelCfgs)
+					if err != nil {
+						c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("模型列表写入失败: %v", err)})
+						return
 					}
+					buf = next
+					synced += len(modelCfgs)
 				}
 			}
 		}

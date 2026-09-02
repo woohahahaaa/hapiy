@@ -315,6 +315,70 @@ func TestManagedProviderSyncConverges(t *testing.T) {
 	}
 }
 
+// TestManagedSyncDottedModelNames 复现线上「同步后永远待同步」：模型名
+// 带点（gpt-5.6-sol）时，逐字段拼 gjson 路径写入会把名字拆成嵌套对象
+// （gpt-5→6-sol），而 pending 按平铺键名比较，永远不相等。
+func TestManagedSyncDottedModelNames(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	// 关键：模型名里带点。
+	db.Model(&model.Provider{}).Where("name = ?", "HAPIY-A").
+		Update("models", `[{"model":"gpt-5.6-sol"},{"model":"gpt-5.6-luna"}]`)
+	db.Model(&model.Provider{}).Where("name = ?", "HAPIY-B").
+		Update("models", `[{"model":"glm-5.3-flash"}]`)
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{
+		models: []modelsDevModel{
+			{ID: "gpt-5.6-sol", Name: "gpt-5.6-sol", ProviderName: "OpenRouter", ContextLength: 1050000, MaxOutput: 128000, InputTypes: []string{"text"}},
+			{ID: "gpt-5.6-luna", Name: "gpt-5.6-luna", ProviderName: "OpenRouter", ContextLength: 1000000, MaxOutput: 128000, InputTypes: []string{"text"}, Reasoning: true},
+			{ID: "glm-5.3-flash", Name: "glm-5.3-flash", ProviderName: "Abacus", ContextLength: 1000000, MaxOutput: 128000, InputTypes: []string{"text"}},
+		},
+		fetchedAt: time.Now(),
+	}
+	modelsDev.mu.Unlock()
+
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-5.6-sol":"OpenRouter","gpt-5.6-luna":"OpenRouter","glm-5.3-flash":"Abacus"}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	for round := 1; round <= 2; round++ {
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("sync round %d: %d %s", round, w.Code, w.Body.String())
+		}
+		// 同步结果里模型名必须按字面量落盘，不能被拆成嵌套对象。
+		var f model.AgentConfigFile
+		db.First(&f)
+		if !strings.Contains(f.Content, `"gpt-5.6-sol"`) {
+			t.Fatalf("round %d: model name with dots was split by the gjson path, file content: %s", round, f.Content)
+		}
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-providers", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("list round %d: %d %s", round, w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+			t.Fatalf("round %d: expected pending_sync false right after sync (dotted model names), got: %s", round, w.Body.String())
+		}
+	}
+}
+
 // TestManagedRealRuleConverges 用真实内置 opencode 规则（含 bool 形状的
 // reasoning、真实 rec 集合）验证「同步后待同步必须消失」，不掺任何手工
 // 编辑——对应「刚点了全部同步还是显示待同步」的线上现象。

@@ -116,6 +116,22 @@ export function ManagedProviderDialog({
             suffix[hg.endpoint] = hg.suffix
             sources[hg.endpoint] = { ...hg.model_sources }
           }
+          // 手填 endpoint 组恢复：endpoint 无法从当前勾选的供应商派生出来的
+          // 分组必然是手动填写的，回填到手动输入框 —— 否则保存过的 endpoint
+          // 在重新打开后看起来像丢了（数据其实还在）。
+          const checkedIds = new Set(editing.provider_ids)
+          const derivable = new Set<string>()
+          for (const o of opts) {
+            if (!checkedIds.has(o.id) || !o.status) continue
+            for (const ep of o.endpoints) derivable.add(ep)
+          }
+          const manualGroup = [...editing.groups, ...(editing.hidden_groups ?? [])]
+            .find((g) => g.endpoint && g.endpoint !== '__none__' && !derivable.has(g.endpoint))
+          if (manualGroup) {
+            setManualEndpoint({ __none__: manualGroup.endpoint })
+            suffix['__none__'] = manualGroup.suffix
+            sources['__none__'] = { ...manualGroup.model_sources }
+          }
           setSuffixByEndpoint(suffix)
           setSourceByEndpoint(sources)
         } else {
@@ -202,6 +218,12 @@ export function ManagedProviderDialog({
     ? `已匹配到同名分组「${noneMergeTarget.endpoint}」${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()
         ? `（命名后缀 ${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()}）`
         : ''}，此处留空保存将自动合并`
+    : undefined
+
+  // 命中已有分组时，后缀输入框的占位符直接显示命中分组的后缀
+  // （留空保存即继承该后缀并合并进该分组）。
+  const noneSuffixPlaceholder = noneMergeTarget
+    ? (suffixByEndpoint[noneMergeTarget.endpoint] ?? defaultSuffixOf(noneMergeTarget.endpoint)).trim()
     : undefined
 
   // 每个分组的模型来源为空时预填首个候选（models.dev 智能匹配）。
@@ -318,35 +340,58 @@ export function ManagedProviderDialog({
       toast.error('请至少勾选一个有 endpoint 的供应商')
       return
     }
-    // 未配置 endpoint 组手动填写的 endpoint 与已有分组相同时，自动并入该
-    // 分组（保留原分组的后缀与模型来源，仅追加其供应商），避免后端出现
-    // 重复 endpoint 条目。
+    // 未配置 endpoint 组：手填 endpoint 的提交语义 ——
+    // · 留空：提示并中止（否则会产生空 endpoint 的坏分组，保存必然失败）；
+    // · 命中已有分组且未另填后缀：并入该分组，后缀/来源继承命中分组；
+    // · 未命中：后缀自动取 endpoint 派生默认值（与普通分组一致），无需手填。
+    const manualNoneEp = (manualEndpoint['__none__'] ?? '').trim()
+    const noneTarget = manualNoneEp
+      ? groups.find((g) => g.endpoint !== '__none__' && g.endpoint === manualNoneEp)
+      : undefined
+    const noneSuffix = (
+      suffixByEndpoint['__none__'] ?? (noneTarget ? '' : defaultSuffixOf(manualNoneEp))
+    ).trim()
     const payload: ManagedAgentGroup[] = []
+    const mergeInto = (existing: ManagedAgentGroup, entry: ManagedAgentGroup) => {
+      const mergedSources: Record<string, string> = { ...existing.model_sources }
+      for (const [m, s] of Object.entries(entry.model_sources)) {
+        if (mergedSources[m] === undefined) mergedSources[m] = s
+      }
+      const idx = payload.indexOf(existing)
+      payload[idx] = {
+        ...existing,
+        provider_ids: [...new Set([...(existing.provider_ids ?? []), ...(entry.provider_ids ?? [])])],
+        model_sources: mergedSources,
+      }
+    }
     for (const g of groups) {
-      const endpoint = g.endpoint === '__none__'
-        ? (manualEndpoint['__none__'] ?? '').trim()
-        : g.endpoint
+      if (g.endpoint === '__none__') {
+        if (!manualNoneEp) {
+          toast.error('有未配置 endpoint 的供应商：请手动填写 endpoint，或取消勾选它们')
+          return
+        }
+        const entry: ManagedAgentGroup = {
+          endpoint: manualNoneEp,
+          suffix: noneSuffix,
+          model_sources: sourceByEndpoint['__none__'] ?? {},
+          ...(g.noEndpointProviderIds ? { provider_ids: [...g.noEndpointProviderIds] } : {}),
+        }
+        const existing = payload.find((p) => p.endpoint === manualNoneEp)
+        if (existing && noneSuffix === '') {
+          mergeInto(existing, entry)
+          continue
+        }
+        payload.push(entry)
+        continue
+      }
       const entry: ManagedAgentGroup = {
-        endpoint,
+        endpoint: g.endpoint,
         suffix: (suffixByEndpoint[g.endpoint] ?? defaultSuffixOf(g.endpoint)).trim(),
         model_sources: sourceByEndpoint[g.endpoint] ?? {},
-        ...(g.endpoint === '__none__' && g.noEndpointProviderIds ? { provider_ids: [...g.noEndpointProviderIds] } : {}),
       }
-      const existing = payload.find((p) => p.endpoint === endpoint)
-      // 未分配 endpoint 组：手动 endpoint 命中已有分组且未另填后缀时，自动
-      // 并入该分组（保留命中分组的后缀与模型来源，仅追加供应商与缺失的
-      // 模型来源）；若用户显式填了后缀，则按用户意图保留独立条目。
-      if (existing && (g.endpoint !== '__none__' || (suffixByEndpoint['__none__'] ?? '').trim() === '')) {
-        const mergedSources: Record<string, string> = { ...existing.model_sources }
-        for (const [m, s] of Object.entries(entry.model_sources)) {
-          if (mergedSources[m] === undefined) mergedSources[m] = s
-        }
-        const idx = payload.indexOf(existing)
-        payload[idx] = {
-          ...existing,
-          provider_ids: [...new Set([...(existing.provider_ids ?? []), ...(entry.provider_ids ?? [])])],
-          model_sources: mergedSources,
-        }
+      const existing = payload.find((p) => p.endpoint === g.endpoint)
+      if (existing) {
+        mergeInto(existing, entry)
         continue
       }
       payload.push(entry)
@@ -587,15 +632,19 @@ export function ManagedProviderDialog({
                                     {idx === 0 && (
                                       <td rowSpan={rows.length} className="w-[14%] border-r border-border px-2 py-2 align-middle">
                                         <Input
-                                          value={suffixByEndpoint[g.endpoint] ?? defaultSuffixOf(g.endpoint)}
+                                          value={
+                                            isNone
+                                              ? (suffixByEndpoint[g.endpoint] ?? (noneMergeTarget ? '' : defaultSuffixOf(manualNoneEndpoint)))
+                                              : (suffixByEndpoint[g.endpoint] ?? defaultSuffixOf(g.endpoint))
+                                          }
                                           onChange={(e) =>
                                             setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
                                           }
-                                          placeholder="填写命名后缀"
+                                          placeholder={isNone && noneSuffixPlaceholder ? noneSuffixPlaceholder : '填写命名后缀'}
                                           className="h-7 w-full text-xs font-mono"
                                         />
                                         {isNone && noneMergeHint && (
-                                          <p className="mt-1 text-[11px] leading-tight text-warning">{noneMergeHint}</p>
+                                          <p className="mt-1 text-[11px] leading-tight break-all text-warning">{noneMergeHint}</p>
                                         )}
                                       </td>
                                     )}
