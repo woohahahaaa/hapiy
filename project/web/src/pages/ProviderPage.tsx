@@ -16,6 +16,7 @@ import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
 import {
   findModelsDevProviderRow,
+  isModelsDevLab,
   loadModelsDevModels,
   providersForModel,
   refreshModelsDevModels,
@@ -999,7 +1000,9 @@ function ModelPriceCell({
               ) : referenceCandidates.length === 0 ? (
                 <SelectItem value="__none__" disabled>未在 models.dev 查到该模型</SelectItem>
               ) : referenceCandidates.map((provider) => (
-                <SelectItem key={provider.providerId} value={provider.providerName}>{provider.providerName}</SelectItem>
+                <SelectItem key={provider.providerId} value={provider.providerName}>
+                  {provider.providerName}{isModelsDevLab(model.model, provider.providerId) ? '（官方）' : ''}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>

@@ -22,7 +22,7 @@ import {
 import { toast } from '@/components/ui/toast'
 import { RemovableTag } from '@/components/tag'
 import { dashboardApi, type AgentConfigFile, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView, type Token } from '@/lib/dashboard-api'
-import { loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
+import { isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 
 interface ManagedProviderDialogProps {
   open: boolean
@@ -132,17 +132,32 @@ export function ManagedProviderDialog({
             suffix['__none__'] = manualGroup.suffix
             sources['__none__'] = { ...manualGroup.model_sources }
           } else {
-            // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
-            // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
-            // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
-            const noEpIds = opts
-              .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
-              .map((o) => o.id)
-            const mergedGroup = noEpIds.length
-              ? editing.groups.find((g) => (g.provider_ids ?? []).some((pid) => noEpIds.includes(pid)))
-              : undefined
-            if (mergedGroup) {
-              setManualEndpoint({ __none__: mergedGroup.endpoint })
+            // 显式重复组恢复：用户给手填组填了与已有分组相同的 endpoint +
+            // 相同后缀，保存后是两条分组记录（写入 JSON 时才合成一个块）。
+            // 同一 endpoint 出现两条即视为有一条是手填的重复组，回填显示，
+            // 弹窗里依旧呈现为独立两组。
+            const endpointCount = new Map<string, number>()
+            for (const g of editing.groups) {
+              endpointCount.set(g.endpoint, (endpointCount.get(g.endpoint) ?? 0) + 1)
+            }
+            const dup = editing.groups.find((g) => (endpointCount.get(g.endpoint) ?? 0) > 1)
+            if (dup) {
+              setManualEndpoint({ __none__: dup.endpoint })
+              suffix['__none__'] = dup.suffix
+              sources['__none__'] = { ...dup.model_sources }
+            } else {
+              // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
+              // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
+              // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
+              const noEpIds = opts
+                .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
+                .map((o) => o.id)
+              const mergedGroup = noEpIds.length
+                ? editing.groups.find((g) => (g.provider_ids ?? []).some((pid) => noEpIds.includes(pid)))
+                : undefined
+              if (mergedGroup) {
+                setManualEndpoint({ __none__: mergedGroup.endpoint })
+              }
             }
           }
           setSuffixByEndpoint(suffix)
@@ -264,73 +279,26 @@ export function ManagedProviderDialog({
     })
   }
 
-  // 全部模型中出现的候选来源供应商（批量套用下拉选项）。
-  const batchSuppliers = useMemo(() => {
-    const names = new Set<string>()
-    for (const g of deferredGroups) {
-      for (const m of g.modelNames) {
-        for (const p of providersForModel(snapshot ?? [], m)) names.add(p.providerName)
+  // 一键官方：所有模型设为官方（lab）参考厂商；模型没有官方来源时
+  // 取其候选列表第一个（官方优先排序后的首位，即字母序第一个）。
+  const applyOfficialToAll = () => {
+    if (snapshot === null) return
+    setSourceByEndpoint((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const g of groups) {
+        const cur: Record<string, string> = {}
+        for (const m of g.modelNames) {
+          const c = providersForModel(snapshot, m)
+          if (c.length === 0) continue
+          cur[m] = c[0].providerName
+          if ((prev[g.endpoint] ?? {})[m] !== cur[m]) changed = true
+        }
+        next[g.endpoint] = cur
       }
-    }
-    return [...names].sort((a, b) => a.localeCompare(b))
-  }, [deferredGroups, snapshot])
-
-  // 批量套用来源：按所选模式一次性作用到全部 endpoint 分组。
-  const applySourceTo = (mode: string) => {
-    if (mode === '__prefill__') {
-      if (snapshot === null) return
-      // 智能匹配：为所有尚未设置来源的模型填入 models.dev 首个供应商
-      setSourceByEndpoint((prev) => {
-        const next = { ...prev }
-        let changed = false
-        for (const g of groups) {
-          const cur = { ...(next[g.endpoint] ?? {}) }
-          for (const m of g.modelNames) {
-            if (cur[m] !== undefined) continue
-            const c = providersForModel(snapshot, m)
-            if (c.length > 0) {
-              cur[m] = c[0].providerName
-              changed = true
-            }
-          }
-          next[g.endpoint] = cur
-        }
-        return changed ? next : prev
-      })
-    } else if (mode === '__clear__') {
-      // 全部置空（不同步）
-      setSourceByEndpoint((prev) => {
-        const next = { ...prev }
-        let changed = false
-        for (const g of groups) {
-          const cur = { ...(next[g.endpoint] ?? {}) }
-          for (const m of g.modelNames) {
-            if (cur[m] !== '') {
-              cur[m] = ''
-              changed = true
-            }
-          }
-          next[g.endpoint] = cur
-        }
-        return changed ? next : prev
-      })
-    } else {
-      const supplier = mode
-      setSourceByEndpoint((prev) => {
-        const next = { ...prev }
-        let changed = false
-        for (const g of groups) {
-          const cur: Record<string, string> = {}
-          for (const m of g.modelNames) {
-            cur[m] = supplier
-            if ((prev[g.endpoint] ?? {})[m] !== supplier) changed = true
-          }
-          next[g.endpoint] = cur
-        }
-        return changed ? next : prev
-      })
-    }
-    toast('已批量套用来源')
+      return changed ? next : prev
+    })
+    toast('已把全部模型设为官方参考厂商（无官方的取候选第一个）')
   }
 
   const toggleProvider = (id: string) => {
@@ -601,21 +569,17 @@ export function ManagedProviderDialog({
                         <div className="w-[26%] border-l border-border pl-2">模型</div>
                         <div className="flex w-[36%] items-center justify-between gap-1 border-l border-border pl-2">
                           <span>从 models.dev 同步模型配置</span>
-                          <Select value="__menu__" onValueChange={(v) => applySourceTo(v)} disabled={snapshot === null}>
-                            <SelectTrigger className="h-6 rounded border-0 bg-transparent px-1.5 text-xs font-medium text-foreground shadow-none hover:bg-muted focus-visible:ring-0 data-[state=open]:bg-muted">
-                              <span className="inline-flex items-center gap-1">
-                                <AppIcon name="auto_fix_high" size={12} />
-                                一键设置
-                              </span>
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__prefill__">默认推荐（智能匹配）</SelectItem>
-                              {batchSuppliers.map((s) => (
-                                <SelectItem key={s} value={s}>全部设为 {s}</SelectItem>
-                              ))}
-                              <SelectItem value="__clear__">不同步（清空全部）</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            title="把全部模型设为官方（lab）参考厂商；没有官方来源的模型取其候选列表第一个"
+                            onClick={applyOfficialToAll}
+                            disabled={snapshot === null}
+                          >
+                            <AppIcon name="auto_fix_high" data-icon="inline-start" />
+                            一键官方
+                          </Button>
                         </div>
                       </div>
                       <div className="divide-y divide-border">

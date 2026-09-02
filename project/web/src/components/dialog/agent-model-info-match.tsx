@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
-import { findModelsDevProviderRow, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
+import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
@@ -333,7 +333,7 @@ export function AgentModelInfoMatchDialog({
                                       <SelectContent>
                                         {providersForModel(snapshot ?? [], g.modelId).map((p) => (
                                           <SelectItem key={p.providerId} value={p.providerName}>
-                                            {p.providerName}
+                                            {p.providerName}{isModelsDevLab(g.modelId, p.providerId) ? '（官方）' : ''}
                                           </SelectItem>
                                         ))}
                                       </SelectContent>

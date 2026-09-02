@@ -145,6 +145,7 @@ export function findModelsDevModel(
 }
 
 // Distinct providers of rows whose id/name equals the committed model value.
+// 官方（lab，模型的第一方厂商）排在最前，其余按名称字母序。
 export function providersForModel(
   models: readonly ModelsDevModel[],
   value: string,
@@ -157,9 +158,58 @@ export function providersForModel(
       providers.set(model.providerId, model.providerName)
     }
   }
+  const lab = labProviderIdForModel(value)
   return [...providers.entries()]
     .map(([providerId, providerName]) => ({ providerId, providerName }))
-    .sort((a, b) => a.providerName.localeCompare(b.providerName))
+    .sort((a, b) =>
+      a.providerId === lab ? -1 : b.providerId === lab ? 1 : a.providerName.localeCompare(b.providerName),
+    )
+}
+
+// LAB_PREFIX_RULES — 模型 id 前缀 → models.dev 第一方（lab）provider id。
+// models.dev 平铺 provider→models 且无官方/权重字段，"官方源"用这张表
+// 推断；注意 provider id 以实际 api.json 为准（如 moonshotai / zhipuai /
+// volcengine / amazon-bedrock）。
+const LAB_PREFIX_RULES: readonly (readonly [string, string])[] = [
+  ['claude', 'anthropic'],
+  ['gpt', 'openai'],
+  ['chatgpt', 'openai'],
+  ['o1', 'openai'],
+  ['o3', 'openai'],
+  ['o4', 'openai'],
+  ['gemini', 'google'],
+  ['gemma', 'google'],
+  ['deepseek', 'deepseek'],
+  ['grok', 'xai'],
+  ['kimi', 'moonshotai'],
+  ['glm', 'zhipuai'],
+  ['minimax', 'minimax'],
+  ['qwen', 'alibaba'],
+  ['llama', 'meta'],
+  ['mistral', 'mistral'],
+  ['codestral', 'mistral'],
+  ['magistral', 'mistral'],
+  ['ministral', 'mistral'],
+  ['pixtral', 'mistral'],
+  ['command', 'cohere'],
+  ['aya', 'cohere'],
+  ['doubao', 'volcengine'],
+  ['nova', 'amazon-bedrock'],
+]
+
+// labProviderIdForModel 推断模型的第一方厂商 provider id；推断不出返回 null。
+export function labProviderIdForModel(modelValue: string): string | null {
+  const name = modelValue.trim().toLowerCase()
+  if (!name) return null
+  for (const [prefix, providerId] of LAB_PREFIX_RULES) {
+    if (name.startsWith(prefix)) return providerId
+  }
+  return null
+}
+
+// isModelsDevLab 报告某 provider 是否为该模型的官方（lab）供应商。
+export function isModelsDevLab(modelValue: string, providerId: string): boolean {
+  return labProviderIdForModel(modelValue) === providerId
 }
 
 // First models.dev row matching (modelValue, providerName) for refilling prices.
