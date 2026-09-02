@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -203,6 +204,13 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		// 改名 / 改分组保存时立即驱动配置文件：旧名字的块删掉、按新名字
+		// 重新生成，避免旧块在保存瞬间掉进普通供应商列表（等下次同步才
+		// 清理就晚了）。
+		if _, _, err := rebuildManagedBlocks(c, db, &row, &m, key); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"data": m})
 	}
 }
@@ -234,166 +242,171 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "托管 provider 不存在"})
 			return
 		}
-		rule, ok := loadRuleForRow(c, db, row)
-		if !ok {
-			return
-		}
-		liveProviders, err := loadLiveProviders(db)
+		formatted, synced, err := rebuildManagedBlocks(c, db, &row, &m, key)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
-		}
-		content, err := readAgentConfigFileContent(&row, key)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
-			return
-		}
-		jpaths, err := rule.GetJsonPaths()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if strings.TrimSpace(jpaths.Provider) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
-			return
-		}
-		groups, err := m.GetGroups()
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		// 生成配置文件时：endpoint 与命名后缀都相同的分组合并为一个
-		// provider 块；endpoint 相同但命名后缀不同则保留各自独立块
-		// （块名 = 规则名 + 后缀）。
-		groupsByKey := make(map[string]model.ManagedAgentGroup, len(groups))
-		for _, g := range groups {
-			key := g.Endpoint + "\x00" + strings.TrimSpace(g.Suffix)
-			if cur, ok := groupsByKey[key]; ok {
-				cur.ProviderIDs = uniqueSorted(append(cur.ProviderIDs, g.ProviderIDs...))
-				if cur.ModelSources == nil {
-					cur.ModelSources = map[string]string{}
-				}
-				for k, v := range g.ModelSources {
-					cur.ModelSources[k] = v
-				}
-				groupsByKey[key] = cur
-				continue
-			}
-			groupsByKey[key] = g
-		}
-		ids, _ := m.GetProviderIDs()
-		live, _ := liveProvision(ids, liveProviders)
-		byID := map[string]model.Provider{}
-		for _, p := range liveProviders {
-			byID[p.ID] = p
-		}
-		membersOf := func(g model.ManagedAgentGroup) []model.Provider {
-			if members := live[g.Endpoint]; len(members) > 0 {
-				return members
-			}
-			var out []model.Provider
-			for _, pid := range g.ProviderIDs {
-				if p, ok := byID[pid]; ok {
-					out = append(out, p)
-				}
-			}
-			return out
-		}
-
-		cleaned := stripJSON5Comments(content)
-		buf := []byte(cleaned)
-		basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(m)
-		// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
-		// 先整块删除，避免旧块残留成「普通供应商」。
-		currentNames := make(map[string]bool, len(groupsByKey))
-		for _, stored := range groupsByKey {
-			currentNames[providerBlockName(m.Name, stored.Suffix)] = true
-		}
-		if previous, err := m.GetSyncedBlocks(); err == nil {
-			for _, old := range previous {
-				if currentNames[old] {
-					continue
-				}
-				if next, derr := sjson.DeleteBytes(buf, jpaths.Provider+"."+old); derr == nil {
-					buf = next
-				}
-			}
-		}
-		synced := 0
-		for _, stored := range groupsByKey {
-			members := membersOf(stored)
-			if len(members) == 0 {
-				continue
-			}
-			gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
-			fullName := providerBlockName(m.Name, stored.Suffix)
-			providerIDPath := jpaths.Provider + "." + fullName
-			// 托管块由系统全权生成（不允许编辑）：先整块删除再重写，
-			// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
-			// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
-			provFields, _ := gen["provider"].(map[string]any)
-			modelCfgs, _ := gen["models"].(map[string]any)
-			if len(provFields) > 0 || len(modelCfgs) > 0 {
-				if next, err := sjson.DeleteBytes(buf, providerIDPath); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider 块 %s 重置失败: %v", fullName, err)})
-					return
-				} else {
-					buf = next
-				}
-			}
-			for k, v := range gen["provider"].(map[string]any) {
-				next, err := sjson.SetBytes(buf, providerIDPath+"."+k, v)
-				if err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider 字段 %s 写入失败: %v", k, err)})
-					return
-				}
-				buf = next
-				synced++
-			}
-			if strings.TrimSpace(jpaths.Model) != "" {
-				resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
-				// 模型名可能自带点（gpt-5.6-sol），逐字段拼 gjson 路径会把
-				// 名字拆成嵌套对象，pending 平铺比较永远失败；整个 models
-				// 子树一次写入，模型名按字面量落盘。
-				if len(modelCfgs) > 0 {
-					next, err := sjson.SetBytes(buf, resolved, modelCfgs)
-					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("模型列表写入失败: %v", err)})
-						return
-					}
-					buf = next
-					synced += len(modelCfgs)
-				}
-			}
-		}
-		// sjson 只原地改写已有行，新增的 provider/模型块会被压成一行；
-		// 写盘前整体重新缩进，保证同步后的文件始终是标准 pretty JSON。
-		formatted := string(buf)
-		if pretty, err := prettifyJSON(string(buf)); err == nil {
-			formatted = pretty
-		}
-		if err := writeAgentConfigFileContent(&row, formatted, key); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "写入失败: " + err.Error()})
-			return
-		}
-		if err := db.Model(&row).Update("content", formatted).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		// 记录本次写入的块名，供下次同步清理改名/删分组后的旧块。
-		names := make([]string, 0, len(currentNames))
-		for n := range currentNames {
-			names = append(names, n)
-		}
-		slices.Sort(names)
-		if namesJSON, merr := json.Marshal(names); merr == nil {
-			if err := db.Model(&m).Update("synced_blocks", string(namesJSON)).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"synced": synced, "content": formatted}})
 	}
+}
+
+// rebuildManagedBlocks regenerates the managed provider's blocks inside
+// the config file: deletes stale blocks (previously synced names that no
+// longer belong to the current name/groups — 改名/删除分组不留残留), writes
+// the current generated blocks, persists file + DB content, and records
+// the current block names. Returns the new content and the write count.
+// Used by both 同步 and 保存（保存时立即驱动文件，避免旧名字在保存瞬间
+// 掉进普通供应商列表）。
+func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFile, m *model.ManagedAgentProvider, key []byte) (string, int, error) {
+	rule, err := loadRule(db, row.AgentType)
+	if err != nil {
+		return "", 0, err
+	}
+	liveProviders, err := loadLiveProviders(db)
+	if err != nil {
+		return "", 0, err
+	}
+	content, err := readAgentConfigFileContent(row, key)
+	if err != nil {
+		return "", 0, fmt.Errorf("读取失败: %w", err)
+	}
+	jpaths, err := rule.GetJsonPaths()
+	if err != nil {
+		return "", 0, err
+	}
+	if strings.TrimSpace(jpaths.Provider) == "" {
+		return "", 0, errors.New("该软件类型尚未配置 json 路径")
+	}
+	groups, err := m.GetGroups()
+	if err != nil {
+		return "", 0, err
+	}
+	// 生成配置文件时：endpoint 与命名后缀都相同的分组合并为一个
+	// provider 块；endpoint 相同但命名后缀不同则保留各自独立块
+	// （块名 = 规则名 + 后缀）。
+	groupsByKey := make(map[string]model.ManagedAgentGroup, len(groups))
+	for _, g := range groups {
+		gkey := g.Endpoint + "\x00" + strings.TrimSpace(g.Suffix)
+		if cur, ok := groupsByKey[gkey]; ok {
+			cur.ProviderIDs = uniqueSorted(append(cur.ProviderIDs, g.ProviderIDs...))
+			if cur.ModelSources == nil {
+				cur.ModelSources = map[string]string{}
+			}
+			for k, v := range g.ModelSources {
+				cur.ModelSources[k] = v
+			}
+			groupsByKey[gkey] = cur
+			continue
+		}
+		groupsByKey[gkey] = g
+	}
+	ids, _ := m.GetProviderIDs()
+	live, _ := liveProvision(ids, liveProviders)
+	byID := map[string]model.Provider{}
+	for _, p := range liveProviders {
+		byID[p.ID] = p
+	}
+	membersOf := func(g model.ManagedAgentGroup) []model.Provider {
+		if members := live[g.Endpoint]; len(members) > 0 {
+			return members
+		}
+		var out []model.Provider
+		for _, pid := range g.ProviderIDs {
+			if p, ok := byID[pid]; ok {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+
+	cleaned := stripJSON5Comments(content)
+	buf := []byte(cleaned)
+	basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(*m)
+	// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
+	// 先整块删除，避免旧块残留成「普通供应商」。
+	currentNames := make(map[string]bool, len(groupsByKey))
+	for _, stored := range groupsByKey {
+		currentNames[providerBlockName(m.Name, stored.Suffix)] = true
+	}
+	if previous, err := m.GetSyncedBlocks(); err == nil {
+		for _, old := range previous {
+			if currentNames[old] {
+				continue
+			}
+			if next, derr := sjson.DeleteBytes(buf, jpaths.Provider+"."+old); derr == nil {
+				buf = next
+			}
+		}
+	}
+	synced := 0
+	for _, stored := range groupsByKey {
+		members := membersOf(stored)
+		if len(members) == 0 {
+			continue
+		}
+		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
+		fullName := providerBlockName(m.Name, stored.Suffix)
+		providerIDPath := jpaths.Provider + "." + fullName
+		// 托管块由系统全权生成（不允许编辑）：先整块删除再重写，
+		// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
+		// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
+		provFields, _ := gen["provider"].(map[string]any)
+		modelCfgs, _ := gen["models"].(map[string]any)
+		if len(provFields) > 0 || len(modelCfgs) > 0 {
+			if next, err := sjson.DeleteBytes(buf, providerIDPath); err != nil {
+				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, err)
+			} else {
+				buf = next
+			}
+		}
+		for k, v := range gen["provider"].(map[string]any) {
+			next, err := sjson.SetBytes(buf, providerIDPath+"."+k, v)
+			if err != nil {
+				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, err)
+			}
+			buf = next
+			synced++
+		}
+		if strings.TrimSpace(jpaths.Model) != "" {
+			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
+			// 模型名可能自带点（gpt-5.6-sol），逐字段拼 gjson 路径会把
+			// 名字拆成嵌套对象，pending 平铺比较永远失败；整个 models
+			// 子树一次写入，模型名按字面量落盘。
+			if len(modelCfgs) > 0 {
+				next, err := sjson.SetBytes(buf, resolved, modelCfgs)
+				if err != nil {
+					return "", 0, fmt.Errorf("模型列表写入失败: %w", err)
+				}
+				buf = next
+				synced += len(modelCfgs)
+			}
+		}
+	}
+	// sjson 只原地改写已有行，新增的 provider/模型块会被压成一行；
+	// 写盘前整体重新缩进，保证同步后的文件始终是标准 pretty JSON。
+	formatted := string(buf)
+	if pretty, err := prettifyJSON(string(buf)); err == nil {
+		formatted = pretty
+	}
+	if err := writeAgentConfigFileContent(row, formatted, key); err != nil {
+		return "", 0, fmt.Errorf("写入失败: %w", err)
+	}
+	if err := db.Model(row).Update("content", formatted).Error; err != nil {
+		return "", 0, err
+	}
+	// 记录本次写入的块名，供下次同步清理改名/删分组后的旧块。
+	names := make([]string, 0, len(currentNames))
+	for n := range currentNames {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	if namesJSON, merr := json.Marshal(names); merr == nil {
+		if err := db.Model(m).Update("synced_blocks", string(namesJSON)).Error; err != nil {
+			return "", 0, err
+		}
+	}
+	return formatted, synced, nil
 }
 
 // ── request / helpers ──────────────────────────────────────────────

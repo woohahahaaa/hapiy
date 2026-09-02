@@ -414,13 +414,21 @@ func TestManagedProviderRenameSyncRemovesOldBlocks(t *testing.T) {
 		t.Fatalf("expected HAPIY-C after first sync: %s", f.Content)
 	}
 
-	// 改名 HAPIY → HAPIY2，再同步。
+	// 改名 HAPIY → HAPIY2。保存瞬间就应驱动文件：旧块删除、新块写入，
+	// 不用等同步 —— 否则旧名字会立刻出现在普通供应商列表。
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest("PUT", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid, strings.NewReader(`{"name":"HAPIY2","provider_ids":`+idsJSON(ids)+`,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{}}]}`))
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
 		t.Fatalf("rename: %d %s", w.Code, w.Body.String())
+	}
+	db.First(&f)
+	if strings.Contains(f.Content, `"HAPIY-C"`) {
+		t.Fatalf("old block HAPIY-C must be removed at rename-save time: %s", f.Content)
+	}
+	if !strings.Contains(f.Content, `"HAPIY2-C"`) {
+		t.Fatalf("expected HAPIY2-C right after rename-save: %s", f.Content)
 	}
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
