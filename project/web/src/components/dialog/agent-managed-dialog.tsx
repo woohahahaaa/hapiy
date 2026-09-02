@@ -1,7 +1,6 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AppIcon } from '@/components/AppIcon'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -41,6 +40,10 @@ interface EndpointGroup {
   readonly noEndpointProviderIds?: readonly string[] // 未配置 endpoint 组成员 app provider ids
 }
 
+// 命名后缀默认值：endpoint 原样把斜杠换成下划线（/v1/chat/completions → _v1_chat_completions）。
+const defaultSuffixOf = (endpoint: string): string =>
+  endpoint === '__none__' ? '' : endpoint.replaceAll('/', '_')
+
 export function ManagedProviderDialog({
   open,
   onOpenChange,
@@ -59,8 +62,7 @@ export function ManagedProviderDialog({
   const [baseUrl, setBaseUrl] = useState('')
   const [autoBaseUrl, setAutoBaseUrl] = useState('')
   const [sourceName, setSourceName] = useState('')
-  // 批量套用来源模式：对全部 endpoint 分组生效。
-  const [batchMode, setBatchMode] = useState('__prefill__')
+  // 批量套用来源：按所选模式一次性作用到全部 endpoint 分组。
   // suffixByEndpoint / sourceByEndpoint persist user input per endpoint
   // so re-derivation (e.g. after toggling a supplier) keeps their edits.
   const [suffixByEndpoint, setSuffixByEndpoint] = useState<Record<string, string>>({})
@@ -68,6 +70,9 @@ export function ManagedProviderDialog({
   // endpointByEndpoint lets the 未配置 endpoint group accept a manual
   // endpoint that replaces the sentinel on submit.
   const [manualEndpoint, setManualEndpoint] = useState<Record<string, string>>({})
+  // 二次确认：是否显示「删除该托管 provider」确认框。
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!open || !record) return
@@ -79,8 +84,6 @@ export function ManagedProviderDialog({
     setManualEndpoint({})
     setApiKey('')
     setBaseUrl('')
-    setSourceName('')
-    setBatchMode('__prefill__')
     Promise.all([
       dashboardApi.listManagedProviderOptions(),
       loadModelsDevModels(),
@@ -197,6 +200,12 @@ export function ManagedProviderDialog({
     ? `${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim() || noneMergeTarget.endpoint}（匹配到已有相同 endpoint 的分组，此处留空则自动合并）`
     : undefined
 
+  // 每个分组的模型来源为空时预填首个候选（models.dev 智能匹配）。
+  useEffect(() => {
+    for (const g of deferredGroups) ensurePrefill(g.endpoint, g.modelNames)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deferredGroups])
+
   // First candidate prefilled once a group's model sources are empty:
   // the first models.dev supplier for the model, else nothing.
   const ensurePrefill = (endpoint: string, modelNames: readonly string[]) => {
@@ -228,8 +237,8 @@ export function ManagedProviderDialog({
   }, [deferredGroups, snapshot])
 
   // 批量套用来源：按所选模式一次性作用到全部 endpoint 分组。
-  const applyBatchSource = () => {
-    if (batchMode === '__prefill__') {
+  const applySourceTo = (mode: string) => {
+    if (mode === '__prefill__') {
       if (snapshot === null) return
       // 智能匹配：为所有尚未设置来源的模型填入 models.dev 首个供应商
       setSourceByEndpoint((prev) => {
@@ -249,7 +258,7 @@ export function ManagedProviderDialog({
         }
         return changed ? next : prev
       })
-    } else if (batchMode === '__clear__') {
+    } else if (mode === '__clear__') {
       // 全部置空（不同步）
       setSourceByEndpoint((prev) => {
         const next = { ...prev }
@@ -267,7 +276,7 @@ export function ManagedProviderDialog({
         return changed ? next : prev
       })
     } else {
-      const supplier = batchMode
+      const supplier = mode
       setSourceByEndpoint((prev) => {
         const next = { ...prev }
         let changed = false
@@ -315,7 +324,7 @@ export function ManagedProviderDialog({
         : g.endpoint
       const entry: ManagedAgentGroup = {
         endpoint,
-        suffix: (suffixByEndpoint[g.endpoint] ?? '').trim(),
+        suffix: (suffixByEndpoint[g.endpoint] ?? defaultSuffixOf(g.endpoint)).trim(),
         model_sources: sourceByEndpoint[g.endpoint] ?? {},
         ...(g.endpoint === '__none__' && g.noEndpointProviderIds ? { provider_ids: [...g.noEndpointProviderIds] } : {}),
       }
@@ -395,6 +404,23 @@ export function ManagedProviderDialog({
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存失败')
+    }
+  }
+
+  // 删除当前编辑的托管 provider（二次确认后再执行）。
+  const handleDelete = async () => {
+    if (!record || !editing) return
+    setDeleting(true)
+    try {
+      await dashboardApi.deleteManagedProvider(record.id, editing.id)
+      toast('已删除托管 provider')
+      setConfirmDelete(false)
+      onSaved()
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -485,7 +511,7 @@ export function ManagedProviderDialog({
 
               <Field>
                 <FieldLabel>
-                  选择要托管的供应商
+从系统配置的供应商中选择
                   <span className="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span>
                 </FieldLabel>
                 <ProviderMultiSelect
@@ -499,63 +525,131 @@ export function ManagedProviderDialog({
               {deferredGroups.length > 0 && (
                 <Field>
                   <FieldLabel>
-                    endpoint 分组
+                    根据 Endpoint 自动生成多组 provider 配置
                     <span className="ml-1 font-normal text-muted-foreground">
-                      （完全相同才分到一组；点击行可折叠/展开子表格）
+                      （一个 provider 只允许一种 Endpoint）
                     </span>
                   </FieldLabel>
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
-                      <span className="text-xs text-muted-foreground">
-                        批量套用来源（对全部 endpoint 分组生效）
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <Select value={batchMode} onValueChange={setBatchMode} disabled={snapshot === null}>
-                          <SelectTrigger className="h-7 w-56 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__prefill__">默认推荐（智能匹配）</SelectItem>
-                            {batchSuppliers.map((s) => (
-                              <SelectItem key={s} value={s}>全部设为 {s}</SelectItem>
-                            ))}
-                            <SelectItem value="__clear__">不同步（清空全部）</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          onClick={applyBatchSource}
-                          disabled={snapshot === null}
-                        >
-                          应用
-                        </Button>
+                    <div className="overflow-hidden rounded-md border border-border">
+                      <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
+                        <div className="w-[24%]">Endpoint</div>
+                        <div className="w-[14%] border-l border-border pl-2">命名后缀</div>
+                        <div className="w-[26%] border-l border-border pl-2">模型</div>
+                        <div className="flex w-[36%] items-center justify-between gap-1 border-l border-border pl-2">
+                          <span>从 models.dev 同步模型配置</span>
+                          <Select value="__menu__" onValueChange={(v) => applySourceTo(v)} disabled={snapshot === null}>
+                            <SelectTrigger className="h-6 rounded border-0 bg-transparent px-1.5 text-xs font-medium text-foreground shadow-none hover:bg-muted focus-visible:ring-0 data-[state=open]:bg-muted">
+                              <span className="inline-flex items-center gap-1">
+                                <AppIcon name="auto_fix_high" size={12} />
+                                一键设置
+                              </span>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__prefill__">默认推荐（智能匹配）</SelectItem>
+                              {batchSuppliers.map((s) => (
+                                <SelectItem key={s} value={s}>全部设为 {s}</SelectItem>
+                              ))}
+                              <SelectItem value="__clear__">不同步（清空全部）</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-border">
+                        {deferredGroups.map((g) => {
+                          const isNone = g.endpoint === '__none__'
+                          const rows = g.modelNames.length > 0 ? g.modelNames : ['']
+                          return (
+                            <table key={g.endpoint} className="w-full table-fixed text-xs">
+                              <tbody>
+                                {rows.map((m, idx) => (
+                                  <tr key={m || '__empty__'} className={idx > 0 ? 'border-t border-border/50' : undefined}>
+                                    {idx === 0 && (
+                                      <td rowSpan={rows.length} className="w-[24%] border-r border-border px-2 py-2 align-middle">
+                                        {isNone ? (
+                                          <Input
+                                            value={manualEndpoint[g.endpoint] ?? ''}
+                                            onChange={(e) =>
+                                              setManualEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
+                                            }
+                                            placeholder="手动输入，例如 /v1/chat/completions"
+                                            className="h-7 w-full text-xs font-mono"
+                                          />
+                                        ) : (
+                                          <span className="block truncate font-mono" title={g.endpoint}>{g.endpoint}</span>
+                                        )}
+                                      </td>
+                                    )}
+                                    {idx === 0 && (
+                                      <td rowSpan={rows.length} className="w-[14%] border-r border-border px-2 py-2 align-middle">
+                                        <Input
+                                          value={suffixByEndpoint[g.endpoint] ?? defaultSuffixOf(g.endpoint)}
+                                          onChange={(e) =>
+                                            setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
+                                          }
+                                          placeholder={isNone ? (noneMergePlaceholder ?? '填写命名后缀') : '填写命名后缀'}
+                                          className="h-7 w-full text-xs font-mono"
+                                        />
+                                      </td>
+                                    )}
+                                    {m ? (
+                                      <>
+                                        <td className="w-[26%] border-r border-border px-2 py-1.5">
+                                          <span className="block truncate font-mono" title={m}>{m}</span>
+                                        </td>
+                                        <td className="w-[36%] px-2 py-1.5">
+                                          <Select
+                                            value={sourceByEndpoint[g.endpoint]?.[m] ?? ''}
+                                            onValueChange={(v) =>
+                                              setSourceByEndpoint((prev) => ({
+                                                ...prev,
+                                                [g.endpoint]: { ...(prev[g.endpoint] ?? {}), [m]: v },
+                                              }))
+                                            }
+                                            disabled={snapshot === null}
+                                          >
+                                            <SelectTrigger className="h-7 w-full text-xs">
+                                              <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {snapshot !== null && (
+                                                <>
+                                                  <SelectItem value="">不同步</SelectItem>
+                                                  {(() => {
+                                                    const stored = sourceByEndpoint[g.endpoint]?.[m] ?? ''
+                                                    const candidates = providersForModel(snapshot, m)
+                                                    if (stored === '' || candidates.some((p) => p.providerName === stored)) return null
+                                                    // 存值可能是历史 models.dev providerId：能解析出名称就显示名称。
+                                                    const resolved = snapshot.find((r) => r.providerId === stored)?.providerName
+                                                    const raw = resolved ?? stored
+                                                    return (
+                                                      <SelectItem value={stored}>
+                                                        {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
+                                                      </SelectItem>
+                                                    )
+                                                  })()}
+                                                  {providersForModel(snapshot, m).map((p) => (
+                                                    <SelectItem key={p.providerId} value={p.providerName}>
+                                                      {p.providerName}
+                                                    </SelectItem>
+                                                  ))}
+                                                </>
+                                              )}
+                                            </SelectContent>
+                                          </Select>
+                                        </td>
+                                      </>
+                                    ) : (
+                                      <td colSpan={2} className="px-2 py-1.5 text-muted-foreground">（无模型）</td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )
+                        })}
                       </div>
                     </div>
-                    {deferredGroups.map((g) => (
-                      <GroupCard
-                        key={g.endpoint}
-                        group={g}
-                        suffix={suffixByEndpoint[g.endpoint] ?? ''}
-                        onSuffixChange={(v) =>
-                          setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: v }))
-                        }
-                        snapshot={snapshot}
-                        sources={sourceByEndpoint[g.endpoint] ?? {}}
-                        onSourceChange={(model, supplier) => {
-                          setSourceByEndpoint((prev) => ({
-                            ...prev,
-                            [g.endpoint]: { ...(prev[g.endpoint] ?? {}), [model]: supplier },
-                          }))
-                        }}
-                        manualEndpoint={manualEndpoint[g.endpoint] ?? ''}
-                        onManualEndpoint={(v) =>
-                          setManualEndpoint((prev) => ({ ...prev, [g.endpoint]: v }))
-                        }
-                        mergePlaceholder={g.endpoint === '__none__' ? noneMergePlaceholder : undefined}
-                        onPrefill={() => ensurePrefill(g.endpoint, g.modelNames)}
-                      />
-                    ))}
                   </div>
                 </Field>
               )}
@@ -564,10 +658,38 @@ export function ManagedProviderDialog({
         </div>
 
         <DialogFooter>
+          {editing && (
+            <Button
+              variant="destructive"
+              className="mr-auto"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+            >
+              <AppIcon name="delete" size={14} data-icon="inline-start" />
+              删除
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
           <Button onClick={() => void submit()}>保存</Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
+        <DialogContent width="sm">
+          <DialogHeader>
+            <DialogTitle>删除托管 provider</DialogTitle>
+          </DialogHeader>
+          <p className="px-4 text-xs text-muted-foreground">
+            确认删除托管 provider「{editing?.name ?? ''}」？删除会立即生效，已生成的 provider 配置仍会保留。
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>取消</Button>
+            <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
+              {deleting ? '删除中…' : '确认删除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }
@@ -595,10 +717,12 @@ function ProviderMultiSelect({
       if (!node) return false
       return Boolean(rootRef.current?.contains(node) || panelRef.current?.contains(node))
     }
-    const onDocMousedown = (e: MouseEvent) => {
-      // 面板经 createPortal 渲染到 body，不包含在 rootRef 内；点击面板
-      // 内选项不能当成“点击外部”而关闭。
-      if (!inFloat(e.target)) setOpen(false)
+    // 触屏/桌面都生效：pointerdown 统一代替 mousedown，并校验 composedPath 兜底（portal 跨根场景）。
+    const onDocPointerdown = (e: PointerEvent) => {
+      const path = (e.composedPath?.() ?? []) as readonly EventTarget[]
+      if (path.some((n) => rootRef.current?.contains(n) || panelRef.current?.contains(n))) return
+      if (inFloat(e.target)) return
+      setOpen(false)
     }
     const onDocKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -608,11 +732,11 @@ function ProviderMultiSelect({
       // 下拉关掉；只有外部页面滚动才关闭。
       if (!inFloat(e.target)) setOpen(false)
     }
-    document.addEventListener('mousedown', onDocMousedown)
+    document.addEventListener('pointerdown', onDocPointerdown, true)
     document.addEventListener('keydown', onDocKeydown)
     document.addEventListener('scroll', onScroll, true)
     return () => {
-      document.removeEventListener('mousedown', onDocMousedown)
+      document.removeEventListener('pointerdown', onDocPointerdown, true)
       document.removeEventListener('keydown', onDocKeydown)
       document.removeEventListener('scroll', onScroll, true)
     }
@@ -645,7 +769,7 @@ function ProviderMultiSelect({
       >
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
           {checkedOptions.length === 0 ? (
-            <span className="text-muted-foreground">点击展开选择要托管的供应商</span>
+            <span className="text-muted-foreground">点击展开，勾选系统配置的供应商</span>
           ) : (
             <>
               {checkedOptions.map((o) => (
@@ -726,167 +850,3 @@ function ProviderMultiSelect({
   )
 }
 
-const SUFFIX_LABEL = '分组后缀（为不同 endpoint 的分组设置不同名称）'
-
-function GroupCard({
-  group,
-  suffix,
-  onSuffixChange,
-  snapshot,
-  sources,
-  onSourceChange,
-  manualEndpoint,
-  onManualEndpoint,
-  mergePlaceholder,
-  onPrefill,
-}: {
-  group: EndpointGroup
-  suffix: string
-  onSuffixChange: (v: string) => void
-  snapshot: readonly ModelsDevModel[] | null
-  sources: Record<string, string>
-  onSourceChange: (model: string, supplier: string) => void
-  manualEndpoint: string
-  onManualEndpoint: (v: string) => void
-  mergePlaceholder?: string
-  onPrefill: () => void
-}) {
-  const [expanded, setExpanded] = useState(group.endpoint === '__none__')
-  const [filter, setFilter] = useState('')
-  useEffect(() => {
-    onPrefill()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.endpoint, group.modelNames.length])
-  const isNoEndpoint = group.endpoint === '__none__'
-  const filteredModels = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    return q ? group.modelNames.filter((m) => m.toLowerCase().includes(q)) : group.modelNames
-  }, [group.modelNames, filter])
-
-  const chevronClass =
-    'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')
-  const stats = (
-    <Badge variant="secondary" className="shrink-0 font-normal">
-      {group.providerNames.length} 个供应商 · {group.modelNames.length} 个模型
-    </Badge>
-  )
-  const suffixRow = (
-    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <span className="shrink-0 text-xs text-muted-foreground">{SUFFIX_LABEL}</span>
-      <Input
-        value={suffix}
-        onChange={(e) => onSuffixChange(e.target.value)}
-        placeholder={mergePlaceholder ?? '例如：-C（多个分组时必填）'}
-        className="h-7 w-44 text-xs font-mono"
-      />
-    </div>
-  )
-
-  return (
-    <div
-      className={
-        'overflow-hidden rounded-lg border ' +
-        (isNoEndpoint ? 'border-warning/40' : 'border-border')
-      }
-    >
-      <div className={'px-2.5 py-2 ' + (isNoEndpoint ? 'bg-warning/10' : 'bg-muted/40')}>
-        {isNoEndpoint ? (
-          <>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 text-left"
-              onClick={() => setExpanded(!expanded)}
-            >
-              <AppIcon name="chevron_right" size={14} className={chevronClass} />
-              <AppIcon name="warning" size={14} className="shrink-0 text-warning" />
-              <span className="shrink-0 text-xs font-medium text-warning">
-                未分配 Endpoint 的供应商
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[10px] text-warning/80">
-                需要补全路径或合并入已有分组
-              </span>
-              {stats}
-            </button>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <span className="shrink-0 text-xs text-muted-foreground">endpoint 路径</span>
-              <Input
-                value={manualEndpoint}
-                onChange={(e) => onManualEndpoint(e.target.value)}
-                placeholder="该供应商未配置 endpoint，可手动输入，例如 /v1/chat/completions"
-                className="h-7 w-72 max-w-full text-xs font-mono"
-              />
-            </div>
-            {suffixRow}
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 text-left"
-              onClick={() => setExpanded(!expanded)}
-            >
-              <AppIcon name="chevron_right" size={14} className={chevronClass} />
-              <Badge variant="outline" className="min-w-0 max-w-[55%] truncate font-mono text-xs">
-                {group.endpoint}
-              </Badge>
-              {stats}
-            </button>
-            {suffixRow}
-          </>
-        )}
-      </div>
-      {expanded && (
-        <div className="space-y-2 p-2.5">
-          <Input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="过滤当前组内的模型…"
-            className="h-7 text-xs"
-          />
-          <div className="overflow-hidden rounded-md border border-border">
-            <div className="flex items-center border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
-              <span className="min-w-0 flex-1 truncate">模型</span>
-              <span className="w-[200px] shrink-0 border-l border-border pl-2">
-                从 models.dev 同步模型配置
-              </span>
-            </div>
-            <div className="divide-y divide-border">
-              {filteredModels.length === 0 ? (
-                <p className="px-2 py-2 text-xs text-muted-foreground">没有匹配的模型</p>
-              ) : (
-                filteredModels.map((m) => (
-                  <div key={m} className="flex items-center gap-2 px-2 py-1.5">
-                    <span className="min-w-0 flex-1 truncate font-mono" title={m}>{m}</span>
-                    <Select
-                      value={sources[m] ?? ''}
-                      onValueChange={(v) => onSourceChange(m, v)}
-                    >
-                      <SelectTrigger
-                        className="h-7 w-[200px] shrink-0 text-xs"
-                        disabled={snapshot === null}
-                      >
-                        <SelectValue placeholder={snapshot === null ? '加载中…' : '模型配置参考供应商'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {snapshot !== null && (
-                          <>
-                            <SelectItem value="">不同步</SelectItem>
-                            {providersForModel(snapshot, m).map((p) => (
-                              <SelectItem key={p.providerId} value={p.providerName}>
-                                {p.providerName}
-                              </SelectItem>
-                            ))}
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}

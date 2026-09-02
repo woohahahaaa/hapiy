@@ -1237,7 +1237,7 @@ function ReadOnlyJson({ value, note }: { value: unknown; note: string }) {
     return <Placeholder>{note}</Placeholder>
   }
   return (
-    <div className="rounded-md border border-border bg-muted/10 p-2">
+    <div>
       <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground">
         {JSON.stringify(value, null, 2)}
       </pre>
