@@ -809,6 +809,7 @@ export type ManagedGroupView = {
   readonly endpoint: string
   readonly suffix: string
   readonly provider_names: readonly string[]
+  readonly provider_ids: readonly string[]
   readonly model_count: number
   readonly model_names: readonly string[]
   readonly model_sources: Readonly<Record<string, string>>
@@ -3020,6 +3021,9 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
             suffix: typeof gr.suffix === 'string' ? gr.suffix : '',
             provider_names: Array.isArray(gr.provider_names)
               ? gr.provider_names.filter((x): x is string => typeof x === 'string')
+              : [],
+            provider_ids: Array.isArray(gr.provider_ids)
+              ? gr.provider_ids.filter((x): x is string => typeof x === 'string')
               : [],
             model_count: readNumber(gr.model_count, 'model_count', 0),
             model_names: modelNames.filter((x): x is string => typeof x === 'string'),
