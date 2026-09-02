@@ -51,24 +51,49 @@ const JSONC_SEED = `{
       }
     }
   ],
-  // 请求协议（SDK）区分部分：每个 SDK 一个块
+  // 请求协议（SDK）区分部分：每个 SDK 一个块。
+  // endpoint_tags 是关键词，endpoint 含任一关键词（子串匹配）即命中该块；
+  // 命中后该块的字段（如 npm 推荐值）优先生效。顺序即优先级。
   "protocols": [
     {
-      "name": "OpenAI 兼容",
-      // 命中条件（provider 配置块里的字段），多个条件为“或”关系
-      "conditions": [
-        { "field": "options.baseURL", "op": "contains", "value": "/v1" }
-      ],
-      // 必填：根据 endpoint 来判断（模型 endpoint 以标签结尾归属本协议）
-      "endpoint_tags": ["/v1/chat/completions"],
+      "name": "OpenAI Responses API",
+      "endpoint_tags": ["responses"],
       "fields": [
         {
-          "name": "extraBody",
-          "key": "options.extraBody",
+          "name": "npm",
+          "key": "npm",
           "scope": "provider",
-          "description": "仅 OpenAI 兼容协议自带附加请求体",
-          "required": false,
-          "recommended": null
+          "description": "Responses API 使用 OpenAI SDK",
+          "required": true,
+          "recommended": "@ai-sdk/openai"
+        }
+      ]
+    },
+    {
+      "name": "Anthropic Messages API",
+      "endpoint_tags": ["chat/message", "messages"],
+      "fields": [
+        {
+          "name": "npm",
+          "key": "npm",
+          "scope": "provider",
+          "description": "Messages API 使用 Anthropic SDK",
+          "required": true,
+          "recommended": "@ai-sdk/anthropic"
+        }
+      ]
+    },
+    {
+      "name": "OpenAI 兼容 Chat Completions",
+      "endpoint_tags": ["completions", "/v1/chat"],
+      "fields": [
+        {
+          "name": "npm",
+          "key": "npm",
+          "scope": "provider",
+          "description": "Chat Completions API 使用 OpenAI 兼容 SDK",
+          "required": true,
+          "recommended": "@ai-sdk/openai-compatible"
         }
       ]
     }
@@ -240,11 +265,69 @@ function buildRuleConfigJsonc(
   return JSON.stringify(doc, null, 2)
 }
 
-// formatRuleConfigJsonc strips comments + whitespace then re-pretty
-// prints so users can tidy their JSONC.
-function formatRuleConfigJsonc(text: string): string {
-  const { common, protocols } = parseRuleConfigJsonc(text)
-  return buildRuleConfigJsonc(common, protocols)
+// ── rule editor structured state ──────────────────────────────────────
+
+// EndpointRuleEdit ─ one {protocol} card in the rule editor: a rule name,
+// the endpoint keywords it inducts (归纳范围), and the endpoint's private
+// fields JSON block (每个 endpoint 一个 JSON 块).
+interface EndpointRuleEdit {
+  readonly name: string
+  readonly tagsText: string
+  readonly conditions: readonly AgentProtocolCondition[]
+  readonly fieldsJson: string
+}
+
+// emptyEndpointRule is the starting card shape for a newly added endpoint rule.
+function emptyEndpointRule(): EndpointRuleEdit {
+  return {
+    name: '',
+    tagsText: '',
+    conditions: [],
+    fieldsJson: '[]',
+  }
+}
+
+// fieldsJsonToRecs parses an endpoint's private fields JSON block array.
+// Throws when the JSON is invalid or not an array.
+function fieldsJsonToRecs(text: string): AgentRecommendation[] {
+  const cleaned = stripJsoncComments(text)
+  const parsed: unknown = JSON.parse(cleaned)
+  if (!Array.isArray(parsed)) throw new Error('字段必须写成 JSON 数组，每项一个推荐字段对象')
+  return parsed.map(normalizeAgentRecommendation)
+}
+
+function tagsTextToArray(text: string): string[] {
+  return text.split(',').map((s) => s.trim()).filter(Boolean)
+}
+
+// parseCommonArray parses the common JSON editor text into an array of
+// recommendations. Throws on invalid JSON / non-array / bad rows.
+function parseCommonArray(text: string): AgentRecommendation[] {
+  const cleaned = stripJsoncComments(text)
+  const parsed: unknown = JSON.parse(cleaned)
+  if (!Array.isArray(parsed)) throw new Error('公共配置必须是 JSON 数组')
+  return parsed.map(normalizeAgentRecommendation)
+}
+
+// ruleToProtocol converts an endpoint rule card into an AgentProtocol,
+// returning an error string when the card is incomplete.
+function ruleToProtocol(rule: EndpointRuleEdit, index: number): AgentProtocol | string {
+  const name = rule.name.trim()
+  if (!name) return `Endpoint 规则 #${index + 1}：缺少规则名称`
+  const tags = tagsTextToArray(rule.tagsText)
+  if (tags.length === 0) return `Endpoint 规则「${name}」：归纳范围为空（endpoint_tags 必填）`
+  let recommendations: AgentRecommendation[]
+  try {
+    recommendations = fieldsJsonToRecs(rule.fieldsJson)
+  } catch (err) {
+    return `Endpoint 规则「${name}」的字段 JSON 解析失败：` + (err instanceof Error ? err.message : String(err))
+  }
+  return {
+    name,
+    conditions: [...rule.conditions],
+    endpoint_tags: tags,
+    recommendations,
+  }
 }
 
 function formatDate(iso: string): string {
@@ -490,8 +573,11 @@ function RuleDialog({
   const [macPath, setMacPath] = useState('')
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
-  const [configJsonc, setConfigJsonc] = useState('')
-  const [jsoncError, setJsoncError] = useState<string | null>(null)
+  // 结构化的字段推荐编辑器：公共配置一个 JSON（common），每个 endpoint
+  // 一套独立规则（名称 / 归纳范围关键词 / 字段推荐值表）。
+  const [commonText, setCommonText] = useState('[]')
+  const [commonError, setCommonError] = useState<string | null>(null)
+  const [endpointRules, setEndpointRules] = useState<readonly EndpointRuleEdit[]>([])
   const [modelInfoTexts, setModelInfoTexts] = useState<Record<ModelInfoFieldKey, string>>(EMPTY_MODEL_INFO_TEXTS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -503,12 +589,31 @@ function RuleDialog({
       setMacPath(editing?.os_paths.mac ?? '')
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
-      setConfigJsonc(
-        editing?.config_jsonc && editing.config_jsonc.trim() !== ''
-          ? editing.config_jsonc
-          : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
-      )
-      setJsoncError(null)
+      // 从既有规则拆出 common 与 protocols：优先用 config_jsonc 原文，
+      // 缺失时用结构化字段兜底。
+      let common: AgentRecommendation[]
+      let protocols: AgentProtocol[]
+      try {
+        const parsed = parseRuleConfigJsonc(
+          editing?.config_jsonc && editing.config_jsonc.trim() !== ''
+            ? editing.config_jsonc
+            : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
+        )
+        common = parsed.common
+        protocols = parsed.protocols
+      } catch (err) {
+        setError('解析既有配置失败：' + (err instanceof Error ? err.message : String(err)))
+        common = editing?.recommendations ?? []
+        protocols = editing?.protocols ?? []
+      }
+      setCommonText(JSON.stringify(common, null, 2))
+      setCommonError(null)
+      setEndpointRules(protocols.map((p) => ({
+        name: p.name,
+        tagsText: p.endpoint_tags.join(', '),
+        conditions: p.conditions ?? [],
+        fieldsJson: JSON.stringify(p.recommendations ?? [], null, 2),
+      })))
       const mif = editing?.model_info_fields
       setModelInfoTexts(mif ? {
         max_context: modelInfoSpecToText(mif.max_context),
@@ -528,18 +633,26 @@ function RuleDialog({
       setError('请填写名称')
       return
     }
-    // Validate + parse the JSONC doc up front so the client gives
-    // immediate feedback; the backend re-validates on write.
+    // 公共配置 JSON 必须可解析成数组。
     let common: AgentRecommendation[]
-    let protocols: AgentProtocol[]
     try {
-      const parsed = parseRuleConfigJsonc(configJsonc)
-      common = parsed.common
-      protocols = parsed.protocols
+      common = parseCommonArray(commonText)
     } catch (err) {
-      setError('JSONC 解析失败：' + (err instanceof Error ? err.message : String(err)))
+      setError('公共配置 JSON 解析失败：' + (err instanceof Error ? err.message : String(err)))
       return
     }
+    // 每个 endpoint 规则的名称 / 归纳范围 / 字段推荐表校验。
+    const protocols: AgentProtocol[] = []
+    for (let i = 0; i < endpointRules.length; i++) {
+      const converted = ruleToProtocol(endpointRules[i], i)
+      if (typeof converted === 'string') {
+        setError(converted)
+        return
+      }
+      protocols.push(converted)
+    }
+    // 组装回 config_jsonc，保持与结构化编辑同步。
+    const configJsonc = buildRuleConfigJsonc(common, protocols)
     const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoTexts)
     if (mifError) {
       setError(mifError)
@@ -631,67 +744,36 @@ function RuleDialog({
 
             <Field>
               <div className="flex items-center justify-between">
-                <FieldLabel>字段推荐配置（JSONC）</FieldLabel>
-                <div className="flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={() => {
-                      try {
-                        setConfigJsonc(formatRuleConfigJsonc(configJsonc))
-                        setJsoncError(null)
-                      } catch (err) {
-                        setJsoncError(err instanceof Error ? err.message : '格式化失败')
-                      }
-                    }}
-                  >
-                    <AppIcon name="content_copy" data-icon="inline-start" />
-                    格式化
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    title="恢复为编辑前的 JSONC 文本"
-                    onClick={() =>
-                      setConfigJsonc(
-                        editing?.config_jsonc && editing.config_jsonc.trim() !== ''
-                          ? editing.config_jsonc
-                          : buildRuleConfigJsonc(editing?.recommendations ?? [], editing?.protocols ?? []),
-                      )
-                    }
-                  >
-                    还原
-                  </Button>
-                </div>
+                <FieldLabel>公共配置（common，JSON 数组）</FieldLabel>
               </div>
               <p className="text-xs text-muted-foreground">
-                用 JSONC 直接编辑：上方「common」是通用字段；下方「protocols」按请求协议（SDK）区分。支持 // 与 /* */ 注释。字段格式：
-                name（字段名）/ key（路径）/ description（含义）/ scope（provider|model）/ required（必填）/
-                recommended（推荐值，null=推荐不填）/ candidates（多候选值说明，可选，type 由 recommended 自动推断）
+                与请求协议 / SDK 无关的字段推荐值，直接填 JSON 数组；每项：
+                key（字段路径）/ scope（provider|model）/ required（必填）/
+                recommended（推荐值，null=推荐不填）/ description（含义，可选）/ candidates（候选说明，可选）。
               </p>
               <Textarea
-                value={configJsonc}
+                value={commonText}
                 onChange={(e) => {
-                  setConfigJsonc(e.target.value)
+                  setCommonText(e.target.value)
                   try {
-                    parseRuleConfigJsonc(e.target.value)
-                    setJsoncError(null)
+                    parseCommonArray(e.target.value)
+                    setCommonError(null)
                   } catch (err) {
-                    setJsoncError(err instanceof Error ? err.message : String(err))
+                    setCommonError(err instanceof Error ? err.message : String(err))
                   }
                 }}
                 className={
-                  'h-[360px] resize-y font-mono text-xs leading-relaxed ' +
-                  (jsoncError ? 'border-destructive focus-visible:ring-destructive' : '')
+                  'h-[180px] resize-y font-mono text-xs leading-relaxed ' +
+                  (commonError ? 'border-destructive focus-visible:ring-destructive' : '')
                 }
                 spellCheck={false}
               />
-              {jsoncError && (
-                <p className="text-[11px] text-destructive">{jsoncError}</p>
+              {commonError && (
+                <p className="text-[11px] text-destructive">{commonError}</p>
               )}
             </Field>
+
+            <EndpointRulesEditor value={endpointRules} onChange={setEndpointRules} />
           </Group>
 
           {error && (
@@ -765,5 +847,116 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
       <legend className="px-1 text-xs font-medium text-muted-foreground">{label}</legend>
       {children}
     </fieldset>
+  )
+}
+
+// EndpointRulesEditor ─ 动态的 endpoint 规则列表：手动点「添加」才出现一张
+// 卡片；每张卡片 = 规则名称 + 归纳范围（endpoint 关键词，逗号分隔）+
+// 私有配置 JSON 块（该 endpoint 的字段推荐值，一个 endpoint 一个 JSON 块）。
+function EndpointRulesEditor({
+  value,
+  onChange,
+}: {
+  value: readonly EndpointRuleEdit[]
+  onChange: (v: readonly EndpointRuleEdit[]) => void
+}) {
+  const update = (index: number, patch: (rule: EndpointRuleEdit) => EndpointRuleEdit) => {
+    onChange(value.map((rule, i) => (i === index ? patch(rule) : rule)))
+  }
+
+  return (
+    <Field>
+      <div className="flex items-center justify-between">
+        <FieldLabel>Endpoint 规则（按 SDK 区分，一个规则一张卡片）</FieldLabel>
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          onClick={() => onChange([...value, emptyEndpointRule()])}
+        >
+          添加 Endpoint 规则
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        每个 endpoint 一条规则：归纳范围填 endpoint 关键词（如
+        completions / responses / chat/message，逗号分隔），任一关键词命中该
+        endpoint 的子串即应用本规则，顺序即优先级。私有配置直接写成 JSON 数组
+        （一个 endpoint 一个 JSON 块），每项一个推荐字段：key（字段路径）/
+        scope（provider|model）/ required（必填）/ recommended（推荐值，
+        null=推荐不填）/ description（含义，可选）—— 如 NPM 用哪个 SDK 就写
+        {'{"key":"npm","recommended":"@ai-sdk/openai-compatible","required":true}'}。
+      </p>
+
+      {value.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+          尚未添加任何 Endpoint 规则；点击右上「添加 Endpoint 规则」新建。
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {value.map((rule, ruleIndex) => {
+            let fieldsError: string | null = null
+            try {
+              fieldsJsonToRecs(rule.fieldsJson)
+            } catch (err) {
+              fieldsError = err instanceof Error ? err.message : String(err)
+            }
+            return (
+              <div key={ruleIndex} className="rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Endpoint 规则 {ruleIndex + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className="text-destructive"
+                    onClick={() => onChange(value.filter((_, i) => i !== ruleIndex))}
+                  >
+                    删除该规则
+                  </Button>
+                </div>
+
+                <div className="mt-2 grid grid-cols-2 items-start gap-3">
+                  <Field>
+                    <FieldLabel>规则名称</FieldLabel>
+                    <Input
+                      value={rule.name}
+                      onChange={(e) => update(ruleIndex, (r) => ({ ...r, name: e.target.value }))}
+                      placeholder="例如：OpenAI 兼容 Chat Completions"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel>归纳范围（endpoint 关键词，逗号分隔）</FieldLabel>
+                    <Input
+                      value={rule.tagsText}
+                      onChange={(e) => update(ruleIndex, (r) => ({ ...r, tagsText: e.target.value }))}
+                      placeholder="例如：completions, /v1/chat, responses, chat/message"
+                      className="font-mono"
+                    />
+                  </Field>
+                </div>
+
+                <Field>
+                  <FieldLabel>私有配置（JSON 数组）</FieldLabel>
+                  <Textarea
+                    value={rule.fieldsJson}
+                    onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
+                    className={
+                      'h-[140px] resize-y font-mono text-xs leading-relaxed ' +
+                      (fieldsError ? 'border-destructive focus-visible:ring-destructive' : '')
+                    }
+                    spellCheck={false}
+                  />
+                  {fieldsError && (
+                    <p className="text-[11px] text-destructive">{fieldsError}</p>
+                  )}
+                </Field>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Field>
   )
 }

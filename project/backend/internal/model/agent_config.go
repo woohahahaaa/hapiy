@@ -247,9 +247,10 @@ type AgentProtocolCondition struct {
 // AgentProtocol — one "请求协议 (SDK)" block of an agent-type rule.
 // Name is free text. The block applies when ANY of its Conditions match
 // the provider's config fields. EndpointTags is the fixed "根据 endpoint
-// 来判断" field: every tag is a suffix (e.g. "/completions") matched
-// against model endpoints by suffix-contains; at least one tag is
-// required. Recommendations only take effect when the protocol matches,
+// 来判断" field: every tag is a keyword matched as a substring of the
+// model endpoint (e.g. "completions" hits "/v1/chat/completions",
+// "responses" hits "/v1/responses"); at least one tag is required.
+// Recommendations only take effect when the protocol matches,
 // and override/supplement the rule's common recommendations.
 type AgentProtocol struct {
 	Name            string               `json:"name"`
@@ -584,6 +585,7 @@ var builtinAgentRules = []struct {
 	JsonPaths       AgentJsonPaths
 	Recommendations []AgentRecommendation
 	ModelInfoFields AgentModelInfoFieldPaths
+	Protocols       []AgentProtocol
 }{
 	{
 		Name: "opencode",
@@ -603,6 +605,10 @@ var builtinAgentRules = []struct {
 			// opencode 的 reasoning 字段要求 boolean，而统一值是思考档位数组。
 			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
+		// npm（AI SDK 适配器包）由 endpoint 关键词自动归类：endpoint 是子串
+		// 包含任一关键词即命中该协议，从而拿到对应的 npm 推荐值。顺序即
+		// 优先级 —— 关键词越具体越靠前，避免误命中。
+		Protocols: opencodeProtocols,
 	},
 	{
 		Name: "WorkBuddy",
@@ -654,18 +660,49 @@ var builtinAgentRules = []struct {
 // opencode. Each entry is checked against the live config in the
 // "管理模型" view and surfaced as a missing / mismatch / extra marker.
 // Clicking "一键套用推荐值" writes the Recommended value into the file.
+// Field set mirrors the official opencode provider schema
+// (opencode.ai/config.json): provider-level npm / name / options.*,
+// model-level name / limit.* / reasoning / tool_call / attachment.
 var opencodeRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名，决定下面 options / models 可用的字段（@ai-sdk/openai-compatible / openai / anthropic / google / amazon-bedrock / azure）", Required: true},
+	{Scope: "provider", Key: "name", Type: "string", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
+	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
 	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "options.maxConcurrency", Type: "number", Description: "最大并发请求数", Recommended: 5},
 	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）。默认 300000，复杂任务建议拉长到 600000", Recommended: 600000},
 	{Scope: "provider", Key: "options.chunkTimeout", Type: "number", Description: "流式响应 chunk 之间间隔超时（毫秒）", Recommended: 30000},
 	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "是否强制为 provider 设置 cache key（开启可缓存优化）", Recommended: true},
-	{Scope: "provider", Key: "options.thinking", Type: "object", Description: "思考模型配置：{ type: enabled }", Recommended: map[string]any{"type": "enabled"}},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 	{Scope: "model", Key: "limit.context", Type: "number", Description: "上下文 token 上限"},
 	{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限"},
+	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "模型是否支持思考模式"},
+	{Scope: "model", Key: "tool_call", Type: "boolean", Description: "模型是否支持工具调用"},
+}
+
+// opencodeProtocols 按 endpoint 关键词把规范化 provider 归入对应的 AI SDK。
+// 匹配为子串包含：endpoint 里含任一关键词即命中该协议的 npm 推荐值。
+// 顺序即优先级 —— 具体关键词放前面避免误命中。
+var opencodeProtocols = []AgentProtocol{
+	{
+		Name:         "OpenAI Responses API",
+		EndpointTags: []string{"responses"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "npm", Type: "string", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
+		},
+	},
+	{
+		Name:         "Anthropic Messages API",
+		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "npm", Type: "string", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
+		},
+	},
+	{
+		Name:         "OpenAI 兼容 Chat Completions",
+		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "npm", Type: "string", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
+		},
+	},
 }
 
 // openclawRecommendations covers the JSON5-shaped providers block.
@@ -863,6 +900,29 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				}
 				dirty = true
 			}
+			// 已有内置规则缺 protocols（或 protocols 是 legacy 空数组）时补
+			// 默认协议（endpoint 关键词 → npm 归类）。用户自己编过 protocols
+			// 的不动。
+			if len(want.Protocols) > 0 && protocolsMissingLatest(rule.Protocols, want.Protocols) {
+				if err := rule.SetProtocols(want.Protocols); err != nil {
+					return err
+				}
+				dirty = true
+			}
+			// config_jsonc 与当前 recommendations + protocols 内容一致时才保留；
+			// 不一致（旧版存着空 protocols / 老字段）用最新配置重编译，让对话框
+			// 读到与结构化编辑一致的内容。
+			if configJsoncUpToDate(rule.ConfigJsonc, rule.Recommendations, rule.Protocols) {
+				// keep
+			} else {
+				curRecs, _ := rule.GetRecommendations()
+				curProtocols, _ := rule.GetProtocols()
+				latest, err := BuildRuleConfigJsonc(curRecs, curProtocols)
+				if err == nil {
+					rule.ConfigJsonc = latest
+					dirty = true
+				}
+			}
 			if rule.ModelInfoFields == "" {
 				if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
 					return err
@@ -879,9 +939,11 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				continue
 			}
 			if err := db.Model(&rule).Updates(map[string]any{
-				"os_paths":         rule.OsPaths,
-				"json_paths":       rule.JsonPaths,
-				"recommendations":  rule.Recommendations,
+				"os_paths":          rule.OsPaths,
+				"json_paths":        rule.JsonPaths,
+				"recommendations":   rule.Recommendations,
+				"protocols":         rule.Protocols,
+				"config_jsonc":      rule.ConfigJsonc,
 				"model_info_fields": rule.ModelInfoFields,
 			}).Error; err != nil {
 				return err
@@ -935,6 +997,99 @@ func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendatio
 		}
 	}
 	return false
+}
+
+// protocolsMissingLatest reports whether the stored protocols blob predates
+// the current seed: empty (never set) or missing any latest protocol.
+// User-authored protocols are never overwritten — only full absence of the
+// seeded keyword protocols triggers a backfill.
+func protocolsMissingLatest(stored string, latest []AgentProtocol) bool {
+	if stored == "" {
+		return true
+	}
+	var parsed []AgentProtocol
+	if err := json.Unmarshal([]byte(stored), &parsed); err != nil {
+		return true
+	}
+	have := make(map[string]bool, len(parsed))
+	for _, p := range parsed {
+		for _, tag := range p.EndpointTags {
+			have[tag] = true
+		}
+	}
+	for _, p := range latest {
+		for _, tag := range p.EndpointTags {
+			if !have[tag] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// configJsoncUpToDate reports whether the stored JSONC doc still mirrors the
+// supplied recommendations + protocols rec keys and endpoint tags. Stale
+// docs (empty protocols, older field sets) get rebuilt by the seed so the
+// rule dialog shows data consistent with the structured editor.
+func configJsoncUpToDate(jsonc, recsBlob, protocolsBlob string) bool {
+	if jsonc == "" {
+		return false
+	}
+	var doc AgentRuleConfigJsonc
+	if err := json.Unmarshal([]byte(jsonc), &doc); err != nil {
+		return false
+	}
+	var recs []AgentRecommendation
+	if recsBlob != "" {
+		if err := json.Unmarshal([]byte(recsBlob), &recs); err != nil {
+			return false
+		}
+	}
+	var protocols []AgentProtocol
+	if protocolsBlob != "" {
+		if err := json.Unmarshal([]byte(protocolsBlob), &protocols); err != nil {
+			return false
+		}
+	}
+	// common 的 key 集合必须一致。
+	readKeys := make(map[string]bool, len(doc.Common))
+	writtenKeys := make(map[string]bool, len(doc.Common))
+	for _, r := range doc.Common {
+		readKeys[r.Key] = true
+	}
+	for _, r := range recs {
+		writtenKeys[r.Key] = true
+	}
+	if len(readKeys) != len(writtenKeys) {
+		return false
+	}
+	for k := range readKeys {
+		if writtenKeys[k] != readKeys[k] {
+			return false
+		}
+	}
+	// protocols 的 endpoint_tags 关键词集合必须一致。
+	tagSet := make(map[string]bool)
+	for _, p := range doc.Protocols {
+		for _, t := range p.EndpointTags {
+			tagSet[t] = true
+		}
+	}
+	writtenTags := make(map[string]bool)
+	for _, p := range protocols {
+		for _, t := range p.EndpointTags {
+			writtenTags[t] = true
+		}
+	}
+	if len(tagSet) != len(writtenTags) {
+		return false
+	}
+	for t := range tagSet {
+		if !writtenTags[t] {
+			return false
+		}
+	}
+	return true
 }
 
 // upgradeLegacyThinkingLevels reports-and-fixes the pre-spec blob shape:

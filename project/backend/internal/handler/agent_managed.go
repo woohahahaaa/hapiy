@@ -345,7 +345,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		if len(members) == 0 {
 			continue
 		}
-		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
+		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
 		fullName := providerBlockName(m.Name, stored.Suffix)
 		providerIDPath := jpaths.Provider + "." + fullName
 		// 托管块由系统全权生成（不允许编辑）：先整块删除再重写，
@@ -618,7 +618,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		}
 		mv.ModelNames = uniqueSorted(membersModelNames(members))
 		mv.ModelCount = len(mv.ModelNames)
-		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
+		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
 		mv.Generated = gen
 		fullName := providerBlockName(m.Name, stored.Suffix)
 		actual := normalizeFileProvider(provResult.Get(fullName), jpaths)
@@ -641,7 +641,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 // four unified fields filled from the chosen models.dev reference
 // suppliers. apiKeyOverride is the 令牌 key chosen in the 托管 dialog;
 // empty falls back to the first linked provider's key (legacy rows).
-func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, apiKeyOverride string, basePrefix string) map[string]any {
+func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, apiKeyOverride string, basePrefix string, displayName string) map[string]any {
 	recs, _ := rule.GetRecommendations()
 	protocols, _ := rule.GetProtocols()
 	mif, _ := rule.GetModelInfoFields()
@@ -666,6 +666,11 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 			continue
 		}
 		_ = setDottedValue(block, r.Key, r.Recommended)
+	}
+	// name：模板声明了 name 字段时自动填成 provider 显示名（规则名+后缀），
+	// 避免生成的块没有显示名、在 opencode 里不好认。
+	if hasRecommendationKey(providerRecs, "name") {
+		_ = setDottedValue(block, "name", displayName)
 	}
 	// baseURL = 系统 BaseURL [+ /__来源] + endpoint：prefer the protocol's
 	// first condition field ending in baseURL/baseUrl/url, then any common
@@ -706,14 +711,14 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 	return map[string]any{"provider": block, "models": models}
 }
 
-// matchProtocolByEndpoint returns the first protocol whose "根据
-// endpoint 来判断" tag is a suffix of the endpoint. Tags OR together //
-// protocols are evaluated in order.
+// matchProtocolByEndpoint returns the first protocol whose 词库里任一
+// endpoint 关键词是 endpoint 的子串（包含即命中，例如关键词
+// "completions" 命中 "/v1/chat/completions"）。
 func matchProtocolByEndpoint(endpoint string, protocols []model.AgentProtocol) *model.AgentProtocol {
 	for i := range protocols {
 		for _, tag := range protocols[i].EndpointTags {
 			tag = strings.TrimSpace(tag)
-			if tag != "" && strings.HasSuffix(endpoint, tag) {
+			if tag != "" && strings.Contains(endpoint, tag) {
 				return &protocols[i]
 			}
 		}
@@ -906,6 +911,18 @@ func recsForScope(recs []model.AgentRecommendation, scope string) []model.AgentR
 		}
 	}
 	return out
+}
+
+// hasRecommendationKey reports whether any rec declares the exact key,
+// regardless of its Recommended value (used to auto-fill std display
+// fields like provider `name`).
+func hasRecommendationKey(recs []model.AgentRecommendation, key string) bool {
+	for _, r := range recs {
+		if r.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeFileProvider turns a file provider block (other fields + its

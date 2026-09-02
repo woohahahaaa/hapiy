@@ -845,3 +845,46 @@ func TestManagedProviderNameConflict(t *testing.T) {
 		t.Fatalf("expected 同名 error: %s", w.Body.String())
 	}
 }
+
+// TestMatchProtocolByEndpointKeywords covers the substring-keyword → npm
+// classification: any protocol keyword contained in the endpoint wins,
+// and more specific keywords take priority by order.
+func TestMatchProtocolByEndpointKeywords(t *testing.T) {
+	protocols := []model.AgentProtocol{
+		{Name: "responses", EndpointTags: []string{"responses"}, Recommendations: []model.AgentRecommendation{
+			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/openai"},
+		}},
+		{Name: "anthropic", EndpointTags: []string{"chat/message", "messages"}, Recommendations: []model.AgentRecommendation{
+			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/anthropic"},
+		}},
+		{Name: "compat", EndpointTags: []string{"completions", "/v1/chat"}, Recommendations: []model.AgentRecommendation{
+			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/openai-compatible"},
+		}},
+	}
+	cases := []struct {
+		endpoint string
+		want     string
+	}{
+		{"/v1/chat/completions", "@ai-sdk/openai-compatible"},
+		{"/proxy/v1/chat/completions", "@ai-sdk/openai-compatible"},
+		{"/v1/responses", "@ai-sdk/openai"},
+		{"/v1/messages", "@ai-sdk/anthropic"},
+		{"/v1/chat/message", "@ai-sdk/anthropic"},
+		{"/v1/anthropic/messages", "@ai-sdk/anthropic"},
+		{"/whatever", ""},
+	}
+	for _, tc := range cases {
+		p := matchProtocolByEndpoint(tc.endpoint, protocols)
+		var got string
+		if p != nil {
+			for _, r := range p.Recommendations {
+				if r.Key == "npm" && r.Recommended != nil {
+					got = r.Recommended.(string)
+				}
+			}
+		}
+		if got != tc.want {
+			t.Fatalf("endpoint %s: want npm %q, got %q", tc.endpoint, tc.want, got)
+		}
+	}
+}
