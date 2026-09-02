@@ -260,9 +260,24 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		groupsByEndpoint := make(map[string]model.ManagedAgentGroup, len(groups))
+		// 生成配置文件时：endpoint 与命名后缀都相同的分组合并为一个
+		// provider 块；endpoint 相同但命名后缀不同则保留各自独立块
+		// （块名 = 规则名 + 后缀）。
+		groupsByKey := make(map[string]model.ManagedAgentGroup, len(groups))
 		for _, g := range groups {
-			groupsByEndpoint[g.Endpoint] = g
+			key := g.Endpoint + "\x00" + strings.TrimSpace(g.Suffix)
+			if cur, ok := groupsByKey[key]; ok {
+				cur.ProviderIDs = uniqueSorted(append(cur.ProviderIDs, g.ProviderIDs...))
+				if cur.ModelSources == nil {
+					cur.ModelSources = map[string]string{}
+				}
+				for k, v := range g.ModelSources {
+					cur.ModelSources[k] = v
+				}
+				groupsByKey[key] = cur
+				continue
+			}
+			groupsByKey[key] = g
 		}
 		ids, _ := m.GetProviderIDs()
 		live, _ := liveProvision(ids, liveProviders)
@@ -287,7 +302,7 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		buf := []byte(cleaned)
 		basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(m)
 		synced := 0
-		for _, stored := range groupsByEndpoint {
+		for _, stored := range groupsByKey {
 			members := membersOf(stored)
 			if len(members) == 0 {
 				continue
@@ -295,6 +310,19 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix)
 			fullName := providerBlockName(m.Name, stored.Suffix)
 			providerIDPath := jpaths.Provider + "." + fullName
+			// 托管块由系统全权生成（不允许编辑）：先整块删除再重写，
+			// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
+			// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
+			provFields, _ := gen["provider"].(map[string]any)
+			modelCfgs, _ := gen["models"].(map[string]any)
+			if len(provFields) > 0 || len(modelCfgs) > 0 {
+				if next, err := sjson.DeleteBytes(buf, providerIDPath); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider 块 %s 重置失败: %v", fullName, err)})
+					return
+				} else {
+					buf = next
+				}
+			}
 			for k, v := range gen["provider"].(map[string]any) {
 				next, err := sjson.SetBytes(buf, providerIDPath+"."+k, v)
 				if err != nil {
@@ -396,22 +424,20 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		return "所选供应商没有可用的 endpoint"
 	}
 
-	// 1. suffix rules: required + unique when more than one active group.
-	groupsByEndpoint := make(map[string]model.ManagedAgentGroup, len(activeGroups))
-	for _, g := range activeGroups {
-		groupsByEndpoint[g.Endpoint] = g
-	}
+	// 1. suffix rules: required; 后缀唯一性按 (endpoint, 后缀) 判定 ——
+	// 相同 endpoint 里重复的后缀会合并成一个 provider 块，允许；不同
+	// endpoint 撞同名后缀才会是名字冲突。
 	if len(activeGroups) > 1 {
-		seen := make(map[string]bool, len(activeGroups))
+		suffixEndpoint := make(map[string]string, len(activeGroups))
 		for _, g := range activeGroups {
 			suffix := strings.TrimSpace(g.Suffix)
 			if suffix == "" {
 				return fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", g.Endpoint)
 			}
-			if seen[suffix] {
+			if prev, ok := suffixEndpoint[suffix]; ok && prev != g.Endpoint {
 				return fmt.Sprintf("后缀 %q 重复", suffix)
 			}
-			seen[suffix] = true
+			suffixEndpoint[suffix] = g.Endpoint
 		}
 	}
 
@@ -434,9 +460,24 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 			}
 		}
 	}
+	// 本托管 provider 自己（按 selfID）历史生成的块名：根名 + 各分组名。
+	// 这些名字在重存/合并时应当原地覆盖，而不是被当成同名冲突。
+	ownBlocks := map[string]bool{}
+	if selfID != "" {
+		var self model.ManagedAgentProvider
+		if err := db.Where("id = ?", selfID).First(&self).Error; err == nil {
+			ownBlocks[strings.TrimSpace(self.Name)] = true
+			if gs, gerr := self.GetGroups(); gerr == nil {
+				for _, g := range gs {
+					ownBlocks[providerBlockName(self.Name, strings.TrimSpace(g.Suffix))] = true
+				}
+			}
+		}
+	}
 	for _, g := range activeGroups {
 		full := providerBlockName(name, strings.TrimSpace(g.Suffix))
-		if existing[full] {
+		// 本托管 provider 自己上次同步生成的块不算冲突：重存/合并时原地覆盖。
+		if existing[full] && !ownBlocks[full] {
 			return fmt.Sprintf("名称 %q 与配置文件里已有的 provider 同名，请更换名字或后缀", full)
 		}
 	}

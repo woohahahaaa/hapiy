@@ -248,6 +248,73 @@ func fileID(db *gorm.DB) string {
 	return f.ID
 }
 
+// TestManagedProviderSyncConverges 复现「同步后仍显示待同步」：文件里的
+// 托管块一旦混入同步覆盖不到的内容（用户手改的字段、快照变化留下的旧
+// 模型条目），旧的增量式同步永远清不掉它们，而 pending 比较是全等。
+func TestManagedProviderSyncConverges(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	// 第一轮：文件干净，同步后应收敛。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync1: %d %s", w.Code, w.Body.String())
+	}
+
+	// 模拟用户在管理模型里编辑过该块：多了一个 provider 字段和一个
+	// 旧模型条目（快照/来源变化后遗留）。
+	var f model.AgentConfigFile
+	db.First(&f)
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(f.Content), &doc); err != nil {
+		t.Fatal(err)
+	}
+	block := doc["provider"].(map[string]any)["HAPIY-C"].(map[string]any)
+	block["userField"] = "keep-me?"
+	block["models"].(map[string]any)["ghost-model"] = map[string]any{"name": "幽灵模型"}
+	f.Content = string(mustJSON(doc))
+	db.Save(&f)
+	if err := writeTempFile("/tmp/hapiy-test-open.json", f.Content); err != nil {
+		t.Fatal(err)
+	}
+
+	// 再同步一次，希望把多余内容清掉、回到与生成块一致。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync2: %d %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+		t.Fatalf("expected pending_sync false after re-sync, block did not converge: %s", w.Body.String())
+	}
+}
+
 func TestManagedProviderNoEndpointGroup(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {

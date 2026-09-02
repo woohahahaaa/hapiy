@@ -196,8 +196,11 @@ export function ManagedProviderDialog({
   const noneMergeTarget = manualNoneEndpoint
     ? deferredGroups.find((g) => g.endpoint !== '__none__' && g.endpoint === manualNoneEndpoint)
     : undefined
-  const noneMergePlaceholder = noneMergeTarget
-    ? `${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim() || noneMergeTarget.endpoint}（匹配到已有相同 endpoint 的分组，此处留空则自动合并）`
+  // 命中已有分组时，显示在命名后缀输入框下方的合并提示。
+  const noneMergeHint = noneMergeTarget
+    ? `已匹配到同名分组「${noneMergeTarget.endpoint}」${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()
+        ? `（命名后缀 ${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()}）`
+        : ''}，此处留空保存将自动合并`
     : undefined
 
   // 每个分组的模型来源为空时预填首个候选（models.dev 智能匹配）。
@@ -587,9 +590,12 @@ export function ManagedProviderDialog({
                                           onChange={(e) =>
                                             setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
                                           }
-                                          placeholder={isNone ? (noneMergePlaceholder ?? '填写命名后缀') : '填写命名后缀'}
+                                          placeholder="填写命名后缀"
                                           className="h-7 w-full text-xs font-mono"
                                         />
+                                        {isNone && noneMergeHint && (
+                                          <p className="mt-1 text-[11px] leading-tight text-warning">{noneMergeHint}</p>
+                                        )}
                                       </td>
                                     )}
                                     {m ? (
@@ -762,6 +768,7 @@ function ProviderMultiSelect({
         type="button"
         onClick={toggleOpen}
         aria-expanded={open}
+        style={{ touchAction: 'manipulation' }}
         className={
           'flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 ' +
           (open ? 'border-ring ring-1 ring-ring/50' : 'hover:bg-muted/40')
@@ -813,8 +820,9 @@ function ProviderMultiSelect({
                         onClick={() => onToggle(opt.id)}
                         role="option"
                         aria-selected={selected}
+                        style={{ touchAction: 'manipulation' }}
                         className={
-                          'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs select-none ' +
+                          'flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-xs select-none touch-manipulation ' +
                           (disabled
                             ? 'cursor-not-allowed opacity-40'
                             : selected
@@ -824,7 +832,7 @@ function ProviderMultiSelect({
                       >
                         <span
                           className={
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ' +
+                            'flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border ' +
                             (selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input')
                           }
                         >

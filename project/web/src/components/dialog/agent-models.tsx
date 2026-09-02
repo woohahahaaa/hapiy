@@ -647,10 +647,11 @@ const [error, setError] = useState<string | null>(null)
                           }
                         />
                         {expanded && (
-                          <div className="space-y-0.5 rounded-md bg-muted/60 py-1 pl-3 pr-1">
+                          <div className="space-y-0.5 rounded-md bg-muted/60">
                             {mv.groups.map((g) => (
                               <ProviderRow
                                 key={g.endpoint}
+                                indent
                                 name={mv.name + g.suffix}
                                 info={{ text: `${g.model_count} 模型`, green: false }}
                                 selected={
@@ -776,11 +777,11 @@ const [error, setError] = useState<string | null>(null)
             </ColumnHeader>
             <div className="max-h-[40%] overflow-auto border-b border-border p-0">
               {selectedManagedGroup ? (
-                <ReadOnlyJson
+                <JsonDiffHighlight
                   value={
                     (selectedManagedGroup.group.generated as { provider?: unknown } | undefined)?.provider
                   }
-                  note="由系统最优值生成，不允许编辑"
+                  markers={[]}
                 />
               ) : selectedProvider ? (
                 editingScope === 'provider' ? (
@@ -823,13 +824,13 @@ const [error, setError] = useState<string | null>(null)
             </ColumnHeader>
             <div className="flex-1 overflow-auto p-0">
               {selectedManagedGroup ? (
-                <ReadOnlyJson
+                <JsonDiffHighlight
                   value={
                     selectedManagedModelId
                       ? (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models?.[selectedManagedModelId]
                       : undefined
                   }
-                  note="由系统最优值生成，不允许编辑"
+                  markers={[]}
                 />
               ) : selectedModel ? (
                 editingScope === 'model' ? (
@@ -1038,6 +1039,7 @@ function ProviderRow({
   name,
   info,
   badge,
+  indent,
   selected,
   onClick,
   actions,
@@ -1046,6 +1048,8 @@ function ProviderRow({
   name: React.ReactNode
   info: RowInfo
   badge?: React.ReactNode
+  /** 子级行：缩进加在内容上而非行本身，保证选中背景整行拉通。 */
+  indent?: boolean
   selected: boolean
   onClick: () => void
   actions: React.ReactNode | null
@@ -1060,7 +1064,7 @@ function ProviderRow({
       }
     >
       {leading}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+      <div className={'flex min-w-0 flex-1 flex-col gap-0.5 text-left ' + (indent ? 'pl-3' : '')}>
         <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
         {(info || badge) && (
           <span
@@ -1227,22 +1231,6 @@ function IconHoverButton({
     >
       <AppIcon name={icon} size={11} />
     </Button>
-  )
-}
-
-// ReadOnlyJson renders a generated managed-provider block in a
-// monospace pre — no edit affordances, just view.
-function ReadOnlyJson({ value, note }: { value: unknown; note: string }) {
-  if (value === null || value === undefined) {
-    return <Placeholder>{note}</Placeholder>
-  }
-  return (
-    <div>
-      <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-all font-mono text-xs leading-relaxed text-foreground">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-      <p className="mt-1 text-[11px] text-muted-foreground">{note}</p>
-    </div>
   )
 }
 
