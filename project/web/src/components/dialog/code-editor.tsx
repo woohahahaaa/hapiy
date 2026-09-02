@@ -163,6 +163,18 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
         <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
           <DialogTitle className="text-base">{title}</DialogTitle>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
+          {mode === 'editable' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-2 right-11 z-10"
+              title="在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件"
+              onClick={prettify}
+              disabled={loading || saving}
+            >
+              美化格式
+            </Button>
+          )}
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {error && <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}
@@ -171,17 +183,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
 <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading || saving}>{mode === 'preview' ? '关闭' : '取消'}</Button>
           {mode === 'editable' && (
-            <>
-              <Button
-                variant="outline"
-                title="在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件"
-                onClick={prettify}
-                disabled={loading || saving}
-              >
-                美化格式
-              </Button>
-              <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>
-            </>
+            <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>
           )}
         </DialogFooter>
         {confirmSave && (
