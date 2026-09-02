@@ -616,12 +616,22 @@ var builtinAgentRules = []struct {
 			Windows: `%USERPROFILE%\.workbuddy\models.json`,
 			Mac:     `~/.workbuddy/models.json`,
 		},
-		// WorkBuddy uses a flat `models` array keyed by `vendor`. The current
-		// gjson design only walks provider objects with a sibling models key,
-		// so the seeded paths stay empty until a vendor-grouping pass lands.
+		// WorkBuddy（腾讯 / CodeBuddy）官方 models.json：平铺的 models 数组，
+		// 每项一个模型，字段 id/name/vendor/apiKey/maxInputTokens/maxOutputTokens/
+		// url/supportsToolCall/supportsImages/supportsReasoning；url 必须是完整
+		// 路径且一般以 /chat/completions 结尾。可选顶层 availableModels 控制
+		// 下拉列表。现有引擎按「provider 对象 + models 子树」设计，平铺数组
+		// 不直接适配，json_paths 留空，仅保留官方字段参考。
 		JsonPaths:       AgentJsonPaths{},
-		Recommendations: nil,
-		ModelInfoFields: AgentModelInfoFieldPaths{},
+		Recommendations: workBuddyRecommendations,
+		ModelInfoFields: AgentModelInfoFieldPaths{
+			// models[] 单项直接就是模型配置：四个字段写在该模型对象里。
+			MaxContext:     ModelInfoPath(`maxInputTokens`),
+			MaxOutputToken: ModelInfoPath(`maxOutputTokens`),
+			// 输入类型：WorkBuddy 用布尔 supportsImages，不是数组。
+			InputTypes:     ModelInfoOp(`supportsImages`, "bool"),
+			ThinkingLevels: ModelInfoOp(`supportsReasoning`, "bool"),
+		},
 	},
 	{
 		Name: "ChatGPT",
@@ -629,10 +639,15 @@ var builtinAgentRules = []struct {
 			Windows: `%USERPROFILE%\.codex\config.toml`,
 			Mac:     `~/.codex/config.toml`,
 		},
-		// Codex stores its config in TOML with a [model_providers.*] table
-		// and no per-provider model list, so the seeded paths stay empty.
+		// Codex 配置是 TOML（config.toml），自定义模型走 [model_providers.<id>]
+		// 表：base_url / env_key / wire_api / name / 重试与流式超时等。
+		// 现有接管引擎只读写 JSON/JSONC，TOML 暂不自动生成 provider 块，
+		// 因此 json_paths 留空；这里仅按官方 config 文档列出完整字段参考，
+		// 标注「推荐时不干预」的字段表示官方有默认、不必写。
 		JsonPaths:       AgentJsonPaths{},
-		Recommendations: nil,
+		Recommendations: codexRecommendations,
+		// Codex 的 provider-model 无独立的 context/output 字段（模型参数由
+		// reasoning_effort 等控制），四个统一模型信息字段不适用。
 		ModelInfoFields: AgentModelInfoFieldPaths{},
 	},
 	{
@@ -663,19 +678,25 @@ var builtinAgentRules = []struct {
 // Field set mirrors the official opencode provider schema
 // (opencode.ai/config.json): provider-level npm / name / options.*,
 // model-level name / limit.* / reasoning / tool_call / attachment.
+// Description 以「推荐时不干预」标注官方允许但推荐留空（走默认）的字段。
 var opencodeRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "name", Type: "string", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
 	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
 	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求超时（毫秒）。默认 300000，复杂任务建议拉长到 600000", Recommended: 600000},
-	{Scope: "provider", Key: "options.chunkTimeout", Type: "number", Description: "流式响应 chunk 之间间隔超时（毫秒）", Recommended: 30000},
-	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "是否强制为 provider 设置 cache key（开启可缓存优化）", Recommended: true},
-	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+	{Scope: "provider", Key: "options.timeout", Type: "number", Description: "请求整体超时（毫秒）。官方默认 300000，复杂任务建议 600000", Recommended: 600000},
+	{Scope: "provider", Key: "options.chunkTimeout", Type: "number", Description: "流式 SSE chunk 之间超时（毫秒），超时中止", Recommended: 30000},
+	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
+	{Scope: "provider", Key: "options.headerTimeout", Type: "number", Description: "响应头等待超时（官方字段，推荐时不干预：留空走集成默认）"},
+	{Scope: "provider", Key: "options.enterpriseUrl", Type: "string", Description: "GitHub Copilot 企业 URL（仅 copilot 认证需用，推荐时不干预）"},
+	{Scope: "provider", Key: "blacklist", Type: "array", Description: "从模型选择器隐藏的模型 ID 列表（可选，推荐时不干预）"},
+	{Scope: "provider", Key: "whitelist", Type: "array", Description: "只保留这些模型、隐藏其余（可选，推荐时不干预）"},
+	{Scope: "model", Key: "name", Type: "string", Description: "模型在界面里的显示名"},
 	{Scope: "model", Key: "limit.context", Type: "number", Description: "上下文 token 上限"},
 	{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限"},
-	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "模型是否支持思考模式"},
+	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
 	{Scope: "model", Key: "tool_call", Type: "boolean", Description: "模型是否支持工具调用"},
+	{Scope: "model", Key: "attachment", Type: "boolean", Description: "模型是否支持文件/图片附件输入"},
 }
 
 // opencodeProtocols 按 endpoint 关键词把规范化 provider 归入对应的 AI SDK。
@@ -705,13 +726,61 @@ var opencodeProtocols = []AgentProtocol{
 	},
 }
 
-// openclawRecommendations covers the JSON5-shaped providers block.
+// codexRecommendations 对齐 OpenAI Codex 官方 config.toml 参考
+// （developers.openai.com/codex/config-file/config-reference 与
+// config-sample）。自定义模型写 [model_providers.<id>] 表，字段类型走 TOML
+// 而非 JSON —— 但字段名与官方一致。官方有默认、不必写的字段在描述中标注
+// 「推荐时不干预」。
+var codexRecommendations = []AgentRecommendation{
+	{Scope: "provider", Key: "model_provider", Type: "string", Description: "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）", Required: true},
+	{Scope: "provider", Key: "name", Type: "string", Description: "自定义 provider 的显示名"},
+	{Scope: "provider", Key: "base_url", Type: "string", Description: "该 provider 的 API base URL（如 https://api.example.com/v1）", Required: true},
+	{Scope: "provider", Key: "wire_api", Type: "string", Description: "协议类型，官方唯一支持 responses（默认即此值，推荐时不干预）"},
+	{Scope: "provider", Key: "env_key", Type: "string", Description: "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）"},
+	{Scope: "provider", Key: "env_key_instructions", Type: "string", Description: "API key 的配置提示（可选）"},
+	{Scope: "provider", Key: "http_headers", Type: "object", Description: "静态请求头（可选，推荐时不干预）"},
+	{Scope: "provider", Key: "env_http_headers", Type: "object", Description: "由环境变量注入的请求头（可选，推荐时不干预）"},
+	{Scope: "provider", Key: "query_params", Type: "object", Description: "附加查询参数（如 Azure 的 api-version，可选）"},
+	{Scope: "provider", Key: "request_max_retries", Type: "number", Description: "HTTP 请求重试次数（官方默认 4，推荐时不干预）"},
+	{Scope: "provider", Key: "stream_max_retries", Type: "number", Description: "SSE 流中断重试次数（官方默认 5，推荐时不干预）"},
+	{Scope: "provider", Key: "stream_idle_timeout_ms", Type: "number", Description: "SSE 流空闲超时，毫秒（官方默认 300000，推荐时不干预）"},
+	{Scope: "provider", Key: "supports_websockets", Type: "boolean", Description: "是否支持 Responses API WebSocket 传输（可选，推荐时不干预）"},
+	{Scope: "provider", Key: "requires_openai_auth", Type: "boolean", Description: "是否使用 OpenAI 认证（仅官方认证后端用，推荐时不干预）"},
+	{Scope: "provider", Key: "experimental_bearer_token", Type: "string", Description: "直接写死 bearer token（官方提醒优先用 env_key，推荐时不干预）"},
+}
+
+// workBuddyRecommendations 对齐 WorkBuddy/CodeBuddy 官方 models.json 指南
+// （腾讯云文档：「models.json 配置指南」）。官方要求：url 必填且必须是完整
+// 接口路径、一般以 /chat/completions 结尾；仅支持 OpenAI 接口格式。apiKey 选填
+// （可留空用环境变量或平台内置）。字段「推荐时不干预」= 官方有默认/选填。
+var workBuddyRecommendations = []AgentRecommendation{
+	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识（官方必填）", Required: true},
+	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名称"},
+	{Scope: "model", Key: "vendor", Type: "string", Description: "模型供应商名（如 OpenAI / Google；自定义模型 UI 自动标 custom 标签，推荐时不干预）"},
+	{Scope: "model", Key: "apiKey", Type: "string", Description: "API 密钥（可留空，用环境变量或平台内置）"},
+	{Scope: "model", Key: "maxInputTokens", Type: "number", Description: "最大输入 token 数"},
+	{Scope: "model", Key: "maxOutputTokens", Type: "number", Description: "最大输出 token 数"},
+	{Scope: "model", Key: "url", Type: "string", Description: "API 端点，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
+	{Scope: "model", Key: "supportsToolCall", Type: "boolean", Description: "是否支持工具调用（推荐开启，官方字段）"},
+	{Scope: "model", Key: "supportsImages", Type: "boolean", Description: "是否支持图片输入（推荐写明确布尔值）"},
+	{Scope: "model", Key: "supportsReasoning", Type: "boolean", Description: "是否支持推理模式（推荐写明确布尔值）"},
+	{Scope: "model", Key: "availableModels", Type: "array", Description: "可选顶层字段：控制下拉列表只显示列出的模型 ID；不配则显示全部（推荐时不干预）"},
+}
+
+// openclawRecommendations 对齐 OpenClaw 官方 openclaw.json：models.providers
+// 下每个 provider 的 baseUrl / apiKey / api（协议类型），models[] 每个模型的
+// id / name / 上下文与输出 / input / reasoning（官方字段）。provider 级
+// model 字段（如 contextWindow、maxTokens）由 models.dev 同步填充。
 var openclawRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "API 端点", Required: true},
+	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
 	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "api", Type: "string", Description: "API 协议（openai-completions / anthropic-messages / ...）", Recommended: "openai-completions"},
-	{Scope: "model", Key: "id", Type: "string", Description: "模型 ID", Required: true},
+	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...）", Recommended: "openai-completions"},
+	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+	{Scope: "model", Key: "contextWindow", Type: "number", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限"},
+	{Scope: "model", Key: "input", Type: "array", Description: "支持的输入类型（text/image/...）"},
+	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "是否支持思考模式（官方 schema 校验，未配按 false 处理）"},
 }
 
 // AgentModelConfigSource — persisted 模型配置参考供应商 selection for one
