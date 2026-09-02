@@ -325,6 +325,10 @@ export function ManagedProviderDialog({
       toast.error('请至少勾选一个有 endpoint 的供应商')
       return
     }
+    if (apiKey.trim() === '') {
+      toast.error('请选择接入用的令牌 Key（必填）')
+      return
+    }
     // 未配置 endpoint 组：手填 endpoint 的提交语义 ——
     // · 留空：提示并中止（否则会产生空 endpoint 的坏分组，保存必然失败）；
     // · 命中已有分组且未另填后缀：并入该分组，后缀/来源继承命中分组；
@@ -492,7 +496,7 @@ export function ManagedProviderDialog({
                 <Field>
                   <FieldLabel>
                     接入 Key
-                    <span className="ml-1 font-normal text-muted-foreground">（令牌页创建的 Key）</span>
+                    <span className="ml-1 font-normal text-muted-foreground">（令牌页创建的 Key，必填）</span>
                   </FieldLabel>
                   <Select value={apiKey} onValueChange={setApiKey}>
                     <SelectTrigger className="h-9 w-full text-xs">
@@ -512,7 +516,7 @@ export function ManagedProviderDialog({
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    写入生成配置的 apiKey，Agent 用它接入本系统
+                    必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 key
                   </p>
                 </Field>
               </div>
@@ -777,7 +781,7 @@ function ProviderMultiSelect({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[220px] w-[--radix-popover-trigger-width] overflow-auto p-0"
+        className="max-h-[55vh] w-[--radix-popover-trigger-width] overflow-auto p-0"
       >
         {loading ? (
           <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>

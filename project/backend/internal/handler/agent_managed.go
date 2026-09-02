@@ -673,14 +673,12 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 	if field := endpointFieldFor(protocol, providerRecs); field != "" {
 		_ = setDottedValue(block, field, strings.TrimSuffix(basePrefix, "/")+group.Endpoint)
 	}
-	// apiKey: the dialog-chosen 令牌 key wins; legacy rows fall back to the
-	// first linked provider's key.
+	// apiKey: only the dialog-chosen 令牌 key is written. Missing (未填)
+	// keys are left out of the generated block instead of silently falling
+	// back to a linked provider's key, which previously produced surprises
+	// like a managed provider borrowing someone else's key.
 	if key := apiKeyFieldFor(providerRecs); key != "" {
-		k := apiKeyOverride
-		if k == "" {
-			k = firstKeyOf(members)
-		}
-		if k != "" {
+		if k := apiKeyOverride; k != "" {
 			_ = setDottedValue(block, key, k)
 		}
 	}
@@ -754,16 +752,6 @@ func apiKeyFieldFor(recs []model.AgentRecommendation) string {
 		lower := strings.ToLower(r.Key)
 		if r.Required && r.Recommended == nil && (strings.HasSuffix(lower, "apikey") || strings.HasSuffix(lower, "key")) {
 			return r.Key
-		}
-	}
-	return ""
-}
-
-func firstKeyOf(members []model.Provider) string {
-	for _, p := range members {
-		keys := parseStringArray(p.Keys)
-		if len(keys) > 0 && strings.TrimSpace(keys[0]) != "" {
-			return strings.TrimSpace(keys[0])
 		}
 	}
 	return ""

@@ -688,6 +688,7 @@ func TestManagedProviderNoEndpointGroup(t *testing.T) {
 	modelsDev.mu.Unlock()
 
 	// 未配置 endpoint 组：endpoint 手填 /manual/v1，provider_ids 指向无 endpoint 供应商。
+	// 没填令牌时不再回退借用供应商的 key —— 生成块里不写 apiKey。
 	body := `{"name":"HAPIY","provider_ids":` + idsJSON([]string{p.ID}) + `,"groups":[{"endpoint":"/manual/v1","suffix":"","model_sources":{"m1":"OpenRouter"},"provider_ids":` + idsJSON([]string{p.ID}) + `}]}`
 	r := newRouterForManaged(db)
 	w := httptest.NewRecorder()
@@ -709,8 +710,8 @@ func TestManagedProviderNoEndpointGroup(t *testing.T) {
 		// members resolved from provider_ids: baseUrl=/manual/v1
 		t.Fatalf("no-endpoint group did not resolve its hand-typed endpoint: %s", syncOut)
 	}
-	if !strings.Contains(syncOut, `sk-x`) {
-		t.Fatalf("expected apiKey from linked provider: %s", syncOut)
+	if strings.Contains(syncOut, `sk-x`) {
+		t.Fatalf("no apiKey should be written when the dialog key is empty (no fallback to linked provider): %s", syncOut)
 	}
 }
 
