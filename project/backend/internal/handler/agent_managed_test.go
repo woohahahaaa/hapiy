@@ -110,6 +110,7 @@ func newRouterForManaged(db *gorm.DB) *gin.Engine {
 	// No auth middleware needed for these direct handler tests.
 	r.POST("/agent-config-files/:id/managed-providers", CreateManagedProvider(db, nil))
 	r.GET("/agent-config-files/:id/managed-providers", ListManagedProviders(db, nil))
+	r.PUT("/agent-config-files/:id/managed-providers/:mid", UpdateManagedProvider(db, nil))
 	r.POST("/agent-config-files/:id/managed-providers/:mid/sync", SyncManagedProvider(db, nil))
 	r.DELETE("/agent-config-files/:id/managed-providers/:mid", DeleteManagedProvider(db))
 	r.GET("/agent-config-files/managed-options", ManagedProviderOptions(db))
@@ -376,6 +377,72 @@ func TestManagedSyncDottedModelNames(t *testing.T) {
 		if strings.Contains(w.Body.String(), `"pending_sync":true`) {
 			t.Fatalf("round %d: expected pending_sync false right after sync (dotted model names), got: %s", round, w.Body.String())
 		}
+	}
+}
+
+// TestManagedProviderRenameSyncRemovesOldBlocks 改名后同步：新块写入，
+// 旧名字的块必须从文件里删除（否则残留在普通供应商列表中）。
+func TestManagedProviderRenameSyncRemovesOldBlocks(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync1: %d %s", w.Code, w.Body.String())
+	}
+	var f model.AgentConfigFile
+	db.First(&f)
+	if !strings.Contains(f.Content, `"HAPIY-C"`) {
+		t.Fatalf("expected HAPIY-C after first sync: %s", f.Content)
+	}
+
+	// 改名 HAPIY → HAPIY2，再同步。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("PUT", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid, strings.NewReader(`{"name":"HAPIY2","provider_ids":`+idsJSON(ids)+`,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{}}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("rename: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync2: %d %s", w.Code, w.Body.String())
+	}
+
+	db.First(&f)
+	if strings.Contains(f.Content, `"HAPIY-C"`) {
+		t.Fatalf("old block HAPIY-C must be removed after rename+sync: %s", f.Content)
+	}
+	if !strings.Contains(f.Content, `"HAPIY2-C"`) {
+		t.Fatalf("expected HAPIY2-C after rename+sync: %s", f.Content)
+	}
+
+	// 列表：新块待同步应为 false。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+		t.Fatalf("expected pending_sync false after rename+sync: %s", w.Body.String())
 	}
 }
 

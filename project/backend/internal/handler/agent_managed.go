@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -302,6 +303,22 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		cleaned := stripJSON5Comments(content)
 		buf := []byte(cleaned)
 		basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(m)
+		// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
+		// 先整块删除，避免旧块残留成「普通供应商」。
+		currentNames := make(map[string]bool, len(groupsByKey))
+		for _, stored := range groupsByKey {
+			currentNames[providerBlockName(m.Name, stored.Suffix)] = true
+		}
+		if previous, err := m.GetSyncedBlocks(); err == nil {
+			for _, old := range previous {
+				if currentNames[old] {
+					continue
+				}
+				if next, derr := sjson.DeleteBytes(buf, jpaths.Provider+"."+old); derr == nil {
+					buf = next
+				}
+			}
+		}
 		synced := 0
 		for _, stored := range groupsByKey {
 			members := membersOf(stored)
@@ -362,6 +379,18 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		if err := db.Model(&row).Update("content", formatted).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		// 记录本次写入的块名，供下次同步清理改名/删分组后的旧块。
+		names := make([]string, 0, len(currentNames))
+		for n := range currentNames {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		if namesJSON, merr := json.Marshal(names); merr == nil {
+			if err := db.Model(&m).Update("synced_blocks", string(namesJSON)).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"synced": synced, "content": formatted}})
 	}

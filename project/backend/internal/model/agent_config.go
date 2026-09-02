@@ -732,12 +732,17 @@ type ManagedAgentProvider struct {
 	// lets generation derive it from the current request + base_url_suffix
 	// setting (BaseURL settings page logic).
 	BaseURL string `gorm:"type:text" json:"base_url"`
-	// SourceName, when non-empty, appends the `__来源` segment after the
-	// base URL (BaseURL settings page 标记来源 logic); empty = no mark.
-	SourceName string    `gorm:"type:text" json:"source_name"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
-}
+ 	// SourceName, when non-empty, appends the `__来源` segment after the
+ 	// base URL (BaseURL settings page 标记来源 logic); empty = no mark.
+ 	SourceName string    `gorm:"type:text" json:"source_name"`
+ 	// SyncedBlocks records the provider block names written into the
+ 	// config file by the last successful sync（根名 + 各分组后缀）。下次
+ 	// 同步时，已不属于当前名字/分组的旧块（改名、删除分组）会被从文件
+ 	// 里删掉，避免残留在普通供应商列表中。
+ 	SyncedBlocks string    `gorm:"type:text" json:"-"`
+ 	CreatedAt    time.Time `json:"created_at"`
+ 	UpdatedAt    time.Time `json:"updated_at"`
+ }
 
 func (m *ManagedAgentProvider) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
@@ -754,6 +759,19 @@ func (m *ManagedAgentProvider) GetProviderIDs() ([]string, error) {
 	}
 	var out []string
 	if err := json.Unmarshal([]byte(m.ProviderIDs), &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetSyncedBlocks parses the block names written by the last sync. An
+// empty blob yields nil.
+func (m *ManagedAgentProvider) GetSyncedBlocks() ([]string, error) {
+	if m.SyncedBlocks == "" {
+		return nil, nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(m.SyncedBlocks), &out); err != nil {
 		return nil, err
 	}
 	return out, nil
