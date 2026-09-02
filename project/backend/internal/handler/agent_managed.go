@@ -655,12 +655,10 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 				applyModelInfoFromModelsDev(row, mif, cfg)
 			}
 		}
-		// Only carry models that would actually be written into the file
-		// (i.e. have at least one field); models with no data source and
-		// no model recs stay out so the pending comparison stays clean.
-		if len(cfg) == 0 {
-			continue
-		}
+		// 来源未填 / 已失效（匹配不到 models.dev 行）的模型：四个统一
+		// 字段一律不写、留空，模型仍以空配置 {} 保留在生成块里 ——
+		// 这样同步后文件里模型条目还在（agent 仍能使用该模型），只是
+		// 没有四个字段。
 		models[name] = cfg
 	}
 	return map[string]any{"provider": block, "models": models}

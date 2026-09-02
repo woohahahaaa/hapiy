@@ -379,6 +379,109 @@ func TestManagedSyncDottedModelNames(t *testing.T) {
 	}
 }
 
+// TestManagedUnresolvedModelSourceLeavesEmptyConfig 来源未填 / 已失效的
+// 模型：四个统一字段留空，但模型仍以空配置保留在生成块与文件里，
+// 且同步必须收敛。
+func TestManagedUnresolvedModelSourceLeavesEmptyConfig(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{
+		models: []modelsDevModel{
+			{ID: "gpt-x", Name: "gpt-x", ProviderName: "OpenRouter", ContextLength: 131072, MaxOutput: 16384, InputTypes: []string{"text"}},
+		},
+		fetchedAt: time.Now(),
+	}
+	modelsDev.mu.Unlock()
+	// ghost-a / ghost-b 是供应商真实声明、但 models.dev 里没有数据来源的模型。
+	db.Model(&model.Provider{}).Where("name = ?", "HAPIY-B").
+		Update("models", `[{"model":"gpt-y"},{"model":"ghost-a"},{"model":"ghost-b"}]`)
+
+	// gpt-x 来源有效；ghost-a 来源失效（不存在的供应商）；ghost-b 未填来源。
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","ghost-a":"不存在的厂商"}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	// 列表：失效/未填来源的模型必须在 generated.models 里且配置为空。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	var listed struct {
+		Data []struct {
+			Groups []struct {
+				Generated struct {
+					Models map[string]map[string]any `json:"models"`
+				} `json:"generated"`
+			} `json:"groups"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	models0 := listed.Data[0].Groups[0].Generated.Models
+	if _, ok := models0["ghost-a"]; !ok {
+		t.Fatalf("stale-source model missing from generated models: %v", models0)
+	}
+	if _, ok := models0["ghost-b"]; !ok {
+		t.Fatalf("unfilled-source model missing from generated models: %v", models0)
+	}
+	if len(models0["ghost-a"]) != 0 || len(models0["ghost-b"]) != 0 {
+		t.Fatalf("stale/unfilled models must have empty config, got: %v / %v", models0["ghost-a"], models0["ghost-b"])
+	}
+	if len(models0["gpt-x"]) == 0 {
+		t.Fatalf("valid-source model should carry info fields: %v", models0["gpt-x"])
+	}
+
+	// 同步 → 列表：必须收敛（pending_sync=false），文件里空模型条目保留。
+	for round := 1; round <= 2; round++ {
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("sync round %d: %d %s", round, w.Code, w.Body.String())
+		}
+		var f model.AgentConfigFile
+		db.First(&f)
+		var doc struct {
+			Provider map[string]struct {
+				Models map[string]map[string]any `json:"models"`
+			} `json:"provider"`
+		}
+		if err := json.Unmarshal([]byte(f.Content), &doc); err != nil {
+			t.Fatalf("round %d: parse content: %v", round, err)
+		}
+		block := doc.Provider["HAPIY-C"]
+		if len(block.Models["ghost-a"]) != 0 || len(block.Models["ghost-b"]) != 0 {
+			t.Fatalf("round %d: stale/unfilled models must be empty in file, got: %v / %v", round, block.Models["ghost-a"], block.Models["ghost-b"])
+		}
+		if _, ok := block.Models["ghost-a"]; !ok {
+			t.Fatalf("round %d: empty-config models must stay in the file", round)
+		}
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-providers", nil)
+		r.ServeHTTP(w, req)
+		if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+			t.Fatalf("round %d: expected pending_sync false after sync, got: %s", round, w.Body.String())
+		}
+	}
+}
+
 // TestManagedRealRuleConverges 用真实内置 opencode 规则（含 bool 形状的
 // reasoning、真实 rec 集合）验证「同步后待同步必须消失」，不掺任何手工
 // 编辑——对应「刚点了全部同步还是显示待同步」的线上现象。

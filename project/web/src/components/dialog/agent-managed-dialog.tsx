@@ -131,6 +131,19 @@ export function ManagedProviderDialog({
             setManualEndpoint({ __none__: manualGroup.endpoint })
             suffix['__none__'] = manualGroup.suffix
             sources['__none__'] = { ...manualGroup.model_sources }
+          } else {
+            // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
+            // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
+            // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
+            const noEpIds = opts
+              .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
+              .map((o) => o.id)
+            const mergedGroup = noEpIds.length
+              ? editing.groups.find((g) => (g.provider_ids ?? []).some((pid) => noEpIds.includes(pid)))
+              : undefined
+            if (mergedGroup) {
+              setManualEndpoint({ __none__: mergedGroup.endpoint })
+            }
           }
           setSuffixByEndpoint(suffix)
           setSourceByEndpoint(sources)

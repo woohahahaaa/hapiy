@@ -9,6 +9,7 @@ import {
 } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { JsonTokens } from '@/components/JsonHighlight'
+import { toast } from '@/components/ui/toast'
 import { splitJsonLines } from '@/lib/json-lines'
 import { cn } from '@/lib/utils'
 
@@ -133,6 +134,15 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
 
   const dirty = mode === 'editable' && content !== null && original !== null && content !== original
   const warning = content === null ? null : jsonWarning(content)
+  // 美化格式只改写编辑器里的工作副本，不落盘；用户仍需点击「保存」。
+  const prettify = () => {
+    if (content === null || saving) return
+    try {
+      setContent(JSON.stringify(JSON.parse(content), null, 2) + '\n')
+    } catch {
+      toast.error('内容不是合法 JSON，无法美化')
+    }
+  }
   const doSave = async () => {
     if (content === null || !onSave || saving) return
     setSaving(true)
@@ -160,7 +170,19 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
         </div>
 <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading || saving}>{mode === 'preview' ? '关闭' : '取消'}</Button>
-          {mode === 'editable' && <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>}
+          {mode === 'editable' && (
+            <>
+              <Button
+                variant="outline"
+                title="在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件"
+                onClick={prettify}
+                disabled={loading || saving}
+              >
+                美化格式
+              </Button>
+              <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>
+            </>
+          )}
         </DialogFooter>
         {confirmSave && (
           <Dialog open={confirmSave} onOpenChange={(next) => !saving && setConfirmSave(next)}>
