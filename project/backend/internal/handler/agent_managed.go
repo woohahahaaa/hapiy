@@ -25,6 +25,7 @@ type managedGroupView struct {
 	Endpoint      string            `json:"endpoint"`
 	Suffix        string            `json:"suffix"`
 	ProviderNames []string          `json:"provider_names"`
+	ProviderIDs   []string          `json:"provider_ids"` // 分组挂的供应商 id（含并入的无 endpoint 供应商），前端恢复手填 endpoint 用
 	ModelCount    int               `json:"model_count"`
 	ModelNames    []string          `json:"model_names"`
 	ModelSources  map[string]string `json:"model_sources"`
@@ -567,6 +568,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		mv := managedGroupView{
 			Endpoint:     stored.Endpoint,
 			Suffix:       stored.Suffix,
+			ProviderIDs:  stored.ProviderIDs,
 			ModelSources: stored.ModelSources,
 		}
 		for _, p := range members {

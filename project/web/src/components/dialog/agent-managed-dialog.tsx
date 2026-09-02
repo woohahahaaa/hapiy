@@ -392,6 +392,7 @@ export function ManagedProviderDialog({
         const existing = payload.find((p) => p.endpoint === manualNoneEp)
         if (existing && noneSuffix === '') {
           mergeInto(existing, entry)
+          toast(`未配置 endpoint 的供应商已并入分组「${existing.endpoint}」`)
           continue
         }
         payload.push(entry)
@@ -699,7 +700,7 @@ export function ManagedProviderDialog({
                                                   })()}
                                                   {providersForModel(snapshot, m).map((p) => (
                                                     <SelectItem key={p.providerId} value={p.providerName}>
-                                                      {p.providerName}
+                                                      {p.providerName}{isModelsDevLab(m, p.providerId) ? '（官方）' : ''}
                                                     </SelectItem>
                                                   ))}
                                                 </>
