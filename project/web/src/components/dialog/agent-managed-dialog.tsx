@@ -586,7 +586,7 @@ export function ManagedProviderDialog({
                             disabled={snapshot === null}
                           >
                             <AppIcon name="auto_fix_high" data-icon="inline-start" />
-                            一键官方
+                            批量设置参考厂商
                           </Button>
                         </div>
                       </div>

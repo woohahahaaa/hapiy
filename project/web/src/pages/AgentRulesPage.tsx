@@ -760,7 +760,7 @@ function RuleDialog({
             </Field>
           </Group>
 
-          <Group label="provider json路径与操作方法">
+          <Group label="供应商与模型推荐配置表">
             <Field>
               <FieldLabel>provider gjson 路径</FieldLabel>
               <Input

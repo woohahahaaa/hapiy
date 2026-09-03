@@ -333,6 +333,18 @@ const [error, setError] = useState<string | null>(null)
     return JSON.stringify(v, null, 2)
   }, [currentEditBaseline])
 
+  // focusLineForSelectedModel: 选中的模型 key 在右侧 JSON 文本中的起始行
+  // （0-based）；未选模型返回 null。用于右侧编辑框滚动到该行并高亮。
+  const focusLineForSelectedModel = useMemo(() => {
+    if (!selectedModelId) return null
+    const t = currentEditableProviderValue
+    if (!t) return null
+    const idx = t.indexOf(`"${selectedModelId}":`)
+    if (idx === -1) return null
+    const nl = t.slice(0, idx).split('\n').length
+    return Math.max(0, nl - 1)
+  }, [selectedModelId, currentEditableProviderValue])
+
   const providerDiff = useMemo(
     () => computeDiff(activeProviderValue, effectiveProviderRecs),
     [activeProviderValue, effectiveProviderRecs],
@@ -543,9 +555,8 @@ const [error, setError] = useState<string | null>(null)
       <DialogContent
         width="md"
         height="auto"
-        minHeight="680px"
         showCloseButton={false}
-        className="flex max-h-[85vh] flex-col !gap-0 overflow-hidden p-0"
+        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <div className="flex flex-col gap-0.5">
@@ -595,7 +606,7 @@ const [error, setError] = useState<string | null>(null)
                     info={
                       tally && tally.count > 0
                         ? { text: `${tally.count} 处修改`, green: true }
-                        : { text: `${p.models.length} 模型`, green: false }
+                        : { text: `${p.models.length}模型`, green: false }
                     }
                     selected={selectedProviderId === p.provider_id}
                     onClick={() => handleSelectProvider(p.provider_id)}
@@ -605,6 +616,7 @@ const [error, setError] = useState<string | null>(null)
                           { key: 'rename', label: '修改名字', icon: 'edit' },
                           { key: 'delete', label: '删除', icon: 'delete', destructive: true },
                         ]}
+                        light={selectedProviderId === p.provider_id}
                         onSelect={(k) => {
                           if (k === 'rename') setRenamingProvider(p.provider_id)
                           else setConfirmingDeleteProvider(p.provider_id)
@@ -662,13 +674,21 @@ const [error, setError] = useState<string | null>(null)
                           name={<span className="truncate font-medium">{mv.name}</span>}
                           info={{ text: `${mv.groups.length} 分组`, green: false }}
                           badge={mv.pending_sync ? (
-                            <span className="shrink-0 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">待同步</span>
+                            <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
                           ) : null}
-                          selected={selectedManaged?.mid === mv.id}
+                          selected={false}
                           onClick={() => {
+                            const willExpand = !expandedManaged.has(mv.id)
+                            // 父级行本身永远不选中：展开时选第一个分组，折叠时清空选择。
                             toggleManagedExpand(mv.id)
-                            // 点击一级行同时选中，让操作按钮在触屏设备上常显
-                            handleSelectManaged(mv.id, mv.groups[0]?.endpoint ?? '')
+                            if (willExpand && mv.groups.length > 0) {
+                              handleSelectManaged(mv.id, mv.groups[0].endpoint)
+                            } else if (selectedManaged?.mid === mv.id) {
+                              setSelectedManaged(null)
+                              setSelectedManagedModelId(null)
+                              setSelectedProviderId(null)
+                              setSelectedModelId(null)
+                            }
                           }}
                           actions={
                             <>
@@ -699,7 +719,7 @@ const [error, setError] = useState<string | null>(null)
                                 key={g.endpoint}
                                 indent
                                 name={mv.name + g.suffix}
-                                info={{ text: `${g.model_count} 模型`, green: false }}
+                                info={{ text: `${g.model_count}模型`, green: false }}
                                 selected={
                                   selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                 }
@@ -716,9 +736,9 @@ const [error, setError] = useState<string | null>(null)
                         <ProviderRow
                           key={g.endpoint}
                           name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
-                          info={{ text: `${g.model_count} 模型`, green: false }}
+                          info={{ text: `${g.model_count}模型`, green: false }}
                           badge={mv.pending_sync ? (
-                            <span className="shrink-0 rounded bg-warning/20 px-1 py-0.5 text-[10px] font-medium text-warning">待同步</span>
+                            <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
                           ) : null}
                           selected={
                             selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
@@ -731,6 +751,7 @@ const [error, setError] = useState<string | null>(null)
                                 icon="settings"
                                 tone="default"
                                 disabled={false}
+                                light={selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint}
                                 onClick={() => {
                                   setManagedEditing(mv)
                                   setManagedDialogOpen(true)
@@ -786,6 +807,7 @@ const [error, setError] = useState<string | null>(null)
                             { key: 'rename', label: '修改名字', icon: 'edit' },
                             { key: 'delete', label: '删除', icon: 'delete', destructive: true },
                           ]}
+                          light={selectedModelId === m.id}
                           onSelect={(k) => {
                             if (!selectedProviderId) return
                             if (k === 'rename') setRenamingModel({ providerId: selectedProviderId, modelId: m.id })
@@ -802,7 +824,7 @@ const [error, setError] = useState<string | null>(null)
 
           {/* Right: single syntax-highlighted JSON editor */}
         <div className="flex min-h-0 flex-1 flex-col">
-            <ColumnHeader>供应商 + 模型 配置（可直接编辑，语法高亮）</ColumnHeader>
+            <ColumnHeader>供应商 JSON 片段</ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
               {selectedManagedGroup ? (
                 <JsonEditor
@@ -812,6 +834,7 @@ const [error, setError] = useState<string | null>(null)
               ) : selectedProvider ? (
                 <JsonEditor
                   value={currentEditableProviderValue}
+                  focusLine={focusLineForSelectedModel}
                   onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
                 />
               ) : (
@@ -1048,19 +1071,25 @@ function ProviderRow({
     <div
       onClick={onClick}
       className={
-        'group flex min-h-[48px] w-full cursor-pointer items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
+        'group relative flex h-[52px] w-full cursor-pointer items-center gap-1 rounded-none py-1 pr-2 pl-4 text-left transition-colors ' +
         (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
       }
     >
-      {leading}
+      {/* 箭头类 leading：绝对叠加在文字左前方，不参与流布局，
+          保证有/无箭头时文字起点完全一致（都从 pl-4 开始） */}
+      {leading ? (
+        <div className="pointer-events-none absolute top-1/2 left-[2px] -translate-y-1/2">
+          {leading}
+        </div>
+      ) : null}
       <div className={'flex min-w-0 flex-1 flex-col gap-0.5 text-left ' + (indent ? 'pl-3' : '')}>
-        <span className={'flex min-w-0 items-center truncate text-sm font-medium ' + (selected ? 'text-primary-foreground' : '')}>{name}</span>
+        <span className={'flex min-w-0 items-center truncate text-sm ' + (selected ? 'font-bold text-primary-foreground' : 'font-medium')}>{name}</span>
         {(info || badge) && (
           <span
             className={
               'flex min-w-0 items-center gap-1 text-[11px] ' +
               (selected
-                ? 'text-primary-foreground/80'
+                ? 'font-bold text-primary-foreground/80'
                 : typeof info === 'object' && info.green
                   ? 'text-success'
                   : 'text-muted-foreground')
@@ -1106,7 +1135,7 @@ function ModelRow({
   return (
     <div
       className={
-        'group flex min-h-[48px] w-full items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
+        'group flex h-[52px] w-full items-center gap-1 rounded-none py-1 pr-2 pl-4 text-left transition-colors ' +
         (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
       }
     >
@@ -1117,7 +1146,7 @@ function ModelRow({
       >
         {info ? (
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className={'flex min-w-0 items-center gap-2 truncate text-sm font-medium ' + (selected ? 'text-primary-foreground' : '')}>
+            <span className={'flex min-w-0 items-center gap-2 truncate text-sm ' + (selected ? 'font-bold text-primary-foreground' : 'font-medium')}>
               <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
               {name}
             </span>
@@ -1125,7 +1154,7 @@ function ModelRow({
               className={
                 'truncate text-[11px] ' +
                 (selected
-                  ? 'text-primary-foreground/80'
+                  ? 'font-bold text-primary-foreground/80'
                   : typeof info === 'object' && info.green
                     ? 'text-success'
                     : 'text-muted-foreground')
@@ -1135,9 +1164,9 @@ function ModelRow({
             </span>
           </span>
         ) : (
-          <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm font-medium">
+          <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm">
             <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
-            <span className={selected ? 'text-primary-foreground' : ''}>{name}</span>
+            <span className={selected ? 'font-bold text-primary-foreground' : 'font-medium'}>{name}</span>
           </span>
         )}
       </button>
@@ -1161,9 +1190,12 @@ function ModelRow({
 function RowMenu({
   items,
   onSelect,
+  light = false,
 }: {
   items: readonly { key: string; label: string; icon: string; destructive?: boolean }[]
   onSelect: (key: string) => void
+  /** 选中态：图标使用与选中文字一致的深色（primary-foreground）。 */
+  light?: boolean
 }) {
   return (
     <DropdownMenu>
@@ -1172,7 +1204,12 @@ function RowMenu({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-5 w-5 text-muted-foreground hover:text-primary"
+          className={
+            'h-5 w-5 ' +
+            (light
+              ? 'text-primary-foreground/90 hover:bg-primary/20 hover:text-primary-foreground'
+              : 'text-muted-foreground hover:text-primary')
+          }
           onClick={(e) => e.stopPropagation()}
         >
           <AppIcon name="more_horiz" size={14} />
@@ -1199,16 +1236,20 @@ function IconHoverButton({
   icon,
   tone,
   disabled,
+  light = false,
   onClick,
 }: {
   title: string
   icon: string
   tone: 'default' | 'destructive' | 'success'
   disabled: boolean
+  /** 选中态：图标使用与选中文字一致的深色（primary-foreground）。 */
+  light?: boolean
   onClick: () => void
 }) {
-  const toneClass =
-    tone === 'destructive'
+  const toneClass = light
+    ? 'text-primary-foreground/90 hover:bg-primary/20 hover:text-primary-foreground'
+    : tone === 'destructive'
       ? 'text-muted-foreground hover:text-destructive'
       : tone === 'success'
         ? 'text-muted-foreground hover:text-success'
@@ -1593,14 +1634,54 @@ function wrapRootScope(
 // from a transparent textarea layered over a highlighted <pre>, with a
 // plain line-number gutter. Errors parsing typed text surface as a red
 // border without dropping the user's keystrokes.
+// `focusLine` (0-based) is the first line of a value block (e.g. the
+// selected model's `"id": {` line): the editor scrolls it to the top
+// and highlights the whole brace block; any editing dims the highlight
+// until focusLine changes again.
+const LINE_HEIGHT = 18 // text-xs (12px) * leading-[1.5]
+
+// braceEndLine returns the last line index of the brace block that
+// starts at startLine (the line of `"key": {`), skipping braces inside
+// string literals so values like "a{}b" don't break the scan.
+function braceEndLine(text: string, startLine: number): number {
+  const lines = text.split('\n')
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = startLine; i < lines.length; i++) {
+    const line = lines[i]
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (ch === '\\') escaped = true
+        else if (ch === '"') inString = false
+        continue
+      }
+      if (ch === '"') {
+        inString = true
+        continue
+      }
+      if (ch === '{') depth++
+      else if (ch === '}') {
+        depth--
+        if (depth === 0) return i
+      }
+    }
+  }
+  return lines.length - 1
+}
+
 function JsonEditor({
   value,
   onChange,
   readonly = false,
+  focusLine = null,
 }: {
   value: unknown
   onChange?: (text: string) => void
   readonly?: boolean
+  focusLine?: number | null
 }) {
   const initial = useMemo(() => {
     if (value === null || value === undefined) return ''
@@ -1613,6 +1694,8 @@ function JsonEditor({
   }, [value])
   const [text, setText] = useState(initial)
   const [error, setError] = useState<string | null>(null)
+  const [dimmed, setDimmed] = useState(false)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
 
@@ -1623,7 +1706,31 @@ function JsonEditor({
     setError(null)
   }, [initial])
 
-  const lineCount = text.split('\n').length
+  // 左侧切换模型 → 重新聚焦：恢复高亮并滚动该块到顶。
+  useEffect(() => {
+    setDimmed(false)
+  }, [focusLine])
+
+  // 聚焦块滚动：将首行放在编辑区顶部，滚动条与 gutter/pre 联动。
+  useEffect(() => {
+    if (focusLine === null || focusLine === undefined) return
+    const ta = textareaRef.current
+    if (!ta) return
+    ta.scrollTop = Math.max(0, focusLine * LINE_HEIGHT)
+    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop
+    if (preRef.current) {
+      preRef.current.scrollTop = ta.scrollTop
+      preRef.current.scrollLeft = ta.scrollLeft
+    }
+  }, [focusLine])
+
+  const lines = useMemo(() => text.split('\n'), [text])
+
+  // 高亮范围 = [首行, 花括号块末行]；编辑（dimmed）后整体熄灭。
+  const focusExtent = useMemo(() => {
+    if (focusLine === null || focusLine === undefined || dimmed) return null
+    return [focusLine, braceEndLine(text, focusLine)] as const
+  }, [focusLine, text, dimmed])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-1">
@@ -1634,29 +1741,38 @@ function JsonEditor({
           aria-hidden
           className="absolute top-0 left-0 z-20 h-full w-8 overflow-hidden border-r border-border bg-muted/30 font-mono text-[10px] leading-[1.5] select-none"
         >
-          {Array.from({ length: lineCount }, (_, i) => (
+          {Array.from({ length: lines.length }, (_, i) => (
             <div
               key={i}
-              className="flex h-[1.5em] items-center justify-center text-muted-foreground"
+              className="flex h-[18px] items-center justify-center text-muted-foreground"
             >
               {i + 1}
             </div>
           ))}
         </div>
-        {/* 语法着色层：与 textarea 完全对齐，承载 JSON 颜色 */}
+        {/* 语法着色层：逐行渲染（高亮整个被聚焦的 JSON 块），与 textarea 完全对齐 */}
         <pre
           ref={preRef}
           aria-hidden
           className="pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden bg-transparent px-0 py-0 pl-9 font-mono text-xs leading-[1.5] whitespace-pre break-words text-transparent"
         >
-          <JsonTokens text={text} />
+          {lines.map((line, i) => (
+            <div
+              key={i}
+              className={focusExtent && i >= focusExtent[0] && i <= focusExtent[1] ? 'bg-muted-foreground/10' : undefined}
+            >
+              {line === '' ? '\u00A0' : <JsonTokens text={line} />}
+            </div>
+          ))}
         </pre>
         <Textarea
+          ref={textareaRef}
           value={text}
           readOnly={readonly}
           onChange={(e) => {
             const v = e.target.value
             setText(v)
+            setDimmed(true)
             try {
               JSON.parse(v)
               setError(null)
@@ -1665,6 +1781,7 @@ function JsonEditor({
               setError(err instanceof Error ? err.message : 'JSON 解析失败')
             }
           }}
+          onFocus={() => setDimmed(true)}
           onScroll={(e) => {
             const el = e.currentTarget
             if (gutterRef.current) gutterRef.current.scrollTop = el.scrollTop

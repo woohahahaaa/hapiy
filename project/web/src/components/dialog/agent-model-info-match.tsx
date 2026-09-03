@@ -380,7 +380,10 @@ export function AgentModelInfoMatchDialog({
           )}
           {!loading && !error && providers.length > 0 && (
             <>
-              <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="mb-2 flex items-center justify-end gap-3">
+                <div className="text-xs text-muted-foreground">
+                  已勾选 {providerCheckedCount + modelCheckedCount} / {providers.reduce((n, p) => n + 1 + p.models.length, 0)} 项
+                </div>
                 <Button
                   variant="outline"
                   size="xs"
@@ -389,11 +392,8 @@ export function AgentModelInfoMatchDialog({
                   title="把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个"
                 >
                   <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                  一键官方
+                  批量设置参考厂商
                 </Button>
-                <div className="text-xs text-muted-foreground">
-                  已勾选 {providerCheckedCount + modelCheckedCount} / {providers.reduce((n, p) => n + 1 + p.models.length, 0)} 项
-                </div>
               </div>
 
               <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border border-border">
@@ -418,7 +418,7 @@ export function AgentModelInfoMatchDialog({
                         />
                       </th>
                       <th className="w-[26%] border-l border-border px-3 py-2 text-left font-medium">名称</th>
-                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">参考</th>
+                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">从 models.dev 同步模型配置</th>
                       <th className="border-l border-border px-3 py-2 text-left font-medium">字段对比</th>
                     </tr>
                   </thead>
