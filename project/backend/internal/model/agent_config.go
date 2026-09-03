@@ -3,6 +3,8 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -671,6 +673,84 @@ var builtinAgentRules = []struct {
 	},
 }
 
+// AgentTemplateConfig is the on-disk representation of one agent's default
+// recommendation template. Each built-in agent has a JSON file under
+// config/agent-templates/<name>.json; operators edit those files to tune the
+// defaults without touching Go code. The rule dialog shows a
+// 「使用默认推荐模版」 button when a same-named template file exists.
+type AgentTemplateConfig struct {
+	Name            string                   `json:"name"`
+	OsPaths         AgentOsPaths             `json:"os_paths"`
+	JsonPaths       AgentJsonPaths           `json:"json_paths"`
+	Recommendations []AgentRecommendation    `json:"recommendations"`
+	Protocols       []AgentProtocol          `json:"protocols"`
+	ModelInfoFields AgentModelInfoFieldPaths `json:"model_info_fields"`
+}
+
+// AgentTemplateDir is the directory (relative to backend cwd) where default
+// agent recommendation templates live. A missing file for a name falls back
+// to the built-in Go templates, so existing deployments keep working.
+const AgentTemplateDir = "config/agent-templates"
+
+// LoadAgentTemplate loads a single agent's default template from
+// config/agent-templates/<name>.json. When the file is missing or unreadable,
+// it falls back to the built-in Go template with that name. ok is false when
+// neither source provides the agent.
+func LoadAgentTemplate(name string) (AgentTemplateConfig, bool) {
+	if tmpl, ok := loadAgentTemplateFile(name); ok {
+		return tmpl, true
+	}
+	for _, b := range builtinAgentRules {
+		if b.Name == name {
+			return AgentTemplateConfig{
+				Name:            b.Name,
+				OsPaths:         b.OsPaths,
+				JsonPaths:       b.JsonPaths,
+				Recommendations: b.Recommendations,
+				Protocols:       b.Protocols,
+				ModelInfoFields: b.ModelInfoFields,
+			}, true
+		}
+	}
+	return AgentTemplateConfig{}, false
+}
+
+// HasAgentTemplate reports whether a default recommendation template exists
+// for the agent (either a JSON file or a built-in Go source).
+func HasAgentTemplate(name string) bool {
+	_, ok := LoadAgentTemplate(name)
+	return ok
+}
+
+func loadAgentTemplateFile(name string) (AgentTemplateConfig, bool) {
+	var tmpl AgentTemplateConfig
+	data, err := os.ReadFile(filepath.Join(AgentTemplateDir, name+".json"))
+	if err != nil {
+		return tmpl, false
+	}
+	if err := json.Unmarshal(data, &tmpl); err != nil {
+		return tmpl, false
+	}
+	return tmpl, true
+}
+
+// ListBuiltinTemplates returns every built-in agent's default template as
+// AgentTemplateConfig, used to (re)generate config/agent-templates/*.json.
+func ListBuiltinTemplates() []AgentTemplateConfig {
+	out := make([]AgentTemplateConfig, 0, len(builtinAgentRules))
+	for _, b := range builtinAgentRules {
+		out = append(out, AgentTemplateConfig{
+			Name:            b.Name,
+			OsPaths:         b.OsPaths,
+			JsonPaths:       b.JsonPaths,
+			Recommendations: b.Recommendations,
+			Protocols:       b.Protocols,
+			ModelInfoFields: b.ModelInfoFields,
+		})
+	}
+	return out
+}
+
 // opencodeRecommendations are the recommended provider/model fields for
 // opencode. Each entry is checked against the live config in the
 // "管理模型" view and surfaced as a missing / mismatch / extra marker.
@@ -992,7 +1072,7 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 					dirty = true
 				}
 			}
-			if rule.ModelInfoFields == "" {
+			if rule.ModelInfoFields == "" || modelInfoFieldsMissing(rule.ModelInfoFields, want.ModelInfoFields) {
 				if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
 					return err
 				}
@@ -1094,6 +1174,22 @@ func protocolsMissingLatest(stored string, latest []AgentProtocol) bool {
 		}
 	}
 	return false
+}
+
+// modelInfoFieldsMissing reports whether the stored model-info blob is
+// effectively empty while the seed defines any path (e.g. old `{}` rows),
+// so WorkBuddy-style backfills still apply.
+func modelInfoFieldsMissing(stored string, want AgentModelInfoFieldPaths) bool {
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		return false
+	}
+	var s AgentModelInfoFieldPaths
+	if err := json.Unmarshal([]byte(stored), &s); err != nil {
+		return false
+	}
+	return string(wantJSON) != "{}" && s.MaxContext.Path == "" && s.MaxOutputToken.Path == "" &&
+		s.InputTypes.Path == "" && s.ThinkingLevels.Path == ""
 }
 
 // configJsoncUpToDate reports whether the stored JSONC doc still mirrors the

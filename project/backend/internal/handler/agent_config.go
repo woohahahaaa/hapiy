@@ -50,7 +50,37 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": rules, "total": total})
+		out := make([]map[string]any, 0, len(rules))
+		for _, r := range rules {
+			marshaled, err := r.MarshalJSON()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			var row map[string]any
+			if err := json.Unmarshal(marshaled, &row); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			row["has_template"] = model.HasAgentTemplate(r.Name)
+			out = append(out, row)
+		}
+		c.JSON(http.StatusOK, gin.H{"data": out, "total": total})
+	}
+}
+
+// GetAgentTypeRuleTemplate returns the default recommendation template for
+// the named agent type (from config/agent-templates/<name>.json, falling
+// back to built-ins). The frontend「使用默认推荐模版」button loads this to
+// prefill the rule editor. 404 when no template exists.
+func GetAgentTypeRuleTemplate() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tmpl, ok := model.LoadAgentTemplate(c.Param("name"))
+		if !ok {
+			c.JSON(http.StatusNotFound, gin.H{"error": "该软件类型没有默认推荐模版"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": tmpl})
 	}
 }
 
@@ -292,13 +322,13 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		var dupCount int64
 		if err := db.Model(&model.AgentConfigFile{}).
-			Where("record_name = ?", req.RecordName).
+			Where("LOWER(record_name) = LOWER(?)", req.RecordName).
 			Count(&dupCount).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		if dupCount > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在，请使用其他名称"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在（同名不区分大小写），请使用其他名称"})
 			return
 		}
 
@@ -481,16 +511,16 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
 			return
 		}
-		if req.RecordName != row.RecordName {
+		if !strings.EqualFold(req.RecordName, row.RecordName) {
 			var dupCount int64
 			if err := db.Model(&model.AgentConfigFile{}).
-				Where("record_name = ? AND id <> ?", req.RecordName, row.ID).
+				Where("LOWER(record_name) = LOWER(?) AND id <> ?", req.RecordName, row.ID).
 				Count(&dupCount).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 			if dupCount > 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在，请使用其他名称"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在（同名不区分大小写），请使用其他名称"})
 				return
 			}
 		}

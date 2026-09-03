@@ -1,0 +1,140 @@
+{
+  "name": "ChatGPT",
+  "os_paths": {
+    "windows": "%USERPROFILE%\\.codex\\config.toml",
+    "mac": "~/.codex/config.toml"
+  },
+  "json_paths": {
+    "provider": "",
+    "model": ""
+  },
+  "recommendations": [
+    {
+      "scope": "provider",
+      "key": "model_provider",
+      "description": "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "name",
+      "description": "自定义 provider 的显示名",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "base_url",
+      "description": "该 provider 的 API base URL（如 https://api.example.com/v1）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "wire_api",
+      "description": "协议类型，官方唯一支持 responses（默认即此值，推荐时不干预）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "env_key",
+      "description": "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "env_key_instructions",
+      "description": "API key 的配置提示（可选）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "http_headers",
+      "description": "静态请求头（可选，推荐时不干预）",
+      "type": "object",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "env_http_headers",
+      "description": "由环境变量注入的请求头（可选，推荐时不干预）",
+      "type": "object",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "query_params",
+      "description": "附加查询参数（如 Azure 的 api-version，可选）",
+      "type": "object",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "request_max_retries",
+      "description": "HTTP 请求重试次数（官方默认 4，推荐时不干预）",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "stream_max_retries",
+      "description": "SSE 流中断重试次数（官方默认 5，推荐时不干预）",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "stream_idle_timeout_ms",
+      "description": "SSE 流空闲超时，毫秒（官方默认 300000，推荐时不干预）",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "supports_websockets",
+      "description": "是否支持 Responses API WebSocket 传输（可选，推荐时不干预）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "requires_openai_auth",
+      "description": "是否使用 OpenAI 认证（仅官方认证后端用，推荐时不干预）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "experimental_bearer_token",
+      "description": "直接写死 bearer token（官方提醒优先用 env_key，推荐时不干预）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    }
+  ],
+  "protocols": null,
+  "model_info_fields": {
+    "max_context": "",
+    "max_output_token": "",
+    "input_types": "",
+    "thinking_levels": ""
+  }
+}

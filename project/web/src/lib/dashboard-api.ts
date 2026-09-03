@@ -695,6 +695,19 @@ export type AgentTypeRule = {
   readonly config_jsonc: string
   readonly created_at: string
   readonly updated_at: string
+  /** 是否存在同名默认推荐模版（编辑弹窗据此显示「使用默认推荐模版」） */
+  readonly has_template?: boolean
+}
+
+// AgentTemplateConfig — 系统默认推荐模版（config/agent-templates/<name>.json
+// 或内置）。「使用默认推荐模版」时用它预填编辑弹窗。
+export type AgentTemplateConfig = {
+  readonly name: string
+  readonly os_paths: AgentOsPaths
+  readonly json_paths: AgentJsonPaths
+  readonly recommendations: readonly AgentRecommendation[]
+  readonly protocols: readonly AgentProtocol[]
+  readonly model_info_fields: AgentModelInfoFieldPaths
 }
 
 export type AgentTypeRuleInput = {
@@ -1986,6 +1999,37 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
     config_jsonc: typeof value.config_jsonc === 'string' ? value.config_jsonc : '',
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
+    has_template: value.has_template === true,
+  }
+}
+
+function parseAgentTemplateConfig(value: unknown): AgentTemplateConfig {
+  if (!isRecord(value)) {
+    throw new DashboardApiError('服务端返回的默认推荐模版格式无效', null)
+  }
+  const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
+  const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
+  const recs = Array.isArray(value.recommendations) ? value.recommendations : []
+  const protocols = Array.isArray(value.protocols) ? value.protocols : []
+  const mif = isRecord(value.model_info_fields) ? value.model_info_fields : {}
+  return {
+    name: readString(value.name, 'agent_template.name'),
+    os_paths: {
+      windows: typeof osPaths.windows === 'string' ? osPaths.windows : '',
+      mac: typeof osPaths.mac === 'string' ? osPaths.mac : '',
+    },
+    json_paths: {
+      provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
+      model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
+    },
+    recommendations: recs.map(parseAgentRecommendation),
+    protocols: protocols.map(parseAgentProtocol),
+    model_info_fields: {
+      max_context: parseAgentModelInfoSpec(mif.max_context),
+      max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
+      input_types: parseAgentModelInfoSpec(mif.input_types),
+      thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
+    },
   }
 }
 
@@ -2757,6 +2801,10 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       rules: data.map(parseAgentTypeRule),
       total: readNumber(body.total, 'total', 0),
     }
+  },
+  async getAgentTypeRuleTemplate(name: string): Promise<AgentTemplateConfig> {
+    const data = await request(`/agent-type-rules/${encodeURIComponent(name)}/template`)
+    return parseAgentTemplateConfig(data)
   },
   async createAgentTypeRule(name: string): Promise<AgentTypeRule> {
     return parseAgentTypeRule(await request('/agent-type-rules', {

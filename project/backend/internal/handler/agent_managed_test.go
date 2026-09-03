@@ -888,3 +888,22 @@ func TestMatchProtocolByEndpointKeywords(t *testing.T) {
 		}
 	}
 }
+// TestLoadRuleCaseInsensitive covers title-based rule recognition: agent
+// config files may store the agent type as "OpenCode" while the rule is
+// named "opencode".
+func TestLoadRuleCaseInsensitive(t *testing.T) {
+	db := seedManagedDB(t)
+	var rule model.AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, probe := range []string{"opencode", "OpenCode", "OPENCODE", " Opencode "} {
+		got, err := loadRule(db, strings.TrimSpace(probe))
+		if err != nil {
+			t.Fatalf("loadRule(%q) failed: %v", probe, err)
+		}
+		if !strings.EqualFold(got.Name, rule.Name) {
+			t.Fatalf("loadRule(%q) = %q, want %q", probe, got.Name, rule.Name)
+		}
+	}
+}

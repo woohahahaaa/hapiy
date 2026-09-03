@@ -233,6 +233,7 @@ func main() {
 			dashboardAuthed.POST("/agent-type-rules", handler.CreateAgentTypeRule(db))
 			dashboardAuthed.PUT("/agent-type-rules/:id", handler.UpdateAgentTypeRule(db))
 			dashboardAuthed.DELETE("/agent-type-rules/:id", handler.DeleteAgentTypeRule(db))
+			dashboardAuthed.GET("/agent-type-rules/:name/template", handler.GetAgentTypeRuleTemplate())
 			dashboardAuthed.GET("/agent-config-files", handler.ListAgentConfigFiles(db))
 			dashboardAuthed.POST("/agent-config-files", handler.CreateAgentConfigFile(db, encKey))
 			dashboardAuthed.GET("/agent-config-files/check", handler.CheckAgentConfigPath())

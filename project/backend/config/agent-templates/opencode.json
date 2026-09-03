@@ -1,0 +1,215 @@
+{
+  "name": "opencode",
+  "os_paths": {
+    "windows": "%USERPROFILE%\\.config\\opencode\\opencode.json",
+    "mac": "~/.config/opencode/opencode.json"
+  },
+  "json_paths": {
+    "provider": "provider",
+    "model": "provider.{provider_id}.models"
+  },
+  "recommendations": [
+    {
+      "scope": "provider",
+      "key": "name",
+      "description": "在 opencode 界面里的显示名（provider 名称）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "npm",
+      "description": "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "options.baseURL",
+      "description": "API 端点（不填则走适配器默认）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "options.apiKey",
+      "description": "认证密钥",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "options.timeout",
+      "description": "请求整体超时（毫秒）。官方默认 300000，复杂任务建议 600000",
+      "type": "number",
+      "recommended": 600000,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "options.chunkTimeout",
+      "description": "流式 SSE chunk 之间超时（毫秒），超时中止",
+      "type": "number",
+      "recommended": 30000,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "options.setCacheKey",
+      "description": "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）",
+      "type": "boolean",
+      "recommended": true,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "options.headerTimeout",
+      "description": "响应头等待超时（官方字段，推荐时不干预：留空走集成默认）",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "options.enterpriseUrl",
+      "description": "GitHub Copilot 企业 URL（仅 copilot 认证需用，推荐时不干预）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "blacklist",
+      "description": "从模型选择器隐藏的模型 ID 列表（可选，推荐时不干预）",
+      "type": "array",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "whitelist",
+      "description": "只保留这些模型、隐藏其余（可选，推荐时不干预）",
+      "type": "array",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "name",
+      "description": "模型在界面里的显示名",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "limit.context",
+      "description": "上下文 token 上限",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "limit.output",
+      "description": "输出 token 上限",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "reasoning",
+      "description": "模型是否支持思考模式（思考程度统一值→bool）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "tool_call",
+      "description": "模型是否支持工具调用",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "attachment",
+      "description": "模型是否支持文件/图片附件输入",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    }
+  ],
+  "protocols": [
+    {
+      "name": "OpenAI Responses API",
+      "conditions": null,
+      "endpoint_tags": [
+        "responses"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "npm",
+          "description": "Responses API 使用 OpenAI SDK",
+          "type": "string",
+          "recommended": "@ai-sdk/openai",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Anthropic Messages API",
+      "conditions": null,
+      "endpoint_tags": [
+        "chat/message",
+        "/v1/message",
+        "messages"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "npm",
+          "description": "Messages API 使用 Anthropic SDK",
+          "type": "string",
+          "recommended": "@ai-sdk/anthropic",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "OpenAI 兼容 Chat Completions",
+      "conditions": null,
+      "endpoint_tags": [
+        "completions",
+        "chat/comple",
+        "/v1/chat"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "npm",
+          "description": "Chat Completions API 使用 OpenAI 兼容 SDK",
+          "type": "string",
+          "recommended": "@ai-sdk/openai-compatible",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "model_info_fields": {
+    "max_context": "limit.context",
+    "max_output_token": "limit.output",
+    "input_types": "modalities.input",
+    "thinking_levels": {
+      "path": "reasoning",
+      "op": "bool"
+    }
+  }
+}

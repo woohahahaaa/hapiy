@@ -21,6 +21,7 @@ import {
   MODEL_INFO_FIELD_LABELS,
   AGENT_MODEL_INFO_FIELD_OPS,
   type AgentModelInfoFieldSpecValue,
+  type AgentModelInfoFieldPaths,
   type AgentProtocol,
   type AgentProtocolConditionOp,
   type AgentRecommendation,
@@ -581,6 +582,33 @@ function RuleDialog({
   const [modelInfoTexts, setModelInfoTexts] = useState<Record<ModelInfoFieldKey, string>>(EMPTY_MODEL_INFO_TEXTS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 「使用默认推荐模版」二次确认框。
+  const [confirmTemplate, setConfirmTemplate] = useState(false)
+  const [templateLoading, setTemplateLoading] = useState(false)
+
+  // fillFromParts fills the recommendation editors from parsed common /
+  // protocols / model-info texts — shared by the open effect and the
+  // 「使用默认推荐模版」 flow.
+  const fillFromParts = useCallback((
+    common: readonly AgentRecommendation[],
+    protocols: readonly AgentProtocol[],
+    mif: AgentModelInfoFieldPaths | undefined,
+  ) => {
+    setCommonText(JSON.stringify(common, null, 2))
+    setCommonError(null)
+    setEndpointRules(protocols.map((p) => ({
+      name: p.name,
+      tagsText: p.endpoint_tags.join(', '),
+      conditions: p.conditions ?? [],
+      fieldsJson: JSON.stringify(p.recommendations ?? [], null, 2),
+    })))
+    setModelInfoTexts(mif ? {
+      max_context: modelInfoSpecToText(mif.max_context),
+      max_output_token: modelInfoSpecToText(mif.max_output_token),
+      input_types: modelInfoSpecToText(mif.input_types),
+      thinking_levels: modelInfoSpecToText(mif.thinking_levels),
+    } : { ...EMPTY_MODEL_INFO_TEXTS })
+  }, [])
 
   useEffect(() => {
     if (open) {
@@ -606,25 +634,38 @@ function RuleDialog({
         common = editing?.recommendations ?? []
         protocols = editing?.protocols ?? []
       }
-      setCommonText(JSON.stringify(common, null, 2))
-      setCommonError(null)
-      setEndpointRules(protocols.map((p) => ({
-        name: p.name,
-        tagsText: p.endpoint_tags.join(', '),
-        conditions: p.conditions ?? [],
-        fieldsJson: JSON.stringify(p.recommendations ?? [], null, 2),
-      })))
-      const mif = editing?.model_info_fields
-      setModelInfoTexts(mif ? {
-        max_context: modelInfoSpecToText(mif.max_context),
-        max_output_token: modelInfoSpecToText(mif.max_output_token),
-        input_types: modelInfoSpecToText(mif.input_types),
-        thinking_levels: modelInfoSpecToText(mif.thinking_levels),
-      } : { ...EMPTY_MODEL_INFO_TEXTS })
+      fillFromParts(common, protocols, editing?.model_info_fields)
       setError(null)
+      setConfirmTemplate(false)
+      setTemplateLoading(false)
       setSaving(false)
     }
-  }, [open, editing])
+  }, [open, editing, fillFromParts])
+
+  // applyDefaultTemplate loads the same-named default recommendation
+  // template (config/agent-templates/<name>.json) and fills the whole
+  // dialog: paths + the four model-info fields + common JSON + every
+  // endpoint rule card.
+  const applyDefaultTemplate = async () => {
+    const ruleName = editing?.name.trim()
+    if (!ruleName) return
+    setTemplateLoading(true)
+    try {
+      const tmpl = await dashboardApi.getAgentTypeRuleTemplate(ruleName)
+      setWindowsPath(tmpl.os_paths.windows ?? '')
+      setMacPath(tmpl.os_paths.mac ?? '')
+      setProviderPath(tmpl.json_paths.provider ?? '')
+      setModelPath(tmpl.json_paths.model ?? '')
+      fillFromParts(tmpl.recommendations, tmpl.protocols, tmpl.model_info_fields)
+      setError(null)
+      setConfirmTemplate(false)
+      toast('已应用默认推荐模版，检查后保存即可生效')
+    } catch (err) {
+      setError(toErrorMessage(err, '加载默认推荐模版失败'))
+    } finally {
+      setTemplateLoading(false)
+    }
+  }
 
   const handleSave = async () => {
     if (saving) return
@@ -783,12 +824,43 @@ function RuleDialog({
           )}
         </FieldGroup>
         <DialogFooter>
+          {editing?.has_template && (
+            <Button
+              variant="outline"
+              className="mr-auto"
+              onClick={() => setConfirmTemplate(true)}
+              disabled={saving || templateLoading}
+              title="将该规则的全部字段（路径 / 四个模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
+            >
+              <AppIcon name="auto_fix_high" data-icon="inline-start" />
+              使用默认推荐模版
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
           <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
             {saving ? '保存中...' : '保存'}
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={confirmTemplate} onOpenChange={(o) => !o && setConfirmTemplate(false)}>
+        <DialogContent width="sm">
+          <DialogHeader>
+            <DialogTitle>使用默认推荐模版</DialogTitle>
+          </DialogHeader>
+          <p className="px-4 text-xs text-muted-foreground">
+            <span className="break-all">将为规则「{editing?.name ?? ''}」应用系统的默认推荐模版：</span>
+            默认路径、provider/model gjson 路径、四个模型信息字段、公共配置（common）与各 Endpoint
+            规则的字段推荐会全部替换为默认值。确认？
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmTemplate(false)} disabled={templateLoading}>取消</Button>
+            <Button variant="default" onClick={() => void applyDefaultTemplate()} disabled={templateLoading}>
+              {templateLoading ? '加载中…' : '确认应用'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

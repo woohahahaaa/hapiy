@@ -1184,7 +1184,10 @@ func loadLiveProviders(db *gorm.DB) ([]model.Provider, error) {
 
 func loadRule(db *gorm.DB, name string) (model.AgentTypeRule, error) {
 	var rule model.AgentTypeRule
-	err := db.Where("name = ?", name).First(&rule).Error
+	// 按名称识别规则时大小写不敏感：接管的 record_name / agent_type 可能是
+	// "OpenCode" 而规则叫 "opencode"，SQLite 默认 BINARY collation 区分
+	// 大小写，直接用 `name = ?` 会漏配。
+	err := db.Where("LOWER(name) = LOWER(?)", name).First(&rule).Error
 	return rule, err
 }
 
