@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -271,6 +271,22 @@ const [error, setError] = useState<string | null>(null)
     return extracted ?? selectedModel?.config
   }, [liveContent, selectedModel, selectedProviderId, selectedModelId, summary])
 
+  // activeValueForModel reads the active value for the given model id — used
+  // to render the merged provider + all models preview on the right side.
+  function activeValueForModel(mid: string): unknown {
+    if (!selectedProvider) return {}
+    const m = selectedProvider.models.find((x) => x.id === mid)
+    if (liveContent === null) return m?.config
+    const extracted = extractFromLiveContent(
+      liveContent,
+      summary?.providers,
+      selectedProviderId,
+      mid,
+      'model',
+    )
+    return extracted ?? m?.config
+  }
+
   const providerDiff = useMemo(
     () => computeDiff(activeProviderValue, effectiveProviderRecs),
     [activeProviderValue, effectiveProviderRecs],
@@ -279,6 +295,24 @@ const [error, setError] = useState<string | null>(null)
     () => computeDiff(activeModelValue, effectiveModelRecs),
     [activeModelValue, effectiveModelRecs],
   )
+
+  // mergedMarkers combines provider-level diff markers with per-model
+  // markers (paths prefixed with `models.<id>.` so the merged JsonDiff
+  // can locate each row). Only computed when a provider is selected.
+  const mergedMarkers = useMemo(() => {
+    if (!selectedProvider) return []
+    const out: DiffMarker[] = [...providerDiff]
+    for (const m of selectedProvider.models) {
+      const mDiff = computeDiff(activeValueForModel(m.id), modelRecs)
+      for (const mk of mDiff) {
+        out.push({ ...mk, path: `models.${m.id}.${mk.path}` })
+      }
+    }
+    return out
+  // activeValueForModel re-reads from liveContent; keep dep minimal:
+  // re-run when provider diff / model keys / liveContent change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerDiff, selectedProvider, selectedModelId, liveContent])
 
   const liveDiffCount = useMemo(() => {
     if (liveContent === null) return 0
@@ -496,7 +530,6 @@ const [error, setError] = useState<string | null>(null)
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              size="sm"
               disabled={!summary || !record}
               onClick={() => setSyncingFromInfo(true)}
               title="从 models.dev 同步文件里全部模型的模型配置"
@@ -506,7 +539,6 @@ const [error, setError] = useState<string | null>(null)
             </Button>
             <Button
               variant="outline"
-              size="sm"
               disabled={applying}
               onClick={() => setConfirmingTemplate(true)}
               title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
@@ -754,8 +786,10 @@ const [error, setError] = useState<string | null>(null)
             </div>
           </div>
 
-          {/* Right: provider config (top) + model config (below) */}
-          <div className="flex min-h-0 flex-col">
+          {/* Right: merged provider + all models block. Clicking a model on the
+              left scrolls the right pane to that model's segment and draws a
+              4px theme-color vertical bar along its left edge. */}
+        <div className="flex min-h-0 flex-col">
             <ColumnHeader
               action={
                 selectedManagedGroup ? null : (
@@ -773,15 +807,14 @@ const [error, setError] = useState<string | null>(null)
                 )
               }
             >
-              供应商配置
+              供应商 + 模型 配置
             </ColumnHeader>
-            <div className="max-h-[40%] overflow-auto border-b border-border p-0">
+            <div className="flex-1 overflow-auto p-0">
               {selectedManagedGroup ? (
                 <JsonDiffHighlight
-                  value={
-                    (selectedManagedGroup.group.generated as { provider?: unknown } | undefined)?.provider
-                  }
+                  value={selectedManagedGroup.group.generated}
                   markers={[]}
+                  selectedModelId={selectedManagedModelId}
                 />
               ) : selectedProvider ? (
                 editingScope === 'provider' ? (
@@ -789,67 +822,35 @@ const [error, setError] = useState<string | null>(null)
                     value={activeProviderValue}
                     onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
                   />
-                ) : (
-                  <JsonDiffHighlight
-                    value={activeProviderValue}
-                    markers={providerDiff}
-                    onApplyOne={(path) => {
-                      const rec = effectiveProviderRecs.find((r) => r.key === path)
-                      if (rec) applyOneField(path, rec.recommended)
-                    }}
-                  />
-                )
+                ) : (() => {
+                  const merged = {
+                    ...((activeProviderValue as Record<string, unknown>) ?? {}),
+                    models: Object.fromEntries(
+                      selectedProvider.models.map((m) => [m.id, activeValueForModel(m.id)]),
+                    ),
+                  }
+                  return (
+                    <JsonDiffHighlight
+                      value={merged}
+                      markers={mergedMarkers}
+                      selectedModelId={selectedModelId}
+                      onApplyOne={(path) => {
+                        // 命中 provider 段：rec 来自 effectiveProviderRecs；
+                        // 命中 model 段：path 形如 models.<id>.<key>，按 id 拆出 rec。
+                        const m = path.match(/^models\.([^.]+)\.(.*)$/)
+                        if (m) {
+                          const rec = effectiveModelRecs.find((r) => r.key === m[2])
+                          if (rec) applyOneField(path, rec.recommended)
+                        } else {
+                          const rec = effectiveProviderRecs.find((r) => r.key === path)
+                          if (rec) applyOneField(path, rec.recommended)
+                        }
+                      }}
+                    />
+                  )
+                })()
               ) : (
                 <Placeholder>未选择供应商</Placeholder>
-              )}
-            </div>
-            <ColumnHeader
-              action={
-                selectedManagedGroup ? null : (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => setEditingScope(editingScope === 'model' ? null : 'model')}
-                      disabled={!selectedModel}
-                    >
-                      <AppIcon name={editingScope === 'model' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                      {editingScope === 'model' ? '完成编辑' : '编辑'}
-                    </Button>
-                  </div>
-                )
-              }
-            >
-              模型配置
-            </ColumnHeader>
-            <div className="flex-1 overflow-auto p-0">
-              {selectedManagedGroup ? (
-                <JsonDiffHighlight
-                  value={
-                    selectedManagedModelId
-                      ? (selectedManagedGroup.group.generated as { models?: Record<string, unknown> } | undefined)?.models?.[selectedManagedModelId]
-                      : undefined
-                  }
-                  markers={[]}
-                />
-              ) : selectedModel ? (
-                editingScope === 'model' ? (
-                  <JsonEditor
-                    value={activeModelValue}
-                    onChange={(text) => setLiveContent(wrapRootScope('model', text, summary, selectedProviderId, selectedModelId, rawContent))}
-                  />
-                ) : (
-                  <JsonDiffHighlight
-                    value={activeModelValue}
-                    markers={modelDiff}
-                    onApplyOne={(path) => {
-                      const rec = effectiveModelRecs.find((r) => r.key === path)
-                      if (rec) applyOneField(path, rec.recommended)
-                    }}
-                  />
-                )
-              ) : (
-                <Placeholder>未选择模型</Placeholder>
               )}
             </div>
           </div>
@@ -1762,20 +1763,122 @@ function JsonDiffHighlight({
   value,
   markers,
   onApplyOne,
+  selectedModelId,
+  scrollContainerRef,
 }: {
   value: unknown
   markers: readonly DiffMarker[]
   onApplyOne?: (path: string) => void
+  /** 选中模型时高亮 + 滚动该模型对应行段 */
+  selectedModelId?: string | null
+  /** 可选外部滚动容器；若不传则在组件内部 div 上滚动 */
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>
 }) {
   if (value === null || value === undefined) {
     return <Placeholder>为空</Placeholder>
   }
   const lines = buildUnifiedDiff(value, markers)
   return (
-    <div className="overflow-x-auto font-mono text-sm leading-relaxed">
-      {lines.map((line, i) => (
-        <DiffRow key={i} line={line} onApplyOne={onApplyOne} />
-      ))}
+    <JsonDiffLines
+      lines={lines}
+      onApplyOne={onApplyOne}
+      selectedModelId={selectedModelId ?? null}
+      scrollContainerRef={scrollContainerRef}
+    />
+  )
+}
+
+// nearestScrollable walks up from a node to the first ancestor with a
+// scrollable overflow (auto/scroll) — the container the code pane scrolls in.
+function nearestScrollable(el: HTMLElement | null): HTMLElement | null {
+  let cur = el?.parentElement ?? null
+  while (cur) {
+    const oy = getComputedStyle(cur).overflowY
+    if (oy === 'auto' || oy === 'scroll') return cur
+    cur = cur.parentElement
+  }
+  return null
+}
+
+// JsonDiffLines renders the row list + 4px theme-color bar + scroll-to-model.
+// Pulled out so the selectedModelId effect (refs + DOM measurements) is scoped
+// to the actual rendered DOM and only fires when a model is selected.
+function JsonDiffLines({
+  lines,
+  onApplyOne,
+  selectedModelId,
+  scrollContainerRef,
+}: {
+  lines: DiffRowData[]
+  onApplyOne?: (path: string) => void
+  selectedModelId: string | null
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [barTop, setBarTop] = useState<number | null>(null)
+  const [barHeight, setBarHeight] = useState<number | null>(null)
+
+  // Selected model → first / last line index carrying that model id.
+  const range = useMemo(() => {
+    if (!selectedModelId) return null
+    let start = -1
+    let end = -1
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].modelId === selectedModelId) {
+        if (start < 0) start = i
+        end = i
+      }
+    }
+    if (start < 0) return null
+    return { start, end }
+  }, [lines, selectedModelId])
+
+  // Measure bar position + scroll into view whenever the selected model or
+  // line content (which determines heights) changes.
+  useEffect(() => {
+    if (!range || !containerRef.current) {
+      setBarTop(null)
+      setBarHeight(null)
+      return
+    }
+    const startEl = containerRef.current.querySelector<HTMLElement>(`[data-line-index="${range.start}"]`)
+    const endEl = containerRef.current.querySelector<HTMLElement>(`[data-line-index="${range.end}"]`)
+    if (!startEl || !endEl) return
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const startRect = startEl.getBoundingClientRect()
+    const endRect = endEl.getBoundingClientRect()
+    setBarTop(startRect.top - containerRect.top)
+    setBarHeight(endRect.bottom - startRect.top)
+    // Auto-scroll: the actual scrollable ancestor is the overflow-auto
+    // wrapper passed in (or the nearest scrollable parent of this renderer).
+    const scroller = scrollContainerRef?.current ?? nearestScrollable(containerRef.current)
+    if (scroller) {
+      const scrollerRect = scroller.getBoundingClientRect()
+      const target = startRect.top - scrollerRect.top + scroller.scrollTop
+      scroller.scrollTo({ top: target - 8, behavior: 'smooth' })
+    }
+  }, [range, scrollContainerRef, lines.length])
+
+  return (
+    <div ref={containerRef} className="relative">
+      {barTop !== null && barHeight !== null && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-0 z-10 w-1 bg-primary"
+          style={{ top: barTop, height: barHeight }}
+        />
+      )}
+      <div className="overflow-x-auto pl-2 font-mono text-sm leading-relaxed">
+        {lines.map((line, i) => (
+          <DiffRow
+            key={i}
+            line={line}
+            lineIndex={i}
+            selected={range !== null && i >= range.start && i <= range.end}
+            onApplyOne={onApplyOne}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -1799,12 +1902,17 @@ interface DiffRowData {
   readonly action: DiffAction
   readonly path?: string
   readonly recommendedValue?: unknown
+  /**
+   * 这行所在的 model 子树 id（顶层字段与 provider 段段段为 null）。
+   * 右侧 JsonDiffHighlight 选中模型时定位行段、画主题色竖条用。
+   */
+  readonly modelId?: string
 }
 
 const ROW_BG: Record<DiffAction, string> = {
   '推荐新增': 'bg-success/15 hover:bg-success/25',
   '推荐修改': 'bg-warning/15 hover:bg-warning/25',
-  '推荐不填': 'bg-muted hover:bg-muted/80',
+  '推荐不填': 'bg-destructive/15 hover:bg-destructive/25',
   '未查到该字段': 'bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700',
   context: 'hover:bg-muted/30',
   mismatch: 'bg-destructive/15 hover:bg-destructive/25',
@@ -1836,19 +1944,26 @@ const ACTION_LABEL: Record<DiffAction, string> = {
   context: '',
   mismatch: '推荐修改',
 }
-
 function DiffRow({
   line,
+  lineIndex,
+  selected,
   onApplyOne,
 }: {
   line: DiffRowData
+  lineIndex: number
+  selected: boolean
   onApplyOne?: (path: string) => void
 }) {
   const showApply = (line.action === '推荐新增' || line.action === '推荐修改' || line.action === '推荐不填') && line.path && onApplyOne
   return (
     <div
+      data-line-index={lineIndex}
+      data-model-id={line.modelId ?? undefined}
       className={
-        'group flex w-full min-w-full items-center gap-2 px-2 py-1 transition-colors ' + ROW_BG[line.action]
+        'group flex w-full min-w-full items-center gap-2 px-2 py-1 transition-colors ' +
+        ROW_BG[line.action] +
+        (selected ? ' bg-primary/10' : '')
       }
     >
       <span
@@ -1859,29 +1974,25 @@ function DiffRow({
       >
         {line.prefix === ' ' ? '' : line.prefix}
       </span>
-      <span
-        className={
-          'w-[88px] shrink-0 select-none text-xs font-medium ' +
-          ROW_ACTION_COLOR[line.action]
-        }
-      >
-        {ACTION_LABEL[line.action]}
+      <span className="w-[88px] shrink-0 text-xs font-medium">
+        {showApply ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="-my-0.5 -ml-1 h-6 w-full justify-start px-1 opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={() => onApplyOne!(line.path!)}
+          >
+            使用推荐值
+          </Button>
+        ) : (
+          <span className={'group-hover:hidden ' + ROW_ACTION_COLOR[line.action]}>
+            {ACTION_LABEL[line.action]}
+          </span>
+        )}
       </span>
       <span className="flex-1 whitespace-nowrap">
         <JsonTokens text={line.text} />
       </span>
-      {showApply ? (
-        <Button
-          variant="ghost"
-          size="xs"
-          className="opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={() => onApplyOne!(line.path!)}
-        >
-          使用推荐值
-        </Button>
-      ) : (
-        <span className="w-[1px]" />
-      )}
     </div>
   )
 }
@@ -1924,9 +2035,11 @@ function renderObject(
   obj: Record<string, unknown>,
   recs: readonly AgentRecommendation[],
   indent: number,
+  modelIdCtx?: string,
 ): DiffRowData[] {
   const pad = '  '.repeat(indent)
   const out: DiffRowData[] = []
+  const tag = (row: DiffRowData): DiffRowData => (modelIdCtx ? { ...row, modelId: modelIdCtx } : row)
 
   const directRecs = new Map<string, AgentRecommendation>()
   const nestedByFirst = new Map<string, AgentRecommendation[]>()
@@ -1949,41 +2062,79 @@ function renderObject(
     const nestedRecs = nestedByFirst.get(k) ?? []
     const status = directRec ? directRecStatus(v, directRec) : null
 
+    // Special-case the "models" map: each child is its own model subtree
+    // with its own modelIdCtx + rec key prefix. We split the recs by
+    // the segment right after "models.<id>." so per-model recs stay
+    // scoped; unmatched model recs are inserted as 行末 per-model groups.
+    if (k === 'models' && v && typeof v === 'object' && !Array.isArray(v) && !modelIdCtx) {
+      out.push(tag({ prefix: ' ', text: `${pad}"models": {`, action: 'context' }))
+      for (const [mid, mval] of Object.entries(v as Record<string, unknown>)) {
+        const subRecs = (nestedRecs ?? [])
+          .filter((r) => r.key.startsWith(`${mid}.`))
+          .map((r) => ({ ...r, key: r.key.substring(mid.length + 1) }))
+        out.push(tag({ prefix: ' ', text: `${pad}  "${mid}": {`, action: 'context' }))
+        if (mval && typeof mval === 'object' && !Array.isArray(mval)) {
+          out.push(...renderObject(mval as Record<string, unknown>, subRecs, indent + 2, mid))
+        } else {
+          out.push(tag({ prefix: ' ', text: `${pad}    ${formatValue(mval)}`, action: 'context' }))
+        }
+        out.push(tag({ prefix: ' ', text: `${pad}  }`, action: 'context' }))
+        // Unmatched model-level recs for this id (those that don't
+        // match any existing key in the model object) become 推荐新增
+        // / 推荐不填 rows at the end of the model block.
+        for (const r of subRecs) {
+          if (!r.key.includes('.') && !(`x_unmatched_${r.key}` in (mval as Record<string, unknown>))) {
+            // handled below
+          }
+        }
+        const directUnmatched = subRecs.filter((r) => !r.key.includes('.') && !(r.key in (mval as Record<string, unknown>)))
+        for (const r of directUnmatched) {
+          if (r.recommended === null || r.recommended === undefined) {
+            out.push(tag({ prefix: ' ', text: `${pad}    "${r.key}": null`, action: '推荐不填', path: `models.${mid}.${r.key}` }))
+          } else {
+            out.push(tag({ prefix: '+', text: `${pad}    "${r.key}": ${formatValue(r.recommended)}`, action: '推荐新增', path: `models.${mid}.${r.key}`, recommendedValue: r.recommended }))
+          }
+        }
+      }
+      out.push(tag({ prefix: ' ', text: `${pad}}`, action: 'context' }))
+      continue
+    }
+
     if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      out.push({ prefix: ' ', text: `${pad}"${k}": {`, action: 'context' })
-      out.push(...renderObject(v as Record<string, unknown>, nestedRecs, indent + 1))
-      out.push({ prefix: ' ', text: `${pad}}`, action: 'context' })
+      out.push(tag({ prefix: ' ', text: `${pad}"${k}": {`, action: 'context' }))
+      out.push(...renderObject(v as Record<string, unknown>, nestedRecs, indent + 1, modelIdCtx))
+      out.push(tag({ prefix: ' ', text: `${pad}}`, action: 'context' }))
       continue
     }
 
     const valText = formatValue(v)
     if (status === 'mismatch') {
-      out.push({
+      out.push(tag({
         prefix: '-',
         text: `${pad}"${k}": ${valText}`,
         action: 'mismatch',
-        path: fullRecPath(obj, directRec!),
+        path: fullRecPath(obj, directRec!, modelIdCtx),
         recommendedValue: directRec!.recommended,
-      })
-      out.push({
+      }))
+      out.push(tag({
         prefix: '+',
         text: `${pad}"${k}": ${formatValue(directRec!.recommended)}`,
         action: '推荐修改',
-        path: fullRecPath(obj, directRec!),
+        path: fullRecPath(obj, directRec!, modelIdCtx),
         recommendedValue: directRec!.recommended,
-      })
+      }))
     } else if (status === 'unmatched') {
-      out.push({
+      out.push(tag({
         prefix: ' ',
         text: `${pad}"${k}": ${valText}`,
         action: '未查到该字段',
-      })
+      }))
     } else {
-      out.push({
+      out.push(tag({
         prefix: ' ',
         text: `${pad}"${k}": ${valText}`,
         action: 'context',
-      })
+      }))
     }
   }
 
@@ -1991,20 +2142,20 @@ function renderObject(
     if (k in obj) continue
     const recVal = r.recommended
     if (recVal === null || recVal === undefined) {
-      out.push({
+      out.push(tag({
         prefix: ' ',
-        text: `${pad}"${k}": null（推荐不填）`,
+        text: `${pad}"${k}": null`,
         action: '推荐不填',
-        path: r.key,
-      })
+        path: modelIdCtx ? `models.${modelIdCtx}.${r.key}` : r.key,
+      }))
     } else {
-      out.push({
+      out.push(tag({
         prefix: '+',
         text: `${pad}"${k}": ${formatValue(recVal)}`,
         action: '推荐新增',
-        path: r.key,
+        path: modelIdCtx ? `models.${modelIdCtx}.${r.key}` : r.key,
         recommendedValue: recVal,
-      })
+      }))
     }
   }
 
@@ -2021,8 +2172,9 @@ function directRecStatus(actual: unknown, rec: AgentRecommendation): 'ok' | 'mis
 // fullRecPath echoes the recommendation's key for the hover handler —
 // the renderer already stripped nested prefixes off the rec, so the
 // stored key is the full path the user wrote.
-function fullRecPath(_obj: Record<string, unknown>, rec: AgentRecommendation): string {
-  return rec.key
+function fullRecPath(_obj: Record<string, unknown>, rec: AgentRecommendation, modelIdCtx?: string): string {
+  if (!modelIdCtx) return rec.key
+  return `models.${modelIdCtx}.${rec.key}`
 }
 
 function formatValue(v: unknown): string {
