@@ -91,6 +91,9 @@ const [error, setError] = useState<string | null>(null)
   const [selectedManaged, setSelectedManaged] = useState<{ mid: string; endpoint: string } | null>(null)
   const [selectedManagedModelId, setSelectedManagedModelId] = useState<string | null>(null)
   const [expandedManaged, setExpandedManaged] = useState<Set<string>>(new Set())
+  // managedActionsRow: 点击托管供应商父级后，该行右侧动作按钮保持常显
+  // （模拟 hover），直到点击该行以外任何地方才消失。
+  const [managedActionsRow, setManagedActionsRow] = useState<string | null>(null)
   const [renamingProvider, setRenamingProvider] = useState<string | null>(null)
   const [confirmingDeleteProvider, setConfirmingDeleteProvider] = useState<string | null>(null)
   const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
@@ -438,6 +441,19 @@ const [error, setError] = useState<string | null>(null)
       return next
     })
   }
+
+  // 点击行外任意位置 → 取消父级行的常显动作按钮（等价于移走 hover）。
+  useEffect(() => {
+    if (!managedActionsRow) return
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null
+      if (!el || !el.closest(`[data-managed-row="${managedActionsRow}"]`)) {
+        setManagedActionsRow(null)
+      }
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [managedActionsRow])
 
   const handleSelectManaged = (mid: string, endpoint: string) => {
     setSelectedProviderId(null)

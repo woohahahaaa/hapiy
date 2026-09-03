@@ -184,7 +184,7 @@ function formatTime(iso: string): string {
 export function AgentConfigPage() {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="配置阶层" />
+      <PageHeader title="配置文件" />
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentConfigFilesTab />
       </div>
@@ -258,7 +258,10 @@ function AgentConfigFilesTab() {
       key: 'mode',
       label: '模式',
       defaultWidth: { kind: 'pixel', value: 100 },
-      accessor: (row) => (row.mode === 'local' ? '本机' : '非本机'),
+      render: (value, row) => {
+        const isLocal = (row as { mode?: string }).mode === 'local'
+        return isLocal ? '本机' : <span className="font-medium text-primary">SSH</span>
+      },
     },
     {
       key: 'path',
