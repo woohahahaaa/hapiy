@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { JsonTokens } from '@/components/JsonHighlight'
+import { DiffView } from '@/components/DiffView'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -68,10 +68,6 @@ const [error, setError] = useState<string | null>(null)
   const [liveContent, setLiveContent] = useState<string | null>(null)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [saving, setSaving] = useState(false)
-  // editingScope says which side's JSON box the user has flipped into
-  // raw textarea mode (and wants to edit by hand). null means both
-  // boxes show the diff recommendation view.
-  const [editingScope, setEditingScope] = useState<'provider' | 'model' | null>(null)
 
   // rawContent is the true file content fetched alongside the summary so
   // local provider/model rename/delete mutations operate on the real
@@ -287,6 +283,56 @@ const [error, setError] = useState<string | null>(null)
     return extracted ?? m?.config
   }
 
+  // rawProviderBaseline: 原始文件里选定 provider 的完整块（含 models），
+  // 作为 diff 对比基准。
+  const rawProviderBaseline = useMemo(() => {
+    if (!selectedProvider || !summary) return null
+    try {
+      const parsed = JSON.parse(rawContent ?? '') as Record<string, unknown>
+      const provPath = summary?.json_paths?.provider ?? 'provider'
+      const root = (parsed as Record<string, unknown>)[provPath]
+      if (root && typeof root === 'object') {
+        return (root as Record<string, unknown>)[selectedProvider.provider_id] ?? null
+      }
+    } catch {
+      // fall through to summary
+    }
+    return selectedProvider.other_fields ? {
+      ...selectedProvider.other_fields,
+      models: Object.fromEntries(selectedProvider.models.map((m) => [m.id, m.config ?? {}])),
+    } : null
+  }, [selectedProvider, rawContent, summary])
+
+  // currentEditBaseline: liveContent 里该 provider 的当前块；无 liveContent
+  // 时等于原始基线（此时无差异）。
+  const currentEditBaseline = useMemo(() => {
+    if (!selectedProvider) return null
+    if (liveContent === null) return rawProviderBaseline
+    const extracted = extractFromLiveContent(
+      liveContent,
+      summary?.providers,
+      selectedProviderId,
+      null,
+      'provider',
+    ) as Record<string, unknown> | null
+    if (extracted) {
+      return {
+        ...extracted,
+        models: Object.fromEntries(
+          selectedProvider.models.map((m) => [m.id, activeValueForModel(m.id)]),
+        ),
+      }
+    }
+    return rawProviderBaseline
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProvider, liveContent, rawProviderBaseline, summary, selectedProviderId])
+
+  // currentEditableProviderValue: JsonEditor 显示的文本（provider 块 + models）。
+  const currentEditableProviderValue = useMemo(() => {
+    const v = currentEditBaseline ?? {}
+    return JSON.stringify(v, null, 2)
+  }, [currentEditBaseline])
+
   const providerDiff = useMemo(
     () => computeDiff(activeProviderValue, effectiveProviderRecs),
     [activeProviderValue, effectiveProviderRecs],
@@ -296,50 +342,11 @@ const [error, setError] = useState<string | null>(null)
     [activeModelValue, effectiveModelRecs],
   )
 
-  // mergedMarkers combines provider-level diff markers with per-model
-  // markers (paths prefixed with `models.<id>.` so the merged JsonDiff
-  // can locate each row). Only computed when a provider is selected.
-  const mergedMarkers = useMemo(() => {
-    if (!selectedProvider) return []
-    const out: DiffMarker[] = [...providerDiff]
-    for (const m of selectedProvider.models) {
-      const mDiff = computeDiff(activeValueForModel(m.id), modelRecs)
-      for (const mk of mDiff) {
-        out.push({ ...mk, path: `models.${m.id}.${mk.path}` })
-      }
-    }
-    return out
-  // activeValueForModel re-reads from liveContent; keep dep minimal:
-  // re-run when provider diff / model keys / liveContent change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerDiff, selectedProvider, selectedModelId, liveContent])
-
   const liveDiffCount = useMemo(() => {
     if (liveContent === null) return 0
-    // After any staging edit, every diff row that the recommendations
-    // would still resolve against the active value counts as one
-    // pending change. The view already marks each line individually.
     return providerDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length +
       modelDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length
   }, [liveContent, providerDiff, modelDiff])
-
-  const problemCount =
-    providerDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length +
-    modelDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length
-
-  // applyOneField is the client-side single-field apply used by the
-  // "使用推荐值" hover button on each diff row. It mutates the working
-  // copy in liveContent; nothing is written to disk until the user
-  // hits 保存. Recomputing the diff afterwards naturally drops the
-  // resolved row from the diff list.
-  const applyOneField = (path: string, value: unknown) => {
-    const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
-    try {
-      setLiveContent(setJsonPath(base, path, value))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '应用失败')
-    }
-  }
 
   const handleSavePending = async () => {
     if (!record || liveContent === null) return
@@ -358,6 +365,7 @@ const [error, setError] = useState<string | null>(null)
       setLiveContent(null)
       setTemplateTally(new Map()); setTemplateApplied(0)
       reload()
+      onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存失败')
     } finally {
@@ -479,12 +487,31 @@ const [error, setError] = useState<string | null>(null)
       setTemplateTally(tally)
       setTemplateApplied(res.applied)
       setLiveContent(res.content)
-      toast(`已生成预览：${res.applied} 处变更待保存`)
+      // 二次确认后立即生效：直接写盘并关闭。
+      await persistContent(res.content)
+      toast(`已应用推荐模板：${res.applied} 处变更已写入文件`)
+      onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '套用失败')
     } finally {
       setApplying(false)
     }
+  }
+
+  // persistContent writes content to disk directly (shared by the
+  // 使用推荐模板 / 同步模型基本信息 confirm flows).
+  const persistContent = async (content: string) => {
+    if (!record) return
+    let pretty = content
+    try {
+      pretty = JSON.stringify(JSON.parse(content), null, 2)
+    } catch {
+      // keep as-is
+    }
+    await dashboardApi.saveAgentConfigFileContent(record.id, pretty)
+    setLiveContent(null)
+    setTemplateTally(new Map()); setTemplateApplied(0)
+    reload()
   }
 
   // Model rename / delete (both route through liveContent for the
@@ -514,11 +541,11 @@ const [error, setError] = useState<string | null>(null)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        width="full"
-        height="full"
-        bare
+        width="md"
+        height="auto"
+        minHeight="640px"
         showCloseButton={false}
-        className="flex flex-col !gap-0 overflow-hidden p-0"
+        className="flex max-h-[85vh] flex-col !gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <div className="flex flex-col gap-0.5">
@@ -532,19 +559,10 @@ const [error, setError] = useState<string | null>(null)
               variant="outline"
               disabled={!summary || !record}
               onClick={() => setSyncingFromInfo(true)}
-              title="从 models.dev 同步文件里全部模型的模型配置"
+              title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
             >
               <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
-              同步模型基本信息
-            </Button>
-            <Button
-              variant="outline"
-              disabled={applying}
-              onClick={() => setConfirmingTemplate(true)}
-              title="按官方配置文档对全部非托管供应商及模型套用推荐模板"
-            >
-              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
-              使用推荐配置模板{problemCount > 0 && `（${problemCount} 处不同）`}
+              使用推荐配置
             </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
               <AppIcon name="close" size={16} />
@@ -553,15 +571,10 @@ const [error, setError] = useState<string | null>(null)
         </DialogHeader>
 
         {liveContent !== null && (
-          <PreviewBanner
-            applied={templateTally.size > 0 ? templateApplied : liveDiffCount}
-            saving={saving}
-            onSave={() => void handleSavePending()}
-            onCancel={handleCancelPending}
-          />
+          <PreviewBanner applied={templateTally.size > 0 ? templateApplied : liveDiffCount} />
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(320px,1fr)_minmax(360px,1.4fr)] divide-x divide-border">
+        <div className="grid min-h-0 flex-1 grid-cols-[200px_220px_minmax(300px,1fr)] divide-x divide-border">
           {/* Left: 非托管供应商 (adaptive) + 托管供应商 module */}
           <div className="flex min-h-0 flex-col">
             <ColumnHeader>供应商</ColumnHeader>
@@ -786,77 +799,61 @@ const [error, setError] = useState<string | null>(null)
             </div>
           </div>
 
-          {/* Right: merged provider + all models block. Clicking a model on the
-              left scrolls the right pane to that model's segment and draws a
-              4px theme-color vertical bar along its left edge. */}
+          {/* Right: editable JSON + inline diff vs 原始文件. Clicking a model on
+              the left scrolls to that model's segment. */}
         <div className="flex min-h-0 flex-col">
-            <ColumnHeader
-              action={
-                selectedManagedGroup ? null : (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      onClick={() => setEditingScope(editingScope === 'provider' ? null : 'provider')}
-                      disabled={!selectedProvider}
-                    >
-                      <AppIcon name={editingScope === 'provider' ? 'auto_fix_high' : 'edit'} size={12} data-icon="inline-start" />
-                      {editingScope === 'provider' ? '完成编辑' : '编辑'}
-                    </Button>
-                  </div>
-                )
-              }
-            >
-              供应商 + 模型 配置
-            </ColumnHeader>
-            <div className="flex-1 overflow-auto p-0">
+            <ColumnHeader>供应商 + 模型 配置（可直接编辑，实时对比下方差异）</ColumnHeader>
+            <div className="max-h-[55%] overflow-auto border-b border-border p-0">
               {selectedManagedGroup ? (
-                <JsonDiffHighlight
-                  value={selectedManagedGroup.group.generated}
-                  markers={[]}
-                  selectedModelId={selectedManagedModelId}
+                <DiffView
+                  before={selectedManagedGroup.group.generated}
+                  after={selectedManagedGroup.group.generated}
                 />
               ) : selectedProvider ? (
-                editingScope === 'provider' ? (
-                  <JsonEditor
-                    value={activeProviderValue}
-                    onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
-                  />
-                ) : (() => {
-                  const merged = {
-                    ...((activeProviderValue as Record<string, unknown>) ?? {}),
-                    models: Object.fromEntries(
-                      selectedProvider.models.map((m) => [m.id, activeValueForModel(m.id)]),
-                    ),
-                  }
-                  return (
-                    <JsonDiffHighlight
-                      value={merged}
-                      markers={mergedMarkers}
-                      selectedModelId={selectedModelId}
-                      onApplyOne={(path) => {
-                        // 命中 provider 段：rec 来自 effectiveProviderRecs；
-                        // 命中 model 段：path 形如 models.<id>.<key>，按 id 拆出 rec。
-                        const m = path.match(/^models\.([^.]+)\.(.*)$/)
-                        if (m) {
-                          const rec = effectiveModelRecs.find((r) => r.key === m[2])
-                          if (rec) applyOneField(path, rec.recommended)
-                        } else {
-                          const rec = effectiveProviderRecs.find((r) => r.key === path)
-                          if (rec) applyOneField(path, rec.recommended)
-                        }
-                      }}
-                    />
-                  )
-                })()
+                <JsonEditor
+                  value={currentEditableProviderValue}
+                  onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
+                />
               ) : (
                 <Placeholder>未选择供应商</Placeholder>
               )}
             </div>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+                与原始文件的差异
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto p-0">
+                {selectedProvider ? (
+                  <DiffView before={rawProviderBaseline} after={currentEditBaseline} />
+                ) : (
+                  <Placeholder>未选择供应商</Placeholder>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-<AgentModelInfoMatchDialog
+        <DialogFooter className="border-t border-border px-4 py-3">
+          <div className="flex flex-1 items-center">
+            {liveContent !== null && (
+              <span className="text-xs text-warning">
+                已修改 {templateTally.size > 0 ? templateApplied : liveDiffCount} 项
+              </span>
+            )}
+          </div>
+          <Button variant="outline" onClick={tryClose} disabled={saving}>
+            取消
+          </Button>
+          <Button
+            variant="default"
+            disabled={liveContent === null || saving}
+            onClick={() => void handleSavePending()}
+          >
+            {saving ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
+          </Button>
+        </DialogFooter>
+
+        <AgentModelInfoMatchDialog
           open={syncingFromInfo}
           onOpenChange={setSyncingFromInfo}
           record={record}
@@ -867,9 +864,11 @@ const [error, setError] = useState<string | null>(null)
             input_types: '',
             thinking_levels: '',
           }}
+          recommendations={summary?.recommendations ?? []}
+          protocols={summary?.protocols ?? []}
           onPreview={({ content, applied }) => {
             setLiveContent(content)
-            toast(`已生成预览：${applied} 处变更待保存`)
+            toast(`已应用推荐配置：${applied} 处变更待保存`)
           }}
         />
 
@@ -912,7 +911,7 @@ const [error, setError] = useState<string | null>(null)
             if (!open) setConfirmingDeleteProvider(null)
           }}
           title="删除 provider"
-          description={`确认删除配置文件中的 provider「${confirmingDeleteProvider ?? ''}」？删除会随预览一起提交，点右上角保存后生效。`}
+          description={`确认删除配置文件中的 provider「${confirmingDeleteProvider ?? ''}」？删除会随预览一起提交，点底部「保存」后生效。`}
           onConfirm={() => {
             if (confirmingDeleteProvider) handleDeleteProvider(confirmingDeleteProvider)
             setConfirmingDeleteProvider(null)
@@ -937,12 +936,13 @@ const [error, setError] = useState<string | null>(null)
               <DialogTitle>使用推荐模板</DialogTitle>
             </DialogHeader>
             <p className="px-4 text-xs text-muted-foreground">
-              我们会根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）及其模型的字段进行调整，使其达到官方推荐的效果。点击「确认」后系统会生成预览，应用后不会马上入库，请在右上角点击「保存」后生效。
+              将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）
+              及其模型的字段进行调整，并把结果直接写入文件生效。确认？
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmingTemplate(false)} disabled={applying}>取消</Button>
               <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
-                {applying ? '生成中...' : '确认'}
+                {applying ? '应用中...' : '确认并生效'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -969,7 +969,7 @@ const [error, setError] = useState<string | null>(null)
             if (!open) setConfirmingDeleteModel(null)
           }}
           title="删除模型"
-          description={`确认删除配置文件中的模型「${confirmingDeleteModel?.modelId ?? ''}」？删除会随预览一起提交，点右上角保存后生效。`}
+          description={`确认删除配置文件中的模型「${confirmingDeleteModel?.modelId ?? ''}」？删除会随预览一起提交，点底部「保存」后生效。`}
           onConfirm={() => {
             if (confirmingDeleteModel) handleDeleteModel(confirmingDeleteModel.providerId, confirmingDeleteModel.modelId)
             setConfirmingDeleteModel(null)
@@ -1740,484 +1740,7 @@ function stripJsoncComments(s: string): string {
   return out.join('')
 }
 
-// setJsonPath walks a dotted path inside the parsed content and writes
-// value at the leaf, creating intermediate objects as needed. Returns
-// the re-serialized content. Throws if content is not valid JSON.
-function setJsonPath(content: string, path: string, value: unknown): string {
-  const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
-  const segments = path.split('.')
-  let cur: Record<string, unknown> = parsed
-  for (let i = 0; i < segments.length - 1; i++) {
-    const seg = segments[i]
-    const next = cur[seg]
-    if (next === null || next === undefined || typeof next !== 'object' || Array.isArray(next)) {
-      cur[seg] = {}
-    }
-    cur = cur[seg] as Record<string, unknown>
-  }
-  cur[segments[segments.length - 1]] = value
-  return JSON.stringify(parsed)
-}
-
-function JsonDiffHighlight({
-  value,
-  markers,
-  onApplyOne,
-  selectedModelId,
-  scrollContainerRef,
-}: {
-  value: unknown
-  markers: readonly DiffMarker[]
-  onApplyOne?: (path: string) => void
-  /** 选中模型时高亮 + 滚动该模型对应行段 */
-  selectedModelId?: string | null
-  /** 可选外部滚动容器；若不传则在组件内部 div 上滚动 */
-  scrollContainerRef?: React.RefObject<HTMLDivElement | null>
-}) {
-  if (value === null || value === undefined) {
-    return <Placeholder>为空</Placeholder>
-  }
-  const lines = buildUnifiedDiff(value, markers)
-  return (
-    <JsonDiffLines
-      lines={lines}
-      onApplyOne={onApplyOne}
-      selectedModelId={selectedModelId ?? null}
-      scrollContainerRef={scrollContainerRef}
-    />
-  )
-}
-
-// nearestScrollable walks up from a node to the first ancestor with a
-// scrollable overflow (auto/scroll) — the container the code pane scrolls in.
-function nearestScrollable(el: HTMLElement | null): HTMLElement | null {
-  let cur = el?.parentElement ?? null
-  while (cur) {
-    const oy = getComputedStyle(cur).overflowY
-    if (oy === 'auto' || oy === 'scroll') return cur
-    cur = cur.parentElement
-  }
-  return null
-}
-
-// JsonDiffLines renders the row list + 4px theme-color bar + scroll-to-model.
-// Pulled out so the selectedModelId effect (refs + DOM measurements) is scoped
-// to the actual rendered DOM and only fires when a model is selected.
-function JsonDiffLines({
-  lines,
-  onApplyOne,
-  selectedModelId,
-  scrollContainerRef,
-}: {
-  lines: DiffRowData[]
-  onApplyOne?: (path: string) => void
-  selectedModelId: string | null
-  scrollContainerRef?: React.RefObject<HTMLDivElement | null>
-}) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [barTop, setBarTop] = useState<number | null>(null)
-  const [barHeight, setBarHeight] = useState<number | null>(null)
-
-  // Selected model → first / last line index carrying that model id.
-  const range = useMemo(() => {
-    if (!selectedModelId) return null
-    let start = -1
-    let end = -1
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].modelId === selectedModelId) {
-        if (start < 0) start = i
-        end = i
-      }
-    }
-    if (start < 0) return null
-    return { start, end }
-  }, [lines, selectedModelId])
-
-  // Measure bar position + scroll into view whenever the selected model or
-  // line content (which determines heights) changes.
-  useEffect(() => {
-    if (!range || !containerRef.current) {
-      setBarTop(null)
-      setBarHeight(null)
-      return
-    }
-    const startEl = containerRef.current.querySelector<HTMLElement>(`[data-line-index="${range.start}"]`)
-    const endEl = containerRef.current.querySelector<HTMLElement>(`[data-line-index="${range.end}"]`)
-    if (!startEl || !endEl) return
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const startRect = startEl.getBoundingClientRect()
-    const endRect = endEl.getBoundingClientRect()
-    setBarTop(startRect.top - containerRect.top)
-    setBarHeight(endRect.bottom - startRect.top)
-    // Auto-scroll: the actual scrollable ancestor is the overflow-auto
-    // wrapper passed in (or the nearest scrollable parent of this renderer).
-    const scroller = scrollContainerRef?.current ?? nearestScrollable(containerRef.current)
-    if (scroller) {
-      const scrollerRect = scroller.getBoundingClientRect()
-      const target = startRect.top - scrollerRect.top + scroller.scrollTop
-      scroller.scrollTo({ top: target - 8, behavior: 'smooth' })
-    }
-  }, [range, scrollContainerRef, lines.length])
-
-  return (
-    <div ref={containerRef} className="relative">
-      {barTop !== null && barHeight !== null && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-0 z-10 w-1 bg-primary"
-          style={{ top: barTop, height: barHeight }}
-        />
-      )}
-      <div className="overflow-x-auto pl-2 font-mono text-sm leading-relaxed">
-        {lines.map((line, i) => (
-          <DiffRow
-            key={i}
-            line={line}
-            lineIndex={i}
-            selected={range !== null && i >= range.start && i <= range.end}
-            onApplyOne={onApplyOne}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// Each diff row carries an action label that drives the row's
-// background color, plus the field path it applies to. The label is
-// always rendered as a Chinese action phrase (推荐新增 / 推荐修改 / 推荐
-// 不填 / 模板无此字段), so the user reads it as guidance rather than a
-// raw status code.
-type DiffAction =
-  | '推荐新增'
-  | '推荐修改'
-  | '推荐不填'
-  | '未查到该字段'
-  | 'context'
-  | 'mismatch'
-
-interface DiffRowData {
-  readonly prefix: ' ' | '-' | '+'
-  readonly text: string
-  readonly action: DiffAction
-  readonly path?: string
-  readonly recommendedValue?: unknown
-  /**
-   * 这行所在的 model 子树 id（顶层字段与 provider 段段段为 null）。
-   * 右侧 JsonDiffHighlight 选中模型时定位行段、画主题色竖条用。
-   */
-  readonly modelId?: string
-}
-
-const ROW_BG: Record<DiffAction, string> = {
-  '推荐新增': 'bg-success/15 hover:bg-success/25',
-  '推荐修改': 'bg-warning/15 hover:bg-warning/25',
-  '推荐不填': 'bg-destructive/15 hover:bg-destructive/25',
-  '未查到该字段': 'bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700',
-  context: 'hover:bg-muted/30',
-  mismatch: 'bg-destructive/15 hover:bg-destructive/25',
-}
-
-const ROW_TEXT_COLOR: Record<DiffAction, string> = {
-  '推荐新增': 'text-success',
-  '推荐修改': 'text-warning',
-  '推荐不填': 'text-muted-foreground',
-  '未查到该字段': 'text-muted-foreground',
-  context: 'text-foreground',
-  mismatch: 'text-destructive',
-}
-
-const ROW_ACTION_COLOR: Record<DiffAction, string> = {
-  '推荐新增': 'text-success',
-  '推荐修改': 'text-warning',
-  '推荐不填': 'text-muted-foreground',
-  '未查到该字段': 'text-muted-foreground',
-  context: 'text-muted-foreground',
-  mismatch: 'text-destructive',
-}
-
-const ACTION_LABEL: Record<DiffAction, string> = {
-  '推荐新增': '推荐新增',
-  '推荐修改': '推荐修改',
-  '推荐不填': '推荐不填',
-  '未查到该字段': '模板无此字段',
-  context: '',
-  mismatch: '推荐修改',
-}
-function DiffRow({
-  line,
-  lineIndex,
-  selected,
-  onApplyOne,
-}: {
-  line: DiffRowData
-  lineIndex: number
-  selected: boolean
-  onApplyOne?: (path: string) => void
-}) {
-  const showApply = (line.action === '推荐新增' || line.action === '推荐修改' || line.action === '推荐不填') && line.path && onApplyOne
-  return (
-    <div
-      data-line-index={lineIndex}
-      data-model-id={line.modelId ?? undefined}
-      className={
-        'group flex w-full min-w-full items-center gap-2 px-2 py-1 transition-colors ' +
-        ROW_BG[line.action] +
-        (selected ? ' bg-primary/10' : '')
-      }
-    >
-      <span
-        className={
-          'w-3 shrink-0 select-none text-center font-bold ' +
-          (line.prefix === ' ' ? 'invisible' : ROW_TEXT_COLOR[line.action])
-        }
-      >
-        {line.prefix === ' ' ? '' : line.prefix}
-      </span>
-      <span className="w-[88px] shrink-0 text-xs font-medium">
-        {showApply ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="-my-0.5 -ml-1 h-6 w-full justify-start px-1 opacity-0 transition-opacity group-hover:opacity-100"
-            onClick={() => onApplyOne!(line.path!)}
-          >
-            使用推荐值
-          </Button>
-        ) : (
-          <span className={'group-hover:hidden ' + ROW_ACTION_COLOR[line.action]}>
-            {ACTION_LABEL[line.action]}
-          </span>
-        )}
-      </span>
-      <span className="flex-1 whitespace-nowrap">
-        <JsonTokens text={line.text} />
-      </span>
-    </div>
-  )
-}
-
-// buildUnifiedDiff turns the actual JSON object + the recommendation
-// markers into a flat list of rows the UI can render directly. Rows are
-// interleaved with the actual object order — every existing key keeps
-// its position, and unmatched recommendation lines are inserted at the
-// end of their scope. The action label on each row tells the user what
-// to do (新增 / 修改 / 不填 / 未查到).
-function buildUnifiedDiff(
-  value: unknown,
-  markers: readonly DiffMarker[],
-): DiffRowData[] {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return [
-      {
-        prefix: ' ',
-        text: JSON.stringify(value, null, 2),
-        action: 'context',
-      },
-    ]
-  }
-  const recs: AgentRecommendation[] = markers.map((m) => ({
-    scope: 'provider',
-    key: m.path,
-    description: '',
-    type: 'string',
-    recommended: m.recommended,
-    required: false,
-  }))
-  const out: DiffRowData[] = []
-  out.push({ prefix: ' ', text: '{', action: 'context' })
-  out.push(...renderObject(value as Record<string, unknown>, recs, 1))
-  out.push({ prefix: ' ', text: '}', action: 'context' })
-  return out
-}
-
-function renderObject(
-  obj: Record<string, unknown>,
-  recs: readonly AgentRecommendation[],
-  indent: number,
-  modelIdCtx?: string,
-): DiffRowData[] {
-  const pad = '  '.repeat(indent)
-  const out: DiffRowData[] = []
-  const tag = (row: DiffRowData): DiffRowData => (modelIdCtx ? { ...row, modelId: modelIdCtx } : row)
-
-  const directRecs = new Map<string, AgentRecommendation>()
-  const nestedByFirst = new Map<string, AgentRecommendation[]>()
-  for (const r of recs) {
-    const dot = r.key.indexOf('.')
-    if (dot < 0) {
-      directRecs.set(r.key, r)
-    } else {
-      const first = r.key.substring(0, dot)
-      const rest = r.key.substring(dot + 1)
-      const sub: AgentRecommendation = { ...r, key: rest }
-      const arr = nestedByFirst.get(first) ?? []
-      arr.push(sub)
-      nestedByFirst.set(first, arr)
-    }
-  }
-
-  for (const [k, v] of Object.entries(obj)) {
-    const directRec = directRecs.get(k)
-    const nestedRecs = nestedByFirst.get(k) ?? []
-    const status = directRec ? directRecStatus(v, directRec) : null
-
-    // Special-case the "models" map: each child is its own model subtree
-    // with its own modelIdCtx + rec key prefix. We split the recs by
-    // the segment right after "models.<id>." so per-model recs stay
-    // scoped; unmatched model recs are inserted as 行末 per-model groups.
-    if (k === 'models' && v && typeof v === 'object' && !Array.isArray(v) && !modelIdCtx) {
-      out.push(tag({ prefix: ' ', text: `${pad}"models": {`, action: 'context' }))
-      for (const [mid, mval] of Object.entries(v as Record<string, unknown>)) {
-        const subRecs = (nestedRecs ?? [])
-          .filter((r) => r.key.startsWith(`${mid}.`))
-          .map((r) => ({ ...r, key: r.key.substring(mid.length + 1) }))
-        out.push(tag({ prefix: ' ', text: `${pad}  "${mid}": {`, action: 'context' }))
-        if (mval && typeof mval === 'object' && !Array.isArray(mval)) {
-          out.push(...renderObject(mval as Record<string, unknown>, subRecs, indent + 2, mid))
-        } else {
-          out.push(tag({ prefix: ' ', text: `${pad}    ${formatValue(mval)}`, action: 'context' }))
-        }
-        out.push(tag({ prefix: ' ', text: `${pad}  }`, action: 'context' }))
-        // Unmatched model-level recs for this id (those that don't
-        // match any existing key in the model object) become 推荐新增
-        // / 推荐不填 rows at the end of the model block.
-        for (const r of subRecs) {
-          if (!r.key.includes('.') && !(`x_unmatched_${r.key}` in (mval as Record<string, unknown>))) {
-            // handled below
-          }
-        }
-        const directUnmatched = subRecs.filter((r) => !r.key.includes('.') && !(r.key in (mval as Record<string, unknown>)))
-        for (const r of directUnmatched) {
-          if (r.recommended === null || r.recommended === undefined) {
-            out.push(tag({ prefix: ' ', text: `${pad}    "${r.key}": null`, action: '推荐不填', path: `models.${mid}.${r.key}` }))
-          } else {
-            out.push(tag({ prefix: '+', text: `${pad}    "${r.key}": ${formatValue(r.recommended)}`, action: '推荐新增', path: `models.${mid}.${r.key}`, recommendedValue: r.recommended }))
-          }
-        }
-      }
-      out.push(tag({ prefix: ' ', text: `${pad}}`, action: 'context' }))
-      continue
-    }
-
-    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-      out.push(tag({ prefix: ' ', text: `${pad}"${k}": {`, action: 'context' }))
-      out.push(...renderObject(v as Record<string, unknown>, nestedRecs, indent + 1, modelIdCtx))
-      out.push(tag({ prefix: ' ', text: `${pad}}`, action: 'context' }))
-      continue
-    }
-
-    const valText = formatValue(v)
-    if (status === 'mismatch') {
-      out.push(tag({
-        prefix: '-',
-        text: `${pad}"${k}": ${valText}`,
-        action: 'mismatch',
-        path: fullRecPath(obj, directRec!, modelIdCtx),
-        recommendedValue: directRec!.recommended,
-      }))
-      out.push(tag({
-        prefix: '+',
-        text: `${pad}"${k}": ${formatValue(directRec!.recommended)}`,
-        action: '推荐修改',
-        path: fullRecPath(obj, directRec!, modelIdCtx),
-        recommendedValue: directRec!.recommended,
-      }))
-    } else if (status === 'unmatched') {
-      out.push(tag({
-        prefix: ' ',
-        text: `${pad}"${k}": ${valText}`,
-        action: '未查到该字段',
-      }))
-    } else {
-      out.push(tag({
-        prefix: ' ',
-        text: `${pad}"${k}": ${valText}`,
-        action: 'context',
-      }))
-    }
-  }
-
-  for (const [k, r] of directRecs) {
-    if (k in obj) continue
-    const recVal = r.recommended
-    if (recVal === null || recVal === undefined) {
-      out.push(tag({
-        prefix: ' ',
-        text: `${pad}"${k}": null`,
-        action: '推荐不填',
-        path: modelIdCtx ? `models.${modelIdCtx}.${r.key}` : r.key,
-      }))
-    } else {
-      out.push(tag({
-        prefix: '+',
-        text: `${pad}"${k}": ${formatValue(recVal)}`,
-        action: '推荐新增',
-        path: modelIdCtx ? `models.${modelIdCtx}.${r.key}` : r.key,
-        recommendedValue: recVal,
-      }))
-    }
-  }
-
-  return out
-}
-
-// directRecStatus decides whether the recommendation matches the
-// actual value, is a mismatch, or simply has no entry for this key.
-function directRecStatus(actual: unknown, rec: AgentRecommendation): 'ok' | 'mismatch' | 'unmatched' {
-  if (rec.recommended === null || rec.recommended === undefined) return 'unmatched'
-  return deepEqual(rec.recommended, actual) ? 'ok' : 'mismatch'
-}
-
-// fullRecPath echoes the recommendation's key for the hover handler —
-// the renderer already stripped nested prefixes off the rec, so the
-// stored key is the full path the user wrote.
-function fullRecPath(_obj: Record<string, unknown>, rec: AgentRecommendation, modelIdCtx?: string): string {
-  if (!modelIdCtx) return rec.key
-  return `models.${modelIdCtx}.${rec.key}`
-}
-
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return 'null'
-  if (typeof v === 'string') return JSON.stringify(v)
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
-  try {
-    return JSON.stringify(v)
-  } catch {
-    return String(v)
-  }
-}
-
-function ColumnHeader({
-  children,
-  action,
-}: {
-  children: React.ReactNode
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="flex h-9 items-center justify-between border-b border-border bg-muted/30 px-3">
-      <span className="truncate text-xs font-medium text-muted-foreground">{children}</span>
-      {action}
-    </div>
-  )
-}
-
-// PreviewBanner sits at the top of the dialog body whenever pending
-// preview changes are waiting to be saved. It exposes two buttons:
-// - 取消: drop the preview, return to read-only state
-// - 保存: write the previewed content to the live config file
-function PreviewBanner({
-  applied,
-  saving,
-  onSave,
-  onCancel,
-}: {
-  applied: number
-  saving: boolean
-  onSave: () => void
-  onCancel: () => void
-}) {
+function PreviewBanner({ applied }: { applied: number }) {
   return (
     <div className="flex items-center justify-between gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs">
       <div className="flex items-center gap-2 text-warning">
@@ -2225,14 +1748,6 @@ function PreviewBanner({
         <span>
           预览：当前编辑与文件实际值相比，共 <strong className="font-semibold">{applied}</strong> 处差异待保存
         </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="xs" disabled={saving} onClick={onCancel}>
-          取消
-        </Button>
-        <Button variant="default" size="xs" disabled={saving} onClick={onSave}>
-          {saving ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '保存'}
-        </Button>
       </div>
     </div>
   )

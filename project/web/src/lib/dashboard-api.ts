@@ -2963,6 +2963,23 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       }),
     }
   },
+  async applyRecommendationConfig(
+    id: string,
+    checked: Record<string, readonly string[]>,
+    modelFields: Record<string, Record<string, Record<string, unknown>>>,
+  ): Promise<{ readonly applied: number; readonly content: string }> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-config`, {
+      method: 'POST',
+      body: JSON.stringify({ checked, model_fields: modelFields }),
+    })
+    if (!isRecord(data)) {
+      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+    }
+    return {
+      applied: readNumber(data.applied, 'applied', 0),
+      content: typeof data.content === 'string' ? data.content : '',
+    }
+  },
   async syncAgentConfigFileModelFields(
     id: string,
     input: {

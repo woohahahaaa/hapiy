@@ -1088,6 +1088,8 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 // per-provider / per-model change tally. Providers whose names belong to
 // a managed provider group (托管供应商) are skipped — their blocks are
 // system-generated and read-only. Preview only; caller writes via PUT.
+// Note: recommended == nil 的推荐项表示「推荐不填」——应用时从文件删除该
+// 字段（而不是写 null），让文件贴合官方推荐。
 func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 	type tally struct {
 		ProviderID string         `json:"provider_id"`
@@ -1163,10 +1165,23 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			// provider scope
 			providerFields := 0
 			for _, r := range effective {
-				if r.Scope != "provider" || r.Recommended == nil {
+				if r.Scope != "provider" {
 					continue
 				}
 				full := jpaths.Provider + "." + pid + "." + r.Key
+				// 推荐不填：删除该字段（若存在）。文件里没有该字段时不算变更。
+				if r.Recommended == nil {
+					if gjson.Parse(string(buf)).Get(full).Exists() {
+						next, err := sjson.DeleteBytes(buf, full)
+						if err != nil {
+							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err)})
+							return
+						}
+						buf = next
+						providerFields++
+					}
+					continue
+				}
 				next, err := sjson.SetBytes(buf, full, r.Recommended)
 				if err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err)})
@@ -1175,6 +1190,13 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 				buf = next
 				providerFields++
 			}
+			// 模板未声明的多余标量字段：递归遍历 provider 子树，路径（点分）不在
+			// 推荐声明集合里、且值是标量的叶子才删除。对象/数组不删（可能
+			// 是官方未进推荐的合法结构，如 options.headers）。
+			{
+				known := knownRecommendationPaths(effective)
+				pruneScalarLeaves(&buf, jpaths.Provider+"."+pid, "", known, &providerFields)
+			}
 			// model scope
 			modelTally := map[string]int{}
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
@@ -1182,10 +1204,23 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 				for _, me := range modelsFromResult(sub) {
 					count := 0
 					for _, r := range effective {
-						if r.Scope != "model" || r.Recommended == nil {
+						if r.Scope != "model" {
 							continue
 						}
 						full := resolved + "." + me + "." + r.Key
+						// 推荐不填：删除该字段（若存在），文件里没有时不计数。
+						if r.Recommended == nil {
+							if gjson.Parse(string(buf)).Get(full).Exists() {
+								next, err := sjson.DeleteBytes(buf, full)
+								if err != nil {
+									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
+									return
+								}
+								buf = next
+								count++
+							}
+							continue
+						}
 						next, err := sjson.SetBytes(buf, full, r.Recommended)
 						if err != nil {
 							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
@@ -1197,6 +1232,16 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if count > 0 {
 						modelTally[me] = count
 						providerFields += count
+					}
+					// 模板未声明的多余标量字段（model 子树递归）。
+					{
+						known := knownRecommendationPaths(effective)
+						deleted := 0
+						pruneScalarLeaves(&buf, resolved+"."+me, "", known, &deleted)
+						if deleted > 0 {
+							modelTally[me] += deleted
+							providerFields += deleted
+						}
 					}
 				}
 			}
@@ -1240,6 +1285,200 @@ func modelsFromResult(res gjson.Result) []string {
 	return out
 }
 
+// checkedApplyReq — 「使用推荐配置」弹窗的应用请求：只对勾选的
+// provider（及其勾选模型）套用规则推荐模板，返回预览内容。模型级
+// 推荐只会应用到 checked provider 下勾选的（或全部）模型。不写盘，
+// 由前端预览后经 PUT 保存。
+type checkedApplyReq struct {
+	// Checked: provider_id → 勾选的模型 id 列表。空列表 = 勾选该
+	// provider 全部模型（provider 级字段总是应用）。
+	Checked map[string][]string `json:"checked"`
+	// ModelFields: provider_id → model_id → 路径→值。来自 models.dev 参考
+	// 供应商的四个基础字段，在模板推荐之后写入（勾选模型才生效）。
+	ModelFields map[string]map[string]map[string]any `json:"model_fields"`
+}
+
+// ApplyRecommendationConfig applies the rule's recommendations to ONLY the
+// checked providers (+ their checked models). Same semantics as
+// ApplyRecommendationTemplate (recommended nil = delete, undeclared scalar
+// leaves pruned) but scoped by 勾选. Returns preview content only.
+func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			return
+		}
+		var rule model.AgentTypeRule
+		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			return
+		}
+		jpaths, err := rule.GetJsonPaths()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			return
+		}
+		recs, _ := rule.GetRecommendations()
+		protocols, _ := rule.GetProtocols()
+		var req checkedApplyReq
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(req.Checked) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请至少勾选一个供应商或模型"})
+			return
+		}
+		content, err := readAgentConfigFileContent(&row, key)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			return
+		}
+		buf := []byte(stripJSON5Comments(content))
+		total := 0
+
+		// Managed provider block names to skip.
+		skip := map[string]bool{}
+		var managed []model.ManagedAgentProvider
+		if err := db.Where("agent_config_file_id = ?", row.ID).Find(&managed).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		for _, m := range managed {
+			groups, _ := m.GetGroups()
+			for _, g := range groups {
+				skip[strings.TrimSpace(m.Name)+strings.TrimSpace(g.Suffix)] = true
+			}
+		}
+
+		for pid, modelIDs := range req.Checked {
+			pid = strings.TrimSpace(pid)
+			if pid == "" || skip[pid] {
+				continue
+			}
+			effective := append([]model.AgentRecommendation(nil), recs...)
+			for _, p := range protocols {
+				if protocolMatchesProvider(string(buf), jpaths, pid, p) {
+					effective = append(effective, p.Recommendations...)
+				}
+			}
+			// Provider scope 推荐（增/删/改）。
+			for _, r := range effective {
+				if r.Scope != "provider" {
+					continue
+				}
+				full := jpaths.Provider + "." + pid + "." + r.Key
+				if r.Recommended == nil {
+					if gjson.Parse(string(buf)).Get(full).Exists() {
+						next, err := sjson.DeleteBytes(buf, full)
+						if err != nil {
+							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err)})
+							return
+						}
+						buf = next
+						total++
+					}
+					continue
+				}
+				next, err := sjson.SetBytes(buf, full, r.Recommended)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err)})
+					return
+				}
+				buf = next
+				total++
+			}
+			// 模板未声明的多余标量叶子清理。
+			{
+				known := knownRecommendationPaths(effective)
+				pruneScalarLeaves(&buf, jpaths.Provider+"."+pid, "", known, &total)
+			}
+
+			// Model scope：全模型（勾选 provider 即应用该下全部模型，
+			// 前端会在 checked 里显式列出勾选模型 id）。
+			matchAll := len(modelIDs) == 0
+			want := map[string]bool{}
+			for _, mid := range modelIDs {
+				want[strings.TrimSpace(mid)] = true
+			}
+			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
+			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
+				for _, me := range modelsFromResult(sub) {
+					if !matchAll && !want[me] {
+						continue
+					}
+					for _, r := range effective {
+						if r.Scope != "model" {
+							continue
+						}
+						full := resolved + "." + me + "." + r.Key
+						if r.Recommended == nil {
+							if gjson.Parse(string(buf)).Get(full).Exists() {
+								next, err := sjson.DeleteBytes(buf, full)
+								if err != nil {
+									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
+									return
+								}
+								buf = next
+								total++
+							}
+							continue
+						}
+						next, err := sjson.SetBytes(buf, full, r.Recommended)
+						if err != nil {
+							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
+							return
+						}
+						buf = next
+						total++
+					}
+					// 未声明标量叶子清理。
+					{
+						known := knownRecommendationPaths(effective)
+						deleted := 0
+						pruneScalarLeaves(&buf, resolved+"."+me, "", known, &deleted)
+						total += deleted
+					}
+				}
+			}
+		}
+		// models.dev 基础字段（勾选模型，参考供应商选出来的四个字段）。
+		if len(req.ModelFields) > 0 {
+			for pid, models := range req.ModelFields {
+				if strings.TrimSpace(pid) == "" || skip[pid] {
+					continue
+				}
+				resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", strings.TrimSpace(pid))
+				for mid, fields := range models {
+					if strings.TrimSpace(mid) == "" {
+						continue
+					}
+					base := resolved + "." + escapeSjsonKey(strings.TrimSpace(mid))
+					for path, val := range fields {
+						full := base + "." + path
+						next, err := sjson.SetBytes(buf, full, val)
+						if err != nil {
+							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", mid, path, err)})
+							return
+						}
+						buf = next
+						total++
+					}
+				}
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"applied": total,
+			"content": string(buf),
+		}})
+	}
+}
+
 // protocolMatchesProvider reports whether at least one condition of the
 // protocol matches the provider's config fields in the live document.
 // Conditions read provider-level gjson paths (e.g. "options.baseURL" or
@@ -1275,6 +1514,60 @@ func protocolMatchesProvider(content string, jpaths model.AgentJsonPaths, provid
 	}
 	return false
 }
+
+// knownRecommendationPaths returns the full dotted paths the rule's
+// recommendations declare（含 protocols 匹配后的补充），用于判定文件里的
+// 字段路径是否为模板声明。
+func knownRecommendationPaths(recs []model.AgentRecommendation) map[string]bool {
+	out := make(map[string]bool, len(recs))
+	for _, r := range recs {
+		out[r.Key] = true
+	}
+	return out
+}
+
+// pruneScalarLeaves walks the object at absBase inside buf and deletes
+// any scalar leaf whose dotted path (relative to the provider/model root,
+// i.e. key path shape of recommendations) is not in known. Object/array
+// subtrees are entered only when some recommendation descends into them,
+// so official-but-unrec'd structures stay intact. deleted is incremented
+// per removed leaf.
+func pruneScalarLeaves(buf *[]byte, absBase, relBase string, known map[string]bool, deleted *int) {
+	root := gjson.Parse(string(*buf)).Get(absBase)
+	if !root.IsObject() {
+		return
+	}
+	for k, v := range root.Map() {
+		relPath := k
+		if relBase != "" {
+			relPath = relBase + "." + k
+		}
+		switch v.Type {
+		case gjson.Number, gjson.String, gjson.True, gjson.False:
+			if !known[relPath] {
+				next, err := sjson.DeleteBytes(*buf, absBase+"."+k)
+				if err == nil {
+					*buf = next
+					*deleted++
+				}
+			}
+		case gjson.JSON:
+			hasDesc := false
+			prefix := relPath + "."
+			for p := range known {
+				if strings.HasPrefix(p, prefix) {
+					hasDesc = true
+					break
+				}
+			}
+			if hasDesc {
+				pruneScalarLeaves(buf, absBase+"."+k, relPath, known, deleted)
+			}
+		}
+	}
+}
+
+// IsScalarLeaf removed: pruning logic inlines the leaf type check.
 
 // SyncAgentConfigFileModelFields returns the file content it *would*
 // write when caller-supplied fields were merged into a single model's

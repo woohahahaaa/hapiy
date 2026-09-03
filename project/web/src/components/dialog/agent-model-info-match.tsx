@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/checkbox'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
@@ -25,6 +26,8 @@ import {
   type AgentModelInfoFieldPaths,
   type AgentModelInfoFieldSpec,
   type AgentModelProvider,
+  type AgentProtocol,
+  type AgentRecommendation,
 } from '@/lib/dashboard-api'
 
 interface AgentModelInfoMatchDialogProps {
@@ -34,11 +37,12 @@ interface AgentModelInfoMatchDialogProps {
   /** 全文件模式：文件里全部 provider（含各自 models），跨 provider 聚合展示。 */
   providers: readonly AgentModelProvider[]
   modelInfoFields: AgentModelInfoFieldPaths
+  /** 规则推荐（common + protocols），弹窗内按 provider 匹配后计算 diff 与应用。 */
+  recommendations: readonly AgentRecommendation[]
+  protocols: readonly AgentProtocol[]
   onPreview: (input: { readonly content: string; readonly applied: number }) => void
 }
 
-// fieldValue extracts the raw value at a (possibly dotted) path inside an
-// object, mirroring the backend's gjson walk.
 function fieldValue(obj: unknown, path: string): unknown {
   if (!path || !obj || typeof obj !== 'object') return undefined
   const segs = path.split('.')
@@ -52,10 +56,6 @@ function fieldValue(obj: unknown, path: string): unknown {
   return cur
 }
 
-// coerceToShape adapts a model-info raw value to the shape the agent's
-// config expects (boolean field → boolean; number field → number). Only
-// used for legacy plain-path rules; explicit {path, op} specs use
-// applySpecOp instead.
 function coerceToShape(raw: unknown, targetShape: unknown): unknown {
   if (typeof targetShape === 'boolean') {
     const has = Array.isArray(raw) ? raw.length > 0 : raw !== undefined && raw !== null
@@ -68,10 +68,6 @@ function coerceToShape(raw: unknown, targetShape: unknown): unknown {
   return raw
 }
 
-// applySpecOp shapes the unified value per an explicit {path, op} spec.
-// Returns undefined when the op semantics say the field must be skipped
-// (empty raw / first / join), so agents never receive e.g. an empty array
-// where a boolean is expected.
 function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
   switch (spec.op) {
     case 'bool': {
@@ -108,17 +104,21 @@ function displayValue(value: unknown): string {
   return String(value)
 }
 
-// SyncRow = 一个 (provider × model) 组合。
-interface SyncRow {
-  readonly providerId: string
-  readonly modelId: string
-  readonly config: unknown
-}
-
-// 同一模型出现于多个 provider 时聚合为一组，模型名列 rowspan。
-interface ModelGroup {
-  readonly modelId: string
-  readonly rows: readonly SyncRow[]
+// protocolMatches: 用现有 agent-models 相同规则判断协议是否作用于该
+// provider（对照其配置字段与协议条件）。
+function protocolMatchesProviderConfig(cfg: unknown, protocol: AgentProtocol): boolean {
+  if ((protocol.conditions ?? []).length === 0) return false
+  for (const cond of protocol.conditions) {
+    const actual = fieldValue(cfg, cond.field)
+    const asString = actual === undefined || actual === null ? '' : String(actual)
+    switch (cond.op) {
+      case 'equals': if (asString === cond.value) return true; break
+      case 'not_equals': if (asString !== cond.value) return true; break
+      case 'contains': if (asString.includes(cond.value)) return true; break
+      case 'not_contains': if (!asString.includes(cond.value)) return true; break
+    }
+  }
+  return false
 }
 
 export function AgentModelInfoMatchDialog({
@@ -127,19 +127,24 @@ export function AgentModelInfoMatchDialog({
   record,
   providers,
   modelInfoFields,
+  recommendations,
+  protocols,
   onPreview,
 }: AgentModelInfoMatchDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
-  const [checked, setChecked] = useState<Record<string, boolean>>({})
+  const [checkedProviders, setCheckedProviders] = useState<Record<string, boolean>>({})
+  const [checkedModels, setCheckedModels] = useState<Record<string, boolean>>({})
+  const [supplierByModelId, setSupplierByModelId] = useState<Record<string, string>>({})
   const [applying, setApplying] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setLoading(true)
     setError(null)
-    setChecked({})
+    setCheckedProviders({})
+    setCheckedModels({})
     setSupplierByModelId({})
     let cancelled = false
     loadModelsDevModels()
@@ -155,23 +160,26 @@ export function AgentModelInfoMatchDialog({
     return () => { cancelled = true }
   }, [open])
 
-  // 聚合：模型名 → 多个 (provider, config)。
-  const groups = useMemo<readonly ModelGroup[]>(() => {
-    const byModel = new Map<string, SyncRow[]>()
-    for (const p of providers) {
-      for (const m of p.models) {
-        const list = byModel.get(m.id) ?? []
-        list.push({ providerId: p.provider_id, modelId: m.id, config: m.config })
-        byModel.set(m.id, list)
+  // provider 有效推荐（common + 匹配协议）。与主弹窗 effectiveProviderRecs
+  // 同语义。
+  const effectiveRecsFor = (p: AgentModelProvider) => {
+    const base: AgentRecommendation[] = [...recommendations.filter((r) => r.scope === 'provider')]
+    for (const proto of protocols) {
+      if (protocolMatchesProviderConfig(p.other_fields, proto)) {
+        base.push(...proto.recommendations.filter((r) => r.scope === 'provider'))
       }
     }
-    return [...byModel.entries()].map(([modelId, rows]) => ({ modelId, rows }))
-  }, [providers])
-
-  const rowCount = groups.reduce((n, g) => n + g.rows.length, 0)
-
-  // 每模型选择的 models.dev 参考供应商（数据只从所选供应商来）。
-  const [supplierByModelId, setSupplierByModelId] = useState<Record<string, string>>({})
+    return base
+  }
+  const effectiveModelRecsFor = (p: AgentModelProvider) => {
+    const base: AgentRecommendation[] = [...recommendations.filter((r) => r.scope === 'model')]
+    for (const proto of protocols) {
+      if (protocolMatchesProviderConfig(p.other_fields, proto)) {
+        base.push(...proto.recommendations.filter((r) => r.scope === 'model'))
+      }
+    }
+    return base
+  }
 
   const sourceMapFor = (row: ModelsDevModel): Record<string, unknown> => {
     const types = [...new Set([...row.inputTypes, ...row.outputTypes])]
@@ -183,18 +191,17 @@ export function AgentModelInfoMatchDialog({
     }
   }
 
-  // diff 依据：该模型被选中的 models.dev 供应商行；未选 → 无源数据。
   const sourceFor = (modelId: string): ModelsDevModel | null => {
     const supplier = supplierByModelId[modelId]
     if (!supplier) return null
     return findModelsDevProviderRow(snapshot ?? [], modelId, supplier)
   }
 
-  const changesFor = (row: SyncRow): readonly FieldChange[] => {
-    const source = sourceFor(row.modelId)
+  // 单个模型的基础字段变更（models.dev 参考供应商）。
+  const modelInfoChangesFor = (config: unknown, modelId: string): FieldChange[] => {
+    const source = sourceFor(modelId)
     if (!source) return []
-    const cfg = row.config
-    if (!cfg || typeof cfg !== 'object') return []
+    if (!config || typeof config !== 'object') return []
     const sourceMap = sourceMapFor(source)
     const changes: FieldChange[] = []
     for (const key of MODEL_INFO_FIELD_KEYS) {
@@ -203,7 +210,7 @@ export function AgentModelInfoMatchDialog({
       if (!path) continue
       const raw = sourceMap[key]
       if (raw === undefined || raw === null) continue
-      const current = fieldValue(cfg, path)
+      const current = fieldValue(config, path)
       const next = typeof spec === 'string' ? coerceToShape(raw, current) : applySpecOp(raw, spec)
       if (next === undefined) continue
       if (!valuesEqual(current, next)) {
@@ -213,176 +220,303 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  const rowKey = (providerId: string, modelId: string): string => `${providerId}\u0000${modelId}`
-  const checkedCount = groups.reduce(
-    (n, g) => n + g.rows.filter((r) => !!checked[rowKey(r.providerId, r.modelId)]).length,
-    0,
-  )
-  const allChecked = rowCount > 0 && checkedCount === rowCount
-
-  const toggleAll = () => {
-    const next = !allChecked
-    const map: Record<string, boolean> = {}
-    for (const g of groups) {
-      for (const r of g.rows) map[rowKey(r.providerId, r.modelId)] = next
+  // 模型级模板推荐字段 diff。
+  const modelRecChangesFor = (config: unknown, provider: AgentModelProvider): FieldChange[] => {
+    const recs = effectiveModelRecsFor(provider)
+    const changes: FieldChange[] = []
+    for (const r of recs) {
+      if (r.recommended === null || r.recommended === undefined) {
+        const current = fieldValue(config, r.key)
+        if (!valuesEqual(current, undefined)) {
+          changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
+        }
+        continue
+      }
+      const current = fieldValue(config, r.key)
+      if (!valuesEqual(current, r.recommended)) {
+        changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+      }
     }
-    setChecked(map)
+    return changes
   }
 
-  const handleSave = async () => {
+  // provider 级模板推荐 diff。
+  const providerRecChangesFor = (p: AgentModelProvider): FieldChange[] => {
+    const recs = effectiveRecsFor(p)
+    const changes: FieldChange[] = []
+    for (const r of recs) {
+      if (r.recommended === null || r.recommended === undefined) {
+        const current = fieldValue(p.other_fields, r.key)
+        if (!valuesEqual(current, undefined)) {
+          changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
+        }
+        continue
+      }
+      const current = fieldValue(p.other_fields, r.key)
+      if (!valuesEqual(current, r.recommended)) {
+        changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+      }
+    }
+    return changes
+  }
+
+  const modelKey = (providerId: string, modelId: string) => `${providerId}\u0000${modelId}`
+  const providerCheckedCount = providers.filter((p) => checkedProviders[p.provider_id]).length
+  const modelCheckedCount = providers.reduce(
+    (n, p) => n + p.models.filter((m) => checkedModels[modelKey(p.provider_id, m.id)]).length,
+    0,
+  )
+
+  // 参考供应商预填：每个模型首个候选（与旧逻辑一致）。
+  useEffect(() => {
+    if (!open) return
+    let changed = false
+    const next: Record<string, string> = { ...supplierByModelId }
+    for (const p of providers) {
+      for (const m of p.models) {
+        if (next[m.id] !== undefined) continue
+        const c = providersForModel(snapshot ?? [], m.id)
+        if (c.length > 0) {
+          next[m.id] = c[0].providerName
+          changed = true
+        }
+      }
+    }
+    if (changed) setSupplierByModelId(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, snapshot, providers])
+
+  const handleApply = async () => {
     if (!record) return
-    const targets = groups.flatMap((g) => g.rows)
-      .filter((r) => {
-        if (!checked[rowKey(r.providerId, r.modelId)]) return false
-        // 未选择 models.dev 供应商的模型不参与同步
-        if (!supplierByModelId[r.modelId]) return false
-        return changesFor(r).length > 0
-      })
-      .map((r) => ({ providerId: r.providerId, modelId: r.modelId, changes: changesFor(r) }))
-    if (targets.length === 0) {
-      toast('没有勾选的模型存在可应用的字段差异')
+    if (providerCheckedCount === 0 && modelCheckedCount === 0) {
+      toast('请至少勾选一个供应商或模型')
       return
     }
     setApplying(true)
     try {
-      let applied = 0
-      // 每次 sync 返回的都是完整文件内容；最后一次快照已包含全部被同步
-      // 的 provider×model，直接作为预览即可。
-      let lastRaw = ''
-      for (const { providerId, modelId, changes } of targets) {
-        const fields: Record<string, unknown> = {}
-        for (const c of changes) fields[c.path] = c.newValue
-        const res = await dashboardApi.syncAgentConfigFileModelFields(record.id, {
-          provider_id: providerId,
-          model_id: modelId,
-          fields,
-        })
-        applied += res.applied
-        lastRaw = res.content
+      // checked: provider_id → 勾选模型列表（空=全模型）。
+      const checked: Record<string, readonly string[]> = {}
+      const modelFields: Record<string, Record<string, Record<string, unknown>>> = {}
+      for (const p of providers) {
+        const providerWantsDefaults = checkedProviders[p.provider_id]
+        const modelIds = p.models
+          .filter((m) => checkedModels[modelKey(p.provider_id, m.id)])
+          .map((m) => m.id)
+        if (!providerWantsDefaults && modelIds.length === 0) continue
+        checked[p.provider_id] = providerWantsDefaults ? [] : modelIds
+        // 勾选模型的 models.dev 基础字段。
+        if (modelIds.length > 0) {
+          modelFields[p.provider_id] = {}
+          for (const m of p.models) {
+            if (!modelIds.includes(m.id)) continue
+            const source = sourceFor(m.id)
+            if (!source) continue
+            const sourceMap = sourceMapFor(source)
+            const fields: Record<string, unknown> = {}
+            for (const key of MODEL_INFO_FIELD_KEYS) {
+              const spec = modelInfoFields[key]
+              const path = typeof spec === 'string' ? spec : spec.path
+              if (!path) continue
+              const raw = sourceMap[key]
+              if (raw === undefined || raw === null) continue
+              const current = fieldValue(m.config, path)
+              const next = typeof spec === 'string' ? coerceToShape(raw, current) : applySpecOp(raw, spec)
+              if (next === undefined) continue
+              if (valuesEqual(current, next)) continue
+              fields[path] = next
+            }
+            if (Object.keys(fields).length > 0) modelFields[p.provider_id][m.id] = fields
+          }
+        }
       }
-      onPreview({ content: lastRaw, applied })
+      const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
+      if (res.applied === 0) {
+        toast('没有可应用的变更（勾选项均已符合推荐）')
+        onOpenChange(false)
+        return
+      }
+      onPreview({ content: res.content, applied: res.applied })
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '同步失败')
+      toast.error(err instanceof Error ? err.message : '应用失败')
     } finally {
       setApplying(false)
     }
   }
 
+  const allChecked = providerCheckedCount + modelCheckedCount ===
+    providers.reduce((n, p) => n + 1 + p.models.length, 0)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
         <DialogHeader>
-          <DialogTitle>同步模型基本信息</DialogTitle>
+          <DialogTitle>使用推荐配置</DialogTitle>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 flex-col">
           {loading && <Placeholder>加载中…</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
-          {!loading && !error && rowCount === 0 && (
-            <Placeholder>该配置文件下没有可同步的模型</Placeholder>
+          {!loading && !error && providers.length === 0 && (
+            <Placeholder>该配置文件下没有可配置的供应商</Placeholder>
           )}
-          {!loading && !error && rowCount > 0 && (
+          {!loading && !error && providers.length > 0 && (
             <>
               <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
-                {/* 表头行：与卡片内列用同一比例，保证对齐 */}
                 <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
-                  <div className="w-[18%]">模型</div>
-                  <div className="w-[26%] border-l border-border pl-2">从 models.dev 同步</div>
-                  <div className="flex w-[22%] items-center gap-2 border-l border-border pl-2">
+                  <div className="w-[10%]">
                     <Checkbox
-                      checked={allChecked ? true : checkedCount > 0 ? 'indeterminate' : false}
-                      onCheckedChange={toggleAll}
+                      checked={allChecked ? true : providerCheckedCount + modelCheckedCount > 0 ? 'indeterminate' : false}
+                      onCheckedChange={(v) => {
+                        const next = v === true
+                        const cp: Record<string, boolean> = {}
+                        const cm: Record<string, boolean> = {}
+                        for (const p of providers) {
+                          cp[p.provider_id] = next
+                          for (const m of p.models) cm[modelKey(p.provider_id, m.id)] = next
+                        }
+                        setCheckedProviders(cp)
+                        setCheckedModels(cm)
+                      }}
                       aria-label="全选"
                     />
-                    所属供应商
                   </div>
-                  <div className="w-[34%] border-l border-border pl-2">将应用的修改</div>
+                  <div className="w-[13%] border-l border-border pl-2">类别</div>
+                  <div className="flex-1 border-l border-border pl-2">名称</div>
+                  <div className="w-[26%] border-l border-border pl-2">参考</div>
+                  <div className="w-[34%] border-l border-border pl-2">字段对比</div>
                 </div>
 
-                {/* 每个模型一张卡片：组内 rowspan 表格，组间分隔线不穿过模型列 */}
                 <div className="divide-y divide-border">
-                  {groups.map((g) => {
-                    const supplier = supplierByModelId[g.modelId] ?? ''
-                    const source = supplier ? findModelsDevProviderRow(snapshot ?? [], g.modelId, supplier) : null
+                  {providers.map((p) => {
+                    const pChanges = providerRecChangesFor(p)
+                    const providerChecked = checkedProviders[p.provider_id]
                     return (
-                      <table key={g.modelId} className="w-full table-fixed text-xs">
-                        <tbody>
-                          {g.rows.map((r, idx) => {
-                            const changes = changesFor(r)
-                            return (
-                            <tr
-                              key={rowKey(r.providerId, r.modelId)}
-                              className={idx > 0 ? 'border-t border-border/50' : undefined}
-                            >
-                              {idx === 0 && (
-                                <>
-                                  <td rowSpan={g.rows.length} className="w-[18%] border-r border-border px-2 py-2 align-top">
-                                    <div className="break-words font-medium">{g.modelId}</div>
-                                  </td>
-                                  <td rowSpan={g.rows.length} className="w-[26%] border-r border-border px-2 py-2 align-top">
-                                    <Select
-                                      value={supplier}
-                                      onValueChange={(v) =>
-                                        setSupplierByModelId((prev) => ({ ...prev, [g.modelId]: v }))
-                                      }
-                                    >
-                                      <SelectTrigger className="h-7 w-full text-xs">
-                                        <SelectValue placeholder="选择参考厂商" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {providersForModel(snapshot ?? [], g.modelId).map((p) => (
-                                          <SelectItem key={p.providerId} value={p.providerName}>
-                                            {p.providerName}{isModelsDevLab(g.modelId, p.providerId) ? '（官方）' : ''}
+                      <div key={p.provider_id}>
+                        {/* 供应商行：有 checkbox、无可点交互、无参考下拉 */}
+                        <div className={providerChecked ? 'flex items-center border-b border-border/60 bg-primary/5 px-2 py-2 text-xs' : 'flex items-center border-b border-border/60 px-2 py-2 text-xs'}>
+                          <div className="w-[10%]">
+                            <Checkbox
+                              checked={providerChecked}
+                              onCheckedChange={(v) =>
+                                setCheckedProviders((prev) => ({ ...prev, [p.provider_id]: v === true }))
+                              }
+                              aria-label={`勾选供应商 ${p.provider_id}`}
+                            />
+                          </div>
+                          <div className="w-[13%] border-l border-border pl-2 font-medium text-muted-foreground">供应商</div>
+                          <div className="flex-1 border-l border-border pl-2 font-mono">{p.provider_id}</div>
+                          <div className="w-[26%] border-l border-border pl-2 text-muted-foreground">系统模板推荐</div>
+                          <div className="w-[34%] border-l border-border pl-2">
+                            {pChanges.length === 0 ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <ul className="space-y-1">
+                                {pChanges.slice(0, 4).map((c, i) => (
+                                  <li key={i} className="text-[11px] leading-snug">
+                                    <span className="font-medium">{c.key}</span>
+                                    <span className="mx-1 text-muted-foreground">
+                                      {displayValue(c.oldValue)} → {displayValue(c.newValue)}
+                                    </span>
+                                  </li>
+                                ))}
+                                {pChanges.length > 4 && (
+                                  <li className="text-[11px] text-muted-foreground">…等 {pChanges.length} 项</li>
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 模型行 */}
+                        {p.models.map((m) => {
+                          const changes = [
+                            ...modelInfoChangesFor(m.config, m.id),
+                            ...modelRecChangesFor(m.config, p),
+                          ]
+                          const supplier = supplierByModelId[m.id] ?? ''
+                          const source = supplier ? findModelsDevProviderRow(snapshot ?? [], m.id, supplier) : null
+                          const key = modelKey(p.provider_id, m.id)
+                          const checked = checkedModels[key]
+                          return (
+                            <div key={m.id} className={checked ? 'flex items-center px-2 py-2 text-xs bg-primary/5' : 'flex items-center px-2 py-2 text-xs'}>
+                              <div className="w-[10%]">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(v) =>
+                                    setCheckedModels((prev) => ({ ...prev, [key]: v === true }))
+                                  }
+                                  aria-label={`勾选模型 ${m.id}`}
+                                />
+                              </div>
+                              <div className="w-[13%] border-l border-border pl-2 text-muted-foreground">模型</div>
+                              <div className="flex-1 border-l border-border pl-2 font-mono">{m.id}</div>
+                              <div className="w-[26%] border-l border-border pl-2">
+                                <Select
+                                  value={supplier}
+                                  onValueChange={(v) =>
+                                    setSupplierByModelId((prev) => ({ ...prev, [m.id]: v }))
+                                  }
+                                  disabled={snapshot === null}
+                                >
+                                  <SelectTrigger className="h-7 w-full text-xs">
+                                    <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {snapshot !== null && (
+                                      <>
+                                        <SelectItem value="">不同步</SelectItem>
+                                        {(() => {
+                                          const stored = supplier
+                                          const candidates = providersForModel(snapshot, m.id)
+                                          if (stored === '' || candidates.some((x) => x.providerName === stored)) return null
+                                          const resolved = snapshot.find((r) => r.providerId === stored)?.providerName
+                                          const raw = resolved ?? stored
+                                          return (
+                                            <SelectItem value={stored}>
+                                              {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
+                                            </SelectItem>
+                                          )
+                                        })()}
+                                        {providersForModel(snapshot, m.id).map((x) => (
+                                          <SelectItem key={x.providerId} value={x.providerName}>
+                                            {x.providerName}{isModelsDevLab(m.id, x.providerId) ? '（官方）' : ''}
                                           </SelectItem>
                                         ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </td>
-                                </>
-                              )}
-                              <td className="w-[22%] border-r border-border px-2 py-2">
-                                <div className="flex items-center gap-2">
-                                  <Checkbox
-                                    checked={!!checked[rowKey(r.providerId, r.modelId)]}
-                                    onCheckedChange={(v) =>
-                                      setChecked((prev) => ({
-                                        ...prev,
-                                        [rowKey(r.providerId, r.modelId)]: v === true,
-                                      }))
-                                    }
-                                    aria-label={`选择 ${g.modelId} · ${r.providerId}`}
-                                  />
-                                  <span className="break-words font-mono">{r.providerId}</span>
-                                </div>
-                              </td>
-                              <td className="w-[34%] px-2 py-2">
+                                      </>
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="w-[34%] border-l border-border pl-2">
                                 {!source ? (
                                   <div className="text-[11px] text-muted-foreground">
                                     {supplier ? '未在 models.dev 查到该模型信息' : '请先选择参考厂商'}
                                   </div>
                                 ) : changes.length === 0 ? (
-                                  <div className="text-muted-foreground">—</div>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">— 已符合推荐</span>
+                                  </div>
                                 ) : (
-                                  <ul className="space-y-1.5">
-                                    {changes.map((c) => (
-                                      <li key={c.key} className="text-[11px] leading-snug">
-                                        <div className="font-medium">{c.label}</div>
-                                        <div className="mt-0.5 text-muted-foreground">
-                                          <span className="line-through">{displayValue(c.oldValue)}</span>
-                                          <span className="mx-1">→</span>
-                                          <span>{displayValue(c.newValue)}</span>
-                                        </div>
+                                  <ul className="space-y-1">
+                                    {changes.slice(0, 3).map((c, i) => (
+                                      <li key={i} className="text-[11px] leading-snug">
+                                        <span className="font-medium">{c.label}</span>
+                                        <span className="mx-1 text-muted-foreground">
+                                          {displayValue(c.oldValue)} → {displayValue(c.newValue)}
+                                        </span>
                                       </li>
                                     ))}
+                                    {changes.length > 3 && (
+                                      <li className="text-[11px] text-muted-foreground">…等 {changes.length} 项</li>
+                                    )}
                                   </ul>
                                 )}
-                              </td>
-                            </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     )
                   })}
                 </div>
@@ -391,15 +525,18 @@ export function AgentModelInfoMatchDialog({
               <div className="flex justify-end gap-2 border-t border-border pt-2">
                 <Button
                   variant="default"
-                  disabled={applying || loading || rowCount === 0 || checkedCount === 0}
-                  onClick={() => void handleSave()}
+                  disabled={applying || loading || (providerCheckedCount === 0 && modelCheckedCount === 0)}
+                  onClick={() => void handleApply()}
                 >
-                  {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '确认应用'}
+                  {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '使用推荐配置'}
                 </Button>
               </div>
             </>
           )}
         </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>关闭</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )
