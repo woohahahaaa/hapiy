@@ -1487,10 +1487,24 @@ function parseEnvelope(value: unknown): unknown {
   return value.data
 }
 
+// REQUEST_TIMEOUT_MS caps every dashboard fetch. 高延迟 / 跨域时避免
+// AuthGate 等 users/me 或业务请求无限挂起。
+const REQUEST_TIMEOUT_MS = 8000
+
+async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function request(path: string, init?: RequestInit): Promise<unknown> {
   let response: Response
   try {
-    response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
+    response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -1517,7 +1531,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
 async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord> {
   let response: Response
   try {
-    response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
+    response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },
@@ -1549,7 +1563,7 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
 async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
   let response: Response
   try {
-    response = await fetch(`${apiBaseUrl}/v1/dashboard${path}`, {
+    response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...init?.headers },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/checkbox'
@@ -286,6 +286,24 @@ export function AgentModelInfoMatchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, snapshot, providers])
 
+  // 一键官方：所有模型设为官方（lab）参考厂商；模型没有官方来源时
+  // 取其候选列表第一个（官方优先排序后的首位，即字母序第一个）。
+  const applyOfficialToAll = () => {
+    if (snapshot === null) return
+    let changed = false
+    const next: Record<string, string> = { ...supplierByModelId }
+    for (const p of providers) {
+      for (const m of p.models) {
+        const c = providersForModel(snapshot, m.id)
+        if (c.length === 0) continue
+        next[m.id] = c[0].providerName
+        if (supplierByModelId[m.id] !== next[m.id]) changed = true
+      }
+    }
+    setSupplierByModelId(next)
+    toast(changed ? '已把全部模型设为官方参考厂商（无官方的取候选第一个）' : '模型均已是最佳参考厂商')
+  }
+
   const handleApply = async () => {
     if (!record) return
     if (providerCheckedCount === 0 && modelCheckedCount === 0) {
@@ -362,164 +380,195 @@ export function AgentModelInfoMatchDialog({
           )}
           {!loading && !error && providers.length > 0 && (
             <>
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
-                <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
-                  <div className="w-[10%]">
-                    <Checkbox
-                      checked={allChecked ? true : providerCheckedCount + modelCheckedCount > 0 ? 'indeterminate' : false}
-                      onCheckedChange={(v) => {
-                        const next = v === true
-                        const cp: Record<string, boolean> = {}
-                        const cm: Record<string, boolean> = {}
-                        for (const p of providers) {
-                          cp[p.provider_id] = next
-                          for (const m of p.models) cm[modelKey(p.provider_id, m.id)] = next
-                        }
-                        setCheckedProviders(cp)
-                        setCheckedModels(cm)
-                      }}
-                      aria-label="全选"
-                    />
-                  </div>
-                  <div className="w-[13%] border-l border-border pl-2">类别</div>
-                  <div className="flex-1 border-l border-border pl-2">名称</div>
-                  <div className="w-[26%] border-l border-border pl-2">参考</div>
-                  <div className="w-[34%] border-l border-border pl-2">字段对比</div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={snapshot === null}
+                  onClick={applyOfficialToAll}
+                  title="把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个"
+                >
+                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                  一键官方
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  已勾选 {providerCheckedCount + modelCheckedCount} / {providers.reduce((n, p) => n + 1 + p.models.length, 0)} 项
                 </div>
+              </div>
 
-                <div className="divide-y divide-border">
-                  {providers.map((p) => {
-                    const pChanges = providerRecChangesFor(p)
-                    const providerChecked = checkedProviders[p.provider_id]
-                    return (
-                      <div key={p.provider_id}>
-                        {/* 供应商行：有 checkbox、无可点交互、无参考下拉 */}
-                        <div className={providerChecked ? 'flex items-center border-b border-border/60 bg-primary/5 px-2 py-2 text-xs' : 'flex items-center border-b border-border/60 px-2 py-2 text-xs'}>
-                          <div className="w-[10%]">
-                            <Checkbox
-                              checked={providerChecked}
-                              onCheckedChange={(v) =>
-                                setCheckedProviders((prev) => ({ ...prev, [p.provider_id]: v === true }))
-                              }
-                              aria-label={`勾选供应商 ${p.provider_id}`}
-                            />
-                          </div>
-                          <div className="w-[13%] border-l border-border pl-2 font-medium text-muted-foreground">供应商</div>
-                          <div className="flex-1 border-l border-border pl-2 font-mono">{p.provider_id}</div>
-                          <div className="w-[26%] border-l border-border pl-2 text-muted-foreground">系统模板推荐</div>
-                          <div className="w-[34%] border-l border-border pl-2">
-                            {pChanges.length === 0 ? (
-                              <span className="text-muted-foreground">—</span>
-                            ) : (
-                              <ul className="space-y-1">
-                                {pChanges.slice(0, 4).map((c, i) => (
-                                  <li key={i} className="text-[11px] leading-snug">
-                                    <span className="font-medium">{c.key}</span>
-                                    <span className="mx-1 text-muted-foreground">
-                                      {displayValue(c.oldValue)} → {displayValue(c.newValue)}
-                                    </span>
-                                  </li>
-                                ))}
-                                {pChanges.length > 4 && (
-                                  <li className="text-[11px] text-muted-foreground">…等 {pChanges.length} 项</li>
-                                )}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border border-border">
+                <table className="w-full table-fixed border-collapse">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
+                      <th className="w-10 py-2 pr-1 pl-2 align-middle text-left">
+                        <Checkbox
+                          checked={allChecked ? true : providerCheckedCount + modelCheckedCount > 0 ? 'indeterminate' : false}
+                          onCheckedChange={(v) => {
+                            const next = v === true
+                            const cp: Record<string, boolean> = {}
+                            const cm: Record<string, boolean> = {}
+                            for (const p of providers) {
+                              cp[p.provider_id] = next
+                              for (const m of p.models) cm[modelKey(p.provider_id, m.id)] = next
+                            }
+                            setCheckedProviders(cp)
+                            setCheckedModels(cm)
+                          }}
+                          aria-label="全选"
+                        />
+                      </th>
+                      <th className="w-[26%] border-l border-border px-3 py-2 text-left font-medium">名称</th>
+                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">参考</th>
+                      <th className="border-l border-border px-3 py-2 text-left font-medium">字段对比</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {providers.map((p) => {
+                      const pChanges = providerRecChangesFor(p)
+                      const providerChecked = checkedProviders[p.provider_id]
+                      return (
+                        <Fragment key={p.provider_id}>
+                          {/* 供应商行：勾选即套整供应商默认推荐；参考在供应商级直接画两个杠表示不需要 */}
+                          <tr
+                            className={
+                              'border-b border-border text-xs hover:bg-muted/40 transition-colors ' +
+                              (providerChecked ? 'bg-primary/5' : '')
+                            }
+                          >
+                            <td className="py-2 pr-1 pl-2 align-top">
+                              <Checkbox
+                                checked={providerChecked}
+                                onCheckedChange={(v) =>
+                                  setCheckedProviders((prev) => ({ ...prev, [p.provider_id]: v === true }))
+                                }
+                                aria-label={`勾选供应商 ${p.provider_id}`}
+                              />
+                            </td>
+                            <td className="border-l border-border px-3 py-2 align-top">
+                              <div className="truncate font-medium">{p.provider_id}</div>
+                              <div className="text-[10px] text-muted-foreground">供应商级推荐</div>
+                            </td>
+                            <td className="border-l border-border px-3 py-2 align-top font-mono text-muted-foreground">--</td>
+                            <td className="border-l border-border px-3 py-2 align-top">
+                              {pChanges.length === 0 ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <ul className="space-y-1">
+                                  {pChanges.slice(0, 4).map((c, i) => (
+                                    <li key={i} className="break-all text-[11px] leading-snug">
+                                      <span className="font-medium">{c.key}</span>
+                                      <span className="mx-1 text-muted-foreground">
+                                        {displayValue(c.oldValue)} → {displayValue(c.newValue)}
+                                      </span>
+                                    </li>
+                                  ))}
+                                  {pChanges.length > 4 && (
+                                    <li className="text-[11px] text-muted-foreground">…等 {pChanges.length} 项</li>
+                                  )}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
 
-                        {/* 模型行 */}
-                        {p.models.map((m) => {
-                          const changes = [
-                            ...modelInfoChangesFor(m.config, m.id),
-                            ...modelRecChangesFor(m.config, p),
-                          ]
-                          const supplier = supplierByModelId[m.id] ?? ''
-                          const source = supplier ? findModelsDevProviderRow(snapshot ?? [], m.id, supplier) : null
-                          const key = modelKey(p.provider_id, m.id)
-                          const checked = checkedModels[key]
-                          return (
-                            <div key={m.id} className={checked ? 'flex items-center px-2 py-2 text-xs bg-primary/5' : 'flex items-center px-2 py-2 text-xs'}>
-                              <div className="w-[10%]">
-                                <Checkbox
-                                  checked={checked}
-                                  onCheckedChange={(v) =>
-                                    setCheckedModels((prev) => ({ ...prev, [key]: v === true }))
-                                  }
-                                  aria-label={`勾选模型 ${m.id}`}
-                                />
-                              </div>
-                              <div className="w-[13%] border-l border-border pl-2 text-muted-foreground">模型</div>
-                              <div className="flex-1 border-l border-border pl-2 font-mono">{m.id}</div>
-                              <div className="w-[26%] border-l border-border pl-2">
-                                <Select
-                                  value={supplier}
-                                  onValueChange={(v) =>
-                                    setSupplierByModelId((prev) => ({ ...prev, [m.id]: v }))
-                                  }
-                                  disabled={snapshot === null}
-                                >
-                                  <SelectTrigger className="h-7 w-full text-xs">
-                                    <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {snapshot !== null && (
-                                      <>
-                                        <SelectItem value="">不同步</SelectItem>
-                                        {(() => {
-                                          const stored = supplier
-                                          const candidates = providersForModel(snapshot, m.id)
-                                          if (stored === '' || candidates.some((x) => x.providerName === stored)) return null
-                                          const resolved = snapshot.find((r) => r.providerId === stored)?.providerName
-                                          const raw = resolved ?? stored
-                                          return (
-                                            <SelectItem value={stored}>
-                                              {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
+                          {/* 模型行 */}
+                          {p.models.map((m) => {
+                            const changes = [
+                              ...modelInfoChangesFor(m.config, m.id),
+                              ...modelRecChangesFor(m.config, p),
+                            ]
+                            const supplier = supplierByModelId[m.id] ?? ''
+                            const source = supplier ? findModelsDevProviderRow(snapshot ?? [], m.id, supplier) : null
+                            const key = modelKey(p.provider_id, m.id)
+                            const checked = checkedModels[key]
+                            return (
+                              <tr
+                                key={m.id}
+                                className={
+                                  'border-b border-border text-xs hover:bg-muted/40 transition-colors ' +
+                                  (checked ? 'bg-primary/5' : '')
+                                }
+                              >
+                                <td className="py-2 pr-1 pl-2 align-top">
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={(v) =>
+                                      setCheckedModels((prev) => ({ ...prev, [key]: v === true }))
+                                    }
+                                    aria-label={`勾选模型 ${m.id}`}
+                                  />
+                                </td>
+                                <td className="border-l border-border px-3 py-2 align-top">
+                                  <div className="break-all pl-2 font-mono">{m.id}</div>
+                                  <div className="pl-2 text-[10px] text-muted-foreground">模型级推荐</div>
+                                </td>
+                                <td className="border-l border-border px-3 py-2 align-top">
+                                  <Select
+                                    value={supplier}
+                                    onValueChange={(v) =>
+                                      setSupplierByModelId((prev) => ({ ...prev, [m.id]: v }))
+                                    }
+                                    disabled={snapshot === null}
+                                  >
+                                    <SelectTrigger className="h-7 w-full text-xs">
+                                      <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {snapshot !== null && (
+                                        <>
+                                          <SelectItem value="">不同步</SelectItem>
+                                          {(() => {
+                                            const stored = supplier
+                                            const candidates = providersForModel(snapshot, m.id)
+                                            if (stored === '' || candidates.some((x) => x.providerName === stored)) return null
+                                            const resolved = snapshot.find((r) => r.providerId === stored)?.providerName
+                                            const raw = resolved ?? stored
+                                            return (
+                                              <SelectItem value={stored}>
+                                                {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
+                                              </SelectItem>
+                                            )
+                                          })()}
+                                          {providersForModel(snapshot, m.id).map((x) => (
+                                            <SelectItem key={x.providerId} value={x.providerName}>
+                                              {x.providerName}{isModelsDevLab(m.id, x.providerId) ? '（官方）' : ''}
                                             </SelectItem>
-                                          )
-                                        })()}
-                                        {providersForModel(snapshot, m.id).map((x) => (
-                                          <SelectItem key={x.providerId} value={x.providerName}>
-                                            {x.providerName}{isModelsDevLab(m.id, x.providerId) ? '（官方）' : ''}
-                                          </SelectItem>
-                                        ))}
-                                      </>
-                                    )}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div className="w-[34%] border-l border-border pl-2">
-                                {!source ? (
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {supplier ? '未在 models.dev 查到该模型信息' : '请先选择参考厂商'}
-                                  </div>
-                                ) : changes.length === 0 ? (
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-muted-foreground">— 已符合推荐</span>
-                                  </div>
-                                ) : (
-                                  <ul className="space-y-1">
-                                    {changes.slice(0, 3).map((c, i) => (
-                                      <li key={i} className="text-[11px] leading-snug">
-                                        <span className="font-medium">{c.label}</span>
-                                        <span className="mx-1 text-muted-foreground">
-                                          {displayValue(c.oldValue)} → {displayValue(c.newValue)}
-                                        </span>
-                                      </li>
-                                    ))}
-                                    {changes.length > 3 && (
-                                      <li className="text-[11px] text-muted-foreground">…等 {changes.length} 项</li>
-                                    )}
-                                  </ul>
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })}
-                </div>
+                                          ))}
+                                        </>
+                                      )}
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                                <td className="border-l border-border px-3 py-2 align-top">
+                                  {!source ? (
+                                    <div className="break-all text-[11px] text-muted-foreground">
+                                      {supplier ? '未在 models.dev 查到该模型信息' : '请先选择参考厂商'}
+                                    </div>
+                                  ) : changes.length === 0 ? (
+                                    <div className="text-[11px] text-muted-foreground">— 已符合推荐</div>
+                                  ) : (
+                                    <ul className="space-y-1">
+                                      {changes.slice(0, 3).map((c, i) => (
+                                        <li key={i} className="break-all text-[11px] leading-snug">
+                                          <span className="font-medium">{c.label}</span>
+                                          <span className="mx-1 text-muted-foreground">
+                                            {displayValue(c.oldValue)} → {displayValue(c.newValue)}
+                                          </span>
+                                        </li>
+                                      ))}
+                                      {changes.length > 3 && (
+                                        <li className="text-[11px] text-muted-foreground">…等 {changes.length} 项</li>
+                                      )}
+                                    </ul>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
 
               <div className="flex justify-end gap-2 border-t border-border pt-2">

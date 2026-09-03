@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { DiffView } from '@/components/DiffView'
+import { JsonTokens } from '@/components/JsonHighlight'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -543,7 +543,7 @@ const [error, setError] = useState<string | null>(null)
       <DialogContent
         width="md"
         height="auto"
-        minHeight="640px"
+        minHeight="680px"
         showCloseButton={false}
         className="flex max-h-[85vh] flex-col !gap-0 overflow-hidden p-0"
       >
@@ -557,6 +557,7 @@ const [error, setError] = useState<string | null>(null)
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
+              className="mr-8"
               disabled={!summary || !record}
               onClick={() => setSyncingFromInfo(true)}
               title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
@@ -799,15 +800,14 @@ const [error, setError] = useState<string | null>(null)
             </div>
           </div>
 
-          {/* Right: editable JSON + inline diff vs 原始文件. Clicking a model on
-              the left scrolls to that model's segment. */}
-        <div className="flex min-h-0 flex-col">
-            <ColumnHeader>供应商 + 模型 配置（可直接编辑，实时对比下方差异）</ColumnHeader>
-            <div className="max-h-[55%] overflow-auto border-b border-border p-0">
+          {/* Right: single syntax-highlighted JSON editor */}
+        <div className="flex min-h-0 flex-1 flex-col">
+            <ColumnHeader>供应商 + 模型 配置（可直接编辑，语法高亮）</ColumnHeader>
+            <div className="min-h-0 flex-1 overflow-hidden p-0">
               {selectedManagedGroup ? (
-                <DiffView
-                  before={selectedManagedGroup.group.generated}
-                  after={selectedManagedGroup.group.generated}
+                <JsonEditor
+                  value={selectedManagedGroup.group.generated}
+                  readonly
                 />
               ) : selectedProvider ? (
                 <JsonEditor
@@ -817,18 +817,6 @@ const [error, setError] = useState<string | null>(null)
               ) : (
                 <Placeholder>未选择供应商</Placeholder>
               )}
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex items-center gap-2 border-b border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-                与原始文件的差异
-              </div>
-              <div className="min-h-0 flex-1 overflow-auto p-0">
-                {selectedProvider ? (
-                  <DiffView before={rawProviderBaseline} after={currentEditBaseline} />
-                ) : (
-                  <Placeholder>未选择供应商</Placeholder>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -1060,18 +1048,22 @@ function ProviderRow({
     <div
       onClick={onClick}
       className={
-        'group flex w-full cursor-pointer items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
-        (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
+        'group flex min-h-[48px] w-full cursor-pointer items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
+        (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
       }
     >
       {leading}
       <div className={'flex min-w-0 flex-1 flex-col gap-0.5 text-left ' + (indent ? 'pl-3' : '')}>
-        <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
+        <span className={'flex min-w-0 items-center truncate text-sm font-medium ' + (selected ? 'text-primary-foreground' : '')}>{name}</span>
         {(info || badge) && (
           <span
             className={
               'flex min-w-0 items-center gap-1 text-[11px] ' +
-              (typeof info === 'object' && info.green ? 'text-success' : 'text-muted-foreground')
+              (selected
+                ? 'text-primary-foreground/80'
+                : typeof info === 'object' && info.green
+                  ? 'text-success'
+                  : 'text-muted-foreground')
             }
           >
             {badge}
@@ -1115,7 +1107,7 @@ function ModelRow({
     <div
       className={
         'group flex min-h-[48px] w-full items-center gap-1 rounded-none px-2 py-2 text-left transition-colors ' +
-        (selected ? 'bg-primary/10 text-primary' : 'hover:bg-muted')
+        (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
       }
     >
       <button
@@ -1125,14 +1117,18 @@ function ModelRow({
       >
         {info ? (
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-2 truncate text-sm font-medium">
-              <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
+            <span className={'flex min-w-0 items-center gap-2 truncate text-sm font-medium ' + (selected ? 'text-primary-foreground' : '')}>
+              <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
               {name}
             </span>
             <span
               className={
                 'truncate text-[11px] ' +
-                (typeof info === 'object' && info.green ? 'text-success' : 'text-muted-foreground')
+                (selected
+                  ? 'text-primary-foreground/80'
+                  : typeof info === 'object' && info.green
+                    ? 'text-success'
+                    : 'text-muted-foreground')
               }
             >
               {typeof info === 'object' ? info.text : info}
@@ -1140,8 +1136,8 @@ function ModelRow({
           </span>
         ) : (
           <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm font-medium">
-            <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
-            {name}
+            <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
+            <span className={selected ? 'text-primary-foreground' : ''}>{name}</span>
           </span>
         )}
       </button>
@@ -1593,20 +1589,22 @@ function wrapRootScope(
   return JSON.stringify(root)
 }
 
-// JsonEditor renders a monospace textarea pre-populated with the
-// current JSON. Typing into it writes the user-edited value back to
-// liveContent so the diff view recomputes against the new state.
-// Errors parsing the typed text surface as a red border on the box
-// without dropping the user's keystrokes.
+// JsonEditor renders a syntax-highlighted (colored) JSON editor built
+// from a transparent textarea layered over a highlighted <pre>, with a
+// plain line-number gutter. Errors parsing typed text surface as a red
+// border without dropping the user's keystrokes.
 function JsonEditor({
   value,
   onChange,
+  readonly = false,
 }: {
   value: unknown
-  onChange: (text: string) => void
+  onChange?: (text: string) => void
+  readonly?: boolean
 }) {
   const initial = useMemo(() => {
     if (value === null || value === undefined) return ''
+    if (typeof value === 'string') return value
     try {
       return JSON.stringify(value, null, 2)
     } catch {
@@ -1615,33 +1613,73 @@ function JsonEditor({
   }, [value])
   const [text, setText] = useState(initial)
   const [error, setError] = useState<string | null>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+
   // When the upstream value changes (provider switch, recommendations
   // apply), reset the editor to the new current state.
   useEffect(() => {
     setText(initial)
     setError(null)
   }, [initial])
+
+  const lineCount = text.split('\n').length
+
   return (
-    <div className="flex h-full flex-col gap-1">
-      <Textarea
-        value={text}
-        onChange={(e) => {
-          const v = e.target.value
-          setText(v)
-          try {
-            JSON.parse(v)
-            setError(null)
-            onChange(v)
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'JSON 解析失败')
+    <div className="flex h-full min-h-0 flex-col gap-1">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {/* 行号 gutter：与 textarea 同字体同 leading，滚动联动 */}
+        <div
+          ref={gutterRef}
+          aria-hidden
+          className="absolute top-0 left-0 z-20 h-full w-8 overflow-hidden border-r border-border bg-muted/30 font-mono text-[10px] leading-[1.5] select-none"
+        >
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div
+              key={i}
+              className="flex h-[1.5em] items-center justify-center text-muted-foreground"
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        {/* 语法着色层：与 textarea 完全对齐，承载 JSON 颜色 */}
+        <pre
+          ref={preRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden bg-transparent px-0 py-0 pl-9 font-mono text-xs leading-[1.5] whitespace-pre break-words text-transparent"
+        >
+          <JsonTokens text={text} />
+        </pre>
+        <Textarea
+          value={text}
+          readOnly={readonly}
+          onChange={(e) => {
+            const v = e.target.value
+            setText(v)
+            try {
+              JSON.parse(v)
+              setError(null)
+              onChange?.(v)
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'JSON 解析失败')
+            }
+          }}
+          onScroll={(e) => {
+            const el = e.currentTarget
+            if (gutterRef.current) gutterRef.current.scrollTop = el.scrollTop
+            if (preRef.current) {
+              preRef.current.scrollTop = el.scrollTop
+              preRef.current.scrollLeft = el.scrollLeft
+            }
+          }}
+          className={
+            'relative z-10 h-full min-h-[120px] resize-none overflow-auto px-0 py-0 pl-9 font-mono text-xs leading-[1.5] whitespace-pre break-words bg-transparent text-transparent caret-foreground selection:bg-primary/30 ' +
+            (error ? 'border-destructive focus-visible:ring-destructive' : '')
           }
-        }}
-        className={
-          'min-h-[120px] flex-1 resize-none font-mono text-xs leading-relaxed ' +
-          (error ? 'border-destructive focus-visible:ring-destructive' : '')
-        }
-        spellCheck={false}
-      />
+          spellCheck={false}
+        />
+      </div>
       {error && (
         <p className="text-[11px] text-destructive">{error}</p>
       )}
@@ -1738,6 +1776,21 @@ function stripJsoncComments(s: string): string {
     out.push(c)
   }
   return out.join('')
+}
+
+function ColumnHeader({
+  children,
+  action,
+}: {
+  children: React.ReactNode
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+      <span>{children}</span>
+      {action ? <span className="flex items-center gap-1">{action}</span> : null}
+    </div>
+  )
 }
 
 function PreviewBanner({ applied }: { applied: number }) {
