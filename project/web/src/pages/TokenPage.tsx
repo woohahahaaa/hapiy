@@ -3,7 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
@@ -281,12 +281,12 @@ function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }:
         <FieldLabel htmlFor="token-quota">额度 (¥，留空=无限制)</FieldLabel>
         <Input id="token-quota" type="number" value={quota} onChange={(event) => setQuota(event.target.value)} placeholder="无限制" />
       </Field>
-      <div className="flex justify-end gap-2">
+      <DialogFooter>
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
         <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
           {isSaving ? '保存中...' : '保存'}
         </Button>
-      </div>
+      </DialogFooter>
     </FieldGroup>
   )
 }
