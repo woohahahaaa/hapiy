@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useEffect, useState } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 import { cn } from "@/lib/utils"
@@ -128,15 +129,45 @@ function DialogFooter({
   className,
   showCloseButton = false,
   children,
+  scrollRef,
+  bleed = false,
   ...props
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
+  /** 弹窗内容区滚动容器：传了则根据"内容是否已滚到底"自动隐藏顶部分隔线；
+   *  未传时固定显示分隔线。 */
+  scrollRef?: React.RefObject<HTMLElement | null>
+  /** 用负 margin 抵消弹窗左右 padding，让顶部分隔线贯穿整个弹窗宽度。 */
+  bleed?: boolean
 }) {
+  // 监听内容区滚动：当内容已滚到底（按钮紧贴内容末尾）时顶部分隔线隐藏，
+  // 营造"按钮在内容之上浮动 → 内容完全展开后无边界"的视觉。
+  const [atBottom, setAtBottom] = useState(false)
+  useEffect(() => {
+    const el = scrollRef?.current
+    if (!el) return
+    const check = () => {
+      setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 1)
+    }
+    check()
+    el.addEventListener('scroll', check, { passive: true })
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', check)
+      ro.disconnect()
+    }
+  }, [scrollRef])
+  const borderClass = scrollRef
+    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border')
+    : 'border-t border-border'
   return (
     <div
       data-slot="dialog-footer"
       className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        "flex flex-col-reverse gap-2 px-4 pt-4 sm:flex-row sm:justify-end",
+        borderClass,
+        bleed && '-mx-4',
         className
       )}
       {...props}

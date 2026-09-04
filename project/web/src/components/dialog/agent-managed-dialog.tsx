@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Checkbox } from '@/components/checkbox'
 import { Button } from '@/components/ui/button'
@@ -463,6 +463,9 @@ export function ManagedProviderDialog({
     }
   }
 
+  // 内容区滚动容器 ref：传给 DialogFooter 用于判断按钮是否浮在内容之上。
+  const contentScrollRef = useRef<HTMLDivElement>(null)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -475,7 +478,7 @@ export function ManagedProviderDialog({
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div ref={contentScrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           {loading ? (
             <p className="text-xs text-muted-foreground">加载供应商列表…</p>
           ) : (
@@ -699,7 +702,7 @@ export function ManagedProviderDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter scrollRef={contentScrollRef} bleed>
           {editing && (
             <Button
               variant="destructive"
