@@ -508,8 +508,15 @@ function AgentTypeRulesTab() {
 // modelInfoSpecToText renders a stored spec value as editor text. Legacy
 // plain paths are wrapped into the 值写法 object form so the editor
 // only ever shows（and saves）that form; op specs are emitted as-is.
+// Empty/unmapped values render as blank text so they round-trip without
+// tripping the path validation on save.
 function modelInfoSpecToText(v: AgentModelInfoFieldSpecValue): string {
-  return typeof v === 'string' ? JSON.stringify({ path: v }) : JSON.stringify(v)
+  if (typeof v === 'string') {
+    if (v.trim() === '') return ''
+    return JSON.stringify({ path: v })
+  }
+  if (!v || typeof v.path !== 'string' || v.path.trim() === '') return ''
+  return JSON.stringify(v)
 }
 
 // buildModelInfoFieldsPayload parses the editor text map back into the

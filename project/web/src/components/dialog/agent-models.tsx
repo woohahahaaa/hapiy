@@ -33,6 +33,7 @@ import { ManagedProviderDialog } from '@/components/dialog/agent-managed-dialog'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { modelInfoChangesFor } from '@/lib/agent-model-info'
 import { loadModelsDevModels, providersForModel } from '@/lib/models-dev'
+import { diffLines, type Change } from 'diff'
 
 type DiffStatus = 'ok' | 'missing' | 'mismatch' | 'extra' | 'no-recommendation'
 
@@ -115,6 +116,9 @@ const [error, setError] = useState<string | null>(null)
   const [diffBefore, setDiffBefore] = useState<string | null>(null)
   const [diffAfter, setDiffAfter] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
+  // 预览差异中"未设置或已失效参考厂商"的模型：{ provider, models } 列表，
+  // 供右侧 diff 顶部灰色备注。文案取表格列头「从 models.dev 同步模型配置」。
+  const [diffUnsetModels, setDiffUnsetModels] = useState<readonly { provider: string; model: string }[]>([])
 
   const reload = () => {
     if (!record) return
@@ -646,6 +650,7 @@ for (const p of summary?.providers ?? []) {
       // 全部普通供应商（含其全部模型）套用。
       const checked: Record<string, readonly string[]> = {}
       const modelFields: Record<string, Record<string, Record<string, unknown>>> = {}
+      const unset: { provider: string; model: string; stale: boolean }[] = []
       for (const p of summary.providers ?? []) {
         if (managedBlockNames.has(p.provider_id)) continue
         checked[p.provider_id] = []
@@ -653,14 +658,22 @@ for (const p of summary?.providers ?? []) {
         for (const m of p.models) {
           // 参考供应商：优先用上次持久化选择，否则候选第一。
           let supplier = ''
+          let stale = false
           const persisted = sources[p.provider_id]?.[m.id]
+          const candidates = providersForModel(models ?? [], m.id)
           if (persisted?.mode === 'self' && persisted.self_supplier) {
-            supplier = persisted.self_supplier
+            if (candidates.some((x) => x.providerName === persisted.self_supplier)) {
+              supplier = persisted.self_supplier
+            } else {
+              stale = true // 持久化参考厂商已失效：留空，备注提示
+            }
           } else {
-            const candidates = providersForModel(models ?? [], m.id)
             supplier = candidates[0]?.providerName ?? ''
           }
-          if (!supplier) continue
+          if (!supplier) {
+            if (!stale) unset.push({ provider: p.provider_id, model: m.id, stale })
+            continue
+          }
           const changes = modelInfoChangesFor(m.config, m.id, supplier, models ?? [], modelInfoFields)
           if (changes.length === 0) continue
           perModel ??= {}
@@ -678,6 +691,7 @@ for (const p of summary?.providers ?? []) {
       const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
       setDiffBefore(base)
       setDiffAfter(res.content)
+      setDiffUnsetModels(unset)
       setDiffPreviewing(true)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '预览差异失败')
@@ -1063,9 +1077,13 @@ for (const p of summary?.providers ?? []) {
 
           {/* Right: single syntax-highlighted JSON editor */}
         <div className="flex min-h-0 flex-1 flex-col">
-            <ColumnHeader>供应商 JSON 片段</ColumnHeader>
+            <ColumnHeader>
+              <span>{diffPreviewing ? '预览差异' : '供应商 JSON 片段'}</span>
+            </ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
-              {selectedManagedGroup ? (
+              {diffPreviewing && diffBefore !== null && diffAfter !== null ? (
+                <DiffView before={diffBefore} after={diffAfter} />
+              ) : selectedManagedGroup ? (
                 <JsonEditor
                   value={selectedManagedGroup.group.generated}
                   focusLine={focusLineForManagedModel}
@@ -1157,6 +1175,7 @@ for (const p of summary?.providers ?? []) {
           recommendations={summary?.recommendations ?? []}
           protocols={summary?.protocols ?? []}
           onPreview={({ content, applied }) => {
+            exitDiffPreview()
             setLiveContent(content)
             toast(`已应用推荐配置：${applied} 处变更待保存`)
           }}
@@ -2098,6 +2117,94 @@ function JsonEditor({
       {error && (
         <p className="text-[11px] text-destructive">{error}</p>
       )}
+    </div>
+  )
+}
+
+// DiffView renders a two-column, line-aligned diff of two JSON texts:
+// left is the current file, right is the "after applying everything"
+// result produced by 预览差异. Changed lines are shown red (removed) /
+// green (added); unchanged lines share a single row to keep alignment
+// stable across the three-column dialog layout.
+function DiffView({ before, after }: { before: string; after: string }) {
+  const pretty = (text: string): string => {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2)
+    } catch {
+      return text
+    }
+  }
+  const beforeLines = useMemo(() => pretty(before).split('\n'), [before])
+  const afterLines = useMemo(() => pretty(after).split('\n'), [after])
+  const groups = useMemo(() => diffLines(pretty(before), pretty(after)), [before, after])
+
+  // 逐行渲染：red-green 行内对比。unchanged 行取 (before[i], after[i])。
+  interface Row {
+    kind: 'same' | 'del' | 'add'
+    before: string | null
+    after: string | null
+  }
+  const rows = useMemo<Row[]>(() => {
+    let bi = 0
+    let ai = 0
+    const out: Row[] = []
+    const valueLines = (v: string) => v.split('\n').slice(0, -1) // drop trailing "" from diffLines
+    for (const part of groups as Change[]) {
+      const lines = valueLines(part.value)
+      if (part.removed) {
+        for (const l of lines) {
+          out.push({ kind: 'del', before: l, after: null })
+          bi++
+        }
+      } else if (part.added) {
+        for (const l of lines) {
+          out.push({ kind: 'add', before: null, after: l })
+          ai++
+        }
+      } else {
+        for (let i = 0; i < lines.length; i++) {
+          out.push({ kind: 'same', before: beforeLines[bi], after: afterLines[ai] })
+          bi++
+          ai++
+        }
+      }
+    }
+    return out
+  }, [groups, beforeLines, afterLines])
+
+  const cell = (line: string | null, kind: 'before' | 'after') => {
+    if (line === null) return <div className="h-full w-full bg-muted/30" />
+    return <div className="h-full w-full px-2 py-0.5 font-mono text-[11px] leading-[1.5] whitespace-pre break-words">{line || '\u00A0'}</div>
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex border-b border-border bg-muted/40 text-[10px] text-muted-foreground">
+        <div className="w-1/2 border-r border-border px-2 py-1">当前内容</div>
+        <div className="w-1/2 px-2 py-1">套用推荐后</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {rows.map((r, i) => (
+          <div key={i} className="flex border-b border-border/40">
+            <div
+              className={
+                'w-1/2 border-r border-border/60 ' +
+                (r.kind === 'del' ? 'bg-destructive/10' : r.kind === 'add' ? 'bg-muted/40' : '')
+              }
+            >
+              {cell(r.before, 'before')}
+            </div>
+            <div
+              className={
+                'w-1/2 ' +
+                (r.kind === 'add' ? 'bg-emerald-500/10' : r.kind === 'del' ? 'bg-muted/40' : '')
+              }
+            >
+              {cell(r.after, 'after')}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
