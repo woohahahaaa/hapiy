@@ -97,6 +97,9 @@ const [error, setError] = useState<string | null>(null)
   const [renamingProvider, setRenamingProvider] = useState<string | null>(null)
   const [confirmingDeleteProvider, setConfirmingDeleteProvider] = useState<string | null>(null)
   const [confirmingDeleteManaged, setConfirmingDeleteManaged] = useState<ManagedProviderView | null>(null)
+  // Top-level panel: 非托管供应商 / 托管供应商。
+  const [activePanel, setActivePanel] = useState<'normal' | 'managed'>('normal')
+  const [confirmSyncManaged, setConfirmSyncManaged] = useState(false)
   const [managedDialogOpen, setManagedDialogOpen] = useState(false)
   const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
   const [syncingAllManaged, setSyncingAllManaged] = useState(false)
@@ -394,12 +397,22 @@ const [error, setError] = useState<string | null>(null)
     setConfirmingCancel(false)
   }
 
+  // 所有关闭路径（右上角 X、取消/关闭按钮、ESC、遮罩点击）统一走这里：
+  // 有未保存编辑时先弹二次确认，否则直接关闭。
   const tryClose = () => {
     if (liveContent !== null) {
       setConfirmingCancel(true)
       return
     }
     onOpenChange(false)
+  }
+
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    tryClose()
   }
 
   const handleSelectProvider = (id: string) => {
@@ -460,6 +473,28 @@ const [error, setError] = useState<string | null>(null)
     setSelectedModelId(null)
     setSelectedManagedModelId(null)
     setSelectedManaged({ mid, endpoint })
+  }
+
+  // 切换顶部分栏：非托管与托管互斥，切过去时自动选中该面板第一项。
+  const switchPanel = (target: 'normal' | 'managed') => {
+    if (target === activePanel) return
+    setActivePanel(target)
+    if (target === 'managed') {
+      setSelectedProviderId(null)
+      setSelectedModelId(null)
+      const first = managed[0]
+      if (first && first.groups.length > 0) {
+        handleSelectManaged(first.id, first.groups[0].endpoint)
+      }
+    } else {
+      setSelectedManaged(null)
+      setSelectedManagedModelId(null)
+      const first = normalProviders[0]
+      if (first) {
+        setSelectedProviderId(first.provider_id)
+        setSelectedModelId(first.models[0]?.id ?? null)
+      }
+    }
   }
 
   // 同步所有待同步的托管供应商（顺序执行，失败即中断提示）。
@@ -567,7 +602,7 @@ const [error, setError] = useState<string | null>(null)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         width="md"
         height="auto"
@@ -582,88 +617,103 @@ const [error, setError] = useState<string | null>(null)
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              className="mr-8"
-              disabled={!summary || !record}
-              onClick={() => setSyncingFromInfo(true)}
-              title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
-            >
-              <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
-              使用推荐配置
-            </Button>
             <Button variant="ghost" size="icon-sm" onClick={tryClose}>
               <AppIcon name="close" size={16} />
             </Button>
           </div>
         </DialogHeader>
 
+        {/* 顶部分栏：非托管供应商 / 托管供应商 */}
+        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted/20 px-4">
+          {(['normal', 'managed'] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => switchPanel(key)}
+              className={
+                'relative -mb-px border-b-2 px-3 py-2 text-xs transition-colors ' +
+                (activePanel === key
+                  ? 'border-primary font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground')
+              }
+            >
+              {key === 'normal' ? '非托管供应商' : '托管供应商'}
+            </button>
+          ))}
+        </div>
+
         {liveContent !== null && (
           <PreviewBanner applied={templateTally.size > 0 ? templateApplied : liveDiffCount} />
         )}
 
         <div className="grid min-h-0 flex-1 grid-cols-[200px_220px_minmax(300px,1fr)] divide-x divide-border">
-          {/* Left: 非托管供应商 (adaptive) + 托管供应商 module */}
-          <div className="flex min-h-0 flex-col">
-            <ColumnHeader>供应商</ColumnHeader>
-            {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
-            <div className="max-h-[40%] flex-1 overflow-y-auto p-0">
-              {loading && <Placeholder>加载中…</Placeholder>}
-              {error && <Placeholder tone="error">{error}</Placeholder>}
-              {!loading && !error && summary && summary.providers.length === 0 && (
-                <Placeholder>未解析到任何 provider</Placeholder>
-              )}
-              {normalProviders.map((p) => {
-                const tally = templateTally.get(p.provider_id)
-                return (
-                  <ProviderRow
-                    key={p.provider_id}
-                    name={p.provider_id}
-                    info={
-                      tally && tally.count > 0
-                        ? { text: `${tally.count} 处修改`, green: true }
-                        : { text: `${p.models.length}模型`, green: false }
-                    }
-                    selected={selectedProviderId === p.provider_id}
-                    onClick={() => handleSelectProvider(p.provider_id)}
-                    actions={
-                      <RowMenu
-                        items={[
-                          { key: 'rename', label: '修改名字', icon: 'edit' },
-                          { key: 'delete', label: '删除', icon: 'delete', destructive: true },
-                        ]}
-                        light={selectedProviderId === p.provider_id}
-                        onSelect={(k) => {
-                          if (k === 'rename') setRenamingProvider(p.provider_id)
-                          else setConfirmingDeleteProvider(p.provider_id)
-                        }}
-                      />
-                    }
-                  />
-                )
-              })}
-            </div>
-
-            <div className="h-px shrink-0 bg-border" />
-
-            {/* 托管供应商 module */}
-            <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/30 px-3 py-1.5">
-              <span className="text-xs font-medium text-muted-foreground">托管供应商</span>
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  disabled={syncingAllManaged}
-                  title="把待同步的托管供应商全部写入配置文件"
-                  onClick={() => void handleSyncAllManaged()}
-                >
-                  <AppIcon name="auto_fix_high" size={14} />
-                  同步所有
-                </Button>
+{/* Left: 非托管供应商 (normal panel) / 托管供应商 (managed panel) */}
+        <div className="flex min-h-0 flex-col">
+          {activePanel === 'normal' ? (
+            <>
+              <ColumnHeader>供应商</ColumnHeader>
+              {/* 非托管面板工具行：与托管面板标题行同高，但左对齐 */}
+              <div className="flex items-center gap-1 border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="ghost"
+                  size="xs"
+                  className="px-1"
+                  disabled={!summary || !record}
+                  onClick={() => setSyncingFromInfo(true)}
+                  title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
+                >
+                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
+                  使用推荐配置
+                </Button>
+              </div>
+              {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
+              <div className="max-h-[40%] flex-1 overflow-y-auto p-0">
+                {loading && <Placeholder>加载中…</Placeholder>}
+                {error && <Placeholder tone="error">{error}</Placeholder>}
+                {!loading && !error && summary && summary.providers.length === 0 && (
+                  <Placeholder>未解析到任何 provider</Placeholder>
+                )}
+                {(normalProviders.map((p) => {
+                  const tally = templateTally.get(p.provider_id)
+                  return (
+                    <ProviderRow
+                      key={p.provider_id}
+                      name={p.provider_id}
+                      info={
+                        tally && tally.count > 0
+                          ? { text: `${tally.count} 处修改`, green: true }
+                          : { text: `${p.models.length}模型`, green: false }
+                      }
+                      selected={selectedProviderId === p.provider_id}
+                      onClick={() => handleSelectProvider(p.provider_id)}
+                      actions={
+                        <RowMenu
+                          items={[
+                            { key: 'rename', label: '修改名字', icon: 'edit' },
+                            { key: 'delete', label: '删除', icon: 'delete', destructive: true },
+                          ]}
+                          light={selectedProviderId === p.provider_id}
+                          onSelect={(k) => {
+                            if (k === 'rename') setRenamingProvider(p.provider_id)
+                            else setConfirmingDeleteProvider(p.provider_id)
+                          }}
+                        />
+                      }
+                    />
+                  )
+                }))}
+              </div>
+            </>
+          ) : (
+            <>
+              <ColumnHeader>
+                <span className="font-medium text-primary">托管供应商</span>
+              </ColumnHeader>
+              <div className="flex items-center justify-end border-b border-border bg-muted/30 px-2 py-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
                   size="xs"
                   title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
                   onClick={() => {
@@ -671,124 +721,128 @@ const [error, setError] = useState<string | null>(null)
                     setManagedDialogOpen(true)
                   }}
                 >
-                  <AppIcon name="add" size={14} />
+                  <AppIcon name="add" size={12} data-icon="inline-start" />
+                  添加托管供应商
                 </Button>
               </div>
-            </div>
-            <div className="shrink-0 overflow-y-auto p-0">
-              {managed.length === 0 && (
-                <Placeholder>暂无托管供应商</Placeholder>
-              )}
-              {managed.map((mv) => {
-                const expandable = mv.groups.length > 1
-                const expanded = expandedManaged.has(mv.id)
-                return (
-                  <div key={mv.id}>
-                    {expandable ? (
-                      <>
-                        <ProviderRow
-                          name={<span className="truncate font-medium">{mv.name}</span>}
-                          info={{ text: `${mv.groups.length} 分组`, green: false }}
-                          badge={mv.pending_sync ? (
-                            <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
-                          ) : null}
-                          selected={false}
-                          onClick={() => {
-                            const willExpand = !expandedManaged.has(mv.id)
-                            // 父级行本身永远不选中：展开时选第一个分组，折叠时清空选择。
-                            toggleManagedExpand(mv.id)
-                            if (willExpand && mv.groups.length > 0) {
-                              handleSelectManaged(mv.id, mv.groups[0].endpoint)
-                            } else if (selectedManaged?.mid === mv.id) {
-                              setSelectedManaged(null)
-                              setSelectedManagedModelId(null)
-                              setSelectedProviderId(null)
-                              setSelectedModelId(null)
+              <div className="flex-1 overflow-y-auto p-0">
+                {managed.length === 0 && (
+                  <Placeholder>暂无托管供应商</Placeholder>
+                )}
+                {managed.map((mv) => {
+                  const expandable = mv.groups.length > 1
+                  const expanded = expandedManaged.has(mv.id)
+                  return (
+                    <div key={mv.id}>
+                      {expandable ? (
+                        <>
+                          <ProviderRow
+                            name={<span className="truncate font-medium">{mv.name}</span>}
+                            info={{ text: `${mv.groups.length} 分组`, green: false }}
+                            badge={mv.pending_sync ? (
+                              <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
+                            ) : null}
+                            selected={false}
+                            onClick={() => {
+                              const willExpand = !expandedManaged.has(mv.id)
+                              // 父级行本身永远不选中：展开时选第一个分组，折叠时清空选择。
+                              toggleManagedExpand(mv.id)
+                              if (willExpand && mv.groups.length > 0) {
+                                handleSelectManaged(mv.id, mv.groups[0].endpoint)
+                              } else if (selectedManaged?.mid === mv.id) {
+                                setSelectedManaged(null)
+                                setSelectedManagedModelId(null)
+                                setSelectedProviderId(null)
+                                setSelectedModelId(null)
+                              }
+                            }}
+                            actions={
+                              <>
+                                <IconHoverButton
+                                  title="设置"
+                                  icon="settings"
+                                  tone="default"
+                                  disabled={false}
+                                  onClick={() => {
+                                    setManagedEditing(mv)
+                                    setManagedDialogOpen(true)
+                                  }}
+                                />
+                              </>
                             }
-                          }}
-                          actions={
-                            <>
-                              <IconHoverButton
-                                title="设置"
-                                icon="settings"
-                                tone="default"
-                                disabled={false}
-                                onClick={() => {
-                                  setManagedEditing(mv)
-                                  setManagedDialogOpen(true)
-                                }}
+                            leading={
+                              <AppIcon
+                                name="chevron_right"
+                                size={12}
+                                className={'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')}
                               />
-                            </>
-                          }
-                          leading={
-                            <AppIcon
-                              name="chevron_right"
-                              size={12}
-                              className={'shrink-0 text-muted-foreground transition-transform ' + (expanded ? 'rotate-90' : '')}
-                            />
-                          }
-                        />
-                        {expanded && (
-                          <div className="space-y-0.5 rounded-md bg-muted/60">
-                            {mv.groups.map((g) => (
-                              <ProviderRow
-                                key={g.endpoint}
-                                indent
-                                name={mv.name + g.suffix}
-                                info={{ text: `${g.model_count}模型`, green: false }}
-                                selected={
-                                  selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
-                                }
-                                onClick={() => handleSelectManaged(mv.id, g.endpoint)}
-                                actions={null}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      // Single group: rendered as a direct row.
-                      mv.groups.map((g) => (
-                        <ProviderRow
-                          key={g.endpoint}
-                          name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
-                          info={{ text: `${g.model_count}模型`, green: false }}
-                          badge={mv.pending_sync ? (
-                            <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
-                          ) : null}
-                          selected={
-                            selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
-                          }
-                          onClick={() => handleSelectManaged(mv.id, g.endpoint)}
-                          actions={
-                            <>
-                              <IconHoverButton
-                                title="设置"
-                                icon="settings"
-                                tone="default"
-                                disabled={false}
-                                light={selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint}
-                                onClick={() => {
-                                  setManagedEditing(mv)
-                                  setManagedDialogOpen(true)
-                                }}
-                              />
-                            </>
-                          }
-                        />
-                      ))
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+                            }
+                          />
+                          {expanded && (
+                            <div className="space-y-0.5 rounded-md bg-muted/60">
+                              {mv.groups.map((g) => (
+                                <ProviderRow
+                                  key={g.endpoint}
+                                  indent
+                                  name={mv.name + g.suffix}
+                                  info={{ text: `${g.model_count}模型`, green: false }}
+                                  selected={
+                                    selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
+                                  }
+                                  onClick={() => handleSelectManaged(mv.id, g.endpoint)}
+                                  actions={null}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        // Single group: rendered as a direct row.
+                        mv.groups.map((g) => (
+                          <ProviderRow
+                            key={g.endpoint}
+                            name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
+                            info={{ text: `${g.model_count}模型`, green: false }}
+                            badge={mv.pending_sync ? (
+                              <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
+                            ) : null}
+                            selected={
+                              selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
+                            }
+                            onClick={() => handleSelectManaged(mv.id, g.endpoint)}
+                            actions={
+                              <>
+                                <IconHoverButton
+                                  title="设置"
+                                  icon="settings"
+                                  tone="default"
+                                  disabled={false}
+                                  light={selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint}
+                                  onClick={() => {
+                                    setManagedEditing(mv)
+                                    setManagedDialogOpen(true)
+                                  }}
+                                />
+                              </>
+                            }
+                          />
+                        ))
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
 
           {/* Middle: models list only */}
           <div className="flex min-h-0 flex-col">
             <ColumnHeader>模型列表</ColumnHeader>
             <div className="flex-1 overflow-y-auto p-0">
-              {selectedManagedGroup ? (
+              {activePanel === 'managed' && !selectedManagedGroup ? (
+                <Placeholder>未选择托管供应商</Placeholder>
+              ) : selectedManagedGroup ? (
                 <>
                   {selectedManagedGroup.group.model_names.length === 0 && (
                     <Placeholder>该分组没有可同步的模型</Placeholder>
@@ -861,23 +915,52 @@ const [error, setError] = useState<string | null>(null)
         </div>
 
         <DialogFooter className="border-t border-border px-4 py-3">
-          <div className="flex flex-1 items-center">
-            {liveContent !== null && (
-              <span className="text-xs text-warning">
-                已修改 {templateTally.size > 0 ? templateApplied : liveDiffCount} 项
-              </span>
-            )}
-          </div>
-          <Button variant="outline" onClick={tryClose} disabled={saving}>
-            取消
-          </Button>
-          <Button
-            variant="default"
-            disabled={liveContent === null || saving}
-            onClick={() => void handleSavePending()}
-          >
-            {saving ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
-          </Button>
+          {activePanel === 'normal' ? (
+            <>
+              <div className="flex flex-1 items-center">
+                {liveContent !== null && (
+                  <span className="text-xs text-warning">
+                    已修改 {templateTally.size > 0 ? templateApplied : liveDiffCount} 项
+                  </span>
+                )}
+              </div>
+              <Button variant="outline" onClick={tryClose} disabled={saving}>
+                取消
+              </Button>
+              <Button
+                variant="default"
+                disabled={liveContent === null || saving}
+                onClick={() => void handleSavePending()}
+              >
+                {saving ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-1 items-center">
+                {managed.some((m) => m.pending_sync) && (
+                  <span className="text-xs text-warning">
+                    {managed.filter((m) => m.pending_sync).length} 个供应商待同步
+                  </span>
+                )}
+              </div>
+              <Button variant="outline" onClick={tryClose} disabled={syncingAllManaged}>
+                关闭
+              </Button>
+              <Button
+                variant="default"
+                disabled={syncingAllManaged || !managed.some((m) => m.pending_sync)}
+                onClick={() => setConfirmSyncManaged(true)}
+              >
+                {syncingAllManaged ? (
+                  <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                ) : (
+                  <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
+                )}
+                同步到配置文件
+              </Button>
+            </>
+          )}
         </DialogFooter>
 
         <AgentModelInfoMatchDialog
@@ -907,7 +990,17 @@ const [error, setError] = useState<string | null>(null)
             handleCancelPending()
             onOpenChange(false)
           }}
-          onSave={() => void handleSavePending().then(() => onOpenChange(false))}
+        />
+
+        <ConfirmSyncManagedDialog
+          open={confirmSyncManaged}
+          pendingCount={managed.filter((m) => m.pending_sync).length}
+          syncing={syncingAllManaged}
+          onCancel={() => setConfirmSyncManaged(false)}
+          onConfirm={() => {
+            setConfirmSyncManaged(false)
+            void handleSyncAllManaged()
+          }}
         />
       {/* Managed provider add/edit dialog (also carries the delete action) */}
         <ManagedProviderDialog
@@ -1947,13 +2040,11 @@ function ConfirmDiscardDialog({
   saving,
   onCancel,
   onDiscard,
-  onSave,
 }: {
   open: boolean
   saving: boolean
   onCancel: () => void
   onDiscard: () => void
-  onSave: () => void
 }) {
   if (!open) return null
   return (
@@ -1962,22 +2053,61 @@ function ConfirmDiscardDialog({
       onClick={onCancel}
     >
       <div
-        className="w-[400px] rounded-none border border-border bg-popover p-4 shadow-lg"
+        className="w-[400px] border border-border bg-popover p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-medium">当前操作未保存</h3>
+        <h3 className="text-sm font-medium">退出编辑？</h3>
         <p className="mt-2 text-xs text-muted-foreground">
-          关闭后将丢失当前预览中的所有变更。继续取消，还是先保存？
+          退出后编辑的内容不会被保存，确认退出？
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
             继续编辑
           </Button>
-          <Button variant="ghost" size="sm" onClick={onDiscard} disabled={saving}>
-            取消变更
+          <Button variant="destructive" size="sm" onClick={onDiscard} disabled={saving}>
+            确认退出
           </Button>
-          <Button variant="default" size="sm" onClick={onSave} disabled={saving}>
-            {saving ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '保存'}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ConfirmSyncManagedDialog: 执行「同步到配置文件」前的二次确认。
+function ConfirmSyncManagedDialog({
+  open,
+  pendingCount,
+  syncing,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean
+  pendingCount: number
+  syncing: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  if (!open) return null
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onCancel}
+    >
+      <div
+        className="w-[400px] border border-border bg-popover p-4 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-medium">同步到配置文件</h3>
+        <p className="mt-2 text-xs text-muted-foreground">
+          将把所有「待同步」的托管供应商分组写入配置文件
+          {pendingCount > 0 && <>（共 {pendingCount} 个供应商）</>}，确认同步？
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={syncing}>
+            取消
+          </Button>
+          <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
+            {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
           </Button>
         </div>
       </div>
