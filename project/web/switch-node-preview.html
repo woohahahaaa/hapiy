@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>条件开关节点 · 静态预览</title>
+<style>
+  :root {
+    --background: oklch(0.967 0.001 0);
+    --foreground: oklch(0.067 0.001 0);
+    --card: oklch(0.976 0.001 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.653 0.186 274.621);
+    --primary-foreground: oklch(1 0.001 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.097 0.001 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.5 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.072 0.007 18.809);
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: oklch(1.0000 0 0);
+    --success: oklch(0.627 0.194 149.214);
+    --success-foreground: oklch(0.982 0.018 155.826);
+    --warning: oklch(0.769 0.188 70.08);
+    --warning-foreground: oklch(0.205 0 0);
+    --border: oklch(0.786 0.001 0);
+    --input: oklch(0.8 0.001 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+    --shadow-lg: 0.25px 1px 12px 0px hsl(0 0% 0% / 0.15), 0.25px 4px 6px -1px hsl(0 0% 0% / 0.15);
+
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    font-size: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--background); color: var(--foreground); }
+
+  .page-head {
+    padding: 18px 24px 10px;
+    font-size: 13px;
+    color: var(--muted-foreground);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .page-head b { color: var(--foreground); }
+  .page-head .hint { font-size: 12px; }
+
+  .split {
+    display: flex;
+    gap: 0;
+    min-height: calc(100vh - 66px);
+  }
+
+  /* ───────────── 左：画布 + 节点 ───────────── */
+  .canvas-pane {
+    flex: 1 1 46%;
+    position: relative;
+    background-image: radial-gradient(var(--border) 1px, transparent 1px);
+    background-size: 20px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .canvas-pane::after {
+    content: "点击节点打开弹窗";
+    position: absolute;
+    left: 16px;
+    top: 14px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+
+  .switch-node {
+    position: relative;
+    width: fit-content;
+    min-width: 200px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    color: var(--card-foreground);
+    cursor: pointer;
+    transition: box-shadow 0.12s ease;
+  }
+  .switch-node:hover { box-shadow: var(--shadow-lg); }
+
+  /* 顶部标题栏 —— 与入口节点一致 */
+  .node-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  .node-head .title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .node-head .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    background: var(--primary);
+  }
+  .node-head .name {
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* shadcn Switch */
+  .sw {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 36px;
+    height: 20px;
+    border-radius: 9999px;
+    background: var(--input);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s ease;
+  }
+  .sw[aria-checked="true"] { background: var(--primary); }
+  .sw .thumb {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow: 0 1px 1px rgb(0 0 0 / 0.15);
+    transform: translateX(2px);
+    transition: transform 0.15s ease;
+  }
+  .sw[aria-checked="true"] .thumb { transform: translateX(18px); }
+
+  /* 节点主体：条件摘要 */
+  .node-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .summary-row .jump { color: var(--primary); cursor: pointer; }
+  .summary-row .jump:hover { text-decoration: underline; }
+  .summary-tag {
+    font-size: 10px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--card-foreground);
+  }
+  .and-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 9px;
+    color: var(--muted-foreground);
+  }
+  .and-pill span {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* 左侧连线 pill（HandlesRail 简化） */
+  .rail {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 20px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    background: linear-gradient(90deg, transparent 0 50%, var(--card) 50% 100%);
+    z-index: 10;
+  }
+
+  /* 右侧输出 handles：是 / 否 */
+  .out-handle {
+    position: absolute;
+    right: 0;
+    transform: translate(50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    border: 2px solid;
+    background: var(--card);
+    z-index: 10;
+  }
+  .out-handle.yes  { top: 46%; border-color: var(--success); }
+  .out-handle.no   { top: 100%;  border-color: var(--destructive); }
+  .out-label {
+    position: absolute;
+    right: 16px;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .out-label.yes { top: 46%; color: var(--success); }
+  .out-label.no  { top: 100%; color: var(--destructive); }
+
+  /* ───────────── 右：弹窗 ───────────── */
+  .dialog-pane {
+    flex: 1 1 54%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 32px;
+  }
+  .dialog-pane::before { content: none; }
+  .dialog-warn {
+    font-size: 11px;
+    color: var(--muted-foreground);
+    position: absolute;
+  }
+
+  .modal {
+    width: 640px;
+    max-width: 100%;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+    border: 1px solid rgb(0 0 0 / 0.08);
+    position: relative;
+  }
+  .modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 16px 0;
+  }
+  .modal-title { font-size: 14px; font-weight: 500; margin: 0; }
+  .modal-sub { font-size: 12px; line-height: 1.5; color: var(--muted-foreground); margin: 2px 0 0; }
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--muted); color: var(--foreground); }
+
+  .modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 16px;
+  }
+
+  .section-title { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .section-title h3 { font-size: 13px; font-weight: 500; margin: 0; }
+  .section-title .sec-desc { font-size: 11px; color: var(--muted-foreground); }
+  .section-title .mandatory { font-size: 9px; color: var(--muted-foreground); }
+
+  /* 供应商多选框 */
+  .provider-box {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+  }
+  .provider-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search {
+    flex: 1;
+    height: 28px;
+    border: 1px solid var(--input);
+    border-radius: 6px;
+    background: var(--card);
+    padding: 0 8px;
+    font-size: 12px;
+    outline: none;
+  }
+  .search:focus { border-color: var(--primary); }
+  .mini-link {
+    font-size: 11px;
+    color: var(--primary);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .mini-link:hover { background: var(--accent); }
+  .provider-list { max-height: 176px; overflow: auto; padding: 4px; }
+  .provider-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .provider-item:hover { background: var(--accent); }
+  .provider-item .p-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .provider-item .p-meta { font-size: 10px; color: var(--muted-foreground); font-family: ui-monospace, Menlo, monospace; }
+
+  .checkbox {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    border: 1.5px solid var(--border);
+    background: var(--card);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.1s ease, border-color 0.1s ease;
+  }
+  .checkbox[data-checked="true"] { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+  .select-all-note { font-size: 10px; color: var(--muted-foreground); padding: 0 8px 8px; }
+
+  /* 请求体条件（对齐 ConditionRow 样式） */
+  .cond-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--background);
+    padding: 6px 8px;
+  }
+  .cond-row .cols { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .cond-line { display: flex; align-items: center; gap: 8px; }
+  .cond-line.pl24 { padding-left: 24px; }
+  .idx { width: 16px; flex-shrink: 0; text-align: center; font-size: 12px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+
+  .select {
+    height: 28px;
+    flex-shrink: 0;
+    border: 1px solid var(--input);
+    border-radius: 6px;
+    background: var(--card);
+    padding: 0 22px 0 8px;
+    font-size: 12px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2.5'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+  }
+  .select.w130 { width: 130px; }
+
+  .input {
+    height: 28px;
+    border: 1px solid var(--input);
+    border-radius: 6px;
+    background: var(--card);
+    padding: 0 8px;
+    font-size: 12px;
+    outline: none;
+    min-width: 0;
+  }
+  .input:focus { border-color: var(--primary); }
+  .input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .input.flex1 { flex: 1; }
+
+  .del-btn {
+    margin-top: 4px;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .del-btn:hover { background: color-mix(in oklch, var(--destructive) 10%, transparent); color: var(--destructive); }
+
+  .add-row { display: flex; align-items: center; gap: 6px; padding-left: 24px; }
+  .add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 6px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    font-size: 12px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+  }
+  .add-btn:hover { background: color-mix(in oklch, var(--warning) 10%, transparent); color: var(--warning); }
+
+  .gjson-hint { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted-foreground); padding: 2px 0 6px; }
+  .gjson-hint code {
+    font-family: ui-monospace, Menlo, monospace; font-size: 10px;
+    background: color-mix(in oklch, var(--foreground) 6%, transparent);
+    border-radius: 3px; padding: 1px 4px; margin: 0 2px;
+  }
+
+  /* 底部说明：合并语义 */
+  .merge-note {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 11px;
+    color: var(--muted-foreground);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: var(--background);
+  }
+  .merge-note .and { font-weight: 600; color: var(--primary); }
+  .pill { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 9999px; }
+  .pill.yes { background: color-mix(in oklch, var(--success) 15%, transparent); color: var(--success); border: 1px solid var(--success); }
+  .pill.no  { background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); border: 1px solid var(--destructive); }
+
+  .modal-foot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .btn {
+    height: 30px;
+    padding: 0 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--secondary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+  .btn.primary:hover { background: color-mix(in oklch, var(--primary) 90%, black); }
+
+  /* 点击节点 => 弹窗 */
+  .modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 0.1);
+    z-index: 40;
+  }
+  .modal { z-index: 50; }
+  body.dialog-open .modal-backdrop { display: block; }
+  body.dialog-open .modal { outline: 3px dashed var(--primary); outline-offset: 4px; }
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <b>条件开关节点（Switch）</b> · 静态样式预览
+    <span class="hint">左：画布上的节点（点击可开关右侧弹窗）；右：点击节点后的设置弹窗</span>
+  </div>
+
+  <div class="split">
+    <!-- ══════════ 左：节点 ══════════ -->
+    <div class="canvas-pane">
+      <div class="switch-node" id="switchNode">
+        <div class="rail"></div>
+
+        <div class="node-head">
+          <span class="title">
+            <span class="dot"></span>
+            <span class="name">条件开关</span>
+          </span>
+          <button class="sw" aria-checked="true" onclick="event.stopPropagation(); this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true')">
+            <span class="thumb"></span>
+          </button>
+        </div>
+
+        <div class="node-body">
+          <div class="summary-row">
+            <span>供应商</span>
+            <span class="summary-tag">全部供应商</span>
+          </div>
+          <div class="summary-row">
+            <span>请求条件</span>
+            <span class="summary-tag">2 条</span>
+          </div>
+          <div class="and-pill">
+            <span></span>AND 同时满足 才走「是」<span></span>
+          </div>
+          <div class="summary-row" style="margin-top:2px">
+            <span class="jump" onclick="event.stopPropagation(); openDialog()">点击配置条件 →</span>
+          </div>
+        </div>
+
+        <span class="out-label yes">是</span>
+        <span class="out-handle yes" title="是"></span>
+        <span class="out-label no">否</span>
+        <span class="out-handle no" title="否"></span>
+      </div>
+    </div>
+
+    <!-- ══════════ 右：弹窗 ══════════ -->
+    <div class="dialog-pane">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h2 class="modal-title">配置条件开关</h2>
+            <p class="modal-sub">同时满足下方两组条件时，请求从「是」输出；否则从「否」输出。</p>
+          </div>
+          <button class="icon-btn" onclick="closeDialog()" aria-label="关闭">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <!-- ── 条件一：供应商筛选 ── -->
+          <section>
+            <div class="section-title">
+              <h3>供应商筛选</h3>
+              <span class="sec-desc">对以下供应商的请求生效；不选 = 全部生效</span>
+            </div>
+            <div class="provider-box">
+              <div class="provider-toolbar">
+                <input class="search" placeholder="搜索供应商名称…" />
+                <button class="mini-link">全选</button>
+                <button class="mini-link">清空</button>
+              </div>
+              <div class="provider-list">
+                <label class="provider-item">
+                  <span class="checkbox" data-checked="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 13 4 4L19 7"/></svg></span>
+                  <span class="p-name">OpenAI 直连</span>
+                  <span class="p-meta">3 keys · 12 models</span>
+                </label>
+                <label class="provider-item">
+                  <span class="checkbox" data-checked="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 13 4 4L19 7"/></svg></span>
+                  <span class="p-name">Anthropic 直连</span>
+                  <span class="p-meta">2 keys · 8 models</span>
+                </label>
+                <label class="provider-item">
+                  <span class="checkbox" data-checked="false"></span>
+                  <span class="p-name">DeepSeek 官方</span>
+                  <span class="p-meta">1 key · 4 models</span>
+                </label>
+                <label class="provider-item">
+                  <span class="checkbox" data-checked="false"></span>
+                  <span class="p-name">硅基流动</span>
+                  <span class="p-meta">1 key · 38 models</span>
+                </label>
+                <label class="provider-item">
+                  <span class="checkbox" data-checked="false"></span>
+                  <span class="p-name">本地 Ollama</span>
+                  <span class="p-meta">0 key · 6 models</span>
+                </label>
+              </div>
+              <div class="select-all-note">已选 2 个供应商</div>
+            </div>
+          </section>
+
+          <!-- ── 条件二：请求体筛选（复用「请求改写」的条件行）── -->
+          <section>
+            <div class="section-title">
+              <h3>请求体筛选</h3>
+              <span class="sec-desc">对请求 header / body 字段做条件匹配</span>
+            </div>
+            <div class="gjson-hint">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .5-1.5 1-1.5 2.5"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>
+              gjson 路径实例：<code>messages.0.content</code> 数组下标、<code>header.X-Request-ID</code> 仅填名字
+            </div>
+
+            <div class="cond-row">
+              <div class="cols">
+                <div class="cond-line">
+                  <span class="idx">1</span>
+                  <select class="select w130">
+                    <option>header+body</option>
+                    <option selected>header</option>
+                    <option>body</option>
+                  </select>
+                  <input class="input mono flex1" value="X-Api-Version" placeholder="gjson 路径" />
+                </div>
+                <div class="cond-line pl24">
+                  <select class="select w130"><option>等于</option><option>包含</option><option selected>以前缀开头</option><option>以后缀结尾</option><option>大于</option><option>正则匹配</option></select>
+                  <input class="input flex1" value="v2" placeholder="value" />
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground);flex-shrink:0;cursor:pointer">
+                    <span class="checkbox" data-checked="false" style="width:16px;height:16px"></span>反向
+                  </label>
+                </div>
+              </div>
+              <button class="del-btn" aria-label="删除条件 1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div class="cond-row" style="margin-top:6px">
+              <div class="cols">
+                <div class="cond-line">
+                  <span class="idx">2</span>
+                  <select class="select w130"><option>header+body</option><option>header</option><option selected>body</option></select>
+                  <input class="input mono flex1" value="messages.-1.role" placeholder="gjson 路径" />
+                </div>
+                <div class="cond-line pl24">
+                  <select class="select w130"><option selected>等于</option><option>包含</option><option>以前缀开头</option><option>以后缀结尾</option><option>大于</option><option>正则匹配</option></select>
+                  <input class="input flex1" value="user" placeholder="value" />
+                  <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-foreground);flex-shrink:0;cursor:pointer">
+                    <span class="checkbox" data-checked="false" style="width:16px;height:16px"></span>反向
+                  </label>
+                </div>
+              </div>
+              <button class="del-btn" aria-label="删除条件 2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div class="add-row" style="margin-top:6px">
+              <button class="add-btn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                添加条件
+              </button>
+              <button class="add-btn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                添加条件组
+              </button>
+            </div>
+          </section>
+
+          <!-- ── 合并语义说明 ── -->
+          <div class="merge-note">
+            <span class="and">AND</span>
+            <span>供应商筛选 <span class="pill yes">是</span> 与 请求体筛选 同时命中时才从「是」输出，任一项不满足则从「否」输出。</span>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn">取消</button>
+          <button class="btn primary">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" onclick="closeDialog()"></div>
+
+  <script>
+    const node = document.getElementById('switchNode')
+    node.addEventListener('click', openDialog)
+    node.addEventListener('pointerdown', (e) => e.stopPropagation())
+
+    function openDialog() {
+      document.body.classList.add('dialog-open')
+      const n = document.getElementById('switchNode')
+      n.style.outline = '3px dashed var(--primary)'
+      n.style.outlineOffset = '4px'
+    }
+    function closeDialog() {
+      document.body.classList.remove('dialog-open')
+      const n = document.getElementById('switchNode')
+      n.style.outline = 'none'
+    }
+    document.querySelectorAll('.checkbox, .provider-item').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        const box = e.currentTarget.querySelector('.checkbox') || e.currentTarget
+        if (!box.classList.contains('checkbox')) return
+        box.setAttribute('data-checked', box.getAttribute('data-checked') === 'true' ? 'false' : 'true')
+      })
+    })
+  </script>
+</body>
+</html>

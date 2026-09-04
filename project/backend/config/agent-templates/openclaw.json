@@ -20,7 +20,7 @@
     {
       "scope": "provider",
       "key": "apiKey",
-      "description": "认证密钥",
+      "description": "认证密钥。规范位置在 auth.profiles 段（用环境变量引用如 ${ZAI_API_KEY}），不在 models.providers 下内联",
       "type": "string",
       "recommended": null,
       "required": true
@@ -78,6 +78,30 @@
       "key": "reasoning",
       "description": "是否支持思考模式（官方 schema 校验，未配按 false 处理）",
       "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "output",
+      "description": "输出类型数组（如 [\"text\"]）",
+      "type": "array",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "cost",
+      "description": "成本配置对象（input/output/cacheRead/cacheWrite，$/1K tokens）",
+      "type": "object",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "supports",
+      "description": "功能支持对象（streaming/functions/vision）",
+      "type": "object",
       "recommended": null,
       "required": false
     }

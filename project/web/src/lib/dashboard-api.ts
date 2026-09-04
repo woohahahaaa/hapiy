@@ -3081,7 +3081,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return data.map((raw) => {
       if (!isRecord(raw)) {
-        return { id: '', name: '', provider_ids: [], stale_provider_ids: [], groups: [], hidden_groups: [], pending_sync: false, api_key: '', base_url: '', source_name: '' }
+        return { id: '', name: '', provider_ids: [], stale_provider_ids: [], groups: [], hidden_groups: [], pending_sync: false, pending_fields: 0, api_key: '', base_url: '', source_name: '' }
       }
       const groups = Array.isArray(raw.groups) ? raw.groups : []
       const hidden = Array.isArray(raw.hidden_groups) ? raw.hidden_groups : []
@@ -3112,6 +3112,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
             generated: isRecord(gr.generated) ? gr.generated : {},
             file_provider: isRecord(gr.file_provider) ? gr.file_provider : null,
             pending: gr.pending === true,
+            pending_fields: readNumber(gr.pending_fields, 'pending_fields', 0),
           }
         }),
         hidden_groups: hidden.map((h) => {
@@ -3123,6 +3124,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
           }
         }),
         pending_sync: raw.pending_sync === true,
+        pending_fields: readNumber(raw.pending_fields, 'pending_fields', 0),
         api_key: typeof raw.api_key === 'string' ? raw.api_key : '',
         base_url: typeof raw.base_url === 'string' ? raw.base_url : '',
         source_name: typeof raw.source_name === 'string' ? raw.source_name : '',

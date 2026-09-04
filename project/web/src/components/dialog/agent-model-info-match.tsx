@@ -23,6 +23,7 @@ import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   type AgentConfigFile,
+  type AgentModelConfigSources,
   type AgentModelInfoFieldPaths,
   type AgentModelInfoFieldSpec,
   type AgentModelProvider,
@@ -137,7 +138,9 @@ export function AgentModelInfoMatchDialog({
   const [checkedProviders, setCheckedProviders] = useState<Record<string, boolean>>({})
   const [checkedModels, setCheckedModels] = useState<Record<string, boolean>>({})
   const [supplierByModelId, setSupplierByModelId] = useState<Record<string, string>>({})
+  const [persistedSources, setPersistedSources] = useState<AgentModelConfigSources | null>(null)
   const [applying, setApplying] = useState(false)
+  const [savingSources, setSavingSources] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -146,6 +149,7 @@ export function AgentModelInfoMatchDialog({
     setCheckedProviders({})
     setCheckedModels({})
     setSupplierByModelId({})
+    setPersistedSources(null)
     let cancelled = false
     loadModelsDevModels()
       .then((models) => {
@@ -157,8 +161,18 @@ export function AgentModelInfoMatchDialog({
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+    if (record) {
+      dashboardApi
+        .getAgentModelConfigSources(record.id)
+        .then((sources) => {
+          if (!cancelled) setPersistedSources(sources)
+        })
+        .catch(() => {
+          // 持久化加载失败不阻断弹窗，仅失去上次选择预填。
+        })
+    }
     return () => { cancelled = true }
-  }, [open])
+  }, [open, record])
 
   // provider 有效推荐（common + 匹配协议）。与主弹窗 effectiveProviderRecs
   // 同语义。
@@ -267,7 +281,9 @@ export function AgentModelInfoMatchDialog({
     0,
   )
 
-  // 参考供应商预填：每个模型首个候选（与旧逻辑一致）。
+  // 参考供应商预填：优先使用上次持久化的选择（同样会校验候选有效，
+  // 若上次的参考厂商这次已不在候选则留空让用户重新选择）；没有上次
+  // 选择时才取每个模型首个候选（与旧逻辑一致）。
   useEffect(() => {
     if (!open) return
     let changed = false
@@ -275,16 +291,24 @@ export function AgentModelInfoMatchDialog({
     for (const p of providers) {
       for (const m of p.models) {
         if (next[m.id] !== undefined) continue
-        const c = providersForModel(snapshot ?? [], m.id)
-        if (c.length > 0) {
-          next[m.id] = c[0].providerName
+        const persisted = persistedSources?.[p.provider_id]?.[m.id]
+        const candidates = providersForModel(snapshot ?? [], m.id)
+        if (persisted?.mode === 'self' && persisted.self_supplier) {
+          if (candidates.some((x) => x.providerName === persisted.self_supplier)) {
+            next[m.id] = persisted.self_supplier
+            changed = true
+          }
+          continue
+        }
+        if (candidates.length > 0) {
+          next[m.id] = candidates[0].providerName
           changed = true
         }
       }
     }
     if (changed) setSupplierByModelId(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, snapshot, providers])
+  }, [open, snapshot, providers, persistedSources])
 
   // 一键官方：所有模型设为官方（lab）参考厂商；模型没有官方来源时
   // 取其候选列表第一个（官方优先排序后的首位，即字母序第一个）。
@@ -301,7 +325,39 @@ export function AgentModelInfoMatchDialog({
       }
     }
     setSupplierByModelId(next)
+    void persistSources(next)
     toast(changed ? '已把全部模型设为官方参考厂商（无官方的取候选第一个）' : '模型均已是最佳参考厂商')
+  }
+
+  // persistSources 把当前每个模型的参考厂商选择按「配置文件 + provider + model」
+  // 持久化保存，下次打开使用推荐配置时默认填回。
+  const persistSources = async (next: Record<string, string>) => {
+    if (!record) return
+    setSavingSources(true)
+    try {
+      const sources: Record<string, Record<string, {
+        mode: 'none' | 'self' | 'link'
+        self_supplier: string
+        link_provider_id: string
+      }>> = {}
+      for (const p of providers) {
+        for (const m of p.models) {
+          const supplier = next[m.id]
+          if (!supplier) continue
+          sources[p.provider_id] ??= {}
+          sources[p.provider_id][m.id] = {
+            mode: 'self',
+            self_supplier: supplier,
+            link_provider_id: '',
+          }
+        }
+      }
+      await dashboardApi.saveAgentModelConfigSources(record.id, sources)
+    } catch {
+      toast.error('保存参考厂商选择失败')
+    } finally {
+      setSavingSources(false)
+    }
   }
 
   const handleApply = async () => {
@@ -504,9 +560,11 @@ export function AgentModelInfoMatchDialog({
                                 <td className="border-l border-border px-3 py-2 align-top">
                                   <Select
                                     value={supplier}
-                                    onValueChange={(v) =>
-                                      setSupplierByModelId((prev) => ({ ...prev, [m.id]: v }))
-                                    }
+                                    onValueChange={(v) => {
+                                      const next = { ...supplierByModelId, [m.id]: v }
+                                      setSupplierByModelId(next)
+                                      void persistSources(next)
+                                    }}
                                     disabled={snapshot === null}
                                   >
                                     <SelectTrigger className="h-7 w-full text-xs">
@@ -516,18 +574,6 @@ export function AgentModelInfoMatchDialog({
                                       {snapshot !== null && (
                                         <>
                                           <SelectItem value="">不同步</SelectItem>
-                                          {(() => {
-                                            const stored = supplier
-                                            const candidates = providersForModel(snapshot, m.id)
-                                            if (stored === '' || candidates.some((x) => x.providerName === stored)) return null
-                                            const resolved = snapshot.find((r) => r.providerId === stored)?.providerName
-                                            const raw = resolved ?? stored
-                                            return (
-                                              <SelectItem value={stored}>
-                                                {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
-                                              </SelectItem>
-                                            )
-                                          })()}
                                           {providersForModel(snapshot, m.id).map((x) => (
                                             <SelectItem key={x.providerId} value={x.providerName}>
                                               {x.providerName}{isModelsDevLab(m.id, x.providerId) ? '（官方）' : ''}

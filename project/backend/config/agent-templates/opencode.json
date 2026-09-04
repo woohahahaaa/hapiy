@@ -44,25 +44,25 @@
     {
       "scope": "provider",
       "key": "options.timeout",
-      "description": "请求整体超时（毫秒）。官方默认 300000，复杂任务建议 600000",
+      "description": "请求整体超时（毫秒）。官方默认 300000",
       "type": "number",
-      "recommended": 600000,
+      "recommended": null,
       "required": false
     },
     {
       "scope": "provider",
       "key": "options.chunkTimeout",
-      "description": "流式 SSE chunk 之间超时（毫秒），超时中止",
+      "description": "流式 SSE chunk 之间超时（毫秒），官方默认 300000，超时中止",
       "type": "number",
-      "recommended": 30000,
+      "recommended": null,
       "required": false
     },
     {
       "scope": "provider",
       "key": "options.setCacheKey",
-      "description": "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）",
+      "description": "启用 promptCacheKey 缓存优化（官方默认 false，需模型支持才生效）",
       "type": "boolean",
-      "recommended": true,
+      "recommended": null,
       "required": false
     },
     {
