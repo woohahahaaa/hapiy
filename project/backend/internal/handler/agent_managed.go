@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -34,6 +35,7 @@ type managedGroupView struct {
 	Generated     map[string]any    `json:"generated"`
 	FileProvider  map[string]any    `json:"file_provider"` // normalized actual block, null when absent
 	Pending       bool              `json:"pending"`
+	PendingFields int               `json:"pending_fields"` // 与文件实际值不一致的叶子字段数（待同步）
 }
 
 type managedProviderView struct {
@@ -44,6 +46,7 @@ type managedProviderView struct {
 	Groups           []managedGroupView       `json:"groups"`
 	HiddenGroups     []model.ManagedAgentGroup `json:"hidden_groups"`
 	PendingSync      bool                     `json:"pending_sync"`
+	PendingFields    int                      `json:"pending_fields"` // 全部分组待同步字段数之和
 	APIKey           string                   `json:"api_key"`
 	BaseURL          string                   `json:"base_url"`
 	SourceName       string                   `json:"source_name"`
@@ -628,6 +631,8 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		if mv.Pending {
 			view.PendingSync = true
 		}
+		mv.PendingFields = countDiffLeaves(expected, actual)
+		view.PendingFields += mv.PendingFields
 		view.Groups = append(view.Groups, mv)
 	}
 	return view
@@ -1030,8 +1035,40 @@ func deepEqualJSON(a, b map[string]any) bool {
 	return fmt.Sprintf("%v", am) == fmt.Sprintf("%v", bm)
 }
 
+// countDiffLeaves counts leaf-level differences between two JSON values:
+// a key present on only one side counts once, and differing leaf values
+// count once per field. Nested objects recurse; arrays compare as whole
+// values (DeepEqual). Used for the 待同步字段数 badge in the 管理模型 view.
+func countDiffLeaves(a, b any) int {
+	am, aok := a.(map[string]any)
+	bm, bok := b.(map[string]any)
+	if aok && bok {
+		keys := make(map[string]struct{}, len(am)+len(bm))
+		for k := range am {
+			keys[k] = struct{}{}
+		}
+		for k := range bm {
+			keys[k] = struct{}{}
+		}
+		n := 0
+		for k := range keys {
+			av, ahas := am[k]
+			bv, bhas := bm[k]
+			if !ahas || !bhas {
+				n++
+				continue
+			}
+			n += countDiffLeaves(av, bv)
+		}
+		return n
+	}
+	if reflect.DeepEqual(a, b) {
+		return 0
+	}
+	return 1
+}
+
 // setDottedValue writes v at a dotted path inside m, creating
-// intermediate objects as needed.
 func setDottedValue(m map[string]any, path string, v any) error {
 	segs := strings.Split(path, ".")
 	cur := m

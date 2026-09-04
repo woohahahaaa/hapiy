@@ -829,6 +829,7 @@ export type ManagedGroupView = {
   readonly generated: Readonly<Record<string, unknown>>
   readonly file_provider: Readonly<Record<string, unknown>> | null
   readonly pending: boolean
+  readonly pending_fields: number
 }
 
 export type ManagedProviderView = {
@@ -839,6 +840,7 @@ export type ManagedProviderView = {
   readonly groups: readonly ManagedGroupView[]
   readonly hidden_groups: readonly ManagedAgentGroup[]
   readonly pending_sync: boolean
+  readonly pending_fields: number
   readonly api_key: string
   readonly base_url: string
   readonly source_name: string

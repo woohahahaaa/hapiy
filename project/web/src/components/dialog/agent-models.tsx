@@ -252,6 +252,35 @@ const [error, setError] = useState<string | null>(null)
     return [...base, ...extra]
   }, [modelRecs, selectedProvider, summary])
 
+  // providerConflictCounts: 每个普通供应商与推荐模板不一致的字段数
+  // （供应商级 + 模型级之和），列表行内展示。
+  const providerConflictCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    const recsOf = (p: AgentModelProvider) => {
+      const matched = (summary?.protocols ?? []).filter((pp) =>
+        protocolMatchesConditions(p.other_fields, pp),
+      )
+      const extra: AgentRecommendation[] = []
+      for (const pp of matched) {
+        for (const r of pp.recommendations) extra.push(r)
+      }
+      return [...providerRecs, ...modelRecs, ...extra]
+    }
+for (const p of summary?.providers ?? []) {
+      const recs = recsOf(p)
+      const pRecs = recs.filter((r) => r.scope === 'provider')
+      const mRecs = recs.filter((r) => r.scope === 'model')
+      const conflicts = (markers: readonly DiffMarker[]) =>
+        markers.filter((d) => d.status !== 'ok').length
+      let n = conflicts(computeDiff(p.other_fields ?? {}, pRecs))
+      for (const m of p.models) {
+        n += conflicts(computeDiff(m.config ?? {}, mRecs))
+      }
+      map.set(p.provider_id, n)
+    }
+    return map
+  }, [summary, providerRecs, modelRecs])
+
   // activeProviderValue / activeModelValue are what the JSON view shows
   // right now. They are the actual file content until the user clicks
   // "使用推荐值" (row or header) or edits the JSON, at which point we
@@ -349,13 +378,15 @@ const [error, setError] = useState<string | null>(null)
   // （0-based）；未选模型返回 null。用于右侧编辑框滚动到该行并高亮。
   const focusLineForSelectedModel = useMemo(() => {
     if (!selectedModelId) return null
-    const t = currentEditableProviderValue
-    if (!t) return null
-    const idx = t.indexOf(`"${selectedModelId}":`)
-    if (idx === -1) return null
-    const nl = t.slice(0, idx).split('\n').length
-    return Math.max(0, nl - 1)
+    return focusLineForKey(currentEditableProviderValue, selectedModelId)
   }, [selectedModelId, currentEditableProviderValue])
+
+  // 托管供应商：与普通供应商一致的滚动/高亮联动，仅只读。
+  const focusLineForManagedModel = useMemo(() => {
+    if (!selectedManagedModelId || !selectedManagedGroup) return null
+    const t = JSON.stringify(selectedManagedGroup.group.generated, null, 2)
+    return focusLineForKey(t, selectedManagedModelId)
+  }, [selectedManagedModelId, selectedManagedGroup])
 
   const providerDiff = useMemo(
     () => computeDiff(activeProviderValue, effectiveProviderRecs),
@@ -695,6 +726,7 @@ const [error, setError] = useState<string | null>(null)
                 )}
                 {(normalProviders.map((p) => {
                   const tally = templateTally.get(p.provider_id)
+                  const conflicts = providerConflictCounts.get(p.provider_id) ?? 0
                   return (
                     <ProviderRow
                       key={p.provider_id}
@@ -702,7 +734,9 @@ const [error, setError] = useState<string | null>(null)
                       info={
                         tally && tally.count > 0
                           ? { text: `${tally.count} 处修改`, green: true }
-                          : { text: `${p.models.length}模型`, green: false }
+                          : conflicts > 0
+                            ? { text: `${conflicts} 个字段与推荐不一致`, green: false }
+                            : { text: `${p.models.length}模型`, green: false }
                       }
                       selected={selectedProviderId === p.provider_id}
                       onClick={() => handleSelectProvider(p.provider_id)}
@@ -758,7 +792,9 @@ const [error, setError] = useState<string | null>(null)
                         <>
                           <ProviderRow
                             name={<span className="truncate font-medium">{mv.name}</span>}
-                            info={{ text: `${mv.groups.length} 分组`, green: false }}
+                            info={mv.pending_sync
+                              ? { text: `${mv.pending_fields} 字段待同步`, green: false }
+                              : { text: `${mv.groups.length} 分组`, green: false }}
                             badge={mv.pending_sync ? (
                               <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
                             ) : null}
@@ -806,7 +842,9 @@ const [error, setError] = useState<string | null>(null)
                                   key={g.endpoint}
                                   indent
                                   name={mv.name + g.suffix}
-                                  info={{ text: `${g.model_count}模型`, green: false }}
+                                  info={g.pending
+                                  ? { text: `${g.pending_fields} 字段待同步`, green: false }
+                                  : { text: `${g.model_count}模型`, green: false }}
                                   selected={
                                     selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                   }
@@ -823,7 +861,9 @@ const [error, setError] = useState<string | null>(null)
                           <ProviderRow
                             key={g.endpoint}
                             name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
-                            info={{ text: `${g.model_count}模型`, green: false }}
+                            info={g.pending
+                              ? { text: `${g.pending_fields} 字段待同步`, green: false }
+                              : { text: `${g.model_count}模型`, green: false }}
                             badge={mv.pending_sync ? (
                               <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
                             ) : null}
@@ -921,6 +961,7 @@ const [error, setError] = useState<string | null>(null)
               {selectedManagedGroup ? (
                 <JsonEditor
                   value={selectedManagedGroup.group.generated}
+                  focusLine={focusLineForManagedModel}
                   readonly
                 />
               ) : selectedProvider ? (
@@ -1778,6 +1819,15 @@ function wrapRootScope(
 // until focusLine changes again.
 const LINE_HEIGHT = 18 // text-xs (12px) * leading-[1.5]
 
+// focusLineForKey returns the 0-based line of `"<key>":` inside a JSON
+// text, or null when the key isn't present.
+function focusLineForKey(text: string, key: string): number | null {
+  if (!text) return null
+  const idx = text.indexOf(`"${key}":`)
+  if (idx === -1) return null
+  return Math.max(0, text.slice(0, idx).split('\n').length - 1)
+}
+
 // braceEndLine returns the last line index of the brace block that
 // starts at startLine (the line of `"key": {`), skipping braces inside
 // string literals so values like "a{}b" don't break the scan.
@@ -1919,7 +1969,7 @@ function JsonEditor({
               setError(err instanceof Error ? err.message : 'JSON 解析失败')
             }
           }}
-          onFocus={() => setDimmed(true)}
+          onFocus={() => { if (!readonly) setDimmed(true) }}
           onScroll={(e) => {
             const el = e.currentTarget
             if (gutterRef.current) gutterRef.current.scrollTop = el.scrollTop
