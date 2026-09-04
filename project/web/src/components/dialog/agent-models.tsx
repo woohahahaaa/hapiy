@@ -100,6 +100,10 @@ const [error, setError] = useState<string | null>(null)
   // Top-level panel: 非托管供应商 / 托管供应商。
   const [activePanel, setActivePanel] = useState<'normal' | 'managed'>('normal')
   const [confirmSyncManaged, setConfirmSyncManaged] = useState(false)
+  // 保存/同步成功后的按钮状态：弹窗保持打开，按钮显示「保存成功/同步成功」，
+  // 有新修改、切换 tab 或重新打开弹窗时恢复。
+  const [savedOk, setSavedOk] = useState(false)
+  const [syncOk, setSyncOk] = useState(false)
   const [managedDialogOpen, setManagedDialogOpen] = useState(false)
   const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
   const [syncingAllManaged, setSyncingAllManaged] = useState(false)
@@ -135,6 +139,8 @@ const [error, setError] = useState<string | null>(null)
     setTemplateTally(new Map()); setTemplateApplied(0)
     setLiveContent(null)
     setConfirmingCancel(false)
+    setSavedOk(false)
+    setSyncOk(false)
     reload()
   }, [open, record]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -366,6 +372,14 @@ const [error, setError] = useState<string | null>(null)
       modelDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length
   }, [liveContent, providerDiff, modelDiff])
 
+  // 新一轮编辑（liveContent 从 null 变非 null）→ 「保存成功」恢复为「保存」。
+  const prevLiveContentRef = useRef<unknown>(null)
+  useEffect(() => {
+    if (prevLiveContentRef.current === liveContent) return
+    prevLiveContentRef.current = liveContent
+    if (liveContent !== null) setSavedOk(false)
+  }, [liveContent])
+
   const handleSavePending = async () => {
     if (!record || liveContent === null) return
     setSaving(true)
@@ -382,8 +396,8 @@ const [error, setError] = useState<string | null>(null)
       toast('已保存预览中的变更')
       setLiveContent(null)
       setTemplateTally(new Map()); setTemplateApplied(0)
+      setSavedOk(true)
       reload()
-      onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '保存失败')
     } finally {
@@ -479,6 +493,8 @@ const [error, setError] = useState<string | null>(null)
   const switchPanel = (target: 'normal' | 'managed') => {
     if (target === activePanel) return
     setActivePanel(target)
+    setSavedOk(false)
+    setSyncOk(false)
     if (target === 'managed') {
       setSelectedProviderId(null)
       setSelectedModelId(null)
@@ -513,6 +529,7 @@ const [error, setError] = useState<string | null>(null)
         total += res.synced
       }
       toast(`已同步全部 ${pending.length} 个托管供应商，共 ${total} 处字段写入配置文件`)
+      setSyncOk(true)
       reload()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '同步失败')
@@ -632,9 +649,13 @@ const [error, setError] = useState<string | null>(null)
               onClick={() => switchPanel(key)}
               className={
                 'relative -mb-px border-b-2 px-3 py-2 text-xs transition-colors ' +
-                (activePanel === key
-                  ? 'border-primary font-medium text-foreground'
-                  : 'border-transparent text-muted-foreground hover:text-foreground')
+                (key === 'managed'
+                  ? activePanel === key
+                    ? 'border-primary font-medium text-primary'
+                    : 'border-transparent text-primary hover:text-primary/75'
+                  : activePanel === key
+                    ? 'border-primary font-medium text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground')
               }
             >
               {key === 'normal' ? '非托管供应商' : '托管供应商'}
@@ -652,19 +673,17 @@ const [error, setError] = useState<string | null>(null)
           {activePanel === 'normal' ? (
             <>
               <ColumnHeader>供应商</ColumnHeader>
-              {/* 非托管面板工具行：与托管面板标题行同高，但左对齐 */}
-              <div className="flex items-center gap-1 border-b border-border bg-muted/30 px-2 py-1.5">
+              {/* 非托管面板工具行：与托管面板样式一致 */}
+              <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="xs"
-                  className="px-1"
+                  title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
                   disabled={!summary || !record}
                   onClick={() => setSyncingFromInfo(true)}
-                  title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
                 >
-                  <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                  使用推荐配置
+                使用推荐配置
                 </Button>
               </div>
               {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
@@ -710,7 +729,7 @@ const [error, setError] = useState<string | null>(null)
               <ColumnHeader>
                 <span className="font-medium text-primary">托管供应商</span>
               </ColumnHeader>
-              <div className="flex items-center justify-end border-b border-border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -719,6 +738,7 @@ const [error, setError] = useState<string | null>(null)
                   onClick={() => {
                     setManagedEditing(null)
                     setManagedDialogOpen(true)
+                    setSyncOk(false)
                   }}
                 >
                   <AppIcon name="add" size={12} data-icon="inline-start" />
@@ -766,6 +786,7 @@ const [error, setError] = useState<string | null>(null)
                                   onClick={() => {
                                     setManagedEditing(mv)
                                     setManagedDialogOpen(true)
+                                    setSyncOk(false)
                                   }}
                                 />
                               </>
@@ -821,6 +842,7 @@ const [error, setError] = useState<string | null>(null)
                                   onClick={() => {
                                     setManagedEditing(mv)
                                     setManagedDialogOpen(true)
+                                    setSyncOk(false)
                                   }}
                                 />
                               </>
@@ -929,10 +951,15 @@ const [error, setError] = useState<string | null>(null)
               </Button>
               <Button
                 variant="default"
-                disabled={liveContent === null || saving}
+                disabled={saving || savedOk || liveContent === null}
                 onClick={() => void handleSavePending()}
               >
-                {saving ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '保存'}
+                {saving ? (
+                  <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                ) : savedOk ? (
+                  <AppIcon name="check" size={14} data-icon="inline-start" />
+                ) : null}
+                {savedOk ? '保存成功' : '保存'}
               </Button>
             </>
           ) : (
@@ -949,15 +976,17 @@ const [error, setError] = useState<string | null>(null)
               </Button>
               <Button
                 variant="default"
-                disabled={syncingAllManaged || !managed.some((m) => m.pending_sync)}
+                disabled={syncingAllManaged || syncOk || !managed.some((m) => m.pending_sync)}
                 onClick={() => setConfirmSyncManaged(true)}
               >
                 {syncingAllManaged ? (
                   <AppIcon name="progress_activity" size={14} className="animate-spin" />
+                ) : syncOk ? (
+                  <AppIcon name="check" size={14} data-icon="inline-start" />
                 ) : (
                   <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
                 )}
-                同步到配置文件
+                {syncOk ? '同步成功' : '同步到配置文件'}
               </Button>
             </>
           )}
