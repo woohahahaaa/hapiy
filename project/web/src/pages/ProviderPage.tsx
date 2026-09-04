@@ -859,6 +859,7 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
                   if (trimmed !== value) apply(trimmed)
                 } : undefined}
                 placeholder={placeholder}
+                className={withNotes ? 'min-w-0 flex-1' : undefined}
               />
               {withNotes && (
                 <Input
@@ -866,6 +867,7 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
                   onChange={(event) => applyNote(index, event.target.value)}
                   placeholder={notesPlaceholder}
                   aria-label={`${label} 备注`}
+                  className="w-40 shrink-0"
                 />
               )}
               <Button

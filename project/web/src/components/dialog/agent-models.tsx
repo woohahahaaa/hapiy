@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -119,6 +120,8 @@ const [error, setError] = useState<string | null>(null)
   // 预览差异中"未设置或已失效参考厂商"的模型：{ provider, models } 列表，
   // 供右侧 diff 顶部灰色备注。文案取表格列头「从 models.dev 同步模型配置」。
   const [diffUnsetModels, setDiffUnsetModels] = useState<readonly { provider: string; model: string; stale: boolean }[]>([])
+  // diff 中点击某一行动作后退出预览，把 JsonEditor 定位到该行（0-based）。
+  const [diffJumpLine, setDiffJumpLine] = useState<number | null>(null)
 
   const reload = () => {
     if (!record) return
@@ -633,6 +636,7 @@ for (const p of summary?.providers ?? []) {
       setDiffPreviewing(false)
       setDiffBefore(null)
       setDiffAfter(null)
+      setDiffUnsetModels([])
       return
     }
     setDiffLoading(true)
@@ -688,9 +692,13 @@ for (const p of summary?.providers ?? []) {
         return
       }
       const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
-      const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
+      // diff 按当前选中 provider 片段对比，保证点击行号与右侧 JsonEditor 对齐。
+      const base = currentEditableProviderValue
+      const afterBlock = selectedProviderId
+        ? extractProviderBlockFromContent(res.content, selectedProviderId)
+        : res.content
       setDiffBefore(base)
-      setDiffAfter(res.content)
+      setDiffAfter(afterBlock)
       setDiffUnsetModels(unset)
       setDiffPreviewing(true)
     } catch (err) {
@@ -707,6 +715,7 @@ for (const p of summary?.providers ?? []) {
       setDiffBefore(null)
       setDiffAfter(null)
       setDiffUnsetModels([])
+      setDiffJumpLine(null)
     }
   }
 
@@ -758,7 +767,7 @@ for (const p of summary?.providers ?? []) {
         width="md"
         height="auto"
         showCloseButton={false}
-        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0 !w-[1280px] !max-w-none"
+        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0 !w-[1280px] !max-w-[calc(100vw-2rem)]"
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <div className="flex flex-col gap-0.5">
@@ -801,7 +810,7 @@ for (const p of summary?.providers ?? []) {
           <PreviewBanner applied={templateTally.size > 0 ? templateApplied : liveDiffCount} />
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[280px_320px_minmax(320px,1fr)] divide-x divide-border">
+        <div className="grid min-h-0 flex-1 grid-cols-[280px_320px_minmax(0,1fr)] divide-x divide-border">
 {/* Left: 非托管供应商 (normal panel) / 托管供应商 (managed panel) */}
         <div className="flex min-h-0 flex-col">
           {activePanel === 'normal' ? (
@@ -823,6 +832,7 @@ for (const p of summary?.providers ?? []) {
                   type="button"
                   variant={diffPreviewing ? 'default' : 'outline'}
                   size="xs"
+                  className="ml-2"
                   title={
                     diffPreviewing
                       ? '退出预览差异，返回编辑视图'
@@ -1083,7 +1093,17 @@ for (const p of summary?.providers ?? []) {
             </ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
               {diffPreviewing && diffBefore !== null && diffAfter !== null ? (
-                <DiffView before={diffBefore} after={diffAfter} unsetModels={diffUnsetModels} />
+                <DiffView
+                  before={diffBefore}
+                  after={diffAfter}
+                  unsetModels={diffUnsetModels}
+                  onInteract={(oldNo) => {
+                    // 点击右侧 Json 区域任意处（尝试编辑）：退出预览，回到
+                    // JsonEditor，并把光标跳到点击的那一行（old → 0-based）。
+                    setDiffJumpLine(oldNo === null ? null : Math.max(0, oldNo - 1))
+                    setDiffPreviewing(false)
+                  }}
+                />
               ) : selectedManagedGroup ? (
                 <JsonEditor
                   value={selectedManagedGroup.group.generated}
@@ -1093,9 +1113,10 @@ for (const p of summary?.providers ?? []) {
               ) : selectedProvider ? (
                 <JsonEditor
                   value={currentEditableProviderValue}
-                  focusLine={focusLineForSelectedModel}
+                  focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
                   onChange={(text) => {
                     exitDiffPreview()
+                    setDiffJumpLine(null)
                     setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))
                   }}
                 />
@@ -1724,6 +1745,28 @@ function providerRootOfContent(parsed: Record<string, unknown>): readonly string
   return null
 }
 
+// extractProviderBlockFromContent 取出整文件 content 中某个 provider 的完整
+// 块（provider 字段 + models），供预览差异按 provider 片段与 JsonEditor 对齐。
+function extractProviderBlockFromContent(content: string, providerId: string): string {
+  try {
+    const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
+    const root = providerRootOfContent(parsed)
+    if (root) {
+      let cur: Record<string, unknown> = parsed
+      for (const seg of root) {
+        const next = cur[seg]
+        if (!next || typeof next !== 'object' || Array.isArray(next)) return content
+        cur = next as Record<string, unknown>
+      }
+      const block = (cur as Record<string, unknown>)[providerId]
+      if (block && typeof block === 'object') return JSON.stringify(block, null, 2)
+    }
+  } catch {
+    // fall back to the raw content
+  }
+  return content
+}
+
 // renameProviderInContent re-keys a provider within the live content,
 // preserving the provider object verbatim under the new id.
 function renameProviderInContent(
@@ -2134,10 +2177,13 @@ function DiffView({
   before,
   after,
   unsetModels,
+  onInteract,
 }: {
   before: string
   after: string
   unsetModels?: readonly { provider: string; model: string; stale: boolean }[]
+  /** 用户在 diff 中点击任一行（尝试编辑）时回调；oldNo 是 before 侧行号（1-based，可为 null）。 */
+  onInteract?: (oldNo: number | null) => void
 }) {
   const pretty = (text: string): string => {
     try {
@@ -2224,9 +2270,10 @@ function DiffView({
         {rows.map((r, i) => (
           <div
             key={i}
+            onClick={() => onInteract?.(r.oldNo)}
             className={
-              'flex items-stretch font-mono text-[11px] leading-[1.5] whitespace-pre break-words ' +
-              (lineClass(r.kind) ?? '')
+              'flex items-stretch font-mono text-[11px] leading-[1.5] whitespace-pre break-words cursor-pointer ' +
+              (lineClass(r.kind) ?? 'hover:bg-muted/40')
             }
           >
             {gutter(r.oldNo, 'old')}
@@ -2377,30 +2424,23 @@ function ConfirmDiscardDialog({
   onCancel: () => void
   onDiscard: () => void
 }) {
-  if (!open) return null
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="w-[400px] border border-border bg-popover p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-sm font-medium">退出编辑？</h3>
-        <p className="mt-2 text-xs text-muted-foreground">
-          退出后编辑的内容不会被保存，确认退出？
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
+      <DialogContent width="xs">
+        <DialogHeader>
+          <DialogTitle>退出编辑？</DialogTitle>
+          <DialogDescription>退出后编辑的内容不会被保存，确认退出？</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
           <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
             继续编辑
           </Button>
           <Button variant="destructive" size="sm" onClick={onDiscard} disabled={saving}>
             确认退出
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -2418,31 +2458,26 @@ function ConfirmSyncManagedDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
-  if (!open) return null
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="w-[400px] border border-border bg-popover p-4 shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-sm font-medium">同步到配置文件</h3>
-        <p className="mt-2 text-xs text-muted-foreground">
-          将把所有「待同步」的托管供应商分组写入配置文件
-          {pendingCount > 0 && <>（共 {pendingCount} 个供应商）</>}，确认同步？
-        </p>
-        <div className="mt-4 flex justify-end gap-2">
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
+      <DialogContent width="xs">
+        <DialogHeader>
+          <DialogTitle>同步到配置文件</DialogTitle>
+          <DialogDescription>
+            将把所有「待同步」的托管供应商分组写入配置文件
+            {pendingCount > 0 && <>（共 {pendingCount} 个供应商）</>}，确认同步？
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
           <Button variant="outline" size="sm" onClick={onCancel} disabled={syncing}>
             取消
           </Button>
           <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
             {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
