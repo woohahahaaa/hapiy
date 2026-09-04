@@ -80,6 +80,8 @@ export type Provider = {
   readonly name: string
   readonly baseUrls: readonly string[]
   readonly keys: readonly string[]
+  // keyNotes maps a key string to its optional remark; purely informational.
+  readonly keyNotes: Readonly<Record<string, string>>
   readonly endpoints: readonly ProviderEndpoint[]
   readonly models: readonly ProviderModel[]
   readonly status: boolean
@@ -960,6 +962,17 @@ function readStringArray(value: unknown, field: string): readonly string[] {
   return parsed
 }
 
+function readStringRecord(value: unknown, field: string): Readonly<Record<string, string>> {
+  if (value === '' || value === null || value === undefined) {
+    return {}
+  }
+  const parsed = typeof value === 'string' ? parseJson(value, field) : value
+  if (!isRecord(parsed) || Object.values(parsed).some((item) => typeof item !== 'string')) {
+    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+  }
+  return parsed as Record<string, string>
+}
+
 function parseEndpoint(value: unknown): ProviderEndpoint {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回的 endpoints 格式无效', null)
@@ -1145,6 +1158,7 @@ function parseProvider(value: unknown): Provider {
     name: readString(value.name, 'provider.name'),
     baseUrls: readStringArray(value.base_urls, 'base_urls'),
     keys: readStringArray(value.keys, 'keys'),
+    keyNotes: readStringRecord(value.key_notes, 'provider.key_notes'),
     endpoints: readObjectArray(value.endpoints, 'endpoints', parseEndpoint),
     models: readObjectArray(value.models, 'models', parseModel),
     status: readBoolean(value.status, 'provider.status'),
@@ -1602,6 +1616,7 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     name: provider.name,
     base_urls: JSON.stringify(provider.baseUrls),
     keys: JSON.stringify(provider.keys),
+    key_notes: JSON.stringify(provider.keyNotes),
     endpoints: JSON.stringify(provider.endpoints),
     models: JSON.stringify(provider.models),
     status: provider.status,

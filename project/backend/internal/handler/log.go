@@ -126,9 +126,10 @@ func ListLogModels(db *gorm.DB) gin.HandlerFunc {
 }
 
 // GetLogStats returns usage stats. When from/to are present it aggregates
-// request rows from the logs table scoped to the time window (success counts
-// tokens/cost, failed counts requests, event rows excluded); otherwise it
-// returns the lifetime-cumulative usage_counters row.
+// the time-stamped usage_stats rows (the 活动监视 page's dedicated store,
+// written per flush batch) scoped to the time window — independent of the
+// logs table, so clearing 使用记录 never affects these numbers; otherwise
+// it returns the lifetime-cumulative usage_counters row.
 func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// "range" is accepted for backward compatibility but not applied.
@@ -141,16 +142,15 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 		var cacheHitTokens, cacheMissTokens, totalUseTimeMs int64
 
 		if fromStr != "" || toStr != "" {
-			query := db.Model(&model.Log{}).
-				Select("COALESCE(SUM(CASE WHEN status = 'success' OR status = 'failed' THEN 1 ELSE 0 END), 0) AS total_requests, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0) AS success_count, "+
-					"COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_count, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_tokens + completion_tokens ELSE 0 END), 0) AS total_tokens, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN quota ELSE 0 END), 0) AS total_cost, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_cache_hit_tokens ELSE 0 END), 0) AS cache_hit_tokens, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN prompt_cache_miss_tokens ELSE 0 END), 0) AS cache_miss_tokens, "+
-					"COALESCE(SUM(CASE WHEN status = 'success' THEN use_time ELSE 0 END), 0) AS total_use_time_ms").
-				Where("status IN ?", []string{"success", "failed"})
+			query := db.Model(&model.UsageStat{}).
+				Select("COALESCE(SUM(total_requests), 0) AS total_requests, "+
+					"COALESCE(SUM(success_count), 0) AS success_count, "+
+					"COALESCE(SUM(failed_count), 0) AS failed_count, "+
+					"COALESCE(SUM(total_tokens), 0) AS total_tokens, "+
+					"COALESCE(SUM(total_cost), 0) AS total_cost, "+
+					"COALESCE(SUM(cache_hit_tokens), 0) AS cache_hit_tokens, "+
+					"COALESCE(SUM(cache_miss_tokens), 0) AS cache_miss_tokens, "+
+					"COALESCE(SUM(total_use_time_ms), 0) AS total_use_time_ms")
 			if fromStr != "" {
 				from, err := time.Parse(time.RFC3339, fromStr)
 				if err != nil {
@@ -234,11 +234,16 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// ClearUsage resets the lifetime usage counter to zero. The logs table
-// is NOT touched — the two stores are intentionally independent.
+// ClearUsage resets the lifetime usage counter and wipes the usage_stats
+// history (the 活动监视 page's dedicated store). The logs table is NOT
+// touched — 使用记录 is cleared only by ClearLogs.
 func ClearUsage(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := db.Exec("DELETE FROM usage_counters WHERE id = ?", 1).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := db.Exec("DELETE FROM usage_stats").Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -249,7 +254,8 @@ func ClearUsage(db *gorm.DB) gin.HandlerFunc {
 // ClearLogs deletes usage log records from the database. Body (optional):
 // {scope: "filtered"|"all", filters?}. filtered mode removes rows matching the
 // filters (token/provider/model/status/from/to, mirroring ListLogs); all mode
-// removes every row. Responds {deleted}.
+// removes every row. Responds {deleted}. Only the logs (使用记录) table is
+// touched — usage_counters and usage_stats (活动监视) are never affected.
 func ClearLogs(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {

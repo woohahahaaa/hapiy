@@ -118,7 +118,7 @@ const [error, setError] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
   // 预览差异中"未设置或已失效参考厂商"的模型：{ provider, models } 列表，
   // 供右侧 diff 顶部灰色备注。文案取表格列头「从 models.dev 同步模型配置」。
-  const [diffUnsetModels, setDiffUnsetModels] = useState<readonly { provider: string; model: string }[]>([])
+  const [diffUnsetModels, setDiffUnsetModels] = useState<readonly { provider: string; model: string; stale: boolean }[]>([])
 
   const reload = () => {
     if (!record) return
@@ -706,6 +706,7 @@ for (const p of summary?.providers ?? []) {
       setDiffPreviewing(false)
       setDiffBefore(null)
       setDiffAfter(null)
+      setDiffUnsetModels([])
     }
   }
 
@@ -757,7 +758,7 @@ for (const p of summary?.providers ?? []) {
         width="md"
         height="auto"
         showCloseButton={false}
-        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0"
+        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0 !w-[1280px] !max-w-none"
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <div className="flex flex-col gap-0.5">
@@ -800,7 +801,7 @@ for (const p of summary?.providers ?? []) {
           <PreviewBanner applied={templateTally.size > 0 ? templateApplied : liveDiffCount} />
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[200px_220px_minmax(300px,1fr)] divide-x divide-border">
+        <div className="grid min-h-0 flex-1 grid-cols-[280px_320px_minmax(320px,1fr)] divide-x divide-border">
 {/* Left: 非托管供应商 (normal panel) / 托管供应商 (managed panel) */}
         <div className="flex min-h-0 flex-col">
           {activePanel === 'normal' ? (
@@ -1082,7 +1083,7 @@ for (const p of summary?.providers ?? []) {
             </ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
               {diffPreviewing && diffBefore !== null && diffAfter !== null ? (
-                <DiffView before={diffBefore} after={diffAfter} />
+                <DiffView before={diffBefore} after={diffAfter} unsetModels={diffUnsetModels} />
               ) : selectedManagedGroup ? (
                 <JsonEditor
                   value={selectedManagedGroup.group.generated}
@@ -2121,12 +2122,23 @@ function JsonEditor({
   )
 }
 
-// DiffView renders a two-column, line-aligned diff of two JSON texts:
-// left is the current file, right is the "after applying everything"
-// result produced by 预览差异. Changed lines are shown red (removed) /
-// green (added); unchanged lines share a single row to keep alignment
-// stable across the three-column dialog layout.
-function DiffView({ before, after }: { before: string; after: string }) {
+// DiffView renders a single-column, VSCode-style unified diff of two JSON
+// texts: the current file vs. the "after applying everything" result
+// produced by 预览差异. Removed lines are marked red with a "-", added
+// lines green with a "+"; old/new line numbers sit in the gutter so the
+// reading feel matches an editor diff view. unsetModels lists the
+// provider/models whose reference supplier is missing or stale — shown as
+// a grey note (matching the "从 models.dev 同步模型配置" column header
+// wording) so the user knows those model fields were not applied.
+function DiffView({
+  before,
+  after,
+  unsetModels,
+}: {
+  before: string
+  after: string
+  unsetModels?: readonly { provider: string; model: string; stale: boolean }[]
+}) {
   const pretty = (text: string): string => {
     try {
       return JSON.stringify(JSON.parse(text), null, 2)
@@ -2134,15 +2146,14 @@ function DiffView({ before, after }: { before: string; after: string }) {
       return text
     }
   }
-  const beforeLines = useMemo(() => pretty(before).split('\n'), [before])
-  const afterLines = useMemo(() => pretty(after).split('\n'), [after])
   const groups = useMemo(() => diffLines(pretty(before), pretty(after)), [before, after])
 
-  // 逐行渲染：red-green 行内对比。unchanged 行取 (before[i], after[i])。
+  // 逐行构造：unified diff，保留旧/新行号供 gutter 显示。
   interface Row {
     kind: 'same' | 'del' | 'add'
-    before: string | null
-    after: string | null
+    oldNo: number | null
+    newNo: number | null
+    text: string | null
   }
   const rows = useMemo<Row[]>(() => {
     let bi = 0
@@ -2153,54 +2164,78 @@ function DiffView({ before, after }: { before: string; after: string }) {
       const lines = valueLines(part.value)
       if (part.removed) {
         for (const l of lines) {
-          out.push({ kind: 'del', before: l, after: null })
+          out.push({ kind: 'del', oldNo: bi + 1, newNo: null, text: l })
           bi++
         }
       } else if (part.added) {
         for (const l of lines) {
-          out.push({ kind: 'add', before: null, after: l })
+          out.push({ kind: 'add', oldNo: null, newNo: ai + 1, text: l })
           ai++
         }
       } else {
         for (let i = 0; i < lines.length; i++) {
-          out.push({ kind: 'same', before: beforeLines[bi], after: afterLines[ai] })
+          out.push({ kind: 'same', oldNo: bi + 1, newNo: ai + 1, text: lines[i] })
           bi++
           ai++
         }
       }
     }
     return out
-  }, [groups, beforeLines, afterLines])
+  }, [groups])
 
-  const cell = (line: string | null, kind: 'before' | 'after') => {
-    if (line === null) return <div className="h-full w-full bg-muted/30" />
-    return <div className="h-full w-full px-2 py-0.5 font-mono text-[11px] leading-[1.5] whitespace-pre break-words">{line || '\u00A0'}</div>
-  }
+  const gutter = (no: number | null, kind: 'old' | 'new') => (
+    <div className={'w-10 shrink-0 px-1 text-right font-mono text-[10px] leading-[1.5] select-none ' + (no === null ? 'text-transparent' : 'text-muted-foreground/70')}>
+      {no ?? '\u00A0'}
+    </div>
+  )
+
+  const lineClass = (kind: Row['kind']) =>
+    kind === 'del'
+      ? 'bg-destructive/10'
+      : kind === 'add'
+        ? 'bg-emerald-500/10'
+        : undefined
+
+  const marker = (kind: Row['kind']) => (kind === 'del' ? '−' : kind === 'add' ? '+' : ' ')
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex border-b border-border bg-muted/40 text-[10px] text-muted-foreground">
-        <div className="w-1/2 border-r border-border px-2 py-1">当前内容</div>
-        <div className="w-1/2 px-2 py-1">套用推荐后</div>
+      {unsetModels && unsetModels.length > 0 && (
+        <div className="max-h-[30%] overflow-auto border-b border-border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+          <div className="mb-1 font-medium text-foreground/70">从 models.dev 同步模型配置</div>
+          <ul className="space-y-0.5">
+            {unsetModels.slice(0, 20).map((u, i) => (
+              <li key={i}>
+                <span className="font-mono">{u.provider}/{u.model}</span>
+                <span className="mx-1">·</span>
+                <span>{u.stale ? '已失效（上次选择的参考厂商已不在候选，未套用）' : '未设置参考厂商（未套用该模型基础字段）'}</span>
+              </li>
+            ))}
+            {unsetModels.length > 20 && (
+              <li className="text-muted-foreground/70">…等 {unsetModels.length} 个模型</li>
+            )}
+          </ul>
+        </div>
+      )}
+      <div className="flex items-center border-b border-border bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
+        <span>当前内容 → 套用推荐后（{rows.filter((r) => r.kind !== 'same').length} 处变更）</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {rows.map((r, i) => (
-          <div key={i} className="flex border-b border-border/40">
-            <div
-              className={
-                'w-1/2 border-r border-border/60 ' +
-                (r.kind === 'del' ? 'bg-destructive/10' : r.kind === 'add' ? 'bg-muted/40' : '')
-              }
-            >
-              {cell(r.before, 'before')}
+          <div
+            key={i}
+            className={
+              'flex items-stretch font-mono text-[11px] leading-[1.5] whitespace-pre break-words ' +
+              (lineClass(r.kind) ?? '')
+            }
+          >
+            {gutter(r.oldNo, 'old')}
+            {gutter(r.newNo, 'new')}
+            <div className={'w-5 shrink-0 text-center select-none ' + (r.kind === 'del' ? 'text-destructive' : r.kind === 'add' ? 'text-emerald-500' : 'text-muted-foreground/50')}>
+              {marker(r.kind)}
             </div>
-            <div
-              className={
-                'w-1/2 ' +
-                (r.kind === 'add' ? 'bg-emerald-500/10' : r.kind === 'del' ? 'bg-muted/40' : '')
-              }
-            >
-              {cell(r.after, 'after')}
+            <div className="min-w-0 flex-1 px-2 py-0">
+              {(r.text ?? '').trimEnd() || '\u00A0'}
             </div>
           </div>
         ))}
