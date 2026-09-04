@@ -3,13 +3,14 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { DateRange } from '@/lib/dashboard-api'
 
-type QuickPreset = 'all' | 'month' | 'week' | 'day'
+type QuickPreset = 'all' | 'month' | 'week' | 'day' | 'today'
 
 const QUICK_OPTIONS: readonly { value: QuickPreset; label: string }[] = [
   { value: 'all', label: '全部' },
   { value: 'month', label: '一个月' },
   { value: 'week', label: '一周' },
   { value: 'day', label: '一天' },
+  { value: 'today', label: '今天' },
 ]
 
 function formatDate(date: Date): string {
@@ -24,6 +25,7 @@ function detectPreset(range: DateRange): QuickPreset | null {
   if (!range.to) return null
   const today = formatDate(new Date())
   if (range.to !== today) return null
+  if (range.from === today) return 'today'
   for (const [days, preset] of [[30, 'month'], [7, 'week'], [1, 'day']] as const) {
     const d = new Date()
     d.setDate(d.getDate() - days)
@@ -47,6 +49,10 @@ export function DateRangeFilter({
       return
     }
     const today = new Date()
+    if (preset === 'today') {
+      onChange({ from: formatDate(today), to: formatDate(today) })
+      return
+    }
     const from = new Date()
     const days = preset === 'month' ? 30 : preset === 'week' ? 7 : 1
     from.setDate(today.getDate() - days)
