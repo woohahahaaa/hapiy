@@ -1,0 +1,114 @@
+{
+  "name": "WorkBuddy",
+  "os_paths": {
+    "windows": "%USERPROFILE%\\.workbuddy\\models.json",
+    "mac": "~/.workbuddy/models.json"
+  },
+  "json_paths": {
+    "provider": "",
+    "model": ""
+  },
+  "recommendations": [
+    {
+      "scope": "model",
+      "key": "id",
+      "description": "模型唯一标识（官方必填）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "model",
+      "key": "name",
+      "description": "模型显示名称",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "vendor",
+      "description": "模型供应商名（如 OpenAI / Google；自定义模型 UI 自动标 custom 标签，推荐时不干预）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "apiKey",
+      "description": "API 密钥（可留空，用环境变量或平台内置）",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "maxInputTokens",
+      "description": "最大输入 token 数",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "maxOutputTokens",
+      "description": "最大输出 token 数",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "url",
+      "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "model",
+      "key": "supportsToolCall",
+      "description": "是否支持工具调用（推荐开启，官方字段）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "supportsImages",
+      "description": "是否支持图片输入（推荐写明确布尔值）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "supportsReasoning",
+      "description": "是否支持推理模式（推荐写明确布尔值）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "availableModels",
+      "description": "可选顶层字段：控制下拉列表只显示列出的模型 ID；不配则显示全部（推荐时不干预）",
+      "type": "array",
+      "recommended": null,
+      "required": false
+    }
+  ],
+  "protocols": null,
+  "model_info_fields": {
+    "max_context": "maxInputTokens",
+    "max_output_token": "maxOutputTokens",
+    "input_types": {
+      "path": "supportsImages",
+      "op": "bool"
+    },
+    "thinking_levels": {
+      "path": "supportsReasoning",
+      "op": "bool"
+    }
+  }
+}

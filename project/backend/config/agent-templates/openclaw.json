@@ -1,0 +1,95 @@
+{
+  "name": "openclaw",
+  "os_paths": {
+    "windows": "%USERPROFILE%\\.openclaw\\openclaw.json",
+    "mac": "~/.openclaw/openclaw.json"
+  },
+  "json_paths": {
+    "provider": "models.providers",
+    "model": "models.providers.{provider_id}.models"
+  },
+  "recommendations": [
+    {
+      "scope": "provider",
+      "key": "baseUrl",
+      "description": "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "apiKey",
+      "description": "认证密钥",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "api",
+      "description": "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...）",
+      "type": "string",
+      "recommended": "openai-completions",
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "id",
+      "description": "模型唯一标识",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "model",
+      "key": "name",
+      "description": "模型显示名",
+      "type": "string",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "contextWindow",
+      "description": "上下文 token 上限",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "maxTokens",
+      "description": "输出 token 上限",
+      "type": "number",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "input",
+      "description": "支持的输入类型（text/image/...）",
+      "type": "array",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "reasoning",
+      "description": "是否支持思考模式（官方 schema 校验，未配按 false 处理）",
+      "type": "boolean",
+      "recommended": null,
+      "required": false
+    }
+  ],
+  "protocols": null,
+  "model_info_fields": {
+    "max_context": "contextWindow",
+    "max_output_token": "maxTokens",
+    "input_types": "input",
+    "thinking_levels": {
+      "path": "reasoning",
+      "op": "bool"
+    }
+  }
+}

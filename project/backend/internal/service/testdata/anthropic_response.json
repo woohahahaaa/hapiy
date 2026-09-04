@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-07-31T13:36:48.053046",
+  "direction": "response",
+  "flow_id": "f73f3cc7-9bb2-43ec-abea-fb951114c25e",
+  "group": "openclaw",
+  "source_id": "src_uysytl2e",
+  "status_code": 200,
+  "url": "http://192.168.1.2:30000/v1/messages",
+  "upstream_url": "http://192.168.1.2:30000/v1/messages",
+  "headers": {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Content-Type": "text/event-stream",
+    "X-Accel-Buffering": "no",
+    "X-New-Api-Version": "v1.0.0-rc.21",
+    "X-Oneapi-Request-Id": "202607310536427218866148268d9d69k4bSAcp",
+    "Date": "Fri, 31 Jul 2026 05:36:47 GMT",
+    "Transfer-Encoding": "chunked"
+  },
+  "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"06bb676dd2518ffe2ba946814beb3d24\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"MiniMax-M3\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0,\"service_tier\":\"standard\"},\"service_tier\":\"standard\"}}\n\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The user is sending a heartbeat poll. According to my instructions, if the current user message is a heartbeat poll and nothing needs attention, I should reply\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" exactly \\\"HEARTBEAT\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"_OK\\\".\\n\\nLet me check if\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" there's anything in HEARTBEAT.md that needs attention -\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"it says it's empty, no periodic tasks, goal-watchdog has been removed.\\n\\nNothing needs attention. I should reply with HEARTBEAT_OK.\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"97475e9da264a004083de9ed14ec75a97cde35bbd75d55abb016b17401f33646\"}}\n\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"HEARTBEAT_OK\"}}\n\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"input_tokens\":28066,\"output_tokens\":92,\"cache_read_input_tokens\":128,\"service_tier\":\"standard\"}}\n\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n\n",
+  "body_length": 2318
+}

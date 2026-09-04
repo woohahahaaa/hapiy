@@ -1,0 +1,37 @@
+
+# Added by opencode auto-gitignore
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+*.lnk
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+.env
+.env.local
+.env.*.local
+.envrc
+*.log
+logs/
+.opencode/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+encryption.key
+
+# Database backups
+.backup/
+*.db.bak*
+
+# Tool artifacts
+.playwright-mcp/
+.omo/start-work/
+.omo/evidence/task-*-topology-magic-layout*

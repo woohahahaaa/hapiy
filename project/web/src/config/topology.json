@@ -1,0 +1,91 @@
+{
+  "render": {
+    "node": {
+      "minWidth": 200,
+      "maxWidth": 300
+    },
+    "slot": {
+      "padding": 16,
+      "contentGap": 8,
+      "shellMinWidth": 240
+    },
+    "modelHub": {
+      "paddingX": 18,
+      "paddingY": 13.5
+    }
+  },
+  "layout": {
+    "nodeGap": 80,
+    "rowGap": 80,
+    "modelHubGap": 30,
+    "groupGap": 80,
+    "marginX": 80,
+    "marginY": 80,
+    "freeSlotRowWidthFactor": 1.5
+  },
+  "fallbackNodeSize": {
+    "width": 224,
+    "height": 80
+  },
+  "initialPositions": {
+    "modelHub": {
+      "x": 20,
+      "y": 20,
+      "verticalOffset": 60
+    },
+    "provider": {
+      "x": 450,
+      "y": 20,
+      "verticalOffset": 60
+    },
+    "slot": {
+      "x": 700,
+      "y": 20,
+      "horizontalOffset": 260,
+      "verticalOffset": 60
+    }
+  },
+  "edge": {
+    "animated": true,
+    "strokeWidth": 1.5
+  },
+  "grid": {
+    "color": "var(--border)",
+    "gap": 20,
+    "size": 1
+  },
+  "handles": {
+    "provider": {
+      "target": {
+        "width": 12,
+        "height": 20,
+        "borderWidth": 2
+      },
+      "source": {
+        "width": 12,
+        "height": 12,
+        "borderWidth": 2
+      },
+      "segmentGap": -2
+    },
+    "modelHub": {
+      "source": {
+        "width": 10,
+        "height": 10,
+        "borderWidth": 2
+      }
+    },
+    "slot": {
+      "target": {
+        "width": 8,
+        "height": 8,
+        "borderWidth": 2
+      },
+      "source": {
+        "width": 8,
+        "height": 8,
+        "borderWidth": 2
+      }
+    }
+  }
+}
