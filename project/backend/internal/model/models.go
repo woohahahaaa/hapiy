@@ -32,6 +32,9 @@ type Provider struct {
 	Name            string    `gorm:"not null" json:"name"`
 	BaseURLs        string    `gorm:"type:text" json:"base_urls"` // JSON array
 	Keys            string    `gorm:"type:text" json:"keys"`      // JSON array
+	// KeyNotes is a JSON object mapping each API key to its optional user
+	// remark. Purely informational; the relay never reads it.
+	KeyNotes        string    `gorm:"type:text" json:"key_notes"`
 	Endpoints       string    `gorm:"type:text" json:"endpoints"` // JSON array
 	Models          string    `gorm:"type:text" json:"models"`    // JSON array
 	Status          bool      `gorm:"default:true" json:"status"`
@@ -159,6 +162,24 @@ type UsageCounter struct {
 	CacheMissTokens int64     `json:"cache_miss_tokens"`
 	TotalUseTimeMs  int64     `json:"total_use_time_ms"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// UsageStat is the 活动监视 page's dedicated stats store: one row per
+// flushed log batch, holding the batch's time and usage aggregates.
+// Fully decoupled from the logs table — clearing 使用记录 never touches
+// it — and wiped together with the lifetime UsageCounter by the 清空用量
+// action, never by ClearLogs.
+type UsageStat struct {
+	ID              uint      `gorm:"primaryKey" json:"-"`
+	TotalRequests   int64     `json:"total_requests"`
+	SuccessCount    int64     `json:"success_count"`
+	FailedCount     int64     `json:"failed_count"`
+	TotalTokens     int64     `json:"total_tokens"`
+	TotalCost       float64   `json:"total_cost"`
+	CacheHitTokens  int64     `json:"cache_hit_tokens"`
+	CacheMissTokens int64     `json:"cache_miss_tokens"`
+	TotalUseTimeMs  int64     `json:"total_use_time_ms"`
+	CreatedAt       time.Time `gorm:"index" json:"created_at"`
 }
 
 // RewriteRule model

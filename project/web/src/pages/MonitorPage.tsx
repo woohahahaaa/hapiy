@@ -256,9 +256,10 @@ function StatsSection() {
     void fetchStats(dateRange)
   }, [dateRange, fetchStats])
 
-  // The backend counter is now lifetime-cumulative; from/to no longer
-  // scope the values, but we still render the filter to keep the UI
-  // layout stable while users transition to the new behavior.
+  // With from/to the backend aggregates the dedicated usage_stats table
+  // (per-batch stats history, independent of the usage-logs table);
+  // without them it returns the lifetime usage counter. The filter is
+  // always rendered either way.
   const successRate = stats && stats.totalRequests > 0
     ? `${((stats.successCount / stats.totalRequests) * 100).toFixed(1)}%`
     : '-'

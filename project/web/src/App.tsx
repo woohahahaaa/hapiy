@@ -19,12 +19,14 @@ import { AgentConfigPage } from '@/pages/AgentConfigPage'
 import { AgentRulesPage } from '@/pages/AgentRulesPage'
 import { AuthGate } from '@/components/AuthGate'
 import { Toaster } from '@/components/ui/toast'
+import { SwitchNodePreviewPage } from '@/pages/SwitchNodePreviewPage'
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/preview/switch" element={<SwitchNodePreviewPage />} />
         <Route
           path="/*"
           element={

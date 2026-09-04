@@ -73,7 +73,9 @@ func (w *LogWriter) loop() {
 }
 
 // Flush writes all pending logs to the database in one batch, then
-// atomically upserts the same flush's aggregates into usage_counters.
+// records the same flush's aggregates twice: atomically upserted into
+// usage_counters (lifetime totals) and appended as one time-stamped row
+// into usage_stats (the 活动监视 page's per-batch stats history).
 // Aggregates are computed from the in-memory batch — no extra DB
 // reads. Historical log data is NOT back-filled; the counter
 // intentionally reflects only what this writer has flushed since the
@@ -148,6 +150,24 @@ func (w *LogWriter) Flush() {
 	`, reqCount, succCount, failCount, totalTokens, totalCost, cacheHit, cacheMiss, totalMs, time.Now()).Error
 	if err != nil {
 		println("logwriter: usage counter upsert failed:", err.Error())
+	}
+
+	// Append the same aggregates as one time-stamped usage_stats row so
+	// 活动监视 can aggregate by time window without touching the logs
+	// table. Written right after the counter upsert so both stores stay
+	// in lockstep; a failure here is logged, not retried.
+	if err := w.db.Create(&model.UsageStat{
+		TotalRequests:   reqCount,
+		SuccessCount:    succCount,
+		FailedCount:     failCount,
+		TotalTokens:     totalTokens,
+		TotalCost:       totalCost,
+		CacheHitTokens:  cacheHit,
+		CacheMissTokens: cacheMiss,
+		TotalUseTimeMs:  totalMs,
+		CreatedAt:       time.Now(),
+	}).Error; err != nil {
+		println("logwriter: usage stat insert failed:", err.Error())
 	}
 }
 

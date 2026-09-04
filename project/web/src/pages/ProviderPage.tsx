@@ -35,7 +35,7 @@ type ProviderFormProps = {
 }
 
 const emptyProvider: ProviderInput = {
-  name: '', baseUrls: [], keys: [], endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
+  name: '', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
 }
 
 // emptyProviderModel builds the serializable form of a model row with all
@@ -247,6 +247,12 @@ export function ProviderPage() {
 
 function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
+  // Per-key remarks as a parallel array aligned with form.keys (array instead
+  // of a key→note map so editing a key text keeps its note). Converted back to
+  // the stored key→note map on save.
+  const [keyNotes, setKeyNotes] = useState<readonly string[]>(() =>
+    provider ? provider.keys.map((key) => provider.keyNotes[key] ?? '') : [],
+  )
   const [endpointError, setEndpointError] = useState<string | null>(null)
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
@@ -543,6 +549,13 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       .filter((endpoint) => endpoint.pathSuffix !== '')
     const baseUrls = form.baseUrls.map((value) => value.trim()).filter((value) => value !== '')
     const keys = form.keys.map((value) => value.trim()).filter((value) => value !== '')
+    const notes: Record<string, string> = {}
+    form.keys.forEach((raw, index) => {
+      const key = raw.trim()
+      if (key === '') return
+      const note = (keyNotes[index] ?? '').trim()
+      if (note !== '') notes[key] = note
+    })
     const models = form.models
       .map((item) => {
         const model = item.model.trim()
@@ -567,7 +580,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         return
       }
     }
-    onSave({ ...form, name: form.name.trim(), baseUrls, keys, endpoints, models })
+    onSave({ ...form, name: form.name.trim(), baseUrls, keys, keyNotes: notes, endpoints, models })
   }
 
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
@@ -636,7 +649,15 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         )
       })()}
       <ProviderValueList label="Base URLs" placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash />
-      <ProviderValueList label="API Keys" placeholder="sk-xxx" values={form.keys} onChange={(keys) => setForm((current) => ({ ...current, keys }))} />
+      <ProviderValueList
+        label="API Keys"
+        placeholder="sk-xxx"
+        values={form.keys}
+        onChange={(keys) => setForm((current) => ({ ...current, keys }))}
+        notes={keyNotes}
+        onNotesChange={setKeyNotes}
+        notesPlaceholder="备注（可选）"
+      />
       <Field>
         <FieldLabel>Endpoints</FieldLabel>
         <div className="flex flex-col gap-2">
@@ -798,10 +819,23 @@ type ProviderValueListProps = {
   readonly values: readonly string[]
   readonly onChange: (values: readonly string[]) => void
   readonly stripTrailingSlash?: boolean
+  // When onNotesChange is provided, each row gets an optional remark input on
+  // its right side; remarks live in a parallel array and are never validated.
+  readonly notes?: readonly string[]
+  readonly onNotesChange?: (notes: readonly string[]) => void
+  readonly notesPlaceholder?: string
 }
 
-function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false }: ProviderValueListProps) {
+function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder = '备注' }: ProviderValueListProps) {
   const rows = values.length === 0 ? [''] : [...values]
+  const withNotes = onNotesChange !== undefined
+  const applyNote = (index: number, next: string) => {
+    if (!onNotesChange) return
+    const padded = [...(notes ?? [])]
+    while (padded.length <= index) padded.push('')
+    padded[index] = next
+    onNotesChange(padded)
+  }
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
@@ -826,7 +860,25 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
                 } : undefined}
                 placeholder={placeholder}
               />
-              <Button type="button" variant="ghost" size="icon" disabled={isPhantom} onClick={() => onChange(values.filter((_, i) => i !== index))} aria-label={`删除${label}`}>
+              {withNotes && (
+                <Input
+                  value={notes?.[index] ?? ''}
+                  onChange={(event) => applyNote(index, event.target.value)}
+                  placeholder={notesPlaceholder}
+                  aria-label={`${label} 备注`}
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={isPhantom}
+                onClick={() => {
+                  onChange(values.filter((_, i) => i !== index))
+                  onNotesChange?.((notes ?? []).filter((_, i) => i !== index))
+                }}
+                aria-label={`删除${label}`}
+              >
                 <AppIcon name="delete" />
               </Button>
             </div>

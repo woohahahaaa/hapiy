@@ -106,17 +106,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
   }
 
   return (
-    <div
-      ref={rootRef}
-      className={cn(
-        'relative rounded-lg border-2 bg-card text-card-foreground',
-        data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
-        !enabled && 'opacity-60',
-      )}
-      style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
-    >{flashLayers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
-      ))}
+    <>
       <HandlesRail
         height={nodeHeight}
         segmentCount={models.length}
@@ -124,56 +114,68 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         borderColor={data.accentColor}
         flashLayers={flashLayers}
       />
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!rounded-full !border-border !bg-background"
-        style={{
-          width: sourceHandle.width,
-          height: sourceHandle.height,
-          borderWidth: sourceHandle.borderWidth,
-        }}
-      />
-
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className={cn('flex min-w-0 items-center gap-1.5')}>
-          <span
-            aria-hidden="true"
-            className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-[var(--node-accent,var(--color-primary))]' : 'bg-muted-foreground/50')}
-          />
-          <span className={cn('truncate text-sm font-medium', data.accentColor && 'text-[var(--node-accent)]')}>{label || '请求入口'}</span>
-        </span>
-        <Switch
-          checked={enabled}
-          onCheckedChange={() => onChangeEnabled(!enabled)}
-          aria-label={enabled ? `${label} 已启用，点击关闭` : `${label} 已停用，点击启用`}
-          className="nodrag nopan"
-          onPointerDown={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
+      <div
+        ref={rootRef}
+        className={cn(
+          'relative rounded-lg border-2 bg-card text-card-foreground',
+          data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
+          !enabled && 'opacity-60',
+        )}
+        style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
+      >{flashLayers.map((layer) => (
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
+        ))}
+        <Handle
+          type="source"
+          position={Position.Right}
+          className="!rounded-full !border-border !bg-background"
+          style={{
+            width: sourceHandle.width,
+            height: sourceHandle.height,
+            borderWidth: sourceHandle.borderWidth,
+          }}
         />
-      </div>
 
-      <div className={cn('flex flex-col gap-1 p-3')}>
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px]">权重</span>
-          <Input
-            type="number"
-            size="sm"
-            min={0}
-            max={1}
-            step={0.01}
-            value={weightText}
-            onChange={(e) => {
-              setWeightText(e.target.value)
-              const next = clampWeight(e.target.value)
-              if (next !== null) weightDebouncerRef.current?.schedule(next)
-            }}
-            onBlur={commitWeightOnBlur}
-            onKeyDown={(e) => e.stopPropagation()}
-            className="nodrag nopan w-full px-1 py-0 text-left"
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+          <span className={cn('flex min-w-0 items-center gap-1.5')}>
+            <span
+              aria-hidden="true"
+              className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-[var(--node-accent,var(--color-primary))]' : 'bg-muted-foreground/50')}
+            />
+            <span className={cn('truncate text-sm font-medium', data.accentColor && 'text-[var(--node-accent)]')}>{label || '请求入口'}</span>
+          </span>
+          <Switch
+            checked={enabled}
+            onCheckedChange={() => onChangeEnabled(!enabled)}
+            aria-label={enabled ? `${label} 已启用，点击关闭` : `${label} 已停用，点击启用`}
+            className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           />
         </div>
+
+        <div className={cn('flex flex-col gap-1 p-3')}>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px]">权重</span>
+            <Input
+              type="number"
+              size="sm"
+              min={0}
+              max={1}
+              step={0.01}
+              value={weightText}
+              onChange={(e) => {
+                setWeightText(e.target.value)
+                const next = clampWeight(e.target.value)
+                if (next !== null) weightDebouncerRef.current?.schedule(next)
+              }}
+              onBlur={commitWeightOnBlur}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="nodrag nopan w-full px-1 py-0 text-left"
+            />
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

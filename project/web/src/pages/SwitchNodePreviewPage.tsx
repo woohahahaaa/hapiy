@@ -2,22 +2,15 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/checkbox'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { AppIcon } from '@/components/AppIcon'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/dialog'
-import { ConditionList } from '@/components/rewrite-rule-editor/ConditionList'
-import { GjsonPathHelp } from '@/components/rewrite-rule-editor/GjsonPathHelp'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { RemovableTag } from '@/components/tag'
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '@/components/dialog'
+import { ConditionRow } from '@/components/rewrite-rule-editor/ConditionRow'
 import { emptyCondition } from '@/components/rewrite-rule-editor/serializer'
+import type { LeafCondition } from '@/components/rewrite-rule-editor/serializer'
 import { topologyConfig } from '@/config/topology-config'
-import type { Condition } from '@/components/rewrite-rule-editor/serializer'
 
 interface PreviewProvider {
   id: string
@@ -37,9 +30,8 @@ const PROVIDERS: readonly PreviewProvider[] = [
 export function SwitchNodePreviewPage() {
   const [enabled, setEnabled] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(true)
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set(['p1', 'p2']))
-  const [conditions, setConditions] = useState<Condition[]>(() => [emptyCondition()])
+  const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
+  const [conditions, setConditions] = useState<LeafCondition[]>(() => [emptyCondition()])
 
   const toggleProvider = (id: string) => {
     setSelected((prev) => {
@@ -49,18 +41,21 @@ export function SwitchNodePreviewPage() {
       return next
     })
   }
-  const selectAll = (on: boolean) => {
-    setSelected(on ? new Set(PROVIDERS.map((p) => p.id)) : new Set())
-  }
-  const filteredProviders = PROVIDERS.filter((p) => p.name.includes(search))
-
+  const selectedProviders = PROVIDERS.filter((p) => selected.has(p.id))
   const providerSummary = selected.size === 0 ? '全部供应商' : `已选 ${selected.size} 个`
+
+  const updateCondition = (i: number, next: LeafCondition) => {
+    setConditions((prev) => prev.map((c, ci) => (ci === i ? next : c)))
+  }
+  const removeCondition = (i: number) => {
+    setConditions((prev) => prev.filter((_, ci) => ci !== i))
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center gap-3 border-b border-border bg-background px-6 py-3 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">条件开关节点 · 真实组件预览</span>
-        <span>左侧画布节点（点击打开弹窗），右侧为弹窗内容</span>
+        <span className="hidden md:inline">左侧画布节点（点击打开弹窗），右侧为弹窗内容</span>
         <Button variant="outline" size="xs" className="ml-auto" onClick={() => setDialogOpen(true)}>
           打开弹窗
         </Button>
@@ -86,36 +81,40 @@ export function SwitchNodePreviewPage() {
               'relative w-fit cursor-pointer rounded-lg border-2 border-border bg-card text-card-foreground transition-all hover:shadow-md',
               !enabled && 'opacity-60',
             )}
-            style={{ minWidth: topologyConfig.render.node.minWidth, paddingRight: 56 }}
+            style={{ minWidth: topologyConfig.render.node.minWidth }}
           >
             {/* 左侧连线 pill（HandlesRail 简化） */}
             <span
               aria-hidden
               className="pointer-events-none absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-[4px] border-2 border-border"
-              style={{ width: 12, height: 20, background: 'linear-gradient(90deg, transparent 0 50%, var(--color-card) 50% 100%)' }}
+              style={{
+                width: 12,
+                height: 20,
+                background: 'linear-gradient(90deg, transparent 0 50%, var(--color-card) 50% 100%)',
+              }}
             />
 
-            {/* 头部：状态点 + 名称 + 开关（对齐入口节点） */}
-            <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+            {/* 头部：状态点 + 名称 + 开关（底部分隔线贯通整卡） */}
+            <div className="flex items-center justify-between gap-2 border-b border-border py-2 pl-3 pr-14">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span
                   aria-hidden
-                  className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-[var(--color-success)]' : 'bg-muted-foreground/50')}
+                  className={cn(
+                    'size-2 shrink-0 rounded-full',
+                    enabled ? 'bg-[var(--color-success)]' : 'bg-muted-foreground/50',
+                  )}
                 />
                 <span className="truncate text-sm font-medium">条件开关</span>
               </span>
               <Switch
-                className="nodrag nopan"
                 checked={enabled}
                 onCheckedChange={setEnabled}
                 aria-label={enabled ? '已启用' : '已停用'}
-                onPointerDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
               />
             </div>
 
             {/* 节点体：条件摘要 */}
-            <div className="flex flex-col gap-2 p-3">
+            <div className="flex flex-col gap-2 p-3 pr-14">
               <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                 <span>供应商</span>
                 <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-card-foreground">
@@ -128,127 +127,136 @@ export function SwitchNodePreviewPage() {
                   {conditions.length} 条
                 </span>
               </div>
-              <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span className="h-px flex-1 bg-border" />
-                同时满足才从「是」输出
-                <span className="h-px flex-1 bg-border" />
-              </div>
             </div>
 
-            {/* 右侧：是 / 否 输出终端 + 标签 */}
-            <div
-              className="pointer-events-none absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-[18px] text-[10px] font-medium"
-              aria-hidden
-            >
-              <span style={{ color: 'var(--color-success)' }}>是</span>
-              <span style={{ color: 'var(--color-destructive)' }}>否</span>
+            {/* 底部说明行（顶部细线贯通整卡） */}
+            <div className="border-t border-border px-3 py-1.5 pr-14 text-[10px]">
+              满足条件 → <span className="font-medium text-foreground">是</span>　·　否则 →{' '}
+              <span className="font-medium text-foreground">否</span>
             </div>
-            <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 translate-x-1/2 flex-col gap-5" aria-hidden>
-              <span className="size-2 rounded-full border-2 bg-card" style={{ borderColor: 'var(--color-success)' }} />
-              <span className="size-2 rounded-full border-2 bg-card" style={{ borderColor: 'var(--color-destructive)' }} />
+
+            {/* 右侧输出端：是 / 否 标签 + Handle（贴上右缘） */}
+            <div className="absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-4">
+              <div className="flex items-center justify-end gap-1.5">
+                <span className="text-[10px] font-medium leading-none">是</span>
+                <span className="size-2.5 rounded-full border-2 border-border bg-background" />
+              </div>
+              <div className="flex items-center justify-end gap-1.5">
+                <span className="text-[10px] font-medium leading-none">否</span>
+                <span className="size-2.5 rounded-full border-2 border-border bg-background" />
+              </div>
             </div>
           </div>
 
-          <span className="absolute left-4 top-3 text-[11px] text-muted-foreground">仿画布背景 · 点击节点打开弹窗</span>
+          <span className="absolute left-4 top-3 text-[11px] text-muted-foreground">
+            仿画布背景 · 点击节点打开弹窗
+          </span>
         </div>
 
         {/* ── 右：弹窗（真实组件） ── */}
         <div className="flex w-full max-w-[720px] flex-1 items-start justify-center border-l border-border bg-muted/40 px-8 py-10">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogContent width="sm" showCloseButton={false} className="!w-[680px]">
-              <DialogHeader>
-                <DialogTitle>配置条件开关</DialogTitle>
-                <DialogDescription>
-                  同时满足下方两组条件时，请求从「是」输出；否则从「否」输出。
-                </DialogDescription>
-              </DialogHeader>
+              <DialogTitle className="px-4 pt-4">满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
 
-              <div className="flex flex-col gap-4">
-                {/* ── 条件一：供应商筛选 ── */}
-                <section className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium">供应商筛选</h3>
-                    <span className="text-[10px] text-muted-foreground">未勾选时对全部供应商生效</span>
-                  </div>
-                  <div className="rounded-md border border-border bg-popover">
-                    <div className="flex items-center gap-2 border-b border-border p-2">
-                      <div className="relative flex-1">
-                        <Input
-                          className="h-7 pl-7"
-                          placeholder="搜索供应商名称…"
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                        />
-                        <AppIcon
-                          name="tune"
-                          size={14}
-                          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                        />
-                      </div>
-                      <Button variant="ghost" size="xs" onClick={() => selectAll(true)}>
-                        全选
-                      </Button>
-                      <Button variant="ghost" size="xs" onClick={() => selectAll(false)}>
-                        清空
-                      </Button>
-                    </div>
-                    <div className="max-h-44 space-y-0.5 overflow-y-auto p-1.5">
-                      {filteredProviders.map((p) => {
-                        const checked = selected.has(p.id)
-                        return (
-                          <label
-                            key={p.id}
-                            className={cn(
-                              'flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs transition-colors hover:bg-muted',
-                              checked && 'bg-muted/60',
+              <div className="flex flex-col gap-4 p-4">
+                {/* ── 供应商：多选下拉（对齐「托管供应商」，选中即出 tag） ── */}
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-xs font-medium">供应商：</span>
+                  <div className="min-w-0 flex-1">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
+                        >
+                          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                            {selectedProviders.length === 0 ? (
+                              <span className="text-muted-foreground">选择供应商（不选时对全部生效）</span>
+                            ) : (
+                              selectedProviders.map((p) => (
+                                <RemovableTag
+                                  key={p.id}
+                                  label={<span className="font-medium">{p.name}</span>}
+                                  onRemove={() => toggleProvider(p.id)}
+                                  removeTitle={`移除 ${p.name}`}
+                                />
+                              ))
                             )}
-                          >
-                            <Checkbox
-                              className="nodrag nopan"
-                              checked={checked}
-                              onCheckedChange={() => toggleProvider(p.id)}
-                              aria-label={`选择供应商 ${p.name}`}
-                            />
-                            <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                            <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                              {p.keys} keys · {p.models} models
-                            </span>
-                          </label>
-                        )
-                      })}
-                      {filteredProviders.length === 0 && (
-                        <p className="py-4 text-center text-xs text-muted-foreground">没有匹配的供应商</p>
-                      )}
-                    </div>
-                    <div className="border-t border-border px-2 py-1.5 text-[10px] text-muted-foreground">
-                      已选 {selected.size} / {PROVIDERS.length} 个供应商
-                    </div>
+                          </span>
+                          <AppIcon name="expand_more" size={16} className="shrink-0 text-muted-foreground" />
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        align="start"
+                        className="max-h-[55vh] w-[--radix-popover-trigger-width] overflow-auto p-0"
+                      >
+                        <ul role="listbox" aria-multiselectable="true">
+                          {PROVIDERS.map((p) => {
+                            const checked = selected.has(p.id)
+                            return (
+                              <li key={p.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleProvider(p.id)}
+                                  role="option"
+                                  aria-selected={checked}
+                                  className={cn(
+                                    'flex w-full items-center gap-2.5 px-2.5 py-2 text-left text-xs select-none',
+                                    checked ? 'bg-muted/60' : 'hover:bg-muted/40',
+                                  )}
+                                >
+                                  <Checkbox checked={checked} aria-hidden tabIndex={-1} className="pointer-events-none" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className={cn('truncate', checked && 'font-medium')}>{p.name}</span>
+                                  </span>
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {p.keys} keys · {p.models} models
+                                  </span>
+                                </button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                </section>
-
-                {/* ── 条件二：请求体筛选（复用「请求改写」条件编辑器）── */}
-                <section className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium">请求体筛选</h3>
-                    <GjsonPathHelp />
-                  </div>
-                  <div className="rounded-md border border-border bg-background p-1.5">
-                    <ConditionList conditions={conditions} onChange={setConditions} />
-                  </div>
-                  {conditions.length === 0 && (
-                    <p className="pl-1 text-[10px] text-muted-foreground">
-                      未配置任何条件时，该组视为恒真（不影响「是」判断）。
-                    </p>
-                  )}
-                </section>
-
-                {/* ── 合并语义说明 ── */}
-                <div className="flex items-start gap-2 rounded-md border border-dashed border-border bg-background px-3 py-2 text-xs text-muted-foreground">
-                  <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] font-semibold text-primary">AND</span>
-                  供应商筛选 与 请求体筛选必须
-                  <b className="font-medium text-foreground">同时命中</b>
-                  才从「是」输出，任一项不满足则从「否」输出。
                 </div>
+
+                {/* ── 判断条件：扁平条件行（请求改写同款，不嵌套条件组） ── */}
+                <section className="flex flex-col gap-1.5">
+                  <h3 className="text-xs font-medium">判断条件</h3>
+                  <div className="space-y-1.5 rounded-md border border-border bg-background p-1.5">
+                    {conditions.length === 0 ? (
+                      <p className="px-1 py-2 text-center text-xs text-muted-foreground">
+                        暂无条件，未配置时始终从「是」输出
+                      </p>
+                    ) : (
+                      conditions.map((c, i) => (
+                        <ConditionRow
+                          key={i}
+                          index={i}
+                          condition={c}
+                          onChange={(next) => updateCondition(i, next)}
+                          onRemove={() => removeCondition(i)}
+                          canRemove={conditions.length > 1}
+                        />
+                      ))
+                    )}
+                    <div className="flex items-center gap-1.5 pl-[24px] pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setConditions((prev) => [...prev, emptyCondition()])}
+                        className="nodrag nopan inline-flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
+                        aria-label="添加条件"
+                        title="添加条件"
+                      >
+                        <AppIcon name="add" size={12} />
+                        添加条件
+                      </button>
+                    </div>
+                  </div>
+                </section>
               </div>
 
               <DialogFooter showCloseButton={false}>

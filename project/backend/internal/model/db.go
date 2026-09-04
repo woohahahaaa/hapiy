@@ -28,6 +28,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&Token{},
 		&Log{},
 		&UsageCounter{},
+		&UsageStat{},
 		&RewriteRule{},
 		&ResponseRewriteRule{},
 		&HeartbeatRule{},
