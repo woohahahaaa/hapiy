@@ -36,7 +36,7 @@
     {
       "scope": "provider",
       "key": "wire_api",
-      "description": "协议类型，官方唯一支持 responses（默认即此值，推荐时不干预）",
+      "description": "协议类型。2026 年 2 月起强制 responses（Responses API），不再支持 Chat Completions；网关必须原生支持 Responses API",
       "type": "string",
       "recommended": null,
       "required": false

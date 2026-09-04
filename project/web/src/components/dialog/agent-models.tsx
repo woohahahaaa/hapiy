@@ -31,6 +31,8 @@ import type {
 import { AgentModelInfoMatchDialog } from '@/components/dialog/agent-model-info-match'
 import { ManagedProviderDialog } from '@/components/dialog/agent-managed-dialog'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+import { modelInfoChangesFor } from '@/lib/agent-model-info'
+import { loadModelsDevModels, providersForModel } from '@/lib/models-dev'
 
 type DiffStatus = 'ok' | 'missing' | 'mismatch' | 'extra' | 'no-recommendation'
 
@@ -107,6 +109,12 @@ const [error, setError] = useState<string | null>(null)
   const [managedDialogOpen, setManagedDialogOpen] = useState(false)
   const [managedEditing, setManagedEditing] = useState<ManagedProviderView | null>(null)
   const [syncingAllManaged, setSyncingAllManaged] = useState(false)
+  // 预览差异：点「预览差异」进入；显示"全部套用推荐模板 + 参考供应商4基础
+  // 字段"后的内容与当前内容的差异。切换供应商/模型保持；编辑则取消。
+  const [diffPreviewing, setDiffPreviewing] = useState(false)
+  const [diffBefore, setDiffBefore] = useState<string | null>(null)
+  const [diffAfter, setDiffAfter] = useState<string | null>(null)
+  const [diffLoading, setDiffLoading] = useState(false)
 
   const reload = () => {
     if (!record) return
@@ -474,6 +482,7 @@ for (const p of summary?.providers ?? []) {
     if (!target || target === oldId) return
     const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
+      exitDiffPreview()
       setLiveContent(renameProviderInContent(base, oldId, target, summary))
       toast('已生成预览：provider 改名待保存')
     } catch (err) {
@@ -484,6 +493,7 @@ for (const p of summary?.providers ?? []) {
   const handleDeleteProvider = (id: string) => {
     const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
+      exitDiffPreview()
       setLiveContent(deleteProviderFromContent(base, id, summary))
       toast('已生成预览：删除 provider 待保存')
     } catch (err) {
@@ -609,6 +619,82 @@ for (const p of summary?.providers ?? []) {
     }
   }
 
+  // 预览差异：对所有非托管供应商 + 模型套用一次"推荐配置"（推荐模板 +
+  // 每模型从其持久化参考供应商（无则候选第一）拉取的 4 基础字段），返回的
+  // content 与当前内容（liveContent ?? 文件原文）并排 diff 显示。切
+  // 换供应商/模型保持状态，再次点击或任何编辑取消。
+  const handlePreviewDiff = async () => {
+    if (!record || !summary) return
+    if (diffPreviewing) {
+      setDiffPreviewing(false)
+      setDiffBefore(null)
+      setDiffAfter(null)
+      return
+    }
+    setDiffLoading(true)
+    try {
+      const [models, sources] = await Promise.all([
+        loadModelsDevModels(),
+        dashboardApi.getAgentModelConfigSources(record.id).catch(() => ({})),
+      ])
+      const modelInfoFields = summary.model_info_fields ?? {
+        max_context: '',
+        max_output_token: '',
+        input_types: '',
+        thinking_levels: '',
+      }
+      // 全部普通供应商（含其全部模型）套用。
+      const checked: Record<string, readonly string[]> = {}
+      const modelFields: Record<string, Record<string, Record<string, unknown>>> = {}
+      for (const p of summary.providers ?? []) {
+        if (managedBlockNames.has(p.provider_id)) continue
+        checked[p.provider_id] = []
+        let perModel: Record<string, Record<string, unknown>> | null = null
+        for (const m of p.models) {
+          // 参考供应商：优先用上次持久化选择，否则候选第一。
+          let supplier = ''
+          const persisted = sources[p.provider_id]?.[m.id]
+          if (persisted?.mode === 'self' && persisted.self_supplier) {
+            supplier = persisted.self_supplier
+          } else {
+            const candidates = providersForModel(models ?? [], m.id)
+            supplier = candidates[0]?.providerName ?? ''
+          }
+          if (!supplier) continue
+          const changes = modelInfoChangesFor(m.config, m.id, supplier, models ?? [], modelInfoFields)
+          if (changes.length === 0) continue
+          perModel ??= {}
+          const fields: Record<string, unknown> = {}
+          for (const ch of changes) fields[ch.path] = ch.newValue
+          perModel[m.id] = fields
+        }
+        if (perModel) modelFields[p.provider_id] = perModel
+      }
+      if (Object.keys(checked).length === 0) {
+        toast('没有可预览的非托管供应商')
+        return
+      }
+      const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
+      const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
+      setDiffBefore(base)
+      setDiffAfter(res.content)
+      setDiffPreviewing(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '预览差异失败')
+    } finally {
+      setDiffLoading(false)
+    }
+  }
+
+  // 任何编辑操作（JSON 编辑、改名、删除、套用推荐）取消预览差异状态。
+  const exitDiffPreview = () => {
+    if (diffPreviewing) {
+      setDiffPreviewing(false)
+      setDiffBefore(null)
+      setDiffAfter(null)
+    }
+  }
+
   // persistContent writes content to disk directly (shared by the
   // 使用推荐模板 / 同步模型基本信息 confirm flows).
   const persistContent = async (content: string) => {
@@ -632,6 +718,7 @@ for (const p of summary?.providers ?? []) {
     if (!target || target === oldId) return
     const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
+      exitDiffPreview()
       setLiveContent(renameModelInContent(base, providerId, oldId, target))
       toast('已生成预览：模型改名待保存')
     } catch (err) {
@@ -642,6 +729,7 @@ for (const p of summary?.providers ?? []) {
   const handleDeleteModel = (providerId: string, modelId: string) => {
     const base = liveContent ?? rawContent ?? JSON.stringify(currentActualContent(summary, rawContent), null, 2)
     try {
+      exitDiffPreview()
       setLiveContent(deleteModelFromContent(base, providerId, modelId))
       toast('已生成预览：删除模型待保存')
     } catch (err) {
@@ -715,6 +803,25 @@ for (const p of summary?.providers ?? []) {
                   onClick={() => setSyncingFromInfo(true)}
                 >
                 使用推荐配置
+                </Button>
+                <Button
+                  type="button"
+                  variant={diffPreviewing ? 'default' : 'outline'}
+                  size="xs"
+                  title={
+                    diffPreviewing
+                      ? '退出预览差异，返回编辑视图'
+                      : '假设全部套用推荐模板（含每个模型持久化的参考供应商基础字段）后，与当前内容对比差异'
+                  }
+                  disabled={!summary || !record || diffLoading}
+                  onClick={() => void handlePreviewDiff()}
+                >
+                  {diffLoading ? (
+                    <AppIcon name="progress_activity" size={12} className="animate-spin" data-icon="inline-start" />
+                  ) : (
+                    <AppIcon name={diffPreviewing ? 'close' : 'call_split'} size={12} data-icon="inline-start" />
+                  )}
+                  {diffLoading ? '计算中…' : diffPreviewing ? '取消预览' : '预览差异'}
                 </Button>
               </div>
               {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
@@ -968,7 +1075,10 @@ for (const p of summary?.providers ?? []) {
                 <JsonEditor
                   value={currentEditableProviderValue}
                   focusLine={focusLineForSelectedModel}
-                  onChange={(text) => setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))}
+                  onChange={(text) => {
+                    exitDiffPreview()
+                    setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))
+                  }}
                 />
               ) : (
                 <Placeholder>未选择供应商</Placeholder>

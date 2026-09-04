@@ -36,7 +36,7 @@
     {
       "scope": "model",
       "key": "apiKey",
-      "description": "API 密钥（可留空，用环境变量或平台内置）",
+      "description": "API 密钥（实际密钥值，非环境变量名）；Ollama 本地填占位符 ollama",
       "type": "string",
       "recommended": null,
       "required": false
@@ -63,12 +63,12 @@
       "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
       "type": "string",
       "recommended": null,
-      "required": true
+      "required": false
     },
     {
       "scope": "model",
       "key": "supportsToolCall",
-      "description": "是否支持工具调用（推荐开启，官方字段）",
+      "description": "是否支持工具调用（模型支持 Function Calling 时才开启）",
       "type": "boolean",
       "recommended": null,
       "required": false
@@ -92,7 +92,7 @@
     {
       "scope": "model",
       "key": "availableModels",
-      "description": "可选顶层字段：控制下拉列表只显示列出的模型 ID；不配则显示全部（推荐时不干预）",
+      "description": "顶层字段，控制下拉列表只显示列出的模型 ID；不配则显示全部。配置后会隐藏未列出的内置模型，推荐不干预",
       "type": "array",
       "recommended": null,
       "required": false
