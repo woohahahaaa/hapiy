@@ -278,12 +278,12 @@ export function rerouteWiresAroundRemoved(
 
   const result: FlatWire[] = []
   const seen = new Set<string>()
-  const add = (source: string, target: string) => {
+  const add = (source: string, target: string, branch?: 'yes' | 'no') => {
     if (source === target) return
     const key = `${source}\u2192${target}`
     if (seen.has(key)) return
     seen.add(key)
-    result.push({ source, target })
+    result.push(branch ? { source, target, branch } : { source, target })
   }
 
   for (const w of wires) {
@@ -293,7 +293,7 @@ export function rerouteWiresAroundRemoved(
     // A wire into a removed node starts a reroute: walk the outgoing chain from
     // the removed target until the first surviving node.
     if (!removed.has(target)) {
-      add(source, target)
+      add(source, target, w.branch)
       continue
     }
     let cur = target
@@ -309,7 +309,8 @@ export function rerouteWiresAroundRemoved(
       }
       cur = next
     }
-    if (survivor !== undefined) add(source, survivor)
+    // 重接线继承原线的分支标签（条件开关的出边 branch 不能丢，否则后端校验拒绝）。
+    if (survivor !== undefined) add(source, survivor, w.branch)
   }
 
   return result
