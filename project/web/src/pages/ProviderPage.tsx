@@ -235,7 +235,7 @@ export function ProviderPage() {
           )}
         />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent width="md">
+          <DialogContent width="md" className="flex max-h-[85vh] flex-col gap-0">
             <DialogHeader><DialogTitle>{editing ? '编辑供应商' : '添加供应商'}</DialogTitle></DialogHeader>
             <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
           </DialogContent>
@@ -597,8 +597,13 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     setFetchedModels(null)
   }
 
+  // 内容区滚动容器：按钮栏固定在滚动区外，内容超高时不被挤出视口。
+  const contentScrollRef = useRef<HTMLDivElement>(null)
+
   return (
-    <FieldGroup>
+    <>
+      <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+        <FieldGroup>
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <FieldLabel htmlFor="provider-name">名称</FieldLabel>
@@ -761,10 +766,12 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           )}
         </div>
       </Field>
-      <div className="flex justify-end gap-2">
+        </FieldGroup>
+      </div>
+      <DialogFooter scrollRef={contentScrollRef} bleed>
         <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
         <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? '保存中...' : '保存'}</Button>
-      </div>
+      </DialogFooter>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
         <DialogContent width="xs">
           <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>
@@ -809,7 +816,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </FieldGroup>
+    </>
   )
 }
 
