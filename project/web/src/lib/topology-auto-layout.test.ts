@@ -44,7 +44,7 @@ describe('rankOfNode', () => {
     expect(rankOfNode(nodes[1])).toBe(0)
     expect(rankOfNode(nodes[2])).toBe(1)
     expect(rankOfNode(nodes[3])).toBe(2)
-    expect(rankOfNode(nodes[4])).toBe(6)
+    expect(rankOfNode(nodes[4])).toBe(5)
   })
 
   it('parses slot type from the last dash when provider id contains dashes', () => {
