@@ -135,16 +135,25 @@ export function SwitchNodePreviewPage() {
               <span className="font-medium text-foreground">否</span>
             </div>
 
-            {/* 右侧输出端：是 / 否 标签 + Handle（贴上右缘） */}
-            <div className="absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-4">
-              <div className="flex items-center justify-end gap-1.5">
-                <span className="text-[10px] font-medium leading-none">是</span>
-                <span className="size-2.5 rounded-full border-2 border-border bg-background" />
-              </div>
-              <div className="flex items-center justify-end gap-1.5">
-                <span className="text-[10px] font-medium leading-none">否</span>
-                <span className="size-2.5 rounded-full border-2 border-border bg-background" />
-              </div>
+            {/* 右侧输出端：是 / 否 —— 镜像 HandlesRail 的两条 pill handlebar */}
+            <div className="absolute right-0 top-1/2 z-10 flex -translate-y-1/2 translate-x-1/2 flex-col gap-3">
+              {(['是', '否'] as const).map((label) => (
+                <div
+                  key={label}
+                  aria-hidden
+                  className="relative"
+                  style={{ width: 12, height: 20, borderRadius: 4 }}
+                >
+                  <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: 4 }}>
+                    <div className="absolute left-0 top-0 h-full bg-card" style={{ width: 6 }} />
+                  </div>
+                  <div className="absolute inset-0 rounded-[4px] border-2 border-border" />
+                </div>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute right-4 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-3">
+              <span className="flex h-5 items-center text-[10px] font-medium">是</span>
+              <span className="flex h-5 items-center text-[10px] font-medium">否</span>
             </div>
           </div>
 
@@ -160,10 +169,10 @@ export function SwitchNodePreviewPage() {
               <DialogTitle className="px-4 pt-4">满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
 
               <div className="flex flex-col gap-4 p-4">
-                {/* ── 供应商：多选下拉（对齐「托管供应商」，选中即出 tag） ── */}
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-xs font-medium">供应商：</span>
-                  <div className="min-w-0 flex-1">
+                {/* ── 供应商：标题一行、下拉框一行 ── */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium">供应商：</span>
+                  <div className="min-w-0">
                     <Popover>
                       <PopoverTrigger asChild>
                         <button
@@ -226,7 +235,7 @@ export function SwitchNodePreviewPage() {
                 {/* ── 判断条件：扁平条件行（请求改写同款，不嵌套条件组） ── */}
                 <section className="flex flex-col gap-1.5">
                   <h3 className="text-xs font-medium">判断条件</h3>
-                  <div className="space-y-1.5 rounded-md border border-border bg-background p-1.5">
+                  <div className="space-y-1.5 rounded-md border border-border bg-card p-1.5">
                     {conditions.length === 0 ? (
                       <p className="px-1 py-2 text-center text-xs text-muted-foreground">
                         暂无条件，未配置时始终从「是」输出
