@@ -17,7 +17,7 @@ export interface SwitchNodeData {
   connectionCount?: number
   externallyDisabled?: boolean
   config?: SwitchNodeConfig
-  providers?: readonly { id: string; name: string }[]
+  providers?: readonly { id: string; name: string; models?: readonly string[] }[]
   flashLayers?: readonly FlowLayerOverlay[]
   onSaveConfig?: (name: string, config: SwitchNodeConfig) => void
 }
@@ -75,11 +75,12 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
     }
   }, [id, updateNodeInternals])
 
+  const mode = config?.mode ?? 'provider'
   const providerIds = config?.providers ?? []
-  const selectedNames = providers
-    .filter((p) => providerIds.includes(p.id))
-    .map((p) => p.name)
-  const providerSummary = selectedNames.length === 0 ? '全部供应商' : selectedNames.join(' · ')
+  const selectedNames = mode === 'model'
+    ? (config?.models ?? [])
+    : providers.filter((p) => providerIds.includes(p.id)).map((p) => p.name)
+  const filterLabel = mode === 'model' ? '模型' : '供应商'
   const conditionSummary =
     (config?.conditions ?? [])
       .map((c) => `${c.invert ? '非 ' : ''}${c.path} ${opLabel(c.op)} ${c.value}`.trim())
@@ -101,15 +102,9 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
           <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
         ))}
 
-        {/* 头部：状态点（在链路中即生效，恒亮）+ 规则名称 + 「编辑」按钮 */}
+        {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-full bg-[var(--node-accent,var(--color-primary))]"
-            />
-            <span className="truncate text-sm font-medium">{displayTitle}</span>
-          </span>
+          <span className="min-w-0 truncate text-sm font-medium">{displayTitle}</span>
           <button
             type="button"
             className="nodrag nopan flex items-center gap-1 rounded-xs border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -124,10 +119,10 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
 
         {/* 正文表格：竖向一分为二 —— 左列明细，右列「是/否」输出 */}
         <div className="flex items-stretch">
-          {/* 左列：命中的供应商与条件明细（供应商卡片的 baseURL 行样式） */}
+          {/* 左列：命中的供应商/模型与条件明细（供应商卡片的 baseURL 行样式） */}
           <div className="min-w-0 flex-1 space-y-1 px-3 py-2 text-xs">
-            <div>供应商 {providerSummary}</div>
-            <div>条件 {conditionSummary === '' ? '无条件' : conditionSummary}</div>
+            <div>{filterLabel} {selectedNames.length === 0 ? `全部${filterLabel}` : selectedNames.join(' · ')}</div>
+            <div>条件 {conditionSummary}</div>
           </div>
 
           {/* 右列：单独划分出的「是/否」输出（各带一条 pill handlebar） */}
