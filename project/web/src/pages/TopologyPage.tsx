@@ -922,7 +922,11 @@ export function TopologyPage() {
             connectionCount: slotConnectionCount.get(node.id) ?? 1,
             externallyDisabled: false,
             config: node.config ?? { providers: [], conditions: [] },
-            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
+            providers: (providers ?? []).map((p) => ({
+              id: p.id,
+              name: p.name,
+              models: p.models.map((m) => m.model),
+            })),
             flashLayers: litNodeLayers.get(node.id),
             onSaveConfig: (name: string, config: SwitchNodeConfig) => {
               updateTopologyNodes((list) =>

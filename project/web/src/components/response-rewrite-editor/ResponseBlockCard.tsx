@@ -131,11 +131,12 @@ export function ResponseBlockCard({
               <button
                 type="button"
                 onClick={() => onChange({ ...block, conditions: [...(block.conditions ?? []), emptyCondition()] })}
-                className="nodrag nopan flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
+                className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
                 aria-label="添加条件"
                 title="添加条件"
               >
-                <AppIcon name="add" size={14} />
+                <AppIcon name="add" size={12} />
+                添加条件
               </button>
             </div>
           </div>
@@ -159,11 +160,12 @@ export function ResponseBlockCard({
             <button
               type="button"
               onClick={addAction}
-              className="nodrag nopan flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-sky-500/10 hover:text-sky-700"
+              className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-sky-500/10 hover:text-sky-700"
               aria-label="添加执行"
               title="添加执行"
             >
-              <AppIcon name="add" size={14} />
+              <AppIcon name="add" size={12} />
+              添加执行
             </button>
           </div>
           {block.actions.length === 0 ? (

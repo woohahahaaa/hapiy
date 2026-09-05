@@ -1,9 +1,5 @@
-import { AppIcon } from '@/components/AppIcon'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConditionRow } from './ConditionRow'
 import {
-  emptyCondition,
-  emptyConditionGroup,
   isConditionLeaf,
   type Condition,
 } from './serializer'
@@ -14,7 +10,8 @@ interface ConditionListProps {
 }
 
 // 递归条件列表：叶子渲染 ConditionRow，组合节点渲染一个 AND/OR 组卡片，
-// 组内再次递归。组卡片可切换 logic、可删组；列表可添加叶子或新的子组。
+// 组内再次递归。组卡片可切换 logic、可删组；新增入口由外层（BlockCard 等）
+// 的「添加条件」按钮承担，这里只负责渲染与编辑。
 export function ConditionList({ conditions, onChange }: ConditionListProps) {
   const update = (i: number, next: Condition) => {
     onChange(conditions.map((c, ci) => (ci === i ? next : c)))
@@ -45,28 +42,6 @@ export function ConditionList({ conditions, onChange }: ConditionListProps) {
           />
         ),
       )}
-      <div className="flex items-center gap-1.5 pl-[24px]">
-        <button
-          type="button"
-          onClick={() => onChange([...conditions, emptyCondition()])}
-          className="nodrag nopan inline-flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
-          aria-label="添加条件"
-          title="添加条件"
-        >
-          <AppIcon name="add" size={12} />
-          添加条件
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange([...conditions, emptyConditionGroup()])}
-          className="nodrag nopan inline-flex h-6 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
-          aria-label="添加条件组"
-          title="添加 AND/OR 条件组"
-        >
-          <AppIcon name="add" size={12} />
-          添加条件组
-        </button>
-      </div>
     </div>
   )
 }

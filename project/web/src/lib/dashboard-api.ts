@@ -402,10 +402,24 @@ export type SwitchCondition = {
   readonly scope: string
 }
 
-/** 条件开关节点配置：供应商筛选 + 请求头/请求体条件，全部满足才走「是」。 */
+/** 条件组：AND/OR 组合节点，可嵌套（与请求改写的条件组同形）。 */
+export type SwitchConditionGroup = {
+  readonly logic: 'AND' | 'OR'
+  readonly children: readonly SwitchConditionNode[]
+}
+
+export type SwitchConditionNode = SwitchCondition | SwitchConditionGroup
+
+/** 筛选维度二选一：按供应商或按模型。 */
+export type SwitchFilterMode = 'provider' | 'model'
+
+/** 条件开关节点配置：筛选维度 + 命中列表 + 请求头/请求体条件（全部命中才走「是」）。 */
 export type SwitchNodeConfig = {
-  readonly providers: readonly string[]
-  readonly conditions: readonly SwitchCondition[]
+  readonly mode?: SwitchFilterMode
+  readonly providers?: readonly string[]
+  readonly models?: readonly string[]
+  readonly conditionLogic?: 'AND' | 'OR'
+  readonly conditions: readonly SwitchConditionNode[]
 }
 
 export type FlatNode = {
@@ -456,16 +470,18 @@ function parseFlatNode(value: unknown): FlatNode {
     const providers = Array.isArray(value.config.providers)
       ? value.config.providers.filter((p): p is string => typeof p === 'string')
       : []
-    const conditions = Array.isArray(value.config.conditions)
-      ? value.config.conditions.filter(isRecord).map((c) => ({
-          path: typeof c.path === 'string' ? c.path : '',
-          op: typeof c.op === 'string' ? c.op : '',
-          value: typeof c.value === 'string' ? c.value : '',
-          invert: c.invert === true,
-          scope: typeof c.scope === 'string' ? c.scope : 'all',
-        }))
+    const models = Array.isArray(value.config.models)
+      ? value.config.models.filter((m): m is string => typeof m === 'string')
       : []
-    config = { providers, conditions }
+    // 条件结构（叶子/组）与请求改写同形，这里整体透传，由编辑器负责解释。
+    const conditions = (Array.isArray(value.config.conditions) ? value.config.conditions : []) as unknown as SwitchConditionNode[]
+    config = {
+      mode: value.config.mode === 'model' ? 'model' : 'provider',
+      providers,
+      models,
+      conditionLogic: value.config.conditionLogic === 'OR' ? 'OR' : 'AND',
+      conditions,
+    }
   }
   return {
     id: readString(value.id, 'node.id'),
