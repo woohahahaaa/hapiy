@@ -918,17 +918,16 @@ export function TopologyPage() {
           style: accentStyleOf(node.id),
           data: {
             title: '条件开关',
+            name: node.name,
             connectionCount: slotConnectionCount.get(node.id) ?? 1,
             externallyDisabled: false,
-            enabled: node.enabled,
             config: node.config ?? { providers: [], conditions: [] },
             providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
             flashLayers: litNodeLayers.get(node.id),
-            onChangeEnabled: (enabled: boolean) => {
-              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, enabled } : n)))
-            },
-            onSaveConfig: (config: SwitchNodeConfig) => {
-              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, config } : n)))
+            onSaveConfig: (name: string, config: SwitchNodeConfig) => {
+              updateTopologyNodes((list) =>
+                list.map((n) => (n.id === node.id ? { ...n, name: name !== '' ? name : undefined, config } : n)),
+              )
             },
           },
         })
