@@ -128,7 +128,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         <Handle
           type="source"
           position={Position.Right}
-          className="!rounded-full !border-border !bg-background"
+          className="!rounded-[4px] !border-border !bg-card"
           style={{
             width: sourceHandle.width,
             height: sourceHandle.height,
