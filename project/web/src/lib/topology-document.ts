@@ -78,7 +78,7 @@ function requiredInteger(value: unknown, field: string): number {
   return value
 }
 
-const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'autoSwitch', 'logOutput'])
+const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'concurrency', 'autoSwitch', 'logOutput'])
 
 function parseNode(value: unknown): WorkflowNode {
   if (!isRecord(value)) throw new TopologyDocumentError('节点必须是对象')
@@ -109,7 +109,7 @@ function parseNode(value: unknown): WorkflowNode {
     }
     default: {
       const node: WorkflowNode = {
-        type: type as 'requestModify' | 'responseModify' | 'autoReply' | 'concurrency' | 'autoSwitch',
+        type: type as 'requestModify' | 'responseModify' | 'concurrency' | 'autoSwitch',
         name,
         order: requiredInteger(value.order, 'order'),
         enabled: value.enabled !== undefined ? requiredBoolean(value.enabled, 'enabled') : true,
@@ -142,7 +142,6 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
   switch (node.type) {
     case 'requestModify':
     case 'responseModify':
-    case 'autoReply':
     case 'concurrency':
     case 'autoSwitch': {
       const rn = node as Extract<WorkflowNode, { order: number }>
@@ -207,7 +206,6 @@ function entryToNode(entry: SlotEntry, _providerName: string): WorkflowNode | nu
   switch (entry.slotType) {
     case 'requestModify':
     case 'responseModify':
-    case 'autoReply':
     case 'concurrency':
     case 'autoSwitch':
       if (entry.ruleId === null) return null

@@ -515,9 +515,22 @@ function parseFlatWire(value: unknown): FlatWire {
 
 function parseFlatTopology(value: unknown): FlatTopology {
   if (!isRecord(value)) throw new DashboardApiError('扁平拓扑格式无效', null)
+  const nodes = readObjectArray(value.nodes, 'flat.nodes', parseFlatNode)
+  const wires = readObjectArray(value.wires, 'flat.wires', parseFlatWire)
+  // 心跳回复（autoReply）插槽已下线：加载时剔除残留节点并丢弃触达它的连线，
+  // 避免画布渲染空白卡、保存时携带已删除的插槽类型。
+  const removed = new Set(
+    nodes.filter((n) => n.kind === 'slot' && n.slotType === 'autoReply').map((n) => n.id),
+  )
+  const keptNodes = removed.size === 0
+    ? nodes
+    : nodes.filter((n) => !removed.has(n.id))
+  const keptWires = removed.size === 0
+    ? wires
+    : wires.filter((w) => !removed.has(w.source) && !removed.has(w.target))
   return {
-    nodes: readObjectArray(value.nodes, 'flat.nodes', parseFlatNode),
-    wires: readObjectArray(value.wires, 'flat.wires', parseFlatWire),
+    nodes: keptNodes,
+    wires: keptWires,
     ...(typeof value.version === 'number' ? { version: value.version } : {}),
     ...(typeof value.updated_at === 'string' ? { updatedAt: value.updated_at } : {}),
   }
@@ -1706,15 +1719,6 @@ export type RewriteRule = {
   readonly status: boolean
 }
 
-export type HeartbeatRule = {
-  readonly id: string
-  readonly name: string
-  readonly matchCondition: string
-  readonly replyContent: string
-  readonly timeout: number
-  readonly status: boolean
-}
-
 export type ConcurrencyRule = {
   readonly id: string
   readonly name: string
@@ -1754,7 +1758,7 @@ export type ResponseRewriteRule = {
   readonly status: boolean
 }
 
-export type RuleType = 'rewrite' | 'heartbeat' | 'concurrency' | 'failover' | 'rewrite-response'
+export type RuleType = 'rewrite' | 'concurrency' | 'failover' | 'rewrite-response'
 
 export type RuleListParams = {
   readonly limit: number
@@ -1774,18 +1778,6 @@ function parseRewriteRule(value: unknown): RewriteRule {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
     script: readString(value.script, 'rule.script'),
-    status: readBoolean(value.status, 'rule.status'),
-  }
-}
-
-function parseHeartbeatRule(value: unknown): HeartbeatRule {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
-  return {
-    id: readString(value.id, 'rule.id'),
-    name: readString(value.name, 'rule.name'),
-    matchCondition: readString(value.match_condition, 'rule.match_condition'),
-    replyContent: readString(value.reply_content, 'rule.reply_content'),
-    timeout: readNumber(value.timeout, 'rule.timeout', 30),
     status: readBoolean(value.status, 'rule.status'),
   }
 }
@@ -1860,62 +1852,9 @@ const serializeRewriteRule: RuleSerializer<RewriteRule> = (rule) => ({
   status: rule.status,
 })
 
-const serializeHeartbeatRule: RuleSerializer<HeartbeatRule> = (rule) => ({
-  name: rule.name,
-  match_condition: (rule as HeartbeatRule).matchCondition ?? '*',
-  reply_content: (rule as HeartbeatRule).replyContent ?? '',
-  timeout: (rule as HeartbeatRule).timeout ?? 30,
-  status: rule.status,
-})
-
-const serializeConcurrencyRule: RuleSerializer<ConcurrencyRule> = (rule) => ({
-  name: rule.name,
-  scope: (rule as ConcurrencyRule).scope ?? 'global',
-  max_concurrent: (rule as ConcurrencyRule).maxConcurrent ?? 10,
-  queue_enabled: (rule as ConcurrencyRule).queueEnabled ?? true,
-  status: rule.status,
-})
-
-const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
-  name: rule.name,
-  primary_provider: (rule as FailoverRule).primaryProvider ?? '',
-  fallback_provider: (rule as FailoverRule).fallbackProvider ?? '',
-  condition: (rule as FailoverRule).condition ?? 'timeout',
-  status: rule.status,
-  keywords: (rule as FailoverRule).keywords ?? [],
-  actions: ((rule as FailoverRule).actions ?? []).map((action) => ({
-    dimension: action.dimension,
-    automatic_polling: action.automaticPolling,
-    auto_disable: action.autoDisable,
-  })) ?? [],
-  dimension: (rule as FailoverRule).dimension ?? '',
-  auto_disable: (rule as FailoverRule).autoDisable ?? true,
-  match_patterns: (rule as FailoverRule).matchPatterns ?? [],
-  ttfb_seconds: (rule as FailoverRule).ttfbSeconds ?? 0,
-  disable_threshold: (rule as FailoverRule).disableThreshold ?? 1,
-  disable_window_minutes: (rule as FailoverRule).disableWindowMinutes ?? 5,
-})
-
-const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
-  name: rule.name,
-  script: (rule as ResponseRewriteRule).script ?? '',
-  status: rule.status,
-})
-
-function ruleParserForType(type: RuleType): (value: unknown) => unknown {
-  switch (type) {
-    case 'rewrite':           return parseRewriteRule
-    case 'heartbeat':         return parseHeartbeatRule
-    case 'concurrency':       return parseConcurrencyRule
-    case 'failover':          return parseFailoverRule
-    case 'rewrite-response':  return parseResponseRewriteRule
-  }
-}
-
 function ruleSerializerForType(type: RuleType): RuleSerializer<unknown> {
   switch (type) {
     case 'rewrite':           return serializeRewriteRule as RuleSerializer<unknown>
-    case 'heartbeat':         return serializeHeartbeatRule as RuleSerializer<unknown>
     case 'concurrency':       return serializeConcurrencyRule as RuleSerializer<unknown>
     case 'failover':          return serializeFailoverRule as RuleSerializer<unknown>
     case 'rewrite-response':  return serializeResponseRewriteRule as RuleSerializer<unknown>

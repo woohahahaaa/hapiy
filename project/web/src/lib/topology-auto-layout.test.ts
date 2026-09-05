@@ -48,8 +48,8 @@ describe('rankOfNode', () => {
   })
 
   it('parses slot type from the last dash when provider id contains dashes', () => {
-    const node: Node = { id: `slot-${uuidA}-autoReply`, type: 'slot', position: { x: 0, y: 0 }, data: {} }
-    expect(rankOfNode(node)).toBe(3)
+    const node: Node = { id: `slot-${uuidA}-autoSwitch`, type: 'slot', position: { x: 0, y: 0 }, data: {} }
+    expect(rankOfNode(node)).toBe(4)
   })
 })
 

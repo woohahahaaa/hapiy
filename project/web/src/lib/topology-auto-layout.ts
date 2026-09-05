@@ -10,10 +10,9 @@ export type { NodeSize }
 const SLOT_RANK: Record<string, number> = {
   requestModify: 0,
   responseModify: 1,
-  autoReply: 2,
-  concurrency: 3,
-  autoSwitch: 4,
-  logOutput: 5,
+  concurrency: 2,
+  autoSwitch: 3,
+  logOutput: 4,
 }
 
 export function rankOfNode(node: Node): number {

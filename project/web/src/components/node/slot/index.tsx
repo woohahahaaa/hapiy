@@ -6,7 +6,6 @@ import { topologyConfig } from '@/config/topology-config'
 import type {
   RequestModifySlotEntry,
   ResponseModifySlotEntry,
-  AutoReplySlotEntry,
   ConcurrencySlotEntry,
   AutoSwitchSlotEntry,
   LogOutputSlotEntry,
@@ -22,7 +21,6 @@ import type { SlotRuleKey, SlotRuleStatusMap } from '@/components/node/executor/
 import { NodeSlotProvider, type ProviderStrategy } from './sub/provider'
 import { NodeSlotRequestModify } from './sub/request-modify'
 import { NodeSlotResponseModify } from './sub/response-modify'
-import { NodeSlotAutoReply } from './sub/auto-reply'
 import { NodeSlotConcurrency } from './sub/concurrency'
 import { NodeSlotAutoSwitch } from './sub/auto-switch'
 import { NodeSlotLogOutput } from './sub/log-output'
@@ -72,7 +70,6 @@ interface NodeSlotProps {
 const EMPTY_RULES: SlotRuleMap = {
   requestModify: [],
   responseModify: [],
-  autoReply: [],
   concurrency: [],
   autoSwitch: [],
 }
@@ -236,24 +233,6 @@ export function NodeSlot({ data }: NodeSlotProps) {
       rules={slotRules.responseModify}
       ruleStatus={ruleStatus?.responseModify}
       onRefreshRules={() => refreshRuleType?.('responseModify')}
-      flashLayers={flashLayers}
-      dragProps={entryDragProps}
-      onChangeEntry={(next) => onChangeEntry?.(next)}
-      onDeleteEntry={onDeleteEntry ?? noop}
-      onAddEntry={handleAddEntry}
-      externallyDisabled={externallyDisabled}
-    />
-  ) : slotType === 'autoReply' ? (
-    <NodeSlotAutoReply
-      title={title}
-      enabled={data.enabled ?? true}
-      onSelectExecutor={onSelectExecutor}
-      selectedExecutorToken={selectedExecutorToken}
-      onToggleEnabled={onToggleEnabled}
-      entries={entries as AutoReplySlotEntry[]}
-      rules={slotRules.autoReply}
-      ruleStatus={ruleStatus?.autoReply}
-      onRefreshRules={() => refreshRuleType?.('autoReply')}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}

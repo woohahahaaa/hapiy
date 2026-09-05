@@ -1,7 +1,6 @@
 import type {
   RewriteRule,
   ResponseRewriteRule,
-  HeartbeatRule,
   ConcurrencyRule,
   FailoverRule,
 } from '@/lib/dashboard-api'
@@ -9,7 +8,6 @@ import type {
 export type SlotType =
   | 'requestModify'
   | 'responseModify'
-  | 'autoReply'
   | 'concurrency'
   | 'autoSwitch'
   | 'logOutput'
@@ -28,15 +26,6 @@ export type RequestModifySlotEntry = {
 export type ResponseModifySlotEntry = {
   readonly id: string
   readonly slotType: 'responseModify'
-  readonly index: number
-  readonly ruleId: string | null
-  readonly enabled: boolean
-  readonly config: Readonly<Record<string, unknown>>
-}
-
-export type AutoReplySlotEntry = {
-  readonly id: string
-  readonly slotType: 'autoReply'
   readonly index: number
   readonly ruleId: string | null
   readonly enabled: boolean
@@ -87,7 +76,6 @@ export type SlotEntry =
 export type SlotEntryMap = {
   requestModify: RequestModifySlotEntry[]
   responseModify: ResponseModifySlotEntry[]
-  autoReply: AutoReplySlotEntry[]
   concurrency: ConcurrencySlotEntry[]
   autoSwitch: AutoSwitchSlotEntry[]
   logOutput: LogOutputSlotEntry[]
@@ -96,7 +84,6 @@ export type SlotEntryMap = {
 export const SLOT_ORDER: readonly SlotType[] = [
   'requestModify',
   'responseModify',
-  'autoReply',
   'concurrency',
   'autoSwitch',
   'logOutput',
@@ -105,7 +92,6 @@ export const SLOT_ORDER: readonly SlotType[] = [
 export const SLOT_LABELS: Record<SlotType, string> = {
   requestModify: '请求改写',
   responseModify: '响应改写',
-  autoReply: '心跳回复',
   concurrency: '并发控制',
   autoSwitch: '自动禁用',
   logOutput: '日志抓取',
@@ -127,7 +113,6 @@ export type SlotItemDragProps = {
 export type SlotRuleMap = {
   requestModify: readonly RewriteRule[]
   responseModify: readonly ResponseRewriteRule[]
-  autoReply: readonly HeartbeatRule[]
   concurrency: readonly ConcurrencyRule[]
   autoSwitch: readonly FailoverRule[]
 }
@@ -136,7 +121,6 @@ export function emptySlotEntryMap(): SlotEntryMap {
   return {
     requestModify: [],
     responseModify: [],
-    autoReply: [],
     concurrency: [],
     autoSwitch: [],
     logOutput: [],
@@ -149,8 +133,6 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
     case 'requestModify':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'responseModify':
-      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
-    case 'autoReply':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'concurrency':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }

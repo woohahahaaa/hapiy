@@ -88,8 +88,7 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 	var assignments []model.TopologySlotAssignment
 	orderClause := `CASE slot_type
 		WHEN 'requestModify' THEN 0 WHEN 'responseModify' THEN 1
-		WHEN 'autoReply' THEN 2 WHEN 'concurrency' THEN 3
-		WHEN 'autoSwitch' THEN 4 WHEN 'logOutput' THEN 5 ELSE 6 END,
+		WHEN 'concurrency' THEN 2 WHEN 'autoSwitch' THEN 3 WHEN 'logOutput' THEN 4 ELSE 5 END,
 		"order" ASC, id ASC`
 	if err := db.Where("provider_id = ? AND enabled = ?", plan.Provider.ID, true).
 		Order(orderClause).Find(&assignments).Error; err != nil {
@@ -146,15 +145,6 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 			return fmt.Errorf("compile response rewrite rule %s (%s): %w", rule.ID, rule.Name, err)
 		}
 		plan.CompiledResponseRewrites = append(plan.CompiledResponseRewrites, CompiledRewriteChain{RuleID: rule.ID, RuleName: rule.Name, Ops: chain})
-	case "autoReply":
-		if plan.HeartbeatRule != nil {
-			return fmt.Errorf("provider %s has multiple enabled autoReply assignments", plan.Provider.ID)
-		}
-		var rule model.HeartbeatRule
-		if err := query.First(&rule).Error; err != nil {
-			return assignedRuleError(assignment, err)
-		}
-		plan.HeartbeatRule = &rule
 	case "concurrency":
 		if plan.ConcurrencyRule != nil {
 			return fmt.Errorf("provider %s has multiple enabled concurrency assignments", plan.Provider.ID)

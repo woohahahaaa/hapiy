@@ -24,7 +24,6 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 		&model.Provider{},
 		&model.RewriteRule{},
 		&model.ResponseRewriteRule{},
-		&model.HeartbeatRule{},
 		&model.ConcurrencyRule{},
 		&model.FailoverRule{},
 		&model.AutoDisableState{},
@@ -98,7 +97,7 @@ func TestLoadProviders_leaves_optional_plan_empty_without_assignments(t *testing
 	if err != nil {
 		t.Fatalf("get plan: %v", err)
 	}
-	if len(plan.RewriteRules) != 0 || plan.HeartbeatRule != nil || plan.ConcurrencyRule != nil || len(plan.FailoverRules) != 0 {
+	if len(plan.RewriteRules) != 0 || plan.ConcurrencyRule != nil || len(plan.FailoverRules) != 0 {
 		t.Fatalf("optional plan was populated globally: %+v", plan)
 	}
 }

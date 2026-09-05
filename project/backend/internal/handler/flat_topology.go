@@ -402,8 +402,6 @@ func validateFlatRuleExists(db *gorm.DB, slotType, ruleID string) error {
 		query.Model(&model.RewriteRule{}).Count(&count)
 	case "responseModify":
 		query.Model(&model.ResponseRewriteRule{}).Count(&count)
-	case "autoReply":
-		query.Model(&model.HeartbeatRule{}).Count(&count)
 	case "concurrency":
 		query.Model(&model.ConcurrencyRule{}).Count(&count)
 	case "autoSwitch":

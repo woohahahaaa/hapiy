@@ -17,7 +17,6 @@ func testEdgesDocument() Document {
 			{Type: "provider", ProviderID: strPtr2("p-a")},
 			{Type: "requestModify", Name: "r1"},
 			{Type: "responseModify", Name: "rv1"},
-			{Type: "autoReply", Name: "hb1"},
 		},
 		{
 			{Type: "provider", ProviderID: strPtr2("p-b")},
@@ -212,9 +211,9 @@ func TestDefaultTopologyEdges_builds_full_chain_per_workflow(t *testing.T) {
 		t.Fatalf("expand default: %v", err)
 	}
 	want := [][]string{
-		{"pv-w-p-a-0", "slot-w-p-a-0-requestModify", "slot-w-p-a-0-responseModify", "slot-w-p-a-0-autoReply", "slot-w-p-a-0-concurrency", "slot-w-p-a-0-autoSwitch", "slot-w-p-a-0-logOutput"},
-		{"pv-w-p-b-0", "slot-w-p-b-0-requestModify", "slot-w-p-b-0-responseModify", "slot-w-p-b-0-autoReply", "slot-w-p-b-0-concurrency", "slot-w-p-b-0-autoSwitch", "slot-w-p-b-0-logOutput"},
-		{"pv-w-p-b-1", "slot-w-p-b-1-requestModify", "slot-w-p-b-1-responseModify", "slot-w-p-b-1-autoReply", "slot-w-p-b-1-concurrency", "slot-w-p-b-1-autoSwitch", "slot-w-p-b-1-logOutput"},
+		{"pv-w-p-a-0", "slot-w-p-a-0-requestModify", "slot-w-p-a-0-responseModify", "slot-w-p-a-0-concurrency", "slot-w-p-a-0-autoSwitch", "slot-w-p-a-0-logOutput"},
+		{"pv-w-p-b-0", "slot-w-p-b-0-requestModify", "slot-w-p-b-0-responseModify", "slot-w-p-b-0-concurrency", "slot-w-p-b-0-autoSwitch", "slot-w-p-b-0-logOutput"},
+		{"pv-w-p-b-1", "slot-w-p-b-1-requestModify", "slot-w-p-b-1-responseModify", "slot-w-p-b-1-concurrency", "slot-w-p-b-1-autoSwitch", "slot-w-p-b-1-logOutput"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expand default: got %d chains, want %d\n%v", len(got), len(want), got)

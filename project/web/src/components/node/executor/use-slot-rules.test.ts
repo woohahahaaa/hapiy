@@ -14,7 +14,6 @@ const listRules = vi.mocked(dashboardApi.listRules)
 const API_TYPE_BY_SLOT: Record<(typeof SLOT_RULE_KEYS)[number], string> = {
   requestModify: 'rewrite',
   responseModify: 'rewrite-response',
-  autoReply: 'heartbeat',
   concurrency: 'concurrency',
   autoSwitch: 'failover',
 }
@@ -26,10 +25,10 @@ describe('use-slot-rules 数据层', () => {
 
   describe('fetchSlotRuleType', () => {
     it('成功时返回该类型规则，并按类型调用对应 API', async () => {
-      listRules.mockResolvedValue({ rules: [{ id: 'hb-1', name: '心跳A' }], total: 1 })
-      const result = await fetchSlotRuleType('autoReply')
+      listRules.mockResolvedValue({ rules: [{ id: 'c-1', name: '并发A' }], total: 1 })
+      const result = await fetchSlotRuleType('concurrency')
       expect(result).toHaveLength(1)
-      expect(listRules).toHaveBeenCalledWith('heartbeat', { limit: 200, offset: 0 })
+      expect(listRules).toHaveBeenCalledWith('concurrency', { limit: 200, offset: 0 })
       expect(listRules).toHaveBeenCalledTimes(1)
     })
 
@@ -43,7 +42,7 @@ describe('use-slot-rules 数据层', () => {
   describe('loadAllSlotRules', () => {
     it('某类型请求失败时仅该类型记录 error，其它类型不受影响', async () => {
       listRules.mockImplementation(async (type: string) => {
-        if (type === 'failover' || type === 'heartbeat') throw new Error('boom')
+        if (type === 'failover') throw new Error('boom')
         return { rules: [{ id: `${type}-1`, name: `${type}规则` }], total: 1 }
       })
       const { rules, status } = await loadAllSlotRules()
@@ -51,8 +50,6 @@ describe('use-slot-rules 数据层', () => {
       // 失败的类型：列表为空 + error 置位
       expect(rules.autoSwitch).toHaveLength(0)
       expect(status.autoSwitch.error).toBe('加载失败')
-      expect(rules.autoReply).toHaveLength(0)
-      expect(status.autoReply.error).toBe('加载失败')
 
       // 成功的类型：列表就位 + error 为空
       expect(rules.requestModify).toHaveLength(1)
@@ -63,7 +60,7 @@ describe('use-slot-rules 数据层', () => {
         expect(status[key].loading).toBe(false)
         expect(listRules).toHaveBeenCalledWith(API_TYPE_BY_SLOT[key], { limit: 200, offset: 0 })
       })
-      expect(listRules).toHaveBeenCalledTimes(5)
+      expect(listRules).toHaveBeenCalledTimes(4)
     })
   })
 })

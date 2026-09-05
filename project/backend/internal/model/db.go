@@ -31,7 +31,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&UsageStat{},
 		&RewriteRule{},
 		&ResponseRewriteRule{},
-		&HeartbeatRule{},
 		&LayoutConfig{},
 		&ConcurrencyRule{},
 		&FailoverRule{},
