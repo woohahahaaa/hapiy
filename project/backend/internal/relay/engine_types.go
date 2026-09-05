@@ -31,7 +31,6 @@ type ExecutionPlan struct {
 	CompiledRewrite      []CompiledRewriteChain
 	ResponseRewriteRules []*model.ResponseRewriteRule
 	CompiledResponseRewrites []CompiledRewriteChain
-	HeartbeatRule        *model.HeartbeatRule
 	ConcurrencyRule      *model.ConcurrencyRule
 	FailoverRules        []*model.FailoverRule
 	LogOutputs           []LogOutputAssignment

@@ -605,8 +605,7 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 	var assignments []model.TopologySlotAssignment
 	orderClause := `CASE slot_type
 		WHEN 'requestModify' THEN 0 WHEN 'responseModify' THEN 1
-		WHEN 'autoReply' THEN 2 WHEN 'concurrency' THEN 3
-		WHEN 'autoSwitch' THEN 4 WHEN 'logOutput' THEN 5 ELSE 6 END,
+		WHEN 'concurrency' THEN 2 WHEN 'autoSwitch' THEN 3 WHEN 'logOutput' THEN 4 ELSE 5 END,
 		"order" ASC, id ASC`
 	if err := db.Where("provider_id = ? AND enabled = ?", plan.Provider.ID, true).
 		Order(orderClause).Find(&assignments).Error; err != nil {

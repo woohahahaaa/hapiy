@@ -14,10 +14,9 @@ import (
 var topologySlotRanks = map[string]int{
 	"requestModify":  0,
 	"responseModify": 1,
-	"autoReply":      2,
-	"concurrency":    3,
-	"autoSwitch":     4,
-	"logOutput":      5,
+	"concurrency":    2,
+	"autoSwitch":     3,
+	"logOutput":      4,
 }
 
 // validateTopologyDocument validates the user-supplied document and produces
@@ -174,10 +173,6 @@ func resolveRuleByName(db *gorm.DB, slotType, name string) (string, error) {
 		var rule model.ResponseRewriteRule
 		err = query.First(&rule).Error
 		id = rule.ID
-	case "autoReply":
-		var rule model.HeartbeatRule
-		err = query.First(&rule).Error
-		id = rule.ID
 	case "concurrency":
 		var rule model.ConcurrencyRule
 		err = query.First(&rule).Error
@@ -203,8 +198,6 @@ func validateRuleExists(db *gorm.DB, slotType, ruleID string) error {
 		query.Model(&model.RewriteRule{}).Count(&count)
 	case "responseModify":
 		query.Model(&model.ResponseRewriteRule{}).Count(&count)
-	case "autoReply":
-		query.Model(&model.HeartbeatRule{}).Count(&count)
 	case "concurrency":
 		query.Model(&model.ConcurrencyRule{}).Count(&count)
 	case "autoSwitch":

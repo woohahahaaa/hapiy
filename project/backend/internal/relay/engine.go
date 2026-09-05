@@ -288,8 +288,7 @@ type UsageInfo struct {
 //  2. Request logging and rewrite
 //  3. Relay to upstream (with failover)
 //  4. Response logging and rewrite
-//  5. Heartbeat monitoring (response wrapping)
-//  6. Debug logging
+//  5. Debug logging
 func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	// Step 1: Request logging and rewrite. The rewrite runs before the
 	// concurrency gate: it is cheap local work and must not consume a
@@ -426,18 +425,11 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	})
 	e.runTopologyLogOutputs(topologyStageResponseAfter, plan.LogOutputs, plan, req, resp)
 
-	// Step 5: Heartbeat monitoring (if streaming). Always returns resp
-	// (possibly with a wrapped body); on failure to wrap we keep the
-	// original body so the stream is never corrupted.
-	if plan.HeartbeatRule != nil && req.Stream {
-		resp = e.wrapWithHeartbeat(resp, plan.HeartbeatRule, req)
-	}
-
-	// Step 5b: Wrap the final streaming body with a capture reader so the
+	// Step 5: Wrap the final streaming body with a capture reader so the
 	// handler can backfill the forwarded bytes into the log capture row
 	// after the stream ends. The capture wrapper sits OUTSIDE the
-	// stream-rewriter and heartbeat wrappers so it observes what the
-	// downstream client actually receives.
+	// stream-rewriter so it observes what the downstream client
+	// actually receives.
 	if req.Stream && resp.Body != nil && resp.StreamCapture == nil {
 		buf := &bytes.Buffer{}
 		capture := newStreamCaptureReader(resp.Body, buf)

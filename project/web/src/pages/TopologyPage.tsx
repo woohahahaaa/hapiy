@@ -1486,10 +1486,12 @@ export function TopologyPage() {
 
   const handleConnect = useCallback(
     (connection: Connection) => {
-      const { source, target } = connection
+      const { source, target, sourceHandle } = connection
       if (!source || !target) return
+      const nodes = tpRef.current?.nodes ?? []
+      const isSwitchSource = nodes.find((n) => n.id === source)?.kind === 'switch'
       const wiring = canvasWiresFromEdges(edgesRef.current)
-      const reason = invalidConnectionReason(tpRef.current?.nodes ?? [], wiring, source, target)
+      const reason = invalidConnectionReason(nodes, wiring, source, target)
       if (reason) {
         toast.error(reason)
         return
@@ -1499,12 +1501,16 @@ export function TopologyPage() {
         source,
         target,
         type: 'flowLight',
-        sourceHandle: connection.sourceHandle,
+        sourceHandle,
         targetHandle: connection.targetHandle,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
       }
-      const next = [...edgesRef.current.filter((e) => e.source !== source), newEdge]
+      // 单出边节点：新连线替换同源旧线。条件开关：是/否各输出一条，按分支
+      // （sourceHandle）替换——重拖同分支换目标，另一分支的线不受影响。
+      const next = isSwitchSource
+        ? [...edgesRef.current.filter((e) => e.source !== source || e.sourceHandle !== sourceHandle), newEdge]
+        : [...edgesRef.current.filter((e) => e.source !== source), newEdge]
       setEdges(next)
       commitCanvasWires(canvasWiresFromEdges(next))
     },
@@ -1973,7 +1979,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     const suffix = crypto.randomUUID().slice(0, 8)
     const entryId = `entry-${suffix}`
     const pslotId = `pslot-${suffix}`
-    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'logOutput']
+    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'concurrency', 'logOutput']
     const nodeIds = new Map<RewriteSlotType, string>()
     for (const st of slotIds) nodeIds.set(st, `${st}-${suffix}`)
 
@@ -2012,7 +2018,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     const suffix = crypto.randomUUID().slice(0, 8)
     const entryId = `entry-${suffix}`
     const pslotId = `pslot-${suffix}`
-    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'autoReply', 'concurrency', 'logOutput']
+    const slotIds: RewriteSlotType[] = ['autoSwitch', 'requestModify', 'responseModify', 'concurrency', 'logOutput']
     const nodeIds = new Map<RewriteSlotType, string>()
     for (const st of slotIds) nodeIds.set(st, `${st}-${suffix}`)
 

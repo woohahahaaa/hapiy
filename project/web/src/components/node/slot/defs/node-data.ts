@@ -54,7 +54,6 @@ export function isLogOutputNode(n: WorkflowNode): n is LogOutputNodeData {
 export const NODE_TYPE_RULE_KIND: Partial<Record<NodeType, RuleKind>> = {
   requestModify: 'rewrite',
   responseModify: 'rewrite-response',
-  autoReply: 'heartbeat',
   concurrency: 'concurrency',
   autoSwitch: 'failover',
 }

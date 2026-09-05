@@ -41,7 +41,6 @@ export interface ModelBinding {
 }
 
 export interface PolicyRules {
-  heartbeat: HeartbeatRule[]
   rewrite: RewriteRule[]
   failover: FailoverRule[]
   concurrency: ConcurrencyRule[]
@@ -52,15 +51,6 @@ export interface ResponseRewriteRule {
   id: string
   name: string
   script: string
-  status: boolean
-}
-
-export interface HeartbeatRule {
-  id: string
-  name: string
-  matchCondition: string
-  replyContent: string
-  timeout: number  // seconds
   status: boolean
 }
 
@@ -124,7 +114,6 @@ export interface TopologyEdge {
 export type SlotType =
   | 'requestModify'
   | 'responseModify'
-  | 'autoReply'
   | 'concurrency'
   | 'autoSwitch'
   | 'logOutput'

@@ -138,7 +138,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
           {/* ── 筛选维度：供应商 / 模型 二选一 + 多选下拉 ── */}
           <div className="flex flex-col gap-1.5">
             <Select value={mode} onValueChange={(v) => setMode(v as SwitchFilterMode)}>
-              <SelectTrigger className="h-7 w-[140px]" size="sm">
+              <SelectTrigger className="h-7 w-fit self-start" size="sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

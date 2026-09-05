@@ -72,7 +72,6 @@ const navigation: NavItem[] = [
     children: [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
       { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
-      { id: 'heartbeat', label: '心跳回复', href: '/policy/heartbeat' },
       { id: 'concurrency', label: '并发控制', href: '/policy/concurrency' },
       { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
       { id: 'failover', label: '自动禁用', href: '/policy/failover' },

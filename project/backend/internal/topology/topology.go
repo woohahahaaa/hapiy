@@ -49,16 +49,15 @@ type EdgeDocument []json.RawMessage
 
 // SlotOrder is the fixed stage order. Both handler validation and the relay
 // execution plan order by this sequence.
-var SlotOrder = []string{"requestModify", "responseModify", "autoReply", "concurrency", "autoSwitch", "logOutput"}
+var SlotOrder = []string{"requestModify", "responseModify", "concurrency", "autoSwitch", "logOutput"}
 
 // SlotRanks maps every slot type to its execution stage.
 var SlotRanks = map[string]int{
 	"requestModify":  0,
 	"responseModify": 1,
-	"autoReply":      2,
-	"concurrency":    3,
-	"autoSwitch":     4,
-	"logOutput":      5,
+	"concurrency":    2,
+	"autoSwitch":     3,
+	"logOutput":      4,
 }
 
 // WorkflowRefs derives the set of valid workflow keys from the canonical

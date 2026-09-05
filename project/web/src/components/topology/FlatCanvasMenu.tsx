@@ -4,7 +4,6 @@ import { REQUEST_REWRITE_SLOT_TYPES, type RewriteSlotType } from '@/lib/flat-top
 const REWRITE_SLOT_LABELS: Record<RewriteSlotType, string> = {
   requestModify: '请求改写',
   responseModify: '响应改写',
-  autoReply: '心跳回复',
   concurrency: '并发控制',
   autoSwitch: '自动禁用',
   logOutput: '日志抓取',
@@ -113,7 +112,7 @@ export function FlatCanvasMenu({
           }}
           className={PLAIN_ROW_CLASS}
         >
-          <span>添加条件开关</span>
+          <span>添加 条件开关</span>
         </button>
         <div className="my-1.5 border-t border-border" />
         <button

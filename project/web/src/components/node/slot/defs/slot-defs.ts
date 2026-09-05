@@ -1,7 +1,6 @@
 import type {
   RewriteRule,
   ResponseRewriteRule,
-  HeartbeatRule,
   ConcurrencyRule,
   FailoverRule,
 } from '@/lib/dashboard-api'
@@ -12,14 +11,13 @@ export type NodeType =
   | 'provider'
   | 'requestModify'
   | 'responseModify'
-  | 'autoReply'
   | 'concurrency'
   | 'autoSwitch'
   | 'logOutput'
 
-export type RuleKind = 'rewrite' | 'rewrite-response' | 'heartbeat' | 'concurrency' | 'failover'
+export type RuleKind = 'rewrite' | 'rewrite-response' | 'concurrency' | 'failover'
 
-export type AnyRule = RewriteRule | ResponseRewriteRule | HeartbeatRule | ConcurrencyRule | FailoverRule
+export type AnyRule = RewriteRule | ResponseRewriteRule | ConcurrencyRule | FailoverRule
 
 // ── Slot defs: declarative description of what each node type activates ──
 
@@ -56,7 +54,7 @@ export interface RecordConfigSlotDef {
 
 export interface PreviewSlotDef {
   readonly enabled: true
-  readonly renderer: 'script' | 'rewriteRule' | 'heartbeat' | 'concurrency' | 'failover' | 'provider'
+  readonly renderer: 'script' | 'rewriteRule' | 'concurrency' | 'failover' | 'provider'
 }
 
 export interface ErrorSlotDef {
@@ -119,17 +117,6 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
     errorSlot: { enabled: true },
   },
 
-  autoReply: {
-    label: '心跳回复',
-    slotOrder: 3,
-    headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'heartbeat', placeholder: '选择心跳规则' },
-    orderSlot: { enabled: true },
-    logConfigSlot: { enabled: false },
-    recordConfigSlot: { enabled: false },
-    previewSlot: { enabled: true, renderer: 'heartbeat' },
-    errorSlot: { enabled: true },
-  },
 
   concurrency: {
     label: '并发控制',
@@ -180,7 +167,6 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
 export const SLOT_ORDER: readonly NodeType[] = [
   'requestModify',
   'responseModify',
-  'autoReply',
   'concurrency',
   'autoSwitch',
   'logOutput',

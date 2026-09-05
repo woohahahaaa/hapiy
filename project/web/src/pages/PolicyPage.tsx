@@ -24,7 +24,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi,
   type RewriteRule,
-  type HeartbeatRule,
   type ConcurrencyRule,
   type FailoverRule,
   type ResponseRewriteRule,
@@ -37,7 +36,6 @@ import { RecoverySettings } from '@/pages/RecoverySettings'
 
 const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite',
-  'heartbeat',
   'concurrency',
   'failover',
   'rewrite-response',
@@ -88,7 +86,6 @@ export function PolicyPage() {
   return (
     <>
       {activeTab === 'rewrite' && <RewritePage />}
-      {activeTab === 'heartbeat' && <HeartbeatPage />}
       {activeTab === 'concurrency' && <ConcurrencyPage />}
       {activeTab === 'failover' && <FailoverPage />}
       {activeTab === 'rewrite-response' && <RewriteResponsePage />}
@@ -317,135 +314,6 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
     </FieldGroup>
   )
 }
-
-// ── Heartbeat ──
-
-function HeartbeatPage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<HeartbeatRule>('heartbeat')
-  const [editing, setEditing] = useState<HeartbeatRule | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
-
-
-  const handleDelete = async (id: string) => {
-    if (mutating) return
-    await remove(id)
-  }
-
-  const handleSave = async (rule: HeartbeatRule) => {
-    if (editing) {
-      const result = await update(rule.id, { name: rule.name, matchCondition: rule.matchCondition, replyContent: rule.replyContent, timeout: rule.timeout, status: rule.status })
-      if (result) { setEditing(null); setIsOpen(false) }
-    } else {
-      const result = await create({ name: rule.name, matchCondition: rule.matchCondition, replyContent: rule.replyContent, timeout: rule.timeout, status: rule.status })
-      if (result) { setIsOpen(false) }
-    }
-  }
-
-  const columns: ColumnDef<HeartbeatRule>[] = [
-    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'matchCondition', label: '匹配条件', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="text-xs">{row.matchCondition}</span> },
-    {
-      key: 'replyContent',
-      label: '回复内容',
-      defaultWidth: { kind: 'percent', value: 20 },
-      defaultOverflow: 'wrap',
-    },
-    { key: 'timeout', label: '超时', defaultWidth: { kind: 'pixel', value: 80 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.timeout}s</span> },
-    {
-      key: 'id',
-      label: '操作',
-      defaultWidth: { kind: 'pixel', value: 140 },
-      defaultAlign: 'right',
-      showEmptyPlaceholder: false,
-      render: (_, row) => (
-        <div className="inline-flex items-center gap-2">
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
-            <AppIcon name="edit" />
-          </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
-            <AppIcon name="delete" />
-          </Button>
-        </div>
-      ),
-    },
-  ]
-
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="心跳回复"
-        description="上游无输出超时时自动插入自定义消息"
-        status={`${total} 条规则`}
-      />
-      <div className="p-6">
-        <DataTable
-          id="policy-heartbeat"
-          columns={columns}
-          data={rules}
-          total={total}
-          loading={loading}
-          error={error}
-          offset={offset}
-          limit={limit}
-          onOffsetChange={setOffset}
-          onLimitChange={setLimit}
-          emptyText='暂无心跳规则，点击"添加规则"创建第一条'
-          onRetry={() => void fetch()}
-          actions={
-            <div className="flex items-center gap-2">
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                <AppIcon name="add" data-icon="inline-start" />
-                添加规则
-              </Button>
-            </div>
-          }
-        />
-      </div>
-
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent width="sm">
-          <DialogHeader>
-            <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
-          </DialogHeader>
-          <HeartbeatForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
-        </DialogContent>
-</Dialog>
-    </div>
-  )
-}
-
-function HeartbeatForm({ rule, onSave, onCancel, saving }: { rule: HeartbeatRule | null; onSave: (r: HeartbeatRule) => void; onCancel: () => void; saving: boolean }) {
-  const [form, setForm] = useState<HeartbeatRule>(
-    rule || { id: '', name: '', matchCondition: '*', replyContent: '', timeout: 30, status: true }
-  )
-
-  return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="heartbeat-name">名称</FieldLabel>
-        <Input id="heartbeat-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="heartbeat-match">匹配条件 (* 表示全部)</FieldLabel>
-        <Input id="heartbeat-match" value={form.matchCondition} onChange={(e) => setForm((p) => ({ ...p, matchCondition: e.target.value }))} placeholder="*" />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="heartbeat-reply">回复内容</FieldLabel>
-        <Textarea id="heartbeat-reply" value={form.replyContent} onChange={(e) => setForm((p) => ({ ...p, replyContent: e.target.value }))} placeholder="连接正常，正在生成内容..." />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="heartbeat-timeout">超时时间 (秒)</FieldLabel>
-        <Input id="heartbeat-timeout" type="number" value={form.timeout} onChange={(e) => setForm((p) => ({ ...p, timeout: Number(e.target.value) }))} />
-      </Field>
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
-      </DialogFooter>
-    </FieldGroup>
-  )
-}
-
-// ── Concurrency ──
 
 function ConcurrencyPage() {
   const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ConcurrencyRule>('concurrency')

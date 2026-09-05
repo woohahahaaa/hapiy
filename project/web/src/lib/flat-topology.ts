@@ -23,7 +23,6 @@ export const PROVIDER_SLOT_TYPE = 'provider'
 export const REQUEST_REWRITE_SLOT_TYPES = [
   'requestModify',
   'responseModify',
-  'autoReply',
   'concurrency',
   'autoSwitch',
   'logOutput',

@@ -212,23 +212,6 @@ func (r *ResponseRewriteRule) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// HeartbeatRule model
-type HeartbeatRule struct {
-	ID             string `gorm:"primaryKey;type:uuid" json:"id"`
-	Name           string `gorm:"not null" json:"name"`
-	MatchCondition string `gorm:"default:'*'" json:"match_condition"`
-	ReplyContent   string `gorm:"not null" json:"reply_content"`
-	Timeout        int    `gorm:"default:30" json:"timeout"`
-	Status         bool   `gorm:"not null" json:"status"`
-}
-
-func (r *HeartbeatRule) BeforeCreate(tx *gorm.DB) error {
-	if r.ID == "" {
-		r.ID = uuid.New().String()
-	}
-	return nil
-}
-
 // ConcurrencyRule model
 type ConcurrencyRule struct {
 	ID            string `gorm:"primaryKey;type:uuid" json:"id"`
@@ -534,7 +517,7 @@ type TopologyNode struct {
 	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
 	Type         string    `gorm:"not null;index" json:"type"` // modelHub | provider | slot
 	ParentID     *string   `gorm:"index" json:"parent_id"`     // for slot nodes: the provider id
-	SlotType     *string   `json:"slot_type"`                  // requestModify / responseModify / autoReply / concurrency / autoSwitch / logOutput
+	SlotType     *string   `json:"slot_type"`                  // requestModify / responseModify / concurrency / autoSwitch / logOutput
 	ProviderID   *string   `gorm:"index" json:"provider_id"`   // for slot nodes: the parent provider id
 	ModelHubID   *string   `json:"model_hub_id"`               // future use
 	Name         string    `gorm:"not null" json:"name"`

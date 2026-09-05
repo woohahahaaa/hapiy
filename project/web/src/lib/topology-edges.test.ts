@@ -102,14 +102,13 @@ describe('expandTopologyEdges', () => {
 })
 
 describe('defaultTopologyEdges', () => {
-  it('builds provider → all six slots in fixed order, sorted by key', () => {
+  it('builds provider → all slots in fixed order, sorted by key', () => {
     const workflows = doc('b', 'a')
     const units = defaultTopologyEdges(workflows)
     expect(units[0]).toEqual([
       'pv-w-a-0',
       'slot-w-a-0-requestModify',
       'slot-w-a-0-responseModify',
-      'slot-w-a-0-autoReply',
       'slot-w-a-0-concurrency',
       'slot-w-a-0-autoSwitch',
       'slot-w-a-0-logOutput',
