@@ -53,18 +53,16 @@ export function HandlesRail({
     >
       {segmentCount > 0 && (
         <>
-          {/* 右半边（压在节点本体上）保持实心 pill；左半边悬空在外只画描边，
-              否则 bg 会盖住从左侧连进来的线最后一截。fill 放进一个带 overflow-hidden
-              的 pill 形容器里，让直角左缘被圆角裁掉，与描边的弧线对齐。 */}
+          {/* 整颗 pill 实心填充（含悬空的左半边）：与条件开关的输出 pill 一致。
+              早期左半边只画描边是为了不盖连线末端，但连线端点落在 pill 左缘，
+              填充最多盖住线尖 ~0.75px；而选中态的 box-shadow ring 画在卡片盒外
+              侧 2px，恰好从透明左半边透出来（发绿），实心填充把它一并盖住。 */}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 overflow-hidden rounded-[inherit]"
             style={{ width: target.width, height: total }}
           >
-            <div
-              className={`absolute left-1/2 top-0 h-full ${fillBgClass}`}
-              style={{ width: target.width / 2 }}
-            />
+            <div className={`absolute inset-0 ${fillBgClass}`} />
           </div>
           <div
             aria-hidden="true"

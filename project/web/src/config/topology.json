@@ -70,8 +70,8 @@
     },
     "modelHub": {
       "source": {
-        "width": 10,
-        "height": 10,
+        "width": 12,
+        "height": 20,
         "borderWidth": 2
       }
     },
@@ -82,8 +82,8 @@
         "borderWidth": 2
       },
       "source": {
-        "width": 8,
-        "height": 8,
+        "width": 12,
+        "height": 20,
         "borderWidth": 2
       }
     }

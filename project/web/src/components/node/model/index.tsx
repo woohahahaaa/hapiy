@@ -81,7 +81,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
               type="source"
               position={Position.Right}
               id={m.id}
-              className="!rounded-full !border-border !bg-background"
+              className="!rounded-[4px] !border-border !bg-card"
               style={{
                 width: topologyConfig.handles.modelHub.source.width,
                 height: topologyConfig.handles.modelHub.source.height,

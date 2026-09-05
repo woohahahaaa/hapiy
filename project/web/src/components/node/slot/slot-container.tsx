@@ -55,7 +55,7 @@ export function SlotContainer({
             <button
               type="button"
               onClick={onAddNode}
-              className="mt-2 flex w-full items-center justify-center rounded-md border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
+              className="mt-2 flex w-full items-center justify-center rounded-xs border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
             >
               <AppIcon name="add" size={12} className="mr-1" />
               添加
