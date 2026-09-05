@@ -51,6 +51,11 @@ export function isProvider(node: FlatNode): boolean {
   return node.kind === 'provider'
 }
 
+/** 条件开关节点：单入两条出（是/否），满足全部条件才走「是」。 */
+export function isSwitchNode(node: FlatNode): boolean {
+  return node.kind === 'switch'
+}
+
 /** Single outgoing target of a node (the output-single constraint). */
 export function outgoing(wires: readonly FlatWire[], id: string): string | null {
   for (const w of wires) {
@@ -105,19 +110,19 @@ export function canvasFromFlat(nodes: readonly FlatNode[], wires: readonly FlatW
   // Collapse provider hops in the wire list into top-level edges.
   const canvasWires: FlatWire[] = []
   const seen = new Set<string>()
-  const addWire = (source: string, target: string) => {
+  const addWire = (source: string, target: string, branch?: 'yes' | 'no') => {
     if (source === target) return
     const key = `${source}→${target}`
     if (seen.has(key)) return
     seen.add(key)
-    canvasWires.push({ source, target })
+    canvasWires.push(branch ? { source, target, branch } : { source, target })
   }
 
   for (const w of wires) {
     const isSourceTop = topLevel.some((n) => n.id === w.source)
     const isTargetTop = topLevel.some((n) => n.id === w.target)
     if (isSourceTop && isTargetTop) {
-      addWire(w.source, w.target)
+      addWire(w.source, w.target, w.branch)
       continue
     }
     // provider → top-level: remap source to the provider's parent slot.
@@ -156,12 +161,12 @@ export function flatWiresFromCanvas(input: FlatSaveInput): FlatWire[] {
   const { topLevel, providers, providerSlotOf, canvasWires } = input
   const wires: FlatWire[] = []
   const seen = new Set<string>()
-  const add = (s: string, t: string) => {
+  const add = (s: string, t: string, branch?: 'yes' | 'no') => {
     if (s === t || s === '' || t === '') return
     const key = `${s}→${t}`
     if (seen.has(key)) return
     seen.add(key)
-    wires.push({ source: s, target: t })
+    wires.push(branch ? { source: s, target: t, branch } : { source: s, target: t })
   }
 
   const bySlot = new Map<string, FlatNode[]>()
@@ -199,7 +204,7 @@ export function flatWiresFromCanvas(input: FlatSaveInput): FlatWire[] {
       }
       continue
     }
-    add(w.source, w.target)
+    add(w.source, w.target, w.branch)
   }
 
   return wires

@@ -389,9 +389,24 @@ export type CurrentUser = {
 }
 
 // ── Flat topology (canvas node/wire model) ──
-export type FlatNodeKind = 'requestEntry' | 'provider' | 'slot'
+export type FlatNodeKind = 'requestEntry' | 'provider' | 'slot' | 'switch'
 
 export type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
+
+/** 条件开关节点的单条判断条件（与请求改写的叶子条件同形）。 */
+export type SwitchCondition = {
+  readonly path: string
+  readonly op: string
+  readonly value: string
+  readonly invert: boolean
+  readonly scope: string
+}
+
+/** 条件开关节点配置：供应商筛选 + 请求头/请求体条件，全部满足才走「是」。 */
+export type SwitchNodeConfig = {
+  readonly providers: readonly string[]
+  readonly conditions: readonly SwitchCondition[]
+}
 
 export type FlatNode = {
   readonly id: string
@@ -405,11 +420,14 @@ export type FlatNode = {
   readonly entries?: readonly SlotEntry[]
   readonly deadlineAt?: number | null
   readonly strategy?: ProviderStrategy
+  readonly config?: SwitchNodeConfig
 }
 
 export type FlatWire = {
   readonly source: string
   readonly target: string
+  /** 条件开关节点的出边分支：是=yes / 否=no；其他节点无 branch。 */
+  readonly branch?: 'yes' | 'no'
 }
 
 export type FlatTopology = {
@@ -430,8 +448,24 @@ export type DuplicateActivation = {
 function parseFlatNode(value: unknown): FlatNode {
   if (!isRecord(value)) throw new DashboardApiError('扁平拓扑节点格式无效', null)
   const kind = value.kind
-  if (kind !== 'requestEntry' && kind !== 'provider' && kind !== 'slot') {
+  if (kind !== 'requestEntry' && kind !== 'provider' && kind !== 'slot' && kind !== 'switch') {
     throw new DashboardApiError('扁平拓扑节点类型无效', null)
+  }
+  let config: SwitchNodeConfig | undefined
+  if (isRecord(value.config)) {
+    const providers = Array.isArray(value.config.providers)
+      ? value.config.providers.filter((p): p is string => typeof p === 'string')
+      : []
+    const conditions = Array.isArray(value.config.conditions)
+      ? value.config.conditions.filter(isRecord).map((c) => ({
+          path: typeof c.path === 'string' ? c.path : '',
+          op: typeof c.op === 'string' ? c.op : '',
+          value: typeof c.value === 'string' ? c.value : '',
+          invert: c.invert === true,
+          scope: typeof c.scope === 'string' ? c.scope : 'all',
+        }))
+      : []
+    config = { providers, conditions }
   }
   return {
     id: readString(value.id, 'node.id'),
@@ -445,6 +479,7 @@ function parseFlatNode(value: unknown): FlatNode {
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
     deadlineAt: typeof value.deadline_at === 'number' ? value.deadline_at : null,
     strategy: isProviderStrategy(value.strategy) ? value.strategy : undefined,
+    ...(config !== undefined ? { config } : {}),
   }
 }
 
@@ -454,7 +489,12 @@ function isProviderStrategy(value: unknown): value is ProviderStrategy {
 
 function parseFlatWire(value: unknown): FlatWire {
   if (!isRecord(value)) throw new DashboardApiError('扁平拓扑连线格式无效', null)
-  return { source: readString(value.source, 'wire.source'), target: readString(value.target, 'wire.target') }
+  const branch = value.branch === 'yes' || value.branch === 'no' ? value.branch : undefined
+  return {
+    source: readString(value.source, 'wire.source'),
+    target: readString(value.target, 'wire.target'),
+    ...(branch !== undefined ? { branch } : {}),
+  }
 }
 
 function parseFlatTopology(value: unknown): FlatTopology {
@@ -480,13 +520,18 @@ function serializeFlatNode(node: FlatNode): JsonRecord {
     ...(node.entries !== undefined ? { entries: node.entries } : {}),
     ...(node.deadlineAt !== undefined ? { deadline_at: node.deadlineAt } : {}),
     ...(node.strategy !== undefined ? { strategy: node.strategy } : {}),
+    ...(node.config !== undefined ? { config: node.config } : {}),
   }
 }
 
 function serializeFlatTopology(tp: FlatTopology): JsonRecord {
   return {
     nodes: tp.nodes.map(serializeFlatNode),
-    wires: tp.wires.map((wire) => ({ source: wire.source, target: wire.target })),
+    wires: tp.wires.map((wire) => ({
+      source: wire.source,
+      target: wire.target,
+      ...(wire.branch !== undefined ? { branch: wire.branch } : {}),
+    })),
   }
 }
 

@@ -19,6 +19,16 @@ const (
 	KindRequestEntry NodeKind = "requestEntry"
 	KindProvider     NodeKind = "provider"
 	KindSlot         NodeKind = "slot"
+	// KindSwitch is the 条件开关节点: one input, two branch outputs (是/否).
+	// Its config (provider filter + header/body conditions) is opaque to the
+	// engine and evaluated by the relay when routing requests.
+	KindSwitch NodeKind = "switch"
+)
+
+// Wire branch labels for KindSwitch outgoing wires: 是=yes, 否=no.
+const (
+	BranchYes = "yes"
+	BranchNo  = "no"
 )
 
 // Provider slot child-picking strategies. Strategy lives on the provider slot
@@ -42,14 +52,18 @@ type FlatNode struct {
 	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
 	Emergency     bool            `json:"emergency,omitempty"`       // 应急请求入口：普通入口无可用供应商时才参与调度
 	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
+	Config        json.RawMessage `json:"config,omitempty"`          // for KindSwitch: {providers:[], conditions:[]}, opaque to the engine
 	DeadlineAt *int64          `json:"deadline_at,omitempty"` // slot-level optional deadline (auto-off), Unix epoch ms
 	Strategy      string          `json:"strategy,omitempty"`        // provider slot child-picking strategy: sequential|random|roundRobin
 }
 
-// Wire is one directed connection in the flat topology.
+// Wire is one directed connection in the flat topology. Branch labels the
+// source-side handle of a KindSwitch wire ("yes"/"否" branch routing); other
+// nodes have no branch.
 type Wire struct {
 	Source string `json:"source"`
 	Target string `json:"target"`
+	Branch string `json:"branch,omitempty"`
 }
 
 // Topology is the flat, non-nested representation of the canvas: a flat node
@@ -110,7 +124,7 @@ func ValidateTopology(t *Topology) error {
 			return fmt.Errorf("duplicate node id %q", n.ID)
 		}
 		switch n.Kind {
-		case KindRequestEntry, KindProvider, KindSlot:
+		case KindRequestEntry, KindProvider, KindSlot, KindSwitch:
 		default:
 			return fmt.Errorf("node %q has unknown kind %q", n.ID, n.Kind)
 		}
@@ -131,22 +145,52 @@ func ValidateTopology(t *Topology) error {
 		if w.Source == w.Target {
 			return fmt.Errorf("self-loop on node %q", w.Source)
 		}
-		if _, ok := nodes[w.Source]; !ok {
+		src, ok := nodes[w.Source]
+		if !ok {
 			return fmt.Errorf("wire references unknown source %q", w.Source)
 		}
 		if _, ok := nodes[w.Target]; !ok {
 			return fmt.Errorf("wire references unknown target %q", w.Target)
 		}
+		if w.Branch != "" {
+			if src.Kind != KindSwitch {
+				return fmt.Errorf("wire %q→%q has branch %q but source is not a switch node", w.Source, w.Target, w.Branch)
+			}
+			if w.Branch != BranchYes && w.Branch != BranchNo {
+				return fmt.Errorf("wire %q→%q has unknown branch %q", w.Source, w.Target, w.Branch)
+			}
+		}
 	}
-	// Output-single constraint: every node has at most one outgoing wire.
+	// Outgoing-wire constraint: a switch node may emit exactly its two branch
+	// wires (是/否, distinct targets); every other node has at most one.
 	outCount := make(map[string]int, len(nodes))
 	for _, w := range t.Wires {
 		outCount[w.Source]++
 	}
 	for id, count := range outCount {
-		if count > 1 {
-			return fmt.Errorf("node %q has %d outgoing wires; at most 1 allowed", id, count)
+		limit := 1
+		if nodes[id].Kind == KindSwitch {
+			limit = 2
 		}
+		if count > limit {
+			return fmt.Errorf("node %q has %d outgoing wires; at most %d allowed", id, count, limit)
+		}
+	}
+	// A switch must not send both branches to the same node (that would make
+	// the branch meaningless), and its two wires must carry distinct branches.
+	branchByPair := make(map[string]string)
+	for _, w := range t.Wires {
+		if nodes[w.Source].Kind != KindSwitch {
+			continue
+		}
+		if w.Branch == "" {
+			return fmt.Errorf("switch wire %q→%q is missing a branch label", w.Source, w.Target)
+		}
+		key := w.Source + "→" + w.Target
+		if prior, exists := branchByPair[key]; exists {
+			return fmt.Errorf("switch node %q has two wires into %q (branches %q/%q)", w.Source, w.Target, prior, w.Branch)
+		}
+		branchByPair[key] = w.Branch
 	}
 	return nil
 }

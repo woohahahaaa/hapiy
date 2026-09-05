@@ -31,8 +31,9 @@ import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { ExecutorDebug } from '@/components/node/executor-debug'
 import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/DebugSettings'
-import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy } from '@/lib/dashboard-api'
+import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy, type SwitchNodeConfig } from '@/lib/dashboard-api'
 import { NodeEdge } from '@/components/node/edge'
+import { NodeSwitch } from '@/components/node/switch'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
 // import { flowDebug } from '@/modules/flow-debug' // FLOW-DEBUG: disabled — re-enable by uncommenting this import and the flowDebug.* call sites below
@@ -55,6 +56,7 @@ import {
   isProviderSlot,
   isRequestEntry,
   isProvider,
+  isSwitchNode,
   PROVIDER_SLOT_TYPE,
   ALL_SLOT_TYPES,
   rerouteWiresAroundRemoved,
@@ -66,6 +68,7 @@ const nodeTypes = {
   modelHub: NodeModel,
   slot: NodeSlot,
   requestEntry: NodeExecutor,
+  switch: NodeSwitch,
 }
 
 const edgeTypes = {
@@ -92,7 +95,10 @@ const defaultEdgeOptions = {
 function canvasWiresFromEdges(edges: readonly Edge[]): FlatWire[] {
   return edges
     .filter((e) => !e.source.startsWith('model-'))
-    .map((e) => ({ source: e.source, target: e.target }))
+    .map((e) => {
+      const branch = e.sourceHandle === 'yes' || e.sourceHandle === 'no' ? e.sourceHandle : undefined
+      return branch ? { source: e.source, target: e.target, branch } : { source: e.source, target: e.target }
+    })
 }
 
 function wiringEdgeId(source: string, target: string): string {
@@ -154,15 +160,23 @@ function computeLightChain(
 
 function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: string): boolean {
   if (source === target) return true
-  const out = new Map<string, string>()
-  for (const w of wires) out.set(w.source, w.target)
-  let current = target
-  const seen = new Set<string>()
-  while (out.has(current)) {
-    if (seen.has(current)) return true
-    seen.add(current)
-    current = out.get(current)!
-    if (current === source) return true
+  // 条件开关节点有两条出边（是/否），环检测按多分支图做 DFS。
+  const out = new Map<string, string[]>()
+  for (const w of wires) {
+    const list = out.get(w.source) ?? []
+    list.push(w.target)
+    out.set(w.source, list)
+  }
+  const seen = new Set<string>([target])
+  const stack = [target]
+  while (stack.length > 0) {
+    const cur = stack.pop()!
+    for (const next of out.get(cur) ?? []) {
+      if (next === source) return true
+      if (seen.has(next)) continue
+      seen.add(next)
+      stack.push(next)
+    }
   }
   return false
 }
@@ -174,10 +188,10 @@ function slotLabel(slotType: string): string {
 /**
  * Walk the chain that the prospective new wire (source→target) would join,
  * merging the new edge into the graph first so `target` is included. Starting at
- * the chain head (a node with no incoming wire) and following the single-output
- * wires, collect every slot node in the chain. Reject the connection when any
- * slot type appears more than once — a workflow cannot contain two nodes of the
- * same stage.
+ * the chain head (a node with no incoming wire) and following all outgoing
+ * wires (条件开关有是/否两条分支), collect every slot node reachable in the
+ * chain. Reject the connection when any slot type appears more than once — a
+ * workflow cannot contain two nodes of the same stage.
  */
 function slotDuplicateReason(
   nodes: readonly FlatNode[],
@@ -186,8 +200,12 @@ function slotDuplicateReason(
   target: string,
 ): string | null {
   const withNew = [...wires, { source, target }]
-  const out = new Map<string, string>()
-  for (const w of withNew) out.set(w.source, w.target)
+  const out = new Map<string, string[]>()
+  for (const w of withNew) {
+    const list = out.get(w.source) ?? []
+    list.push(w.target)
+    out.set(w.source, list)
+  }
   const hasIncoming = new Set(withNew.map((w) => w.target))
 
   let head = source
@@ -204,8 +222,10 @@ function slotDuplicateReason(
 
   const seenSlotTypes = new Map<string, string>()
   const visited = new Set<string>()
-  let cur: string | undefined = head
-  while (cur !== undefined && !visited.has(cur)) {
+  const stack = [head]
+  while (stack.length > 0) {
+    const cur = stack.pop()!
+    if (visited.has(cur)) continue
     visited.add(cur)
     const st = slotTypeOf.get(cur)
     if (st) {
@@ -215,7 +235,7 @@ function slotDuplicateReason(
       }
       seenSlotTypes.set(st, cur)
     }
-    cur = out.get(cur)
+    for (const next of out.get(cur) ?? []) stack.push(next)
   }
   return null
 }
@@ -226,22 +246,40 @@ function invalidConnectionReason(
   source: string,
   target: string,
 ): string | null {
-  if (wires.some((w) => w.source === source)) return '每个节点最多一条出边'
+  const sourceNode = nodes.find((n) => n.id === source)
+  const outgoingFromSource = wires.filter((w) => w.source === source)
+  if (sourceNode?.kind === 'switch') {
+    // 条件开关：是/否两条出边，且两个分支不能连向同一个节点。
+    if (outgoingFromSource.length >= 2) return '条件开关最多两条出边（是/否）'
+    if (outgoingFromSource.some((w) => w.target === target)) return '条件开关的两个分支不能连向同一个节点'
+  } else if (outgoingFromSource.length >= 1) {
+    return '每个节点最多一条出边'
+  }
   if (wouldCreateCycle(wires, source, target)) return '不能形成环路'
   return slotDuplicateReason(nodes, wires, source, target)
 }
 
 function reaches(wires: readonly FlatWire[], from: string, to: string): boolean {
-  const out = new Map<string, string>()
-  for (const w of wires) out.set(w.source, w.target)
-  let cur: string | undefined = from
-  const seen = new Set<string>()
-  while (cur !== undefined && !seen.has(cur)) {
-    if (cur === to) return true
-    seen.add(cur)
-    cur = out.get(cur)
+  // 多分支可达性：条件开关节点有两条出边，按 BFS 遍历。
+  if (from === to) return true
+  const out = new Map<string, string[]>()
+  for (const w of wires) {
+    const list = out.get(w.source) ?? []
+    list.push(w.target)
+    out.set(w.source, list)
   }
-  return cur === to
+  const seen = new Set<string>([from])
+  const queue = [from]
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const next of out.get(cur) ?? []) {
+      if (next === to) return true
+      if (seen.has(next)) continue
+      seen.add(next)
+      queue.push(next)
+    }
+  }
+  return false
 }
 
 function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
@@ -418,8 +456,10 @@ export function TopologyPage() {
     const counts = new Map<string, number>()
     if (!canvas) return counts
     for (const w of canvas.canvasWires) {
-      const targetIsSlot = canvas.topLevel.some((n) => n.id === w.target && n.kind === 'slot')
-      if (targetIsSlot) counts.set(w.target, (counts.get(w.target) ?? 0) + 1)
+      const targetIsRailNode = canvas.topLevel.some(
+        (n) => n.id === w.target && (n.kind === 'slot' || n.kind === 'switch'),
+      )
+      if (targetIsRailNode) counts.set(w.target, (counts.get(w.target) ?? 0) + 1)
     }
     return counts
   }, [canvas])
@@ -870,6 +910,28 @@ export function TopologyPage() {
             onSelectExecutor: (token: string | null) => handleSelectExecutor(node.id, token),
           },
         })
+      } else if (isSwitchNode(node)) {
+        nodes.push({
+          id: node.id,
+          type: 'switch',
+          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
+          style: accentStyleOf(node.id),
+          data: {
+            title: '条件开关',
+            connectionCount: slotConnectionCount.get(node.id) ?? 1,
+            externallyDisabled: false,
+            enabled: node.enabled,
+            config: node.config ?? { providers: [], conditions: [] },
+            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
+            flashLayers: litNodeLayers.get(node.id),
+            onChangeEnabled: (enabled: boolean) => {
+              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, enabled } : n)))
+            },
+            onSaveConfig: (config: SwitchNodeConfig) => {
+              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, config } : n)))
+            },
+          },
+        })
       } else {
         const slotType = node.slotType as SlotType
         nodes.push({
@@ -920,7 +982,7 @@ export function TopologyPage() {
   useEffect(() => {
     setNodes((current) =>
       current.map((node) => {
-        if (node.type === 'modelHub' || node.type === 'requestEntry' || node.type === 'slot') {
+        if (node.type === 'modelHub' || node.type === 'requestEntry' || node.type === 'slot' || node.type === 'switch') {
           const data = node.data as Record<string, unknown>
           const nextData = node.type === 'slot' && data.isProviderSlot
             ? { ...data, providerFlashLayers: litNodeLayers }
@@ -964,6 +1026,7 @@ export function TopologyPage() {
         source: w.source,
         target: w.target,
         type: 'flowLight',
+        sourceHandle: w.branch,
         targetHandle: slotIds.has(w.target) ? `seg-${segIndex}` : undefined,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
@@ -1545,7 +1608,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   const executeDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes
-      .filter((n) => n.type === 'requestEntry' || n.type === 'slot')
+      .filter((n) => n.type === 'requestEntry' || n.type === 'slot' || n.type === 'switch')
       .map((n) => n.id)
     if (topLevelIds.length > 0) {
       handleDeleteNodes(topLevelIds)
@@ -1572,7 +1635,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   const requestDeleteSelected = useCallback(() => {
     const topLevelIds = selectionRef.current.nodes.filter(
-      (n) => n.type === 'requestEntry' || n.type === 'slot',
+      (n) => n.type === 'requestEntry' || n.type === 'slot' || n.type === 'switch',
     )
     const edgeCount = selectionRef.current.edges.filter((e) => !e.source.startsWith('model-')).length
     if (topLevelIds.length > 0 || edgeCount > 0) {
@@ -1813,6 +1876,15 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     },
     [updateTopologyNodes, placeNewNodes],
   )
+
+  const handleAddSwitch = useCallback(() => {
+    const cur = tpRef.current
+    if (!cur) return
+    const id = `switch-${crypto.randomUUID().slice(0, 8)}`
+    const node: FlatNode = { id, kind: 'switch', enabled: true, config: { providers: [], conditions: [] } }
+    updateTopologyNodes(() => [...cur.nodes, node])
+    placeNewNodes([{ id, width: topologyConfig.fallbackNodeSize.width }])
+  }, [updateTopologyNodes, placeNewNodes])
 
   const handleAddProvider = useCallback(
     (slotId: string) => {
@@ -2183,6 +2255,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     onAddEntry={handleAddEntry}
             onAddProviderSlot={handleAddProviderSlot}
             onAddSlot={handleAddSlot}
+            onAddSwitch={handleAddSwitch}
             onClose={() => setMenuState((s) => ({ ...s, open: false }))}
           />
         )}
