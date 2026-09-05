@@ -53,6 +53,8 @@ function nodeIdPrefix(node: FlatNode): string {
       return 'prov'
     case 'slot':
       return node.slotType === PROVIDER_SLOT_TYPE ? 'pslot' : (node.slotType ?? 'pslot')
+    case 'switch':
+      return 'switch'
   }
 }
 
@@ -95,7 +97,7 @@ export function pasteTopologySnapshot(
     const source = idMap.get(wire.source)
     const target = idMap.get(wire.target)
     if (!source || !target) continue
-    wires.push({ source, target })
+    wires.push(wire.branch ? { source, target, branch: wire.branch } : { source, target })
   }
   return { nodes, wires, idMap }
 }

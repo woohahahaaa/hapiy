@@ -23,6 +23,7 @@ interface FlatCanvasMenuProps {
   onAddEntry: () => void
   onAddProviderSlot: () => void
   onAddSlot: (slotType: RewriteSlotType) => void
+  onAddSwitch: () => void
   onClose: () => void
 }
 
@@ -35,6 +36,7 @@ export function FlatCanvasMenu({
   onAddEntry,
   onAddProviderSlot,
   onAddSlot,
+  onAddSwitch,
   onClose,
 }: FlatCanvasMenuProps) {
   const positionStyle = mode === 'corner' ? { right: x, bottom: y } : { left: x, top: y }
@@ -103,6 +105,16 @@ export function FlatCanvasMenu({
             <span>添加 {REWRITE_SLOT_LABELS[slotType]} 插槽</span>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => {
+            onAddSwitch()
+            onClose()
+          }}
+          className={PLAIN_ROW_CLASS}
+        >
+          <span>添加条件开关</span>
+        </button>
         <div className="my-1.5 border-t border-border" />
         <button
           type="button"
