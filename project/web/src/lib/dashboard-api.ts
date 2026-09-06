@@ -649,9 +649,12 @@ export type AgentOsPaths = {
   readonly mac: string
 }
 
+export type AgentModelsContainer = '' | 'array' | 'object'
+
 export type AgentJsonPaths = {
   readonly provider: string
   readonly model: string
+  readonly models_container?: AgentModelsContainer
 }
 
 export type AgentRecommendationScope = 'provider' | 'model'
@@ -792,6 +795,7 @@ export type AgentTypeRuleInput = {
   readonly mac?: string
   readonly provider_path?: string
   readonly model_path?: string
+  readonly models_container?: AgentModelsContainer
   readonly recommendations?: readonly AgentRecommendation[]
   readonly protocols?: readonly AgentProtocol[]
   readonly model_info_fields?: AgentModelInfoFieldPaths
@@ -1719,13 +1723,27 @@ export type RewriteRule = {
   readonly status: boolean
 }
 
-export type ConcurrencyRule = {
-  readonly id: string
-  readonly name: string
-  readonly scope: 'global' | 'per_user' | 'per_token'
-  readonly maxConcurrent: number
-  readonly queueEnabled: boolean
-  readonly status: boolean
+// 并行控制节点内联配置：直接在拓扑 slot 条目上保存，不再依赖规则表。
+export type ConcurrencyNodeConfig = {
+  readonly windowMinutes: number // 每 X 分钟内
+  readonly maxCount: number // 最多 N 条
+  readonly perProvider: boolean // 按供应商分别计算
+  readonly providers: readonly string[] // 命中的供应商 id; 空 = 全部
+}
+
+export function defaultConcurrencyNodeConfig(): ConcurrencyNodeConfig {
+  return { windowMinutes: 5, maxCount: 10, perProvider: false, providers: [] }
+}
+
+export function parseConcurrencyNodeConfig(value: unknown): ConcurrencyNodeConfig {
+  if (!isRecord(value)) return defaultConcurrencyNodeConfig()
+  let windowMinutes = readNumber(value.windowMinutes, 'concurrency.windowMinutes', 5)
+  if (windowMinutes <= 0) windowMinutes = 5
+  let maxCount = readNumber(value.maxCount, 'concurrency.maxCount', 10)
+  if (maxCount <= 0) maxCount = 10
+  const perProvider = typeof value.perProvider === 'boolean' ? value.perProvider : false
+  const providers = readStringArray(value.providers, 'concurrency.providers')
+  return { windowMinutes, maxCount, perProvider, providers }
 }
 
 export type FailoverRule = {
@@ -1758,7 +1776,7 @@ export type ResponseRewriteRule = {
   readonly status: boolean
 }
 
-export type RuleType = 'rewrite' | 'concurrency' | 'failover' | 'rewrite-response'
+export type RuleType = 'rewrite' | 'failover' | 'rewrite-response'
 
 export type RuleListParams = {
   readonly limit: number
@@ -1778,20 +1796,6 @@ function parseRewriteRule(value: unknown): RewriteRule {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
     script: readString(value.script, 'rule.script'),
-    status: readBoolean(value.status, 'rule.status'),
-  }
-}
-
-function parseConcurrencyRule(value: unknown): ConcurrencyRule {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
-  const rawScope = readString(value.scope, 'rule.scope')
-  const scope = rawScope === 'global' || rawScope === 'per_user' || rawScope === 'per_token' ? rawScope : 'global'
-  return {
-    id: readString(value.id, 'rule.id'),
-    name: readString(value.name, 'rule.name'),
-    scope,
-    maxConcurrent: readNumber(value.max_concurrent, 'rule.max_concurrent', 10),
-    queueEnabled: readBoolean(value.queue_enabled, 'rule.queue_enabled'),
     status: readBoolean(value.status, 'rule.status'),
   }
 }
@@ -1852,12 +1856,41 @@ const serializeRewriteRule: RuleSerializer<RewriteRule> = (rule) => ({
   status: rule.status,
 })
 
+const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
+  name: rule.name,
+  primary_provider: (rule as FailoverRule).primaryProvider ?? '',
+  fallback_provider: (rule as FailoverRule).fallbackProvider ?? '',
+  condition: (rule as FailoverRule).condition ?? 'timeout',
+  status: rule.status,
+  keywords: (rule as FailoverRule).keywords ?? [],
+  actions: (rule as FailoverRule).actions ?? [],
+  dimension: (rule as FailoverRule).dimension ?? '',
+  auto_disable: (rule as FailoverRule).autoDisable ?? false,
+  match_patterns: (rule as FailoverRule).matchPatterns ?? [],
+  ttfb_seconds: (rule as FailoverRule).ttfbSeconds ?? 0,
+  disable_threshold: (rule as FailoverRule).disableThreshold ?? 1,
+  disable_window_minutes: (rule as FailoverRule).disableWindowMinutes ?? 5,
+})
+
+const serializeResponseRewriteRule: RuleSerializer<ResponseRewriteRule> = (rule) => ({
+  name: rule.name,
+  script: (rule as ResponseRewriteRule).script ?? '',
+  status: rule.status,
+})
+
 function ruleSerializerForType(type: RuleType): RuleSerializer<unknown> {
   switch (type) {
     case 'rewrite':           return serializeRewriteRule as RuleSerializer<unknown>
-    case 'concurrency':       return serializeConcurrencyRule as RuleSerializer<unknown>
     case 'failover':          return serializeFailoverRule as RuleSerializer<unknown>
     case 'rewrite-response':  return serializeResponseRewriteRule as RuleSerializer<unknown>
+  }
+}
+
+function ruleParserForType(type: RuleType): (value: unknown) => unknown {
+  switch (type) {
+    case 'rewrite':           return parseRewriteRule
+    case 'failover':          return parseFailoverRule
+    case 'rewrite-response':  return parseResponseRewriteRule
   }
 }
 
@@ -2018,6 +2051,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
     json_paths: {
       provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
+      models_container: parseAgentModelsContainer(jsonPaths.models_container),
     },
     recommendations: recs.map(parseAgentRecommendation),
     protocols: protocols.map(parseAgentProtocol),
@@ -2052,6 +2086,7 @@ function parseAgentTemplateConfig(value: unknown): AgentTemplateConfig {
     json_paths: {
       provider: typeof jsonPaths.provider === 'string' ? jsonPaths.provider : '',
       model: typeof jsonPaths.model === 'string' ? jsonPaths.model : '',
+      models_container: parseAgentModelsContainer(jsonPaths.models_container),
     },
     recommendations: recs.map(parseAgentRecommendation),
     protocols: protocols.map(parseAgentProtocol),
@@ -2086,6 +2121,18 @@ function parseAgentProtocol(value: unknown): AgentProtocol {
     endpoint_tags: tags.filter((t): t is string => typeof t === 'string'),
     recommendations: recs.map(parseAgentRecommendation),
   }
+}
+
+// parseAgentModelsContainer maps whatever the server returned for the
+// rule's `models_container` field onto the canonical form used by the
+// UI: "" (unknown / unset, fall back to "object"), "array" or "object".
+// Anything else is coerced to "" so the editor doesn't display a bogus
+// value, and the write path then degrades to the legacy object shape.
+function parseAgentModelsContainer(value: unknown): AgentModelsContainer {
+  if (typeof value !== 'string') return ''
+  const lower = value.trim().toLowerCase()
+  if (lower === 'array' || lower === 'object') return lower
+  return ''
 }
 
 function parseAgentRecommendation(value: unknown): AgentRecommendation {
@@ -2200,6 +2247,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
       return {
         provider: typeof jp.provider === 'string' ? jp.provider : '',
         model: typeof jp.model === 'string' ? jp.model : '',
+        models_container: parseAgentModelsContainer(jp.models_container),
       }
     })(),
   }

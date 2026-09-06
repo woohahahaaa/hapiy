@@ -70,7 +70,6 @@ interface NodeSlotProps {
 const EMPTY_RULES: SlotRuleMap = {
   requestModify: [],
   responseModify: [],
-  concurrency: [],
   autoSwitch: [],
 }
 
@@ -248,9 +247,7 @@ export function NodeSlot({ data }: NodeSlotProps) {
       selectedExecutorToken={selectedExecutorToken}
       onToggleEnabled={onToggleEnabled}
       entries={entries as ConcurrencySlotEntry[]}
-      rules={slotRules.concurrency}
-      ruleStatus={ruleStatus?.concurrency}
-      onRefreshRules={() => refreshRuleType?.('concurrency')}
+      providers={providers}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}

@@ -85,15 +85,16 @@ func GetAgentTypeRuleTemplate() gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name            string                          `json:"name"`
-	Windows         string                          `json:"windows"`
-	Mac             string                          `json:"mac"`
-	ProviderPath    string                          `json:"provider_path"`
-	ModelPath       string                          `json:"model_path"`
-	Recommendations []model.AgentRecommendation     `json:"recommendations"`
-	Protocols       []model.AgentProtocol           `json:"protocols"`
-	ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
-	ConfigJsonc     string                          `json:"config_jsonc"`
+	Name             string                          `json:"name"`
+	Windows          string                          `json:"windows"`
+	Mac              string                          `json:"mac"`
+	ProviderPath     string                          `json:"provider_path"`
+	ModelPath        string                          `json:"model_path"`
+	ModelsContainer  string                          `json:"models_container"`
+	Recommendations  []model.AgentRecommendation     `json:"recommendations"`
+	Protocols        []model.AgentProtocol           `json:"protocols"`
+	ModelInfoFields  *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
+	ConfigJsonc      string                          `json:"config_jsonc"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its
@@ -128,8 +129,9 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		jpaths := model.AgentJsonPaths{
-			Provider: strings.TrimSpace(req.ProviderPath),
-			Model:    strings.TrimSpace(req.ModelPath),
+			Provider:        strings.TrimSpace(req.ProviderPath),
+			Model:           strings.TrimSpace(req.ModelPath),
+			ModelsContainer: normalizeModelsContainer(req.ModelsContainer),
 		}
 		if err := rule.SetJsonPaths(jpaths); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -178,6 +180,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Name            string                          `json:"name"`
 			ProviderPath    string                          `json:"provider_path"`
 			ModelPath       string                          `json:"model_path"`
+			ModelsContainer string                          `json:"models_container"`
 			Recommendations []model.AgentRecommendation     `json:"recommendations"`
 			Protocols       []model.AgentProtocol           `json:"protocols"`
 			ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
@@ -205,8 +208,9 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			Name: name,
 		}
 		if err := rule.SetJsonPaths(model.AgentJsonPaths{
-			Provider: strings.TrimSpace(req.ProviderPath),
-			Model:    strings.TrimSpace(req.ModelPath),
+			Provider:        strings.TrimSpace(req.ProviderPath),
+			Model:           strings.TrimSpace(req.ModelPath),
+			ModelsContainer: normalizeModelsContainer(req.ModelsContainer),
 		}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -957,6 +961,20 @@ func lastPathSegment(path string) string {
 		return path[i+1:]
 	}
 	return path
+}
+
+// normalizeModelsContainer maps the user-facing ModelsContainer value
+// from the rule dialog to the canonical form persisted in the json_paths
+// blob. Empty / unknown values fall back to "object" so legacy rules
+// keep their pre-existing write behaviour.
+func normalizeModelsContainer(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "array":
+		return "array"
+	case "object", "":
+		return ""
+	}
+	return ""
 }
 
 // collectModels turns a gjson.Result (object map or array) into a list of

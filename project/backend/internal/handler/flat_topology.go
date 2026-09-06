@@ -275,6 +275,25 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			continue
 		}
 
+		if slot.SlotType == "concurrency" {
+			// 并行控制配置内联在条目 config（不再引用规则表）。Config 直通
+			// 引擎；slot-level deadline 合并进去以便自动关闭仍生效。同时写入
+			// 该扁平槽位节点的稳定 ID，作为窗口桶的节点维度。
+			config := e.Config
+			nodeEnabled := slot.Enabled
+			*rows = append(*rows, model.TopologySlotAssignment{
+				ProviderID:  providerID,
+				SlotType:    slot.SlotType,
+				Order:       order,
+				Enabled:     entryEnabled,
+				NodeEnabled: &nodeEnabled,
+				RuleID:      nil,
+				Name:        "",
+				Config:      mergeConcurrencyConfig(config, slot),
+			})
+			continue
+		}
+
 		if e.RuleID == nil || *e.RuleID == "" {
 			log.Printf("flat-topology: slot %s entry %s has empty ruleId; skipping", slot.ID, e.ID)
 			continue
@@ -296,6 +315,42 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			Config:      slotDeadlineConfig(slot),
 		})
 	}
+}
+
+// mergeConcurrencyConfig packs a concurrency entry's inline config with the
+// slot's optional auto-off deadline into the assignment Config JSON. When the
+// entry has no config, the legacy deadline-only shape is preserved. The flat
+// slot node id is injected (nodeId) so the engine can key the "all" window
+// across every provider chain that reaches the same node.
+func mergeConcurrencyConfig(config json.RawMessage, slot topology.FlatNode) string {
+	trimmed := bytes.TrimSpace(config)
+	if len(trimmed) == 0 || string(trimmed) == "null" || string(trimmed) == "{}" {
+		cfg := map[string]any{"nodeId": slot.ID}
+		if slot.DeadlineAt != nil && *slot.DeadlineAt > 0 {
+			cfg["deadline_at"] = *slot.DeadlineAt
+		}
+		if packed, err := json.Marshal(cfg); err == nil {
+			return string(packed)
+		}
+		return string(config)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(config, &cfg); err != nil {
+		return string(config)
+	}
+	if len(cfg) == 0 {
+		cfg = map[string]any{}
+	}
+	if slot.ID != "" {
+		cfg["nodeId"] = slot.ID
+	}
+	if slot.DeadlineAt != nil && *slot.DeadlineAt > 0 {
+		cfg["deadline_at"] = *slot.DeadlineAt
+	}
+	if packed, err := json.Marshal(cfg); err == nil {
+		return string(packed)
+	}
+	return string(config)
 }
 
 // deriveUpstreamAutoSwitchRows binds autoSwitch rules for the
@@ -402,8 +457,6 @@ func validateFlatRuleExists(db *gorm.DB, slotType, ruleID string) error {
 		query.Model(&model.RewriteRule{}).Count(&count)
 	case "responseModify":
 		query.Model(&model.ResponseRewriteRule{}).Count(&count)
-	case "concurrency":
-		query.Model(&model.ConcurrencyRule{}).Count(&count)
 	case "autoSwitch":
 		query.Model(&model.FailoverRule{}).Count(&count)
 	default:
@@ -414,6 +467,7 @@ func validateFlatRuleExists(db *gorm.DB, slotType, ruleID string) error {
 	}
 	return nil
 }
+
 // slotDeadlineConfig packs a slot's optional auto-off deadline into the
 // assignment Config JSON the engine reads at plan time.
 func slotDeadlineConfig(slot topology.FlatNode) string {

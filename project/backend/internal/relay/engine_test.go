@@ -24,7 +24,7 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 		&model.Provider{},
 		&model.RewriteRule{},
 		&model.ResponseRewriteRule{},
-		&model.ConcurrencyRule{},
+		&model.ConcurrencyWindowCounter{},
 		&model.FailoverRule{},
 		&model.AutoDisableState{},
 		&model.Setting{},
@@ -97,7 +97,7 @@ func TestLoadProviders_leaves_optional_plan_empty_without_assignments(t *testing
 	if err != nil {
 		t.Fatalf("get plan: %v", err)
 	}
-	if len(plan.RewriteRules) != 0 || plan.ConcurrencyRule != nil || len(plan.FailoverRules) != 0 {
+	if len(plan.RewriteRules) != 0 || len(plan.ConcurrencyRules) != 0 || len(plan.FailoverRules) != 0 {
 		t.Fatalf("optional plan was populated globally: %+v", plan)
 	}
 }
@@ -313,7 +313,7 @@ func TestRelayRequest_recordsQueueWaitMs(t *testing.T) {
 	// Given: a fast upstream and a plan with a concurrency rule (no queueing
 	// pressure in this test, so QueueWaitMs is 0 rather than -1).
 	engine, _ := newTestEngine(t)
-	concurrencyRule := &model.ConcurrencyRule{ID: "cq-test", Name: "cq-test", MaxConcurrent: 4, QueueEnabled: true, Scope: "global", Status: true}
+	concurrencyRule := &ConcurrencyRule{ID: "cq-test", WindowMinutes: 5, MaxCount: 4, PerProvider: false}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(`{"ok":true}`))
@@ -321,10 +321,10 @@ func TestRelayRequest_recordsQueueWaitMs(t *testing.T) {
 	defer server.Close()
 
 	withRule := &ExecutionPlan{
-		Provider:        &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
-		BaseURLs:        []string{server.URL},
-		Keys:            []string{"key"},
-		ConcurrencyRule: concurrencyRule,
+		Provider:         &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},
+		BaseURLs:         []string{server.URL},
+		Keys:             []string{"key"},
+		ConcurrencyRules: []*ConcurrencyRule{concurrencyRule},
 	}
 	withoutRule := &ExecutionPlan{
 		Provider: &model.Provider{BaseURLs: `["` + server.URL + `"]`, Keys: `["key"]`},

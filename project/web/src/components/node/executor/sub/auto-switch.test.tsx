@@ -29,7 +29,7 @@ const boundEntry = {
   config: {},
 }
 
-// 自动禁用条目必须与心跳回复/并发控制一致：无论是否绑定规则都渲染 RuleSelect，
+// 自动禁用条目必须与并发控制一致：无论是否绑定规则都渲染 RuleSelect，
 // 而不是在已绑定时退化成只读的 react-router 跳转链接。
 describe('NodeExecutorAutoSwitch', () => {
   it('已绑定规则时渲染 RuleSelect（无跳转链接，仍可切换规则）', () => {

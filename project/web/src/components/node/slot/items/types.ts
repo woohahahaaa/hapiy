@@ -1,9 +1,9 @@
 import type {
   RewriteRule,
   ResponseRewriteRule,
-  ConcurrencyRule,
   FailoverRule,
 } from '@/lib/dashboard-api'
+import type { ConcurrencyNodeConfig } from '@/lib/dashboard-api'
 
 export type SlotType =
   | 'requestModify'
@@ -36,9 +36,9 @@ export type ConcurrencySlotEntry = {
   readonly id: string
   readonly slotType: 'concurrency'
   readonly index: number
-  readonly ruleId: string | null
+  readonly ruleId: null
   readonly enabled: boolean
-  readonly config: Readonly<Record<string, unknown>>
+  readonly config: ConcurrencyNodeConfig
 }
 
 export type AutoSwitchSlotEntry = {
@@ -68,7 +68,6 @@ export type LogOutputSlotState = {
 export type SlotEntry =
   | RequestModifySlotEntry
   | ResponseModifySlotEntry
-  | AutoReplySlotEntry
   | ConcurrencySlotEntry
   | AutoSwitchSlotEntry
   | LogOutputSlotEntry
@@ -109,11 +108,11 @@ export type SlotItemDragProps = {
   flashLayers?: readonly FlowLayerOverlay[]
 }
 
-// Rule sources keyed by slotType (everything except logOutput binds to a rule).
+// Rule sources keyed by slotType (everything except logOutput/concurrency
+// binds to a rule; concurrency uses an inline config).
 export type SlotRuleMap = {
   requestModify: readonly RewriteRule[]
   responseModify: readonly ResponseRewriteRule[]
-  concurrency: readonly ConcurrencyRule[]
   autoSwitch: readonly FailoverRule[]
 }
 
@@ -135,7 +134,7 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
     case 'responseModify':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'concurrency':
-      return { id, slotType, index, ruleId: null, enabled: true, config: {} }
+      return { id, slotType, index, ruleId: null, enabled: true, config: { windowMinutes: 5, maxCount: 10, perProvider: false, providers: [] } }
     case 'autoSwitch':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'logOutput':

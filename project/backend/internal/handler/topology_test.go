@@ -34,7 +34,6 @@ func newTopologyTestDB(t *testing.T) *gorm.DB {
 		&model.Provider{},
 		&model.RewriteRule{},
 		&model.ResponseRewriteRule{},
-		&model.ConcurrencyRule{},
 		&model.FailoverRule{},
 		&model.TopologyState{},
 		&model.TopologyConfig{},

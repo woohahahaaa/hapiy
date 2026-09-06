@@ -355,15 +355,30 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
 		// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
 		provFields, _ := gen["provider"].(map[string]any)
-		modelCfgs, _ := gen["models"].(map[string]any)
-		if len(provFields) > 0 || len(modelCfgs) > 0 {
+		// models 子树形状由规则的 models_container 决定：可能是 object
+		// map（opencode）或 array of {id,...cfg}（openclaw）。rebuild
+		// 整块重写即可，两种形状都能直接交给 sjson 序列化。
+		var modelsValue any
+		var modelsCount int
+		switch m := gen["models"].(type) {
+		case map[string]any:
+			modelsValue = m
+			modelsCount = len(m)
+		case []map[string]any:
+			modelsValue = m
+			modelsCount = len(m)
+		case []any:
+			modelsValue = m
+			modelsCount = len(m)
+		}
+		if len(provFields) > 0 || modelsCount > 0 {
 			if next, err := sjson.DeleteBytes(buf, providerIDPath); err != nil {
 				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, err)
 			} else {
 				buf = next
 			}
 		}
-		for k, v := range gen["provider"].(map[string]any) {
+		for k, v := range provFields {
 			next, err := sjson.SetBytes(buf, providerIDPath+"."+k, v)
 			if err != nil {
 				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, err)
@@ -371,19 +386,17 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 			buf = next
 			synced++
 		}
-		if strings.TrimSpace(jpaths.Model) != "" {
+		if strings.TrimSpace(jpaths.Model) != "" && modelsValue != nil {
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
 			// 模型名可能自带点（gpt-5.6-sol），逐字段拼 gjson 路径会把
 			// 名字拆成嵌套对象，pending 平铺比较永远失败；整个 models
 			// 子树一次写入，模型名按字面量落盘。
-			if len(modelCfgs) > 0 {
-				next, err := sjson.SetBytes(buf, resolved, modelCfgs)
-				if err != nil {
-					return "", 0, fmt.Errorf("模型列表写入失败: %w", err)
-				}
-				buf = next
-				synced += len(modelCfgs)
+			next, err := sjson.SetBytes(buf, resolved, modelsValue)
+			if err != nil {
+				return "", 0, fmt.Errorf("模型列表写入失败: %w", err)
 			}
+			buf = next
+			synced += modelsCount
 		}
 	}
 	// sjson 只原地改写已有行，新增的 provider/模型块会被压成一行；
@@ -693,27 +706,64 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 		}
 	}
 
-	models := map[string]any{}
-	for _, name := range uniqueSorted(membersModelNames(members)) {
-		cfg := map[string]any{}
-		for _, r := range modelRecs {
-			if r.Recommended == nil {
-				continue
+	models := buildManagedModels(jpaths.ModelsContainer, members, modelRecs, group, mif, mdModels)
+	return map[string]any{"provider": block, "models": models}
+}
+
+// buildManagedModels emits the per-provider `models` subtree in the
+// shape declared by the rule (`jpaths.ModelsContainer`): array of
+// {id, name, ...cfg} when "array" (openclaw-style), or object map keyed
+// by model name whose value is the cfg object when "object"
+// (opencode-style). Empty value falls back to "object" so legacy rules
+// without the field keep their old behaviour.
+func buildManagedModels(container string, members []model.Provider, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel) any {
+	names := uniqueSorted(membersModelNames(members))
+	if strings.EqualFold(strings.TrimSpace(container), "array") {
+		out := make([]map[string]any, 0, len(names))
+		for _, name := range names {
+			cfg := buildOneModelCfg(name, modelRecs, group, mif, mdModels)
+			// 数组形状：每项必须有 id 字段（openclaw / 校验依赖此键）。
+			// name 字段由 rec 决定是否写入（模板里 `name` 字段的
+			// Recommended 通常是 null，循环里会跳过），所以这里只在
+			// cfg 没有同名键时回填。
+			if _, hasID := cfg["id"]; !hasID {
+				cfg["id"] = name
 			}
-			_ = setDottedValue(cfg, r.Key, r.Recommended)
+			if _, hasName := cfg["name"]; !hasName {
+				cfg["name"] = name
+			}
+			out = append(out, cfg)
 		}
-		if supplier := group.ModelSources[name]; supplier != "" {
+		return out
+	}
+	out := map[string]any{}
+	for _, name := range names {
+		cfg := buildOneModelCfg(name, modelRecs, group, mif, mdModels)
+		out[name] = cfg
+	}
+	return out
+}
+
+// buildOneModelCfg fills one model's config object: recs with non-nil
+// Recommended values first, then the four unified model-info fields
+// from the chosen models.dev reference supplier. Returns an empty
+// object when no values are available so the entry still shows up.
+func buildOneModelCfg(name string, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel) map[string]any {
+	cfg := map[string]any{}
+	for _, r := range modelRecs {
+		if r.Recommended == nil {
+			continue
+		}
+		_ = setDottedValue(cfg, r.Key, r.Recommended)
+	}
+	if supplier := group.ModelSources[name]; supplier != "" {
+		if mdModels != nil {
 			if row, ok := findModelsDevRow(mdModels, name, supplier); ok {
 				applyModelInfoFromModelsDev(row, mif, cfg)
 			}
 		}
-		// 来源未填 / 已失效（匹配不到 models.dev 行）的模型：四个统一
-		// 字段一律不写、留空，模型仍以空配置 {} 保留在生成块里 ——
-		// 这样同步后文件里模型条目还在（agent 仍能使用该模型），只是
-		// 没有四个字段。
-		models[name] = cfg
 	}
-	return map[string]any{"provider": block, "models": models}
+	return cfg
 }
 
 // matchProtocolByEndpoint returns the first protocol whose 词库里任一
@@ -969,17 +1019,52 @@ func normalizeFileProvider(val gjson.Result, jpaths model.AgentJsonPaths) map[st
 }
 
 // normalizeGenerated flattens the {provider:…, models:…} shape produced
-// by buildGeneratedBlock into {fields…, models:{name: cfg}} so it can be
-// compared against normalizeFileProvider's output.
+// by buildGeneratedBlock into {fields…, models:{id: cfg}} so it can be
+// compared against normalizeFileProvider's output. Both shapes — object
+// map keyed by id, and array of {id, ...cfg} — collapse to the same
+// map form here so the pending diff stays shape-agnostic.
 func normalizeGenerated(gen map[string]any) map[string]any {
 	out := map[string]any{}
 	provider, _ := gen["provider"].(map[string]any)
-	models, _ := gen["models"].(map[string]any)
+	models := map[string]any{}
+	switch m := gen["models"].(type) {
+	case map[string]any:
+		for id, cfg := range m {
+			models[id] = cfg
+		}
+	case []any:
+		for _, raw := range m {
+			item, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			id, _ := item["id"].(string)
+			if id == "" {
+				if name, _ := item["name"].(string); name != "" {
+					id = name
+				}
+			}
+			if id == "" {
+				continue
+			}
+			models[id] = item
+		}
+	case []map[string]any:
+		for _, item := range m {
+			id, _ := item["id"].(string)
+			if id == "" {
+				if name, _ := item["name"].(string); name != "" {
+					id = name
+				}
+			}
+			if id == "" {
+				continue
+			}
+			models[id] = item
+		}
+	}
 	for k, v := range provider {
 		out[k] = v
-	}
-	if models == nil {
-		models = map[string]any{}
 	}
 	out["models"] = models
 	return out

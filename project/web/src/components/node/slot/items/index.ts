@@ -4,7 +4,6 @@ export type {
   SlotEntryMap,
   RequestModifySlotEntry,
   ResponseModifySlotEntry,
-  AutoReplySlotEntry,
   ConcurrencySlotEntry,
   AutoSwitchSlotEntry,
   LogOutputSlotEntry,

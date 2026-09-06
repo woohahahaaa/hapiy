@@ -4,6 +4,13 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -20,6 +27,7 @@ import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   AGENT_MODEL_INFO_FIELD_OPS,
+  type AgentModelsContainer,
   type AgentModelInfoFieldSpecValue,
   type AgentModelInfoFieldPaths,
   type AgentProtocol,
@@ -581,6 +589,7 @@ function RuleDialog({
   const [macPath, setMacPath] = useState('')
   const [providerPath, setProviderPath] = useState('')
   const [modelPath, setModelPath] = useState('')
+  const [modelsContainer, setModelsContainer] = useState<AgentModelsContainer>('')
   // 结构化的字段推荐编辑器：公共配置一个 JSON（common），每个 endpoint
   // 一套独立规则（名称 / 归纳范围关键词 / 字段推荐值表）。
   const [commonText, setCommonText] = useState('[]')

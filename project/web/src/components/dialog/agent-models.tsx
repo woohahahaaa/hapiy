@@ -1968,18 +1968,103 @@ function wrapRootScope(
   } catch {
     parsed = edited
   }
+  // openclaw 模板声明 models_container="array"：保存时把 models 子树改写成
+  // [{id, ...cfg}] 数组，而不是默认的对象 map，否则 openclaw 启动会因
+  // schema 校验失败而崩溃。
+  const useArray = summary.json_paths?.models_container === 'array'
   if (scope === 'provider') {
     const next = { ...(parsed as Record<string, unknown>) }
-    next.models = provider.models
+    next.models = modelsForShape(provider.models, useArray)
     providerMapContainer[providerId] = next
   } else if (scope === 'model' && modelId) {
     const next = { ...(parsed as Record<string, unknown>) }
-    const models = { ...((provider.models ?? {}) as Record<string, unknown>) }
-    models[modelId] = parsed
-    next.models = models
+    next.models = upsertModelById(provider.models, modelId, parsed, useArray)
     providerMapContainer[providerId] = next
   }
   return JSON.stringify(root)
+}
+
+// modelsForShape re-emits an existing models subtree in the shape the
+// rule declares (array or object map). Unknown / undefined input
+// becomes an empty container of the right shape.
+function modelsForShape(
+  existing: unknown,
+  asArray: boolean,
+): Record<string, unknown> | unknown[] {
+  if (asArray) {
+    if (Array.isArray(existing)) {
+      return existing.map((item) => (isRecord(item) ? item : {}))
+    }
+    if (isRecord(existing)) {
+      return Object.entries(existing).map(([id, cfg]) => {
+        const base: Record<string, unknown> = { id, name: id }
+        if (isRecord(cfg)) Object.assign(base, cfg)
+        if (!('id' in base)) base.id = id
+        return base
+      })
+    }
+    return []
+  }
+  if (isRecord(existing)) {
+    const out: Record<string, unknown> = {}
+    if (Array.isArray(existing)) {
+      for (const item of existing) {
+        if (!isRecord(item)) continue
+        const id = typeof item.id === 'string' ? item.id : ''
+        if (id === '') continue
+        out[id] = stripIdLikeKeys(item, id)
+      }
+      return out
+    }
+    return existing
+  }
+  return {}
+}
+
+// upsertModelById replaces (or inserts) a model entry in either shape,
+// keeping the rest of the list intact.
+function upsertModelById(
+  existing: unknown,
+  modelId: string,
+  parsed: unknown,
+  asArray: boolean,
+): Record<string, unknown> | unknown[] {
+  const edited = isRecord(parsed) ? parsed : {}
+  if (asArray) {
+    const list = Array.isArray(existing) ? existing.slice() : []
+    const idx = list.findIndex((item) => isRecord(item) && item.id === modelId)
+    const base: Record<string, unknown> = { id: modelId, name: modelId, ...edited }
+    if (!('id' in base)) base.id = modelId
+    if (idx >= 0) {
+      list[idx] = base
+    } else {
+      list.push(base)
+    }
+    return list
+  }
+  const map: Record<string, unknown> = {}
+  if (Array.isArray(existing)) {
+    for (const item of existing) {
+      if (!isRecord(item)) continue
+      const id = typeof item.id === 'string' ? item.id : ''
+      if (id === '') continue
+      map[id] = stripIdLikeKeys(item, id)
+    }
+  } else if (isRecord(existing)) {
+    Object.assign(map, existing)
+  }
+  map[modelId] = edited
+  return map
+}
+
+// stripIdLikeKeys drops the `id` and `name` keys that the array form
+// carries as siblings of the cfg, so the object-map form does not
+// duplicate them inside the cfg body.
+function stripIdLikeKeys(item: Record<string, unknown>, fallback: string): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...item }
+  if (out.id === fallback) delete out.id
+  if (out.name === fallback) delete out.name
+  return out
 }
 
 // JsonEditor renders a syntax-highlighted (colored) JSON editor built
@@ -2318,13 +2403,28 @@ function currentActualContent(
     }
   }
 
+  // openclaw 模板声明 models_container="array"：rebuild 出来的 providers
+  // 块里 models 子树必须是数组形式（每项带 id / name），不能默认写成对象
+  // map，否则 openclaw 启动会因 schema 校验失败崩溃。
+  const useArray = summary?.json_paths?.models_container === 'array'
+
   const providers: Record<string, unknown> = {}
   const summaryProviders = summary?.providers ?? []
   for (const p of summaryProviders) {
     const other = (p.other_fields ?? {}) as Record<string, unknown>
-    const models: Record<string, unknown> = {}
+    const cfgById: Record<string, unknown> = {}
     for (const m of p.models) {
-      models[m.id] = (m.config ?? {}) as unknown
+      cfgById[m.id] = (m.config ?? {}) as unknown
+    }
+    let models: unknown
+    if (useArray) {
+      models = p.models.map((m) => ({
+        id: m.id,
+        name: m.id,
+        ...((m.config ?? {}) as Record<string, unknown>),
+      }))
+    } else {
+      models = cfgById
     }
     providers[p.provider_id] = { ...other, models }
   }

@@ -3,14 +3,13 @@ import {
   dashboardApi,
   type RewriteRule,
   type ResponseRewriteRule,
-  type ConcurrencyRule,
   type FailoverRule,
   type RuleType,
 } from '@/lib/dashboard-api'
 import type { SlotRuleMap } from '@/components/node/slot/items'
 
-// 槽位规则下拉框按"插槽类型"独立管理加载/失败状态：五种规则类型互不影响，
-// 打开某个下拉时只刷新它自己的那一种（refreshRuleType），失败也只影响该类型。
+// 槽位规则下拉框按"插槽类型"独立管理加载/失败状态；并发控制使用内联配置，
+// 不依赖规则表，故只包含 rewrite / rewrite-response / failover 三种。
 export type SlotRuleKey = keyof SlotRuleMap
 
 export interface RuleTypeStatus {
@@ -23,16 +22,13 @@ export type SlotRuleStatusMap = Record<SlotRuleKey, RuleTypeStatus>
 export const SLOT_RULE_KEYS: readonly SlotRuleKey[] = [
   'requestModify',
   'responseModify',
-  'concurrency',
   'autoSwitch',
 ]
 
-// 插槽类型 → 后端规则类型（其中 rewrite / concurrency / failover /
-// rewrite-response 的返回结构不同，统一按 SlotRuleMap 的值类型收窄）。
+// 插槽类型 → 后端规则类型（返回结构不同，统一按 SlotRuleMap 的值类型收窄）。
 const API_TYPE_BY_SLOT: Record<SlotRuleKey, RuleType> = {
   requestModify: 'rewrite',
   responseModify: 'rewrite-response',
-  concurrency: 'concurrency',
   autoSwitch: 'failover',
 }
 
@@ -40,7 +36,6 @@ function emptyRules(): SlotRuleMap {
   return {
     requestModify: [],
     responseModify: [],
-    concurrency: [],
     autoSwitch: [],
   }
 }
@@ -50,7 +45,6 @@ function initialStatus(): SlotRuleStatusMap {
   return {
     requestModify: { loading: true, error: null },
     responseModify: { loading: true, error: null },
-    concurrency: { loading: true, error: null },
     autoSwitch: { loading: true, error: null },
   }
 }
@@ -59,7 +53,6 @@ function settledStatus(): SlotRuleStatusMap {
   return {
     requestModify: { loading: false, error: null },
     responseModify: { loading: false, error: null },
-    concurrency: { loading: false, error: null },
     autoSwitch: { loading: false, error: null },
   }
 }
@@ -74,8 +67,6 @@ export async function fetchSlotRuleType(key: SlotRuleKey): Promise<SlotRuleMap[S
       return (await dashboardApi.listRules<RewriteRule>(API_TYPE_BY_SLOT.requestModify, params)).rules
     case 'responseModify':
       return (await dashboardApi.listRules<ResponseRewriteRule>(API_TYPE_BY_SLOT.responseModify, params)).rules
-    case 'concurrency':
-      return (await dashboardApi.listRules<ConcurrencyRule>(API_TYPE_BY_SLOT.concurrency, params)).rules
     case 'autoSwitch':
       return (await dashboardApi.listRules<FailoverRule>(API_TYPE_BY_SLOT.autoSwitch, params)).rules
   }
@@ -90,9 +81,6 @@ function assignRuleList(rules: SlotRuleMap, key: SlotRuleKey, list: SlotRuleMap[
       return
     case 'responseModify':
       rules.responseModify = list as readonly ResponseRewriteRule[]
-      return
-    case 'concurrency':
-      rules.concurrency = list as readonly ConcurrencyRule[]
       return
     case 'autoSwitch':
       rules.autoSwitch = list as readonly FailoverRule[]

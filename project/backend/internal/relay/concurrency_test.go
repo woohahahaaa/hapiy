@@ -5,203 +5,265 @@ import (
 	"errors"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 )
 
+// testConcurrencyPlan builds a compiled inline concurrency rule for tests.
+func testConcurrencyPlan(id string, windowMinutes, maxCount int, perProvider bool, providers ...string) *ConcurrencyRule {
+	return &ConcurrencyRule{
+		ID:            id,
+		WindowMinutes: windowMinutes,
+		MaxCount:      maxCount,
+		PerProvider:   perProvider,
+		Providers:     providers,
+	}
+}
+
+// newTestProvider returns a bare provider row used to resolve bucket scopes.
+func newTestProvider(id string) *model.Provider {
+	return &model.Provider{ID: id, Name: id}
+}
+
 func TestCheckConcurrency_admitsUnderLimit(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 2, QueueEnabled: true, Status: true}
-	req := &RelayRequest{}
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("r1", 1, 2, false)
 
-	release1, err := eng.checkConcurrency(context.Background(), rule, req)
+	release1, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
-	defer release1()
+	defer release1(time.Now())
 
-	release2, err := eng.checkConcurrency(context.Background(), rule, req)
+	release2, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("second acquire: %v", err)
 	}
-	defer release2()
-
-	// Third acquire should queue: we won't wait, but we know it would
-	// block because the first two are still held.
+	defer release2(time.Now())
 }
 
-func TestCheckConcurrency_rejectsImmediatelyWhenQueueDisabled(t *testing.T) {
+func TestCheckConcurrency_blocksAtCapacity_untilCancelled(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-	req := &RelayRequest{}
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("r1", 1, 1, false)
 
-	release, err := eng.checkConcurrency(context.Background(), rule, req)
+	release, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("first acquire: %v", err)
 	}
-	defer release()
+	defer release(time.Now())
 
-	release2, err := eng.checkConcurrency(context.Background(), rule, req)
-	if err == nil {
-		release2()
-		t.Fatal("expected ErrConcurrencyRejected, got nil")
-	}
-	if !errors.Is(err, ErrConcurrencyRejected) {
-		t.Fatalf("expected ErrConcurrencyRejected, got %v", err)
-	}
-}
-
-func TestCheckConcurrency_queueRejectsAfterTimeout(t *testing.T) {
-	prev := concurrencyQueueTimeout
-	concurrencyQueueTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { concurrencyQueueTimeout = prev })
-
-	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 1, QueueEnabled: true, Status: true}
-	req := &RelayRequest{}
-
-	release, err := eng.checkConcurrency(context.Background(), rule, req)
-	if err != nil {
-		t.Fatalf("first acquire: %v", err)
-	}
-	defer release()
-
-	start := time.Now()
-	_, err = eng.checkConcurrency(context.Background(), rule, req)
-	elapsed := time.Since(start)
-	if err == nil {
-		t.Fatal("expected queue rejection, got nil")
-	}
-	if !errors.Is(err, ErrConcurrencyRejected) {
-		t.Fatalf("expected ErrConcurrencyRejected, got %v", err)
-	}
-	if elapsed < 150*time.Millisecond || elapsed > 2*time.Second {
-		t.Fatalf("expected ~200ms wait, got %v", elapsed)
-	}
-}
-
-func TestCheckConcurrency_perUserScopes(t *testing.T) {
-	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "per_user", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-
-	release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{UserID: "alice"})
-	if err != nil {
-		t.Fatalf("alice acquire: %v", err)
-	}
-	defer release()
-
-	// Bob's request must succeed because the limiter is keyed by user.
-	release2, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{UserID: "bob"})
-	if err != nil {
-		t.Fatalf("bob should not be blocked by alice: %v", err)
-	}
-	defer release2()
-
-	// Alice's second request must be rejected.
-	_, err = eng.checkConcurrency(context.Background(), rule, &RelayRequest{UserID: "alice"})
-	if !errors.Is(err, ErrConcurrencyRejected) {
-		t.Fatalf("alice's second request should be rejected, got %v", err)
-	}
-}
-
-func TestCheckConcurrency_releaseAfterPanic(t *testing.T) {
-	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-	var done int32
+	// Second acquire must park (wait forever) — a cancelled context is the
+	// only way out, matching the "等到天荒地老" contract.
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
 	go func() {
-		release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
-		if err != nil {
-			t.Errorf("acquire: %v", err)
-			return
-		}
-		defer release()
-		// Yield the slot to a sibling after a short delay so the
-		// sibling observes the held state before this goroutine
-		// returns and releases.
-		time.Sleep(50 * time.Millisecond)
-		atomic.StoreInt32(&done, 1)
+		_, err := eng.checkConcurrency(ctx, plan, rule)
+		done <- err
 	}()
-	time.Sleep(10 * time.Millisecond)
-	// The slot is now held. Use a short timeout so the test stays fast.
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-	_, err := eng.checkConcurrency(ctx, rule, &RelayRequest{})
-	if !errors.Is(err, ErrConcurrencyRejected) {
-		t.Fatalf("expected rejection while slot held, got %v", err)
+	select {
+	case err := <-done:
+		t.Fatalf("acquire returned early with %v (should have parked)", err)
+	case <-time.After(50 * time.Millisecond):
 	}
-	// Wait for the holder to release.
-	deadline := time.Now().Add(2 * time.Second)
-	for atomic.LoadInt32(&done) == 0 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrConcurrencyRejected) {
+			t.Fatalf("expected ErrConcurrencyRejected on cancel, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("parked acquire did not unblock after cancel")
 	}
-	if atomic.LoadInt32(&done) == 0 {
-		t.Fatal("holder goroutine did not complete")
-	}
-	// Slot is now free — fresh acquire should succeed.
-	release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
-	if err != nil {
-		t.Fatalf("post-release acquire: %v", err)
-	}
-	release()
 }
 
-func TestPublishPlans_clearsConcurrencyLimiters(t *testing.T) {
+func TestCheckConcurrency_waiterReleasedAfterWindowCountdown(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-	release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
+	_ = eng
+	// Directly exercise the bucket with a tiny window for speed.
+	key := bucketKey("r1", "*")
+	fast := newWindowBucket(50*time.Millisecond, 1, eng, "w1", key)
+	release1, err := fast.acquire(context.Background())
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	defer release()
 
-	// Publish empty plans — must drop the limiter so the rule id key
-	// can be reused on the next refresh without leaking old counters.
-	eng.publishPlans(map[string]*model.Provider{}, map[string]*ExecutionPlan{})
+	ctx, cancel := context.WithCancel(context.Background())
+	type result struct {
+		err error
+		rel func(time.Time)
+	}
+	ch := make(chan result, 1)
+	go func() {
+		rel, err := fast.acquire(ctx)
+		ch <- result{err, rel}
+	}()
+	select {
+	case r := <-ch:
+		t.Fatalf("acquire returned early (%v), should have parked", r.err)
+	case <-time.After(30 * time.Millisecond):
+	}
 
-	// The old reference is a stale limiter; a fresh checkConcurrency
-	// against a new rule (different ID) should succeed because the
-	// limiter map was cleared.
-	newRule := &model.ConcurrencyRule{ID: "r2", Name: "r2", Scope: "global", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-	release2, err := eng.checkConcurrency(context.Background(), newRule, &RelayRequest{})
+	// Holder finishes now -> window countdown (50ms) starts; the parked
+	// waiter must be admitted once the countdown completes.
+	time.Sleep(10 * time.Millisecond)
+	release1(time.Now())
+
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("waiter acquire failed: %v", r.err)
+		}
+		r.rel(time.Now())
+	case <-time.After(time.Second):
+		t.Fatal("waiter was not woken after countdown")
+	}
+	cancel()
+}
+
+func TestCheckConcurrency_perProviderBins(t *testing.T) {
+	eng := NewEngine(nil)
+	rule := testConcurrencyPlan("r1", 5, 1, true)
+
+	// Two different providers must not share a window when perProvider is set.
+	planA := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	planB := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p2")}
+
+	release, err := eng.checkConcurrency(context.Background(), planA, rule)
+	if err != nil {
+		t.Fatalf("provider A acquire: %v", err)
+	}
+	defer release(time.Now())
+
+	release2, err := eng.checkConcurrency(context.Background(), planB, rule)
+	if err != nil {
+		t.Fatalf("provider B should have its own window, got %v", err)
+	}
+	release2(time.Now())
+}
+
+func TestCheckConcurrency_sharedBinAcrossProviders(t *testing.T) {
+	eng := NewEngine(nil)
+	rule := testConcurrencyPlan("r1", 5, 1, false)
+
+	planA := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	planB := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p2")}
+
+	release, err := eng.checkConcurrency(context.Background(), planA, rule)
+	if err != nil {
+		t.Fatalf("provider A acquire: %v", err)
+	}
+	defer release(time.Now())
+
+	// Provider B shares the "*" window: A holds the only slot -> B parks
+	// (cancelled ctx exits with rejection immediately).
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := eng.checkConcurrency(ctx, planB, rule)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("provider B should share the window and park, got %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrConcurrencyRejected) {
+			t.Fatalf("expected rejection on cancel, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("parked provider B acquire did not unblock")
+	}
+}
+
+func TestCheckConcurrency_providerMatchFilter(t *testing.T) {
+	eng := NewEngine(nil)
+	// Rule restricts to p1 + p2 by name; p3 is excluded entirely.
+	rule := testConcurrencyPlan("r1", 5, 1, false, "p1", "p2")
+
+	excluded := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p3")}
+	release, err := eng.checkConcurrency(context.Background(), excluded, rule)
+	if err != nil {
+		t.Fatalf("excluded provider acquire: %v", err)
+	}
+	// No-op release (rule doesn't apply -> no slot reserved).
+	release(time.Now())
+
+	included := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	release2, err := eng.checkConcurrency(context.Background(), included, rule)
+	if err != nil {
+		t.Fatalf("included provider acquire: %v", err)
+	}
+	release2(time.Now())
+}
+
+func TestPublishPlans_clearsConcurrencyBuckets(t *testing.T) {
+	eng := NewEngine(nil)
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("r1", 5, 1, false)
+	release, err := eng.checkConcurrency(context.Background(), plan, rule)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	defer release(time.Now())
+
+	eng.publishPlans(map[string]*model.Provider{"p1": newTestProvider("p1")}, map[string]*ExecutionPlan{})
+
+	// A fresh rule (different ID) must acquire without interference.
+	newRule := testConcurrencyPlan("r2", 5, 1, false)
+	release2, err := eng.checkConcurrency(context.Background(), plan, newRule)
 	if err != nil {
 		t.Fatalf("new rule acquire after publish: %v", err)
 	}
-	release2()
+	release2(time.Now())
 }
 
 func TestCheckConcurrency_concurrentRelease(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "r1", Name: "r1", Scope: "global", MaxConcurrent: 4, QueueEnabled: true, Status: true}
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("r1", 5, 4, false)
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
+			release, err := eng.checkConcurrency(context.Background(), plan, rule)
 			if err != nil {
 				t.Errorf("acquire: %v", err)
 				return
 			}
 			time.Sleep(10 * time.Millisecond)
-			release()
+			release(time.Now())
 		}()
 	}
 	wg.Wait()
 }
 
-func TestCheckConcurrency_errorMessageNamesRule(t *testing.T) {
+func TestCheckConcurrency_errorMessageNamesNode(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := &model.ConcurrencyRule{ID: "rule-7", Name: "r7", Scope: "global", MaxConcurrent: 1, QueueEnabled: false, Status: true}
-	release, err := eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("node-7", 5, 1, false)
+	release, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
-	defer release()
-	_, err = eng.checkConcurrency(context.Background(), rule, &RelayRequest{})
-	if err == nil || !strings.Contains(err.Error(), "rule-7") {
-		t.Fatalf("expected error to mention rule id, got %v", err)
+	defer release(time.Now())
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := eng.checkConcurrency(ctx, plan, rule)
+		done <- err
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	err = <-done
+	if err == nil || !strings.Contains(err.Error(), "node-7") {
+		t.Fatalf("expected error to mention node id, got %v", err)
 	}
 }
