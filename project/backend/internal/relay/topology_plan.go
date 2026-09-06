@@ -58,13 +58,36 @@ func (e *Engine) publishPlans(freshProviders map[string]*model.Provider, freshPl
 	e.plansMu.Unlock()
 	e.providersMu.Unlock()
 
-	// Drop every limiter entry. Rule IDs are immutable per request but
-	// rules themselves can be deleted or replaced across a refresh, so
-	// clearing is the safest guarantee against leak.
-	e.concurrencyLimiters.Range(func(key, _ interface{}) bool {
-		e.concurrencyLimiters.Delete(key)
+	// Drop every window bucket. Redesign rules out stale counters: closing a
+	// bucket wakes parked waiters so they fail fast instead of hanging.
+	e.concurrencyBuckets.Range(func(key, value interface{}) bool {
+		if b, ok := value.(*windowBucket); ok {
+			b.close()
+		}
+		e.concurrencyBuckets.Delete(key)
 		return true
 	})
+	e.concurrencyFlushTimes.Range(func(key, value interface{}) bool {
+		e.concurrencyFlushTimes.Delete(key)
+		return true
+	})
+
+	// 临时统计表：清除不再活跃的工作流行（工作流停止即清）。
+	if e.db != nil {
+		active := make([]string, 0, len(freshPlans))
+		for id := range freshPlans {
+			active = append(active, id)
+		}
+		if len(freshPlans) == 0 {
+			if err := e.db.Where("1 = 1").Delete(&model.ConcurrencyWindowCounter{}).Error; err != nil {
+				log.Printf("relay: failed to clear concurrency counters: %v", err)
+			}
+		} else {
+			if err := e.db.Where("workflow_id NOT IN (?)", active).Delete(&model.ConcurrencyWindowCounter{}).Error; err != nil {
+				log.Printf("relay: failed to prune concurrency counters: %v", err)
+			}
+		}
+	}
 }
 
 func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
@@ -146,14 +169,19 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		}
 		plan.CompiledResponseRewrites = append(plan.CompiledResponseRewrites, CompiledRewriteChain{RuleID: rule.ID, RuleName: rule.Name, Ops: chain})
 	case "concurrency":
-		if plan.ConcurrencyRule != nil {
-			return fmt.Errorf("provider %s has multiple enabled concurrency assignments", plan.Provider.ID)
+		// 并行控制配置内联在 assignment.Config（与 logOutput 同级）：不再
+		// 从规则表加载。一个提供者可挂多个并发节点，请求必须全部通过
+		// （AND）。RuleID 为空/配置缺失时跳过该节点而不是拖垮整个计划。
+		if assignment.Config == "" || assignment.Config == "{}" {
+			log.Printf("relay: provider %s: concurrency assignment %s has no config; skipping", plan.Provider.ID, assignment.ID)
+			return nil
 		}
-		var rule model.ConcurrencyRule
-		if err := query.First(&rule).Error; err != nil {
-			return assignedRuleError(assignment, err)
+		rule, err := parseConcurrencyRuleConfig(assignment)
+		if err != nil {
+			log.Printf("relay: provider %s: concurrency assignment %s invalid config: %v; skipping", plan.Provider.ID, assignment.ID, err)
+			return nil
 		}
-		plan.ConcurrencyRule = &rule
+		plan.ConcurrencyRules = append(plan.ConcurrencyRules, rule)
 	case "autoSwitch":
 		var rule model.FailoverRule
 		if err := query.First(&rule).Error; err != nil {
@@ -168,6 +196,46 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 
 func assignedRuleError(assignment model.TopologySlotAssignment, err error) error {
 	return fmt.Errorf("resolve %s rule for assignment %s: %w", assignment.SlotType, assignment.ID, err)
+}
+
+// parseConcurrencyRuleConfig decodes the inline 并行控制 config stored on the
+// topology assignment. Supported JSON shape (mirrors the frontend):
+//
+//	{
+//	  "nodeId": "concurrency-abc",       // 幕后识别：from the flat slot node id
+//	  "windowMinutes": 5,                // 每 X 分钟内
+//	  "maxCount": 10,                    // 最多 N 条
+//	  "perProvider": false,              // 按供应商分别计算
+//	  "providers": ["p1","p2"]           // 命中的供应商; empty = all
+//	}
+func parseConcurrencyRuleConfig(assignment model.TopologySlotAssignment) (*ConcurrencyRule, error) {
+	var cfg struct {
+		NodeID        string   `json:"nodeId"`
+		WindowMinutes int      `json:"windowMinutes"`
+		MaxCount      int      `json:"maxCount"`
+		PerProvider   bool     `json:"perProvider"`
+		Providers     []string `json:"providers"`
+	}
+	if err := json.Unmarshal([]byte(assignment.Config), &cfg); err != nil {
+		return nil, err
+	}
+	// Old topologies persisted `{"deadline_at": N}` for concurrency via
+	// slotDeadlineConfig; treat that as "no window control".
+	if cfg.WindowMinutes <= 0 || cfg.MaxCount <= 0 {
+		return nil, fmt.Errorf("windowMinutes/maxCount must be positive")
+	}
+	nodeID := cfg.NodeID
+	if nodeID == "" {
+		nodeID = assignment.ID
+	}
+	rule := &ConcurrencyRule{
+		ID:            nodeID,
+		WindowMinutes: cfg.WindowMinutes,
+		MaxCount:      cfg.MaxCount,
+		PerProvider:   cfg.PerProvider,
+		Providers:     cfg.Providers,
+	}
+	return rule, nil
 }
 
 // decodeStringList unmarshals a JSON-encoded string array into the

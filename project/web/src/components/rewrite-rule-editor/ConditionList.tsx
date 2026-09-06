@@ -3,6 +3,8 @@ import {
   isConditionLeaf,
   type Condition,
 } from './serializer'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { AppIcon } from '@/components/AppIcon'
 
 interface ConditionListProps {
   conditions: Condition[]

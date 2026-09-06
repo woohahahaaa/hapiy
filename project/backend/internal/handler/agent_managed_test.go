@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -905,5 +906,159 @@ func TestLoadRuleCaseInsensitive(t *testing.T) {
 		if !strings.EqualFold(got.Name, rule.Name) {
 			t.Fatalf("loadRule(%q) = %q, want %q", probe, got.Name, rule.Name)
 		}
+	}
+}
+
+// TestManagedOpenclawArrayContainer 验证 openclaw 规则（models_container
+// = "array"）下托管 provider 同步写出来的 models 必须是数组，每项带
+// `id` 字段；之前 buildGeneratedBlock 写死成对象 map 会让 openclaw 启
+// 动崩溃。这一测试同时保证 sync 后 pending_sync=false 能收敛。
+func TestManagedOpenclawArrayContainer(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "openclaw.json")
+	initial := `{"models":{}}`
+	if err := writeFile(path, initial); err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "openclaw-test", AgentType: "openclaw",
+		Mode: "local", TargetOS: "mac", Path: path,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	p1 := model.Provider{Name: "HAPIY-A", Endpoints: `[{"pathSuffix":"/v1/chat/completions"}]`, Models: `[{"model":"gpt-x"}]`, Keys: `["sk-a"]`}
+	p2 := model.Provider{Name: "HAPIY-B", Endpoints: `[{"pathSuffix":"/v1/chat/completions"}]`, Models: `[{"model":"gpt-y"}]`, Keys: `["sk-b"]`}
+	for _, p := range []model.Provider{p1, p2} {
+		if err := db.Create(&p).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	modelsDev.mu.Lock()
+	modelsDev.cached = &modelsDevSnapshot{
+		models: []modelsDevModel{
+			{ID: "gpt-x", Name: "gpt-x", ProviderName: "OpenRouter", ContextLength: 131072, MaxOutput: 16384, InputTypes: []string{"text"}},
+			{ID: "gpt-y", Name: "gpt-y", ProviderName: "OpenRouter", ContextLength: 262144, MaxOutput: 32768, InputTypes: []string{"text"}},
+		},
+		fetchedAt: time.Now(),
+	}
+	modelsDev.mu.Unlock()
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+
+	r := newRouterForManaged(db)
+	body := `{"name":"hapiying","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":"OpenRouter"}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	// 1) 列表生成的 generated.models 必须是数组，每项带 id。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	var listed struct {
+		Data []struct {
+			Groups []struct {
+				Generated struct {
+					Models []map[string]any `json:"models"`
+				} `json:"generated"`
+			} `json:"groups"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &listed); err != nil {
+		t.Fatal(err)
+	}
+	genModels := listed.Data[0].Groups[0].Generated.Models
+	if len(genModels) == 0 {
+		t.Fatalf("generated models should not be empty")
+	}
+	gotIDs := map[string]bool{}
+	for _, item := range genModels {
+		id, _ := item["id"].(string)
+		if id == "" {
+			t.Fatalf("array entry missing id: %#v", item)
+		}
+		gotIDs[id] = true
+	}
+	if !gotIDs["gpt-x"] || !gotIDs["gpt-y"] {
+		t.Fatalf("expected gpt-x and gpt-y ids, got %v", gotIDs)
+	}
+
+	// 2) 同步后文件内容里 models 必须是数组，且数组里每项有 id。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers/"+mid+"/sync", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Models struct {
+			Providers map[string]struct {
+				Models []map[string]any `json:"models"`
+			} `json:"providers"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(written, &doc); err != nil {
+		t.Fatalf("parse written file: %v\n%s", err, written)
+	}
+	block := doc.Models.Providers["hapiying-C"]
+	if block.Models == nil {
+		t.Fatalf("written models should be an array, got nil (file: %s)", written)
+	}
+	writtenIDs := map[string]bool{}
+	for _, item := range block.Models {
+		id, _ := item["id"].(string)
+		if id == "" {
+			t.Fatalf("written array entry missing id: %#v", item)
+		}
+		writtenIDs[id] = true
+	}
+	if !writtenIDs["gpt-x"] || !writtenIDs["gpt-y"] {
+		t.Fatalf("written file should have gpt-x and gpt-y ids, got %v (file: %s)", writtenIDs, written)
+	}
+	// openclaw 文件顶层不允许把 models 写成对象 map —— 一旦再 sync 一次，
+	// 数组形状应稳定（不会再被改成对象）。
+	if strings.Contains(string(written), `"models":{`) {
+		t.Fatalf("written file corrupted back to object map shape: %s", written)
+	}
+
+	// 3) 第二次同步：pending_sync 必须收敛（不再永远「待同步」）。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("list after sync: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), `"pending_sync":true`) {
+		t.Fatalf("expected pending_sync false right after sync, got: %s", w.Body.String())
 	}
 }

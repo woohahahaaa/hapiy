@@ -133,6 +133,23 @@ func validateAndConvertNode(db *gorm.DB, node TopologyNode, providerID string, n
 		nextOrder[key] = row.Order
 		return row, nil
 	}
+	if node.Type == "concurrency" {
+		// 并行控制配置内联在节点 Config，不再关联规则表。
+		config, err := validateConcurrencyNode(node)
+		if err != nil {
+			return row, err
+		}
+		row.Config = config
+		row.RuleID = nil
+		key := providerID + "\x00" + node.Type
+		if node.Order != nil {
+			row.Order = *node.Order
+		} else {
+			row.Order = nextOrder[key] + 1
+		}
+		nextOrder[providerID+"\x00"+node.Type] = row.Order
+		return row, nil
+	}
 	ruleID, err := resolveRuleID(db, node)
 	if err != nil {
 		return row, err
@@ -173,10 +190,6 @@ func resolveRuleByName(db *gorm.DB, slotType, name string) (string, error) {
 		var rule model.ResponseRewriteRule
 		err = query.First(&rule).Error
 		id = rule.ID
-	case "concurrency":
-		var rule model.ConcurrencyRule
-		err = query.First(&rule).Error
-		id = rule.ID
 	case "autoSwitch":
 		var rule model.FailoverRule
 		err = query.First(&rule).Error
@@ -198,8 +211,6 @@ func validateRuleExists(db *gorm.DB, slotType, ruleID string) error {
 		query.Model(&model.RewriteRule{}).Count(&count)
 	case "responseModify":
 		query.Model(&model.ResponseRewriteRule{}).Count(&count)
-	case "concurrency":
-		query.Model(&model.ConcurrencyRule{}).Count(&count)
 	case "autoSwitch":
 		query.Model(&model.FailoverRule{}).Count(&count)
 	default:
@@ -228,6 +239,58 @@ func validateLogOutputNode(node TopologyNode) (string, error) {
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		return "", fmt.Errorf("encode config: %w", err)
+	}
+	return string(encoded), nil
+}
+
+// validateConcurrencyNode validates the inline 并行控制 config carried by a
+// concurrency node and returns the canonical JSON stored on the assignment.
+// Any non-object config is rejected; missing windowMinutes/maxCount fall
+// through to validation (the engine skips such nodes at plan build).
+func validateConcurrencyNode(node TopologyNode) (string, error) {
+	var config map[string]any
+	if len(node.Config) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(node.Config))
+		decoder.UseNumber()
+		if err := decoder.Decode(&config); err != nil {
+			return "", fmt.Errorf("concurrency config must be an object: %w", err)
+		}
+	} else {
+		config = map[string]any{}
+	}
+	for key, value := range config {
+		switch key {
+		case "windowMinutes", "maxCount":
+			num, ok := value.(json.Number)
+			if !ok {
+				return "", fmt.Errorf("concurrency config %s must be an integer", key)
+			}
+			if n, err := num.Int64(); err != nil || n <= 0 {
+				return "", fmt.Errorf("concurrency config %s must be a positive integer", key)
+			}
+		case "perProvider":
+			if _, ok := value.(bool); !ok {
+				return "", fmt.Errorf("concurrency config perProvider must be a boolean")
+			}
+		case "providers":
+			if _, ok := value.([]any); !ok {
+				return "", fmt.Errorf("concurrency config providers must be an array")
+			}
+		case "deadline_at":
+			num, ok := value.(json.Number)
+			if !ok {
+				return "", fmt.Errorf("concurrency config deadline_at must be an integer")
+			}
+			if _, err := num.Int64(); err != nil {
+				return "", fmt.Errorf("concurrency config deadline_at must be a valid epoch")
+			}
+		default:
+			return "", fmt.Errorf("concurrency config contains unknown field %s", key)
+		}
+	}
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("encode concurrency config: %w", err)
 	}
 	return string(encoded), nil
 }

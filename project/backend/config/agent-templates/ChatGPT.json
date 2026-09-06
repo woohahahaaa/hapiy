@@ -6,7 +6,8 @@
   },
   "json_paths": {
     "provider": "",
-    "model": ""
+    "model": "",
+    "models_container": "object"
   },
   "recommendations": [
     {

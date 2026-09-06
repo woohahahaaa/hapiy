@@ -32,7 +32,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&RewriteRule{},
 		&ResponseRewriteRule{},
 		&LayoutConfig{},
-		&ConcurrencyRule{},
+		&ConcurrencyWindowCounter{},
 		&FailoverRule{},
 		&TopologyConfig{},
 		&TopologyNode{},

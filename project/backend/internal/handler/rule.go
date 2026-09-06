@@ -26,12 +26,6 @@ func ruleNameTaken(db *gorm.DB, ruleType, name, excludeID string) (bool, error) 
 			return false, err
 		}
 		return n > 0, nil
-	case RuleTypeConcurrency:
-		var n int64
-		if err := q.Model(&model.ConcurrencyRule{}).Count(&n).Error; err != nil {
-			return false, err
-		}
-		return n > 0, nil
 	case RuleTypeFailover:
 		var n int64
 		if err := q.Model(&model.FailoverRule{}).Count(&n).Error; err != nil {
@@ -51,7 +45,6 @@ func ruleNameTaken(db *gorm.DB, ruleType, name, excludeID string) (bool, error) 
 // Rule type constants
 const (
 	RuleTypeRewrite         = "rewrite"
-	RuleTypeConcurrency     = "concurrency"
 	RuleTypeFailover        = "failover"
 	RuleTypeRewriteResponse = "rewrite-response"
 )
@@ -75,18 +68,6 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
-			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
-		case RuleTypeConcurrency:
-			var r []model.ConcurrencyRule
-			var total int64
-			if err := db.Model(&model.ConcurrencyRule{}).Count(&total).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			if err := db.Model(&model.ConcurrencyRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
 			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeFailover:
 			var r []model.FailoverRule
@@ -136,20 +117,6 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				return
 			} else if dup {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("改写规则名称 %q 已存在", r.Name)})
-				return
-			}
-			rule = &r
-		case RuleTypeConcurrency:
-			var r model.ConcurrencyRule
-			if err := c.ShouldBindJSON(&r); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			if dup, err := ruleNameTaken(db, RuleTypeConcurrency, r.Name, ""); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("并发规则名称 %q 已存在", r.Name)})
 				return
 			}
 			rule = &r
@@ -210,17 +177,6 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 		switch ruleType {
 		case RuleTypeRewrite:
 			var r model.RewriteRule
-			if err := db.First(&r, "id = ?", id).Error; err != nil {
-				c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
-				return
-			}
-			if err := c.ShouldBindJSON(&r); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			rule = &r
-		case RuleTypeConcurrency:
-			var r model.ConcurrencyRule
 			if err := db.First(&r, "id = ?", id).Error; err != nil {
 				c.JSON(http.StatusNotFound, gin.H{"error": "rule not found"})
 				return
@@ -295,8 +251,6 @@ func DeleteRule(db *gorm.DB) gin.HandlerFunc {
 		switch ruleType {
 		case RuleTypeRewrite:
 			modelType = &model.RewriteRule{}
-		case RuleTypeConcurrency:
-			modelType = &model.ConcurrencyRule{}
 		case RuleTypeFailover:
 			modelType = &model.FailoverRule{}
 		case RuleTypeRewriteResponse:

@@ -4,19 +4,14 @@ import { topologyConfig } from '@/config/topology-config'
 import { SlotEnableControl } from '@/components/node/slot/slot-enable-control'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import type { SlotItemDragProps, ConcurrencySlotEntry } from '@/components/node/slot/items'
-import type { ConcurrencyRule } from '@/lib/dashboard-api'
 import { NodeExecutorConcurrency } from '@/components/node/executor/sub/concurrency'
-import type { RuleTypeStatus } from '@/components/node/executor/use-slot-rules'
 
 export interface NodeSlotConcurrencyProps {
   onSelectExecutor?: (token: string | null) => void
   selectedExecutorToken?: string | null
   title: string
   entries: readonly ConcurrencySlotEntry[]
-  rules: readonly ConcurrencyRule[]
-  // 该类型规则列表的加载状态与打开时刷新回调（由 useSlotRules 透传下来）。
-  ruleStatus?: RuleTypeStatus
-  onRefreshRules?: () => void
+  providers: readonly { id: string; name: string }[]
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
   onChangeEntry: (next: ConcurrencySlotEntry) => void
@@ -27,11 +22,11 @@ export interface NodeSlotConcurrencyProps {
   onToggleEnabled?: (enabled: boolean) => void
 }
 
-// 并发控制插槽节点：并发业务条目列表。
+// 并发控制插槽节点：并发业务条目列表（配置内联在条目上）。
 export function NodeSlotConcurrency({
   title,
   entries,
-  rules,
+  providers,
   flashLayers,
   dragProps,
   onChangeEntry,
@@ -42,8 +37,6 @@ export function NodeSlotConcurrency({
   onToggleEnabled,
   onSelectExecutor,
   selectedExecutorToken,
-  ruleStatus,
-  onRefreshRules,
 }: NodeSlotConcurrencyProps) {
     const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
@@ -71,9 +64,7 @@ export function NodeSlotConcurrency({
           picked={selectedExecutorToken === entry.id}
           onPickToken={onSelectExecutor}
           entry={entry}
-          rules={rules}
-          ruleStatus={ruleStatus}
-          onRefreshRules={onRefreshRules}
+          providers={providers}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}

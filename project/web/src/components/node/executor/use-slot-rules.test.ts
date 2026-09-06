@@ -14,7 +14,6 @@ const listRules = vi.mocked(dashboardApi.listRules)
 const API_TYPE_BY_SLOT: Record<(typeof SLOT_RULE_KEYS)[number], string> = {
   requestModify: 'rewrite',
   responseModify: 'rewrite-response',
-  concurrency: 'concurrency',
   autoSwitch: 'failover',
 }
 
@@ -25,17 +24,17 @@ describe('use-slot-rules 数据层', () => {
 
   describe('fetchSlotRuleType', () => {
     it('成功时返回该类型规则，并按类型调用对应 API', async () => {
-      listRules.mockResolvedValue({ rules: [{ id: 'c-1', name: '并发A' }], total: 1 })
-      const result = await fetchSlotRuleType('concurrency')
+      listRules.mockResolvedValue({ rules: [{ id: 'r-1', name: '改写A' }], total: 1 })
+      const result = await fetchSlotRuleType('requestModify')
       expect(result).toHaveLength(1)
-      expect(listRules).toHaveBeenCalledWith('concurrency', { limit: 200, offset: 0 })
+      expect(listRules).toHaveBeenCalledWith('rewrite', { limit: 200, offset: 0 })
       expect(listRules).toHaveBeenCalledTimes(1)
     })
 
     it('请求失败时按类型抛出错误', async () => {
       listRules.mockRejectedValue(new Error('网络错误'))
-      await expect(fetchSlotRuleType('concurrency')).rejects.toThrow('网络错误')
-      expect(listRules).toHaveBeenCalledWith('concurrency', { limit: 200, offset: 0 })
+      await expect(fetchSlotRuleType('requestModify')).rejects.toThrow('网络错误')
+      expect(listRules).toHaveBeenCalledWith('rewrite', { limit: 200, offset: 0 })
     })
   })
 
@@ -60,7 +59,7 @@ describe('use-slot-rules 数据层', () => {
         expect(status[key].loading).toBe(false)
         expect(listRules).toHaveBeenCalledWith(API_TYPE_BY_SLOT[key], { limit: 200, offset: 0 })
       })
-      expect(listRules).toHaveBeenCalledTimes(4)
+      expect(listRules).toHaveBeenCalledTimes(3)
     })
   })
 })

@@ -1,7 +1,6 @@
 import type {
   RewriteRule,
   ResponseRewriteRule,
-  ConcurrencyRule,
   FailoverRule,
 } from '@/lib/dashboard-api'
 
@@ -17,7 +16,7 @@ export type NodeType =
 
 export type RuleKind = 'rewrite' | 'rewrite-response' | 'concurrency' | 'failover'
 
-export type AnyRule = RewriteRule | ResponseRewriteRule | ConcurrencyRule | FailoverRule
+export type AnyRule = RewriteRule | ResponseRewriteRule | FailoverRule
 
 // ── Slot defs: declarative description of what each node type activates ──
 

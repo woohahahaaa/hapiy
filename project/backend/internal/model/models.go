@@ -28,16 +28,16 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 
 // Provider model (upstream API provider)
 type Provider struct {
-	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
-	Name            string    `gorm:"not null" json:"name"`
-	BaseURLs        string    `gorm:"type:text" json:"base_urls"` // JSON array
-	Keys            string    `gorm:"type:text" json:"keys"`      // JSON array
+	ID       string `gorm:"primaryKey;type:uuid" json:"id"`
+	Name     string `gorm:"not null" json:"name"`
+	BaseURLs string `gorm:"type:text" json:"base_urls"` // JSON array
+	Keys     string `gorm:"type:text" json:"keys"`      // JSON array
 	// KeyNotes is a JSON object mapping each API key to its optional user
 	// remark. Purely informational; the relay never reads it.
-	KeyNotes        string    `gorm:"type:text" json:"key_notes"`
-	Endpoints       string    `gorm:"type:text" json:"endpoints"` // JSON array
-	Models          string    `gorm:"type:text" json:"models"`    // JSON array
-	Status          bool      `gorm:"default:true" json:"status"`
+	KeyNotes  string `gorm:"type:text" json:"key_notes"`
+	Endpoints string `gorm:"type:text" json:"endpoints"` // JSON array
+	Models    string `gorm:"type:text" json:"models"`    // JSON array
+	Status    bool   `gorm:"default:true" json:"status"`
 	// AutoDisabled is derived (not a column): the persisted automatic-disable
 	// source is the auto_disable_states table. It is kept on the struct so the
 	// API contract (auto_disabled in provider payloads) is preserved; callers
@@ -98,9 +98,9 @@ type Log struct {
 	// Currency is the billing currency this quota was computed in ("USD" or
 	// "CNY"). Historical records keep the currency they were written with;
 	// switching the global billing currency only affects new records.
-	Currency     string `json:"currency"`
-	UseTime      int    `json:"use_time"` // milliseconds
-	Status       string `json:"status"` // success / failed
+	Currency string `json:"currency"`
+	UseTime  int    `json:"use_time"` // milliseconds
+	Status   string `json:"status"`   // success / failed
 	// AffinityReuse records how much of the last channel-affinity channel was
 	// reused on this request: empty when no affinity rule matched, otherwise
 	// "none" / "partial" / "full" (see relay.AffinityReuse*).
@@ -109,14 +109,14 @@ type Log struct {
 	// that were reused ("provider","baseurl","key"); empty when nothing was
 	// reused or no affinity rule matched.
 	AffinityReuseParts string `json:"affinity_reuse_parts"`
-	IP            string `json:"ip"`
-	RequestID     string `json:"request_id"`
-	ErrorMessage string `json:"error_message"`
+	IP                 string `json:"ip"`
+	RequestID          string `json:"request_id"`
+	ErrorMessage       string `json:"error_message"`
 	// EventDetail is populated for event rows (auto-disable / auto-recover /
 	// manual action / system admin) and explains which rule fired or which
 	// action ran. Empty for request rows; historical rows stay empty
 	// (no backfill).
-	EventDetail    string `gorm:"type:text" json:"event_detail,omitempty"`
+	EventDetail string `gorm:"type:text" json:"event_detail,omitempty"`
 	// Stage timings in milliseconds; nil means the stage does not apply.
 	// ConnectMs: time from issuing the upstream request until its response
 	// headers arrive. FirstByteMs: time from response headers until the first
@@ -212,19 +212,30 @@ func (r *ResponseRewriteRule) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// ConcurrencyRule model
-type ConcurrencyRule struct {
-	ID            string `gorm:"primaryKey;type:uuid" json:"id"`
-	Name          string `gorm:"not null" json:"name"`
-	Scope         string `gorm:"default:'global'" json:"scope"`
-	MaxConcurrent int    `gorm:"default:10" json:"max_concurrent"`
-	QueueEnabled  bool   `gorm:"default:true" json:"queue_enabled"`
-	Status        bool   `gorm:"not null" json:"status"`
+// ConcurrencyWindowCounter is a transient per-bucket counter backing the
+// sliding-window concurrency control. A row exists only while its workflow is
+// running: rows are written (throttled) as requests enter/leave windows and
+// wiped whenever plans are republished so a stopped topology never leaves
+// stale counters behind.
+//
+// Bucket identity: (WorkflowID, NodeID, Provider). Provider is "*" for the
+// merged window computed across suppliers; otherwise it is the id of the
+// supplier whose separate window the row tracks (按供应商分别计算).
+type ConcurrencyWindowCounter struct {
+	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
+	WorkflowID      string    `gorm:"index;size:64" json:"workflow_id"`
+	NodeID          string    `gorm:"index;size:64" json:"node_id"`
+	Provider        string    `gorm:"index;size:64" json:"provider"`
+	MaxCount        int       `json:"max_count"`
+	WindowMinutes   int       `json:"window_minutes"`
+	WindowCount     int       `json:"window_count"`
+	WindowStartedAt time.Time `json:"window_started_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-func (r *ConcurrencyRule) BeforeCreate(tx *gorm.DB) error {
-	if r.ID == "" {
-		r.ID = uuid.New().String()
+func (c *ConcurrencyWindowCounter) BeforeCreate(tx *gorm.DB) error {
+	if c.ID == "" {
+		c.ID = uuid.New().String()
 	}
 	return nil
 }
@@ -250,7 +261,7 @@ type FailoverRule struct {
 	// DisableThreshold counts rule hits before auto-disable fires;
 	// 0 preserves legacy "disable on first match" behavior. DisableWindowMinutes
 	// is the rolling window for those hits; 0 disables the time check.
-	DisableThreshold    int `gorm:"default:0" json:"disable_threshold"`
+	DisableThreshold     int `gorm:"default:0" json:"disable_threshold"`
 	DisableWindowMinutes int `gorm:"default:0" json:"disable_window_minutes"`
 }
 
@@ -444,16 +455,16 @@ type TopologyConfig struct {
 // RequestChannelHistory remembers which channel was last used for a
 // (session_id, model) pair, used by the fallback channel affinity feature.
 type RequestChannelHistory struct {
-	ID            string    `gorm:"primaryKey;type:uuid" json:"id"`
-	SessionID     string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"session_id"`
-	Model         string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"model"`
-	ProviderID    string    `gorm:"not null" json:"provider_id"`
-	KeyIndex      int       `json:"key_index"`
-	BaseURLIndex  int       `json:"base_url_index"`
-	EntryID       string    `json:"entry_id"` // request entry the channel was used through; "" = legacy/unscoped
-	LastUsedAt    time.Time `gorm:"index" json:"last_used_at"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID           string    `gorm:"primaryKey;type:uuid" json:"id"`
+	SessionID    string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"session_id"`
+	Model        string    `gorm:"not null;uniqueIndex:idx_rch_session_model" json:"model"`
+	ProviderID   string    `gorm:"not null" json:"provider_id"`
+	KeyIndex     int       `json:"key_index"`
+	BaseURLIndex int       `json:"base_url_index"`
+	EntryID      string    `json:"entry_id"` // request entry the channel was used through; "" = legacy/unscoped
+	LastUsedAt   time.Time `gorm:"index" json:"last_used_at"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (h *RequestChannelHistory) BeforeCreate(tx *gorm.DB) error {

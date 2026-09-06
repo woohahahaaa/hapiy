@@ -83,7 +83,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
   const filterLabel = mode === 'model' ? '模型' : '供应商'
   const conditionSummary =
     (config?.conditions ?? [])
-      .map((c) => `${c.invert ? '非 ' : ''}${c.path} ${opLabel(c.op)} ${c.value}`.trim())
+      .map((c) => ('path' in c ? `${c.invert ? '非 ' : ''}${c.path} ${opLabel(c.op)} ${c.value}`.trim() : `(${c.logic})`))
       .join(' · ')
   const displayTitle = name && name.trim() !== '' ? name : title || '条件开关'
 

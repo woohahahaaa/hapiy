@@ -29,9 +29,16 @@ type AgentOsPaths struct {
 // a fragment relative to each provider) lets the schema handle agents
 // whose models live anywhere — under a provider, in a sibling list, or
 // anywhere else reachable from the root.
+//
+// ModelsContainer declares the JSON shape of the per-provider models
+// container that the rule expects — "array" (each entry is {id, ...cfg},
+// e.g. openclaw) or "object" (each model is a key whose value is the
+// cfg object, e.g. opencode). Empty / unset means "object" so old
+// stored blobs keep their pre-existing write behaviour.
 type AgentJsonPaths struct {
-	Provider string `json:"provider"` // e.g. `provider` (opencode)
-	Model    string `json:"model"`    // e.g. `provider.{provider_id}.models`
+	Provider        string `json:"provider"`         // e.g. `provider` (opencode)
+	Model           string `json:"model"`            // e.g. `provider.{provider_id}.models`
+	ModelsContainer string `json:"models_container"` // "" | "array" | "object"
 }
 
 // AgentRecommendation — one recommended field for an agent's provider or
@@ -598,6 +605,8 @@ var builtinAgentRules = []struct {
 		JsonPaths: AgentJsonPaths{
 			Provider: `provider`,
 			Model:    `provider.{provider_id}.models`,
+			// opencode 的 models 是 { model_id: cfg } 对象 map。
+			ModelsContainer: "object",
 		},
 		Recommendations: opencodeRecommendations,
 		ModelInfoFields: AgentModelInfoFieldPaths{
@@ -661,6 +670,8 @@ var builtinAgentRules = []struct {
 		JsonPaths: AgentJsonPaths{
 			Provider: `models.providers`,
 			Model:    `models.providers.{provider_id}.models`,
+			// openclaw 的 models 是 [{ id, ...cfg }] 数组。
+			ModelsContainer: "array",
 		},
 		Recommendations: openclawRecommendations,
 		ModelInfoFields: AgentModelInfoFieldPaths{
@@ -1032,6 +1043,18 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 					return err
 				}
 				dirty = true
+			} else if want.JsonPaths.ModelsContainer != "" {
+				// 老版本的 json_paths blob 没有 models_container 字段（写入
+				// openclaw 文件会把 models 写成对象 map，导致 agent 启动
+				// 崩溃）。从 builtin 把这一字段补回，保留用户自己改的
+				// provider / model 路径。
+				if stored, err := rule.GetJsonPaths(); err == nil && stored.ModelsContainer == "" {
+					stored.ModelsContainer = want.JsonPaths.ModelsContainer
+					if err := rule.SetJsonPaths(stored); err != nil {
+						return err
+					}
+					dirty = true
+				}
 			}
 			if rule.Recommendations == "" && want.Recommendations != nil {
 				if err := rule.SetRecommendations(want.Recommendations); err != nil {

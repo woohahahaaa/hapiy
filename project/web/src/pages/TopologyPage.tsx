@@ -951,6 +951,7 @@ export function TopologyPage() {
             externallyDisabled: externallyDisabledSet.has(node.id),
             entries: [...(node.entries ?? [])],
             rules: slotRules,
+            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
             ruleStatus: slotRuleStatus,
             refreshRuleType,
             onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),

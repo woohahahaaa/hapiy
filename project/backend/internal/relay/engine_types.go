@@ -21,21 +21,21 @@ import (
 //   - Compiled rewrite chains: validated []RewriteOp executed in order.
 //   - bound FailoverRules: ready for runtime resolution.
 type ExecutionPlan struct {
-	ID                   string
-	Provider             *model.Provider
-	BaseURLs             []string
-	Keys                 []string
-	ModelSet             map[string]struct{}
-	AllowedPaths         map[string]struct{}
-	RewriteRules         []*model.RewriteRule
-	CompiledRewrite      []CompiledRewriteChain
-	ResponseRewriteRules []*model.ResponseRewriteRule
+	ID                       string
+	Provider                 *model.Provider
+	BaseURLs                 []string
+	Keys                     []string
+	ModelSet                 map[string]struct{}
+	AllowedPaths             map[string]struct{}
+	RewriteRules             []*model.RewriteRule
+	CompiledRewrite          []CompiledRewriteChain
+	ResponseRewriteRules     []*model.ResponseRewriteRule
 	CompiledResponseRewrites []CompiledRewriteChain
-	ConcurrencyRule      *model.ConcurrencyRule
-	FailoverRules        []*model.FailoverRule
-	LogOutputs           []LogOutputAssignment
-	DebugEnabled         bool
-	DebugFields          []string
+	ConcurrencyRules         []*ConcurrencyRule
+	FailoverRules            []*model.FailoverRule
+	LogOutputs               []LogOutputAssignment
+	DebugEnabled             bool
+	DebugFields              []string
 }
 
 // LogOutputAssignment is a thin wrapper over a topology logOutput slot.
@@ -60,12 +60,12 @@ type LogOutputAssignment struct {
 // once time.Now() exceeds it, runTopologyLogOutputs skips the assignment.
 // Zero means "no timer set" — the slot stays open until manually closed.
 type LogOutputNodeConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Prefix          string `json:"prefix"`
-	RecordRequest   bool   `json:"record_request"`
-	RecordResponse  bool   `json:"record_response"`
-	RecordSystem    bool   `json:"record_system"`
-	DeadlineAt      int64  `json:"deadline_at,omitempty"`
+	Enabled        bool   `json:"enabled"`
+	Prefix         string `json:"prefix"`
+	RecordRequest  bool   `json:"record_request"`
+	RecordResponse bool   `json:"record_response"`
+	RecordSystem   bool   `json:"record_system"`
+	DeadlineAt     int64  `json:"deadline_at,omitempty"`
 }
 
 // topologyStage labels where in the request pipeline a stage event fires.
@@ -92,9 +92,9 @@ type topologyStageEvent struct {
 }
 
 // Engine owns the compiled execution plans plus runtime concurrency state.
-// concurrencyLimiters is keyed by ConcurrencyRule.ID (global) or by
-// ConcurrencyRule.ID + "\x00" + scope-key (per_user / per_token). It is
-// wiped whenever plans are republished so stale rules never leak counters.
+// concurrencyBuckets is keyed by bucketKey(workflow, node, providerScope). It
+// is wiped whenever plans are republished so stale nodes never leak counters;
+// buckets are closed before removal so parked waiters fail fast.
 type Engine struct {
 	db          *gorm.DB
 	providers   map[string]*model.Provider
@@ -103,10 +103,11 @@ type Engine struct {
 	providersMu sync.RWMutex
 	stopCh      chan struct{}
 
-	// concurrencyLimiters holds the runtime semaphore state per rule.
-	// It is rebuilt in lockstep with the plans map to ensure stale rule
-	// IDs don't continue to throttle new requests.
-	concurrencyLimiters sync.Map // map[string]*concurrencyLimiter
+	// concurrencyBuckets holds the runtime sliding-window state per
+	// (workflow, node, provider-scope). Rebuilt in lockstep with plans.
+	concurrencyBuckets sync.Map // map[string]*windowBucket
+	// concurrencyFlushTimes throttles best-effort stats writes per bucket key.
+	concurrencyFlushTimes sync.Map // map[string]time.Time
 
 	topologyStageHook func(topologyStageEvent)
 

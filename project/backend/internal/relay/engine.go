@@ -305,33 +305,38 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	e.runTopologyLogOutputs(topologyStageRequestAfter, plan.LogOutputs, plan, req, nil)
 
 	// Step 2: Concurrency control. Only the upstream request is gated; the
-	// rewrite above already completed. The release func MUST be called on
-	// every exit path so we wrap the rest of the pipeline in a closure
-	// that defers release before returning.
+	// rewrite above already completed. Multiple concurrency nodes on the
+	// provider's chain must ALL pass (AND); each release func must be called
+	// on every exit path so we wrap the rest of the pipeline in a closure
+	// that defers the releases before returning.
 	queueWaitMs := -1
-	var releaseConcurrency func()
-	if plan.ConcurrencyRule != nil {
-		if req.Progress != nil {
-			req.Progress("queued")
-		}
-		queueStart := time.Now()
-		rel, err := e.checkConcurrency(ctx, plan.ConcurrencyRule, req)
+	var releaseConcurrency []func(time.Time)
+	if len(plan.ConcurrencyRules) > 0 && req.Progress != nil {
+		req.Progress("queued")
+	}
+	queueStart := time.Now()
+	for _, rule := range plan.ConcurrencyRules {
+		rel, err := e.checkConcurrency(ctx, plan, rule)
 		if err != nil {
+			for _, r := range releaseConcurrency {
+				r(time.Now())
+			}
 			return nil, err
 		}
-		releaseConcurrency = rel
+		releaseConcurrency = append(releaseConcurrency, rel)
+	}
+	if len(plan.ConcurrencyRules) > 0 {
 		queueWaitMs = int(time.Since(queueStart).Milliseconds())
 	}
-	if releaseConcurrency != nil {
-		defer releaseConcurrency()
+	finishConcurrency := func(finish time.Time) {
+		for _, r := range releaseConcurrency {
+			r(finish)
+		}
 	}
+	defer func() { finishConcurrency(time.Now()) }()
 	if req.Progress != nil {
 		req.Progress("connecting")
 	}
-
-	// Step 3: Relay to upstream (with failover). The "relay" stage fires
-	// here so a future UI can light up the provider node as the request
-	// hits the network.
 	e.recordTopologyStage(topologyStageEvent{
 		Stage:      topologyStageRelay,
 		ProviderID: plan.ID,

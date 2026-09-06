@@ -6,9 +6,6 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-
-
-import { Switch } from '@/components/ui/switch'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
@@ -24,7 +21,6 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi,
   type RewriteRule,
-  type ConcurrencyRule,
   type FailoverRule,
   type ResponseRewriteRule,
   type RuleType,
@@ -36,7 +32,6 @@ import { RecoverySettings } from '@/pages/RecoverySettings'
 
 const KNOWN_RULE_TYPES: readonly RuleType[] = [
   'rewrite',
-  'concurrency',
   'failover',
   'rewrite-response',
 ]
@@ -86,7 +81,6 @@ export function PolicyPage() {
   return (
     <>
       {activeTab === 'rewrite' && <RewritePage />}
-      {activeTab === 'concurrency' && <ConcurrencyPage />}
       {activeTab === 'failover' && <FailoverPage />}
       {activeTab === 'rewrite-response' && <RewriteResponsePage />}
     </>
@@ -311,146 +305,6 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
           <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
         </div>
       </div>
-    </FieldGroup>
-  )
-}
-
-function ConcurrencyPage() {
-  const { rules, loading, error, mutating, fetch, create, update, remove, offset, limit, total, setOffset, setLimit } = useRulesApi<ConcurrencyRule>('concurrency')
-  const [editing, setEditing] = useState<ConcurrencyRule | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
-
-
-  const handleDelete = async (id: string) => {
-    if (mutating) return
-    await remove(id)
-  }
-
-  const handleSave = async (rule: ConcurrencyRule) => {
-    if (editing) {
-      const result = await update(rule.id, { name: rule.name, scope: rule.scope, maxConcurrent: rule.maxConcurrent, queueEnabled: rule.queueEnabled, status: rule.status })
-      if (result) { setEditing(null); setIsOpen(false) }
-    } else {
-      const result = await create({ name: rule.name, scope: rule.scope, maxConcurrent: rule.maxConcurrent, queueEnabled: rule.queueEnabled, status: rule.status })
-      if (result) { setIsOpen(false) }
-    }
-  }
-
-  const scopeLabel = (scope: ConcurrencyRule['scope']) =>
-    scope === 'global' ? '全局' : scope === 'per_user' ? '每用户' : '每令牌'
-
-  const columns: ColumnDef<ConcurrencyRule>[] = [
-    { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'scope', label: '作用域', defaultWidth: { kind: 'pixel', value: 100 }, render: (_, row) => <span className="text-xs">{scopeLabel(row.scope)}</span> },
-    { key: 'maxConcurrent', label: '最大并发', defaultWidth: { kind: 'pixel', value: 100 }, defaultAlign: 'right', render: (_, row) => <span className="text-xs">{row.maxConcurrent}</span> },
-    { key: 'queueEnabled', label: '排队', defaultWidth: { kind: 'pixel', value: 80 }, render: (_, row) => <span className="text-xs">{row.queueEnabled ? '是' : '否'}</span> },
-    {
-      key: 'id',
-      label: '操作',
-      defaultWidth: { kind: 'pixel', value: 140 },
-      defaultAlign: 'right',
-      showEmptyPlaceholder: false,
-      render: (_, row) => (
-        <div className="inline-flex items-center gap-2">
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
-            <AppIcon name="edit" />
-          </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
-            <AppIcon name="delete" />
-          </Button>
-        </div>
-      ),
-    },
-  ]
-
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="并发控制"
-        description="限制并发请求数量，支持排队"
-        status={`${total} 条规则`}
-      />
-      <div className="p-6">
-        <DataTable
-          id="policy-concurrency"
-          columns={columns}
-          data={rules}
-          total={total}
-          loading={loading}
-          error={error}
-          offset={offset}
-          limit={limit}
-          onOffsetChange={setOffset}
-          onLimitChange={setLimit}
-          emptyText='暂无并发规则，点击"添加规则"创建第一条'
-          onRetry={() => void fetch()}
-          actions={
-            <div className="flex items-center gap-2">
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
-                <AppIcon name="add" data-icon="inline-start" />
-                添加规则
-              </Button>
-            </div>
-          }
-        />
-      </div>
-
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent width="sm">
-          <DialogHeader>
-            <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
-          </DialogHeader>
-          <ConcurrencyForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
-        </DialogContent>
-</Dialog>
-    </div>
-  )
-}
-
-function ConcurrencyForm({ rule, onSave, onCancel, saving }: { rule: ConcurrencyRule | null; onSave: (r: ConcurrencyRule) => void; onCancel: () => void; saving: boolean }) {
-  const [form, setForm] = useState<ConcurrencyRule>(
-    rule || { id: '', name: '', scope: 'global', maxConcurrent: 10, queueEnabled: true, status: true }
-  )
-
-  return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="concurrency-name">名称</FieldLabel>
-        <Input id="concurrency-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="concurrency-scope">作用域</FieldLabel>
-        <Select
-          value={form.scope}
-          onValueChange={(value) => setForm((p) => ({ ...p, scope: value as typeof p.scope }))}
-        >
-          <SelectTrigger id="concurrency-scope" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="global">全局</SelectItem>
-              <SelectItem value="per_user">每用户</SelectItem>
-              <SelectItem value="per_token">每令牌</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="concurrency-max">最大并发数</FieldLabel>
-        <Input id="concurrency-max" type="number" value={form.maxConcurrent} onChange={(e) => setForm((p) => ({ ...p, maxConcurrent: Number(e.target.value) }))} />
-      </Field>
-      <Field orientation="horizontal" className="items-center justify-between rounded-md border border-border px-3 py-2">
-        <FieldLabel>允许排队</FieldLabel>
-        <div className="flex items-center gap-1.5">
-          <span className={form.queueEnabled ? 'text-sm font-medium' : 'text-sm text-muted-foreground'}>{form.queueEnabled ? '已开启' : '已关闭'}</span>
-          <Switch checked={form.queueEnabled} onCheckedChange={(v) => setForm((p) => ({ ...p, queueEnabled: v }))} />
-        </div>
-      </Field>
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button disabled={saving} onClick={() => onSave(form)}>{saving ? '保存中...' : '保存'}</Button>
-      </DialogFooter>
     </FieldGroup>
   )
 }
