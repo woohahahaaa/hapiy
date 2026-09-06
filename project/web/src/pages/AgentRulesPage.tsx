@@ -546,11 +546,11 @@ function buildModelInfoFieldsPayload(
       return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请使用值&写法（JSON 对象），不允许只填路径` }
     }
     try {
-      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown }
+      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown; values?: unknown }
       if (typeof parsed.path !== 'string' || parsed.path.trim() === '') {
         return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」写法缺少 path 字段` }
       }
-      const spec: { path: string; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string } = { path: parsed.path.trim() }
+      const spec: { path: string; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string; values?: string[] } = { path: parsed.path.trim() }
       if (parsed.op !== undefined) {
         if (!AGENT_MODEL_INFO_FIELD_OPS.includes(parsed.op as never)) {
           return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」不支持的 op: ${String(parsed.op)}（可选 ${AGENT_MODEL_INFO_FIELD_OPS.join(' / ')}）` }
@@ -558,6 +558,10 @@ function buildModelInfoFieldsPayload(
         spec.op = parsed.op as (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]
       }
       if (typeof parsed.sep === 'string' && parsed.sep !== '') spec.sep = parsed.sep
+      if (Array.isArray(parsed.values)) {
+        const values = parsed.values.filter((x): x is string => typeof x === 'string')
+        if (values.length > 0) spec.values = values
+      }
       fields[key] = spec
     } catch (err) {
       return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」JSON 解析失败：` + (err instanceof Error ? err.message : String(err)) }
@@ -809,8 +813,8 @@ function RuleDialog({
                   <SelectValue placeholder="选择格式" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="array">数组 [{&quot;id&quot;: ...}]（openclaw）</SelectItem>
-                  <SelectItem value="object">对象 map {&quot;模型id&quot;: {...}}（opencode）</SelectItem>
+                  <SelectItem value="array">数组 [{'{"id": ...}'}]（openclaw）</SelectItem>
+                  <SelectItem value="object">对象 map {'{"模型id": {...}}'}（opencode）</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

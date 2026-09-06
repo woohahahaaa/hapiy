@@ -24,13 +24,13 @@ var ErrConcurrencyRejected = errors.New("concurrency limit exceeded")
 // ConcurrencyRule is the compiled, inline concurrency config attached to a
 // 并行控制 slot node. It replaces the old globally-managed concurrency rule:
 // the parameters now live directly on the topology slot entry and are
-// compiled into the provider's plan at plan build time.
+// compiled into the provider's plan at plan build time. The rule applies a
+// single shared sliding window to every request passing the node — no
+// supplier dimension.
 type ConcurrencyRule struct {
-	ID            string   // node id (assignment id) — bucket identity dimension #2
-	WindowMinutes int      // 每 X 分钟内 (countdown length after each finish)
-	MaxCount      int      // 最多 N 条 (window capacity)
-	PerProvider   bool     // 按供应商分别计算: per-supplier bucket vs "all" bucket
-	Providers     []string // 命中的供应商; empty = all
+	ID            string // node id (assignment id) — bucket identity
+	WindowMinutes int    // 每 X 分钟内 (countdown length after each finish)
+	MaxCount      int    // 最多 N 条 (window capacity)
 }
 
 // windowBucket implements the sliding-window concurrency control.
@@ -153,44 +153,15 @@ func (b *windowBucket) close() {
 	}
 }
 
-// bucketKey builds the window bucket identity: node + provider scope. The
-// node id is the flat topology slot node (shared by every provider whose
-// chain reaches it), so:
-//   - perProvider=false → scope "*" → ONE bucket shared by all suppliers.
-//   - perProvider=true  → node+provider → separate bucket per supplier.
+// bucketKey builds the window bucket identity. The node id is the flat
+// topology slot node (shared by every request whose chain reaches it), so all
+// requests passing the node share ONE "*" bucket — a single uniform window.
 //
 // The workflow id is deliberately not part of the runtime key (it is recorded
 // in the stats rows for observability); two providers attaching the same node
-// must land in the same "*" bucket for 按所有统一计算.
-func bucketKey(nodeID, providerScope string) string {
-	return nodeID + "\x00" + providerScope
-}
-
-// providerScope resolves the bucket scope from the rule and the request.
-// When PerProvider is set the scope is the supplier actually serving the
-// request; otherwise every supplier shares the "all" window.
-func (r *ConcurrencyRule) providerScope(plan *ExecutionPlan) string {
-	if r.PerProvider && plan != nil && plan.Provider != nil {
-		return plan.Provider.ID
-	}
-	return "*"
-}
-
-// appliesTo reports whether the rule restricts the given supplier. An empty
-// Providers list means "all suppliers" (命中供应商 = 全部).
-func (r *ConcurrencyRule) appliesTo(plan *ExecutionPlan) bool {
-	if len(r.Providers) == 0 {
-		return true
-	}
-	if plan == nil || plan.Provider == nil {
-		return false
-	}
-	for _, p := range r.Providers {
-		if strings.EqualFold(p, plan.Provider.ID) || strings.EqualFold(p, plan.Provider.Name) {
-			return true
-		}
-	}
-	return false
+// must land in the same "*" bucket.
+func bucketKey(nodeID string) string {
+	return nodeID + "\x00*"
 }
 
 // checkConcurrency reserves a slot for one compiled concurrency rule. It
@@ -198,11 +169,7 @@ func (r *ConcurrencyRule) appliesTo(plan *ExecutionPlan) bool {
 // returned release parameter schedules the window countdown from the finish
 // moment; pass zero to count down from now.
 func (e *Engine) checkConcurrency(ctx context.Context, plan *ExecutionPlan, rule *ConcurrencyRule) (release func(finish time.Time), err error) {
-	if !rule.appliesTo(plan) {
-		return func(time.Time) {}, nil
-	}
-	scope := rule.providerScope(plan)
-	sKey := bucketKey(rule.ID, scope)
+	sKey := bucketKey(rule.ID)
 	bucket := e.concurrencyBucketFor(plan, sKey, rule)
 	return bucket.acquire(ctx)
 }

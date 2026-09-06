@@ -12,13 +12,11 @@ import (
 )
 
 // testConcurrencyPlan builds a compiled inline concurrency rule for tests.
-func testConcurrencyPlan(id string, windowMinutes, maxCount int, perProvider bool, providers ...string) *ConcurrencyRule {
+func testConcurrencyPlan(id string, windowMinutes, maxCount int) *ConcurrencyRule {
 	return &ConcurrencyRule{
 		ID:            id,
 		WindowMinutes: windowMinutes,
 		MaxCount:      maxCount,
-		PerProvider:   perProvider,
-		Providers:     providers,
 	}
 }
 
@@ -30,7 +28,7 @@ func newTestProvider(id string) *model.Provider {
 func TestCheckConcurrency_admitsUnderLimit(t *testing.T) {
 	eng := NewEngine(nil)
 	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	rule := testConcurrencyPlan("r1", 1, 2, false)
+	rule := testConcurrencyPlan("r1", 1, 2)
 
 	release1, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
@@ -48,7 +46,7 @@ func TestCheckConcurrency_admitsUnderLimit(t *testing.T) {
 func TestCheckConcurrency_blocksAtCapacity_untilCancelled(t *testing.T) {
 	eng := NewEngine(nil)
 	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	rule := testConcurrencyPlan("r1", 1, 1, false)
+	rule := testConcurrencyPlan("r1", 1, 1)
 
 	release, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
@@ -84,7 +82,7 @@ func TestCheckConcurrency_waiterReleasedAfterWindowCountdown(t *testing.T) {
 	eng := NewEngine(nil)
 	_ = eng
 	// Directly exercise the bucket with a tiny window for speed.
-	key := bucketKey("r1", "*")
+	key := bucketKey("r1")
 	fast := newWindowBucket(50*time.Millisecond, 1, eng, "w1", key)
 	release1, err := fast.acquire(context.Background())
 	if err != nil {
@@ -124,30 +122,9 @@ func TestCheckConcurrency_waiterReleasedAfterWindowCountdown(t *testing.T) {
 	cancel()
 }
 
-func TestCheckConcurrency_perProviderBins(t *testing.T) {
-	eng := NewEngine(nil)
-	rule := testConcurrencyPlan("r1", 5, 1, true)
-
-	// Two different providers must not share a window when perProvider is set.
-	planA := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	planB := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p2")}
-
-	release, err := eng.checkConcurrency(context.Background(), planA, rule)
-	if err != nil {
-		t.Fatalf("provider A acquire: %v", err)
-	}
-	defer release(time.Now())
-
-	release2, err := eng.checkConcurrency(context.Background(), planB, rule)
-	if err != nil {
-		t.Fatalf("provider B should have its own window, got %v", err)
-	}
-	release2(time.Now())
-}
-
 func TestCheckConcurrency_sharedBinAcrossProviders(t *testing.T) {
 	eng := NewEngine(nil)
-	rule := testConcurrencyPlan("r1", 5, 1, false)
+	rule := testConcurrencyPlan("r1", 5, 1)
 
 	planA := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
 	planB := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p2")}
@@ -182,31 +159,10 @@ func TestCheckConcurrency_sharedBinAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestCheckConcurrency_providerMatchFilter(t *testing.T) {
-	eng := NewEngine(nil)
-	// Rule restricts to p1 + p2 by name; p3 is excluded entirely.
-	rule := testConcurrencyPlan("r1", 5, 1, false, "p1", "p2")
-
-	excluded := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p3")}
-	release, err := eng.checkConcurrency(context.Background(), excluded, rule)
-	if err != nil {
-		t.Fatalf("excluded provider acquire: %v", err)
-	}
-	// No-op release (rule doesn't apply -> no slot reserved).
-	release(time.Now())
-
-	included := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	release2, err := eng.checkConcurrency(context.Background(), included, rule)
-	if err != nil {
-		t.Fatalf("included provider acquire: %v", err)
-	}
-	release2(time.Now())
-}
-
 func TestPublishPlans_clearsConcurrencyBuckets(t *testing.T) {
 	eng := NewEngine(nil)
 	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	rule := testConcurrencyPlan("r1", 5, 1, false)
+	rule := testConcurrencyPlan("r1", 5, 1)
 	release, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("acquire: %v", err)
@@ -216,7 +172,7 @@ func TestPublishPlans_clearsConcurrencyBuckets(t *testing.T) {
 	eng.publishPlans(map[string]*model.Provider{"p1": newTestProvider("p1")}, map[string]*ExecutionPlan{})
 
 	// A fresh rule (different ID) must acquire without interference.
-	newRule := testConcurrencyPlan("r2", 5, 1, false)
+	newRule := testConcurrencyPlan("r2", 5, 1)
 	release2, err := eng.checkConcurrency(context.Background(), plan, newRule)
 	if err != nil {
 		t.Fatalf("new rule acquire after publish: %v", err)
@@ -227,7 +183,7 @@ func TestPublishPlans_clearsConcurrencyBuckets(t *testing.T) {
 func TestCheckConcurrency_concurrentRelease(t *testing.T) {
 	eng := NewEngine(nil)
 	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	rule := testConcurrencyPlan("r1", 5, 4, false)
+	rule := testConcurrencyPlan("r1", 5, 4)
 	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
@@ -248,7 +204,7 @@ func TestCheckConcurrency_concurrentRelease(t *testing.T) {
 func TestCheckConcurrency_errorMessageNamesNode(t *testing.T) {
 	eng := NewEngine(nil)
 	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
-	rule := testConcurrencyPlan("node-7", 5, 1, false)
+	rule := testConcurrencyPlan("node-7", 5, 1)
 	release, err := eng.checkConcurrency(context.Background(), plan, rule)
 	if err != nil {
 		t.Fatalf("acquire: %v", err)

@@ -269,10 +269,13 @@ func validateConcurrencyNode(node TopologyNode) (string, error) {
 				return "", fmt.Errorf("concurrency config %s must be a positive integer", key)
 			}
 		case "perProvider":
+			// 旧版本配置遗留字段：供应商维度已移除，引擎不再读取，
+			// 这里仅做类型校验以允许老数据继续保存（下次保存即被清理）。
 			if _, ok := value.(bool); !ok {
 				return "", fmt.Errorf("concurrency config perProvider must be a boolean")
 			}
 		case "providers":
+			// 同上：遗留字段，仅类型校验，允许老数据保存。
 			if _, ok := value.([]any); !ok {
 				return "", fmt.Errorf("concurrency config providers must be an array")
 			}

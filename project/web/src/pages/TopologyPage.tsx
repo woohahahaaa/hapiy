@@ -1020,7 +1020,9 @@ export function TopologyPage() {
     // slot 入线按 canvasWires 顺序分配 targetHandle（= HandlesRail 匿名段的
     // `seg-i` id）：无 targetHandle 的 edge 会被 React Flow 锚到第一个 handle，
     // 导致多线入同一个 slot 时全部挤在第一个点上。
-    const slotIds = new Set(canvas.topLevel.filter((n) => n.kind === 'slot').map((n) => n.id))
+    const slotIds = new Set(
+      canvas.topLevel.filter((n) => n.kind === 'slot' || n.kind === 'switch').map((n) => n.id),
+    )
     const segIndexOf = new Map<string, number>()
     for (const w of canvas.canvasWires) {
       const segIndex = segIndexOf.get(w.target) ?? 0

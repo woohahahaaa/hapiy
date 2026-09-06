@@ -95,10 +95,17 @@ func InferRecommendationType(rec AgentRecommendation) string {
 // Ops: raw (default, value as-is), bool (non-empty → true, empty →
 // false), first (first element; skipped when empty), join (elements
 // joined with Sep, default ","; skipped when empty).
+//
+// Values filters array outputs to the listed allowed literals before
+// writing (e.g. openclaw's `input` only accepts text/image/video/audio,
+// so `"values": ["text","image","video","audio"]` strips anything else
+// like models.dev's "pdf"). Unlisted elements are dropped; set empty to
+// skip filtering.
 type AgentModelInfoFieldSpec struct {
-	Path string `json:"path"`
-	Op   string `json:"op,omitempty"`
-	Sep  string `json:"sep,omitempty"`
+	Path   string   `json:"path"`
+	Op     string   `json:"op,omitempty"`
+	Sep    string   `json:"sep,omitempty"`
+	Values []string `json:"values,omitempty"`
 }
 
 // UnmarshalJSON accepts the legacy string form and the object form.
@@ -121,10 +128,10 @@ func (s *AgentModelInfoFieldSpec) UnmarshalJSON(b []byte) error {
 }
 
 // MarshalJSON writes the plain-path string form unless an op (other than
-// raw) or a separator is configured, keeping stored blobs and API
-// payloads readable for the common case.
+// raw), a separator, or an allowed-values filter is configured, keeping
+// stored blobs and API payloads readable for the common case.
 func (s AgentModelInfoFieldSpec) MarshalJSON() ([]byte, error) {
-	if (s.Op == "" || s.Op == "raw") && s.Sep == "" {
+	if (s.Op == "" || s.Op == "raw") && s.Sep == "" && len(s.Values) == 0 {
 		return json.Marshal(s.Path)
 	}
 	type plain AgentModelInfoFieldSpec
@@ -143,40 +150,46 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 		}
 		return valueTruthy(v), true
 	case "first":
-		switch arr := v.(type) {
-		case []any:
-			if len(arr) > 0 {
-				return arr[0], true
-			}
-		case []string:
-			if len(arr) > 0 {
-				return arr[0], true
-			}
+		arr, ok := toStrings(v)
+		if !ok {
+			return nil, false
 		}
-		return nil, false
+		if len(arr) == 0 {
+			return nil, false
+		}
+		return s.filterValues(arr)[0], true
 	case "join":
 		sep := s.Sep
 		if sep == "" {
 			sep = ","
 		}
-		switch arr := v.(type) {
-		case []any:
-			if len(arr) == 0 {
-				return nil, false
-			}
-			parts := make([]string, 0, len(arr))
-			for _, item := range arr {
-				parts = append(parts, fmt.Sprintf("%v", item))
-			}
-			return strings.Join(parts, sep), true
-		case []string:
-			if len(arr) == 0 {
-				return nil, false
-			}
-			return strings.Join(arr, sep), true
+		arr, ok := toStrings(v)
+		if !ok {
+			return nil, false
 		}
-		return nil, false
+		arr = s.filterValues(arr)
+		if len(arr) == 0 {
+			return nil, false
+		}
+		return strings.Join(arr, sep), true
 	default: // "" | raw
+		arr, isArr := toStrings(v)
+		if isArr {
+			arr = s.filterValues(arr)
+			if len(arr) == 0 {
+				return nil, false
+			}
+			// Preserve the original element kind when the caller passed a
+			// []any so applyModelInfoFromModelsDev still assigns an array.
+			if _, anySlice := v.([]any); anySlice {
+				out := make([]any, len(arr))
+				for i, x := range arr {
+					out[i] = x
+				}
+				return out, true
+			}
+			return arr, true
+		}
 		switch val := v.(type) {
 		case nil:
 			return nil, false
@@ -184,17 +197,49 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 			if val == "" {
 				return nil, false
 			}
-		case []any:
-			if len(val) == 0 {
-				return nil, false
-			}
-		case []string:
-			if len(val) == 0 {
-				return nil, false
-			}
 		}
 		return v, true
 	}
+}
+
+// filterValues drops elements not listed in the spec's allowed Values
+// (case-insensitive, trimmed). With no Values set every element passes.
+func (s AgentModelInfoFieldSpec) filterValues(arr []string) []string {
+	if len(s.Values) == 0 {
+		return arr
+	}
+	allowed := make(map[string]bool, len(s.Values))
+	for _, v := range s.Values {
+		allowed[strings.ToLower(strings.TrimSpace(v))] = true
+	}
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		if allowed[strings.ToLower(strings.TrimSpace(item))] {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// toStrings normalizes a unified value into a string slice. nil and
+// scalar values yield ok=false so ops that need arrays skip.
+func toStrings(v any) ([]string, bool) {
+	switch arr := v.(type) {
+	case []string:
+		return arr, true
+	case []any:
+		if len(arr) == 0 {
+			return nil, true
+		}
+		out := make([]string, 0, len(arr))
+		for _, item := range arr {
+			out = append(out, fmt.Sprintf("%v", item))
+		}
+		return out, true
+	case nil:
+		return nil, false
+	}
+	return nil, false
 }
 
 func valueTruthy(v any) bool {
@@ -677,7 +722,9 @@ var builtinAgentRules = []struct {
 		ModelInfoFields: AgentModelInfoFieldPaths{
 			MaxContext:     ModelInfoPath(`contextWindow`),
 			MaxOutputToken: ModelInfoPath(`maxTokens`),
-			InputTypes:     ModelInfoPath(`input`),
+			// openclaw 的 input 数组只接受 text/image/video/audio，
+			// models.dev 可能带回 pdf 等非法值，写前过滤。
+			InputTypes:     AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image", "video", "audio"}},
 			// openclaw 的 reasoning 字段同样要求 boolean。
 			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
@@ -1106,6 +1153,13 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 				// 升级为 {"path":"reasoning","op":"bool"}，不动其他自定义路径。
 				rule.ModelInfoFields = upgraded
 				dirty = true
+			} else if upgraded, changed := upgradeMissingModelInfoValues(rule.ModelInfoFields, want.ModelInfoFields); changed {
+				// builtin 新增了 input_types 的 allowed-values 白名单（如
+				// openclaw 的 input 只收 text/image/video/audio），老库存的
+				// input_types 只有路径没有 values，原位补上，避免重新同步时
+				// models.dev 的 pdf 等非法值再次写进配置文件。
+				rule.ModelInfoFields = upgraded
+				dirty = true
 			}
 			if !dirty {
 				continue
@@ -1202,6 +1256,37 @@ func protocolsMissingLatest(stored string, latest []AgentProtocol) bool {
 // modelInfoFieldsMissing reports whether the stored model-info blob is
 // effectively empty while the seed defines any path (e.g. old `{}` rows),
 // so WorkBuddy-style backfills still apply.
+// upgradeMissingModelInfoValues back-fills the allowed-values whitelist
+// (Values) that a newer built-in rule declares for its model-info fields
+// when an existing stored row has the same field path but no whitelist
+// yet. Other snippets (op, sep, custom paths) are preserved untouched.
+// changed is false when nothing was added.
+func upgradeMissingModelInfoValues(stored string, want AgentModelInfoFieldPaths) (string, bool) {
+	var s AgentModelInfoFieldPaths
+	if err := json.Unmarshal([]byte(stored), &s); err != nil {
+		return stored, false
+	}
+	changed := false
+	fill := func(cur *AgentModelInfoFieldSpec, want AgentModelInfoFieldSpec) {
+		if cur.Path != "" && cur.Path == want.Path && len(cur.Values) == 0 && len(want.Values) > 0 {
+			cur.Values = want.Values
+			changed = true
+		}
+	}
+	fill(&s.InputTypes, want.InputTypes)
+	fill(&s.MaxContext, want.MaxContext)
+	fill(&s.MaxOutputToken, want.MaxOutputToken)
+	fill(&s.ThinkingLevels, want.ThinkingLevels)
+	if !changed {
+		return stored, false
+	}
+	out, err := json.Marshal(s)
+	if err != nil {
+		return stored, false
+	}
+	return string(out), true
+}
+
 func modelInfoFieldsMissing(stored string, want AgentModelInfoFieldPaths) bool {
 	wantJSON, err := json.Marshal(want)
 	if err != nil {

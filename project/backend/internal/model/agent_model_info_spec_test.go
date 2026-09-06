@@ -46,6 +46,14 @@ func TestAgentModelInfoFieldSpecMarshal(t *testing.T) {
 	if string(raw) != `{"path":"reasoning","op":"bool"}` {
 		t.Fatalf("op spec should marshal as object, got %s", raw)
 	}
+	// Values must keep the object form so the whitelist is not lost.
+	raw, err = json.Marshal(AgentModelInfoFieldSpec{Path: "input", Values: []string{"text", "image", "video", "audio"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != `{"path":"input","values":["text","image","video","audio"]}` {
+		t.Fatalf("values spec should marshal as object, got %s", raw)
+	}
 }
 
 // TestAgentModelInfoFieldSpecShape covers the op vocabulary and the
@@ -69,6 +77,12 @@ func TestAgentModelInfoFieldSpecShape(t *testing.T) {
 		{"join default sep", AgentModelInfoFieldSpec{Path: "input", Op: "join"}, []any{"text", "image"}, "text,image", true},
 		{"join custom sep", AgentModelInfoFieldSpec{Path: "input", Op: "join", Sep: "+"}, []any{"a", "b"}, "a+b", true},
 		{"join empty skips", AgentModelInfoFieldSpec{Path: "input", Op: "join"}, []string{}, nil, false},
+		{"values filters bad literals", AgentModelInfoFieldSpec{Path: "input", Values: []string{"text", "image", "video", "audio"}}, []any{"text", "image", "pdf"}, []any{"text", "image"}, true},
+		{"values keeps all when valid", AgentModelInfoFieldSpec{Path: "input", Values: []string{"text", "image", "video", "audio"}}, []any{"text", "image"}, []any{"text", "image"}, true},
+		{"values all dropped skips", AgentModelInfoFieldSpec{Path: "input", Values: []string{"text"}}, []any{"pdf", "xls"}, nil, false},
+		{"values case-insensitive", AgentModelInfoFieldSpec{Path: "input", Values: []string{"Text"}}, []any{"text"}, []any{"text"}, true},
+		{"first filters then take first", AgentModelInfoFieldSpec{Path: "input", Op: "first", Values: []string{"image"}}, []any{"text", "image"}, "image", true},
+		{"join filters then join", AgentModelInfoFieldSpec{Path: "input", Op: "join", Values: []string{"text", "image"}}, []any{"text", "pdf", "image"}, "text,image", true},
 	}
 	for _, tc := range cases {
 		got, ok := tc.spec.Shape(tc.in)
@@ -109,5 +123,40 @@ func TestUpgradeLegacyThinkingLevels(t *testing.T) {
 	}
 	if _, changed := upgradeLegacyThinkingLevels(`{"thinking_levels":"my.reasoning"}`); changed {
 		t.Fatal("customized path must not be touched")
+	}
+}
+
+// TestUpgradeMissingModelInfoValues pins the allowed-values back-fill:
+// an existing row that has the same path but no whitelist gets the
+// builtin Values added, while other snippets are preserved.
+func TestUpgradeMissingModelInfoValues(t *testing.T) {
+	want := AgentModelInfoFieldPaths{
+		InputTypes: AgentModelInfoFieldSpec{Path: "input", Values: []string{"text", "image", "video", "audio"}},
+	}
+	stored := `{"max_context":"ctx","input_types":{"path":"input","op":"join","sep":"+"}}`
+	upgraded, changed := upgradeMissingModelInfoValues(stored, want)
+	if !changed {
+		t.Fatalf("should be upgraded: %s", stored)
+	}
+	var p AgentModelInfoFieldPaths
+	if err := json.Unmarshal([]byte(upgraded), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.InputTypes.Path != "input" || p.InputTypes.Op != "join" || p.InputTypes.Sep != "+" {
+		t.Fatalf("custom op/sep must survive: %s", upgraded)
+	}
+	if len(p.InputTypes.Values) != 4 || p.InputTypes.Values[3] != "audio" {
+		t.Fatalf("values not back-filled: %s", upgraded)
+	}
+	if p.MaxContext.Path != "ctx" {
+		t.Fatalf("unrelated path must survive: %s", upgraded)
+	}
+	// Already-filled rows are untouched.
+	if _, changed := upgradeMissingModelInfoValues(upgraded, want); changed {
+		t.Fatalf("already-filled row must not change again: %s", upgraded)
+	}
+	// Different path must not be touched.
+	if _, changed := upgradeMissingModelInfoValues(`{"input_types":"modalities.input"}`, want); changed {
+		t.Fatal("different path must not be rewritten")
 	}
 }

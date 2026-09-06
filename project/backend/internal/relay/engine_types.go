@@ -92,8 +92,9 @@ type topologyStageEvent struct {
 }
 
 // Engine owns the compiled execution plans plus runtime concurrency state.
-// concurrencyBuckets is keyed by bucketKey(workflow, node, providerScope). It
-// is wiped whenever plans are republished so stale nodes never leak counters;
+// concurrencyBuckets is keyed by bucketKey(node). scope is always "*" (a
+// single uniform window per node, no supplier dimension). It is wiped
+// whenever plans are republished so stale nodes never leak counters;
 // buckets are closed before removal so parked waiters fail fast.
 type Engine struct {
 	db          *gorm.DB
