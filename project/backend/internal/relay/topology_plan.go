@@ -199,22 +199,19 @@ func assignedRuleError(assignment model.TopologySlotAssignment, err error) error
 }
 
 // parseConcurrencyRuleConfig decodes the inline 并行控制 config stored on the
-// topology assignment. Supported JSON shape (mirrors the frontend):
+// topology assignment. Supported JSON shape (mirrors the frontend, no
+// supplier dimension):
 //
 //	{
 //	  "nodeId": "concurrency-abc",       // 幕后识别：from the flat slot node id
 //	  "windowMinutes": 5,                // 每 X 分钟内
 //	  "maxCount": 10,                    // 最多 N 条
-//	  "perProvider": false,              // 按供应商分别计算
-//	  "providers": ["p1","p2"]           // 命中的供应商; empty = all
 //	}
 func parseConcurrencyRuleConfig(assignment model.TopologySlotAssignment) (*ConcurrencyRule, error) {
 	var cfg struct {
-		NodeID        string   `json:"nodeId"`
-		WindowMinutes int      `json:"windowMinutes"`
-		MaxCount      int      `json:"maxCount"`
-		PerProvider   bool     `json:"perProvider"`
-		Providers     []string `json:"providers"`
+		NodeID        string `json:"nodeId"`
+		WindowMinutes int    `json:"windowMinutes"`
+		MaxCount      int    `json:"maxCount"`
 	}
 	if err := json.Unmarshal([]byte(assignment.Config), &cfg); err != nil {
 		return nil, err
@@ -228,14 +225,11 @@ func parseConcurrencyRuleConfig(assignment model.TopologySlotAssignment) (*Concu
 	if nodeID == "" {
 		nodeID = assignment.ID
 	}
-	rule := &ConcurrencyRule{
+	return &ConcurrencyRule{
 		ID:            nodeID,
 		WindowMinutes: cfg.WindowMinutes,
 		MaxCount:      cfg.MaxCount,
-		PerProvider:   cfg.PerProvider,
-		Providers:     cfg.Providers,
-	}
-	return rule, nil
+	}, nil
 }
 
 // decodeStringList unmarshals a JSON-encoded string array into the

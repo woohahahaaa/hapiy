@@ -11,7 +11,6 @@ export interface NodeSlotConcurrencyProps {
   selectedExecutorToken?: string | null
   title: string
   entries: readonly ConcurrencySlotEntry[]
-  providers: readonly { id: string; name: string }[]
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
   onChangeEntry: (next: ConcurrencySlotEntry) => void
@@ -22,11 +21,10 @@ export interface NodeSlotConcurrencyProps {
   onToggleEnabled?: (enabled: boolean) => void
 }
 
-// 并发控制插槽节点：并发业务条目列表（配置内联在条目上）。
+// 并发控制插槽节点：并发业务条目列表（配置内联在条目上，不区分供应商）。
 export function NodeSlotConcurrency({
   title,
   entries,
-  providers,
   flashLayers,
   dragProps,
   onChangeEntry,
@@ -64,7 +62,6 @@ export function NodeSlotConcurrency({
           picked={selectedExecutorToken === entry.id}
           onPickToken={onSelectExecutor}
           entry={entry}
-          providers={providers}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}

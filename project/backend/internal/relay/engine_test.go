@@ -313,7 +313,7 @@ func TestRelayRequest_recordsQueueWaitMs(t *testing.T) {
 	// Given: a fast upstream and a plan with a concurrency rule (no queueing
 	// pressure in this test, so QueueWaitMs is 0 rather than -1).
 	engine, _ := newTestEngine(t)
-	concurrencyRule := &ConcurrencyRule{ID: "cq-test", WindowMinutes: 5, MaxCount: 4, PerProvider: false}
+	concurrencyRule := &ConcurrencyRule{ID: "cq-test", WindowMinutes: 5, MaxCount: 4}
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusOK)
 		_, _ = writer.Write([]byte(`{"ok":true}`))

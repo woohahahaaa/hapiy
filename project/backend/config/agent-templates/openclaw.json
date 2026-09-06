@@ -111,7 +111,10 @@
   "model_info_fields": {
     "max_context": "contextWindow",
     "max_output_token": "maxTokens",
-    "input_types": "input",
+    "input_types": {
+      "path": "input",
+      "values": ["text", "image", "video", "audio"]
+    },
     "thinking_levels": {
       "path": "reasoning",
       "op": "bool"

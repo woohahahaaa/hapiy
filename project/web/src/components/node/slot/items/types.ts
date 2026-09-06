@@ -134,7 +134,7 @@ export function makeEmptyEntry(slotType: SlotType, index: number, idFactory: () 
     case 'responseModify':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'concurrency':
-      return { id, slotType, index, ruleId: null, enabled: true, config: { windowMinutes: 5, maxCount: 10, perProvider: false, providers: [] } }
+      return { id, slotType, index, ruleId: null, enabled: true, config: { windowMinutes: 5, maxCount: 10 } }
     case 'autoSwitch':
       return { id, slotType, index, ruleId: null, enabled: true, config: {} }
     case 'logOutput':

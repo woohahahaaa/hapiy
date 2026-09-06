@@ -247,7 +247,6 @@ export function NodeSlot({ data }: NodeSlotProps) {
       selectedExecutorToken={selectedExecutorToken}
       onToggleEnabled={onToggleEnabled}
       entries={entries as ConcurrencySlotEntry[]}
-      providers={providers}
       flashLayers={flashLayers}
       dragProps={entryDragProps}
       onChangeEntry={(next) => onChangeEntry?.(next)}

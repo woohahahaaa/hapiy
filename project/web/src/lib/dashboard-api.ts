@@ -678,12 +678,16 @@ export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
 // 如 opencode 的 reasoning 要求 boolean 而统一值是档位数组）。
 // op: raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个）
 //     / join（拼接，sep 可选，默认 ","）。
+// values: 可选白名单，数组值写入前只保留列出的字面量（如 openclaw 的
+// input 只接受 text/image/video/audio），其它值（如 models.dev 的 pdf）
+// 自动丢弃。
 export type AgentModelInfoFieldOp = 'raw' | 'bool' | 'first' | 'join'
 
 export type AgentModelInfoFieldSpec = {
   readonly path: string
   readonly op?: AgentModelInfoFieldOp
   readonly sep?: string
+  readonly values?: readonly string[]
 }
 
 // 每个字段既接受纯路径字符串（等价 raw），也接受上面的对象写法。
@@ -695,11 +699,14 @@ export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['ra
 export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpecValue {
   if (typeof value === 'string') return value
   if (isRecord(value) && typeof value.path === 'string') {
-    const spec: { path: string; op?: AgentModelInfoFieldOp; sep?: string } = { path: value.path }
+    const spec: { path: string; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path: value.path }
     if (AGENT_MODEL_INFO_FIELD_OPS.includes(value.op as AgentModelInfoFieldOp)) {
       spec.op = value.op as AgentModelInfoFieldOp
     }
     if (typeof value.sep === 'string' && value.sep !== '') spec.sep = value.sep
+    if (Array.isArray(value.values)) {
+      spec.values = value.values.filter((x): x is string => typeof x === 'string')
+    }
     return spec
   }
   return ''
@@ -1724,15 +1731,14 @@ export type RewriteRule = {
 }
 
 // 并行控制节点内联配置：直接在拓扑 slot 条目上保存，不再依赖规则表。
+// 所有请求统一使用一个滑动窗口，不区分供应商。
 export type ConcurrencyNodeConfig = {
   readonly windowMinutes: number // 每 X 分钟内
   readonly maxCount: number // 最多 N 条
-  readonly perProvider: boolean // 按供应商分别计算
-  readonly providers: readonly string[] // 命中的供应商 id; 空 = 全部
 }
 
 export function defaultConcurrencyNodeConfig(): ConcurrencyNodeConfig {
-  return { windowMinutes: 5, maxCount: 10, perProvider: false, providers: [] }
+  return { windowMinutes: 5, maxCount: 10 }
 }
 
 export function parseConcurrencyNodeConfig(value: unknown): ConcurrencyNodeConfig {
@@ -1741,9 +1747,7 @@ export function parseConcurrencyNodeConfig(value: unknown): ConcurrencyNodeConfi
   if (windowMinutes <= 0) windowMinutes = 5
   let maxCount = readNumber(value.maxCount, 'concurrency.maxCount', 10)
   if (maxCount <= 0) maxCount = 10
-  const perProvider = typeof value.perProvider === 'boolean' ? value.perProvider : false
-  const providers = readStringArray(value.providers, 'concurrency.providers')
-  return { windowMinutes, maxCount, perProvider, providers }
+  return { windowMinutes, maxCount }
 }
 
 export type FailoverRule = {

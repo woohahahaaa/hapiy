@@ -31,7 +31,7 @@ const opLabel = (op: string): string => COND_OPS.find((o) => o.value === op)?.la
 
 // 条件开关节点：无自身启停开关 —— 在链路中即生效。
 // 外壳对齐请求入口：状态点 + 规则名称 + 标题右侧「编辑」按钮。
-// 正文表格竖向一分为二：左列显示命中的供应商与条件明细（baseURL 计数行样式），
+// 正文表格竖向一分为二：左列显示生效供应商与条件明细（baseURL 计数行样式），
 // 右列单独划分出「是/否」两条输出（各带一条 pill handlebar）。
 export function NodeSwitch({ data, id }: NodeSwitchProps) {
   const {
@@ -119,7 +119,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
 
         {/* 正文表格：竖向一分为二 —— 左列明细，右列「是/否」输出 */}
         <div className="flex items-stretch">
-          {/* 左列：命中的供应商/模型与条件明细（供应商卡片的 baseURL 行样式） */}
+          {/* 左列：生效供应商/模型与条件明细（供应商卡片的 baseURL 行样式） */}
           <div className="min-w-0 flex-1 space-y-1 px-3 py-2 text-xs">
             <div>{filterLabel} {selectedNames.length === 0 ? `全部${filterLabel}` : selectedNames.join(' · ')}</div>
             <div>条件 {conditionSummary}</div>
