@@ -85,16 +85,16 @@ func GetAgentTypeRuleTemplate() gin.HandlerFunc {
 }
 
 type updateAgentTypeRuleRequest struct {
-	Name             string                          `json:"name"`
-	Windows          string                          `json:"windows"`
-	Mac              string                          `json:"mac"`
-	ProviderPath     string                          `json:"provider_path"`
-	ModelPath        string                          `json:"model_path"`
-	ModelsContainer  string                          `json:"models_container"`
-	Recommendations  []model.AgentRecommendation     `json:"recommendations"`
-	Protocols        []model.AgentProtocol           `json:"protocols"`
-	ModelInfoFields  *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
-	ConfigJsonc      string                          `json:"config_jsonc"`
+	Name            string                          `json:"name"`
+	Windows         string                          `json:"windows"`
+	Mac             string                          `json:"mac"`
+	ProviderPath    string                          `json:"provider_path"`
+	ModelPath       string                          `json:"model_path"`
+	ModelsContainer string                          `json:"models_container"`
+	Recommendations []model.AgentRecommendation     `json:"recommendations"`
+	Protocols       []model.AgentProtocol           `json:"protocols"`
+	ModelInfoFields *model.AgentModelInfoFieldPaths `json:"model_info_fields"`
+	ConfigJsonc     string                          `json:"config_jsonc"`
 }
 
 // UpdateAgentTypeRule edits an existing rule's display name and/or its

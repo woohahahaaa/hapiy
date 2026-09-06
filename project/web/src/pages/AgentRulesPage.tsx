@@ -633,6 +633,7 @@ function RuleDialog({
       setMacPath(editing?.os_paths.mac ?? '')
       setProviderPath(editing?.json_paths.provider ?? '')
       setModelPath(editing?.json_paths.model ?? '')
+      setModelsContainer(editing?.json_paths.models_container ?? '')
       // 从既有规则拆出 common 与 protocols：优先用 config_jsonc 原文，
       // 缺失时用结构化字段兜底。
       let common: AgentRecommendation[]
@@ -672,6 +673,7 @@ function RuleDialog({
       setMacPath(tmpl.os_paths.mac ?? '')
       setProviderPath(tmpl.json_paths.provider ?? '')
       setModelPath(tmpl.json_paths.model ?? '')
+      setModelsContainer(tmpl.json_paths.models_container ?? '')
       fillFromParts(tmpl.recommendations, tmpl.protocols, tmpl.model_info_fields)
       setError(null)
       setConfirmTemplate(false)
@@ -725,6 +727,7 @@ function RuleDialog({
           mac: macPath.trim(),
           provider_path: providerPath.trim(),
           model_path: modelPath.trim(),
+          models_container: modelsContainer,
           recommendations: common,
           protocols,
           model_info_fields: modelInfoFields,
@@ -794,6 +797,24 @@ function RuleDialog({
               />
               <p className="text-xs text-muted-foreground">
                 完整 gjson 路径，model 里用 {'{provider_id}'} 占位当前 provider 键名
+              </p>
+            </Field>
+            <Field>
+              <FieldLabel>模型列表容器格式（models_container）</FieldLabel>
+              <Select
+                value={modelsContainer || 'object'}
+                onValueChange={(v) => setModelsContainer(v === 'object' ? '' : 'array')}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="选择格式" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="array">数组 [{&quot;id&quot;: ...}]（openclaw）</SelectItem>
+                  <SelectItem value="object">对象 map {&quot;模型id&quot;: {...}}（opencode）</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                决定托管同步时 models 写进配置文件的样子。数组每项带 id；对象以模型名做键。选错会导致 agent 启动校验失败
               </p>
             </Field>
 
