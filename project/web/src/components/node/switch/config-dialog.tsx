@@ -120,7 +120,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
         <DialogHeader>
           <DialogTitle>满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
           <DialogDescription>
-            供应商筛选与判断条件须同时命中才从「是」输出；否则从「否」输出。
+            供应商筛选与判断条件须同时命中才从「是」输出；否则从「否」输出。未配置任何筛选和条件时，默认从「是」输出。
           </DialogDescription>
         </DialogHeader>
 

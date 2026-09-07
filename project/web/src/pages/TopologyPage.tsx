@@ -8,6 +8,8 @@ import {
   type Node,
   type Edge,
   type Connection,
+  type HandleType,
+  type FinalConnectionState,
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -1546,6 +1548,19 @@ export function TopologyPage() {
     [setEdges, commitCanvasWires],
   )
 
+  // 拖任一端子松开在空白处：onReconnect 只处理落到有效 handle 的重连，
+  // 这里把无效落点当作「断开该线」处理（isValid=false 即没落在 handle 上）。
+  const handleReconnectEnd = useCallback(
+    (_event: MouseEvent | TouchEvent, edge: Edge, _handleType: HandleType, connectionState: FinalConnectionState) => {
+      if (connectionState.isValid) return
+      if (!edgesRef.current.some((e) => e.id === edge.id)) return
+      const next = edgesRef.current.filter((e) => e.id !== edge.id)
+      setEdges(next)
+      commitCanvasWires(canvasWiresFromEdges(next))
+    },
+    [setEdges, commitCanvasWires],
+  )
+
 const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     selectionRef.current = { nodes: params.nodes, edges: params.edges }
     setSelectedDebugIds(params.nodes.map((n) => n.id))
@@ -1651,6 +1666,11 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     )
     const edgeCount = selectionRef.current.edges.filter((e) => !e.source.startsWith('model-')).length
     if (topLevelIds.length > 0 || edgeCount > 0) {
+      // 只选中了连线：直接断开，不弹确认框；涉及节点删除才需要确认。
+      if (topLevelIds.length === 0) {
+        handleDeleteSelectedEdges()
+        return
+      }
       setConfirmDelete({ nodeCount: topLevelIds.length, edgeCount })
       return
     }
@@ -1668,7 +1688,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         }
       }
     }
-  }, [selectedExecutor, canvas, resolveExecutorTarget])
+  }, [selectedExecutor, canvas, resolveExecutorTarget, handleDeleteSelectedEdges])
 
   const handleUndo = useCallback(() => {
     const cur = tpRef.current
@@ -1761,7 +1781,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       if (event.key !== 'Delete' && event.key !== 'Backspace') return
       if (inEditable) return
       const topLevelIds = selectionRef.current.nodes.filter(
-        (n) => n.type === 'requestEntry' || n.type === 'slot',
+        (n) => n.type === 'requestEntry' || n.type === 'slot' || n.type === 'switch',
       )
       const hasEdges = selectionRef.current.edges.some((e) => !e.source.startsWith('model-'))
       if (topLevelIds.length === 0 && !hasEdges && !selectedExecutor) return
@@ -2165,6 +2185,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
           onNodeContextMenu={handleNodeContextMenu}
           onConnect={handleConnect}
           onReconnect={handleReconnect}
+          onReconnectEnd={handleReconnectEnd}
           onSelectionChange={handleSelectionChange}
           onInit={(instance) => {
             rfInstanceRef.current = instance

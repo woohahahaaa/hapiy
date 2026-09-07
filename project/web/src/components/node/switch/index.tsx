@@ -1,5 +1,5 @@
-import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { useEffect, useRef, useState } from 'react'
+import { Handle, Position, useStore, useUpdateNodeInternals } from '@xyflow/react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
@@ -75,7 +75,27 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
     }
   }, [id, updateNodeInternals])
 
+  const selected = useStore((s) => s.nodes.find((n) => n.id === id)?.selected ?? false)
   const mode = config?.mode ?? 'provider'
+  const accent = 'var(--node-accent, var(--color-primary))'
+
+  const pillStyle = (): CSSProperties => {
+    return {
+      width: 12,
+      height: 20,
+      borderWidth: 2,
+      // 默认 right:0 以所在行 div 的 padding 边为基准（= 卡片内容右缘，
+      // 比 2px 边框的外缘靠左 2px），不动会比左侧 handlebar 的 pill 偏
+      // 左 2px；right:-2 把 pill 中心线挪到节点右边框竖线上。
+      right: -2,
+      // 选中点亮：只把描边换成主题色（与卡片选中 ring 同色），背景保持
+      // 卡片色。不实心填充、不加 box-shadow 外圈——前者像整根被填掉，
+      // 后者看起来比其他节点的 handle 粗一圈。
+      borderColor: selected ? accent : 'var(--color-border)',
+      background: 'var(--color-card)',
+    }
+  }
+
   const providerIds = config?.providers ?? []
   const selectedNames = mode === 'model'
     ? (config?.models ?? [])
@@ -133,8 +153,8 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="yes"
-                className="!rounded-[4px] !border-border !bg-card"
-                style={{ width: 12, height: 20, borderWidth: 2 }}
+                className="!rounded-[4px]"
+                style={pillStyle()}
               />
             </div>
             <div className="relative flex flex-1 items-center justify-end gap-1.5 border-t border-border px-2 py-1.5">
@@ -143,8 +163,8 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="no"
-                className="!rounded-[4px] !border-border !bg-card"
-                style={{ width: 12, height: 20, borderWidth: 2 }}
+                className="!rounded-[4px]"
+                style={pillStyle()}
               />
             </div>
           </div>
