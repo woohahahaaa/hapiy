@@ -16,8 +16,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { toast } from '@/components/ui/toast'
@@ -281,13 +281,24 @@ export function BillingSettings() {
       </Card>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>汇率接口设置</DialogTitle>
             <DialogDescription>
               配置在线获取人民币兑美元汇率的接口：通过 GET 方法请求接口地址，从返回的 JSON 中读取人民币汇率字段。
             </DialogDescription>
           </DialogHeader>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setSettingsOpen(false)} disabled={refreshing}>
+                取消
+              </Button>
+              <Button onClick={handleSaveExchangeConfig} disabled={refreshing}>
+                {refreshing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                保存并刷新
+              </Button>
+            </>
+          }>
           <div className="flex flex-col gap-4">
             <div className="grid gap-1.5 text-sm">
               <span>接口地址</span>
@@ -342,15 +353,7 @@ export function BillingSettings() {
               )}
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSettingsOpen(false)} disabled={refreshing}>
-              取消
-            </Button>
-            <Button onClick={handleSaveExchangeConfig} disabled={refreshing}>
-              {refreshing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-              保存并刷新
-            </Button>
-          </DialogFooter>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </>

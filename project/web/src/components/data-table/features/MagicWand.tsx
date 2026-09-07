@@ -9,8 +9,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from "@/components/dialog";
 import { cn } from "@/lib/utils";
@@ -144,29 +144,32 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
       >
         <DialogContent
           width="sm"
+          scrollFooter
         >
           <DialogHeader>
             <DialogTitle>宽度参考已选择</DialogTitle>
             <DialogDescription>选择宽度单位</DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => handlePick("percent")}
-            >
-              百分比
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => handlePick("pixel")}
-            >
-              像素
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => handlePick("percent")}
+              >
+                百分比
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => handlePick("pixel")}
+              >
+                像素
+              </Button>
+            </>
+          } />
         </DialogContent>
       </Dialog>
 

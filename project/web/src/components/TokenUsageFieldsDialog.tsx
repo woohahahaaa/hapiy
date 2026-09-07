@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { AppIcon } from '@/components/AppIcon'
@@ -51,10 +51,24 @@ export function TokenUsageFieldsDialog({ open, onOpenChange, initial, onSave }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
+      <DialogContent width="sm" scrollFooter>
         <DialogHeader>
           <DialogTitle>Token 用量字段配置</DialogTitle>
         </DialogHeader>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setDraft(DEFAULT_TOKEN_USAGE_FIELDS)}>
+              恢复默认
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+              {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+              保存
+            </Button>
+          </>
+        }>
         <div className="flex max-h-[60vh] flex-col gap-4 overflow-auto pr-1">
           {FIELD_GROUPS.map((group) => {
             const paths = draft[group.key]
@@ -99,18 +113,7 @@ export function TokenUsageFieldsDialog({ open, onOpenChange, initial, onSave }: 
             )
           })}
         </div>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setDraft(DEFAULT_TOKEN_USAGE_FIELDS)}>
-            恢复默认
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
-            {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-            保存
-          </Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )

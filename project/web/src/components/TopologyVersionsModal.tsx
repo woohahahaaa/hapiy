@@ -5,7 +5,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { NodeModel } from '@/components/node/model'
 import { NodeSlot } from '@/components/node/slot'
 import { NodeExecutor } from '@/components/node/executor'
@@ -390,20 +390,23 @@ export function TopologyVersionsModal({
         </div>
       </DialogContent>
       <Dialog open={confirmRestoreId !== null} onOpenChange={(next) => { if (!next) setConfirmRestoreId(null) }}>
-        <DialogContent>
+        <DialogContent scrollFooter>
           <DialogHeader>
             <DialogTitle>恢复版本</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">恢复前会自动存档当前版本，确定恢复到该版本吗？</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmRestoreId(null)} disabled={actionBusy !== null}>
-              取消
-            </Button>
-            <Button onClick={() => void handleRestore()} disabled={actionBusy !== null}>
-              {actionBusy === 'restore' && <AppIcon name="progress_activity" size={16} className="animate-spin" data-icon="inline-start" />}
-              确认恢复
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setConfirmRestoreId(null)} disabled={actionBusy !== null}>
+                取消
+              </Button>
+              <Button onClick={() => void handleRestore()} disabled={actionBusy !== null}>
+                {actionBusy === 'restore' && <AppIcon name="progress_activity" size={16} className="animate-spin" data-icon="inline-start" />}
+                确认恢复
+              </Button>
+            </>
+          }>
+            <p className="text-sm text-muted-foreground">恢复前会自动存档当前版本，确定恢复到该版本吗？</p>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </Dialog>

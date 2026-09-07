@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { AppIcon } from '@/components/AppIcon'
@@ -75,43 +75,48 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
   return (
     <>
       <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-        <DialogContent width="md" height="auto" className="flex flex-col overflow-hidden">
+        <DialogContent width="md" height="auto" scrollFooter className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>编辑 JSON</DialogTitle>
           </DialogHeader>
-          {error && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
-              {error}
-            </div>
-          )}
-          <Textarea
-            value={text}
-            onChange={(e) => { setText(e.target.value); setError(null) }}
-            className="min-h-0 flex-1 overflow-auto font-mono text-xs"
-            spellCheck={false}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
-            <Button variant="outline" onClick={handleFormat} disabled={saving}>
-              <AppIcon name="auto_fix_high" data-icon="inline-start" />
-              格式化
-            </Button>
-            <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
+              <Button variant="outline" onClick={handleFormat} disabled={saving}>
+                <AppIcon name="auto_fix_high" data-icon="inline-start" />
+                格式化
+              </Button>
+              <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+            </>
+          }>
+            {error && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+                {error}
+              </div>
+            )}
+            <Textarea
+              value={text}
+              onChange={(e) => { setText(e.target.value); setError(null) }}
+              className="min-h-0 flex-1 overflow-auto font-mono text-xs"
+              spellCheck={false}
+            />
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
       <Dialog open={showConfirm} onOpenChange={(open) => { if (!open) setShowConfirm(false) }}>
-        <DialogContent>
+        <DialogContent scrollFooter>
           <DialogHeader>
             <DialogTitle>保存 JSON</DialogTitle>
             <DialogDescription>
               你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={saving}>我再想想</Button>
-            <Button onClick={() => { setShowConfirm(false); void handleSave() }} disabled={saving}>确认保存</Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={saving}>我再想想</Button>
+              <Button onClick={() => { setShowConfirm(false); void handleSave() }} disabled={saving}>确认保存</Button>
+            </>
+          } />
         </DialogContent>
       </Dialog>
     </>

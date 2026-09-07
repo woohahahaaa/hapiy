@@ -18,8 +18,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { PageHeader } from '@/components/PageHeader'
@@ -2306,7 +2306,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
             if (!open) setConfirmDelete(null)
           }}
         >
-          <DialogContent width="sm">
+          <DialogContent width="sm" scrollFooter>
             <DialogHeader>
               <DialogTitle>确认删除</DialogTitle>
               <DialogDescription>
@@ -2315,20 +2315,23 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
                   : `将删除 ${confirmDelete?.edgeCount ?? 0} 条连线,删除后可通过撤销恢复。`}
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmDelete(null)}>
-                取消
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  executeDeleteSelected()
-                  setConfirmDelete(null)
-                }}
-              >
-                确认删除
-              </Button>
-            </DialogFooter>
+            <DialogScrollBody footer={
+              <>
+                <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    executeDeleteSelected()
+                    setConfirmDelete(null)
+                  }}
+                >
+                  确认删除
+                </Button>
+              </>
+            }>
+            </DialogScrollBody>
           </DialogContent>
         </Dialog>
       </div>

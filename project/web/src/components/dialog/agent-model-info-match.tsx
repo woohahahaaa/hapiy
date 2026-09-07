@@ -429,6 +429,13 @@ export function AgentModelInfoMatchDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
+            <Button
+              variant="default"
+              disabled={applying || loading || (providerCheckedCount === 0 && modelCheckedCount === 0)}
+              onClick={() => void handleApply()}
+            >
+              {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '使用推荐配置'}
+            </Button>
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>关闭</Button>
           </>
         }>
@@ -619,16 +626,6 @@ export function AgentModelInfoMatchDialog({
                     })}
                   </tbody>
                 </table>
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-border pt-2">
-                <Button
-                  variant="default"
-                  disabled={applying || loading || (providerCheckedCount === 0 && modelCheckedCount === 0)}
-                  onClick={() => void handleApply()}
-                >
-                  {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '使用推荐配置'}
-                </Button>
               </div>
             </>
           )}

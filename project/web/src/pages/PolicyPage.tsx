@@ -11,8 +11,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
@@ -253,7 +253,7 @@ function RewritePage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent width="md">
+        <DialogContent width="md" scrollFooter>
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
@@ -285,7 +285,18 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
   const formKey = rule?.id ?? 'new'
 
   return (
-    <FieldGroup>
+    <DialogScrollBody footer={
+      <>
+        <div className="flex w-full items-center justify-between gap-2">
+          <GjsonPathHelp />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onCancel}>取消</Button>
+            <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
+          </div>
+        </div>
+      </>
+    }>
+      <FieldGroup>
       <Field>
         <FieldLabel htmlFor="rewrite-name">名称</FieldLabel>
         <Input id="rewrite-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
@@ -298,14 +309,8 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
           onScriptChange={(next) => setForm((p) => ({ ...p, script: next }))}
         />
       </Field>
-      <div className="flex items-center justify-between border-t border-border pt-3">
-        <GjsonPathHelp />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onCancel}>取消</Button>
-          <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
-        </div>
-      </div>
-    </FieldGroup>
+      </FieldGroup>
+    </DialogScrollBody>
   )
 }
 
@@ -437,7 +442,7 @@ function FailoverPage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setEditing(null); clearEditQuery() } }}>
-          <DialogContent width="md">
+          <DialogContent width="md" scrollFooter>
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
@@ -485,6 +490,23 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
   const [matchPatterns, setMatchPatterns] = useState(() => (rule?.matchPatterns ?? []).join('\n'))
 
   return (
+    <DialogScrollBody footer={
+      <>
+        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button
+          disabled={saving || !form.name.trim() || !form.dimension}
+          onClick={() =>
+            onSave({
+              ...form,
+              name: form.name.trim(),
+              matchPatterns: matchPatterns.split('\n').map((s) => s.trim()).filter(Boolean),
+            })
+          }
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </>
+    }>
     <FieldGroup>
       <Field>
         <FieldLabel htmlFor="failover-name">名称</FieldLabel>
@@ -539,22 +561,8 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         <p className="text-xs text-muted-foreground">窗口期内连续命中 N 次才禁用。窗口填 0 表示不限时间；次数填 1 等于「一次就禁」。</p>
       </Field>
 
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button
-          disabled={saving || !form.name.trim() || !form.dimension}
-          onClick={() =>
-            onSave({
-              ...form,
-              name: form.name.trim(),
-              matchPatterns: matchPatterns.split('\n').map((s) => s.trim()).filter(Boolean),
-            })
-          }
-        >
-          {saving ? '保存中...' : '保存'}
-        </Button>
-      </DialogFooter>
-    </FieldGroup>
+      </FieldGroup>
+    </DialogScrollBody>
   )
 }
 
@@ -645,7 +653,7 @@ function RewriteResponsePage() {
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent width="md">
+        <DialogContent width="md" scrollFooter>
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>

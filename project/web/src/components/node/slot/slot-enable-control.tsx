@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 
@@ -135,23 +135,26 @@ function CountdownControl({
         />
       </div>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>设置开启时长</DialogTitle>
           </DialogHeader>
-          <div className="flex items-end justify-center gap-2">
-            <TimeField label="时" value={hours} onChange={setHours} />
-            <TimeField label="分" value={minutes} onChange={setMinutes} />
-            <TimeField label="秒" value={seconds} onChange={setSeconds} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
-              取消
-            </Button>
-            <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
-              确认
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
+                取消
+              </Button>
+              <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
+                确认
+              </Button>
+            </>
+          }>
+            <div className="flex items-end justify-center gap-2">
+              <TimeField label="时" value={hours} onChange={setHours} />
+              <TimeField label="分" value={minutes} onChange={setMinutes} />
+              <TimeField label="秒" value={seconds} onChange={setSeconds} />
+            </div>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </>

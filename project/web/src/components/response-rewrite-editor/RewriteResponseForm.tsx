@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
+import { DialogScrollBody } from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import type { ResponseRewriteRule } from '@/lib/dashboard-api'
@@ -74,7 +75,17 @@ export function RewriteResponseForm({ rule, onSave, onCancel, saving }: RewriteR
   const disabled = saving || !name.trim() || !hasAnyCompleteBlock(form.blocks)
 
   return (
-    <FieldGroup>
+    <DialogScrollBody footer={
+      <>
+        <Button variant="outline" onClick={onCancel}>
+          取消
+        </Button>
+        <Button disabled={disabled} onClick={handleSave}>
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </>
+    }>
+      <FieldGroup>
       <Field>
         <FieldLabel htmlFor="rr-name">名称</FieldLabel>
         <Input
@@ -127,15 +138,8 @@ export function RewriteResponseForm({ rule, onSave, onCancel, saving }: RewriteR
         </div>
       </Field>
 
-      <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
-        <Button variant="outline" onClick={onCancel}>
-          取消
-        </Button>
-        <Button disabled={disabled} onClick={handleSave}>
-          {saving ? '保存中...' : '保存'}
-        </Button>
-      </div>
     </FieldGroup>
+    </DialogScrollBody>
   )
 }
 

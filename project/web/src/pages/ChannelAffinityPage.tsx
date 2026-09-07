@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -61,6 +61,17 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
   }
 
   return (
+    <DialogScrollBody footer={
+      <>
+        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button
+          disabled={saving || !form.name.trim() || parseList(sessionText).length === 0}
+          onClick={() => void handleSave()}
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </>
+    }>
     <FieldGroup>
       <Field>
         <FieldLabel htmlFor="aff-rule-name">规则名称</FieldLabel>
@@ -94,16 +105,8 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
         <Input id="aff-ttl" type="number" min={1} value={form.ttlSeconds ?? 1800} onChange={(event) => setForm((current) => ({ ...current, ttlSeconds: Number(event.target.value) || 1800 }))} />
       </Field>
 
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button
-          disabled={saving || !form.name.trim() || parseList(sessionText).length === 0}
-          onClick={() => void handleSave()}
-        >
-          {saving ? '保存中...' : '保存'}
-        </Button>
-      </DialogFooter>
     </FieldGroup>
+    </DialogScrollBody>
   )
 }
 
@@ -120,6 +123,23 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
   const [modelText, setModelText] = useState(fallback.modelFields.join('\n') ?? '')
 
   return (
+    <DialogScrollBody footer={
+      <>
+        <Button variant="outline" onClick={onCancel}>取消</Button>
+        <Button
+          disabled={saving}
+          onClick={async () => {
+            await onSave({
+              enabled,
+              sessionIdFields: parseList(sessionText),
+              modelFields: parseList(modelText),
+            })
+          }}
+        >
+          {saving ? '保存中...' : '保存'}
+        </Button>
+      </>
+    }>
     <FieldGroup>
       <Field>
         <label className="flex items-center gap-2 text-sm">
@@ -157,22 +177,8 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
         </>
       )}
 
-      <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
-        <Button
-          disabled={saving}
-          onClick={async () => {
-            await onSave({
-              enabled,
-              sessionIdFields: parseList(sessionText),
-              modelFields: parseList(modelText),
-            })
-          }}
-        >
-          {saving ? '保存中...' : '保存'}
-        </Button>
-      </DialogFooter>
     </FieldGroup>
+    </DialogScrollBody>
   )
 }
 
@@ -357,14 +363,14 @@ export function ChannelAffinityPage() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent width="md">
+        <DialogContent width="md" scrollFooter>
           <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
           <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} saving={isSaving} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isFallbackOpen} onOpenChange={setIsFallbackOpen}>
-        <DialogContent width="md">
+        <DialogContent width="md" scrollFooter>
           <DialogHeader><DialogTitle>兜底渠道亲和性匹配</DialogTitle></DialogHeader>
           <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} onCancel={() => setIsFallbackOpen(false)} saving={isSaving} />
         </DialogContent>
