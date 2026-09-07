@@ -685,6 +685,7 @@ export type AgentModelInfoFieldOp = 'raw' | 'bool' | 'first' | 'join'
 
 export type AgentModelInfoFieldSpec = {
   readonly path: string
+  readonly action?: 'set' | 'skip' | 'delete'
   readonly op?: AgentModelInfoFieldOp
   readonly sep?: string
   readonly values?: readonly string[]
@@ -699,7 +700,10 @@ export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['ra
 export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpecValue {
   if (typeof value === 'string') return value
   if (isRecord(value) && typeof value.path === 'string') {
-    const spec: { path: string; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path: value.path }
+    const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path: value.path }
+    if (value.action === 'skip' || value.action === 'delete') {
+      spec.action = value.action
+    }
     if (AGENT_MODEL_INFO_FIELD_OPS.includes(value.op as AgentModelInfoFieldOp)) {
       spec.op = value.op as AgentModelInfoFieldOp
     }
@@ -765,9 +769,15 @@ export type AgentRecommendation = {
   readonly key: string
   readonly description: string
   readonly type: AgentRecommendationType
+  /** 推荐操作："set"（推荐填，默认）| "skip"（推荐不填）| "delete"（推荐删除字段） */
+  readonly action?: 'set' | 'skip' | 'delete'
   readonly recommended: unknown
   readonly candidates?: Readonly<Record<string, string>>
   readonly required: boolean
+  /** 值写法：写入前如何变换值 */
+  readonly op?: AgentModelInfoFieldOp
+  readonly sep?: string
+  readonly values?: readonly string[]
 }
 
 export type AgentTypeRule = {
@@ -1737,6 +1747,13 @@ export type ConcurrencyNodeConfig = {
   readonly maxCount: number // 最多 N 条
 }
 
+// 后端报告的单条并发窗口当前占用（ConcurrencyWindowCounter 行的视图）。
+export type ConcurrencyWindowActive = {
+  readonly nodeId: string
+  readonly windowCount: number // 当前窗口内活跃条数
+  readonly maxCount: number // 窗口容量
+}
+
 export function defaultConcurrencyNodeConfig(): ConcurrencyNodeConfig {
   return { windowMinutes: 5, maxCount: 10 }
 }
@@ -2159,9 +2176,18 @@ function parseAgentRecommendation(value: unknown): AgentRecommendation {
     key: typeof value.key === 'string' ? value.key : '',
     description: typeof value.description === 'string' ? value.description : '',
     type,
+    action:
+      value.action === 'skip' || value.action === 'delete'
+        ? (value.action as 'skip' | 'delete')
+        : undefined,
     recommended: value.recommended ?? null,
     candidates: Object.keys(out).length > 0 ? out : undefined,
     required: value.required === true,
+    op: AGENT_MODEL_INFO_FIELD_OPS.includes(value.op as AgentModelInfoFieldOp)
+      ? (value.op as AgentModelInfoFieldOp)
+      : undefined,
+    sep: typeof value.sep === 'string' && value.sep !== '' ? value.sep : undefined,
+    values: Array.isArray(value.values) ? value.values.filter((x): x is string => typeof x === 'string') : undefined,
   }
 }
 
@@ -2817,6 +2843,17 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await request('/flat-topology/validate')
     if (!Array.isArray(body)) throw new DashboardApiError('服务端返回的重复激活冲突格式无效', null)
     return body.map(parseDuplicateActivation)
+  },
+
+  async listConcurrencyWindows(): Promise<readonly ConcurrencyWindowActive[]> {
+    const body = await request('/concurrency/windows')
+    if (!Array.isArray(body)) throw new DashboardApiError('服务端返回的并发窗口状态格式无效', null)
+    return body.map((raw) => {
+      const nodeId = isRecord(raw) && typeof raw.node_id === 'string' ? raw.node_id : ''
+      const windowCount = isRecord(raw) && typeof raw.window_count === 'number' ? raw.window_count : 0
+      const maxCount = isRecord(raw) && typeof raw.max_count === 'number' ? raw.max_count : 0
+      return { nodeId, windowCount, maxCount }
+    })
   },
 
   async listTopologyVersions(): Promise<TopologyVersionList> {

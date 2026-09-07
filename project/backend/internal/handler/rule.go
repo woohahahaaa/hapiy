@@ -63,12 +63,11 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			if err := db.Model(&model.RewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
-			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
+if err := db.Model(&model.RewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
 		case RuleTypeFailover:
 			var r []model.FailoverRule
 			var total int64

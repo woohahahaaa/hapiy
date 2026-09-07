@@ -3,6 +3,7 @@ import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/checkbox'
 import {
   Select,
   SelectContent,
@@ -201,9 +202,13 @@ function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
     key,
     description: typeof v.description === 'string' ? v.description : '',
     type,
+    action: v.action === 'skip' || v.action === 'delete' ? v.action : undefined,
     recommended,
     candidates: Object.keys(cand).length > 0 ? cand : undefined,
     required: v.required === true,
+    op: AGENT_MODEL_INFO_FIELD_OPS.includes(v.op as never) ? (v.op as (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]) : undefined,
+    sep: typeof v.sep === 'string' && v.sep !== '' ? v.sep : undefined,
+    values: Array.isArray(v.values) ? v.values.filter((x): x is string => typeof x === 'string') : undefined,
   }
 }
 
@@ -284,6 +289,7 @@ interface EndpointRuleEdit {
   readonly tagsText: string
   readonly conditions: readonly AgentProtocolCondition[]
   readonly fieldsJson: string
+  readonly showJson?: boolean
 }
 
 // emptyEndpointRule is the starting card shape for a newly added endpoint rule.
@@ -546,11 +552,14 @@ function buildModelInfoFieldsPayload(
       return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请使用值&写法（JSON 对象），不允许只填路径` }
     }
     try {
-      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown; values?: unknown }
+      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown; values?: unknown; action?: unknown }
       if (typeof parsed.path !== 'string' || parsed.path.trim() === '') {
         return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」写法缺少 path 字段` }
       }
-      const spec: { path: string; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string; values?: string[] } = { path: parsed.path.trim() }
+      const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string; values?: string[] } = { path: parsed.path.trim() }
+      if (parsed.action === 'skip' || parsed.action === 'delete') {
+        spec.action = parsed.action
+      }
       if (parsed.op !== undefined) {
         if (!AGENT_MODEL_INFO_FIELD_OPS.includes(parsed.op as never)) {
           return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」不支持的 op: ${String(parsed.op)}（可选 ${AGENT_MODEL_INFO_FIELD_OPS.join(' / ')}）` }
@@ -598,6 +607,7 @@ function RuleDialog({
   // 一套独立规则（名称 / 归纳范围关键词 / 字段推荐值表）。
   const [commonText, setCommonText] = useState('[]')
   const [commonError, setCommonError] = useState<string | null>(null)
+  const [showCommonJson, setShowCommonJson] = useState(false)
   const [endpointRules, setEndpointRules] = useState<readonly EndpointRuleEdit[]>([])
   const [modelInfoTexts, setModelInfoTexts] = useState<Record<ModelInfoFieldKey, string>>(EMPTY_MODEL_INFO_TEXTS)
   const [saving, setSaving] = useState(false)
@@ -826,32 +836,72 @@ function RuleDialog({
 
             <Field>
               <div className="flex items-center justify-between">
-                <FieldLabel>公共配置（common，JSON 数组）</FieldLabel>
+                <FieldLabel>公共配置（common）</FieldLabel>
               </div>
               <p className="text-xs text-muted-foreground">
-                与请求协议 / SDK 无关的字段推荐值，直接填 JSON 数组；每项：
-                key（字段路径）/ scope（provider|model）/ required（必填）/
-                recommended（推荐值，null=推荐不填）/ description（含义，可选）/ candidates（候选说明，可选）。
+                与请求协议 / SDK 无关的字段推荐值。每行一个字段：路径 / 落在（provider|model）/ 推荐操作（填 / 不填 / 删除）/
+                推荐值 / 值写法（op / sep / 允许值白名单）/ 必填 / 说明。与页面里其余配置用同一套「值 + 写法」规则。
               </p>
-              <Textarea
-                value={commonText}
-                onChange={(e) => {
-                  setCommonText(e.target.value)
+              <div className="flex items-center justify-end py-1">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2"
+                  onClick={() => setShowCommonJson((v) => !v)}
+                >
+                  {showCommonJson ? '收起 JSON' : '编辑为 JSON'}
+                </button>
+              </div>
+              {showCommonJson ? (
+                <>
+                  <Textarea
+                    value={commonText}
+                    onChange={(e) => {
+                      setCommonText(e.target.value)
+                      try {
+                        parseCommonArray(e.target.value)
+                        setCommonError(null)
+                      } catch (err) {
+                        setCommonError(err instanceof Error ? err.message : String(err))
+                      }
+                    }}
+                    className={
+                      'h-[180px] resize-y font-mono text-xs leading-relaxed ' +
+                      (commonError ? 'border-destructive focus-visible:ring-destructive' : '')
+                    }
+                    spellCheck={false}
+                  />
+                  {commonError && (
+                    <p className="text-[11px] text-destructive">{commonError}</p>
+                  )}
+                </>
+              ) : (
+                (() => {
                   try {
-                    parseCommonArray(e.target.value)
-                    setCommonError(null)
+                    const commonRecs = parseCommonArray(commonText)
+                    return (
+                      <RecommendationTable
+                        showScope
+                        recs={commonRecs}
+                        onChange={(next) => setCommonText(JSON.stringify(next, null, 2))}
+                      />
+                    )
                   } catch (err) {
-                    setCommonError(err instanceof Error ? err.message : String(err))
+                    return (
+                      <>
+                        <p className="pb-1 text-[11px] text-destructive">
+                          当前公共配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
+                          请在「编辑为 JSON」里修正
+                        </p>
+                        <Textarea
+                          value={commonText}
+                          onChange={(e) => setCommonText(e.target.value)}
+                          className="h-[120px] resize-y font-mono text-xs leading-relaxed border-destructive"
+                          spellCheck={false}
+                        />
+                      </>
+                    )
                   }
-                }}
-                className={
-                  'h-[180px] resize-y font-mono text-xs leading-relaxed ' +
-                  (commonError ? 'border-destructive focus-visible:ring-destructive' : '')
-                }
-                spellCheck={false}
-              />
-              {commonError && (
-                <p className="text-[11px] text-destructive">{commonError}</p>
+                })()
               )}
             </Field>
 
@@ -906,6 +956,207 @@ function RuleDialog({
   )
 }
 
+const REC_ACTIONS = ['set', 'skip', 'delete'] as const
+const REC_ACTION_LABEL: Record<string, string> = {
+  set: '填',
+  skip: '不填',
+  delete: '删除',
+}
+
+// RecommendationTable — 结构化字段推荐编辑器，同时用于公共配置与每个
+// endpoint 的私有配置。每行一个推荐字段：路径 / 推荐操作 / 推荐值 /
+// 值写法（op/sep/values 白名单）/ 必填 / 说明。与非结构化 JSON 文本
+// 双向同步由调用方负责。
+function RecommendationTable({
+  recs,
+  onChange,
+  showScope = false,
+}: {
+  recs: readonly AgentRecommendation[]
+  onChange: (recs: AgentRecommendation[]) => void
+  showScope?: boolean
+}) {
+  const update = (index: number, patch: (r: AgentRecommendation) => AgentRecommendation) => {
+    onChange(recs.map((r, i) => (i === index ? patch(r) : r)))
+  }
+  const addRow = () => {
+    onChange([...recs, { scope: 'model', key: '', description: '', type: 'string', recommended: null, required: false }])
+  }
+  const valueToText = (v: unknown): string => {
+    if (v === undefined || v === null) return ''
+    if (typeof v === 'string') return v
+    return JSON.stringify(v)
+  }
+  const textToValue = (text: string, fallback: unknown): unknown => {
+    const t = text.trim()
+    if (t === '') return fallback
+    try {
+      return JSON.parse(t)
+    } catch {
+      return t
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      <div className="flex items-center justify-end border-b border-border bg-muted/40 px-2 py-1">
+        <Button type="button" variant="outline" size="xs" onClick={addRow}>
+          添加字段
+        </Button>
+      </div>
+      <table className="w-full text-xs">
+        <thead className="bg-muted/40 text-muted-foreground">
+          <tr>
+            <th className="px-2 py-1.5 text-left font-medium">路径</th>
+            {showScope ? <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">落在</th> : null}
+            <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
+            <th className="w-[8rem] px-2 py-1.5 text-left font-medium">推荐值</th>
+            <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">op</th>
+            <th className="w-[4rem] px-2 py-1.5 text-left font-medium">sep</th>
+            <th className="w-[10rem] px-2 py-1.5 text-left font-medium">允许值</th>
+            <th className="w-[3.5rem] px-2 py-1.5 text-left font-medium">必填</th>
+            <th className="w-[8rem] px-2 py-1.5 pl-0 text-left font-medium">说明</th>
+            <th className="w-9 px-2 py-1.5" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {recs.length === 0 ? (
+            <tr>
+              <td colSpan={showScope ? 10 : 9} className="px-2 py-2 text-muted-foreground">
+                暂无字段；点击「添加字段」开始。
+              </td>
+            </tr>
+          ) : (
+            recs.map((r, i) => (
+              <tr key={i} className="align-top">
+                <td className="px-2 py-1">
+                  <Input
+                    value={r.key}
+                    onChange={(e) => update(i, (x) => ({ ...x, key: e.target.value }))}
+                    className="h-6 text-xs font-mono"
+                    placeholder="options.baseURL"
+                  />
+                </td>
+                {showScope ? (
+                  <td className="px-2 py-1">
+                    <Select value={r.scope} onValueChange={(v) => update(i, (x) => ({ ...x, scope: v as 'provider' | 'model' }))}>
+                      <SelectTrigger className="h-6 w-full text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="provider">provider</SelectItem>
+                        <SelectItem value="model">model</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                ) : null}
+                <td className="px-2 py-1">
+                  <Select
+                    value={r.action ?? 'set'}
+                    onValueChange={(v) => update(i, (x) => ({ ...x, action: v === 'set' ? undefined : (v as 'skip' | 'delete') }))}
+                  >
+                    <SelectTrigger className="h-6 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REC_ACTIONS.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {REC_ACTION_LABEL[a]}
+                          {a === 'set' ? '（推荐填）' : a === 'skip' ? '（推荐不填）' : '（删除字段）'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-2 py-1">
+                  <Input
+                    value={valueToText(r.recommended)}
+                    onChange={(e) => {
+                      const v = textToValue(e.target.value, null)
+                      if (v === null && e.target.value.trim() === '') {
+                        update(i, (x) => ({ ...x, recommended: null }))
+                      } else {
+                        update(i, (x) => ({ ...x, recommended: v }))
+                      }
+                    }}
+                    className="h-6 text-xs font-mono"
+                    placeholder="null"
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <Select
+                    value={r.op ?? 'raw'}
+                    onValueChange={(v) => update(i, (x) => ({ ...x, op: v === 'raw' ? undefined : (v as 'bool' | 'first' | 'join') }))}
+                  >
+                    <SelectTrigger className="h-6 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="raw">raw</SelectItem>
+                      <SelectItem value="bool">bool</SelectItem>
+                      <SelectItem value="first">first</SelectItem>
+                      <SelectItem value="join">join</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-2 py-1">
+                  <Input
+                    value={r.sep ?? ''}
+                    onChange={(e) => update(i, (x) => ({ ...x, sep: e.target.value || undefined }))}
+                    className="h-6 text-xs font-mono"
+                    placeholder=","
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <Input
+                    value={(r.values ?? []).join(', ')}
+                    onChange={(e) =>
+                      update(i, (x) => ({
+                        ...x,
+                        values: e.target.value
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      }))
+                    }
+                    className="h-6 text-xs font-mono"
+                    placeholder="text, image, video（逗号分隔）"
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <Checkbox
+                     checked={r.required}
+                     onCheckedChange={(c) => update(i, (x) => ({ ...x, required: c === true }))}
+                   />
+                 </td>
+                 <td className="px-2 py-1">
+                  <Input
+                    value={r.description}
+                    onChange={(e) => update(i, (x) => ({ ...x, description: e.target.value }))}
+                    className="h-6 text-xs font-mono"
+                    placeholder="说明"
+                  />
+                 </td>
+                  <td className="px-2 py-1 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="text-destructive"
+                      onClick={() => onChange(recs.filter((_, j) => j !== i))}
+                    >
+                      删
+                    </Button>
+                  </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ModelInfoFieldsEditor({
   value,
   onChange,
@@ -922,7 +1173,8 @@ function ModelInfoFieldsEditor({
         四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。只允许值&写法（JSON 对象）：
         <code className="font-mono">{'{"path":"reasoning","op":"bool"}'}</code>
         ，不允许只填路径。path 为写入位置，op 可选：
-        raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，sep 可选，默认逗号）。
+        raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，sep 可选，默认逗号）；
+        action 可选：set（填，默认）/ skip（不填）/ delete（删除字段）；values 可选白名单（如 openclaw input 只允许 text/image/video/audio）。
       </p>
       <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-xs">
@@ -993,11 +1245,10 @@ function EndpointRulesEditor({
       <p className="text-xs text-muted-foreground">
         每个 endpoint 一条规则：归纳范围填 endpoint 关键词（如
         completions / responses / chat/message，逗号分隔），任一关键词命中该
-        endpoint 的子串即应用本规则，顺序即优先级。私有配置直接写成 JSON 数组
-        （一个 endpoint 一个 JSON 块），每项一个推荐字段：key（字段路径）/
-        scope（provider|model）/ required（必填）/ recommended（推荐值，
-        null=推荐不填）/ description（含义，可选）—— 如 NPM 用哪个 SDK 就写
-        {'{"key":"npm","recommended":"@ai-sdk/openai-compatible","required":true}'}。
+        endpoint 的子串即应用本规则，顺序即优先级。私有配置用「值 + 写法」表格：
+        每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），
+        scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）
+        —— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={'{"@ai-sdk/openai-compatible"'}+、必填勾上。
       </p>
 
       {value.length === 0 ? (
@@ -1051,18 +1302,59 @@ function EndpointRulesEditor({
                 </div>
 
                 <Field>
-                  <FieldLabel>私有配置（JSON 数组）</FieldLabel>
-                  <Textarea
-                    value={rule.fieldsJson}
-                    onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
-                    className={
-                      'h-[140px] resize-y font-mono text-xs leading-relaxed ' +
-                      (fieldsError ? 'border-destructive focus-visible:ring-destructive' : '')
-                    }
-                    spellCheck={false}
-                  />
-                  {fieldsError && (
-                    <p className="text-[11px] text-destructive">{fieldsError}</p>
+                  <div className="flex items-center justify-between">
+                    <FieldLabel>私有配置（该 endpoint 的字段推荐表）</FieldLabel>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline underline-offset-2"
+                      onClick={() => update(ruleIndex, (r) => ({ ...r, showJson: !r.showJson }))}
+                    >
+                      {rule.showJson ? '收起 JSON' : '编辑为 JSON'}
+                    </button>
+                  </div>
+                  {rule.showJson ? (
+                    <>
+                      <Textarea
+                        value={rule.fieldsJson}
+                        onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
+                        className={
+                          'h-[140px] resize-y font-mono text-xs leading-relaxed ' +
+                          (fieldsError ? 'border-destructive focus-visible:ring-destructive' : '')
+                        }
+                        spellCheck={false}
+                      />
+                      {fieldsError && (
+                        <p className="text-[11px] text-destructive">{fieldsError}</p>
+                      )}
+                    </>
+                  ) : (
+                    (() => {
+                      try {
+                        const recs = fieldsJsonToRecs(rule.fieldsJson)
+                        return (
+                          <RecommendationTable
+                            showScope
+                            recs={recs}
+                            onChange={(next) => update(ruleIndex, (r) => ({ ...r, fieldsJson: JSON.stringify(next, null, 2) }))}
+                          />
+                        )
+                      } catch (err) {
+                        return (
+                          <>
+                            <p className="pb-1 text-[11px] text-destructive">
+                              当前私有配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
+                              请在「编辑为 JSON」里修正
+                            </p>
+                            <Textarea
+                              value={rule.fieldsJson}
+                              onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
+                              className="h-[120px] resize-y font-mono text-xs leading-relaxed border-destructive"
+                              spellCheck={false}
+                            />
+                          </>
+                        )
+                      }
+                    })()
                   )}
                 </Field>
               </div>

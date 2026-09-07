@@ -318,6 +318,9 @@ func main() {
 			dashboardAuthed.PUT("/flat-topology", handler.SaveFlatTopology(db, engine))
 			dashboardAuthed.GET("/flat-topology/validate", handler.ValidateFlatTopology(db))
 
+			// 并行控制滑动窗口当前占用（前端轮询展示）
+			dashboardAuthed.GET("/concurrency/windows", handler.ListConcurrencyWindows(db))
+
 			// Topology canvas layout (node positions)
 			dashboardAuthed.GET("/layout", handler.GetLayout(db))
 			dashboardAuthed.PUT("/layout", handler.PutLayout(db))

@@ -10,6 +10,8 @@ export interface NodeSlotConcurrencyProps {
   onSelectExecutor?: (token: string | null) => void
   selectedExecutorToken?: string | null
   title: string
+  /** 并发 slot 节点的扁平拓扑节点 id，下传给每个条目卡片查询窗口占用。 */
+  nodeId?: string
   entries: readonly ConcurrencySlotEntry[]
   flashLayers?: readonly FlowLayerOverlay[]
   dragProps: (entryIndex: number) => SlotItemDragProps
@@ -25,6 +27,7 @@ export interface NodeSlotConcurrencyProps {
 export function NodeSlotConcurrency({
   title,
   entries,
+  nodeId,
   flashLayers,
   dragProps,
   onChangeEntry,
@@ -36,7 +39,7 @@ export function NodeSlotConcurrency({
   onSelectExecutor,
   selectedExecutorToken,
 }: NodeSlotConcurrencyProps) {
-    const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
+  const active = slotNodeActive(enabled, undefined, externallyDisabled ?? false)
   return (
     <SlotContainer
       title={
@@ -61,7 +64,9 @@ export function NodeSlotConcurrency({
           token={entry.id}
           picked={selectedExecutorToken === entry.id}
           onPickToken={onSelectExecutor}
+          nodeId={nodeId}
           entry={entry}
+          nodeId={nodeId}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}
