@@ -46,8 +46,58 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 	return refs
 }
 
+// providerDisabled reports whether a provider must not serve requests right
+// now: it is either explicitly auto-disabled at the provider dimension, or it
+// has no usable channel left (every configured key, or every configured base
+// URL, got auto-disabled). Without the channel check a provider whose whole
+// key pool is auto-disabled would stay eligible and every request dispatched
+// to it would die with the internal "no enabled API key configured" error
+// instead of being excluded from selection.
 func (e *Engine) providerDisabled(provider *model.Provider) bool {
-	return e.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID)
+	if provider == nil {
+		return true
+	}
+	if e.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		return true
+	}
+	return e.allChannelsDisabled(provider)
+}
+
+// allChannelsDisabled reports whether every configured key or every configured
+// base URL of the provider is auto-disabled. A provider with zero configured
+// keys/base URLs is NOT considered disabled here (that is a configuration gap
+// surfaced at relay time, unchanged from before). Only when at least one value
+// is configured AND all of them are auto-disabled does the provider become
+// effectively unusable.
+func (e *Engine) allChannelsDisabled(provider *model.Provider) bool {
+	if e.db == nil {
+		return false
+	}
+	var keys, baseURLs []string
+	_ = decodeStringList(provider.ID, provider.Keys, &keys, "keys")
+	_ = decodeStringList(provider.ID, provider.BaseURLs, &baseURLs, "base_urls")
+	if len(keys) > 0 && e.allValuesDisabled(provider.ID, model.FailoverDimensionKey, keys) {
+		return true
+	}
+	return len(baseURLs) > 0 && e.allValuesDisabled(provider.ID, model.FailoverDimensionBaseURL, baseURLs)
+}
+
+// allValuesDisabled reports whether every entry of values is in the
+// auto-disable state for the given provider+dimension. A single COUNT over the
+// configured values (instead of one per value) keeps the check cheap; it also
+// ignores stale disable rows for keys that were since removed from config.
+func (e *Engine) allValuesDisabled(providerID, dimension string, values []string) bool {
+	if e.db == nil || len(values) == 0 {
+		return false
+	}
+	var count int64
+	if err := e.db.Model(&model.AutoDisableState{}).
+		Where("provider_id = ? AND dimension = ? AND disabled = ?", providerID, dimension, true).
+		Where("value IN ?", values).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count >= int64(len(values))
 }
 
 // SelectByFlatTopology chooses a provider for a request using the flat topology

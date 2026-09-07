@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { DataTable, type ColumnDef } from '@/components/data-table'
@@ -464,29 +464,32 @@ export function LogCapturePage() {
       )}
 
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
-        <DialogContent>
+        <DialogContent scrollFooter>
           <DialogHeader>
             <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
-              取消
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={clearing}
-              onClick={() => void handleClear('filtered')}
-            >
-              清空当前页面的
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={clearing}
-              onClick={() => void handleClear('all')}
-            >
-              清空所有页面的
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={clearing}
+                onClick={() => void handleClear('filtered')}
+              >
+                清空当前页面的
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={clearing}
+                onClick={() => void handleClear('all')}
+              >
+                清空所有页面的
+              </Button>
+            </>
+          }>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </div>

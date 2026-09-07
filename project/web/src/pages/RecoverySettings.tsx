@@ -14,8 +14,8 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { FieldGroup } from '@/components/ui/field'
@@ -718,39 +718,42 @@ function PastDeadlineDialog({
 }) {
   return (
     <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onCancel() }}>
-      <DialogContent width="sm">
+      <DialogContent width="sm" scrollFooter>
         <DialogHeader>
           <DialogTitle>自动恢复已超时</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-          <p>
-            该条禁用记录的自动恢复已超过设定的恢复时长
-            {remaining < 0 && (
-              <>
-                （已超时
-                <span className="mx-1 font-medium text-foreground">{formatCountdown(-remaining)}</span>
-                ）
-              </>
-            )}
-            。可立即解除，或为它再延后恢复时长，等下个周期再判断。
-          </p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={busy}>
-            全部取消
-          </Button>
-          <Button variant="outline" onClick={onSkip} disabled={busy}>
-            跳过这条
-          </Button>
-          <Button variant="outline" onClick={onExtend} disabled={busy}>
-            {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-            下个周期再恢复
-          </Button>
-          <Button onClick={onImmediate} disabled={busy}>
-            {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-            立即恢复
-          </Button>
-        </DialogFooter>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={onCancel} disabled={busy}>
+              全部取消
+            </Button>
+            <Button variant="outline" onClick={onSkip} disabled={busy}>
+              跳过这条
+            </Button>
+            <Button variant="outline" onClick={onExtend} disabled={busy}>
+              {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+              下个周期再恢复
+            </Button>
+            <Button onClick={onImmediate} disabled={busy}>
+              {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+              立即恢复
+            </Button>
+          </>
+        }>
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+            <p>
+              该条禁用记录的自动恢复已超过设定的恢复时长
+              {remaining < 0 && (
+                <>
+                  （已超时
+                  <span className="mx-1 font-medium text-foreground">{formatCountdown(-remaining)}</span>
+                  ）
+                </>
+              )}
+              。可立即解除，或为它再延后恢复时长，等下个周期再判断。
+            </p>
+          </div>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
@@ -798,12 +801,22 @@ function RecoveryHandlerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
+      <DialogContent width="sm" scrollFooter>
         <DialogHeader>
           <DialogTitle>测试方法</DialogTitle>
         </DialogHeader>
-        <FieldGroup>
-          <div className="flex flex-col gap-3">
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              取消
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={saving}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
+          </>
+        }>
+          <FieldGroup>
+            <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground">
               禁用瞬间保存请求，按下列 JSON 规则简化；字段不存在时自动跳过。
             </p>
@@ -904,14 +917,7 @@ function RecoveryHandlerDialog({
             </div>
           </div>
         </FieldGroup>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            取消
-          </Button>
-          <Button onClick={() => void handleSave()} disabled={saving}>
-            {saving ? '保存中...' : '保存'}
-          </Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
@@ -960,10 +966,17 @@ function RequestPreviewDialog({
 
   return (
     <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent width="md">
+      <DialogContent width="md" scrollFooter>
         <DialogHeader>
           <DialogTitle>测试上游</DialogTitle>
         </DialogHeader>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={onClose}>
+              关闭
+            </Button>
+          </>
+        }>
         {record && (
           <div className="flex flex-col gap-3 text-xs">
             {errorMessage && !result && (
@@ -1008,11 +1021,7 @@ function RequestPreviewDialog({
             </div>
           </div>
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            关闭
-          </Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )

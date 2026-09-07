@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
@@ -235,7 +235,7 @@ export function TokenPage() {
         />
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="flex max-h-[85vh] flex-col gap-0">
+          <DialogContent scrollFooter>
             <DialogHeader>
               <DialogTitle>{editing ? '编辑令牌' : '添加令牌'}</DialogTitle>
             </DialogHeader>
@@ -262,12 +262,16 @@ function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }:
   const [name, setName] = useState(token?.name ?? '')
   const [quota, setQuota] = useState(token?.quota?.toString() ?? '')
 
-  const contentScrollRef = useRef<HTMLDivElement>(null)
-
   return (
-    <>
-      <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
-        <FieldGroup>
+    <DialogScrollBody footer={
+      <>
+        <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
+        <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
+          {isSaving ? '保存中...' : '保存'}
+        </Button>
+      </>
+    }>
+      <FieldGroup>
       <Field>
         <FieldLabel htmlFor="token-name">名称</FieldLabel>
         <Input id="token-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Production Token" />
@@ -286,13 +290,6 @@ function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }:
         <Input id="token-quota" type="number" value={quota} onChange={(event) => setQuota(event.target.value)} placeholder="无限制" />
       </Field>
         </FieldGroup>
-      </div>
-      <DialogFooter scrollRef={contentScrollRef} bleed>
-        <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
-        <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
-          {isSaving ? '保存中...' : '保存'}
-        </Button>
-      </DialogFooter>
-    </>
+    </DialogScrollBody>
   )
 }

@@ -14,8 +14,8 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -762,11 +762,31 @@ function RuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="lg">
+      <DialogContent width="lg" scrollFooter>
         <DialogHeader>
           <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
         </DialogHeader>
-        <FieldGroup>
+        <DialogScrollBody footer={
+          <>
+            {editing?.has_template && (
+              <Button
+                variant="outline"
+                className="mr-auto"
+                onClick={() => setConfirmTemplate(true)}
+                disabled={saving || templateLoading}
+                title="将该规则的全部字段（路径 / 四个模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
+              >
+                <AppIcon name="auto_fix_high" data-icon="inline-start" />
+                使用默认推荐模版
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
+            <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
+          </>
+        }>
+          <FieldGroup>
           <Field>
             <FieldLabel>名称</FieldLabel>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：opencode" />
@@ -914,42 +934,28 @@ function RuleDialog({
             </div>
           )}
         </FieldGroup>
-        <DialogFooter>
-          {editing?.has_template && (
-            <Button
-              variant="outline"
-              className="mr-auto"
-              onClick={() => setConfirmTemplate(true)}
-              disabled={saving || templateLoading}
-              title="将该规则的全部字段（路径 / 四个模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
-            >
-              <AppIcon name="auto_fix_high" data-icon="inline-start" />
-              使用默认推荐模版
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
-          <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
-            {saving ? '保存中...' : '保存'}
-          </Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
 
       <Dialog open={confirmTemplate} onOpenChange={(o) => !o && setConfirmTemplate(false)}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>使用默认推荐模版</DialogTitle>
           </DialogHeader>
-          <p className="px-4 text-xs text-muted-foreground">
-            <span className="break-all">将为规则「{editing?.name ?? ''}」应用系统的默认推荐模版：</span>
-            默认路径、provider/model gjson 路径、四个模型信息字段、公共配置（common）与各 Endpoint
-            规则的字段推荐会全部替换为默认值。确认？
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmTemplate(false)} disabled={templateLoading}>取消</Button>
-            <Button variant="default" onClick={() => void applyDefaultTemplate()} disabled={templateLoading}>
-              {templateLoading ? '加载中…' : '确认应用'}
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setConfirmTemplate(false)} disabled={templateLoading}>取消</Button>
+              <Button variant="default" onClick={() => void applyDefaultTemplate()} disabled={templateLoading}>
+                {templateLoading ? '加载中…' : '确认应用'}
+              </Button>
+            </>
+          }>
+            <p className="text-xs text-muted-foreground">
+              <span className="break-all">将为规则「{editing?.name ?? ''}」应用系统的默认推荐模版：</span>
+              默认路径、provider/model gjson 路径、四个模型信息字段、公共配置（common）与各 Endpoint
+              规则的字段推荐会全部替换为默认值。确认？
+            </p>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </Dialog>

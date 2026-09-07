@@ -1755,15 +1755,15 @@ export type ConcurrencyWindowActive = {
 }
 
 export function defaultConcurrencyNodeConfig(): ConcurrencyNodeConfig {
-  return { windowMinutes: 5, maxCount: 10 }
+  return { windowMinutes: 1, maxCount: 20 }
 }
 
 export function parseConcurrencyNodeConfig(value: unknown): ConcurrencyNodeConfig {
   if (!isRecord(value)) return defaultConcurrencyNodeConfig()
-  let windowMinutes = readNumber(value.windowMinutes, 'concurrency.windowMinutes', 5)
-  if (windowMinutes <= 0) windowMinutes = 5
-  let maxCount = readNumber(value.maxCount, 'concurrency.maxCount', 10)
-  if (maxCount <= 0) maxCount = 10
+  let windowMinutes = readNumber(value.windowMinutes, 'concurrency.windowMinutes', 1)
+  if (windowMinutes <= 0) windowMinutes = 1
+  let maxCount = readNumber(value.maxCount, 'concurrency.maxCount', 20)
+  if (maxCount <= 0) maxCount = 20
   return { windowMinutes, maxCount }
 }
 

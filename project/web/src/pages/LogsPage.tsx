@@ -17,8 +17,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { toast } from '@/components/ui/toast'
@@ -484,24 +484,27 @@ export function LogsPage() {
       </div>
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
             <DialogDescription>
               此操作不可恢复，清空后无法找回相关记录。
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
-              取消
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
-              清空当前页面的
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
-              清空所有页面的
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
+                取消
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
+                清空当前页面的
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
+                清空所有页面的
+              </Button>
+            </>
+          }>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
 

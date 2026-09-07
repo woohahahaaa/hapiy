@@ -5,6 +5,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
@@ -188,16 +189,18 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
         </DialogFooter>
         {confirmSave && (
           <Dialog open={confirmSave} onOpenChange={(next) => !saving && setConfirmSave(next)}>
-            <DialogContent width="sm">
+            <DialogContent width="sm" scrollFooter>
               <DialogHeader>
                 <DialogTitle>{warning ? 'JSON 格式可能有误' : '确认保存'}</DialogTitle>
                 <DialogDescription className={warning ? 'text-destructive' : undefined}>{warning ? `检测到 JSON 格式问题，是否仍要保存对「${subtitle}」的修改？` : `是否确认保存对「${subtitle}」的修改？`}</DialogDescription>
                 {warning && <p className="text-destructive">{warning}</p>}
               </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>
-                <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>{saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}</Button>
-              </DialogFooter>
+              <DialogScrollBody footer={
+                <>
+                  <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>
+                  <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>{saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}</Button>
+                </>
+              } />
             </DialogContent>
           </Dialog>
         )}
