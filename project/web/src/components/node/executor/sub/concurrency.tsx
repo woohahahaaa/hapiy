@@ -104,15 +104,22 @@ export function NodeExecutorConcurrency({ entry, nodeId, onChange, onDelete, tok
           <ConcurrencyNumber aria-label="并发上限（条）" value={config.maxCount} onCommit={(v) => commit({ maxCount: v })} />
           <span>条</span>
         </div>
-        {windowActive && (
+        {nodeId && (
           <div
             className={cn(
               'flex items-center gap-1 text-xs text-muted-foreground',
-              windowActive.windowCount >= windowActive.maxCount && 'font-medium text-amber-600 dark:text-amber-400',
+              (windowActive?.windowCount ?? 0) > 0 && 'text-foreground',
+              (windowActive?.windowCount ?? 0) >= config.maxCount && 'font-medium text-amber-600 dark:text-amber-400',
             )}
           >
-            <span className="inline-block size-1.5 rounded-full bg-current opacity-70" />
-            窗口内 {windowActive.windowCount}/{windowActive.maxCount}
+            <span
+              className={cn(
+                'inline-block size-1.5 rounded-full',
+                (windowActive?.windowCount ?? 0) > 0 ? 'bg-[var(--node-accent,var(--color-primary))]' : 'bg-current opacity-60',
+                (windowActive?.windowCount ?? 0) >= config.maxCount && 'bg-amber-500',
+              )}
+            />
+            窗口内 {windowActive?.windowCount ?? 0}/{config.maxCount}
           </div>
         )}
       </div>

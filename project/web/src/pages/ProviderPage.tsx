@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/checkbox'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -773,8 +773,14 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         </FieldGroup>
       </DialogScrollBody>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
-        <DialogContent width="xs">
+        <DialogContent width="xs" scrollFooter>
           <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setIsEndpointDialogOpen(false)}>取消</Button>
+              <Button onClick={() => void handleSaveEndpoint()} disabled={isEndpointSaving}>{isEndpointSaving ? '保存中...' : '保存'}</Button>
+            </>
+          }>
           <div className="flex flex-col gap-2">
             <Field>
               <FieldLabel htmlFor="model-list-endpoint">模型列表接口路径</FieldLabel>
@@ -787,10 +793,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
             </label>
             <p className="text-xs text-muted-foreground">将使用当前供应商的第一个 Key 作为 Bearer 凭证</p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEndpointDialogOpen(false)}>取消</Button>
-            <Button onClick={() => void handleSaveEndpoint()} disabled={isEndpointSaving}>{isEndpointSaving ? '保存中...' : '保存'}</Button>
-          </DialogFooter>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
       {fetchedModels && (
@@ -802,18 +805,21 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         />
       )}
       <Dialog open={syncTarget !== null} onOpenChange={(open) => { if (!open) setSyncTarget(null) }}>
-        <DialogContent width="xs">
+        <DialogContent width="xs" scrollFooter>
           <DialogHeader><DialogTitle>同步价格设置</DialogTitle></DialogHeader>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setSyncTarget(null)} disabled={refSyncing}>取消</Button>
+              <Button onClick={() => void syncReference()} disabled={refSyncing}>{refSyncing ? '同步中...' : '确认同步'}</Button>
+            </>
+          }>
           <p>
             确认将模型「{syncTarget ?? ''}」的当前价格设置同步到其他供应商的同名模型？
           </p>
           <p className="text-xs text-muted-foreground">
             会将价格模式、参考供应商、价格快照和倍率一起写入其他供应商的同名模型。
           </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSyncTarget(null)} disabled={refSyncing}>取消</Button>
-            <Button onClick={() => void syncReference()} disabled={refSyncing}>{refSyncing ? '同步中...' : '确认同步'}</Button>
-          </DialogFooter>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </>
@@ -1135,8 +1141,17 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent width="xs">
+      <DialogContent width="xs" scrollFooter>
         <DialogHeader><DialogTitle>从上游获取模型</DialogTitle></DialogHeader>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" disabled={saving} onClick={handleToggleSelectAll}>{allSelected ? '全不选' : '全选'}</Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
+              <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>
+            </div>
+          </>
+        }>
         <div className="flex max-h-64 flex-col overflow-y-auto">
           {models.map((model) => (
             <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
@@ -1145,13 +1160,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
             </label>
           ))}
         </div>
-        <DialogFooter className="sm:justify-between">
-          <Button variant="outline" disabled={saving} onClick={handleToggleSelectAll}>{allSelected ? '全不选' : '全选'}</Button>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? '添加中...' : '清空已有并添加'}</Button>
-            <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? '添加中...' : '添加'}</Button>
-          </div>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )

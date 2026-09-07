@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
@@ -560,14 +560,18 @@ function PairDialog({ requestId, open, onClose }: {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width="lg" height="auto" className="flex flex-col overflow-hidden">
+      <DialogContent width="lg" height="auto" scrollFooter className="flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{pair?.request_id ?? requestId}</span>
             {pair && <Badge variant={pairHasError(pair) ? 'destructive' : 'default'}>{typeLabel}</Badge>}
           </DialogTitle>
         </DialogHeader>
-
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={onClose}>关闭</Button>
+          </>
+        }>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
             <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>
@@ -630,10 +634,7 @@ function PairDialog({ requestId, open, onClose }: {
             <div className="py-16 text-center text-xs text-muted-foreground">暂无内容</div>
           )}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>关闭</Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
@@ -698,14 +699,18 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width="lg" height="auto" className="flex flex-col overflow-hidden">
+      <DialogContent width="lg" height="auto" scrollFooter className="flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{fileName}</span>
             {row && <Badge variant="outline">系统</Badge>}
           </DialogTitle>
         </DialogHeader>
-
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={onClose}>关闭</Button>
+          </>
+        }>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
             <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>
@@ -741,10 +746,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
             </div>
           ) : null}
         </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>关闭</Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
