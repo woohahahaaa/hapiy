@@ -2,6 +2,7 @@ package relay
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -312,7 +313,14 @@ func (e *Engine) resolveTopologyFallbackPlan(req *RelayRequest, failed *Executio
 		return nil
 	}
 	refs := e.buildFlatProviderRefs()
-	for _, candidate := range topology.FindProviderSlotAlternatives(tp, refs, req.Model, req.Path, req.TopologyOrigin.EntryID, req.TopologyOrigin.ProviderID) {
+	var bodyBytes []byte
+	if req.Body != nil {
+		if b, err := json.Marshal(req.Body); err == nil {
+			bodyBytes = b
+		}
+	}
+	eval := switchEvalFor(req.Headers, bodyBytes)
+	for _, candidate := range topology.FindProviderSlotAlternatives(tp, refs, req.Model, req.Path, req.TopologyOrigin.EntryID, req.TopologyOrigin.ProviderID, eval) {
 		if candidate.ProviderID == failed.Provider.ID {
 			continue
 		}

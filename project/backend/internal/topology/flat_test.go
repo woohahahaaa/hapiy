@@ -1,6 +1,9 @@
 package topology
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func node(id string, kind NodeKind) FlatNode {
 	return FlatNode{ID: id, Kind: kind, Enabled: true, Weight: 1}
@@ -57,7 +60,7 @@ func TestBuildRequestPathFollowsSelectedProviderAtProviderSlot(t *testing.T) {
 		},
 	}
 
-	path := BuildRequestPath(tp, "entry", "provider-deepseek")
+	path := BuildRequestPath(tp, "entry", "provider-deepseek", "", nil)
 	expected := []string{"entry", "provider-slot", "provider-deepseek", "request-modify"}
 	if len(path) != len(expected) {
 		t.Fatalf("path length = %d, want %d: %v", len(path), len(expected), path)
@@ -67,6 +70,57 @@ func TestBuildRequestPathFollowsSelectedProviderAtProviderSlot(t *testing.T) {
 			t.Fatalf("path[%d] = %q, want %q: %v", i, got, expected[i], path)
 		}
 	}
+}
+
+func TestBuildRequestPathRoutesSwitchBranch(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "entry", Kind: KindRequestEntry, Enabled: true},
+			{ID: "provider-slot", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "provider-a", Kind: KindProvider, Name: "opencode go", ProviderID: "p-opencode", Enabled: true},
+			{ID: "switch", Kind: KindSwitch},
+			{ID: "auto-yes", Kind: KindSlot, SlotType: "autoSwitch", Enabled: true},
+			{ID: "auto-no", Kind: KindSlot, SlotType: "autoSwitch", Enabled: true},
+		},
+		// 否分支故意排在是分支前面：分支解析必须按 branch 标签而非线序。
+		Wires: []Wire{
+			{Source: "entry", Target: "provider-slot"},
+			{Source: "provider-slot", Target: "provider-a"},
+			{Source: "provider-a", Target: "switch"},
+			{Source: "switch", Target: "auto-no", Branch: BranchNo},
+			{Source: "switch", Target: "auto-yes", Branch: BranchYes},
+		},
+	}
+	wantYes := true
+	eval := func(_ json.RawMessage, ctx SwitchEvalContext) bool { return wantYes }
+
+	expectedYes := []string{"entry", "provider-slot", "provider-a", "switch", "auto-yes"}
+	if path := BuildRequestPath(tp, "entry", "provider-a", "gpt-4", eval); !equalStrings(path, expectedYes) {
+		t.Fatalf("是分支 path = %v, want %v", path, expectedYes)
+	}
+
+	wantYes = false
+	expectedNo := []string{"entry", "provider-slot", "provider-a", "switch", "auto-no"}
+	if path := BuildRequestPath(tp, "entry", "provider-a", "gpt-4", eval); !equalStrings(path, expectedNo) {
+		t.Fatalf("否分支 path = %v, want %v", path, expectedNo)
+	}
+
+	// 无 eval：维持旧行为（第一条出边）。
+	if path := BuildRequestPath(tp, "entry", "provider-a", "", nil); !equalStrings(path, expectedNo) {
+		t.Fatalf("nil eval 应走第一条出边 = %v, want %v", path, expectedNo)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestValidateTopologyRejectsMultipleOutputs(t *testing.T) {
@@ -108,7 +162,7 @@ func TestFindEligibleProvidersBasic(t *testing.T) {
 			Models: map[string]struct{}{"deepseek-chat": {}},
 		},
 	}
-	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +192,7 @@ func TestFindEligibleProvidersFiltersDisabledEntry(t *testing.T) {
 	refs := map[string]ProviderRef{
 		"deepseek": {Name: "deepseek", Status: true, Enabled: true, Workflow: true, Models: map[string]struct{}{"deepseek-chat": {}}},
 	}
-	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,7 +216,7 @@ func TestFindEligibleProvidersModelMismatch(t *testing.T) {
 	refs := map[string]ProviderRef{
 		"deepseek": {Name: "deepseek", Status: true, Enabled: true, Workflow: true, Models: map[string]struct{}{"other": {}}},
 	}
-	got, _ := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, _ := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if len(got) != 0 {
 		t.Fatalf("expected 0 eligible on model mismatch, got %d", len(got))
 	}
@@ -183,7 +237,7 @@ func TestFindEligibleProvidersProviderStatusOff(t *testing.T) {
 	refs := map[string]ProviderRef{
 		"deepseek": {Name: "deepseek", Status: false, Enabled: true, Workflow: true, Models: map[string]struct{}{"deepseek-chat": {}}},
 	}
-	got, _ := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, _ := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if len(got) != 0 {
 		t.Fatalf("expected 0 eligible when provider status off, got %d", len(got))
 	}
@@ -215,7 +269,7 @@ func TestFindEligibleProvidersSequentialSlotFallback(t *testing.T) {
 
 	// The wired provider doesn't support the model; the slot's next active
 	// child (moreai) must be selected, skipping the disabled one.
-	got, err := FindEligibleProviders(tp, refs, "minimax-m3", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "minimax-m3", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +284,7 @@ func TestFindEligibleProvidersSequentialSlotFallback(t *testing.T) {
 	}
 
 	// The wired provider supports the model: no fallback, it stays primary.
-	got, err = FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err = FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -239,7 +293,7 @@ func TestFindEligibleProvidersSequentialSlotFallback(t *testing.T) {
 	}
 
 	// No child supports the model: nothing eligible.
-	got, err = FindEligibleProviders(tp, refs, "unknown-model", "/v1/chat/completions")
+	got, err = FindEligibleProviders(tp, refs, "unknown-model", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

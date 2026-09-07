@@ -48,7 +48,7 @@ func TestValidateTopologyRejectsUnknownStrategy(t *testing.T) {
 
 func TestFindEligibleProvidersSequentialReturnsAllInOrder(t *testing.T) {
 	tp := dualSlotTopology("")
-	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestFindEligibleProvidersSequentialReturnsAllInOrder(t *testing.T) {
 
 func TestFindEligibleProvidersRandomReturnsAll(t *testing.T) {
 	tp := dualSlotTopology(StrategyRandom)
-	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestFindEligibleProvidersRandomReturnsAll(t *testing.T) {
 
 func TestFindEligibleProvidersRoundRobinReturnsAll(t *testing.T) {
 	tp := dualSlotTopology(StrategyRoundRobin)
-	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestFindEligibleProvidersRoundRobinReturnsAll(t *testing.T) {
 func TestFindEligibleProvidersStrategySkipsIneligibleChild(t *testing.T) {
 	tp := dualSlotTopology(StrategyRandom)
 	refs := refsFor("deepseek-a") // deepseek-b has no ref: not eligible
-	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestFindEligibleProvidersMatchesByProviderIDOnRename(t *testing.T) {
 		"p-123": {ID: "p-123", Name: "deepseek", Status: true, Enabled: true, Workflow: true,
 			Models: map[string]struct{}{"deepseek-chat": {}}},
 	}
-	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestProviderEligibleLegacyNameOnlyBindingStillMatches(t *testing.T) {
 		"deepseek": {ID: "p-123", Name: "deepseek", Status: true, Enabled: true, Workflow: true,
 			Models: map[string]struct{}{"deepseek-chat": {}}},
 	}
-	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions")
+	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

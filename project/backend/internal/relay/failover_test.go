@@ -322,7 +322,7 @@ func TestRelayWithFailover_emptyFallbackUsesSameProviderSlotOrder(t *testing.T) 
 	if err != nil {
 		t.Fatalf("load topology: %v", err)
 	}
-	if alternatives := topology.FindProviderSlotAlternatives(topologySnapshot, engine.buildFlatProviderRefs(), "m1", "/v1/chat/completions", "entry", "primary"); len(alternatives) != 2 {
+	if alternatives := topology.FindProviderSlotAlternatives(topologySnapshot, engine.buildFlatProviderRefs(), "m1", "/v1/chat/completions", "entry", "primary", nil); len(alternatives) != 2 {
 		t.Fatalf("alternatives: want 2, got %#v", alternatives)
 	}
 
