@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -14,9 +15,14 @@ import (
 
 // newTestEngine builds an in-memory SQLite engine that mirrors the production
 // AutoMigrate shape so cache rebuilds can be exercised against real SQL.
+// A per-test shared-memory cache DSN is used so the engine's background writes
+// (e.g. the throttled ConcurrencyWindowCounter snapshot goroutine) are visible
+// to the test's own connections — plain ":memory:" opens a fresh empty
+// database per connection, and a fixed name would be shared across tests.
 func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	dsn := "file:" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -99,6 +105,62 @@ func TestLoadProviders_leaves_optional_plan_empty_without_assignments(t *testing
 	}
 	if len(plan.RewriteRules) != 0 || len(plan.ConcurrencyRules) != 0 || len(plan.FailoverRules) != 0 {
 		t.Fatalf("optional plan was populated globally: %+v", plan)
+	}
+}
+
+func TestLoadProviders_concurrency_assignment_without_rule_id_compiles(t *testing.T) {
+	// Given: a provider with an enabled concurrency assignment that carries
+	// its config inline and no rule_id (the shape the frontend persists).
+	// Plan build must succeed and the rule must land on the plan instead of
+	// failing the whole provider with "has no rule_id".
+	engine, db := newTestEngine(t)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	assignment := model.TopologySlotAssignment{ID: "cq", ProviderID: provider.ID, SlotType: "concurrency", Order: 1, Enabled: true, Config: `{"nodeId":"concurrency-1","windowMinutes":1,"maxCount":20}`}
+	if err := db.Create(&assignment).Error; err != nil {
+		t.Fatalf("create assignment: %v", err)
+	}
+
+	// When
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatalf("load providers: %v", err)
+	}
+	plan, err := engine.GetPlan(provider.ID)
+
+	// Then
+	if err != nil {
+		t.Fatalf("get plan: %v", err)
+	}
+	if len(plan.ConcurrencyRules) != 1 {
+		t.Fatalf("concurrency rule was not compiled: %+v", plan.ConcurrencyRules)
+	}
+	rule := plan.ConcurrencyRules[0]
+	if rule.ID != "concurrency-1" || rule.MaxCount != 20 || rule.WindowMinutes != 1 {
+		t.Fatalf("unexpected concurrency rule: %+v", rule)
+	}
+}
+
+func TestLoadProviders_still_rejects_missing_rule_id_for_rule_slots(t *testing.T) {
+	// Given: a requestModify assignment with no rule_id it must still fail
+	// loudly — only concurrency/logOutput are config-inline slots.
+	engine, db := newTestEngine(t)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	assignment := model.TopologySlotAssignment{ID: "rm", ProviderID: provider.ID, SlotType: "requestModify", Order: 1, Enabled: true, Config: `{}`}
+	if err := db.Create(&assignment).Error; err != nil {
+		t.Fatalf("create assignment: %v", err)
+	}
+
+	// When
+	err := engine.LoadProviders()
+
+	// Then
+	if err == nil || !strings.Contains(err.Error(), "has no rule_id") {
+		t.Fatalf("expected rule_id error, got %v", err)
 	}
 }
 

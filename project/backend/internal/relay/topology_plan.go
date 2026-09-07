@@ -141,6 +141,22 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		})
 		return nil
 	}
+	if assignment.SlotType == "concurrency" {
+		// 并行控制配置内联在 assignment.Config（与 logOutput 同级）：不再
+		// 从规则表加载。一个提供者可挂多个并发节点，请求必须全部通过
+		// （AND）。RuleID 为空/配置缺失时跳过该节点而不是拖垮整个计划。
+		if assignment.Config == "" || assignment.Config == "{}" {
+			log.Printf("relay: provider %s: concurrency assignment %s has no config; skipping", plan.Provider.ID, assignment.ID)
+			return nil
+		}
+		rule, err := parseConcurrencyRuleConfig(assignment)
+		if err != nil {
+			log.Printf("relay: provider %s: concurrency assignment %s invalid config: %v; skipping", plan.Provider.ID, assignment.ID, err)
+			return nil
+		}
+		plan.ConcurrencyRules = append(plan.ConcurrencyRules, rule)
+		return nil
+	}
 	if assignment.RuleID == nil {
 		return fmt.Errorf("assignment %s has no rule_id", assignment.ID)
 	}
@@ -168,20 +184,6 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 			return fmt.Errorf("compile response rewrite rule %s (%s): %w", rule.ID, rule.Name, err)
 		}
 		plan.CompiledResponseRewrites = append(plan.CompiledResponseRewrites, CompiledRewriteChain{RuleID: rule.ID, RuleName: rule.Name, Ops: chain})
-	case "concurrency":
-		// 并行控制配置内联在 assignment.Config（与 logOutput 同级）：不再
-		// 从规则表加载。一个提供者可挂多个并发节点，请求必须全部通过
-		// （AND）。RuleID 为空/配置缺失时跳过该节点而不是拖垮整个计划。
-		if assignment.Config == "" || assignment.Config == "{}" {
-			log.Printf("relay: provider %s: concurrency assignment %s has no config; skipping", plan.Provider.ID, assignment.ID)
-			return nil
-		}
-		rule, err := parseConcurrencyRuleConfig(assignment)
-		if err != nil {
-			log.Printf("relay: provider %s: concurrency assignment %s invalid config: %v; skipping", plan.Provider.ID, assignment.ID, err)
-			return nil
-		}
-		plan.ConcurrencyRules = append(plan.ConcurrencyRules, rule)
 	case "autoSwitch":
 		var rule model.FailoverRule
 		if err := query.First(&rule).Error; err != nil {
