@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -222,4 +223,49 @@ func TestCheckConcurrency_errorMessageNamesNode(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "node-7") {
 		t.Fatalf("expected error to mention node id, got %v", err)
 	}
+}
+
+// TestConcurrencyWindowCounter_rollsWithTraffic proves the frontend's
+// "窗口内 X/Y" number actually moves: each acquire records the bucket's
+// current occupancy row, and an in-flight request appears as active count.
+func TestConcurrencyWindowCounter_rollsWithTraffic(t *testing.T) {
+	eng, db := newTestEngine(t)
+	plan := &ExecutionPlan{ID: "w1", Provider: newTestProvider("p1")}
+	rule := testConcurrencyPlan("cq-live", 5, 3)
+
+	release1, err := eng.checkConcurrency(context.Background(), plan, rule)
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+
+	var row model.ConcurrencyWindowCounter
+	waitForCount := func(nodeID string, want int) error {
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			var r model.ConcurrencyWindowCounter
+			if err := db.Where("node_id = ?", nodeID).First(&r).Error; err == nil && r.WindowCount == want {
+				row = r
+				return nil
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return fmt.Errorf("no stats row for %s with window_count=%d (last=%+v)", nodeID, want, row)
+	}
+
+	if err := waitForCount("cq-live", 1); err != nil {
+		t.Fatalf("expected a stats row with occupancy 1 after acquire, got %v", err)
+	}
+
+	// 等过 1s 统计限流，这样第二次 acquire 的写入不会被跳过，
+	// 从而证明窗口占用行会随活跃请求数变化（前端数字据此滚动）。
+	release1(time.Now()) // 模拟第一个请求完成；其窗口倒计时在测试内不会触发
+	time.Sleep(1100 * time.Millisecond)
+	release2, err := eng.checkConcurrency(context.Background(), plan, rule)
+	if err != nil {
+		t.Fatalf("second acquire: %v", err)
+	}
+	if err := waitForCount("cq-live", 2); err != nil {
+		t.Fatalf("window occupancy did not roll to 2 after second acquire, got %v", err)
+	}
+	release2(time.Now())
 }

@@ -116,11 +116,11 @@ describe('providersForModel', () => {
     makeModel({ id: 'gpt-4o', providerName: 'OpenAI' }),
   ]
 
-  it('returns distinct providers sorted by provider name', () => {
+  it('returns distinct providers, official (lab) provider first then by name', () => {
     const result = providersForModel(models, 'DEEPSEEK-V3-FLASH')
     expect(result).toEqual([
-      { providerId: 'alibaba', providerName: 'Alibaba' },
       { providerId: 'deepseek', providerName: 'DeepSeek' },
+      { providerId: 'alibaba', providerName: 'Alibaba' },
       { providerId: 'zhipu', providerName: 'Zhipu AI' },
     ])
   })
@@ -134,8 +134,8 @@ describe('providersForModel', () => {
     ]
     const result = providersForModel(qualified, 'deepseek-v4-flash')
     expect(result).toEqual([
-      { providerId: 'alibaba', providerName: 'Alibaba' },
       { providerId: 'deepseek', providerName: 'DeepSeek' },
+      { providerId: 'alibaba', providerName: 'Alibaba' },
       { providerId: 'zhipu', providerName: 'Zhipu AI' },
     ])
   })

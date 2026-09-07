@@ -115,8 +115,8 @@ export function searchModelsDevModels(
     .map((model) => ({ model, score: scoreMatch(model, needle) }))
     .filter((entry) => entry.score >= 0)
     .sort((a, b) => a.score - b.score ||
-      a.model.providerName.localeCompare(b.model.providerName) ||
-      a.model.id.localeCompare(b.model.id))
+      a.model.providerName.localeCompare(b.model.providerName, 'en') ||
+      a.model.id.localeCompare(b.model.id, 'en'))
     .slice(0, limit)
     .map((entry) => entry.model)
 }
@@ -162,7 +162,7 @@ export function providersForModel(
   return [...providers.entries()]
     .map(([providerId, providerName]) => ({ providerId, providerName }))
     .sort((a, b) =>
-      a.providerId === lab ? -1 : b.providerId === lab ? 1 : a.providerName.localeCompare(b.providerName),
+      a.providerId === lab ? -1 : b.providerId === lab ? 1 : a.providerName.localeCompare(b.providerName, 'en'),
     )
 }
 
