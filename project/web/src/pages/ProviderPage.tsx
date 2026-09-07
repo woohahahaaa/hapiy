@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/checkbox'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -771,11 +771,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         </div>
       </Field>
         </FieldGroup>
-      </div>
-      <DialogFooter scrollRef={contentScrollRef} bleed>
-        <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
-        <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? '保存中...' : '保存'}</Button>
-      </DialogFooter>
+      </DialogScrollBody>
       <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
         <DialogContent width="xs">
           <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>

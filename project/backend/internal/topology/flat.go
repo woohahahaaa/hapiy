@@ -136,6 +136,11 @@ func ValidateTopology(t *Topology) error {
 		if n.Strategy != "" && !validStrategy(n.Strategy) {
 			return fmt.Errorf("node %q has unknown strategy %q", n.ID, n.Strategy)
 		}
+		if n.Kind == KindSlot && n.SlotType == "concurrency" {
+			if err := validateConcurrencySlotEntries(n); err != nil {
+				return err
+			}
+		}
 		nodes[n.ID] = n
 	}
 	for _, w := range t.Wires {
@@ -679,4 +684,23 @@ func SlotActive(n FlatNode, now int64) bool {
 		return false
 	}
 	return n.DeadlineAt == nil || *n.DeadlineAt > now
+}
+
+// validateConcurrencySlotEntries enforces the 并发控制 slot's "at most one
+// executor" rule: the slot config is a single sliding window, so multiple
+// entries would be redundant (and would each try to own the same bucket). An
+// empty or missing entries list is a valid "no rule yet" state; a single
+// entry is the only accepted shape.
+func validateConcurrencySlotEntries(n FlatNode) error {
+	if len(n.Entries) == 0 || string(n.Entries) == "null" || string(n.Entries) == "{}" {
+		return nil
+	}
+	var entries []json.RawMessage
+	if err := json.Unmarshal(n.Entries, &entries); err != nil {
+		return fmt.Errorf("node %q concurrency slot entries must be a JSON array: %w", n.ID, err)
+	}
+	if len(entries) > 1 {
+		return fmt.Errorf("node %q concurrency slot allows at most one executor, got %d", n.ID, len(entries))
+	}
+	return nil
 }

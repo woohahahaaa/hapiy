@@ -10,8 +10,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { DataTable, type ColumnDef } from '@/components/data-table'
@@ -388,45 +388,51 @@ function StatsSection() {
       )}
 
       <Dialog open={clearOpen} onOpenChange={closeClearDialog}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>清空用量</DialogTitle>
             <DialogDescription>
               将清空累计用量统计，不影响请求记录。
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => closeClearDialog(false)} disabled={clearing}>
-              取消
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={clearing}
-              onClick={() => {
-                setClearOpen(false)
-                setClearConfirmOpen(true)
-              }}
-            >
-              清空
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => closeClearDialog(false)} disabled={clearing}>
+                取消
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={clearing}
+                onClick={() => {
+                  setClearOpen(false)
+                  setClearConfirmOpen(true)
+                }}
+              >
+                清空
+              </Button>
+            </>
+          }>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
 
       <Dialog open={clearConfirmOpen} onOpenChange={closeClearConfirmDialog}>
-        <DialogContent width="xs">
+        <DialogContent width="xs" scrollFooter>
           <DialogHeader>
             <DialogTitle>确认清空用量？</DialogTitle>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => closeClearConfirmDialog(false)} disabled={clearing}>
-              取消
-            </Button>
-            <Button variant="destructive" size="sm" onClick={() => void handleClearUsage()} disabled={clearing}>
-              {clearing ? '清空中…' : '确认清空'}
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" size="sm" onClick={() => closeClearConfirmDialog(false)} disabled={clearing}>
+                取消
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => void handleClearUsage()} disabled={clearing}>
+                {clearing ? '清空中…' : '确认清空'}
+              </Button>
+            </>
+          }>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </section>
@@ -636,13 +642,23 @@ function ActiveRequestsSection() {
       />
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
+        <DialogContent scrollFooter>
           <DialogHeader>
             <DialogTitle>保留时间设置</DialogTitle>
             <DialogDescription>
               请求结束后，在列表中保留多久
             </DialogDescription>
           </DialogHeader>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={() => void handleSave()} disabled={saving}>
+                {saving ? '保存中…' : '保存'}
+              </Button>
+            </>
+          }>
           <div className="flex flex-wrap gap-2">
             {RETENTION_CHOICES.map((choice) => (
               <Button
@@ -655,14 +671,7 @@ function ActiveRequestsSection() {
               </Button>
             ))}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? '保存中…' : '保存'}
-            </Button>
-          </DialogFooter>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
 

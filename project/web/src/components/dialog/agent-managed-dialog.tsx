@@ -1,12 +1,12 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Checkbox } from '@/components/checkbox'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Field, FieldLabel } from '@/components/ui/field'
@@ -463,22 +463,35 @@ export function ManagedProviderDialog({
     }
   }
 
-  // 内容区滚动容器 ref：传给 DialogFooter 用于判断按钮是否浮在内容之上。
-  const contentScrollRef = useRef<HTMLDivElement>(null)
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         width="lg"
         height="auto"
         minHeight={840}
-        className="flex max-h-[85vh] flex-col gap-0"
+        scrollFooter
       >
         <DialogHeader>
           <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
         </DialogHeader>
 
-        <div ref={contentScrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <DialogScrollBody className="space-y-4" footer={
+          <>
+            {editing && (
+              <Button
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => setConfirmDelete(true)}
+                disabled={deleting}
+              >
+                <AppIcon name="delete" size={14} data-icon="inline-start" />
+                删除
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+            <Button onClick={() => void submit()}>保存</Button>
+          </>
+        }>
           {loading ? (
             <p className="text-xs text-muted-foreground">加载供应商列表…</p>
           ) : (
@@ -700,39 +713,26 @@ export function ManagedProviderDialog({
               )}
             </>
           )}
-        </div>
-
-        <DialogFooter scrollRef={contentScrollRef} bleed>
-          {editing && (
-            <Button
-              variant="destructive"
-              className="mr-auto"
-              onClick={() => setConfirmDelete(true)}
-              disabled={deleting}
-            >
-              <AppIcon name="delete" size={14} data-icon="inline-start" />
-              删除
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button onClick={() => void submit()}>保存</Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
 
       <Dialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
-        <DialogContent width="sm">
+        <DialogContent width="sm" scrollFooter>
           <DialogHeader>
             <DialogTitle>删除托管 provider</DialogTitle>
           </DialogHeader>
-          <p className="px-4 text-xs text-muted-foreground">
-            确认删除托管 provider「{editing?.name ?? ''}」？删除会立即生效，已生成的 provider 配置仍会保留。
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>取消</Button>
-            <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
-              {deleting ? '删除中…' : '确认删除'}
-            </Button>
-          </DialogFooter>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>取消</Button>
+              <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
+                {deleting ? '删除中…' : '确认删除'}
+              </Button>
+            </>
+          }>
+            <p className="text-xs text-muted-foreground">
+              确认删除托管 provider「{editing?.name ?? ''}」？删除会立即生效，已生成的 provider 配置仍会保留。
+            </p>
+          </DialogScrollBody>
         </DialogContent>
       </Dialog>
     </Dialog>

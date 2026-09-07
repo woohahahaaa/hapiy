@@ -10,6 +10,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import {
@@ -1272,20 +1273,23 @@ for (const p of summary?.providers ?? []) {
 
         {/* 使用推荐模板 confirm */}
         <Dialog open={confirmingTemplate} onOpenChange={setConfirmingTemplate}>
-          <DialogContent width="sm">
+          <DialogContent width="sm" scrollFooter>
             <DialogHeader>
               <DialogTitle>使用推荐模板</DialogTitle>
             </DialogHeader>
-            <p className="px-4 text-xs text-muted-foreground">
-              将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）
-              及其模型的字段进行调整，并把结果直接写入文件生效。确认？
-            </p>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmingTemplate(false)} disabled={applying}>取消</Button>
-              <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
-                {applying ? '应用中...' : '确认并生效'}
-              </Button>
-            </DialogFooter>
+            <DialogScrollBody footer={
+              <>
+                <Button variant="outline" onClick={() => setConfirmingTemplate(false)} disabled={applying}>取消</Button>
+                <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
+                  {applying ? '应用中...' : '确认并生效'}
+                </Button>
+              </>
+            }>
+              <p className="text-xs text-muted-foreground">
+                将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）
+                及其模型的字段进行调整，并把结果直接写入文件生效。确认？
+              </p>
+            </DialogScrollBody>
           </DialogContent>
         </Dialog>
 
@@ -1340,34 +1344,37 @@ function RenameProviderDialog({
   }, [open, currentName])
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
+      <DialogContent width="sm" scrollFooter>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <div className="px-4 pb-4">
-          <Input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && value.trim() && value.trim() !== currentName) {
-                onConfirm(value.trim())
-              }
-            }}
-          />
-          <p className="mt-2 text-xs text-muted-foreground">
-            修改会作为预览的一部分，点右上角「保存」后才会写入配置文件。
-          </p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button
-            disabled={!value.trim() || value.trim() === currentName}
-            onClick={() => onConfirm(value.trim())}
-          >
-            确认
-          </Button>
-        </DialogFooter>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+            <Button
+              disabled={!value.trim() || value.trim() === currentName}
+              onClick={() => onConfirm(value.trim())}
+            >
+              确认
+            </Button>
+          </>
+        }>
+          <div className="pb-4">
+            <Input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && value.trim() && value.trim() !== currentName) {
+                  onConfirm(value.trim())
+                }
+              }}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              修改会作为预览的一部分，点右上角「保存」后才会写入配置文件。
+            </p>
+          </div>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
@@ -2526,19 +2533,21 @@ function ConfirmDiscardDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
-      <DialogContent width="xs">
+      <DialogContent width="xs" scrollFooter>
         <DialogHeader>
           <DialogTitle>退出编辑？</DialogTitle>
           <DialogDescription>退出后编辑的内容不会被保存，确认退出？</DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
-            继续编辑
-          </Button>
-          <Button variant="destructive" size="sm" onClick={onDiscard} disabled={saving}>
-            确认退出
-          </Button>
-        </DialogFooter>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
+              继续编辑
+            </Button>
+            <Button variant="destructive" size="sm" onClick={onDiscard} disabled={saving}>
+              确认退出
+            </Button>
+          </>
+        } />
       </DialogContent>
     </Dialog>
   )
@@ -2560,7 +2569,7 @@ function ConfirmSyncManagedDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
-      <DialogContent width="xs">
+      <DialogContent width="xs" scrollFooter>
         <DialogHeader>
           <DialogTitle>同步到配置文件</DialogTitle>
           <DialogDescription>
@@ -2568,14 +2577,16 @@ function ConfirmSyncManagedDialog({
             {pendingCount > 0 && <>（共 {pendingCount} 个供应商）</>}，确认同步？
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={onCancel} disabled={syncing}>
-            取消
-          </Button>
-          <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
-            {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
-          </Button>
-        </DialogFooter>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" size="sm" onClick={onCancel} disabled={syncing}>
+              取消
+            </Button>
+            <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
+              {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
+            </Button>
+          </>
+        } />
       </DialogContent>
     </Dialog>
   )

@@ -10,8 +10,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -831,11 +831,19 @@ function AgentConfigFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="md">
+      <DialogContent width="md" scrollFooter>
         <DialogHeader>
           <DialogTitle>{record ? '编辑接管记录' : '接管新的配置文件'}</DialogTitle>
         </DialogHeader>
-        <FieldGroup>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
+            <Button onClick={() => void handleSave()} disabled={saving}>
+              {saving ? '保存中...' : record ? '保存修改' : '保存'}
+            </Button>
+          </>
+        }>
+          <FieldGroup>
           <Field>
             <FieldLabel>记录名称</FieldLabel>
             <Input value={recordName} onChange={(e) => setRecordName(e.target.value)} placeholder="例如：OpenCode 配置" />
@@ -1028,12 +1036,7 @@ function AgentConfigFormDialog({
             </div>
           )}
         </FieldGroup>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
-          <Button onClick={() => void handleSave()} disabled={saving}>
-            {saving ? '保存中...' : record ? '保存修改' : '保存'}
-          </Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
 
       {previewOpen && (
@@ -1077,17 +1080,19 @@ export function ConfirmDeleteDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
+      <DialogContent width="sm" scrollFooter>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
-          <Button variant="destructive" onClick={onConfirm} disabled={busy}>
-            {busy ? '删除中...' : '确认删除'}
-          </Button>
-        </DialogFooter>
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
+            <Button variant="destructive" onClick={onConfirm} disabled={busy}>
+              {busy ? '删除中...' : '确认删除'}
+            </Button>
+          </>
+        } />
       </DialogContent>
     </Dialog>
   )

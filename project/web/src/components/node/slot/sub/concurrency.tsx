@@ -52,7 +52,7 @@ export function NodeSlotConcurrency({
           />
         </div>
       }
-      onAddNode={onAddEntry}
+      onAddNode={entries.length >= 1 ? undefined : onAddEntry}
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
       active={active}
@@ -66,7 +66,6 @@ export function NodeSlotConcurrency({
           onPickToken={onSelectExecutor}
           nodeId={nodeId}
           entry={entry}
-          nodeId={nodeId}
           onChange={onChangeEntry}
           onDelete={() => onDeleteEntry(entry.index)}
           flashLayers={flashLayers}

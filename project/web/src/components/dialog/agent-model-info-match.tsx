@@ -5,8 +5,8 @@ import { Checkbox } from '@/components/checkbox'
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import {
@@ -423,11 +423,15 @@ export function AgentModelInfoMatchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="lg" height="auto" className="flex max-h-[70vh] flex-col">
+      <DialogContent width="lg" height="auto" scrollFooter className="flex max-h-[70vh] flex-col">
         <DialogHeader>
           <DialogTitle>使用推荐配置</DialogTitle>
         </DialogHeader>
-
+        <DialogScrollBody footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>关闭</Button>
+          </>
+        }>
         <div className="flex min-h-0 flex-1 flex-col">
           {loading && <Placeholder>加载中…</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
@@ -629,9 +633,7 @@ export function AgentModelInfoMatchDialog({
             </>
           )}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>关闭</Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )

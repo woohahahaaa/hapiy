@@ -204,8 +204,8 @@ func assignedRuleError(assignment model.TopologySlotAssignment, err error) error
 //
 //	{
 //	  "nodeId": "concurrency-abc",       // 幕后识别：from the flat slot node id
-//	  "windowMinutes": 5,                // 每 X 分钟内
-//	  "maxCount": 10,                    // 最多 N 条
+//	  "windowMinutes": 1,                // 每 X 分钟内
+//	  "maxCount": 20,                    // 最多 N 条
 //	}
 func parseConcurrencyRuleConfig(assignment model.TopologySlotAssignment) (*ConcurrencyRule, error) {
 	var cfg struct {

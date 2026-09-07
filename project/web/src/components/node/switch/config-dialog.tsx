@@ -12,8 +12,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
+  DialogScrollBody,
   DialogTitle,
 } from '@/components/dialog'
 import { ConditionList } from '@/components/rewrite-rule-editor/ConditionList'
@@ -116,7 +116,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm" className="!w-[680px]">
+      <DialogContent width="sm" scrollFooter className="!w-[680px]">
         <DialogHeader>
           <DialogTitle>满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
           <DialogDescription>
@@ -124,7 +124,14 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <DialogScrollBody className="flex flex-col gap-4" footer={
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSave}>保存</Button>
+          </>
+        }>
           {/* ── 规则名称：留空则节点显示「条件开关」 ── */}
           <Field>
             <FieldLabel>规则名称</FieldLabel>
@@ -250,14 +257,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
               <ConditionList conditions={conditions} onChange={setConditions} />
             )}
           </div>
-        </div>
-
-        <DialogFooter showCloseButton={false}>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
-          </Button>
-          <Button onClick={handleSave}>保存</Button>
-        </DialogFooter>
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
