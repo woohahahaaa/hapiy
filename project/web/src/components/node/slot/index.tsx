@@ -243,6 +243,7 @@ export function NodeSlot({ data }: NodeSlotProps) {
     <NodeSlotConcurrency
       title={title}
       enabled={data.enabled ?? true}
+      nodeId={nodeId}
       onSelectExecutor={onSelectExecutor}
       selectedExecutorToken={selectedExecutorToken}
       onToggleEnabled={onToggleEnabled}

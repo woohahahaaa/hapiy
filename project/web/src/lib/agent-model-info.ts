@@ -45,20 +45,42 @@ function coerceToShape(raw: unknown, targetShape: unknown): unknown {
   return raw
 }
 
+function filterValues(values: readonly string[] | undefined, raw: readonly unknown[]): unknown[] {
+  if (!values || values.length === 0) return raw
+  const allowed = new Set(values.map((v) => v.trim().toLowerCase()))
+  return raw.filter((item) => allowed.has(String(item).trim().toLowerCase()))
+}
+
+// filterValuesFor exposes filterValues for tests: drops elements not in
+// the allowed whitelist (case-insensitive); empty whitelist passes all.
+export function filterValuesFor(values: readonly string[] | undefined, raw: readonly unknown[]): unknown[] {
+  return filterValues(values, raw)
+}
+
 function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
   switch (spec.op) {
     case 'bool': {
       if (raw === undefined || raw === null) return undefined
       return Array.isArray(raw) ? raw.length > 0 : Boolean(raw)
     }
-    case 'first':
-      return Array.isArray(raw) && raw.length > 0 ? raw[0] : undefined
-    case 'join':
-      return Array.isArray(raw) && raw.length > 0 ? raw.join(spec.sep ?? ',') : undefined
-    default:
+    case 'first': {
+      if (!Array.isArray(raw) || raw.length === 0) return undefined
+      const filtered = filterValues(spec.values, raw)
+      return filtered.length > 0 ? filtered[0] : undefined
+    }
+    case 'join': {
+      if (!Array.isArray(raw) || raw.length === 0) return undefined
+      const filtered = filterValues(spec.values, raw)
+      return filtered.length > 0 ? filtered.join(spec.sep ?? ',') : undefined
+    }
+    default: {
       if (raw === undefined || raw === null) return undefined
-      if (Array.isArray(raw) && raw.length === 0) return undefined
+      if (Array.isArray(raw)) {
+        const filtered = filterValues(spec.values, raw)
+        return filtered.length > 0 ? filtered : undefined
+      }
       return raw
+    }
   }
 }
 

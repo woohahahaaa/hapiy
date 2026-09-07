@@ -1665,19 +1665,45 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 }
 
 // applyRecommendationsToContent merges each rule's Recommended value at
-// its key path into the supplied JSON document, using sjson. Returns the
-// updated content and the count of fields applied.
+// its key path into the supplied JSON document, using sjson, honouring
+// each recommendation's action and 值写法 (op/sep/values):
+//
+//	skip   → leave the field untouched
+//	delete → delete the field (sjson.DeleteBytes)
+//	set    → shape Recommended then write it
+//
+// Returns the updated content and the count of fields applied.
 func applyRecommendationsToContent(content, providerPath, modelPath, providerID, modelID string, recs []model.AgentRecommendation) (string, int, error) {
 	buf := []byte(content)
 	applied := 0
 	for _, r := range recs {
+		action := r.RecommendAction()
+		switch action {
+		case "skip":
+			continue
+		case "delete":
+			// delete the field regardless of provider/model scope
+			next, ok, err := applyRecDeleteBytes(buf, r, providerPath, modelPath, providerID, modelID)
+			if err != nil {
+				return string(buf), applied, err
+			}
+			buf = next
+			if ok {
+				applied++
+			}
+			continue
+		}
 		if r.Recommended == nil {
 			continue
+		}
+		value := r.Recommended
+		if shaped, ok := r.ShapeValue(r.Recommended); ok {
+			value = shaped
 		}
 		switch r.Scope {
 		case "provider":
 			full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
-			next, err := sjson.SetBytes(buf, full, r.Recommended)
+			next, err := sjson.SetBytes(buf, full, value)
 			if err != nil {
 				return string(buf), applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
 			}
@@ -1696,7 +1722,7 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 				base = resolved + "." + escapeSjsonKey(modelID)
 			}
 			full := base + "." + r.Key
-			next, err := sjson.SetBytes(buf, full, r.Recommended)
+			next, err := sjson.SetBytes(buf, full, value)
 			if err != nil {
 				return string(buf), applied, fmt.Errorf("model %q 字段 %s: %v", modelID, r.Key, err)
 			}
@@ -1705,6 +1731,37 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 		}
 	}
 	return string(buf), applied, nil
+}
+
+// applyRecDeleteBytes deletes one recommendation's field from the JSON
+// document. ok reports whether the field existed. Arrays of model entries
+// (openclaw shape) are only deleted when the model itself exists.
+func applyRecDeleteBytes(buf []byte, r model.AgentRecommendation, providerPath, modelPath, providerID, modelID string) ([]byte, bool, error) {
+	switch r.Scope {
+	case "provider":
+		full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
+		if !gjson.GetBytes(buf, full).Exists() {
+			return buf, false, nil
+		}
+		next, err := sjson.DeleteBytes(buf, full)
+		return next, true, err
+	case "model":
+		if modelID == "" {
+			return buf, false, nil
+		}
+		resolved := strings.ReplaceAll(modelPath, "{provider_id}", escapeSjsonKey(providerID))
+		base, found := modelEntryPath(buf, resolved, modelID)
+		if !found {
+			return buf, false, nil
+		}
+		full := base + "." + r.Key
+		if !gjson.GetBytes(buf, full).Exists() {
+			return buf, false, nil
+		}
+		next, err := sjson.DeleteBytes(buf, full)
+		return next, true, err
+	}
+	return buf, false, nil
 }
 
 // stripJSON5Comments removes // and /* */ comments so gjson can parse

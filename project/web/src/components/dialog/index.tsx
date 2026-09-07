@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 import { cn } from "@/lib/utils"
@@ -66,6 +66,7 @@ function DialogContent({
   height = 'auto',
   minHeight,
   bare = false,
+  scrollFooter = false,
   style,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -78,6 +79,9 @@ function DialogContent({
   /** Edge-to-edge mode: strips the dialog chrome (radius, border, padding)
    * for fullscreen editors/panels. Callers still provide their own layout. */
   bare?: boolean
+  /** 固定底部按钮栏模式：面板本身不滚动（flex 列 + 85vh 封顶），内容区
+   * 交由 DialogScrollBody 内部滚动，DialogFooter 作为兄弟被钉在底部。 */
+  scrollFooter?: boolean
 }) {
   const sizeClass = width === 'full' && height === 'full'
     ? '!w-screen !max-w-none !h-screen !max-h-none !inset-0 !translate-x-0 !translate-y-0'
@@ -92,6 +96,7 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           sizeClass,
           bare && 'rounded-none border-0 p-0 !gap-0',
+          scrollFooter && 'flex max-h-[85vh] flex-col gap-0 overflow-hidden',
           className,
         )}
         style={{ minHeight, ...style }}
@@ -122,6 +127,32 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
       className={cn("flex flex-col gap-1 text-left", className)}
       {...props}
     />
+  )
+}
+
+/**
+ * 固定底部按钮栏的滚动内容区：配合 DialogContent 的 scrollFooter 使用。
+ * 把内容包在自滚动的区域里，footer 栏钉在弹窗底部、随内容滚不到，
+ * 滚到底时 footer 顶部分隔线自动消失（按钮像浮在内容之上）。
+ * footer 直接传按钮（可含多个），DialogFooter 外壳由本组件统一渲染。
+ */
+function DialogScrollBody({
+  className,
+  children,
+  footer,
+}: React.ComponentProps<"div"> & {
+  footer: React.ReactNode
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  return (
+    <>
+      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto p-4", className)}>
+        {children}
+      </div>
+      <DialogFooter scrollRef={scrollRef} bleed>
+        {footer}
+      </DialogFooter>
+    </>
   )
 }
 
@@ -220,6 +251,7 @@ export {
   DialogHeader,
   DialogOverlay,
   DialogPortal,
+  DialogScrollBody,
   DialogTitle,
   DialogTrigger,
 }

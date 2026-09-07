@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import { createDebouncedCommit, type DebouncedCommit } from './debounce'
+import { useConcurrencyWindowCount } from '@/lib/concurrency-windows'
 import type { ConcurrencySlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
 import { parseConcurrencyNodeConfig, type ConcurrencyNodeConfig } from '@/lib/dashboard-api'
 
@@ -9,6 +11,8 @@ export interface NodeExecutorConcurrencyProps extends SlotItemDragProps {
   token?: string
   picked?: boolean
   onPickToken?: (token: string) => void
+  /** 所属并发 slot 节点的扁平拓扑节点 id（用于轮询窗口占用）。 */
+  nodeId?: string
   entry: ConcurrencySlotEntry
   onChange: (next: ConcurrencySlotEntry) => void
   onDelete: () => void
@@ -73,8 +77,10 @@ function ConcurrencyNumber({ value, onCommit, ...rest }: ConcurrencyNumberProps)
 
 // 并发控制业务节点：槽位内的一条并行控制条目。配置文件直接在节点框上编辑
 // （「每 X 分钟内最多 N 条」的数字内嵌为输入框），不区分供应商，不再弹窗。
-export function NodeExecutorConcurrency({ entry, onChange, onDelete, token, picked, onPickToken, ...drag }: NodeExecutorConcurrencyProps) {
+// 下方动态显示当前滑动窗口内已占用的条数（无数据时不渲染）。
+export function NodeExecutorConcurrency({ entry, nodeId, onChange, onDelete, token, picked, onPickToken, ...drag }: NodeExecutorConcurrencyProps) {
   const config = parseConcurrencyNodeConfig(entry.config)
+  const windowActive = useConcurrencyWindowCount(entry.enabled ? nodeId : undefined)
 
   const commit = (patch: Partial<ConcurrencyNodeConfig>) =>
     onChange({ ...entry, config: { ...config, ...patch } })
@@ -90,7 +96,7 @@ export function NodeExecutorConcurrency({ entry, onChange, onDelete, token, pick
       onPickToken={onPickToken}
       {...drag}
     >
-      <div className="min-w-0 text-xs">
+      <div className="min-w-0 flex flex-col gap-1.5 text-xs">
         <div className="flex flex-wrap items-center gap-1">
           <span>每</span>
           <ConcurrencyNumber aria-label="时间窗口（分钟）" value={config.windowMinutes} onCommit={(v) => commit({ windowMinutes: v })} />
@@ -98,7 +104,17 @@ export function NodeExecutorConcurrency({ entry, onChange, onDelete, token, pick
           <ConcurrencyNumber aria-label="并发上限（条）" value={config.maxCount} onCommit={(v) => commit({ maxCount: v })} />
           <span>条</span>
         </div>
-        <div className="mt-0.5 text-xs text-muted-foreground">所有请求共用一个滑动窗口</div>
+        {windowActive && (
+          <div
+            className={cn(
+              'flex items-center gap-1 text-xs text-muted-foreground',
+              windowActive.windowCount >= windowActive.maxCount && 'font-medium text-amber-600 dark:text-amber-400',
+            )}
+          >
+            <span className="inline-block size-1.5 rounded-full bg-current opacity-70" />
+            窗口内 {windowActive.windowCount}/{windowActive.maxCount}
+          </div>
+        )}
       </div>
     </SlotItemCard>
   )

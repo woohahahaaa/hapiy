@@ -45,17 +45,46 @@ type AgentJsonPaths struct {
 // model config. Scope decides where the field is checked/applied:
 // "provider" against the provider's other_fields, "model" against each
 // model's config object. Key is a gjson path under that scope (single
-// segment or dotted, no array wildcards); Recommended is the value to
-// fill in when the user clicks "一键套用推荐值".
+// segment or dotted, no array wildcards).
+//
+// Action declares what the recommendation should do to the field:
+//
+//	"set"   推荐填 —— 写入 Recommended（默认，缺省即 set）
+//	"skip"  推荐不填 —— 明确不动该字段（即使文件里已有也保持原样）
+//	"delete"推荐删除该字段
+//
+// Op / Sep / Values shape the Recommended value before writing (值写法),
+// matching the semantics of AgentModelInfoFieldSpec: op raw/bool/first/join,
+// sep for join, Values as an allowed-literal whitelist that drops anything
+// not listed (e.g. openclaw's `input` only accepts text/image/video/audio).
 type AgentRecommendation struct {
 	Name        string            `json:"name,omitempty"`      // 字段名（官方配置里）
 	Scope       string            `json:"scope"`               // "provider" | "model"
 	Key         string            `json:"key"`                 // gjson path, e.g. "maxConcurrency" or "thinking.type"
 	Description string            `json:"description"`         // human-readable meaning
 	Type        string            `json:"type"`                // "string" | "number" | "boolean" | "object" | "array"
+	Action      string            `json:"action,omitempty"`    // "set" | "skip" | "delete"（缺省 "set"）
 	Recommended any               `json:"recommended"`         // recommended value, or null when not filled
 	Candidates  map[string]string `json:"candidates,omitempty"` // 多候选值说明 key→含义
 	Required    bool              `json:"required"`            // recommended to be present?
+	Op          string            `json:"op,omitempty"`        // ""|"raw"|"bool"|"first"|"join"
+	Sep         string            `json:"sep,omitempty"`       // join 分隔符
+	Values      []string          `json:"values,omitempty"`    // allowed-literal whitelist
+}
+
+// RecommendAction resolves the effective action of a recommendation,
+// defaulting the empty value to "set" for backward compatibility.
+func (r AgentRecommendation) RecommendAction() string {
+	if r.Action == "skip" || r.Action == "delete" {
+		return r.Action
+	}
+	return "set"
+}
+
+// ShapeValue applies the 值写法 (op/sep/values) to the recommendation's
+// value before writing. ok=false means "skip this field" after shaping.
+func (r AgentRecommendation) ShapeValue(v any) (any, bool) {
+	return shapeValue(r.Op, r.Sep, r.Values, v)
 }
 
 // InferRecommendationType infers the type field from the recommended
@@ -101,11 +130,25 @@ func InferRecommendationType(rec AgentRecommendation) string {
 // so `"values": ["text","image","video","audio"]` strips anything else
 // like models.dev's "pdf"). Unlisted elements are dropped; set empty to
 // skip filtering.
+//
+// Action mirrors AgentRecommendation.Action: "set" (default) writes the
+// unified value, "delete" removes the field from the model config
+// entirely, and "skip" leaves any existing value untouched.
 type AgentModelInfoFieldSpec struct {
 	Path   string   `json:"path"`
+	Action string   `json:"action,omitempty"` // "set" | "skip" | "delete"（缺省 "set"）
 	Op     string   `json:"op,omitempty"`
 	Sep    string   `json:"sep,omitempty"`
 	Values []string `json:"values,omitempty"`
+}
+
+// RecommendAction resolves the effective action of a model-info field
+// spec, defaulting the empty value to "set".
+func (s AgentModelInfoFieldSpec) RecommendAction() string {
+	if s.Action == "skip" || s.Action == "delete" {
+		return s.Action
+	}
+	return "set"
 }
 
 // UnmarshalJSON accepts the legacy string form and the object form.
@@ -143,7 +186,17 @@ func (s AgentModelInfoFieldSpec) MarshalJSON() ([]byte, error) {
 // (empty raw / first / join values), so agents never receive e.g. an
 // empty array where a boolean is expected.
 func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
-	switch s.Op {
+	return shapeValue(s.Op, s.Sep, s.Values, v)
+}
+
+// shapeValue transforms a unified/raw value into the concrete value an
+// agent expects: op raw (as-is, filtered by allowed values), bool
+// (non-empty → true, empty → false), first (first element of a list),
+// join (list joined with sep). ok=false means "skip this field".
+// This is the single 值写法 engine shared by the unified model-info
+// fields and AgentRecommendation writing.
+func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
+	switch op {
 	case "bool":
 		if v == nil {
 			return nil, false
@@ -154,12 +207,12 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 		if !ok {
 			return nil, false
 		}
+		arr = filterValues(allowed, arr)
 		if len(arr) == 0 {
 			return nil, false
 		}
-		return s.filterValues(arr)[0], true
+		return arr[0], true
 	case "join":
-		sep := s.Sep
 		if sep == "" {
 			sep = ","
 		}
@@ -167,15 +220,15 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 		if !ok {
 			return nil, false
 		}
-		arr = s.filterValues(arr)
+		arr = filterValues(allowed, arr)
 		if len(arr) == 0 {
 			return nil, false
 		}
 		return strings.Join(arr, sep), true
-	default: // "" | raw
+	default: // "" | "raw"
 		arr, isArr := toStrings(v)
 		if isArr {
-			arr = s.filterValues(arr)
+			arr = filterValues(allowed, arr)
 			if len(arr) == 0 {
 				return nil, false
 			}
@@ -202,19 +255,19 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 	}
 }
 
-// filterValues drops elements not listed in the spec's allowed Values
-// (case-insensitive, trimmed). With no Values set every element passes.
-func (s AgentModelInfoFieldSpec) filterValues(arr []string) []string {
-	if len(s.Values) == 0 {
+// filterValues drops elements not listed in the allowed whitelist
+// (case-insensitive, trimmed). An empty whitelist passes everything.
+func filterValues(allowed, arr []string) []string {
+	if len(allowed) == 0 {
 		return arr
 	}
-	allowed := make(map[string]bool, len(s.Values))
-	for _, v := range s.Values {
-		allowed[strings.ToLower(strings.TrimSpace(v))] = true
+	allow := make(map[string]bool, len(allowed))
+	for _, v := range allowed {
+		allow[strings.ToLower(strings.TrimSpace(v))] = true
 	}
 	out := make([]string, 0, len(arr))
 	for _, item := range arr {
-		if allowed[strings.ToLower(strings.TrimSpace(item))] {
+		if allow[strings.ToLower(strings.TrimSpace(item))] {
 			out = append(out, item)
 		}
 	}

@@ -679,12 +679,7 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 	mdModels, _ := modelsDev.load()
 
 	block := map[string]any{}
-	for _, r := range providerRecs {
-		if r.Recommended == nil {
-			continue
-		}
-		_ = setDottedValue(block, r.Key, r.Recommended)
-	}
+	applyRecToMap(block, providerRecs)
 	// name：模板声明了 name 字段时自动填成 provider 显示名（规则名+后缀），
 	// 避免生成的块没有显示名、在 opencode 里不好认。
 	if hasRecommendationKey(providerRecs, "name") {
@@ -744,18 +739,13 @@ func buildManagedModels(container string, members []model.Provider, modelRecs []
 	return out
 }
 
-// buildOneModelCfg fills one model's config object: recs with non-nil
-// Recommended values first, then the four unified model-info fields
-// from the chosen models.dev reference supplier. Returns an empty
+// buildOneModelCfg fills one model's config object: recs (respecting each
+// recommendation's action / 值写法), then the four unified model-info
+// fields from the chosen models.dev reference supplier. Returns an empty
 // object when no values are available so the entry still shows up.
 func buildOneModelCfg(name string, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel) map[string]any {
 	cfg := map[string]any{}
-	for _, r := range modelRecs {
-		if r.Recommended == nil {
-			continue
-		}
-		_ = setDottedValue(cfg, r.Key, r.Recommended)
-	}
+	applyRecToMap(cfg, modelRecs)
 	if supplier := group.ModelSources[name]; supplier != "" {
 		if mdModels != nil {
 			if row, ok := findModelsDevRow(mdModels, name, supplier); ok {
@@ -764,6 +754,58 @@ func buildOneModelCfg(name string, modelRecs []model.AgentRecommendation, group 
 		}
 	}
 	return cfg
+}
+
+// applyRecToMap writes a batch of recommendations into a config map in
+// one place, honoring each rec's action (set/skip/delete) and its
+// 值写法 (op/sep/values):
+//
+//   - action=skip            → leave the field untouched
+//   - action=delete          → delete the field from the map
+//   - action=set (default)   → shape the Recommended value, write it
+//
+// Dotted keys are honoured via setDottedValue / deleteDottedValue.
+func applyRecToMap(m map[string]any, recs []model.AgentRecommendation) {
+	for _, r := range recs {
+		switch r.RecommendAction() {
+		case "skip":
+			continue
+		case "delete":
+			deleteDottedValue(m, r.Key)
+			continue
+		}
+		if r.Recommended == nil {
+			continue
+		}
+		if v, ok := r.ShapeValue(r.Recommended); ok {
+			_ = setDottedValue(m, r.Key, v)
+		}
+	}
+}
+
+// deleteDottedValue removes the value at a dotted path inside m,
+// pruning empty intermediate objects along the way.
+func deleteDottedValue(m map[string]any, path string) {
+	segs := strings.Split(path, ".")
+	cur := m
+	for i, seg := range segs {
+		if seg == "" {
+			return
+		}
+		if i == len(segs)-1 {
+			delete(cur, seg)
+			return
+		}
+		next, ok := cur[seg]
+		if !ok {
+			return
+		}
+		child, ok := next.(map[string]any)
+		if !ok {
+			return
+		}
+		cur = child
+	}
 }
 
 // matchProtocolByEndpoint returns the first protocol whose 词库里任一
@@ -821,36 +863,45 @@ func apiKeyFieldFor(recs []model.AgentRecommendation) string {
 // from a models.dev row (matched by the model name + the reference
 // supplier stored in the group's ModelSources), writing each value at its
 // rule-configured path after shaping it with the field spec's op (e.g.
-// opencode's `reasoning` boolean). Nothing is persisted here: the view /
-// generation reads the live snapshot each time.
+// opencode's `reasoning` boolean). Each field spec's action is honoured:
+// "skip" leaves the field untouched, "delete" removes it from the config,
+// and "set" (default) writes the shaped value. Nothing is persisted here:
+// the view / generation reads the live snapshot each time.
 func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFieldPaths, cfg map[string]any) {
-	if mif.MaxContext.Path != "" && row.ContextLength > 0 {
-		if v, ok := mif.MaxContext.Shape(row.ContextLength); ok {
-			_ = setDottedValue(cfg, mif.MaxContext.Path, v)
+	writeSpec := func(spec model.AgentModelInfoFieldSpec, raw any) {
+		if spec.Path == "" {
+			return
+		}
+		switch spec.RecommendAction() {
+		case "skip":
+			return
+		case "delete":
+			deleteDottedValue(cfg, spec.Path)
+			return
+		}
+		if v, ok := spec.Shape(raw); ok {
+			_ = setDottedValue(cfg, spec.Path, v)
 		}
 	}
+	if mif.MaxContext.Path != "" && row.ContextLength > 0 {
+		writeSpec(mif.MaxContext, row.ContextLength)
+	}
 	if mif.MaxOutputToken.Path != "" && row.MaxOutput > 0 {
-		if v, ok := mif.MaxOutputToken.Shape(row.MaxOutput); ok {
-			_ = setDottedValue(cfg, mif.MaxOutputToken.Path, v)
-		}
+		writeSpec(mif.MaxOutputToken, row.MaxOutput)
 	}
 	if len(row.InputTypes) > 0 && mif.InputTypes.Path != "" {
 		vals := make([]any, len(row.InputTypes))
 		for i, s := range row.InputTypes {
 			vals[i] = s
 		}
-		if v, ok := mif.InputTypes.Shape(vals); ok {
-			_ = setDottedValue(cfg, mif.InputTypes.Path, v)
-		}
+		writeSpec(mif.InputTypes, vals)
 	}
 	if mif.ThinkingLevels.Path != "" {
 		levels := []any{}
 		if row.Reasoning {
 			levels = append(levels, "high")
 		}
-		if v, ok := mif.ThinkingLevels.Shape(levels); ok {
-			_ = setDottedValue(cfg, mif.ThinkingLevels.Path, v)
-		}
+		writeSpec(mif.ThinkingLevels, levels)
 	}
 }
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -1060,5 +1061,51 @@ func TestManagedOpenclawArrayContainer(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), `"pending_sync":true`) {
 		t.Fatalf("expected pending_sync false right after sync, got: %s", w.Body.String())
+	}
+}
+
+// TestApplyRecToMap_ActionsAndWriters 验证托管生成时每条推荐按
+// action（set/skip/delete）与 值写法（op/sep/values）写盘：白名单过滤
+// 掉非法字面量、skip 不动已有值、delete 删除字段。
+func TestApplyRecToMap_ActionsAndWriters(t *testing.T) {
+	cfg := map[string]any{
+		"existing": "keep-me",
+		"legacy":   []any{"pdf", "text"},
+		"toDelete": map[string]any{"a": 1},
+		"nested":   map[string]any{"sub": "old"},
+	}
+	recs := []model.AgentRecommendation{
+		// set + values 白名单：pdf 被过滤掉
+		{Key: "input", Recommended: []any{"text", "image", "pdf"}, Op: "raw", Values: []string{"text", "image", "video", "audio"}},
+		// set + join 白名单
+		{Key: "modes", Recommended: []any{"x", "text", "video"}, Op: "join", Sep: "+", Values: []string{"text", "video", "audio"}},
+		// skip：不动已有值
+		{Key: "existing", Recommended: "overwrite", Action: "skip"},
+		// delete：删除字段
+		{Key: "toDelete", Action: "delete"},
+		{Key: "nested.sub", Action: "delete"},
+		// set 但 ShapeValue 预算为空 → 不写
+		{Key: "emptyArr", Recommended: []any{}, Op: "raw"},
+	}
+	applyRecToMap(cfg, recs)
+
+	if got := cfg["input"]; fmt.Sprintf("%v", got) != "[text image]" {
+		t.Fatalf("input: want [text image], got %#v", got)
+	}
+	if got := cfg["modes"]; got != "text+video" {
+		t.Fatalf("modes: want text+video, got %#v", got)
+	}
+	if cfg["existing"] != "keep-me" {
+		t.Fatalf("existing should be untouched by skip, got %#v", cfg["existing"])
+	}
+	if _, ok := cfg["toDelete"]; ok {
+		t.Fatalf("toDelete should be deleted, got %#v", cfg["toDelete"])
+	}
+	nested := cfg["nested"].(map[string]any)
+	if _, ok := nested["sub"]; ok {
+		t.Fatalf("nested.sub should be deleted, got %#v", nested)
+	}
+	if _, ok := cfg["emptyArr"]; ok {
+		t.Fatalf("emptyArr should not be written, got %#v", cfg["emptyArr"])
 	}
 }
