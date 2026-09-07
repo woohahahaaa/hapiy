@@ -192,8 +192,10 @@ function slotLabel(slotType: string): string {
  * merging the new edge into the graph first so `target` is included. Starting at
  * the chain head (a node with no incoming wire) and following all outgoing
  * wires (条件开关有是/否两条分支), collect every slot node reachable in the
- * chain. Reject the connection when any slot type appears more than once — a
- * workflow cannot contain two nodes of the same stage.
+ * chain. Reject the connection when any slot type appears more than once on the
+ * SAME branch path — a workflow cannot contain two nodes of the same stage.
+ * 条件开关的「是」「否」是互斥的两条分支，运行时只会走其中一条，等同两个
+ * 工作流，因此分属两条分支的同阶段节点不算冲突（各自路径上重复仍拒绝）。
  */
 function slotDuplicateReason(
   nodes: readonly FlatNode[],
@@ -222,22 +224,20 @@ function slotDuplicateReason(
   const slotTypeOf = new Map<string, string>()
   for (const n of nodes) if (n.kind === 'slot') slotTypeOf.set(n.id, n.slotType ?? '')
 
-  const seenSlotTypes = new Map<string, string>()
-  const visited = new Set<string>()
-  const stack = [head]
+  // 每条分支路径携带自己的 slot 类型账本；环已被 wouldCreateCycle 拒掉，
+  // 图是 DAG，逐路径 DFS 必然终止。
+  const stack: { cur: string; seen: Map<string, string> }[] = [{ cur: head, seen: new Map() }]
   while (stack.length > 0) {
-    const cur = stack.pop()!
-    if (visited.has(cur)) continue
-    visited.add(cur)
+    const { cur, seen } = stack.pop()!
     const st = slotTypeOf.get(cur)
     if (st) {
-      const prior = seenSlotTypes.get(st)
+      const prior = seen.get(st)
       if (prior !== undefined && prior !== cur) {
         return `一个工作流里面不能有多个${slotLabel(st)}`
       }
-      seenSlotTypes.set(st, cur)
+      seen.set(st, cur)
     }
-    for (const next of out.get(cur) ?? []) stack.push(next)
+    for (const next of out.get(cur) ?? []) stack.push({ cur: next, seen: new Map(seen) })
   }
   return null
 }

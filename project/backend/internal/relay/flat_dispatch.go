@@ -109,7 +109,7 @@ func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string)
 		return nil, fmt.Errorf("flat topology is empty")
 	}
 	refs := e.buildFlatProviderRefs()
-	eligible, err := topology.FindEligibleProviders(tp, refs, model, path)
+	eligible, err := topology.FindEligibleProviders(tp, refs, model, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				keyIndex:     fallback.keyIndex,
 				baseURLIndex: fallback.baseURLIndex,
 				entryID:      fallback.entryID,
-			}, false); used {
+			}, false, nil); used {
 				return result, nil
 			}
 		}
@@ -238,7 +238,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				keyIndex:     ruleMatch.Triple.KeyIndex,
 				baseURLIndex: ruleMatch.Triple.BaseURLIndex,
 				entryID:      ruleMatch.Triple.EntryID,
-			}, false); used {
+			}, false, nil); used {
 				result.AffinityMatch = &ruleMatch
 				return result, nil
 			}
@@ -269,6 +269,13 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 // A nil result (with nil error) means the lane had nothing to serve the
 // request with and the caller should try the next lane.
 func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request, tp *topology.Topology, emergency bool, ruleMatch *affinity.MatchResult) (*DispatchResult, error) {
+	var headers map[string]string
+	var body []byte
+	if affinityReq != nil {
+		headers = affinityReq.Headers
+		body = affinityReq.Body
+	}
+	eval := switchEvalFor(headers, body)
 	if affinityReq != nil {
 		if fallback := e.lookupFallbackAffinity(affinityReq); fallback.matched {
 			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
@@ -277,7 +284,7 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 				keyIndex:     fallback.keyIndex,
 				baseURLIndex: fallback.baseURLIndex,
 				entryID:      fallback.entryID,
-			}, emergency); used {
+			}, emergency, eval); used {
 				return result, nil
 			}
 		}
@@ -287,7 +294,7 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 				keyIndex:     ruleMatch.Triple.KeyIndex,
 				baseURLIndex: ruleMatch.Triple.BaseURLIndex,
 				entryID:      ruleMatch.Triple.EntryID,
-			}, emergency); used {
+			}, emergency, eval); used {
 				match := *ruleMatch
 				result.AffinityMatch = &match
 				return result, nil
@@ -300,7 +307,7 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 		}
 	}
 
-	eligible, err := e.selectByFlatTopologyLane(tp, model, path, emergency)
+	eligible, err := e.selectByFlatTopologyLane(tp, model, path, emergency, eval)
 	if err != nil {
 		return nil, err
 	}
@@ -323,16 +330,16 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 		BaseURLIndex:  -1,
 		EntryID:       eligible.EntryID,
 		AffinityMatch: weak,
-		PathNodeIDs:   topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID),
+		PathNodeIDs:   topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID, model, eval),
 		Origin:        &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
 	}, nil
 }
 
 // selectByFlatTopologyLane chooses a provider within one lane. It returns
 // (nil, nil) when the lane has no eligible provider for the request.
-func (e *Engine) selectByFlatTopologyLane(tp *topology.Topology, model, path string, emergency bool) (*topology.EligibleProvider, error) {
+func (e *Engine) selectByFlatTopologyLane(tp *topology.Topology, model, path string, emergency bool, eval topology.SwitchEval) (*topology.EligibleProvider, error) {
 	refs := e.buildFlatProviderRefs()
-	eligible, err := topology.FindEligibleProvidersOfLane(tp, refs, model, path, emergency)
+	eligible, err := topology.FindEligibleProvidersOfLane(tp, refs, model, path, emergency, eval)
 	if err != nil {
 		return nil, err
 	}
@@ -352,8 +359,8 @@ func (e *Engine) selectByFlatTopologyLane(tp *topology.Topology, model, path str
 // selection. Hints only resolve against providers in the requested lane
 // (emergency=false 普通入口, emergency=true 应急请求入口), which is what keeps
 // the two affinity environments isolated.
-func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, emergency bool) (*DispatchResult, bool) {
-	candidates := e.eligibleAffinityCandidates(model, path, emergency)
+func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, emergency bool, eval topology.SwitchEval) (*DispatchResult, bool) {
+	candidates := e.eligibleAffinityCandidates(model, path, emergency, eval)
 	tp, _ := topology.NewStore(e.db).Load()
 	if len(candidates) == 0 {
 		return nil, false
@@ -390,7 +397,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, e
 				BaseURLIndex:  hint.baseURLIndex,
 				EntryID:       c.entryID,
 				AffinityReuse: reuse,
-				PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
+				PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider, model, eval),
 			}
 			result.AffinityReuseParts = e.reuseParts(hint, result)
 			return result, true
@@ -410,7 +417,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, e
 						BaseURLIndex:  bi,
 						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
-						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
+						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider, model, eval),
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
 					return result, true
@@ -432,7 +439,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, e
 						BaseURLIndex:  hint.baseURLIndex,
 						EntryID:       c.entryID,
 						AffinityReuse: AffinityReusePartial,
-						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider),
+						PathNodeIDs:   affinityRequestPath(tp, c.entryID, c.provider, model, eval),
 					}
 					result.AffinityReuseParts = e.reuseParts(hint, result)
 					return result, true
@@ -473,10 +480,10 @@ func (e *Engine) reuseParts(hint channelHint, result *DispatchResult) []string {
 // endpoints, node switches and slot strategy), otherwise every usable
 // provider that supports the model/path. This is the "可选集合" the affinity
 // hint is validated against.
-func (e *Engine) eligibleAffinityCandidates(modelName, path string, emergency bool) []affinityCandidate {
+func (e *Engine) eligibleAffinityCandidates(modelName, path string, emergency bool, eval topology.SwitchEval) []affinityCandidate {
 	if tp, err := topology.NewStore(e.db).Load(); err == nil && tp != nil && len(tp.Nodes) > 0 {
 		refs := e.buildFlatProviderRefs()
-		if eligible, err := topology.FindEligibleProvidersOfLane(tp, refs, modelName, path, emergency); err == nil {
+		if eligible, err := topology.FindEligibleProvidersOfLane(tp, refs, modelName, path, emergency, eval); err == nil {
 			candidates := make([]affinityCandidate, 0, len(eligible))
 			for _, el := range eligible {
 				provider, plan, err := e.buildPlanForProvider(el.ProviderID, el.Name, el.Chain)
@@ -676,7 +683,7 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 // affinityRequestPath builds the exact node path an affinity-reused request
 // traverses: it is served through the same request entry and provider node in
 // the topology, so its path is just as well-defined as a regular dispatch.
-func affinityRequestPath(tp *topology.Topology, entryID string, provider *model.Provider) []string {
+func affinityRequestPath(tp *topology.Topology, entryID string, provider *model.Provider, model string, eval topology.SwitchEval) []string {
 	if tp == nil || entryID == "" || provider == nil {
 		return nil
 	}
@@ -685,7 +692,7 @@ func affinityRequestPath(tp *topology.Topology, entryID string, provider *model.
 			continue
 		}
 		if (n.ProviderID != "" && n.ProviderID == provider.ID) || n.Name == provider.Name {
-			return topology.BuildRequestPath(tp, entryID, n.ID)
+			return topology.BuildRequestPath(tp, entryID, n.ID, model, eval)
 		}
 	}
 	return nil

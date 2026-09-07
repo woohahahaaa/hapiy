@@ -66,6 +66,22 @@ type Wire struct {
 	Branch string `json:"branch,omitempty"`
 }
 
+// SwitchEvalContext is the per-request facts a 条件开关 branch decision needs:
+// which provider is serving the request and which model it carries. Header /
+// body conditions are NOT part of the struct — the relay captures them inside
+// the SwitchEval closure (they never change during one request).
+type SwitchEvalContext struct {
+	ProviderID   string // serving provider record ID (empty on legacy name bindings)
+	ProviderName string // serving provider node name
+	Model        string // request model
+}
+
+// SwitchEval decides the branch a 条件开关 node takes for one request.
+// It receives the switch's raw config and returns true for the 是 (yes)
+// branch, false for 否. A nil eval keeps the legacy behaviour: follow the
+// first outgoing wire (which is the 是 branch when wired first).
+type SwitchEval func(config json.RawMessage, ctx SwitchEvalContext) bool
+
 // Topology is the flat, non-nested representation of the canvas: a flat node
 // list plus a flat wire list. The user edits nodes/wires; dispatch reads the
 // active request entries and walks the wires to pick a provider and its chain.
@@ -260,15 +276,68 @@ func outgoing(t *Topology, id string) string {
 	return ""
 }
 
-// collectChain walks from a provider node along the single-output wires,
-// collecting the slot types it passes through until a node with no outgoing
-// wire (or a non-slot) is reached.
-func collectChain(t *Topology, provider FlatNode) []string {
+// switchOutgoing returns the target the wire from a node routes to. For a
+// 条件开关 node it resolves the branch via eval (true = 是, false = 否); any
+// other node keeps the single-output constraint. A nil eval (or a branch that
+// has no wire) falls back to the first outgoing wire.
+func switchOutgoing(t *Topology, id string, ctx SwitchEvalContext, eval SwitchEval) string {
+	yesTarget := ""
+	noTarget := ""
+	first := ""
+	for _, w := range t.Wires {
+		if w.Source != id {
+			continue
+		}
+		if first == "" {
+			first = w.Target
+		}
+		switch w.Branch {
+		case BranchYes:
+			if yesTarget == "" {
+				yesTarget = w.Target
+			}
+		case BranchNo:
+			if noTarget == "" {
+				noTarget = w.Target
+			}
+		}
+	}
+	if eval == nil {
+		return first
+	}
+	node, ok := nodeByID(t, id)
+	if !ok {
+		return first
+	}
+	if eval(node.Config, ctx) {
+		if yesTarget != "" {
+			return yesTarget
+		}
+	} else if noTarget != "" {
+		return noTarget
+	}
+	return first
+}
+
+// switchBranchNext routes through KindSwitch nodes via eval, non-switch nodes
+// keep the single-output walk.
+func switchBranchNext(t *Topology, cur string, ctx SwitchEvalContext, eval SwitchEval) string {
+	if node, ok := nodeByID(t, cur); ok && node.Kind == KindSwitch {
+		return switchOutgoing(t, cur, ctx, eval)
+	}
+	return outgoing(t, cur)
+}
+
+// collectChain walks from a provider node along the output wires, collecting
+// the slot types it passes through until a node with no outgoing wire (or a
+// non-slot) is reached. 条件开关 nodes choose their branch per request.
+func collectChain(t *Topology, provider FlatNode, model string, eval SwitchEval) []string {
 	slotTypes := make([]string, 0)
+	ctx := SwitchEvalContext{ProviderID: provider.ProviderID, ProviderName: provider.Name, Model: model}
 	cur := provider.ID
 	visited := map[string]bool{cur: true}
 	for {
-		next := outgoing(t, cur)
+		next := switchBranchNext(t, cur, ctx, eval)
 		if next == "" {
 			break
 		}
@@ -324,24 +393,24 @@ type EligibleProvider struct {
 // ALL eligible providers of a provider slot are returned in display order —
 // the slot's strategy only decides the default pick among them (see
 // PickEligibleProvider); channel affinity is free to reuse any of them.
-func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path string) ([]EligibleProvider, error) {
+func FindEligibleProviders(t *Topology, refs map[string]ProviderRef, model, path string, eval SwitchEval) ([]EligibleProvider, error) {
 	if err := ValidateTopology(t); err != nil {
 		return nil, err
 	}
-	return findEligibleFromEntries(t, refs, model, path, activeRequestEntries(t)), nil
+	return findEligibleFromEntries(t, refs, model, path, activeRequestEntries(t), eval), nil
 }
 
 // FindEligibleProvidersOfLane is FindEligibleProviders restricted to one lane:
 // emergency=false walks normal request entries only, emergency=true walks
 // 应急请求入口 only.
-func FindEligibleProvidersOfLane(t *Topology, refs map[string]ProviderRef, model, path string, emergency bool) ([]EligibleProvider, error) {
+func FindEligibleProvidersOfLane(t *Topology, refs map[string]ProviderRef, model, path string, emergency bool, eval SwitchEval) ([]EligibleProvider, error) {
 	if err := ValidateTopology(t); err != nil {
 		return nil, err
 	}
-	return findEligibleFromEntries(t, refs, model, path, activeRequestEntriesOfLane(t, emergency)), nil
+	return findEligibleFromEntries(t, refs, model, path, activeRequestEntriesOfLane(t, emergency), eval), nil
 }
 
-func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, path string, entries []FlatNode) []EligibleProvider {
+func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, path string, entries []FlatNode, eval SwitchEval) []EligibleProvider {
 	result := make([]EligibleProvider, 0)
 	seen := map[string]bool{}
 	for _, entry := range entries {
@@ -382,7 +451,7 @@ func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, pa
 						Name:       p.Name,
 						ProviderID: p.ProviderID,
 						Weight:     entry.Weight,
-						Chain:      collectChain(t, p),
+						Chain:      collectChain(t, p, model, eval),
 						EntryID:    entry.ID,
 						SlotID:     slotID,
 						Strategy:   strategy,
@@ -458,15 +527,21 @@ func providerSupports(ref ProviderRef, model, path string) bool {
 	return true
 }
 
-// BuildRequestPath walks the single-output wire chain starting at a request
-// entry and returns every node ID it passes through, including the provider
-// child and each slot node. This is the exact node path a dispatched request
-// traverses (request entry -> provider entries -> slots), used by the
-// dashboard to light the flow path without re-deriving it from the live
-// topology, which may change after the request starts.
-func BuildRequestPath(t *Topology, entryID, providerID string) []string {
+// BuildRequestPath walks the output wire chain starting at a request entry
+// and returns every node ID it passes through, including the provider child
+// and each slot node. 条件开关 nodes choose their branch per request, so the
+// path reflects the branch the request actually took. This is the exact node
+// path a dispatched request traverses (request entry -> provider entries ->
+// slots), used by the dashboard to light the flow path without re-deriving it
+// from the live topology, which may change after the request starts.
+func BuildRequestPath(t *Topology, entryID, providerID, model string, eval SwitchEval) []string {
 	if t == nil || entryID == "" || providerID == "" {
 		return nil
+	}
+	ctx := SwitchEvalContext{Model: model}
+	if providerNode, ok := nodeByID(t, providerID); ok {
+		ctx.ProviderID = providerNode.ProviderID
+		ctx.ProviderName = providerNode.Name
 	}
 	path := make([]string, 0, 8)
 	seen := map[string]bool{}
@@ -475,19 +550,19 @@ func BuildRequestPath(t *Topology, entryID, providerID string) []string {
 		seen[cur] = true
 		path = append(path, cur)
 		if cur == providerID {
-			cur = outgoing(t, cur)
+			cur = switchBranchNext(t, cur, ctx, eval)
 			continue
 		}
 		if node, ok := nodeByID(t, cur); ok && node.Kind == KindSlot && node.SlotType == "provider" {
 			cur = providerID
 			continue
 		}
-		cur = outgoing(t, cur)
+		cur = switchBranchNext(t, cur, ctx, eval)
 	}
 	return path
 }
 
-func FindProviderSlotAlternatives(t *Topology, refs map[string]ProviderRef, model, path, entryID, providerID string) []EligibleProvider {
+func FindProviderSlotAlternatives(t *Topology, refs map[string]ProviderRef, model, path, entryID, providerID string, eval SwitchEval) []EligibleProvider {
 	if t == nil || entryID == "" || providerID == "" {
 		return nil
 	}
@@ -505,7 +580,7 @@ func FindProviderSlotAlternatives(t *Topology, refs map[string]ProviderRef, mode
 				if !providerEligible(refs, child, model, path) {
 					continue
 				}
-				result = append(result, EligibleProvider{Node: child, Name: child.Name, ProviderID: child.ProviderID, Chain: collectChain(t, child), EntryID: entryID})
+				result = append(result, EligibleProvider{Node: child, Name: child.Name, ProviderID: child.ProviderID, Chain: collectChain(t, child, model, eval), EntryID: entryID})
 			}
 			return result
 		}
