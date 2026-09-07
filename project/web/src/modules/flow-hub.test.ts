@@ -54,7 +54,7 @@ describe('buildFlowSteps', () => {
     expect(stepsOf(['model-kimi-k3'])).toEqual([])
   })
 
-  it('keeps the incoming edge while skipping a disabled logOutput slot', () => {
+  it('keeps both surrounding edges while skipping a disabled logOutput slot', () => {
     const inactiveCanvas = {
       topLevel: [
         { id: 'model-kimi-k3', kind: 'modelHub' },
@@ -69,6 +69,7 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
     ])
   })
 
@@ -108,6 +109,7 @@ describe('buildFlowSteps', () => {
       { kind: 'node', nodeId: 'model-kimi-k3' },
       { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
       { kind: 'node', nodeId: 'entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→logOutput-1' },
     ])
   })
 
@@ -193,7 +195,12 @@ describe('buildFlowSteps', () => {
       localCanvas,
       state,
     )
-    expect(steps).toEqual([{ kind: 'node', nodeId: 'model-kimi-k3' }])
+    expect(steps).toEqual([
+      { kind: 'node', nodeId: 'model-kimi-k3' },
+      { kind: 'edge', edgeId: 'model-kimi-k3→entry-1' },
+      { kind: 'edge', edgeId: 'entry-1→pslot-1' },
+      { kind: 'edge', edgeId: 'pslot-1→requestModify-1' },
+    ])
   })
 })
 

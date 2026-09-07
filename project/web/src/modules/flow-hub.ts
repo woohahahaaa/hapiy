@@ -96,20 +96,22 @@ export function buildFlowSteps(
   }
 
   const steps: FlowStep[] = []
-  let lastVisible: string | undefined
+  let lastTop: string | undefined
   for (let i = 0; i < pathNodeIds.length; i++) {
     const nodeId = pathNodeIds[i]
     if (nodeId === undefined) continue
-    const active = isChild(nodeId) ? providerActive(nodeId) : nodeActive(nodeId)
-    if (!active) {
-      if (!isChild(nodeId)) lastVisible = undefined
-      continue
+    const topLevel = !isChild(nodeId)
+    const active = topLevel ? nodeActive(nodeId) : providerActive(nodeId)
+    // 连线始终点亮：路径经过的每个顶层节点，进/出它的线都属于链路本身，
+    // 只有节点本体/执行器需要按生效状态熄灭。不生效的节点照常产生进出
+    // 两端的 edge step，只是不发 node step。
+    if (topLevel && lastTop !== undefined) {
+      steps.push({ kind: 'edge', edgeId: `${lastTop}→${nodeId}` })
     }
-    if (lastVisible && !isChild(nodeId)) {
-      steps.push({ kind: 'edge', edgeId: `${lastVisible}→${nodeId}` })
+    if (active) {
+      steps.push({ kind: 'node', nodeId })
     }
-    steps.push({ kind: 'node', nodeId })
-    if (!isChild(nodeId)) lastVisible = nodeId
+    if (topLevel) lastTop = nodeId
   }
   return steps
 }
