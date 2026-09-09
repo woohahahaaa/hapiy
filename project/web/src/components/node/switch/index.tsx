@@ -140,9 +140,9 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
         {/* 正文表格：竖向一分为二 —— 左列明细，右列「是/否」输出 */}
         <div className="flex items-stretch">
           {/* 左列：生效供应商/模型与条件明细（供应商卡片的 baseURL 行样式） */}
-          <div className="min-w-0 flex-1 space-y-1 px-3 py-2 text-xs">
+<div className="min-w-0 flex-1 space-y-1 px-3 py-2 text-xs">
             <div>{filterLabel} {selectedNames.length === 0 ? `全部${filterLabel}` : selectedNames.join(' · ')}</div>
-            <div>条件 {conditionSummary}</div>
+            <div>条件 {(config?.conditions ?? []).length === 0 ? '未设置' : conditionSummary}</div>
           </div>
 
           {/* 右列：单独划分出的「是/否」输出（各带一条 pill handlebar） */}

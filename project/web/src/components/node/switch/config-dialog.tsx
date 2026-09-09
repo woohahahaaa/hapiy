@@ -17,8 +17,14 @@ import {
   DialogTitle,
 } from '@/components/dialog'
 import { ConditionList } from '@/components/rewrite-rule-editor/ConditionList'
-import { emptyCondition, type Condition } from '@/components/rewrite-rule-editor/serializer'
-import type { SwitchConditionNode, SwitchFilterMode, SwitchNodeConfig } from '@/lib/dashboard-api'
+import {
+  conditionToJson,
+  conditionsFromJson,
+  emptyCondition,
+  isConditionValid,
+  type Condition,
+} from '@/components/rewrite-rule-editor/serializer'
+import type { SwitchCondition, SwitchConditionNode, SwitchFilterMode, SwitchNodeConfig } from '@/lib/dashboard-api'
 
 export interface SwitchConfigDialogProps {
   open: boolean
@@ -33,18 +39,10 @@ export interface SwitchConfigDialogProps {
   onSave: (name: string, config: SwitchNodeConfig) => void
 }
 
-// Switch 的条件结构与请求改写同形，直接互转复用 ConditionList。
+// Switch 的条件结构与请求改写同形，直接用请求改写的序列化/反序列化做
+// round-trip：value 走「加/去引号」的字面量约定（否则存库时字符串会带一圈
+// 引号，contains 匹配不上），header 条件路径也会补上 header. 前缀。
 type RwCondition = Condition
-
-const toRw = (c: SwitchConditionNode): RwCondition =>
-  'logic' in c
-    ? { logic: c.logic, children: c.children.map(toRw) }
-    : { path: c.path, op: c.op, value: c.value, invert: c.invert, scope: c.scope as 'all' | 'header' | 'body' }
-
-const fromRw = (c: RwCondition): SwitchConditionNode =>
-  'logic' in c
-    ? { logic: c.logic, children: c.children.map(fromRw) }
-    : { path: c.path, op: c.op, value: c.value, invert: c.invert, scope: c.scope }
 
 // 条件开关节点配置弹窗（系统 Dialog 组件）：规则名称 + 筛选维度二选一
 // （供应商/模型）+ 多选下拉 + 请求头/请求体条件块（照搬请求改写编辑器）。
@@ -54,7 +52,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
   const [selectedProviders, setSelectedProviders] = useState<ReadonlySet<string>>(new Set(config.providers ?? []))
   const [selectedModels, setSelectedModels] = useState<ReadonlySet<string>>(new Set(config.models ?? []))
   const [conditionLogic, setConditionLogic] = useState<'AND' | 'OR'>(config.conditionLogic ?? 'AND')
-  const [conditions, setConditions] = useState<RwCondition[]>(() => (config.conditions ?? []).map(toRw))
+  const [conditions, setConditions] = useState<RwCondition[]>(() => conditionsFromJson(config.conditions))
 
   // 每次打开时以节点当前配置重置草稿。
   useEffect(() => {
@@ -64,7 +62,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
     setSelectedProviders(new Set(config.providers ?? []))
     setSelectedModels(new Set(config.models ?? []))
     setConditionLogic(config.conditionLogic ?? 'AND')
-    setConditions((config.conditions ?? []).map(toRw))
+    setConditions(conditionsFromJson(config.conditions))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -104,12 +102,16 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
   const handleSave = () => {
     // 二选一语义：只保留当前维度勾选的内容；切到另一维度后未填 → 对全部生效，
     // 之前另一维度填写的列表一并作废（不落库）。
+    const toSwitchNode = (c: RwCondition): SwitchConditionNode =>
+      'children' in c
+        ? { logic: c.logic, children: c.children.filter(isConditionValid).map(toSwitchNode) }
+        : (conditionToJson(c) as unknown as SwitchCondition)
     onSave(draftName.trim(), {
       mode,
       providers: mode === 'provider' ? [...selectedProviders] : [],
       models: mode === 'model' ? [...selectedModels] : [],
       conditionLogic,
-      conditions: conditions.map(fromRw),
+      conditions: conditions.filter(isConditionValid).map(toSwitchNode),
     })
     onOpenChange(false)
   }
@@ -120,7 +122,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
         <DialogHeader>
           <DialogTitle>满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
           <DialogDescription>
-            供应商筛选与判断条件须同时命中才从「是」输出；否则从「否」输出。未配置任何筛选和条件时，默认从「是」输出。
+            配置了供应商/模型筛选或判断条件时，命中其中任一即从「是」输出；全部未命中从「否」输出。未配置任何筛选和条件时，默认从「是」输出。
           </DialogDescription>
         </DialogHeader>
 
