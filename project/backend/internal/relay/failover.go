@@ -324,7 +324,7 @@ func (e *Engine) resolveTopologyFallbackPlan(req *RelayRequest, failed *Executio
 		if candidate.ProviderID == failed.Provider.ID {
 			continue
 		}
-		provider, plan, err := e.buildPlanForProvider(candidate.ProviderID, candidate.Name, candidate.Chain)
+		provider, plan, err := e.buildPlanForProvider(candidate.ProviderID, candidate.Name, candidate.Chain, candidate.SlotNodeIDs)
 		if err == nil && provider.ID != failed.Provider.ID && !e.providerDisabled(provider) && provider.Status && provider.WorkflowEnabled {
 			return plan
 		}

@@ -206,6 +206,65 @@ func TestDeriveFlatAssignments_emits_log_output_with_nil_rule(t *testing.T) {
 	}
 }
 
+func TestDeriveFlatAssignments_binds_autoSwitch_downstream_of_switch(t *testing.T) {
+	db := newTopologyTestDB(t)
+	provider := model.Provider{ID: "p-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true, WorkflowEnabled: true}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	ruleYes := model.FailoverRule{ID: "fo-yes", Name: "yes", Status: true, Dimension: model.FailoverDimensionKey}
+	ruleNo := model.FailoverRule{ID: "fo-no", Name: "no", Status: true, Dimension: model.FailoverDimensionProvider}
+	if err := db.Create(&ruleYes).Error; err != nil {
+		t.Fatalf("create ruleYes: %v", err)
+	}
+	if err := db.Create(&ruleNo).Error; err != nil {
+		t.Fatalf("create ruleNo: %v", err)
+	}
+
+	// Provider feeds a 条件开关, whose yes/no branches each land on a
+	// different autoSwitch slot. Both rules must be bound to p-a even
+	// though the switch node sits between them.
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "e1", Kind: topology.KindRequestEntry, Enabled: true, Weight: 1},
+			{ID: "pa1", Kind: topology.KindProvider, Name: "A", Enabled: true},
+			{ID: "sw1", Kind: topology.KindSwitch, Enabled: true, Config: json.RawMessage(`{}`)},
+			{
+				ID: "as-yes", Kind: topology.KindSlot, SlotType: "autoSwitch", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"r1","slotType":"autoSwitch","index":1,"ruleId":"fo-yes","enabled":true,"config":{}}]`),
+			},
+			{
+				ID: "as-no", Kind: topology.KindSlot, SlotType: "autoSwitch", Enabled: true,
+				Entries: json.RawMessage(`[{"id":"r2","slotType":"autoSwitch","index":1,"ruleId":"fo-no","enabled":true,"config":{}}]`),
+			},
+		},
+		Wires: []topology.Wire{
+			{Source: "e1", Target: "pa1"},
+			{Source: "pa1", Target: "sw1"},
+			{Source: "sw1", Target: "as-yes", Branch: topology.BranchYes},
+			{Source: "sw1", Target: "as-no", Branch: topology.BranchNo},
+		},
+	}
+
+	rows, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	byRule := map[string]model.TopologySlotAssignment{}
+	for _, row := range rows {
+		if row.SlotType != "autoSwitch" || row.ProviderID != provider.ID || row.RuleID == nil {
+			continue
+		}
+		byRule[*row.RuleID] = row
+	}
+	if row, ok := byRule["fo-yes"]; !ok || row.NodeID != "as-yes" {
+		t.Errorf("yes-branch rule not bound: %v", byRule)
+	}
+	if row, ok := byRule["fo-no"]; !ok || row.NodeID != "as-no" {
+		t.Errorf("no-branch rule not bound: %v", byRule)
+	}
+}
+
 func TestDeriveFlatAssignments_binds_upstream_autoSwitch_to_each_provider_child(t *testing.T) {
 	db := newTopologyTestDB(t)
 	for _, p := range []model.Provider{

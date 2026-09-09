@@ -314,7 +314,7 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 	if eligible == nil {
 		return nil, nil
 	}
-	provider, plan, err := e.buildPlanForProvider(eligible.ProviderID, eligible.Name, eligible.Chain)
+	provider, plan, err := e.buildPlanForProvider(eligible.ProviderID, eligible.Name, eligible.Chain, eligible.SlotNodeIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +486,7 @@ func (e *Engine) eligibleAffinityCandidates(modelName, path string, emergency bo
 		if eligible, err := topology.FindEligibleProvidersOfLane(tp, refs, modelName, path, emergency, eval); err == nil {
 			candidates := make([]affinityCandidate, 0, len(eligible))
 			for _, el := range eligible {
-				provider, plan, err := e.buildPlanForProvider(el.ProviderID, el.Name, el.Chain)
+				provider, plan, err := e.buildPlanForProvider(el.ProviderID, el.Name, el.Chain, el.SlotNodeIDs)
 				if err != nil {
 					continue
 				}
@@ -508,7 +508,7 @@ func (e *Engine) eligibleAffinityCandidates(modelName, path string, emergency bo
 		if !p.Status || !p.WorkflowEnabled || e.providerDisabled(p) {
 			continue
 		}
-		provider, plan, err := e.buildPlanForProvider(p.ID, p.Name, nil)
+		provider, plan, err := e.buildPlanForProvider(p.ID, p.Name, nil, nil)
 		if err != nil {
 			continue
 		}
@@ -558,7 +558,7 @@ func (e *Engine) hintKey(hint channelHint) string {
 
 // hintPlan resolves the hinted provider's execution plan by ID or name.
 func (e *Engine) hintPlan(hint channelHint) *ExecutionPlan {
-	_, plan, err := e.buildPlanForProvider(hint.providerID, hint.providerName, nil)
+	_, plan, err := e.buildPlanForProvider(hint.providerID, hint.providerName, nil, nil)
 	if err != nil || plan == nil {
 		return nil
 	}
@@ -586,7 +586,7 @@ func providerSlotID(tp *topology.Topology, entryID string) string {
 // When chain is non-nil the plan is restricted to those slot types. The
 // provider is resolved by stable ID when available, falling back to the
 // legacy name binding.
-func (e *Engine) buildPlanForProvider(providerID, name string, chain []string) (*model.Provider, *ExecutionPlan, error) {
+func (e *Engine) buildPlanForProvider(providerID, name string, chain, slotNodeIDs []string) (*model.Provider, *ExecutionPlan, error) {
 	var provider *model.Provider
 	var err error
 	if providerID != "" {
@@ -603,7 +603,7 @@ func (e *Engine) buildPlanForProvider(providerID, name string, chain []string) (
 	}
 	plan := &ExecutionPlan{ID: provider.ID, Provider: provider}
 	if chain != nil {
-		if err := e.populatePlanWithSlots(e.db, plan, chain); err != nil {
+		if err := e.populatePlanWithSlots(e.db, plan, chain, slotNodeIDs); err != nil {
 			return nil, nil, err
 		}
 	} else if err := e.populatePlan(e.db, plan); err != nil {
@@ -640,7 +640,7 @@ func (e *Engine) getProviderByName(name string) (*model.Provider, error) {
 // in the flat wiring chain. It mirrors populatePlan but only loads enabled
 // assignments whose slot_type is listed in chain, preserving the canonical
 // stage order.
-func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain []string) error {
+func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain, slotNodeIDs []string) error {
 	if err := decodeStringList(plan.Provider.ID, plan.Provider.BaseURLs, &plan.BaseURLs, "base_urls"); err != nil {
 		return err
 	}
@@ -658,6 +658,10 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 	for _, st := range chain {
 		wanted[st] = true
 	}
+	wantedNodeIDs := make(map[string]bool, len(slotNodeIDs))
+	for _, id := range slotNodeIDs {
+		wantedNodeIDs[id] = true
+	}
 
 	var assignments []model.TopologySlotAssignment
 	orderClause := `CASE slot_type
@@ -669,7 +673,10 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain [
 		return fmt.Errorf("load topology assignments: %w", err)
 	}
 	for _, assignment := range assignments {
-		if assignment.SlotType != "autoSwitch" && !wanted[assignment.SlotType] {
+		if assignment.NodeID != "" && !wantedNodeIDs[assignment.NodeID] {
+			continue
+		}
+		if assignment.NodeID == "" && !wanted[assignment.SlotType] {
 			continue
 		}
 		if err := e.populateAssignment(db, plan, assignment); err != nil {

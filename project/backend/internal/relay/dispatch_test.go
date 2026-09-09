@@ -92,6 +92,61 @@ func TestDispatch_flatTopologySelectsEnabledProvider(t *testing.T) {
 	}
 }
 
+func TestDispatch_loadsOnlyRulesOnMatchedSwitchBranch(t *testing.T) {
+	engine, db := newTestEngine(t)
+	provider := model.Provider{
+		ID:              "p-opencode",
+		Name:            "opencode go",
+		BaseURLs:        `["https://a.example.com"]`,
+		Keys:            `["k"]`,
+		Models:          `[{"model":"m1"}]`,
+		Status:          true,
+		WorkflowEnabled: true,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	rules := []model.FailoverRule{
+		{ID: "key-rule", Name: "轮询 key", Status: true, Dimension: model.FailoverDimensionKey},
+		{ID: "provider-rule", Name: "轮询供应商", Status: true, Dimension: model.FailoverDimensionProvider},
+	}
+	if err := db.Create(&rules).Error; err != nil {
+		t.Fatalf("create rules: %v", err)
+	}
+	assignments := []model.TopologySlotAssignment{
+		{ID: "yes", ProviderID: provider.ID, NodeID: "auto-yes", SlotType: "autoSwitch", Order: 1, Enabled: true, RuleID: stringPointer("key-rule"), Config: `{}`},
+		{ID: "no", ProviderID: provider.ID, NodeID: "auto-no", SlotType: "autoSwitch", Order: 2, Enabled: true, RuleID: stringPointer("provider-rule"), Config: `{}`},
+	}
+	if err := db.Create(&assignments).Error; err != nil {
+		t.Fatalf("create assignments: %v", err)
+	}
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatalf("load providers: %v", err)
+	}
+	seedFlatTopology(t, db, `{"nodes":[
+		{"id":"entry","kind":"requestEntry","enabled":true,"weight":1},
+		{"id":"provider-slot","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"provider","kind":"provider","name":"opencode go","provider_id":"p-opencode","enabled":true},
+		{"id":"switch","kind":"switch","config":{"mode":"provider","providers":["p-opencode"],"conditions":[]}},
+		{"id":"auto-yes","kind":"slot","slot_type":"autoSwitch","enabled":true},
+		{"id":"auto-no","kind":"slot","slot_type":"autoSwitch","enabled":true}
+	],"wires":[
+		{"source":"entry","target":"provider-slot"},
+		{"source":"provider-slot","target":"provider"},
+		{"source":"provider","target":"switch"},
+		{"source":"switch","target":"auto-yes","branch":"yes"},
+		{"source":"switch","target":"auto-no","branch":"no"}
+	]}`)
+
+	result, err := engine.Dispatch("m1", "/v1/chat/completions", nil)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(result.Plan.FailoverRules) != 1 || result.Plan.FailoverRules[0].ID != "key-rule" {
+		t.Fatalf("matched branch rules: %+v", result.Plan.FailoverRules)
+	}
+}
+
 func TestRecordDispatchRejection_writesLogCaptureRow(t *testing.T) {
 	engine, db := newTestEngine(t)
 	if err := db.AutoMigrate(&model.TopologyConfig{}, &model.LogCapture{}); err != nil {

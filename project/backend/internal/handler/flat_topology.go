@@ -50,26 +50,12 @@ func SaveFlatTopology(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
-		var assignments []model.TopologySlotAssignment
 		err := db.Transaction(func(tx *gorm.DB) error {
 			backfillProviderIDs(tx, &tp)
 			if err := topology.NewStore(tx).Save(&tp); err != nil {
 				return err
 			}
-			if err := tx.Where("1 = 1").Delete(&model.TopologySlotAssignment{}).Error; err != nil {
-				return fmt.Errorf("wipe topology assignments: %w", err)
-			}
-			derived, err := deriveFlatAssignments(tx, &tp)
-			if err != nil {
-				return err
-			}
-			assignments = derived
-			if len(assignments) > 0 {
-				if err := tx.Create(&assignments).Error; err != nil {
-					return fmt.Errorf("insert topology assignments: %w", err)
-				}
-			}
-			return nil
+			return replaceFlatAssignments(tx, &tp)
 		})
 		if err != nil {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
@@ -93,6 +79,55 @@ func SaveFlatTopology(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			"updated_at": meta.UpdatedAt,
 		}})
 	}
+}
+
+// RebuildFlatAssignmentsIfNeeded upgrades assignments written before slot node
+// IDs existed. Node IDs are required to keep rules on separate switch branches
+// from being applied together at runtime.
+func RebuildFlatAssignmentsIfNeeded(db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	var total, legacy int64
+	if err := db.Model(&model.TopologySlotAssignment{}).Count(&total).Error; err != nil {
+		return fmt.Errorf("count topology assignments: %w", err)
+	}
+	if total > 0 {
+		if err := db.Model(&model.TopologySlotAssignment{}).Where("node_id = '' OR node_id IS NULL").Count(&legacy).Error; err != nil {
+			return fmt.Errorf("count legacy topology assignments: %w", err)
+		}
+		if legacy == 0 {
+			return nil
+		}
+	}
+
+	tp, err := topology.NewStore(db).Load()
+	if err != nil {
+		return fmt.Errorf("load flat topology: %w", err)
+	}
+	if len(tp.Nodes) == 0 {
+		return nil
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		return replaceFlatAssignments(tx, tp)
+	})
+}
+
+func replaceFlatAssignments(db *gorm.DB, tp *topology.Topology) error {
+	if err := db.Where("1 = 1").Delete(&model.TopologySlotAssignment{}).Error; err != nil {
+		return fmt.Errorf("wipe topology assignments: %w", err)
+	}
+	assignments, err := deriveFlatAssignments(db, tp)
+	if err != nil {
+		return err
+	}
+	if len(assignments) == 0 {
+		return nil
+	}
+	if err := db.Create(&assignments).Error; err != nil {
+		return fmt.Errorf("insert topology assignments: %w", err)
+	}
+	return nil
 }
 
 // ValidateFlatTopology checks the flat topology for structural errors and
@@ -184,23 +219,38 @@ func deriveFlatAssignments(db *gorm.DB, tp *topology.Topology) ([]model.Topology
 		providerEnabled := n.Enabled && !seenName[n.Name]
 		seenName[n.Name] = true
 
-		cur := n.ID
-		visited := map[string]bool{cur: true}
-		for {
-			next := flatOutgoing(tp, cur)
-			if next == "" || visited[next] {
-				break
-			}
-			visited[next] = true
-			node, ok := nodesByID[next]
-			if !ok || node.Kind != topology.KindSlot || node.SlotType == "" {
-				break
-			}
-			collectSlotEntries(db, &rows, node, provider.ID, providerEnabled, nextOrder)
-			cur = next
-		}
+		walkDownstreamFromProvider(db, tp, nodesByID, &rows, n.ID, provider.ID, providerEnabled, nextOrder, map[string]bool{n.ID: true})
 	}
 	return rows, nil
+}
+
+// walkDownstreamFromProvider follows every wire leaving startID and binds
+// slot entries to providerID. KindSwitch nodes are treated as routers: each
+// yes/no branch is traversed so autoSwitch slots downstream of a 条件开关 are
+// still wired to providers feeding it. Cycles are cut by visited.
+func walkDownstreamFromProvider(db *gorm.DB, tp *topology.Topology, nodesByID map[string]topology.FlatNode, rows *[]model.TopologySlotAssignment, startID, providerID string, providerEnabled bool, nextOrder map[string]int, visited map[string]bool) {
+	for _, w := range tp.Wires {
+		if w.Source != startID {
+			continue
+		}
+		if visited[w.Target] {
+			continue
+		}
+		visited[w.Target] = true
+		target, ok := nodesByID[w.Target]
+		if !ok {
+			continue
+		}
+		switch target.Kind {
+		case topology.KindSlot:
+			if target.SlotType != "" {
+				collectSlotEntries(db, rows, target, providerID, providerEnabled, nextOrder)
+			}
+			walkDownstreamFromProvider(db, tp, nodesByID, rows, w.Target, providerID, providerEnabled, nextOrder, visited)
+		case topology.KindSwitch:
+			walkDownstreamFromProvider(db, tp, nodesByID, rows, w.Target, providerID, providerEnabled, nextOrder, visited)
+		}
+	}
 }
 
 // flatOutgoing returns the single target node id a wire leaves from, or "".
@@ -264,6 +314,7 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			nodeEnabled := slot.Enabled
 			*rows = append(*rows, model.TopologySlotAssignment{
 				ProviderID:  providerID,
+				NodeID:      slot.ID,
 				SlotType:    slot.SlotType,
 				Order:       order,
 				Enabled:     entryEnabled,
@@ -283,6 +334,7 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 			nodeEnabled := slot.Enabled
 			*rows = append(*rows, model.TopologySlotAssignment{
 				ProviderID:  providerID,
+				NodeID:      slot.ID,
 				SlotType:    slot.SlotType,
 				Order:       order,
 				Enabled:     entryEnabled,
@@ -306,6 +358,7 @@ func collectSlotEntries(db *gorm.DB, rows *[]model.TopologySlotAssignment, slot 
 		nodeEnabled := slot.Enabled
 		*rows = append(*rows, model.TopologySlotAssignment{
 			ProviderID:  providerID,
+			NodeID:      slot.ID,
 			SlotType:    slot.SlotType,
 			Order:       order,
 			Enabled:     entryEnabled,

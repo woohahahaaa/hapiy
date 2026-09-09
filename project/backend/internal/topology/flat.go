@@ -43,18 +43,18 @@ const (
 // node carries the provider's configured name (resolved against the Provider
 // table at plan time). A request-entry node carries the master switch and weight.
 type FlatNode struct {
-	ID            string          `json:"id"`
-	Kind          NodeKind        `json:"kind"`
-	Name          string          `json:"name,omitempty"`            // provider configured name for KindProvider (binding fallback)
-	ProviderID    string          `json:"provider_id,omitempty"`     // for KindProvider: stable key of the provider record; survives renames
-	SlotType      string          `json:"slot_type,omitempty"`       // for KindSlot
-	Enabled       bool            `json:"enabled"`                   // request-entry master switch / provider mini-switch / logOutput slot master switch
-	Weight        float64         `json:"weight,omitempty"`          // request-entry weight in [0,1]
-	Emergency     bool            `json:"emergency,omitempty"`       // 应急请求入口：普通入口无可用供应商时才参与调度
-	Entries       json.RawMessage `json:"entries,omitempty"`         // for KindSlot: rule entries, opaque to the engine
-	Config        json.RawMessage `json:"config,omitempty"`          // for KindSwitch: {providers:[], conditions:[]}, opaque to the engine
+	ID         string          `json:"id"`
+	Kind       NodeKind        `json:"kind"`
+	Name       string          `json:"name,omitempty"`        // provider configured name for KindProvider (binding fallback)
+	ProviderID string          `json:"provider_id,omitempty"` // for KindProvider: stable key of the provider record; survives renames
+	SlotType   string          `json:"slot_type,omitempty"`   // for KindSlot
+	Enabled    bool            `json:"enabled"`               // request-entry master switch / provider mini-switch / logOutput slot master switch
+	Weight     float64         `json:"weight,omitempty"`      // request-entry weight in [0,1]
+	Emergency  bool            `json:"emergency,omitempty"`   // 应急请求入口：普通入口无可用供应商时才参与调度
+	Entries    json.RawMessage `json:"entries,omitempty"`     // for KindSlot: rule entries, opaque to the engine
+	Config     json.RawMessage `json:"config,omitempty"`      // for KindSwitch: {providers:[], conditions:[]}, opaque to the engine
 	DeadlineAt *int64          `json:"deadline_at,omitempty"` // slot-level optional deadline (auto-off), Unix epoch ms
-	Strategy      string          `json:"strategy,omitempty"`        // provider slot child-picking strategy: sequential|random|roundRobin
+	Strategy   string          `json:"strategy,omitempty"`    // provider slot child-picking strategy: sequential|random|roundRobin
 }
 
 // Wire is one directed connection in the flat topology. Branch labels the
@@ -357,6 +357,18 @@ func collectChain(t *Topology, provider FlatNode, model string, eval SwitchEval)
 	return slotTypes
 }
 
+func slotNodeIDsInPath(t *Topology, entryID, providerID, model string, eval SwitchEval) []string {
+	path := BuildRequestPath(t, entryID, providerID, model, eval)
+	ids := make([]string, 0, len(path))
+	for _, id := range path {
+		node, ok := nodeByID(t, id)
+		if ok && node.Kind == KindSlot && node.SlotType != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 func nodeByID(t *Topology, id string) (FlatNode, bool) {
 	for _, n := range t.Nodes {
 		if n.ID == id {
@@ -369,11 +381,12 @@ func nodeByID(t *Topology, id string) (FlatNode, bool) {
 // EligibleProvider is a provider node that can serve the request, tagged with
 // its entry weight and its stable binding.
 type EligibleProvider struct {
-	Node       FlatNode
-	Name       string
-	ProviderID string // stable provider record id; empty on legacy name-only bindings
-	Weight     float64
-	Chain      []string
+	Node        FlatNode
+	Name        string
+	ProviderID  string // stable provider record id; empty on legacy name-only bindings
+	Weight      float64
+	Chain       []string
+	SlotNodeIDs []string
 	// EntryID is the request entry whose workflow selected this provider,
 	// so callers can reconstruct the exact node path the request traverses.
 	EntryID string
@@ -447,14 +460,15 @@ func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, pa
 					}
 					seen[key] = true
 					result = append(result, EligibleProvider{
-						Node:       p,
-						Name:       p.Name,
-						ProviderID: p.ProviderID,
-						Weight:     entry.Weight,
-						Chain:      collectChain(t, p, model, eval),
-						EntryID:    entry.ID,
-						SlotID:     slotID,
-						Strategy:   strategy,
+						Node:        p,
+						Name:        p.Name,
+						ProviderID:  p.ProviderID,
+						Weight:      entry.Weight,
+						Chain:       collectChain(t, p, model, eval),
+						SlotNodeIDs: slotNodeIDsInPath(t, entry.ID, p.ID, model, eval),
+						EntryID:     entry.ID,
+						SlotID:      slotID,
+						Strategy:    strategy,
 					})
 				}
 				break
@@ -580,7 +594,7 @@ func FindProviderSlotAlternatives(t *Topology, refs map[string]ProviderRef, mode
 				if !providerEligible(refs, child, model, path) {
 					continue
 				}
-				result = append(result, EligibleProvider{Node: child, Name: child.Name, ProviderID: child.ProviderID, Chain: collectChain(t, child, model, eval), EntryID: entryID})
+				result = append(result, EligibleProvider{Node: child, Name: child.Name, ProviderID: child.ProviderID, Chain: collectChain(t, child, model, eval), SlotNodeIDs: slotNodeIDsInPath(t, entryID, child.ID, model, eval), EntryID: entryID})
 			}
 			return result
 		}
