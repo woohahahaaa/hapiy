@@ -15,17 +15,18 @@ type TopologyState struct {
 }
 
 type TopologySlotAssignment struct {
-	ID         string    `gorm:"primaryKey;type:text" json:"id"`
-	ProviderID string    `gorm:"not null;index;uniqueIndex:idx_topology_slot_position" json:"provider_id"`
-	SlotType   string    `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"slot_type"`
-	Order      int       `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"order"`
-	Enabled    bool      `gorm:"not null" json:"enabled"`
-	NodeEnabled *bool    `gorm:"type:boolean" json:"node_enabled,omitempty"`
-	RuleID     *string   `gorm:"type:text" json:"rule_id"`
-	Name       string    `gorm:"type:text;not null;default:''" json:"name"`
-	Config     string    `gorm:"type:text;not null" json:"-"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID          string    `gorm:"primaryKey;type:text" json:"id"`
+	ProviderID  string    `gorm:"not null;index;uniqueIndex:idx_topology_slot_position" json:"provider_id"`
+	NodeID      string    `gorm:"type:text;index" json:"node_id"`
+	SlotType    string    `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"slot_type"`
+	Order       int       `gorm:"not null;uniqueIndex:idx_topology_slot_position" json:"order"`
+	Enabled     bool      `gorm:"not null" json:"enabled"`
+	NodeEnabled *bool     `gorm:"type:boolean" json:"node_enabled,omitempty"`
+	RuleID      *string   `gorm:"type:text" json:"rule_id"`
+	Name        string    `gorm:"type:text;not null;default:''" json:"name"`
+	Config      string    `gorm:"type:text;not null" json:"-"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 func (a *TopologySlotAssignment) BeforeCreate(tx *gorm.DB) error {

@@ -111,6 +111,41 @@ func TestBuildRequestPathRoutesSwitchBranch(t *testing.T) {
 	}
 }
 
+func TestFindEligibleProvidersTracksSwitchBranchSlotIDs(t *testing.T) {
+	tp := &Topology{
+		Nodes: []FlatNode{
+			{ID: "entry", Kind: KindRequestEntry, Enabled: true, Weight: 1},
+			{ID: "provider-slot", Kind: KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "provider", Kind: KindProvider, Name: "opencode go", ProviderID: "p-opencode", Enabled: true},
+			{ID: "switch", Kind: KindSwitch},
+			{ID: "auto-yes", Kind: KindSlot, SlotType: "autoSwitch", Enabled: true},
+			{ID: "auto-no", Kind: KindSlot, SlotType: "autoSwitch", Enabled: true},
+		},
+		Wires: []Wire{
+			{Source: "entry", Target: "provider-slot"},
+			{Source: "provider-slot", Target: "provider"},
+			{Source: "provider", Target: "switch"},
+			{Source: "switch", Target: "auto-yes", Branch: BranchYes},
+			{Source: "switch", Target: "auto-no", Branch: BranchNo},
+		},
+	}
+	refs := map[string]ProviderRef{
+		"p-opencode": {ID: "p-opencode", Name: "opencode go", Status: true, Enabled: true, Workflow: true},
+	}
+	wantYes := true
+	eval := func(_ json.RawMessage, _ SwitchEvalContext) bool { return wantYes }
+
+	got, err := FindEligibleProviders(tp, refs, "model", "/v1/chat/completions", eval)
+	if err != nil || len(got) != 1 || !equalStrings(got[0].SlotNodeIDs, []string{"provider-slot", "auto-yes"}) {
+		t.Fatalf("yes branch slot IDs = %+v, err=%v", got, err)
+	}
+	wantYes = false
+	got, err = FindEligibleProviders(tp, refs, "model", "/v1/chat/completions", eval)
+	if err != nil || len(got) != 1 || !equalStrings(got[0].SlotNodeIDs, []string{"provider-slot", "auto-no"}) {
+		t.Fatalf("no branch slot IDs = %+v, err=%v", got, err)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

@@ -87,6 +87,9 @@ func main() {
 	}
 
 	// Initialize relay engine (loads providers and compiles execution plans)
+	if err := handler.RebuildFlatAssignmentsIfNeeded(db); err != nil {
+		log.Fatalf("Failed to rebuild topology assignments: %v", err)
+	}
 	engine := relay.NewEngine(db)
 	if err := engine.LoadProviders(); err != nil {
 		log.Printf("Warning: Failed to load providers: %v", err)

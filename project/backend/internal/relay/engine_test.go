@@ -108,6 +108,44 @@ func TestLoadProviders_leaves_optional_plan_empty_without_assignments(t *testing
 	}
 }
 
+func TestPopulatePlanWithSlotsFiltersAssignmentsByNodeID(t *testing.T) {
+	engine, db := newTestEngine(t)
+	provider := model.Provider{ID: "provider-a", Name: "A", BaseURLs: "[]", Keys: "[]", Models: "[]", Status: true}
+	rules := []model.FailoverRule{
+		{ID: "yes", Name: "yes", Status: true, Dimension: model.FailoverDimensionKey},
+		{ID: "no", Name: "no", Status: true, Dimension: model.FailoverDimensionProvider},
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	if err := db.Create(&rules).Error; err != nil {
+		t.Fatalf("create rules: %v", err)
+	}
+	assignments := []model.TopologySlotAssignment{
+		{ID: "as-yes", ProviderID: provider.ID, NodeID: "auto-yes", SlotType: "autoSwitch", Order: 1, Enabled: true, RuleID: stringPointer("yes"), Config: `{}`},
+		{ID: "as-no", ProviderID: provider.ID, NodeID: "auto-no", SlotType: "autoSwitch", Order: 2, Enabled: true, RuleID: stringPointer("no"), Config: `{}`},
+	}
+	if err := db.Create(&assignments).Error; err != nil {
+		t.Fatalf("create assignments: %v", err)
+	}
+
+	for _, tc := range []struct {
+		slotNodeID string
+		wantRuleID string
+	}{
+		{slotNodeID: "auto-yes", wantRuleID: "yes"},
+		{slotNodeID: "auto-no", wantRuleID: "no"},
+	} {
+		plan := &ExecutionPlan{Provider: &provider}
+		if err := engine.populatePlanWithSlots(db, plan, []string{"autoSwitch"}, []string{tc.slotNodeID}); err != nil {
+			t.Fatalf("populate %s: %v", tc.slotNodeID, err)
+		}
+		if len(plan.FailoverRules) != 1 || plan.FailoverRules[0].ID != tc.wantRuleID {
+			t.Fatalf("%s loaded rules: %+v", tc.slotNodeID, plan.FailoverRules)
+		}
+	}
+}
+
 func TestLoadProviders_concurrency_assignment_without_rule_id_compiles(t *testing.T) {
 	// Given: a provider with an enabled concurrency assignment that carries
 	// its config inline and no rule_id (the shape the frontend persists).
