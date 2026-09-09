@@ -503,11 +503,11 @@ func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
 		BaseURLs: []string{upstream.URL},
 		Keys:     []string{"key"},
 		FailoverRules: []*model.FailoverRule{{
-			Condition:          "timeout",
-			MatchPatterns:      []string{"可用预算已用尽"},
-			Dimension:          model.FailoverDimensionProvider,
-			AutoDisable:        true,
-			DisableThreshold:   3,
+			Condition:            "timeout",
+			MatchPatterns:        []string{"可用预算已用尽"},
+			Dimension:            model.FailoverDimensionProvider,
+			AutoDisable:          true,
+			DisableThreshold:     3,
 			DisableWindowMinutes: 5,
 		}},
 	}
@@ -529,6 +529,40 @@ func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
 	}
 }
 
+func TestRelayWithFailover_countsFailuresOnRotatedKeys(t *testing.T) {
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "usage limit reached")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"key-1", "key-2"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:            "error",
+			MatchPatterns:        []string{"usage limit reached"},
+			Dimension:            model.FailoverDimensionKey,
+			AutoDisable:          true,
+			DisableThreshold:     2,
+			DisableWindowMinutes: 5,
+		}},
+	}
+
+	for i := 0; i < 3; i++ {
+		_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
+	}
+
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionKey, "key-1") {
+		t.Fatal("initial key should be disabled after two failures")
+	}
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionKey, "key-2") {
+		t.Fatal("rotated key should be disabled after two failures")
+	}
+}
+
 func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
 	// Given: threshold=3, no fallback so requests surface their error
 	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
@@ -543,11 +577,11 @@ func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
 		BaseURLs: []string{upstream.URL},
 		Keys:     []string{"key"},
 		FailoverRules: []*model.FailoverRule{{
-			Condition:          "timeout",
-			MatchPatterns:      []string{"可用预算已用尽"},
-			Dimension:          model.FailoverDimensionProvider,
-			AutoDisable:        true,
-			DisableThreshold:   3,
+			Condition:            "timeout",
+			MatchPatterns:        []string{"可用预算已用尽"},
+			Dimension:            model.FailoverDimensionProvider,
+			AutoDisable:          true,
+			DisableThreshold:     3,
 			DisableWindowMinutes: 5,
 		}},
 	}
@@ -567,9 +601,9 @@ func TestRelayWithFailover_hittingThreshold_disables(t *testing.T) {
 	}
 }
 
-func TestRelayWithFailover_successResetsCounter(t *testing.T) {
-	// Threshold=3; rotation must succeed on the second baseURL so the
-	// failing key/baseURL counter is reset by clearFailoverHit.
+func TestRelayWithFailover_successfulRotationKeepsFailedEntityCounter(t *testing.T) {
+	// Threshold=2; a successful rotation to another baseURL must not clear the
+	// failing baseURL's counter because the success was on a different entity.
 	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	failing := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
 	working := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -587,21 +621,21 @@ func TestRelayWithFailover_successResetsCounter(t *testing.T) {
 		BaseURLs: []string{failing.URL, working.URL},
 		Keys:     []string{"key"},
 		FailoverRules: []*model.FailoverRule{{
-			Condition:          "timeout",
-			MatchPatterns:      []string{"可用预算已用尽"},
-			Dimension:          model.FailoverDimensionBaseURL,
-			AutoDisable:        true,
-			DisableThreshold:   3,
+			Condition:            "timeout",
+			MatchPatterns:        []string{"可用预算已用尽"},
+			Dimension:            model.FailoverDimensionBaseURL,
+			AutoDisable:          true,
+			DisableThreshold:     2,
 			DisableWindowMinutes: 5,
 		}},
 	}
 
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 2; i++ {
 		_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{BaseURLIndex: 0})
 	}
 
-	if engine.isDisabled(provider.ID, model.FailoverDimensionBaseURL, failing.URL) {
-		t.Fatal("failing baseURL should not be disabled — successful rotations reset the counter")
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionBaseURL, failing.URL) {
+		t.Fatal("failing baseURL should be disabled after two failures despite successful rotations")
 	}
 }
 
@@ -621,11 +655,11 @@ func TestRelayWithFailover_windowExpiryResetsCounter(t *testing.T) {
 		BaseURLs: []string{upstream.URL},
 		Keys:     []string{"key"},
 		FailoverRules: []*model.FailoverRule{{
-			Condition:          "timeout",
-			MatchPatterns:      []string{"可用预算已用尽"},
-			Dimension:          model.FailoverDimensionProvider,
-			AutoDisable:        true,
-			DisableThreshold:   3,
+			Condition:            "timeout",
+			MatchPatterns:        []string{"可用预算已用尽"},
+			Dimension:            model.FailoverDimensionProvider,
+			AutoDisable:          true,
+			DisableThreshold:     3,
 			DisableWindowMinutes: 1,
 		}},
 	}
@@ -711,6 +745,36 @@ func TestTTFBForSlowUpstream_returnsZero_whenFirstByteWithinLimit(t *testing.T) 
 	}
 	if got := engine.ttfbForSlowUpstream(plan, resp); got != 0 {
 		t.Fatalf("expected 0 (first byte within limit), got %d", got)
+	}
+	_ = resp.Body.Close()
+}
+
+func TestTTFBForSlowUpstream_countsSlowHeaders_beforeBody(t *testing.T) {
+	// 响应头 1.5s 后才到、body 立即返回：新口径从「请求发出」计时，
+	// 1.5s > 1s 阈值必须算超时（旧口径从响应头后才开始算，测不出这类慢）。
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(1500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer upstream.Close()
+	engine := NewEngine(nil)
+	plan := &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		FailoverRules: []*model.FailoverRule{
+			{TTFBSeconds: 1, Status: true, Dimension: model.FailoverDimensionProvider},
+		},
+	}
+	resp, err := engine.performUpstreamCall(context.Background(), &ExecutionPlan{
+		Provider: &model.Provider{ID: "p", Name: "p"},
+		BaseURLs: []string{upstream.URL},
+		Keys:     []string{"k"},
+	}, &RelayRequest{})
+	if err != nil {
+		t.Fatalf("upstream call: %v", err)
+	}
+	if got := engine.ttfbForSlowUpstream(plan, resp); got < 1000 {
+		t.Fatalf("expected slow headers to count toward TTFB, got %d", got)
 	}
 	_ = resp.Body.Close()
 }

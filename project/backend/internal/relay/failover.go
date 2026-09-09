@@ -164,11 +164,10 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
-		if rotated := e.rotateKeyOrBaseURL(ctx, plan, req, dimension); rotated != nil {
+		if rotated, _ := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, &disableApplied); rotated != nil {
 			if disableApplied {
 				e.recordDisabledAttempt(req, plan, err)
 			}
-			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 			return rotated, nil
 		}
 	case model.FailoverDimensionProvider:
@@ -211,12 +210,14 @@ func failoverActionValue(plan *ExecutionPlan, req *RelayRequest, dimension strin
 	return ""
 }
 
-// ttfbForSlowUpstream wraps the response body in a first-byte probe and
-// waits up to the smallest enabled rule's ttfb_seconds. Returns the first
-// byte latency in milliseconds when it exceeded a rule limit; 0 when the
-// first byte arrived in time or no rule has a TTFB limit. The probe reader
-// replaces resp.Body so the buffered first byte is still delivered to the
-// consumer (handler forwarding / failover drain).
+// ttfbForSlowUpstream measures time-to-first-byte from the moment the
+// upstream request was issued (resp.FirstByteAt), i.e. connection +
+// response headers + first body byte — the same 口径 as the UI's 首字
+// column and the recovery probe. Returns the latency in milliseconds when
+// it exceeded a rule limit; 0 when the first byte arrived in time or no
+// rule has a TTFB limit. The probe reader replaces resp.Body so the
+// buffered first byte is still delivered to the consumer (handler
+// forwarding / failover drain).
 func (e *Engine) ttfbForSlowUpstream(plan *ExecutionPlan, resp *RelayResponse) int {
 	if plan == nil || resp == nil || resp.Body == nil {
 		return 0
@@ -232,13 +233,21 @@ func (e *Engine) ttfbForSlowUpstream(plan *ExecutionPlan, resp *RelayResponse) i
 	if limitSeconds == 0 {
 		return 0
 	}
-	started := time.Now()
-	probe := publicfunction.NewFirstByteProbeReader(resp.Body, started)
+	start := resp.FirstByteAt
+	if start.IsZero() {
+		start = time.Now()
+	}
+	limit := time.Duration(limitSeconds) * time.Second
+	// 上游调用已结束（响应头已到）；如果从发请求算起已经超时，不用再等 body。
+	if elapsed := time.Since(start); elapsed >= limit {
+		return int(elapsed.Milliseconds())
+	}
+	probe := publicfunction.NewFirstByteProbeReader(resp.Body, start)
 	resp.Body = probe
-	if probe.WaitFirstByte(time.Duration(limitSeconds) * time.Second) {
+	if probe.WaitFirstByte(limit - time.Since(start)) {
 		return 0
 	}
-	return int(time.Since(started).Milliseconds())
+	return int(time.Since(start).Milliseconds())
 }
 
 // recordFailoverHit increments the consecutive-match counter for
@@ -443,11 +452,11 @@ func (e *Engine) recordDisabledAttempt(req *RelayRequest, plan *ExecutionPlan, f
 // rotateKeyOrBaseURL retries the request against every other key or
 // base URL of the same provider. It returns the first successful
 // response, or nil when nothing is left to try.
-func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, req *RelayRequest, dimension string) *RelayResponse {
+func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, req *RelayRequest, dimension string, disabledThisRequest *bool) (*RelayResponse, bool) {
 	baseCount := len(plan.BaseURLs)
 	keyCount := len(plan.Keys)
 	if baseCount <= 0 || keyCount <= 0 {
-		return nil
+		return nil, false
 	}
 	for bi := 0; bi < baseCount; bi++ {
 		for ki := 0; ki < keyCount; ki++ {
@@ -465,7 +474,26 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 			candidate.KeyIndex = ki
 			resp, err := e.performUpstreamCall(ctx, plan, &candidate)
 			if err == nil {
-				return resp
+				return resp, false
+			}
+			outcome := classifyOutcome(resp, err)
+			if disabledThisRequest == nil || !*disabledThisRequest {
+				if rule, matched := matchingFailoverRule(outcome, plan.FailoverRules); matched {
+					rotatedDimension, autoDisable := rule.SingleAction()
+					if autoDisable && rotatedDimension == dimension {
+						value := failoverActionValue(plan, &candidate, dimension)
+						if _, reached := e.recordFailoverHit(plan.Provider.ID, dimension, value, rule); reached && (disabledThisRequest == nil || !*disabledThisRequest) {
+							if applyErr := e.applyFailoverAction(plan, &candidate, dimension, rule, outcome); applyErr != nil {
+								log.Printf("relay: applyFailoverAction rotated %s/%s: %v", plan.Provider.ID, dimension, applyErr)
+							} else {
+								e.clearFailoverHit(plan.Provider.ID, dimension, value)
+								if disabledThisRequest != nil {
+									*disabledThisRequest = true
+								}
+							}
+						}
+					}
+				}
 			}
 			if resp != nil && resp.Body != nil {
 				_, _ = io.Copy(io.Discard, resp.Body)
@@ -473,7 +501,7 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 			}
 		}
 	}
-	return nil
+	return nil, false
 }
 
 func (e *Engine) isDisabled(providerID, dimension, value string) bool {
