@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/config"
 	"github.com/hapiy/hapiy/internal/handler"
@@ -144,38 +146,9 @@ func main() {
 	// Create Gin router
 	r := gin.Default()
 
-	// Own model list fallback: catch any GET whose path ends with the
-	// configured `own_model_list_endpoint`, and serve the aggregated model
-	// list. This lets clients compose the URL as `<baseurl><endpoint>` —
-	// e.g. baseurl `http://host:port/proxy/__macCodex` + `/v1/models` —
-	// regardless of upstream baseurl prefix. Gin doesn't allow catch-all
-	// wildcards alongside sub-groups, so we hook NoRoute and match by
-	// suffix ourselves.
-	r.NoRoute(func(c *gin.Context) {
-		if c.Request.Method != http.MethodGet {
-			c.String(http.StatusNotFound, "404 page not found")
-			return
-		}
-		endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
-			return
-		}
-		expected := strings.TrimSpace(endpoint)
-		if expected == "" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
-			return
-		}
-		if !strings.HasSuffix(c.Request.URL.Path, expected) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
-			return
-		}
-		middleware.TokenAuth(db)(c)
-		if c.IsAborted() {
-			return
-		}
-		handler.OwnModelList(db, engine)(c)
-	})
+	// All 404/fallback routing (agent taxi rewrite, own model list, SPA)
+	// lives in a single NoRoute handler — see registerNoRoute.
+	r.NoRoute(noRouteHandler(db, engine, cfg.WebDistDir))
 
 	sessions := middleware.NewSessionStore()
 
@@ -356,9 +329,35 @@ func main() {
 		}
 	}
 
+	// Agent taxi prefix (`/proxy/__<source>/...`) mirrors the OpenAI-compatible
+	// /v1 relay endpoints with the same middleware order, so the production
+	// single-origin build accepts the exact URLs agents actually call — e.g.
+	// opencode posts `/proxy/__opencode/chat/completions`. The Vite dev server
+	// rewrites these to /v1 for the backend; here the source mark is captured
+	// into the X-Hapiy-Source header (with the `__` prefix, matching the dev
+	// proxy) and the path is rewritten to /v1 so dispatch / endpoint matching /
+	// audit logging see identical paths in both modes.
+	proxyRelay := r.Group("/proxy/__:source")
+	proxyRelay.Use(middleware.OverloadProtection(nil))
+	proxyRelay.Use(func(c *gin.Context) {
+		src := c.Param("source")
+		c.Request.Header.Set("X-Hapiy-Source", "__"+src)
+		c.Request.URL.Path = "/v1" + c.Request.URL.Path[len("/proxy/__"+src):]
+		c.Next()
+	})
+	proxyRelay.Use(middleware.TokenAuth(db))
+	{
+		proxyRelay.POST("/chat/completions", handler.Relay(db, engine))
+		proxyRelay.POST("/completions", handler.Relay(db, engine))
+		proxyRelay.POST("/embeddings", handler.Relay(db, engine))
+		proxyRelay.POST("/images/generations", handler.Relay(db, engine))
+		proxyRelay.POST("/audio/speech", handler.Relay(db, engine))
+		proxyRelay.POST("/audio/transcriptions", handler.Relay(db, engine))
+	}
+
 	// Production mode: serve the built frontend from the same Go origin so
 	// the API is same-origin (no dev proxy needed).
-	registerFrontend(r, cfg.WebDistDir)
+	// Nothing to do here: the NoRoute handler already serves webDist when set.
 
 	// Start server
 	addr := cfg.Host + ":" + cfg.Port
@@ -369,20 +368,73 @@ func main() {
 	}
 }
 
-// registerFrontend serves the built frontend (SPA) from distDir when it is
-// non-empty: static assets under /assets, an SPA fallback to index.html for
-// client-side routes, and 404 for unknown API paths.
-func registerFrontend(r *gin.Engine, distDir string) {
-	if distDir == "" {
-		return
+// noRouteHandler is the single catch-all handler for every mode. Only one
+// NoRoute can be registered on a Gin engine, so own-model-list and SPA/dist
+// serving share it. In order it:
+//
+//  1. serves the own model list for any GET whose path ends with the
+//     configured `own_model_list_endpoint` (colloquially `<baseurl>/v1/models`).
+//  2. when webDist is non-empty, serves the built SPA from it (static assets,
+//     index.html fallback for client-side routes, 404 for unknown API paths);
+//     otherwise returns plain 404.
+//
+// The agent taxi prefix `/proxy/__<source>/<path>` is handled by real routes
+// registered in main (see proxyRelay), NOT here — running handlers inside the
+// NoRoute callback is unsafe because gin pre-sets the 404 status on the
+// response writer before the callback runs, which leaks a 404 status line to
+// the client for streamed responses.
+func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.HandlerFunc {
+	if webDist != "" {
+		info, err := os.Stat(webDist)
+		if err != nil || !info.IsDir() {
+			log.Printf("Warning: frontend dist dir %q not found; serving API only", webDist)
+			webDist = ""
+		} else {
+			log.Printf("Serving frontend from %s (production mode)", webDist)
+		}
 	}
-	info, err := os.Stat(distDir)
-	if err != nil || !info.IsDir() {
-		log.Printf("Warning: frontend dist dir %q not found; serving API only", distDir)
-		return
+	modelList := func(c *gin.Context) bool {
+		endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+			return true
+		}
+		expected := strings.TrimSpace(endpoint)
+		if c.Request.Method != http.MethodGet || expected == "" ||
+			!strings.HasSuffix(c.Request.URL.Path, expected) {
+			return false
+		}
+		middleware.TokenAuth(db)(c)
+		if c.IsAborted() {
+			return true
+		}
+		handler.OwnModelList(db, engine)(c)
+		return true
 	}
-	fileServer := http.FileServer(http.Dir(distDir))
-	r.NoRoute(func(c *gin.Context) {
+
+	return func(c *gin.Context) {
+		if modelList(c) {
+			return
+		}
+		if webDist == "" {
+			if c.Request.Method != http.MethodGet {
+				c.String(http.StatusNotFound, "404 page not found")
+				return
+			}
+			endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+				return
+			}
+			expected := strings.TrimSpace(endpoint)
+			if expected == "" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
+			return
+		}
+		fileServer := http.FileServer(http.Dir(webDist))
 		p := path.Clean(c.Request.URL.Path)
 		if p == "." {
 			p = "/"
@@ -401,6 +453,5 @@ func registerFrontend(r *gin.Engine, distDir string) {
 		req := c.Request.Clone(c.Request.Context())
 		req.URL.Path = "/"
 		fileServer.ServeHTTP(c.Writer, req)
-	})
-	log.Printf("Serving frontend from %s (production mode)", distDir)
+	}
 }

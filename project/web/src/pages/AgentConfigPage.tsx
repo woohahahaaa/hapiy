@@ -258,7 +258,7 @@ function AgentConfigFilesTab() {
       key: 'mode',
       label: '模式',
       defaultWidth: { kind: 'pixel', value: 100 },
-      render: (value, row) => {
+      render: (_value, row) => {
         const isLocal = (row as { mode?: string }).mode === 'local'
         return isLocal ? '本机' : <span className="font-medium text-primary">SSH</span>
       },

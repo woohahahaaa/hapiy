@@ -582,14 +582,18 @@ func evaluateCombined(c *RewriteCondition, body []byte, headers map[string]strin
 
 // compareValues performs the leaf comparison. gt/gte/lt/lte try numeric
 // comparison first and fall back to lexicographic for non-numeric values.
+// contains / prefix / suffix are intentionally case-insensitive for textual
+// matching — "minimax" catches "MiniMax-M3" — which matches how users expect
+// a substring search to behave. Authors needing case-sensitive textual
+// matching should use the matches op instead.
 func compareValues(op, actual, expected string) (bool, error) {
 	switch op {
 	case "contains":
-		return strings.Contains(actual, expected), nil
+		return strings.Contains(strings.ToLower(actual), strings.ToLower(expected)), nil
 	case "prefix":
-		return strings.HasPrefix(actual, expected), nil
+		return strings.HasPrefix(strings.ToLower(actual), strings.ToLower(expected)), nil
 	case "suffix":
-		return strings.HasSuffix(actual, expected), nil
+		return strings.HasSuffix(strings.ToLower(actual), strings.ToLower(expected)), nil
 	case "eq":
 		return actual == expected, nil
 	case "neq":
@@ -626,7 +630,8 @@ func compareValues(op, actual, expected string) (bool, error) {
 // literal (bool / number / null) against the body value. eq/neq are
 // type-aware: a JSON string "true" never equals the boolean true. Ordering
 // ops compare numerically when both sides are numeric, otherwise
-// lexicographically; string ops use the literal's text form.
+// lexicographically; contains/prefix/suffix operate case-insensitively on
+// the string form (see compareValues), matches uses regex.
 func compareNativeLiteral(c *RewriteCondition, actual gjson.Result) bool {
 	raw := string(c.RawValue)
 	switch c.Op {
@@ -637,11 +642,11 @@ func compareNativeLiteral(c *RewriteCondition, actual gjson.Result) bool {
 	case "gt", "gte", "lt", "lte":
 		return nativeLiteralCompare(c.Op, actual, raw)
 	case "contains":
-		return strings.Contains(actual.String(), raw)
+		return strings.Contains(strings.ToLower(actual.String()), strings.ToLower(raw))
 	case "prefix":
-		return strings.HasPrefix(actual.String(), raw)
+		return strings.HasPrefix(strings.ToLower(actual.String()), strings.ToLower(raw))
 	case "suffix":
-		return strings.HasSuffix(actual.String(), raw)
+		return strings.HasSuffix(strings.ToLower(actual.String()), strings.ToLower(raw))
 	case "matches":
 		return c.Regex != nil && c.Regex.MatchString(actual.String())
 	}

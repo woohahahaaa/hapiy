@@ -29,23 +29,7 @@ export function fieldValueAt(obj: unknown, path: string): unknown {
   return cur
 }
 
-function coerceToShape(raw: unknown, targetShape: unknown): unknown {
-  if (targetShape === undefined) {
-    const has = Array.isArray(raw) ? raw.length > 0 : raw !== undefined && raw !== null
-    return has ? raw : undefined
-  }
-  if (typeof targetShape === 'boolean') {
-    const has = Array.isArray(raw) ? raw.length > 0 : raw !== undefined && raw !== null
-    return has
-  }
-  if (typeof targetShape === 'number') {
-    const n = Number(raw)
-    return Number.isFinite(n) ? n : undefined
-  }
-  return raw
-}
-
-function filterValues(values: readonly string[] | undefined, raw: readonly unknown[]): unknown[] {
+function filterValues(values: readonly string[] | undefined, raw: readonly unknown[]): readonly unknown[] {
   if (!values || values.length === 0) return raw
   const allowed = new Set(values.map((v) => v.trim().toLowerCase()))
   return raw.filter((item) => allowed.has(String(item).trim().toLowerCase()))
@@ -53,7 +37,7 @@ function filterValues(values: readonly string[] | undefined, raw: readonly unkno
 
 // filterValuesFor exposes filterValues for tests: drops elements not in
 // the allowed whitelist (case-insensitive); empty whitelist passes all.
-export function filterValuesFor(values: readonly string[] | undefined, raw: readonly unknown[]): unknown[] {
+export function filterValuesFor(values: readonly string[] | undefined, raw: readonly unknown[]): readonly unknown[] {
   return filterValues(values, raw)
 }
 

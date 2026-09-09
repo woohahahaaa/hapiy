@@ -32,7 +32,7 @@ async function refresh() {
   polling = true
   try {
     const rows = await dashboardApi.listConcurrencyWindows()
-    const next: Snapshot = new Map()
+    const next = new Map<string, ConcurrencyWindowActive>()
     for (const row of rows) next.set(row.nodeId, row)
     if (!sameSnapshot(next)) {
       cache = next

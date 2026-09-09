@@ -140,7 +140,7 @@ export function AgentModelInfoMatchDialog({
   const [supplierByModelId, setSupplierByModelId] = useState<Record<string, string>>({})
   const [persistedSources, setPersistedSources] = useState<AgentModelConfigSources | null>(null)
   const [applying, setApplying] = useState(false)
-  const [savingSources, setSavingSources] = useState(false)
+  const [_savingSources, setSavingSources] = useState(false)
 
   useEffect(() => {
     if (!open) return

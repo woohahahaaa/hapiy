@@ -257,7 +257,7 @@ describe('serializeTopologyEdges', () => {
 
 describe('buildEdgesFromTopology', () => {
   const providers = [
-    { id: 'a', name: 'A', baseUrls: [], keys: [], endpoints: [], models: [{ model: 'gpt', endpoints: [], rate: '1', ratePriceConfigId: null, referenceProvider: null, referencePrices: null, referenceAt: null, prices: null }], status: true, autoDisabled: false, workflowEnabled: true, weight: 1 },
+    { id: 'a', name: 'A', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [{ model: 'gpt', endpoints: [], rate: '1', ratePriceConfigId: null, referenceProvider: null, referencePrices: null, referenceAt: null, prices: null }], status: true, autoDisabled: false, workflowEnabled: true, weight: 1 },
   ]
 
   it('renders wiring edges from the expanded chains plus model→provider edges', () => {

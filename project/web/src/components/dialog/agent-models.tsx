@@ -23,6 +23,7 @@ import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type {
   AgentConfigFile,
+  AgentModelConfigSources,
   AgentModelProvider,
   AgentModelSummary,
   AgentProtocol,
@@ -644,7 +645,7 @@ for (const p of summary?.providers ?? []) {
     try {
       const [models, sources] = await Promise.all([
         loadModelsDevModels(),
-        dashboardApi.getAgentModelConfigSources(record.id).catch(() => ({})),
+        dashboardApi.getAgentModelConfigSources(record.id).catch(() => ({}) as AgentModelConfigSources),
       ])
       const modelInfoFields = summary.model_info_fields ?? {
         max_context: '',
@@ -1427,14 +1428,14 @@ function ProviderRow({
               'flex min-w-0 items-center gap-1 text-[11px] ' +
               (selected
                 ? 'font-bold text-primary-foreground/80'
-                : typeof info === 'object' && info.green
+                : info !== null && typeof info === 'object' && info.green
                   ? 'text-success'
                   : 'text-muted-foreground')
             }
           >
             {badge}
             <span className="truncate">
-              {typeof info === 'object' ? info.text : info}
+              {info !== null && typeof info === 'object' ? info.text : info}
             </span>
           </span>
         )}
@@ -1994,6 +1995,10 @@ function wrapRootScope(
 // modelsForShape re-emits an existing models subtree in the shape the
 // rule declares (array or object map). Unknown / undefined input
 // becomes an empty container of the right shape.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function modelsForShape(
   existing: unknown,
   asArray: boolean,
@@ -2321,7 +2326,7 @@ function DiffView({
     return out
   }, [groups])
 
-  const gutter = (no: number | null, kind: 'old' | 'new') => (
+  const gutter = (no: number | null) => (
     <div className={'w-10 shrink-0 px-1 text-right font-mono text-[10px] leading-[1.5] select-none ' + (no === null ? 'text-transparent' : 'text-muted-foreground/70')}>
       {no ?? '\u00A0'}
     </div>
@@ -2368,8 +2373,8 @@ function DiffView({
               (lineClass(r.kind) ?? 'hover:bg-muted/40')
             }
           >
-            {gutter(r.oldNo, 'old')}
-            {gutter(r.newNo, 'new')}
+            {gutter(r.oldNo)}
+            {gutter(r.newNo)}
             <div className={'w-5 shrink-0 text-center select-none ' + (r.kind === 'del' ? 'text-destructive' : r.kind === 'add' ? 'text-emerald-500' : 'text-muted-foreground/50')}>
               {marker(r.kind)}
             </div>

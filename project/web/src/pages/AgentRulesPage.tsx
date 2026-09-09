@@ -32,6 +32,7 @@ import {
   type AgentModelInfoFieldSpecValue,
   type AgentModelInfoFieldPaths,
   type AgentProtocol,
+  type AgentProtocolCondition,
   type AgentProtocolConditionOp,
   type AgentRecommendation,
   type AgentRecommendationType,
@@ -650,8 +651,8 @@ function RuleDialog({
       setModelsContainer(editing?.json_paths.models_container ?? '')
       // 从既有规则拆出 common 与 protocols：优先用 config_jsonc 原文，
       // 缺失时用结构化字段兜底。
-      let common: AgentRecommendation[]
-      let protocols: AgentProtocol[]
+      let common: readonly AgentRecommendation[]
+      let protocols: readonly AgentProtocol[]
       try {
         const parsed = parseRuleConfigJsonc(
           editing?.config_jsonc && editing.config_jsonc.trim() !== ''
