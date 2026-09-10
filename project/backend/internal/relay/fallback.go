@@ -17,12 +17,12 @@ import (
 // an empty provider means nothing matched and the caller should fall
 // through to normal selection.
 type fallbackLookupResult struct {
-	matched       bool
-	providerID    string
-	providerName  string
-	keyIndex      int
-	baseURLIndex  int
-	entryID       string
+	matched      bool
+	providerID   string
+	providerName string
+	keyIndex     int
+	baseURLIndex int
+	entryID      string
 }
 
 // lookupFallbackAffinity runs the fallback affinity check for a request.

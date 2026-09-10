@@ -17,18 +17,17 @@ import (
 
 const (
 	// compactStringMaxLen caps a single string field in the request body
-	// before we collapse it to "你好". Above this length the user's
+	// before we collapse it to "...". Above this length the user's
 	// content is unlikely to affect upstream behavior but it bloats
 	// the replay payload.
 	compactStringMaxLen = 30
-	// compactArrayMaxLen caps array elements we copy through.
-	compactArrayMaxLen = 3
 )
 
 // compactBody returns a JSON string with the same shape as the original
-// body but with long strings replaced by "你好" and oversized arrays
-// truncated. The structure is preserved so a replay upstream gets the
-// same field paths and types it would have gotten originally.
+// body but with long strings replaced by "..." and arrays truncated to
+// their first element. The structure (field paths and types) is preserved
+// so a replay upstream gets a schema-valid body — these probes only test
+// connectivity, not the payload content.
 func compactBody(body map[string]interface{}) string {
 	if len(body) == 0 {
 		return ""
@@ -44,24 +43,23 @@ func compactBody(body map[string]interface{}) string {
 func compactValue(v interface{}) interface{} {
 	switch val := v.(type) {
 	case string:
+		// Short strings may still be semantically meaningful (e.g. model
+		// name, "stream"); keep them. Long strings (user content) don't
+		// matter for a connectivity probe and just bloat the payload.
 		if len(val) > compactStringMaxLen {
-			return "你好"
+			return "..."
 		}
 		return val
 	case []interface{}:
-		if len(val) > compactArrayMaxLen {
-			truncated := make([]interface{}, 0, compactArrayMaxLen+1)
-			for i := 0; i < compactArrayMaxLen; i++ {
-				truncated = append(truncated, compactValue(val[i]))
-			}
-			truncated = append(truncated, "...")
-			return truncated
+		// Arrays carry typed items (messages / tools are arrays of
+		// objects). Never append a placeholder element — a string "..."
+		// inside a typed array makes the replayed body invalid and
+		// upstreams reject it with "Input should be a valid dictionary
+		// or object". Keep only the first element.
+		if len(val) == 0 {
+			return val
 		}
-		out := make([]interface{}, len(val))
-		for i, item := range val {
-			out[i] = compactValue(item)
-		}
-		return out
+		return []interface{}{compactValue(val[0])}
 	case map[string]interface{}:
 		out := make(map[string]interface{}, len(val))
 		for k, item := range val {
@@ -243,6 +241,27 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	return true
 }
 
+// sanitizeReplayBody turns a stored DisabledRecord request body into a
+// schema-valid, non-streaming probe payload. Stored rows may come from
+// older builds whose compaction appended a bare "..." string to truncated
+// arrays (strict upstreams reject the replay with 422 "Input should be a
+// valid dictionary or object"), and they usually carry stream=true with
+// stream_options — the probe needs a JSON response, so streaming is forced
+// off (stream_options is only legal when stream=true).
+func sanitizeReplayBody(raw []byte) []byte {
+	var body map[string]interface{}
+	if json.Unmarshal(raw, &body) != nil {
+		return nil
+	}
+	body["stream"] = false
+	delete(body, "stream_options")
+	compacted := compactBody(body)
+	if compacted == "" {
+		return nil
+	}
+	return []byte(compacted)
+}
+
 // replayProbe sends the recorded request (compact body + headers) to
 // (baseURL, key) with a fresh chat completions call and reports whether
 // the upstream returned 2xx with a usable body. When a recovery request
@@ -264,11 +283,12 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 	if err != nil {
 		return service.ProbeResult{}
 	}
-	// The recorded body is stored post-rewrite + post-compaction, so replay
-	// it as-is when it parses; the self-built payload is only a fallback.
+	// Stored bodies are sanitized (re-compacted, stream forced off) before
+	// replay — see sanitizeReplayBody. The self-built payload is only a
+	// fallback for rows without a usable body.
 	if record != nil && record.RequestBody != "" {
-		if json.Valid([]byte(record.RequestBody)) {
-			raw = []byte(record.RequestBody)
+		if sanitized := sanitizeReplayBody([]byte(record.RequestBody)); sanitized != nil {
+			raw = sanitized
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
