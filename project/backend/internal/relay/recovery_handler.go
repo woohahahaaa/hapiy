@@ -31,7 +31,7 @@ type RecoveryOp struct {
 // request body (e.g. backfilled rows): they only replay once the cooldown
 // has elapsed since the disable.
 type RecoveryRequestHandler struct {
-	Ops         []RecoveryOp `json:"ops"`
+	Ops          []RecoveryOp `json:"ops"`
 	TimeoutHours int          `json:"timeout_hours"`
 }
 

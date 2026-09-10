@@ -605,12 +605,12 @@ func TestApplyRewriteChain_negative_index_into_content_array(t *testing.T) {
 func TestResolveSjsonPath_negative_indexes(t *testing.T) {
 	body := []byte(`{"messages":[{"a":1},{"a":2},{"a":3}]}`)
 	cases := map[string]string{
-		"messages.-1.content":   "messages.2.content",
-		"messages.-2.x":         "messages.1.x",
-		"messages.0":            "messages.0",
-		"messages.-1":           "messages.2",
-		"messages":              "messages",
-		"messages.-9.content":   "messages.-9.content", // out of range: unchanged
+		"messages.-1.content": "messages.2.content",
+		"messages.-2.x":       "messages.1.x",
+		"messages.0":          "messages.0",
+		"messages.-1":         "messages.2",
+		"messages":            "messages",
+		"messages.-9.content": "messages.-9.content", // out of range: unchanged
 	}
 	for in, want := range cases {
 		if got := resolveSjsonPath(body, in); got != want {

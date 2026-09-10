@@ -332,8 +332,9 @@ export function LogsPage() {
         line1: (row) => {
           if (row.status === 'success') return '<#16a34a>成功</#16a34a>'
           if (row.status === 'failed') return '<#dc2626>失败</#dc2626>'
-          const action = row.errorMessage || row.source
-          return action ? `<#9ca3af>${action}</#9ca3af>` : null
+          // 事件行（自动禁用/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
+          // 长文本（errorMessage/eventDetail）统一放进详情字段。
+          return row.source ? `<#9ca3af>${row.source}</#9ca3af>` : null
         },
       },
     },

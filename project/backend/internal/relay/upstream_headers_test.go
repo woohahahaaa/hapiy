@@ -10,8 +10,8 @@ func TestSetupUpstreamHeaders_stripsHapiySource(t *testing.T) {
 	req := &RelayRequest{
 		Headers: map[string]string{
 			"X-Hapiy-Source":   "__opencodetest",
-			"X-Session-Id":     "ses_keep_me",        // client-owned, must pass through
-			"X-Custom-Through": "untouched",          // arbitrary client header, must pass through
+			"X-Session-Id":     "ses_keep_me", // client-owned, must pass through
+			"X-Custom-Through": "untouched",   // arbitrary client header, must pass through
 		},
 	}
 

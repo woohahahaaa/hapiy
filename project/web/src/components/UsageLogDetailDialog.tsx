@@ -114,7 +114,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow
           className="col-span-2"
           label="状态"
-          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : (log.errorMessage || log.source || '-')}
+          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : (log.source || '-')}
         />
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">

@@ -47,9 +47,9 @@ type streamRewriteReader struct {
 
 	br        *bufio.Reader
 	firstDone map[string]bool
-	held      []byte          // rewritten JSON payload of the held event
-	heldTail  []byte          // trailing bytes (blank lines) of the held event
-	heldOps   []rewriteOpRef  // last_append ops the held event matched
+	held      []byte         // rewritten JSON payload of the held event
+	heldTail  []byte         // trailing bytes (blank lines) of the held event
+	heldOps   []rewriteOpRef // last_append ops the held event matched
 	totalMs   int64
 }
 
