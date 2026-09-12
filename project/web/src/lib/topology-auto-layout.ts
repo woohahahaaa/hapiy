@@ -1,7 +1,7 @@
 import type { Edge, Node } from '@xyflow/react'
 import { fallbackNodeSize } from '../config/topology-config'
 import type { NodeSize } from './use-reactflow-node-sizes'
-import { isRequestEntry } from './flat-topology'
+import { isRequestEntry, isSwitchNode } from './flat-topology'
 import type { FlatCanvas } from './flat-topology'
 import type { FlatNode, FlatWire } from './dashboard-api'
 
@@ -176,13 +176,19 @@ export type LayoutPositionMap = Record<string, LayoutPosition>
  *   2. Workflow group (right): one row per request entry — the entry node
  *      followed by the slots reachable from it (wire chain order), left-to-right,
  *      vertically centered within the row. Rows stack vertically with rowGap.
- *   3. Free-floating region (below both groups): slots NOT reachable from any
- *      request entry, grouped by connectivity. Slots connected via canvasWires
- *      form one group (ordered in wire-chain order, chain head first); isolated
- *      slots are singleton groups. Each group is placed as a single unit
- *      (members left-to-right with nodeGap, vertically centered); groups are
- *      sorted by first member id, and a row wraps when the next group's left
- *      edge would exceed freeSlotRowWidthFactor × slotBaseWidth.
+ *   3. Switch branches: a 条件开关 ends its row; its two outgoing arms (是/否)
+ *      are treated as two extra workflow rows hanging directly below the switch
+ *      row, left-aligned to the switch node's left edge. A switch inside a
+ *      branch hangs its own sub-branches the same way. A node with multiple
+ *      incoming wires belongs to the row of its FIRST incoming wire (canvasWires
+ *      order) — that source is its horizontal alignment reference.
+ *   4. Free-floating region (below both groups): slots NOT reachable from any
+ *      request entry (nor claimed by a switch branch), grouped by connectivity.
+ *      Slots connected via canvasWires form one group (ordered in wire-chain
+ *      order, chain head first); isolated slots are singleton groups. Each group
+ *      is placed as a single unit (members left-to-right with nodeGap, vertically
+ *      centered); groups are sorted by first member id, and a row wraps when the
+ *      next group's left edge would exceed freeSlotRowWidthFactor × slotBaseWidth.
  *
  * Every modelHub, requestEntry and slot id present in `nodes`/`canvas` receives
  * a position. Gaps are literal edge-to-edge distances; sizes come from the
@@ -206,9 +212,16 @@ export function layoutFlatCanvas(
   const topLevelById = new Map<string, FlatNode>()
   for (const n of canvas.topLevel) topLevelById.set(n.id, n)
 
-  const outMap = new Map<string, string>()
+  // A node's horizontal reference: the source of its FIRST incoming wire
+  // (canvasWires order). Rows follow only incoming wires that match this
+  // reference, so a node with multiple inputs belongs to its first input's row.
+  const parentOf = new Map<string, string>()
+  const outgoingOf = new Map<string, FlatWire[]>()
   for (const w of canvas.canvasWires) {
-    if (!outMap.has(w.source)) outMap.set(w.source, w.target)
+    if (!parentOf.has(w.target)) parentOf.set(w.target, w.source)
+    const list = outgoingOf.get(w.source) ?? []
+    list.push(w)
+    outgoingOf.set(w.source, list)
   }
 
   const entries = canvas.topLevel
@@ -218,23 +231,52 @@ export function layoutFlatCanvas(
       const laneB = b.emergency === true ? 1 : 0
       return laneA - laneB || a.id.localeCompare(b.id)
     })
-  const entryChains = new Map<string, string[]>()
-  const ownerOfSlot = new Map<string, string>()
-  for (const entry of entries) {
-    const chain: string[] = []
-    const seen = new Set<string>([entry.id])
-    let cur = outMap.get(entry.id)
-    while (cur !== undefined && !seen.has(cur)) {
-      seen.add(cur)
+
+  // ── Flow tree per entry ──
+  // A row is a linear left-to-right chain. The chain ends at a switch, whose
+  // outgoing arms each spawn a child row hanging below. Nodes are claimed by
+  // the walker that owns their first incoming wire, so a convergence node stays
+  // on its first source's row and nothing is placed twice.
+  interface LayoutRow {
+    readonly id: string
+    readonly chain: string[]
+    readonly branches: LayoutRow[]
+  }
+
+  const claimed = new Set<string>()
+  const entryRows: LayoutRow[] = []
+
+  const buildRow = (startId: string, row: LayoutRow): void => {
+    let cur: string | undefined = startId
+    while (cur !== undefined) {
+      if (claimed.has(cur)) break
       const node = topLevelById.get(cur)
       if (!node) break
-      if (!isRequestEntry(node)) {
-        chain.push(cur)
-        ownerOfSlot.set(cur, entry.id)
+      claimed.add(cur)
+      if (cur !== startId && isRequestEntry(node)) break
+      row.chain.push(cur)
+      const outs: FlatWire[] = outgoingOf.get(cur) ?? []
+      if (outs.length === 0) break
+      if (isSwitchNode(node)) {
+        for (const w of outs) {
+          if (w.target === undefined) continue
+          if (claimed.has(w.target) || parentOf.get(w.target) !== cur) continue
+          const child: LayoutRow = { id: `${row.id}→${w.target}`, chain: [], branches: [] }
+          buildRow(w.target, child)
+          row.branches.push(child)
+        }
+        break
       }
-      cur = outMap.get(cur)
+      const w: FlatWire = outs[0]
+      if (claimed.has(w.target) || parentOf.get(w.target) !== w.source) break
+      cur = w.target
     }
-    entryChains.set(entry.id, chain)
+  }
+
+  for (const entry of entries) {
+    const row: LayoutRow = { id: entry.id, chain: [], branches: [] }
+    buildRow(entry.id, row)
+    entryRows.push(row)
   }
 
   const sortedModels = nodes
@@ -244,30 +286,29 @@ export function layoutFlatCanvas(
   const modelTotalHeight = modelSizes.reduce((acc, s, i) => acc + s.height + (i > 0 ? modelHubGap : 0), 0)
   const modelMaxWidth = modelSizes.reduce((max, s) => Math.max(max, s.width), 0)
 
+  // ── Measurement ──
+  // A row's block height = its own row height plus (rowGap + child block
+  // height) per hanging branch, so the vertical stack below stays coherent.
   type PlacedNode = { id: string; x: number; y: number; height: number }
-  type WorkflowRow = { entryId: string; width: number; height: number; nodes: PlacedNode[] }
 
-  const workflowRows: WorkflowRow[] = []
-  for (const entry of entries) {
-    const rowNodeIds = [entry.id, ...(entryChains.get(entry.id) ?? [])]
-    let cursorX = 0
-    let maxH = 0
-    const placed: PlacedNode[] = []
-    for (let i = 0; i < rowNodeIds.length; i++) {
-      const id = rowNodeIds[i]
-      const d = sizeOf(id)
-      placed.push({ id, x: cursorX, y: 0, height: d.height })
-      cursorX += d.width + (i < rowNodeIds.length - 1 ? nodeGap : 0)
-      if (d.height > maxH) maxH = d.height
+  const rowHeightOf = (row: LayoutRow): number =>
+    row.chain.reduce((max, id) => Math.max(max, sizeOf(id).height), 0)
+
+  const blockHeightOf = (row: LayoutRow): number => {
+    let h = rowHeightOf(row)
+    for (const child of row.branches) {
+      h += rowGap + blockHeightOf(child)
     }
-    for (const p of placed) p.y = (maxH - p.height) / 2
-    workflowRows.push({ entryId: entry.id, width: cursorX, height: maxH, nodes: placed })
+    return h
   }
 
-  const workflowTotalHeight = workflowRows.reduce((acc, r, i) => acc + r.height + (i > 0 ? rowGap : 0), 0)
+  const entryRowsHeight = entryRows.reduce(
+    (acc, r, i) => acc + blockHeightOf(r) + (i > 0 ? rowGap : 0),
+    0,
+  )
 
-  const groupCenterY = Math.max(workflowTotalHeight, modelTotalHeight) / 2
-  const workflowStartY = marginY + (groupCenterY - workflowTotalHeight / 2)
+  const groupCenterY = Math.max(entryRowsHeight, modelTotalHeight) / 2
+  const workflowStartY = marginY + (groupCenterY - entryRowsHeight / 2)
   const modelStartY = marginY + (groupCenterY - modelTotalHeight / 2)
 
   const positions: LayoutPositionMap = {}
@@ -281,17 +322,52 @@ export function layoutFlatCanvas(
 
   const modelGroupRightEdge = modelMaxWidth > 0 ? marginX + modelMaxWidth + groupGap : marginX
   const workflowX = modelGroupRightEdge
-  let rowCursorY = workflowStartY
-  for (const row of workflowRows) {
-    for (const p of row.nodes) positions[p.id] = { x: workflowX + p.x, y: rowCursorY + p.y }
-    rowCursorY += row.height + rowGap
+
+  // ── Placement ──
+  // Places a row (left-aligned at x) and returns its block height. Child rows
+  // hang directly below, left-aligned to the x of the switch that spawned them
+  // (the row's last node).
+  const placeRow = (row: LayoutRow, x: number, yTop: number): number => {
+    const rowIds = row.chain
+    let cursorX = x
+    let maxH = 0
+    const xOf = new Map<string, number>()
+    const placed: PlacedNode[] = []
+    for (let i = 0; i < rowIds.length; i++) {
+      const id = rowIds[i]
+      const d = sizeOf(id)
+      xOf.set(id, cursorX)
+      placed.push({ id, x: cursorX, y: 0, height: d.height })
+      cursorX += d.width + (i < rowIds.length - 1 ? nodeGap : 0)
+      if (d.height > maxH) maxH = d.height
+    }
+    for (const p of placed) positions[p.id] = { x: p.x, y: yTop + (maxH - p.height) / 2 }
+
+    const switchId = rowIds.length > 0 ? rowIds[rowIds.length - 1] : null
+    const switchX = switchId !== null ? (xOf.get(switchId) ?? x) : x
+    let childY = yTop + maxH
+    let blockH = maxH
+    for (const child of row.branches) {
+      childY += rowGap
+      blockH += rowGap
+      const childH = placeRow(child, switchX, childY)
+      blockH += childH
+      childY += childH
+    }
+    return blockH
   }
 
-  // Free-floating region: top-level slots NOT reachable from any request entry.
-  // Connected slots (via canvasWires) form one group, placed as a single unit;
-  // isolated slots are singleton groups.
+  let rowCursorY = workflowStartY
+  for (let i = 0; i < entryRows.length; i++) {
+    placeRow(entryRows[i], workflowX, rowCursorY)
+    rowCursorY += blockHeightOf(entryRows[i]) + (i < entryRows.length - 1 ? rowGap : 0)
+  }
+
+  // Free-floating region: top-level slots NOT reachable from any request entry
+  // (nor claimed by a switch branch). Connected slots (via canvasWires) form
+  // one group, placed as a single unit; isolated slots are singleton groups.
   const freeIds = canvas.topLevel
-    .filter((n) => !isRequestEntry(n) && !ownerOfSlot.has(n.id))
+    .filter((n) => !isRequestEntry(n) && !claimed.has(n.id))
     .map((n) => n.id)
 
   const memberSet = new Set(freeIds)
@@ -333,7 +409,7 @@ export function layoutFlatCanvas(
     .map((comp) => orderFreeGroup(comp, canvas.canvasWires))
     .sort((a, b) => a[0].localeCompare(b[0]))
 
-  const groupBottom = Math.max(workflowStartY + workflowTotalHeight, modelStartY + modelTotalHeight)
+  const groupBottom = Math.max(workflowStartY + entryRowsHeight, modelStartY + modelTotalHeight)
   let freeCursorX = workflowX
   let freeRowY = groupBottom + rowGap
   let freeRowMaxH = 0

@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -736,6 +738,7 @@ func (e *Engine) relayNonStreaming(ctx context.Context, url, key string, req *Re
 		// layer can read the status code. The caller MUST drain/close
 		// the body when it discards the response.
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		errBody = decompressBody(resp.Header, errBody)
 		return &RelayResponse{
 			StatusCode: resp.StatusCode,
 			Headers:    flattenHeaders(resp.Header),
@@ -776,6 +779,7 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 	}
 	if resp.StatusCode >= 400 {
 		errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		errBody = decompressBody(resp.Header, errBody)
 		return &RelayResponse{
 			StatusCode: resp.StatusCode,
 			Headers:    flattenHeaders(resp.Header),
@@ -807,9 +811,34 @@ func (e *Engine) setupUpstreamHeaders(httpReq *http.Request, key string, req *Re
 		switch k {
 		case "Authorization", "Content-Length", "Host", "Connection", "X-Hapiy-Source":
 			continue
+		case "Accept-Encoding":
+			// Let Go negotiate encoding itself so it transparently
+			// decompresses responses (manual br/zstd never is).
+			continue
 		default:
 			httpReq.Header.Set(k, v)
 		}
+	}
+}
+
+// decompressBody transparently decompresses an upstream error body according
+// to its Content-Encoding so error details stay readable. Go's stdlib only
+// auto-decompresses gzip it requested itself; a forwarded Accept-Encoding of
+// br/zstd leaves compressed binary bodies here.
+func decompressBody(h http.Header, body []byte) []byte {
+	switch strings.ToLower(strings.TrimSpace(h.Get("Content-Encoding"))) {
+	case "gzip":
+		r, err := gzip.NewReader(bytes.NewReader(body))
+		if err != nil {
+			return body
+		}
+		out, err := io.ReadAll(io.LimitReader(r, 4096))
+		if err != nil {
+			return body
+		}
+		return out
+	default:
+		return body
 	}
 }
 

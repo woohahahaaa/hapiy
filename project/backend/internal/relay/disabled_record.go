@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
@@ -137,7 +138,13 @@ func recordErrorMessage(err error) string {
 	msg := err.Error()
 	const max = 200
 	if len(msg) > max {
-		return msg[:max]
+		// Cut on a rune boundary — slicing bytes mid-rune stores
+		// invalid UTF-8 that renders as garbage in the dashboard.
+		runes := []rune(msg)
+		if len(runes) > max {
+			runes = runes[:max]
+		}
+		return string(runes)
 	}
 	return msg
 }
@@ -237,7 +244,7 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 	if resolveErr := e.db.Where("id = ?", record.ID).Delete(&model.DisabledRecord{}).Error; resolveErr != nil {
 		log.Printf("relay: drop resolved disabled-record: %v", resolveErr)
 	}
-	e.resolveCascade(provider, baseURL)
+	e.resolveCascade(provider, record)
 	return true
 }
 
@@ -304,7 +311,10 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 		if json.Unmarshal([]byte(record.RequestHeaders), &recorded) == nil {
 			for k, v := range recorded {
 				lower := strings.ToLower(k)
-				if lower == "host" || lower == "content-length" || lower == "authorization" || lower == "content-type" {
+				if lower == "host" || lower == "content-length" || lower == "authorization" || lower == "content-type" || lower == "accept-encoding" {
+					// accept-encoding must not be replayed: with an explicit
+					// header Go won't transparently decompress, and the probe
+					// would grade a gzip body as a JSON failure.
 					continue
 				}
 				req.Header.Set(k, v)
@@ -408,33 +418,46 @@ func probeErrorExcerpt(body []byte) string {
 		}
 	}
 	snippet := strings.TrimSpace(string(body))
-	if snippet == "" {
+	if snippet == "" || !utf8.Valid(body) {
+		// Empty or not valid text (e.g. a gzip response body we didn't
+		// replay as decompressable) — don't store binary garbage.
 		return ""
 	}
 	if len(snippet) > max {
-		snippet = snippet[:max] + "…"
+		snippet = string([]rune(snippet)[:max]) + "…"
 	}
 	return snippet
 }
 
-// resolveCascade clears disable states for the provider that just proved
-// healthy: every dimension of that provider (provider/base_url/key) and any
-// base_url-dimension disable that shares the same baseURL value (other
-// providers reusing the endpoint). Open DisabledRecord rows matching the
-// provider or the baseURL are dropped so no redundant replay probes run for
-// them.
-func (e *Engine) resolveCascade(provider *model.Provider, baseURL string) {
-	if e.db == nil || provider == nil {
+// resolveCascade clears disable state for the entity a successful replay
+// actually proved healthy: the record's own (dimension, value) state, the
+// provider-level disable, and any base_url-dimension disable on the same
+// baseURL (other providers reusing the endpoint). Sibling keys/baseURLs of
+// this provider are NOT touched — one key answering does not prove its
+// siblings are healthy (e.g. they may be genuinely out of quota), so their
+// pending DisabledRecord rows stay in the table and keep being replayed.
+func (e *Engine) resolveCascade(provider *model.Provider, record *model.DisabledRecord) {
+	if e.db == nil || provider == nil || record == nil {
 		return
 	}
-	// Clear every disable dimension of this provider.
+	// Clear this record's own disable state.
+	if record.Dimension != "" && record.Value != "" {
+		if err := e.db.Model(&model.AutoDisableState{}).
+			Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, record.Dimension, record.Value).
+			Update("disabled", false).Error; err != nil {
+			log.Printf("relay: cascade clear recorded entity: %v", err)
+		}
+	}
+	// A successful replay through the provider proves the provider itself
+	// is reachable: clear provider-dimension disables.
 	if err := e.db.Model(&model.AutoDisableState{}).
-		Where("provider_id = ?", provider.ID).
+		Where("provider_id = ? AND dimension = ?", provider.ID, model.FailoverDimensionProvider).
 		Update("disabled", false).Error; err != nil {
-		log.Printf("relay: cascade clear provider disables: %v", err)
+		log.Printf("relay: cascade clear provider disable: %v", err)
 	}
 	// Clear base_url-dimension disables on OTHER providers that reuse the
 	// same baseURL value (the endpoint itself is healthy).
+	baseURL := record.BaseURL
 	if baseURL != "" {
 		if err := e.db.Model(&model.AutoDisableState{}).
 			Where("dimension = ? AND value = ?", model.FailoverDimensionBaseURL, baseURL).
@@ -442,13 +465,20 @@ func (e *Engine) resolveCascade(provider *model.Provider, baseURL string) {
 			log.Printf("relay: cascade clear shared baseURL: %v", err)
 		}
 	}
-	// Drop open records for this provider or for the recovered baseURL so
-	// the scheduler never replays them again.
-	query := e.db.Where("resolved_at IS NULL")
-	query = query.Where("provider_id = ? OR (dimension = ? AND value = ?)",
-		provider.ID, model.FailoverDimensionBaseURL, baseURL)
-	if err := query.Delete(&model.DisabledRecord{}).Error; err != nil {
+	// Drop open records for the recovered entity and for the proven base
+	// URL so the scheduler never replays them again — but leave sibling
+	// keys alone.
+	if err := e.db.Where("resolved_at IS NULL AND provider_id = ? AND dimension = ? AND value = ?",
+		provider.ID, record.Dimension, record.Value).
+		Delete(&model.DisabledRecord{}).Error; err != nil {
 		log.Printf("relay: cascade drop records: %v", err)
+	}
+	if baseURL != "" {
+		if err := e.db.Where("resolved_at IS NULL AND dimension = ? AND value = ?",
+			model.FailoverDimensionBaseURL, baseURL).
+			Delete(&model.DisabledRecord{}).Error; err != nil {
+			log.Printf("relay: cascade drop baseURL records: %v", err)
+		}
 	}
 }
 
