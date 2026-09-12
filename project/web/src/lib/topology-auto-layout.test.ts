@@ -3,7 +3,7 @@ import type { Edge, Node } from '@xyflow/react'
 import { getLayoutedElements, layoutFlatCanvas, rankOfNode } from './topology-auto-layout'
 import type { NodeSize, NodeSizeMap } from './use-reactflow-node-sizes'
 import { canvasFromFlat } from './flat-topology'
-import type { FlatNode } from './dashboard-api'
+import type { FlatNode, FlatWire } from './dashboard-api'
 
 const opts = {
   nodeGap: 20,
@@ -25,6 +25,14 @@ const flatOpts = {
 
 function flatNode(id: string, kind: 'requestEntry' | 'slot', slotType?: string): FlatNode {
   return slotType ? { id, kind, enabled: true, slotType } : { id, kind, enabled: true }
+}
+
+function switchNode(id: string): FlatNode {
+  return { id, kind: 'switch', enabled: true, config: { providers: [], conditions: [] } }
+}
+
+function wire(source: string, target: string, branch?: 'yes' | 'no'): FlatWire {
+  return branch ? { source, target, branch } : { source, target }
 }
 
 function sizesFrom(entries: Record<string, NodeSize>): NodeSizeMap {
@@ -423,6 +431,159 @@ describe('layoutFlatCanvas — free-floating region', () => {
     expect(out['free-a'].x).toBe(20)
     expect(out['free-c'].x).toBe(20 + 100 + 20)
     expect(out['free-b'].x).toBe(20 + 100 + 20 + 100 + 20)
+  })
+})
+
+describe('layoutFlatCanvas — switch branches', () => {
+  it('hangs the two switch branches below the parent row, left-aligned to the switch', () => {
+    const nodes = [
+      flatNode('entry-a', 'requestEntry'),
+      flatNode('pslot-a', 'slot', 'provider'),
+      switchNode('sw-a'),
+      flatNode('yes1-a', 'slot', 'requestModify'),
+      flatNode('yes2-a', 'slot', 'requestModify'),
+      flatNode('no1-a', 'slot', 'requestModify'),
+    ]
+    const wires = [
+      wire('entry-a', 'pslot-a'),
+      wire('pslot-a', 'sw-a'),
+      wire('sw-a', 'yes1-a', 'yes'),
+      wire('sw-a', 'no1-a', 'no'),
+      wire('yes1-a', 'yes2-a'),
+    ]
+    const canvas = canvasFromFlat(nodes, wires)
+    const sizes = sizesFrom({
+      'entry-a': { width: 200, height: 60 },
+      'pslot-a': { width: 240, height: 100 },
+      'sw-a': { width: 120, height: 50 },
+      'yes1-a': { width: 240, height: 100 },
+      'yes2-a': { width: 240, height: 80 },
+      'no1-a': { width: 200, height: 60 },
+    })
+    const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
+
+    // Parent row: entry → pslot → switch, centered within the row.
+    expect(out['entry-a'].y).toBe(30 + (100 - 60) / 2)
+    expect(out['pslot-a'].y).toBe(30)
+    expect(out['sw-a'].y).toBe(30 + (100 - 50) / 2)
+    expect(out['pslot-a'].x).toBe(240)
+
+    // Branch rows stack below the parent row with rowGap, left-aligned at the switch x.
+    const switchX = out['sw-a'].x
+    expect(out['yes1-a'].x).toBe(switchX)
+    expect(out['yes1-a'].y).toBe(30 + 100 + 20)
+    expect(out['yes2-a'].x).toBe(switchX + 240 + 20)
+    expect(out['yes2-a'].y).toBe(30 + 100 + 20 + (100 - 80) / 2)
+    expect(out['no1-a'].x).toBe(switchX)
+    expect(out['no1-a'].y).toBe(30 + 100 + 20 + 100 + 20)
+  })
+
+  it('a node with multiple incoming wires belongs to its FIRST incoming row', () => {
+    const nodes = [
+      flatNode('entry-a', 'requestEntry'),
+      flatNode('pslot-a', 'slot', 'provider'),
+      switchNode('sw-a'),
+      flatNode('yes1-a', 'slot', 'requestModify'),
+      flatNode('no1-a', 'slot', 'requestModify'),
+      flatNode('merge-c', 'slot', 'responseModify'),
+    ]
+    // merge-c's first incoming wire comes from yes1-a → it joins the yes branch.
+    const wires = [
+      wire('entry-a', 'pslot-a'),
+      wire('pslot-a', 'sw-a'),
+      wire('sw-a', 'yes1-a', 'yes'),
+      wire('sw-a', 'no1-a', 'no'),
+      wire('yes1-a', 'merge-c'),
+      wire('no1-a', 'merge-c'),
+    ]
+    const canvas = canvasFromFlat(nodes, wires)
+    const sizes = sizesFrom({
+      'entry-a': { width: 200, height: 60 },
+      'pslot-a': { width: 240, height: 100 },
+      'sw-a': { width: 120, height: 50 },
+      'yes1-a': { width: 240, height: 100 },
+      'no1-a': { width: 200, height: 80 },
+      'merge-c': { width: 240, height: 80 },
+    })
+    const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
+
+    // merge-c follows yes1-a in the yes branch row, not the no row.
+    expect(out['merge-c'].x).toBe(out['yes1-a'].x + 240 + 20)
+    expect(out['merge-c'].y).toBe(out['yes1-a'].y + (100 - 80) / 2)
+    // The no branch is a lone row left-aligned at the switch.
+    expect(out['no1-a'].y).toBe(out['yes1-a'].y + 100 + 20)
+    expect(out['no1-a'].x).toBe(out['sw-a'].x)
+  })
+
+  it('a switch inside a branch hangs its own two sub-branches below', () => {
+    const nodes = [
+      flatNode('entry-a', 'requestEntry'),
+      switchNode('sw-a'),
+      switchNode('sw-b'),
+      flatNode('sub-x1', 'slot', 'requestModify'),
+      flatNode('sub-x2', 'slot', 'requestModify'),
+      flatNode('no1-a', 'slot', 'requestModify'),
+    ]
+    const wires = [
+      wire('entry-a', 'sw-a'),
+      wire('sw-a', 'sw-b', 'yes'),
+      wire('sw-a', 'no1-a', 'no'),
+      wire('sw-b', 'sub-x1', 'yes'),
+      wire('sw-b', 'sub-x2', 'no'),
+    ]
+    const canvas = canvasFromFlat(nodes, wires)
+    const sizes = sizesFrom({
+      'entry-a': { width: 200, height: 60 },
+      'sw-a': { width: 120, height: 50 },
+      'sw-b': { width: 120, height: 50 },
+      'sub-x1': { width: 240, height: 80 },
+      'sub-x2': { width: 240, height: 80 },
+      'no1-a': { width: 200, height: 80 },
+    })
+    const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
+
+    // sw-b's row hangs below the entry row, left-aligned at sw-a's x.
+    const swAX = out['sw-a'].x
+    expect(out['sw-b'].x).toBe(swAX)
+    expect(out['sw-b'].y).toBe(30 + 60 + 20)
+    // sw-b's own branches hang below sw-b's row.
+    expect(out['sub-x1'].x).toBe(out['sw-b'].x)
+    expect(out['sub-x1'].y).toBe(out['sw-b'].y + 50 + 20)
+    expect(out['sub-x2'].x).toBe(out['sw-b'].x)
+    expect(out['sub-x2'].y).toBe(out['sub-x1'].y + 80 + 20)
+    // The no branch comes after the whole sw-b block.
+    expect(out['no1-a'].x).toBe(swAX)
+    expect(out['no1-a'].y).toBe(out['sub-x2'].y + 80 + 20)
+  })
+
+  it('both branch arms leave nothing in the free-floating region', () => {
+    const nodes = [
+      flatNode('entry-a', 'requestEntry'),
+      switchNode('sw-a'),
+      flatNode('yes1-a', 'slot', 'requestModify'),
+      flatNode('no1-a', 'slot', 'requestModify'),
+      flatNode('free-1', 'slot', 'requestModify'),
+    ]
+    const wires = [
+      wire('entry-a', 'sw-a'),
+      wire('sw-a', 'yes1-a', 'yes'),
+      wire('sw-a', 'no1-a', 'no'),
+    ]
+    const canvas = canvasFromFlat(nodes, wires)
+    const sizes = sizesFrom({
+      'entry-a': { width: 200, height: 60 },
+      'sw-a': { width: 120, height: 50 },
+      'yes1-a': { width: 240, height: 80 },
+      'no1-a': { width: 200, height: 80 },
+      'free-1': { width: 240, height: 80 },
+    })
+    const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
+
+    // Both branch arms sit in the workflow region; free-1 goes below the block.
+    expect(out['yes1-a'].y).toBe(30 + 60 + 20)
+    expect(out['no1-a'].y).toBe(30 + 60 + 20 + 80 + 20)
+    const blockBottom = out['no1-a'].y + 80
+    expect(out['free-1'].y).toBe(blockBottom + 20)
   })
 })
 

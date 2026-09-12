@@ -143,7 +143,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
         }}
       >
         <DialogContent
-          width="sm"
+          width="xs"
           scrollFooter
         >
           <DialogHeader>
