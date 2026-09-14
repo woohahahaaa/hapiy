@@ -71,3 +71,19 @@ func TestCompactBody_repairsLegacyRecordedBody(t *testing.T) {
 	}
 	t.Logf("sanitized body: %s", sanitized)
 }
+
+// TestProbeErrorExcerpt_multibyteNoPanic feeds a raw UTF-8 upstream error
+// body whose byte length exceeds max (300) but whose rune count does not.
+// The code previously sliced []rune(...)[:max] at the top guard of
+// len(snippet) > max (byte length) — panicking with "slice bounds out of
+// range [:300] with capacity 256" and killing the whole process.
+func TestProbeErrorExcerpt_multibyteNoPanic(t *testing.T) {
+	long := strings.Repeat("很长的错误很长", 40)
+	out := probeErrorExcerpt([]byte(long))
+	if out == "" {
+		t.Fatalf("expected a non-empty excerpt")
+	}
+	if len(out) == 0 {
+		t.Fatalf("excerpt empty")
+	}
+}

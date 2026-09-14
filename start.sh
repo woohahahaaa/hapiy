@@ -50,8 +50,12 @@ do_start() {
     echo "[start] port $API_PORT is occupied (likely a leftover dev backend sharing the DB)."
     echo "[start] Occupied by:"
     lsof -nP -iTCP:"$API_PORT" -sTCP:LISTEN >&2 || true
-    printf "[start] Kill it before starting production? [y/N] "
-    read answer || true
+    if [ "${HAPIY_AUTO_KILL:-}" = "1" ]; then
+      answer="y"
+    else
+      printf "[start] Kill it before starting production? [y/N] "
+      read answer || true
+    fi
     case "$answer" in
       y|Y|yes|YES)
         echo "[start] killing old process..."
