@@ -424,7 +424,10 @@ func probeErrorExcerpt(body []byte) string {
 		return ""
 	}
 	if len(snippet) > max {
-		snippet = string([]rune(snippet)[:max]) + "…"
+		runes := []rune(snippet)
+		if len(runes) > max {
+			snippet = string(runes[:max]) + "…"
+		}
 	}
 	return snippet
 }

@@ -70,8 +70,12 @@ kill_occupant() {
   echo "[dev] port $PORT is ALREADY IN USE."
   echo "[dev] Occupied by:"
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
-  printf "[dev] Kill it and start a fresh dev server? [y/N] "
-  read answer || true
+  if [ "${HAPIY_AUTO_KILL:-}" = "1" ]; then
+    answer="y"
+  else
+    printf "[dev] Kill it and start a fresh dev server? [y/N] "
+    read answer || true
+  fi
   case "$answer" in
     y|Y|yes|YES)
       echo "[dev] killing old process..."
@@ -113,6 +117,7 @@ case "${1:-start}" in
       echo "[dev] running initial production build..."
       pnpm run build
     fi
+    [ -f "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.prev" 2>/dev/null || true
     : > "$LOG_FILE"
     nohup pnpm dev >>"$LOG_FILE" 2>&1 </dev/null &
     echo $! > "$PID_FILE"

@@ -435,7 +435,7 @@ describe('layoutFlatCanvas — free-floating region', () => {
 })
 
 describe('layoutFlatCanvas — switch branches', () => {
-  it('hangs the two switch branches below the parent row, left-aligned to the switch', () => {
+  it('places the two branch rows to the RIGHT of the switch, centered on its centerline', () => {
     const nodes = [
       flatNode('entry-a', 'requestEntry'),
       flatNode('pslot-a', 'slot', 'provider'),
@@ -462,20 +462,25 @@ describe('layoutFlatCanvas — switch branches', () => {
     })
     const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
 
-    // Parent row: entry → pslot → switch, centered within the row.
-    expect(out['entry-a'].y).toBe(30 + (100 - 60) / 2)
-    expect(out['pslot-a'].y).toBe(30)
-    expect(out['sw-a'].y).toBe(30 + (100 - 50) / 2)
+    // Parent row: entry → pslot → switch, x starts at workflowX.
+    expect(out['entry-a'].x).toBe(20)
     expect(out['pslot-a'].x).toBe(240)
 
-    // Branch rows stack below the parent row with rowGap, left-aligned at the switch x.
-    const switchX = out['sw-a'].x
-    expect(out['yes1-a'].x).toBe(switchX)
-    expect(out['yes1-a'].y).toBe(30 + 100 + 20)
-    expect(out['yes2-a'].x).toBe(switchX + 240 + 20)
-    expect(out['yes2-a'].y).toBe(30 + 100 + 20 + (100 - 80) / 2)
-    expect(out['no1-a'].x).toBe(switchX)
-    expect(out['no1-a'].y).toBe(30 + 100 + 20 + 100 + 20)
+    // Branch heads sit right after the switch (its right edge + nodeGap),
+    // and both heads are left-aligned with EACH OTHER.
+    const swX = out['sw-a'].x
+    const headsX = swX + 120 + 20
+    expect(out['yes1-a'].x).toBe(headsX)
+    expect(out['no1-a'].x).toBe(headsX)
+    expect(out['yes2-a'].x).toBe(headsX + 240 + 20)
+
+    // The two branch rows (as a block) are vertically centered on the switch.
+    const swCenter = out['sw-a'].y + 50 / 2
+    const blockTop = out['yes1-a'].y
+    const blockBottom = out['no1-a'].y + 60
+    expect((blockTop + blockBottom) / 2).toBe(swCenter)
+    // Rows keep rowGap between them.
+    expect(out['no1-a'].y - (out['yes1-a'].y + 100)).toBe(20)
   })
 
   it('a node with multiple incoming wires belongs to its FIRST incoming row', () => {
@@ -510,12 +515,11 @@ describe('layoutFlatCanvas — switch branches', () => {
     // merge-c follows yes1-a in the yes branch row, not the no row.
     expect(out['merge-c'].x).toBe(out['yes1-a'].x + 240 + 20)
     expect(out['merge-c'].y).toBe(out['yes1-a'].y + (100 - 80) / 2)
-    // The no branch is a lone row left-aligned at the switch.
-    expect(out['no1-a'].y).toBe(out['yes1-a'].y + 100 + 20)
-    expect(out['no1-a'].x).toBe(out['sw-a'].x)
+    // The no branch is a lone row, left-aligned with the yes branch head.
+    expect(out['no1-a'].x).toBe(out['yes1-a'].x)
   })
 
-  it('a switch inside a branch hangs its own two sub-branches below', () => {
+  it('a switch inside a branch places its own two sub-branches to its right', () => {
     const nodes = [
       flatNode('entry-a', 'requestEntry'),
       switchNode('sw-a'),
@@ -542,18 +546,20 @@ describe('layoutFlatCanvas — switch branches', () => {
     })
     const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
 
-    // sw-b's row hangs below the entry row, left-aligned at sw-a's x.
-    const swAX = out['sw-a'].x
-    expect(out['sw-b'].x).toBe(swAX)
-    expect(out['sw-b'].y).toBe(30 + 60 + 20)
-    // sw-b's own branches hang below sw-b's row.
-    expect(out['sub-x1'].x).toBe(out['sw-b'].x)
-    expect(out['sub-x1'].y).toBe(out['sw-b'].y + 50 + 20)
-    expect(out['sub-x2'].x).toBe(out['sw-b'].x)
-    expect(out['sub-x2'].y).toBe(out['sub-x1'].y + 80 + 20)
-    // The no branch comes after the whole sw-b block.
-    expect(out['no1-a'].x).toBe(swAX)
-    expect(out['no1-a'].y).toBe(out['sub-x2'].y + 80 + 20)
+    // sw-b's row starts right after sw-a (sw-a's right edge + nodeGap),
+    // same X as the no1-a branch head.
+    const swAHeadX = out['sw-a'].x + 120 + 20
+    expect(out['sw-b'].x).toBe(swAHeadX)
+    expect(out['no1-a'].x).toBe(swAHeadX)
+    // sw-b's sub-branches start right after sw-b.
+    const swBHeadX = out['sw-b'].x + 120 + 20
+    expect(out['sub-x1'].x).toBe(swBHeadX)
+    expect(out['sub-x2'].x).toBe(swBHeadX)
+    // sub-x1/sub-x2 block centered on sw-b's centerline.
+    const swBCenter = out['sw-b'].y + 50 / 2
+    expect((out['sub-x1'].y + (out['sub-x2'].y + 80)) / 2).toBe(swBCenter)
+    // no branch comes below the sw-b block with rowGap.
+    expect(out['no1-a'].y - (out['sub-x2'].y + 80)).toBe(20)
   })
 
   it('both branch arms leave nothing in the free-floating region', () => {
@@ -579,11 +585,16 @@ describe('layoutFlatCanvas — switch branches', () => {
     })
     const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
 
-    // Both branch arms sit in the workflow region; free-1 goes below the block.
-    expect(out['yes1-a'].y).toBe(30 + 60 + 20)
-    expect(out['no1-a'].y).toBe(30 + 60 + 20 + 80 + 20)
+    // Both branch arms sit in the workflow region, right of the switch;
+    // free-1 goes below the whole entry block.
+    const headsX = out['sw-a'].x + 120 + 20
+    expect(out['yes1-a'].x).toBe(headsX)
+    expect(out['no1-a'].x).toBe(headsX)
+    expect(out['yes1-a'].y).toBe(30)
+    expect(out['no1-a'].y).toBe(30 + 80 + 20)
     const blockBottom = out['no1-a'].y + 80
     expect(out['free-1'].y).toBe(blockBottom + 20)
+    expect(out['free-1'].x).toBe(20)
   })
 })
 

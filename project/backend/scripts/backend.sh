@@ -80,8 +80,12 @@ kill_occupant() {
   echo "[backend] port $PORT is ALREADY IN USE."
   echo "[backend] Occupied by:"
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
-  printf "[backend] Kill it and start a fresh backend? [y/N] "
-  read answer || true
+  if [ "${HAPIY_AUTO_KILL:-}" = "1" ]; then
+    answer="y"
+  else
+    printf "[backend] Kill it and start a fresh backend? [y/N] "
+    read answer || true
+  fi
   case "$answer" in
     y|Y|yes|YES)
       echo "[backend] killing old process..."
@@ -116,6 +120,7 @@ case "${1:-start}" in
       kill_occupant || exit 1
     fi
     build_if_needed
+    [ -f "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.prev" 2>/dev/null || true
     : > "$LOG_FILE"
 
     firewall_mode_arg=""

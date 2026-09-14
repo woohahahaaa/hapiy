@@ -177,11 +177,13 @@ export type LayoutPositionMap = Record<string, LayoutPosition>
  *      followed by the slots reachable from it (wire chain order), left-to-right,
  *      vertically centered within the row. Rows stack vertically with rowGap.
  *   3. Switch branches: a 条件开关 ends its row; its two outgoing arms (是/否)
- *      are treated as two extra workflow rows hanging directly below the switch
- *      row, left-aligned to the switch node's left edge. A switch inside a
- *      branch hangs its own sub-branches the same way. A node with multiple
- *      incoming wires belongs to the row of its FIRST incoming wire (canvasWires
- *      order) — that source is its horizontal alignment reference.
+ *      are two further workflow rows placed to the RIGHT of the switch (its
+ *      right edge + nodeGap, like any row member following its predecessor)
+ *      and left-aligned with EACH OTHER. The two branch rows form a block that
+ *      is vertically centered on the switch's centerline. A switch inside a
+ *      branch spawns its own block to its right the same way. A node with
+ *      multiple incoming wires belongs to the row of its FIRST incoming wire
+ *      (canvasWires order) — that source is its horizontal alignment reference.
  *   4. Free-floating region (below both groups): slots NOT reachable from any
  *      request entry (nor claimed by a switch branch), grouped by connectivity.
  *      Slots connected via canvasWires form one group (ordered in wire-chain
@@ -287,28 +289,33 @@ export function layoutFlatCanvas(
   const modelMaxWidth = modelSizes.reduce((max, s) => Math.max(max, s.width), 0)
 
   // ── Measurement ──
-  // A row's block height = its own row height plus (rowGap + child block
-  // height) per hanging branch, so the vertical stack below stays coherent.
+  // Each row occupies a vertical "flow": its own row band, plus — when the
+  // row ends at a switch — the block of branch rows to its right. The block is
+  // vertically centered on the row (the switch sits centered in its row), so a
+  // flow's height is the larger of its row height and its block height.
   type PlacedNode = { id: string; x: number; y: number; height: number }
 
   const rowHeightOf = (row: LayoutRow): number =>
     row.chain.reduce((max, id) => Math.max(max, sizeOf(id).height), 0)
 
   const blockHeightOf = (row: LayoutRow): number => {
-    let h = rowHeightOf(row)
-    for (const child of row.branches) {
-      h += rowGap + blockHeightOf(child)
+    let blockH = 0
+    for (let i = 0; i < row.branches.length; i++) {
+      blockH += (i > 0 ? rowGap : 0) + flowHeightOf(row.branches[i])
     }
-    return h
+    return blockH
   }
 
-  const entryRowsHeight = entryRows.reduce(
-    (acc, r, i) => acc + blockHeightOf(r) + (i > 0 ? rowGap : 0),
+  const flowHeightOf = (row: LayoutRow): number =>
+    Math.max(rowHeightOf(row), blockHeightOf(row))
+
+  const entryFlowsHeight = entryRows.reduce(
+    (acc, r, i) => acc + flowHeightOf(r) + (i > 0 ? rowGap : 0),
     0,
   )
 
-  const groupCenterY = Math.max(entryRowsHeight, modelTotalHeight) / 2
-  const workflowStartY = marginY + (groupCenterY - entryRowsHeight / 2)
+  const groupCenterY = Math.max(entryFlowsHeight, modelTotalHeight) / 2
+  const workflowStartY = marginY + (groupCenterY - entryFlowsHeight / 2)
   const modelStartY = marginY + (groupCenterY - modelTotalHeight / 2)
 
   const positions: LayoutPositionMap = {}
@@ -324,44 +331,49 @@ export function layoutFlatCanvas(
   const workflowX = modelGroupRightEdge
 
   // ── Placement ──
-  // Places a row (left-aligned at x) and returns its block height. Child rows
-  // hang directly below, left-aligned to the x of the switch that spawned them
-  // (the row's last node).
-  const placeRow = (row: LayoutRow, x: number, yTop: number): number => {
-    const rowIds = row.chain
+  // Places a row (left-aligned at x) whose vertical band starts at `flowTop`,
+  // then spawns its branch rows to the RIGHT of the switch: branch rows are
+  // stacked with rowGap and the block they form is centered on the switch's
+  // centerline. Returns the flow's bottom edge.
+  const placeFlow = (row: LayoutRow, x: number, flowTop: number): number => {
+    const rh = rowHeightOf(row)
+    const bh = blockHeightOf(row)
+    const rowTopY = bh >= rh ? flowTop - rh / 2 + bh / 2 : flowTop
+
     let cursorX = x
     let maxH = 0
     const xOf = new Map<string, number>()
     const placed: PlacedNode[] = []
-    for (let i = 0; i < rowIds.length; i++) {
-      const id = rowIds[i]
+    for (let i = 0; i < row.chain.length; i++) {
+      const id = row.chain[i]
       const d = sizeOf(id)
       xOf.set(id, cursorX)
       placed.push({ id, x: cursorX, y: 0, height: d.height })
-      cursorX += d.width + (i < rowIds.length - 1 ? nodeGap : 0)
+      cursorX += d.width + (i < row.chain.length - 1 ? nodeGap : 0)
       if (d.height > maxH) maxH = d.height
     }
-    for (const p of placed) positions[p.id] = { x: p.x, y: yTop + (maxH - p.height) / 2 }
+    for (const p of placed) positions[p.id] = { x: p.x, y: rowTopY + (maxH - p.height) / 2 }
 
-    const switchId = rowIds.length > 0 ? rowIds[rowIds.length - 1] : null
-    const switchX = switchId !== null ? (xOf.get(switchId) ?? x) : x
-    let childY = yTop + maxH
-    let blockH = maxH
-    for (const child of row.branches) {
-      childY += rowGap
-      blockH += rowGap
-      const childH = placeRow(child, switchX, childY)
-      blockH += childH
-      childY += childH
+    let bottom = rowTopY + rh
+    if (row.branches.length > 0) {
+      const switchId = row.chain[row.chain.length - 1]
+      const switchX = xOf.get(switchId) ?? x
+      const childX = switchX + sizeOf(switchId).width + nodeGap
+      const blockTop = rowTopY + rh / 2 - bh / 2
+      let childTop = blockTop
+      for (let i = 0; i < row.branches.length; i++) {
+        childTop = placeFlow(row.branches[i], childX, childTop) + rowGap
+      }
+      bottom = Math.max(bottom, blockTop + bh)
     }
-    return blockH
+    return bottom
   }
 
-  let rowCursorY = workflowStartY
-  for (let i = 0; i < entryRows.length; i++) {
-    placeRow(entryRows[i], workflowX, rowCursorY)
-    rowCursorY += blockHeightOf(entryRows[i]) + (i < entryRows.length - 1 ? rowGap : 0)
+  let flowCursorY = workflowStartY
+  for (const entry of entryRows) {
+    flowCursorY = placeFlow(entry, workflowX, flowCursorY) + rowGap
   }
+  const workflowBottom = flowCursorY - rowGap
 
   // Free-floating region: top-level slots NOT reachable from any request entry
   // (nor claimed by a switch branch). Connected slots (via canvasWires) form
@@ -409,7 +421,7 @@ export function layoutFlatCanvas(
     .map((comp) => orderFreeGroup(comp, canvas.canvasWires))
     .sort((a, b) => a[0].localeCompare(b[0]))
 
-  const groupBottom = Math.max(workflowStartY + entryRowsHeight, modelStartY + modelTotalHeight)
+  const groupBottom = Math.max(workflowBottom, modelStartY + modelTotalHeight)
   let freeCursorX = workflowX
   let freeRowY = groupBottom + rowGap
   let freeRowMaxH = 0
