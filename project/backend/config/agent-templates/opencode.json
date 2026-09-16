@@ -44,58 +44,10 @@
     },
     {
       "scope": "provider",
-      "key": "options.timeout",
-      "description": "请求整体超时（毫秒）。官方默认 300000",
-      "type": "number",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
-      "key": "options.chunkTimeout",
-      "description": "流式 SSE chunk 之间超时（毫秒），官方默认 300000，超时中止",
-      "type": "number",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
       "key": "options.setCacheKey",
-      "description": "启用 promptCacheKey 缓存优化（官方默认 false，需模型支持才生效）",
+      "description": "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）",
       "type": "boolean",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
-      "key": "options.headerTimeout",
-      "description": "响应头等待超时（官方字段，推荐时不干预：留空走集成默认）",
-      "type": "number",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
-      "key": "options.enterpriseUrl",
-      "description": "GitHub Copilot 企业 URL（仅 copilot 认证需用，推荐时不干预）",
-      "type": "string",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
-      "key": "blacklist",
-      "description": "从模型选择器隐藏的模型 ID 列表（可选，推荐时不干预）",
-      "type": "array",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "provider",
-      "key": "whitelist",
-      "description": "只保留这些模型、隐藏其余（可选，推荐时不干预）",
-      "type": "array",
-      "recommended": null,
+      "recommended": true,
       "required": false
     },
     {

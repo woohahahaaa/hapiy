@@ -28,19 +28,11 @@
     },
     {
       "scope": "model",
-      "key": "vendor",
-      "description": "模型供应商名（如 OpenAI / Google；自定义模型 UI 自动标 custom 标签，推荐时不干预）",
+      "key": "url",
+      "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
       "type": "string",
       "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
-      "key": "apiKey",
-      "description": "API 密钥（实际密钥值，非环境变量名）；Ollama 本地填占位符 ollama",
-      "type": "string",
-      "recommended": null,
-      "required": false
+      "required": true
     },
     {
       "scope": "model",
@@ -60,16 +52,8 @@
     },
     {
       "scope": "model",
-      "key": "url",
-      "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
-      "type": "string",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
       "key": "supportsToolCall",
-      "description": "是否支持工具调用（模型支持 Function Calling 时才开启）",
+      "description": "是否支持工具调用",
       "type": "boolean",
       "recommended": null,
       "required": false
@@ -77,7 +61,7 @@
     {
       "scope": "model",
       "key": "supportsImages",
-      "description": "是否支持图片输入（推荐写明确布尔值）",
+      "description": "是否支持图片输入（图片/视频等输入格式）",
       "type": "boolean",
       "recommended": null,
       "required": false
@@ -85,16 +69,8 @@
     {
       "scope": "model",
       "key": "supportsReasoning",
-      "description": "是否支持推理模式（推荐写明确布尔值）",
+      "description": "是否支持推理模式",
       "type": "boolean",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
-      "key": "availableModels",
-      "description": "顶层字段，控制下拉列表只显示列出的模型 ID；不配则显示全部。配置后会隐藏未列出的内置模型，推荐不干预",
-      "type": "array",
       "recommended": null,
       "required": false
     }

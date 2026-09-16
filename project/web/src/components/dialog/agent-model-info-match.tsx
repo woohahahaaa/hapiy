@@ -234,16 +234,14 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  // 模型级模板推荐字段 diff。
+  // 模型级模板推荐字段 diff。recommended 为 null（模板未提供值）时后端
+  // 采用「不干预」语义（保留用户已有字段，不删除），因此这里也不再展示为
+  // 删除变更，避免预览与实际应用不一致。
   const modelRecChangesFor = (config: unknown, provider: AgentModelProvider): FieldChange[] => {
     const recs = effectiveModelRecsFor(provider)
     const changes: FieldChange[] = []
     for (const r of recs) {
       if (r.recommended === null || r.recommended === undefined) {
-        const current = fieldValue(config, r.key)
-        if (!valuesEqual(current, undefined)) {
-          changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
-        }
         continue
       }
       const current = fieldValue(config, r.key)

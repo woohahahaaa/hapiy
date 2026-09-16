@@ -1140,6 +1140,8 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
 			return
 		}
+		mif, _ := rule.GetModelInfoFields()
+		mifPaths := modelInfoFieldPathSet(mif)
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
@@ -1217,28 +1219,29 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			}
 			// model scope
 			modelTally := map[string]int{}
+			knownForModelSet := knownForModel(effective, mifPaths)
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
 			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
 				for _, me := range modelsFromResult(sub) {
+					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
+					// 当对象 key 写入 sjson（"cannot set array element"）。
+					base, found := modelEntryPath(buf, resolved, me)
+					if !found {
+						continue
+					}
 					count := 0
 					for _, r := range effective {
 						if r.Scope != "model" {
 							continue
 						}
-						full := resolved + "." + me + "." + r.Key
-						// 推荐不填：删除该字段（若存在），文件里没有时不计数。
+						// 推荐不填（recommended=nil，模板里 optional 字段常见）：
+						// 模型字段多为能力/规格数据，模板没提供值就「不干预」保留
+						// 用户字段，避免 models.dev 读不到时误删 contextWindow /
+						// limit.context 等基础字段。
 						if r.Recommended == nil {
-							if gjson.Parse(string(buf)).Get(full).Exists() {
-								next, err := sjson.DeleteBytes(buf, full)
-								if err != nil {
-									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
-									return
-								}
-								buf = next
-								count++
-							}
 							continue
 						}
+						full := base + "." + r.Key
 						next, err := sjson.SetBytes(buf, full, r.Recommended)
 						if err != nil {
 							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
@@ -1253,9 +1256,8 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 					}
 					// 模板未声明的多余标量字段（model 子树递归）。
 					{
-						known := knownRecommendationPaths(effective)
 						deleted := 0
-						pruneScalarLeaves(&buf, resolved+"."+me, "", known, &deleted)
+						pruneScalarLeaves(&buf, base, "", knownForModelSet, &deleted)
 						if deleted > 0 {
 							modelTally[me] += deleted
 							providerFields += deleted
@@ -1348,6 +1350,8 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		mif, _ := rule.GetModelInfoFields()
+		mifPaths := modelInfoFieldPathSet(mif)
 		if len(req.Checked) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "请至少勾选一个供应商或模型"})
 			return
@@ -1424,29 +1428,30 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			for _, mid := range modelIDs {
 				want[strings.TrimSpace(mid)] = true
 			}
+			knownForModelSet := knownForModel(effective, mifPaths)
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
 			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
 				for _, me := range modelsFromResult(sub) {
 					if !matchAll && !want[me] {
 						continue
 					}
+					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
+					// 当对象 key 写入 sjson（"cannot set array element"）。
+					base, found := modelEntryPath(buf, resolved, me)
+					if !found {
+						continue
+					}
 					for _, r := range effective {
 						if r.Scope != "model" {
 							continue
 						}
-						full := resolved + "." + me + "." + r.Key
+						// 推荐不填（recommended=nil）：模型字段多为能力/规格数据，
+						// 模板没提供值就「不干预」保留用户字段，避免 models.dev
+						// 读不到时误删 contextWindow / limit.context 等基础字段。
 						if r.Recommended == nil {
-							if gjson.Parse(string(buf)).Get(full).Exists() {
-								next, err := sjson.DeleteBytes(buf, full)
-								if err != nil {
-									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
-									return
-								}
-								buf = next
-								total++
-							}
 							continue
 						}
+						full := base + "." + r.Key
 						next, err := sjson.SetBytes(buf, full, r.Recommended)
 						if err != nil {
 							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
@@ -1457,9 +1462,8 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 					}
 					// 未声明标量叶子清理。
 					{
-						known := knownRecommendationPaths(effective)
 						deleted := 0
-						pruneScalarLeaves(&buf, resolved+"."+me, "", known, &deleted)
+						pruneScalarLeaves(&buf, base, "", knownForModelSet, &deleted)
 						total += deleted
 					}
 				}
@@ -1476,7 +1480,12 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if strings.TrimSpace(mid) == "" {
 						continue
 					}
-					base := resolved + "." + escapeSjsonKey(strings.TrimSpace(mid))
+					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
+					// 当对象 key 写入 sjson（"cannot set array element"）。
+					base, found := modelEntryPath(buf, resolved, strings.TrimSpace(mid))
+					if !found {
+						continue
+					}
 					for path, val := range fields {
 						full := base + "." + path
 						next, err := sjson.SetBytes(buf, full, val)
@@ -1542,6 +1551,40 @@ func knownRecommendationPaths(recs []model.AgentRecommendation) map[string]bool 
 		out[r.Key] = true
 	}
 	return out
+}
+
+// modelInfoFieldPathSet returns the dotted paths declared by the rule's
+// model_info_fields (string form or spec Path). These are the model
+// base-info fields owned by the models.dev sync layer — the template
+// apply must never delete them, so a models.dev miss cannot wipe
+// user-set values like openclaw `contextWindow` / opencode
+// `limit.context`.
+func modelInfoFieldPathSet(mif model.AgentModelInfoFieldPaths) map[string]bool {
+	out := make(map[string]bool, 4)
+	for _, s := range []model.AgentModelInfoFieldSpec{
+		mif.MaxContext, mif.MaxOutputToken, mif.InputTypes, mif.ThinkingLevels,
+	} {
+		if p := strings.TrimSpace(s.Path); p != "" {
+			out[p] = true
+		}
+	}
+	return out
+}
+
+// knownForModel is the pruning allowlist for a model subtree: declared
+// recommendation keys plus the model-info field paths. Undeclared scalar
+// cleanup then never strips base-info fields that models.dev sync owns,
+// nor the structural identifiers (`id` / `name`) that openclaw-style
+// array entries use — deleting them would make later modelEntryPath
+// lookups miss the element entirely.
+func knownForModel(effective []model.AgentRecommendation, mifPaths map[string]bool) map[string]bool {
+	known := knownRecommendationPaths(effective)
+	for p := range mifPaths {
+		known[p] = true
+	}
+	known["id"] = true
+	known["name"] = true
+	return known
 }
 
 // pruneScalarLeaves walks the object at absBase inside buf and deletes

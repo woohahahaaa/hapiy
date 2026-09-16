@@ -5,6 +5,8 @@ import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 import { ModeToggle } from '@/components/ModeToggle'
 import { AppIcon } from '@/components/AppIcon'
+import { AGENT_ENABLED_SETTING_KEY } from '@/components/OtherSettings'
+import { dashboardApi } from '@/lib/dashboard-api'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -93,8 +95,9 @@ const navigation: NavItem[] = [
       { id: 'base-url', label: 'BaseURL', href: '/settings/base-url' },
       { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
-      { id: 'token-usage', label: 'token用量获取', href: '/settings/token-usage' },
+      { id: 'token-usage', label: '查询token用量', href: '/settings/token-usage' },
       { id: 'debug', label: 'Debug', href: '/settings/debug' },
+      { id: 'other', label: '开启接管Agent', href: '/settings/other' },
     ],
   },
   {
@@ -353,12 +356,32 @@ function readOpenSections(): Set<string> {
 export function AppSidebar() {
   const { state } = useSidebar()
   const [openSections, setOpenSections] = useState(readOpenSections)
+  const [agentEnabled, setAgentEnabled] = useState(false)
   const collapsed = state === 'collapsed'
   const showLabel = !collapsed
 
   useEffect(() => {
     localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify([...openSections]))
   }, [openSections])
+
+  useEffect(() => {
+    let cancelled = false
+    void dashboardApi
+      .getSettings()
+      .then((settings) => {
+        if (cancelled) return
+        setAgentEnabled(settings.find((s) => s.key === AGENT_ENABLED_SETTING_KEY)?.value === 'true')
+      })
+      .catch(() => {
+        if (!cancelled) setAgentEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const visibleNavigation =
+    agentEnabled ? navigation : navigation.filter((item) => item.id !== 'agent')
 
   return (
     <SidebarRoot collapsible="icon">
@@ -396,7 +419,7 @@ export function AppSidebar() {
           {showLabel && <SidebarGroupLabel>导航</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigation.map((item) => (
+              {visibleNavigation.map((item) => (
                 <NavLink
                   key={item.id}
                   item={item}

@@ -200,12 +200,13 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 	if !strings.Contains(syncOut, `16384`) {
 		t.Fatalf("sync should include model info fields (output token): %s", syncOut)
 	}
-	if !strings.Contains(syncOut, `/v1/chat/completions`) {
-		t.Fatalf("sync should include the endpoint in baseURL: %s", syncOut)
+	// baseURL = 系统 BaseURL（请求 Host + proxy 后缀）+ /__SRC 来源段；
+	// 规则声明了 npm 这类 SDK 驱动字段，agent 自行拼操作路径，所以不拼 endpoint
+	if !strings.Contains(syncOut, `http://example.com/proxy/__SRC`) {
+		t.Fatalf("sync should build the baseURL with source mark: %s", syncOut)
 	}
-	// baseURL = 系统 BaseURL（请求 Host + proxy 后缀）+ /__SRC 来源段 + endpoint
-	if !strings.Contains(syncOut, `http://example.com/proxy/__SRC/v1/chat/completions`) {
-		t.Fatalf("sync should build the full baseURL with source mark: %s", syncOut)
+	if strings.Contains(syncOut, `http://example.com/proxy/__SRC/v1/chat/completions`) {
+		t.Fatalf("sync should NOT append the endpoint when the rule declares an SDK driver field (npm): %s", syncOut)
 	}
 	// 令牌 Key 优先于上游供应商的 key
 	if !strings.Contains(syncOut, `sk-token-1`) {
