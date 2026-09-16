@@ -65,9 +65,12 @@ supervise() {
   mode="$1"
   printf '%s' "$mode" >"$MODE_FILE"
   log "supervise mode=$mode (interval=${INTERVAL}s max_fail=${MAX_FAIL})"
-  # Bring the stack up right away (idempotent: start scripts only act if the
-  # target service is missing), then monitor and auto-restart on failure.
-  start_stack "$mode" || log "initial start attempt failed (supervisor will retry)"
+  # Bring the stack up right away if it isn't already healthy (idempotent:
+  # a foreground start may have just brought it up), then monitor and
+  # auto-restart on failure.
+  if ! stack_up "$mode"; then
+    start_stack "$mode" || log "initial start attempt failed (supervisor will retry)"
+  fi
   fail=0
   while :; do
     if stack_up "$mode"; then
@@ -116,8 +119,6 @@ start_supervised() {
     old_mode=$(read_mode)
     echo "[keepalive] supervisor already running (mode=$old_mode); forcing restart in mode=$mode ..."
     stop_supervisor >/dev/null 2>&1 || true
-    # restart the stack of the NEW mode; if switching modes, also stop the old
-    # stack so its ports/DB locks are released before the new one starts.
     if [ "$old_mode" != "$mode" ]; then
       echo "[keepalive] mode switch: stopping old stack ($old_mode)..."
       if [ "$old_mode" = "dev" ]; then
@@ -129,8 +130,9 @@ start_supervised() {
     fi
   fi
 
-  # Forced fresh start: stop any current stack in the target mode, then
-  # (re)launch the supervisor so the stack comes up under supervision.
+  # Fresh start: stop whatever is running in the target mode, then bring the
+  # stack up in the FOREGROUND so build/start output streams to the terminal
+  # and we only hand off to the background supervisor once /health is good.
   if [ "$mode" = "dev" ]; then
     HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh" --stop >>"$LOG_FILE" 2>&1 || true
   else
@@ -138,12 +140,34 @@ start_supervised() {
   fi
   sleep 1
 
+  if [ "$mode" = "dev" ]; then
+    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh"
+  else
+    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start.sh"
+  fi
+
+  # Wait for the stack to actually pass health before handing off to the
+  # background supervisor, so the user sees it come up to ready.
+  printf '[keepalive] waiting for %s health' "$mode"
+  ok=0
+  i=0
+  while [ "$i" -lt 60 ]; do
+    if stack_up "$mode"; then ok=1; break; fi
+    printf '.'
+    sleep 1
+    i=$((i + 1))
+  done
+  echo ""
+  if [ "$ok" != 1 ]; then
+    echo "[keepalive] warning: $mode did not become healthy within 60s; supervisor will keep trying" >&2
+  fi
+
   rm -f "$PID_FILE"
   nohup "$self" supervise "$mode" >>"$LOG_FILE" 2>&1 </dev/null &
   echo $! >"$PID_FILE"
   disown || true
   sleep 1
-  echo "[keepalive] launched (mode=$mode) pid $(cat "$PID_FILE"); log: $LOG_FILE"
+  echo "[keepalive] supervisor pid $(cat "$PID_FILE") monitoring mode=$mode; log: $LOG_FILE"
   show_status
 }
 

@@ -158,6 +158,14 @@ const [error, setError] = useState<string | null>(null)
     setConfirmingCancel(false)
     setSavedOk(false)
     setSyncOk(false)
+    // 预览差异是进入弹窗后手动点击才激活的临时状态；换记录/重开弹窗必须
+    // 复位，否则上一次的「预览差异」会被默认带上（按钮误显示选中 + 残留 diff）。
+    setDiffPreviewing(false)
+    setDiffBefore(null)
+    setDiffAfter(null)
+    setDiffUnsetModels([])
+    setDiffLoading(false)
+    setDiffJumpLine(null)
     reload()
   }, [open, record]) // eslint-disable-line react-hooks/exhaustive-deps
 

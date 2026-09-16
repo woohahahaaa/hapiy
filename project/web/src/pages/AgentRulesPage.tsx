@@ -1014,7 +1014,7 @@ function RecommendationTable({
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
-            <th className="px-2 py-1.5 text-left font-medium">路径</th>
+            <th className="w-56 px-2 py-1.5 text-left font-medium">路径</th>
             {showScope ? <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">落在</th> : null}
             <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
             <th className="w-[8rem] px-2 py-1.5 text-left font-medium">推荐值</th>

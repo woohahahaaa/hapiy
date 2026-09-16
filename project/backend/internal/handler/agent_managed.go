@@ -120,9 +120,8 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		out := make([]managedProviderView, 0, len(managed))
-		basePrefix := systemBaseURLPrefix(c, db)
 		for _, m := range managed {
-			view := deriveManagedProvider(rule, row, liveProviders, content, m, basePrefix+managedSourceMarkSuffix(m))
+			view := deriveManagedProvider(rule, row, liveProviders, content, m, managedBasePrefix(c, db, m)+managedSourceMarkSuffix(m))
 			out = append(out, view)
 		}
 		c.JSON(http.StatusOK, gin.H{"data": out})
@@ -325,7 +324,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 
 	cleaned := stripJSON5Comments(content)
 	buf := []byte(cleaned)
-	basePrefix := systemBaseURLPrefix(c, db) + managedSourceMarkSuffix(*m)
+	basePrefix := managedBasePrefix(c, db, *m) + managedSourceMarkSuffix(*m)
 	// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
 	// 先整块删除，避免旧块残留成「普通供应商」。
 	currentNames := make(map[string]bool, len(groupsByKey))
@@ -685,11 +684,19 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 	if hasRecommendationKey(providerRecs, "name") {
 		_ = setDottedValue(block, "name", displayName)
 	}
-	// baseURL = 系统 BaseURL [+ /__来源] + endpoint：prefer the protocol's
-	// first condition field ending in baseURL/baseUrl/url, then any common
-	// provider rec key that looks like a URL field.
+	// baseURL = 系统 BaseURL [+ /__来源]（+ endpoint，当规则没有声明协议/
+	// SDK 驱动字段时）：prefer the protocol's first condition field ending
+	// in baseURL/baseUrl/url, then any common provider rec key that looks
+	// like a URL field. 声明了 api/npm 等驱动字段的规则（opencode 的 npm、
+	// openclaw 的 api）由 agent 自己拼操作路径（/chat/completions 等），
+	// baseURL 只写到根；未声明的（WorkBuddy 的 url 是完整地址语义）才把
+	// endpoint 拼进 baseURL。
 	if field := endpointFieldFor(protocol, providerRecs); field != "" {
-		_ = setDottedValue(block, field, strings.TrimSuffix(basePrefix, "/")+group.Endpoint)
+		url := strings.TrimSuffix(basePrefix, "/")
+		if !ruleAppendsPathItself(providerRecs) {
+			url += group.Endpoint
+		}
+		_ = setDottedValue(block, field, url)
 	}
 	// apiKey: only the dialog-chosen 令牌 key is written. Missing (未填)
 	// keys are left out of the generated block instead of silently falling
@@ -845,6 +852,22 @@ func endpointFieldFor(protocol *model.AgentProtocol, recs []model.AgentRecommend
 func looksLikeURIField(field string) bool {
 	lower := strings.ToLower(field)
 	return strings.HasSuffix(lower, "baseurl") || strings.HasSuffix(lower, "base_url") || strings.HasSuffix(lower, "url") || field == "baseUrl"
+}
+
+// ruleAppendsPathItself reports whether the rule's provider recs declare a
+// protocol / SDK driver field (openclaw's `api`, opencode's `npm`,
+// codex's `wire_api`, ...) that makes the agent append the operation path
+// itself (e.g. /chat/completions). Managed generation then writes the
+// baseURL without the endpoint suffix; rules with no such field (e.g.
+// WorkBuddy's `url` is a full-URL semantics) keep the endpoint in baseURL.
+func ruleAppendsPathItself(recs []model.AgentRecommendation) bool {
+	for _, r := range recs {
+		switch strings.ToLower(strings.TrimSpace(r.Key)) {
+		case "api", "npm", "wire_api", "wireapi", "sdk", "adapter":
+			return true
+		}
+	}
+	return false
 }
 
 // apiKeyFieldFor returns the dotted path of a required provider rec

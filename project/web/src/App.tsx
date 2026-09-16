@@ -13,6 +13,7 @@ import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
 import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
 import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
+import { OtherSettingsPage } from '@/pages/OtherSettingsPage'
 import { TokenUsageSettingsPage } from '@/pages/TokenUsageSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AgentConfigPage } from '@/pages/AgentConfigPage'
@@ -44,6 +45,7 @@ function App() {
                   <Route path="/settings/general" element={<GeneralSettingsPage />} />
                   <Route path="/settings/billing" element={<BillingSettingsPage />} />
                   <Route path="/settings/debug" element={<DebugSettingsPage />} />
+                  <Route path="/settings/other" element={<OtherSettingsPage />} />
                   <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                   <Route path="/agent" element={<AgentRulesPage />} />
