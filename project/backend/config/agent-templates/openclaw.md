@@ -45,7 +45,7 @@ model 配置在 `models.providers.{provider_id}.models[]` 数组元素里：
 | `input` | array | 否 | 输入类型 | 如 `["text"]` / `["text", "image"]` |
 | `output` | array | 否 | 输出类型 | 如 `["text"]`（模板未列，建议补） |
 | `contextWindow` | number | 否 | 上下文 token 上限 | 如 `204800` |
-| `maxTokens` | number | 否 | 输出 token 上限 | 如 `131072` |
+| `maxTokens` | number | 否（anthropic-messages 协议下必填） | 输出 token 上限 | 如 `131072` |
 | `cost` | object | 否 | 成本配置 | `{ input, output, cacheRead, cacheWrite }`（$/1K tokens，模板未列） |
 | `supports` | object | 否 | 功能支持 | `{ streaming, functions, vision }`（模板未列，建议补） |
 
@@ -64,8 +64,8 @@ openclaw 模板字段与官方吻合度较高，主要问题如下：
 - `cost`（成本配置对象，含 input/output/cacheRead/cacheWrite）；
 - `supports`（功能支持对象：streaming/functions/vision）。
 
-### 3. `protocols` 为 null（合理）
-openclaw 通过 `api` 字段直接指定协议类型（openai-completions/anthropic-messages/ollama/lmstudio），无需 protocols 数组，`null` 合理。
+### 3. `protocols` 按 endpoint 关键词归类 `api`（已修正）
+openclaw 通过 `api` 字段直接指定协议类型（openai-completions/anthropic-messages/ollama/lmstudio）。与 opencode 的 `npm` 同理，`api` 是「必须先填、且必须和 endpoint 匹配」的驱动字段 —— 同一个托管 provider 下不同 endpoint 分组（如 `/v1/messages` 与 `/v1/chat/completions`）走的 SDK 不同，不能全默认 `openai-completions`。本模板已为 openclaw 配置 `protocols`：按 endpoint 关键词自动归入对应 `api` 值并作为该分组的推荐（具体关键词优先），未命中时退回到通用 openai-completions。另：**anthropic-messages 协议下每个模型都必须有 `maxTokens`**（Anthropic 官方要求每次请求带 max_tokens），该协议的 model 级推荐已把 `maxTokens` 标为必填。
 
 ### 4. `baseUrl` 提醒正确
 模板提醒「注意不要多写不该有的 `/v1`」与官方示例（`https://open.bigmodel.cn/api/coding/paas/v4` 不带多余 /v1）一致，这点正确。

@@ -891,6 +891,73 @@ func TestMatchProtocolByEndpointKeywords(t *testing.T) {
 		}
 	}
 }
+
+// TestManagedOpenclawEndpointApiClassification 验证 openclaw 内置模板的
+// protocols 会按 endpoint 关键词把不同 endpoint 归入不同的 `api`（SDK 协议
+// 类型），而不是所有 endpoint 都默认 openai-completions；同时 anthropic
+// 协议的 model 级推荐把 maxTokens 标为必填。复现「接管 agent 默认配置对
+// 不同 endpoint 相同」的问题。
+func TestManagedOpenclawEndpointApiClassification(t *testing.T) {
+	tmpl, ok := model.LoadAgentTemplate("openclaw")
+	if !ok {
+		t.Fatalf("openclaw template not found")
+	}
+	if len(tmpl.Protocols) == 0 {
+		t.Fatalf("openclaw template should carry per-endpoint protocols, got none")
+	}
+
+	// endpoint → 期望 api（SDK 协议类型）
+	cases := []struct {
+		endpoint string
+		wantAPI  string
+	}{
+		{"/v1/messages", "anthropic-messages"},
+		{"/v1/chat/message", "anthropic-messages"},
+		{"/anthropic-messages", "anthropic-messages"},
+		{"/v1/chat/completions", "openai-completions"},
+		{"/proxy/v1/chat", "openai-completions"},
+	}
+	for _, tc := range cases {
+		p := matchProtocolByEndpoint(tc.endpoint, tmpl.Protocols)
+		var got string
+		if p != nil {
+			for _, r := range p.Recommendations {
+				if r.Scope == "provider" && r.Key == "api" && r.Recommended != nil {
+					got = r.Recommended.(string)
+				}
+			}
+		}
+		if got != tc.wantAPI {
+			t.Fatalf("endpoint %s: want api %q, got %q", tc.endpoint, tc.wantAPI, got)
+		}
+	}
+
+	// anthropic 协议下模型 maxTokens 必须必填。
+	var anthropic *model.AgentProtocol
+	for i := range tmpl.Protocols {
+		for _, tag := range tmpl.Protocols[i].EndpointTags {
+			if tag != "" && (strings.Contains("anthropic-messages", tag) || strings.Contains("chat/message", tag)) {
+				anthropic = &tmpl.Protocols[i]
+				break
+			}
+		}
+		if anthropic != nil {
+			break
+		}
+	}
+	if anthropic == nil {
+		t.Fatalf("anthropic protocol not found")
+	}
+	foundRequired := false
+	for _, r := range anthropic.Recommendations {
+		if r.Scope == "model" && r.Key == "maxTokens" && r.Required {
+			foundRequired = true
+		}
+	}
+	if !foundRequired {
+		t.Fatalf("anthropic protocol should mark model maxTokens required")
+	}
+}
 // TestLoadRuleCaseInsensitive covers title-based rule recognition: agent
 // config files may store the agent type as "OpenCode" while the rule is
 // named "opencode".

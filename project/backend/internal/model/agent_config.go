@@ -772,6 +772,12 @@ var builtinAgentRules = []struct {
 			ModelsContainer: "array",
 		},
 		Recommendations: openclawRecommendations,
+		// openclaw 的 provider `api` 字段（协议类型：openai-completions /
+		// anthropic-messages / ollama / lmstudio）是驱动字段，跟 opencode 的
+		// npm 一样必须由 endpoint 关键词自动归类 —— 同一个托管 provider 下
+		// 不同 endpoint 分组（如 /v1/messages 与 /v1/chat/completions）走不同
+		// 的 SDK，不能全默认 openai-completions。顺序即优先级。
+		Protocols: openclawProtocols,
 		ModelInfoFields: AgentModelInfoFieldPaths{
 			MaxContext:     ModelInfoPath(`contextWindow`),
 			MaxOutputToken: ModelInfoPath(`maxTokens`),
@@ -898,6 +904,9 @@ var opencodeProtocols = []AgentProtocol{
 		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "npm", Type: "string", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
+			// Anthropic Messages API 官方要求每次请求带 max_tokens，对应
+			// opencode 的模型 limit.output —— anthropic-messages 协议下必填。
+			{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
 		},
 	},
 	{
@@ -944,13 +953,52 @@ var workBuddyRecommendations = []AgentRecommendation{
 var openclawRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
 	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...）", Recommended: "openai-completions"},
+	// api 是协议/SDK 驱动字段，一般由 endpoint 关键词自动归类（见 openclawProtocols）；
+	// 这里保留 openai-completions 作为未命中任何关键词时的兜底。
+	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类", Recommended: "openai-completions"},
 	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 	{Scope: "model", Key: "contextWindow", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限"},
+	{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限（anthropic-messages 协议下必填）"},
 	{Scope: "model", Key: "input", Type: "array", Description: "支持的输入类型（text/image/video/audio）"},
 	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "是否支持思考模式（官方 schema 校验，未配按 false 处理）"},
+}
+
+// openclawProtocols 按 endpoint 关键词把规范化 provider 归入对应的
+// openclaw `api`（协议/SDK）类型。匹配为子串包含：endpoint 里含任一关键词
+// 即命中该协议的 api 推荐值。顺序即优先级 —— 具体关键词放前面避免误命中。
+// anthropic-messages 协议下模型必须有 maxTokens（Anthropic API 官方要求每次
+// 请求都带 max_tokens），故该协议的 model 级推荐把 maxTokens 声明为必填。
+var openclawProtocols = []AgentProtocol{
+	{
+		Name:         "Anthropic Messages API",
+		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Type: "string", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
+			{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
+		},
+	},
+	{
+		Name:         "OpenAI 兼容 Chat Completions",
+		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Type: "string", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
+		},
+	},
+	{
+		Name:         "Ollama",
+		EndpointTags: []string{"ollama"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Type: "string", Description: "Ollama 本地推理使用 ollama 协议", Recommended: "ollama"},
+		},
+	},
+	{
+		Name:         "LM Studio",
+		EndpointTags: []string{"lmstudio"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Type: "string", Description: "LM Studio 本地推理使用 lmstudio 协议", Recommended: "lmstudio"},
+		},
+	},
 }
 
 // AgentModelConfigSource — persisted 模型配置参考供应商 selection for one

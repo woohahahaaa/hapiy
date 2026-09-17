@@ -29,7 +29,7 @@
     {
       "scope": "provider",
       "key": "api",
-      "description": "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...）",
+      "description": "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类",
       "type": "string",
       "recommended": "openai-completions",
       "required": false
@@ -83,7 +83,88 @@
       "required": false
     }
   ],
-  "protocols": null,
+  "protocols": [
+    {
+      "name": "Anthropic Messages API",
+      "conditions": null,
+      "endpoint_tags": [
+        "chat/message",
+        "/v1/message",
+        "messages"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Messages API 使用 anthropic-messages 协议",
+          "type": "string",
+          "recommended": "anthropic-messages",
+          "required": false
+        },
+        {
+          "scope": "model",
+          "key": "maxTokens",
+          "description": "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）",
+          "type": "number",
+          "recommended": null,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "OpenAI 兼容 Chat Completions",
+      "conditions": null,
+      "endpoint_tags": [
+        "completions",
+        "chat/comple",
+        "/v1/chat"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Chat Completions API 使用 openai-completions 协议",
+          "type": "string",
+          "recommended": "openai-completions",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Ollama",
+      "conditions": null,
+      "endpoint_tags": [
+        "ollama"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Ollama 本地推理使用 ollama 协议",
+          "type": "string",
+          "recommended": "ollama",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "LM Studio",
+      "conditions": null,
+      "endpoint_tags": [
+        "lmstudio"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "LM Studio 本地推理使用 lmstudio 协议",
+          "type": "string",
+          "recommended": "lmstudio",
+          "required": false
+        }
+      ]
+    }
+  ],
   "model_info_fields": {
     "max_context": "contextWindow",
     "max_output_token": "maxTokens",
