@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -451,6 +452,14 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			strings.HasPrefix(p, "/v1") ||
 			strings.HasPrefix(p, "/proxy") {
 			c.String(http.StatusNotFound, "404 page not found")
+			return
+		}
+		// 静态文件（/logo.svg, /manifest.webmanifest, /icon-192.png 等）
+		// 先尝试直接 serve，文件不存在才走 SPA fallback 返回 index.html。
+		// 否则浏览器请求 manifest / 图标会拿到 index.html（text/html），
+		// 导致 PWA 识别不了、图标加载不出来。
+		if info, err := os.Stat(filepath.Join(webDist, p)); err == nil && !info.IsDir() {
+			fileServer.ServeHTTP(c.Writer, c.Request)
 			return
 		}
 		req := c.Request.Clone(c.Request.Context())

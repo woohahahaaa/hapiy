@@ -133,6 +133,14 @@
           "type": "string",
           "recommended": "@ai-sdk/anthropic",
           "required": false
+        },
+        {
+          "scope": "model",
+          "key": "limit.output",
+          "description": "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）",
+          "type": "number",
+          "recommended": null,
+          "required": true
         }
       ]
     },
