@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DataTable, type ColumnDef } from '@/components/data-table'
+import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import {
   dashboardApi,
@@ -260,7 +261,13 @@ function AgentConfigFilesTab() {
       defaultWidth: { kind: 'pixel', value: 100 },
       render: (_value, row) => {
         const isLocal = (row as { mode?: string }).mode === 'local'
-        return isLocal ? '本机' : <span className="font-medium text-primary">SSH</span>
+        return isLocal ? (
+          <Badge variant="outline">本机</Badge>
+        ) : (
+          <Badge variant="default">
+            SSH<span aria-hidden>↓</span>
+          </Badge>
+        )
       },
     },
     {
