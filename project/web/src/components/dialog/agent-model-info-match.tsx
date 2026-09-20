@@ -234,39 +234,63 @@ export function AgentModelInfoMatchDialog({
     return changes
   }
 
-  // 模型级模板推荐字段 diff。recommended 为 null（模板未提供值）时后端
-  // 采用「不干预」语义（保留用户已有字段，不删除），因此这里也不再展示为
-  // 删除变更，避免预览与实际应用不一致。
+  // 解析推荐操作：缺省 "set"，与后端 RecommendAction 一致。
+  const recAction = (r: AgentRecommendation): 'set' | 'skip' | 'delete' => {
+    if (r.action === 'skip' || r.action === 'delete') return r.action
+    return 'set'
+  }
+
+  // 模型级模板推荐字段 diff。仅显式 action=delete 才展示「删除」变更；
+  // recommended 为 null（模板未提供值）采用「不干预」语义（保留用户已有
+  // 字段，不删除），与后端应用逻辑一致，因此也不展示删除变更，避免
+  // 预览与实际应用不一致。
   const modelRecChangesFor = (config: unknown, provider: AgentModelProvider): FieldChange[] => {
     const recs = effectiveModelRecsFor(provider)
     const changes: FieldChange[] = []
     for (const r of recs) {
-      if (r.recommended === null || r.recommended === undefined) {
-        continue
-      }
       const current = fieldValue(config, r.key)
-      if (!valuesEqual(current, r.recommended)) {
-        changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+      switch (recAction(r)) {
+        case 'skip':
+          continue
+        case 'delete':
+          if (!valuesEqual(current, undefined)) {
+            changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
+          }
+          continue
+        default:
+          if (r.recommended === null || r.recommended === undefined) {
+            continue
+          }
+          if (!valuesEqual(current, r.recommended)) {
+            changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+          }
       }
     }
     return changes
   }
 
-  // provider 级模板推荐 diff。
+  // provider 级模板推荐 diff。仅显式 action=delete 才展示「删除」变更；
+  // recommended 为 null 或模板未声明的字段一律「不干预」，不展示变更。
   const providerRecChangesFor = (p: AgentModelProvider): FieldChange[] => {
     const recs = effectiveRecsFor(p)
     const changes: FieldChange[] = []
     for (const r of recs) {
-      if (r.recommended === null || r.recommended === undefined) {
-        const current = fieldValue(p.other_fields, r.key)
-        if (!valuesEqual(current, undefined)) {
-          changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
-        }
-        continue
-      }
       const current = fieldValue(p.other_fields, r.key)
-      if (!valuesEqual(current, r.recommended)) {
-        changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+      switch (recAction(r)) {
+        case 'skip':
+          continue
+        case 'delete':
+          if (!valuesEqual(current, undefined)) {
+            changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: undefined })
+          }
+          continue
+        default:
+          if (r.recommended === null || r.recommended === undefined) {
+            continue
+          }
+          if (!valuesEqual(current, r.recommended)) {
+            changes.push({ key: r.key, label: r.key, path: r.key, oldValue: current, newValue: r.recommended })
+          }
       }
     }
     return changes

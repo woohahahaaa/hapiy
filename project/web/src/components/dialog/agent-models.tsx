@@ -38,7 +38,7 @@ import { modelInfoChangesFor } from '@/lib/agent-model-info'
 import { loadModelsDevModels, providersForModel } from '@/lib/models-dev'
 import { diffLines, type Change } from 'diff'
 
-type DiffStatus = 'ok' | 'missing' | 'mismatch' | 'extra' | 'no-recommendation'
+type DiffStatus = 'ok' | 'missing' | 'mismatch'
 
 interface DiffMarker {
   readonly path: string
@@ -428,6 +428,15 @@ for (const p of summary?.providers ?? []) {
       modelDiff.filter((d) => d.status === 'missing' || d.status === 'mismatch').length
   }, [liveContent, providerDiff, modelDiff])
 
+  // pendingChangeCount: 当前未提交预览的实际差异数（推荐模板已应用或
+  // JSON 编辑后）。hasPendingPreview 只在「确有差异」时为真 —— 0 差异时
+  // 不显示差异横幅、不提示退出编辑、也不提示「已修改 N 项」。
+  const pendingChangeCount = useMemo(
+    () => (templateTally.size > 0 ? templateApplied : liveDiffCount),
+    [templateTally, templateApplied, liveDiffCount],
+  )
+  const hasPendingPreview = liveContent !== null && pendingChangeCount > 0
+
   // 新一轮编辑（liveContent 从 null 变非 null）→ 「保存成功」恢复为「保存」。
   const prevLiveContentRef = useRef<unknown>(null)
   useEffect(() => {
@@ -468,9 +477,9 @@ for (const p of summary?.providers ?? []) {
   }
 
   // 所有关闭路径（右上角 X、取消/关闭按钮、ESC、遮罩点击）统一走这里：
-  // 有未保存编辑时先弹二次确认，否则直接关闭。
+  // 有未保存差异时先弹二次确认，否则直接关闭。
   const tryClose = () => {
-    if (liveContent !== null) {
+    if (hasPendingPreview) {
       setConfirmingCancel(true)
       return
     }
@@ -618,6 +627,13 @@ for (const p of summary?.providers ?? []) {
     setApplying(true)
     try {
       const res = await dashboardApi.applyRecommendationTemplate(record.id)
+      // 0 差异：不进入预览/写盘，避免残留「已修改 0 项」的提示。
+      if (res.applied === 0) {
+        setTemplateTally(new Map()); setTemplateApplied(0); setLiveContent(null)
+        toast('没有需要应用的变更（均已符合推荐）')
+        onOpenChange(false)
+        return
+      }
       const tally = new Map<string, { count: number; models: Readonly<Record<string, number>> }>()
       for (const p of res.providers) {
         tally.set(p.provider_id, { count: p.count, models: p.models ?? {} })
@@ -816,8 +832,8 @@ for (const p of summary?.providers ?? []) {
           ))}
         </div>
 
-        {liveContent !== null && (
-          <PreviewBanner applied={templateTally.size > 0 ? templateApplied : liveDiffCount} />
+        {hasPendingPreview && (
+          <PreviewBanner applied={pendingChangeCount} />
         )}
 
         <div className="grid min-h-0 flex-1 grid-cols-[280px_320px_minmax(0,1fr)] divide-x divide-border">
@@ -1125,6 +1141,7 @@ for (const p of summary?.providers ?? []) {
                   value={currentEditableProviderValue}
                   focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
                   onChange={(text) => {
+                    if (text === currentEditableProviderValue) return
                     exitDiffPreview()
                     setDiffJumpLine(null)
                     setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))
@@ -1141,15 +1158,12 @@ for (const p of summary?.providers ?? []) {
           {activePanel === 'normal' ? (
             <>
               <div className="flex flex-1 items-center">
-                {liveContent !== null && (
+                {hasPendingPreview && (
                   <span className="text-xs text-warning">
-                    已修改 {templateTally.size > 0 ? templateApplied : liveDiffCount} 项
+                    已修改 {pendingChangeCount} 项
                   </span>
                 )}
               </div>
-              <Button variant="outline" onClick={tryClose} disabled={saving}>
-                取消
-              </Button>
               <Button
                 variant="default"
                 disabled={saving || savedOk || liveContent === null}
@@ -1636,9 +1650,13 @@ function computeDiff(
     }
   }
 
-  // Recommendations for keys that aren't present.
+  // Recommendations for keys that aren't present. 不干预推荐（skip / 无值
+  // set）不产生 missing：缺失即无需处理；仅“set 且有推荐值”才算冲突。
   for (const rec of recs) {
     if (visited.has(rec.key)) continue
+    if (recActionOf(rec) !== 'set' || rec.recommended === null || rec.recommended === undefined) {
+      continue
+    }
     out.push({
       path: rec.key,
       status: 'missing',
@@ -1649,14 +1667,32 @@ function computeDiff(
   return out
 }
 
+// recActionOf 解析推荐操作（缺省 "set"），与后端 RecommendAction 一致。
+function recActionOf(rec: AgentRecommendation): 'set' | 'skip' | 'delete' {
+  if (rec.action === 'skip' || rec.action === 'delete') return rec.action
+  return 'set'
+}
+
 function evaluateMarker(key: string, actual: unknown, rec: AgentRecommendation): DiffMarker {
-  if (rec.recommended === null || rec.recommended === undefined) {
-    return { path: key, status: 'no-recommendation', recommended: null, actual }
+  switch (recActionOf(rec)) {
+    case 'skip':
+      // 推荐不填、明确不动：无论文件里有没有该字段都是「不干预」。
+      return { path: key, status: 'ok', recommended: rec.recommended, actual }
+    case 'delete':
+      // 仅显式 delete 才视为“应删除”：字段存在即冲突，缺失即无事。
+      return actual === undefined
+        ? { path: key, status: 'ok', recommended: undefined, actual }
+        : { path: key, status: 'mismatch', recommended: undefined, actual }
+    default:
+      if (rec.recommended === null || rec.recommended === undefined) {
+        // recommended 无值 = 不干预，保留用户字段，不算冲突。
+        return { path: key, status: 'ok', recommended: null, actual }
+      }
+      if (deepEqual(rec.recommended, actual)) {
+        return { path: key, status: 'ok', recommended: rec.recommended, actual }
+      }
+      return { path: key, status: 'mismatch', recommended: rec.recommended, actual }
   }
-  if (deepEqual(rec.recommended, actual)) {
-    return { path: key, status: 'ok', recommended: rec.recommended, actual }
-  }
-  return { path: key, status: 'mismatch', recommended: rec.recommended, actual }
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {

@@ -763,7 +763,7 @@ function RuleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="lg" scrollFooter>
+      <DialogContent width="xl" scrollFooter>
         <DialogHeader>
           <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
         </DialogHeader>
@@ -1152,7 +1152,7 @@ function RecommendationTable({
                       className="text-destructive"
                       onClick={() => onChange(recs.filter((_, j) => j !== i))}
                     >
-                      删
+                      删除
                     </Button>
                   </td>
               </tr>
@@ -1284,7 +1284,7 @@ function EndpointRulesEditor({
                     className="text-destructive"
                     onClick={() => onChange(value.filter((_, i) => i !== ruleIndex))}
                   >
-                    删除该规则
+                    删除
                   </Button>
                 </div>
 

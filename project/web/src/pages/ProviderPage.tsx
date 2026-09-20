@@ -167,24 +167,41 @@ export function ProviderPage() {
     {
       key: 'autoDisabled',
       label: '自动禁用',
-      defaultWidth: { kind: 'pixel', value: 120 },
+      defaultWidth: { kind: 'pixel', value: 160 },
       defaultOverflow: 'wrap',
       render: (_, provider) => {
+        // 与拓扑节点卡片的自动禁用逻辑一致，但把每个维度的具体禁用数量
+        // 写出来：key n/m、base URL n/m，只展示存在禁用的维度。
         const status = disableStatuses.get(provider.id)
         const providerDisabled = status?.provider || provider.autoDisabled
-        const urlDisabled = Object.values(status?.baseUrls ?? {}).some(Boolean)
-        const keyDisabled = Object.values(status?.keys ?? {}).some(Boolean)
-        const word = (disabled: boolean) => (
-          <span className={disabled ? 'text-destructive' : undefined}>{disabled ? '禁用' : '未禁用'}</span>
-        )
+        const urlFlags = status?.baseUrls ?? {}
+        const keyFlags = status?.keys ?? {}
+        const urlDisabled = Object.values(urlFlags).filter(Boolean).length
+        const keyDisabled = Object.values(keyFlags).filter(Boolean).length
+        const urlTotal = Math.max(provider.baseUrls.length, Object.keys(urlFlags).length)
+        const keyTotal = Math.max(provider.keys.length, Object.keys(keyFlags).length)
+        const none = !providerDisabled && urlDisabled === 0 && keyDisabled === 0
         return (
           <div className="text-xs">
-            <span className="text-muted-foreground">供应商</span>{' '}
-            {word(providerDisabled)}{' '}
-            <span className="text-muted-foreground">Base URL</span>{' '}
-            {word(urlDisabled)}{' '}
-            <span className="text-muted-foreground">Key</span>{' '}
-            {word(keyDisabled)}
+            {none ? (
+              <span className="text-muted-foreground">—</span>
+            ) : (
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {providerDisabled && (
+                  <span className="font-medium text-destructive">供应商</span>
+                )}
+                {urlDisabled > 0 && (
+                  <span className="font-medium text-destructive">
+                    base URL {urlDisabled}/{urlTotal}
+                  </span>
+                )}
+                {keyDisabled > 0 && (
+                  <span className="font-medium text-destructive">
+                    key {keyDisabled}/{keyTotal}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )
       },

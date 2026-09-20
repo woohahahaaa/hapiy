@@ -11,6 +11,7 @@ const WIDTH_MAP: Record<string, string> = {
   sm: '!w-[640px] !max-w-[640px]',
   md: '!w-[960px] !max-w-[960px]',
   lg: '!w-[1024px] !max-w-[1024px]',
+  xl: '!w-[1280px] !max-w-[1280px]',
   full: '!w-screen !max-w-none',
 }
 const HEIGHT_MAP: Record<string, string> = {
@@ -71,7 +72,7 @@ function DialogContent({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
-  width?: 'xs' | 'sm' | 'md' | 'lg' | 'full'
+  width?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
   height?: 'auto' | 'full'
   /** Minimum content height (e.g. "640px"): keeps the dialog at a usable
    * size regardless of its content, e.g. so list dialogs don't jump. */

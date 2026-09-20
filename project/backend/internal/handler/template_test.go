@@ -75,21 +75,21 @@ func TestApplyRecommendationTemplate(t *testing.T) {
 	if !strings.Contains(resp.Data.Content, `"timeout":600000`) {
 		t.Fatalf("expected provider timeout applied: %s", resp.Data.Content)
 	}
-	// 推荐不填（baseURL/apiKey 的 recommended=null）应被执行删除。
-	if strings.Contains(resp.Data.Content, `"baseURL":"https://old.example.com"`) {
-		t.Fatalf("recommended-null field baseURL must be deleted: %s", resp.Data.Content)
+	// 推荐无值（baseURL/apiKey 的 recommended=null）→ 不干预，用户原值保留。
+	if !strings.Contains(resp.Data.Content, `"baseURL":"https://old.example.com"`) {
+		t.Fatalf("recommended-null field baseURL must be kept untouched: %s", resp.Data.Content)
 	}
-	if strings.Contains(resp.Data.Content, `"apiKey":"sk-old"`) {
-		t.Fatalf("recommended-null field apiKey must be deleted: %s", resp.Data.Content)
+	if !strings.Contains(resp.Data.Content, `"apiKey":"sk-old"`) {
+		t.Fatalf("recommended-null field apiKey must be kept untouched: %s", resp.Data.Content)
 	}
 	// 推荐修改（timeout 规则推荐 600000，文件里是 123）应被改写。
 	if !strings.Contains(resp.Data.Content, `"timeout":600000`) {
 		t.Fatalf("expected timeout updated to 600000: %s", resp.Data.Content)
 	}
-	// 模板未声明的多余标量字段（maxConcurrency 顶层与 options 内）应被删除，
-	// 而未声明对象结构（thinking）保留。
-	if strings.Contains(resp.Data.Content, `"maxConcurrency":5`) {
-		t.Fatalf("undeclared scalar maxConcurrency must be deleted: %s", resp.Data.Content)
+	// 模板未声明的字段（maxConcurrency 顶层与 options 内）一律不干预保留，
+	// 未声明对象结构（thinking）同样保留。
+	if !strings.Contains(resp.Data.Content, `"maxConcurrency":5`) {
+		t.Fatalf("undeclared scalar maxConcurrency must be kept untouched: %s", resp.Data.Content)
 	}
 	if !strings.Contains(resp.Data.Content, `"thinking":{"type":"enabled"}`) &&
 		!strings.Contains(resp.Data.Content, `"type":"enabled"`) {
@@ -154,8 +154,8 @@ func TestApplyRecommendationConfigChecked(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	// alpha 被勾选：timeout 应用为 600000（npm 因 recommended=nil 被删）。
-	if !strings.Contains(resp.Data.Content, `"alpha":{"options":{"timeout":600000}}`) {
+	// alpha 被勾选：timeout 应用为 600000（npm 虽 recommended=nil 但不删除）。
+	if !strings.Contains(resp.Data.Content, `"alpha":{"npm":"openai","options":{"timeout":600000}}`) {
 		t.Fatalf("alpha should get recommendations: %s", resp.Data.Content)
 	}
 	// beta 未被勾选：保持 timeout 123。
