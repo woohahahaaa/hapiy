@@ -264,9 +264,7 @@ function AgentConfigFilesTab() {
         return isLocal ? (
           <Badge variant="outline">本机</Badge>
         ) : (
-          <Badge variant="default">
-            SSH<span aria-hidden>↓</span>
-          </Badge>
+          <Badge variant="default">SSH</Badge>
         )
       },
     },
