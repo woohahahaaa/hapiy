@@ -389,7 +389,7 @@ export function AppSidebar() {
         <div
           className={
             showLabel
-              ? 'flex items-center justify-between gap-2 py-2'
+              ? 'flex items-center justify-between gap-2 py-2 pl-2'
               : 'flex flex-col items-start justify-center gap-1 py-1'
           }
         >
