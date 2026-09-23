@@ -3,7 +3,9 @@ package service
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -216,7 +218,7 @@ func LogRelayFailure(in LogRelayFailureInput) {
 // Channel/management event sources written into the usage-logs table by
 // the "使用记录" feature. Source carries the Chinese event type label.
 const (
-	LogSourceChannelDisabled        = "自动禁用"
+	LogSourceChannelDisabled        = "故障转移"
 	LogSourceChannelRecoveredAuto   = "自动恢复"
 	LogSourceChannelRecoveredManual = "手动恢复"
 	LogSourceSystemAdmin            = "系统管理"
@@ -226,6 +228,23 @@ const (
 // rows whose source column is empty/NULL. A real source can never equal this
 // value because it starts with "__" and carries the literal marker.
 const LogSourceUnmarked = "__unmarked__"
+
+// MigrateLogSources renames historical log-source marks after a source
+// rename. The source value is stored verbatim in the logs column, so an
+// event-type rename must rewrite old rows or dashboards fail to group
+// them under the new label. Idempotent: only touches the legacy value.
+func MigrateLogSources(db *gorm.DB) error {
+	result := db.Model(&model.Log{}).
+		Where("source = ?", "自动禁用").
+		Update("source", LogSourceChannelDisabled)
+	if result.Error != nil {
+		return fmt.Errorf("rename legacy 自动禁用 log sources: %w", result.Error)
+	}
+	if result.RowsAffected > 0 {
+		log.Printf("migrated %d log rows from source 自动禁用 to 故障转移", result.RowsAffected)
+	}
+	return nil
+}
 
 // DimensionLabel maps a failover dimension key to its display label.
 // Unknown dimensions are returned verbatim.

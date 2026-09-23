@@ -17,7 +17,7 @@ export interface NodeExecutorAutoSwitchProps extends SlotItemDragProps {
   onDelete: () => void
 }
 
-// 自动禁用业务节点：槽位内的一条自动禁用（故障转移）规则条目。
+// 故障转移业务节点：槽位内的一条故障转移规则条目。
 // 与并发控制保持一致：无论是否已绑定规则都渲染 RuleSelect，
 // 已绑定时同样可以随时下拉更换规则，而不是只能跳去编辑页。
 export function NodeExecutorAutoSwitch({ entry, rules, onChange, onDelete, token, picked, onPickToken, ruleStatus, onRefreshRules, ...drag }: NodeExecutorAutoSwitchProps) {

@@ -402,13 +402,13 @@ function FailoverPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="自动禁用"
+        title="故障转移"
         description="主供应商失败时自动切换到备选供应商"
       />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <Tabs defaultValue="failover" className="flex min-h-0 flex-1 flex-col">
           <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border p-0">
-            <TabsTrigger value="failover" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">自动禁用</TabsTrigger>
+            <TabsTrigger value="failover" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">故障转移</TabsTrigger>
             <TabsTrigger value="recovery" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">自动恢复</TabsTrigger>
           </TabsList>
           <TabsContent value="failover" className="flex min-h-0 flex-1 flex-col">
@@ -423,7 +423,7 @@ function FailoverPage() {
               limit={limit}
               onOffsetChange={setOffset}
               onLimitChange={setLimit}
-              emptyText='暂无自动禁用规则，点击"添加规则"创建第一条'
+              emptyText='暂无故障转移规则，点击"添加规则"创建第一条'
               onRetry={() => void fetch()}
               actions={
                 <div className="flex items-center gap-2">
@@ -531,7 +531,7 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         </div>
         <p className="text-xs text-muted-foreground">每个规则只选一个维度。同一请求失败时，只走这一条规则的轮询。</p>
         <p className="text-xs text-muted-foreground">
-          自动禁用：轮询用尽后将出问题的
+          故障转移：轮询用尽后将出问题的
           {form.dimension === 'key' ? 'Key' : form.dimension === 'provider' ? '供应商' : 'BaseURL'}
           标记为禁用。
         </p>

@@ -140,7 +140,7 @@ export function ProviderPage() {
 
   const handleResetDisableDimension = async (provider: Provider, dimension: 'provider' | 'base_url' | 'key') => {
     const reset = await runMutation(() => dashboardApi.resetProviderDisableDimension(provider.id, dimension))
-    if (reset) toast('已恢复自动禁用状态')
+    if (reset) toast('已恢复故障转移禁用状态')
   }
 
   const columns: ColumnDef<Provider>[] = [
@@ -166,11 +166,11 @@ export function ProviderPage() {
     },
     {
       key: 'autoDisabled',
-      label: '自动禁用',
+      label: '故障转移',
       defaultWidth: { kind: 'pixel', value: 160 },
       defaultOverflow: 'wrap',
       render: (_, provider) => {
-        // 与拓扑节点卡片的自动禁用逻辑一致，但把每个维度的具体禁用数量
+        // 与拓扑节点卡片的故障转移禁用逻辑一致，但把每个维度的具体禁用数量
         // 写出来：key n/m、base URL n/m，只展示存在禁用的维度。
         const status = disableStatuses.get(provider.id)
         const providerDisabled = status?.provider || provider.autoDisabled
@@ -652,7 +652,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         if (rows.length === 0) return null
         return (
           <div className="rounded-none border border-border bg-muted p-3">
-            <div className="mb-2 text-xs font-medium">自动禁用</div>
+            <div className="mb-2 text-xs font-medium">故障转移</div>
             <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
               {rows.map((row) => (
                 <div key={row.dimension} className="flex items-center gap-2">

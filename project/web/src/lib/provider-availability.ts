@@ -53,7 +53,7 @@ export function formatAutoDisableSummary(input: {
   readonly baseURLCount: number
   readonly keyCount: number
 }): string | null {
-  if (input.providerDisabled) return '自动禁用：供应商'
+  if (input.providerDisabled) return '故障转移：供应商'
 
   const disabledBaseURLCount = Object.values(input.baseUrlsDisabled).filter(Boolean).length
   const disabledKeyCount = Object.values(input.keysDisabled).filter(Boolean).length
@@ -71,5 +71,5 @@ export function formatAutoDisableSummary(input: {
   ].filter((item): item is string => item !== null)
   const items = [...fullyDisabledItems, ...partiallyDisabledItems]
 
-  return items.length > 0 ? `自动禁用：${items.join('、')}` : null
+  return items.length > 0 ? `故障转移：${items.join('、')}` : null
 }

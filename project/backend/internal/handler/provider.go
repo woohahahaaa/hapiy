@@ -309,7 +309,7 @@ type resetProviderDimensionRequest struct {
 
 // ResetProviderDisableDimension clears every auto-disable state of one
 // dimension for a single provider. Used by the provider editor dialog's
-// "自动禁用" block (恢复 Provider 行 / 恢复该供应商全部 BaseURL / 全部 Key).
+// "故障转移" block (恢复 Provider 行 / 恢复该供应商全部 BaseURL / 全部 Key).
 func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
@@ -346,7 +346,7 @@ type resetAllProviderDisableRequest struct {
 }
 
 // ResetAllProviderDisableStatus clears every auto-disable state of one
-// dimension across all providers. Used by the dashboard's "自动禁用"
+// dimension across all providers. Used by the dashboard's "故障转移"
 // summary block (恢复 provider 行 / 恢复全部 baseURL / 恢复全部 key).
 func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {

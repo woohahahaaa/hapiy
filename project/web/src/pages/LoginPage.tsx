@@ -50,6 +50,7 @@ export function LoginPage() {
               value={username}
               autoComplete="username"
               onChange={(e) => setUsername(e.target.value)}
+              placeholder="请输入用户名，默认 admin"
               disabled={submitting}
               className="rounded-none"
             />
@@ -62,6 +63,7 @@ export function LoginPage() {
               value={password}
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="请输入密码，默认 admin"
               disabled={submitting}
               className="rounded-none"
             />
