@@ -134,7 +134,7 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("自动禁用规则名称 %q 已存在", r.Name)})
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name)})
 				return
 			}
 			rule = &r
@@ -204,7 +204,7 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("自动禁用规则名称 %q 已存在", r.Name)})
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name)})
 				return
 			}
 			rule = &r

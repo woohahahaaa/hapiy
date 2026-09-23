@@ -49,6 +49,12 @@ func main() {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 
+	// Rename the legacy "故障转移" event-source mark to "故障转移" so
+	// dashboard filters keep grouping old rows under the current label.
+	if err := service.MigrateLogSources(db); err != nil {
+		log.Fatalf("Failed to migrate log sources: %v", err)
+	}
+
 	// Seed the built-in agent type (opencode) for the 接管配置文件 feature.
 	if err := model.EnsureDefaultAgentTypes(db); err != nil {
 		log.Fatalf("Failed to seed default agent types: %v", err)

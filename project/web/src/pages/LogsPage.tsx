@@ -31,7 +31,7 @@ function fmtSeconds(val: number): string {
   return `${Math.max(0.1, val / 1000).toFixed(1)}s`
 }
 
-// Event records (自动禁用/自动恢复/手动恢复/系统管理) carry an empty status.
+// Event records (故障转移/自动恢复/手动恢复/系统管理) carry an empty status.
 function isEventLog(row: UsageLog): boolean {
   return row.status === ''
 }
@@ -39,7 +39,7 @@ function isEventLog(row: UsageLog): boolean {
 // Event-type label → color (hex) so the "来源" column tints each event
 // type distinctly, matching the visual language of the status badges.
 const EVENT_SOURCE_COLORS: Record<string, string> = {
-  自动禁用: 'dc2626',
+  故障转移: 'dc2626',
   自动恢复: '16a34a',
   手动恢复: '2563eb',
   系统管理: '9ca3af',
@@ -332,7 +332,7 @@ export function LogsPage() {
         line1: (row) => {
           if (row.status === 'success') return '<#16a34a>成功</#16a34a>'
           if (row.status === 'failed') return '<#dc2626>失败</#dc2626>'
-          // 事件行（自动禁用/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
+          // 事件行（故障转移/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
           // 长文本（errorMessage/eventDetail）统一放进详情字段。
           return row.source ? `<#9ca3af>${row.source}</#9ca3af>` : null
         },
@@ -378,7 +378,7 @@ export function LogsPage() {
                   <SelectGroup>
                     <SelectItem value="all">全部类型</SelectItem>
                     <SelectItem value="request">请求</SelectItem>
-                    <SelectItem value="channel_disabled">自动禁用</SelectItem>
+                    <SelectItem value="channel_disabled">故障转移</SelectItem>
                     <SelectItem value="channel_recovered_auto">自动恢复</SelectItem>
                     <SelectItem value="channel_recovered_manual">手动恢复</SelectItem>
                     <SelectItem value="system_admin">系统管理</SelectItem>

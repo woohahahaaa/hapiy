@@ -92,7 +92,7 @@ export const SLOT_LABELS: Record<SlotType, string> = {
   requestModify: '请求改写',
   responseModify: '响应改写',
   concurrency: '并发控制',
-  autoSwitch: '自动禁用',
+  autoSwitch: '故障转移',
   logOutput: '日志抓取',
 }
 

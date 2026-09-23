@@ -75,7 +75,7 @@ const navigation: NavItem[] = [
       { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
       { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
       { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
-      { id: 'failover', label: '自动禁用', href: '/policy/failover' },
+      { id: 'failover', label: '故障转移', href: '/policy/failover' },
     ],
   },
   {

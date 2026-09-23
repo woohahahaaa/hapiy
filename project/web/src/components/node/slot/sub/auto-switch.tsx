@@ -27,7 +27,7 @@ export interface NodeSlotAutoSwitchProps {
   onToggleEnabled?: (enabled: boolean) => void
 }
 
-// 自动禁用插槽节点：自动禁用（故障转移）业务条目列表。
+// 故障转移插槽节点：故障转移业务条目列表。
 export function NodeSlotAutoSwitch({
   title,
   entries,

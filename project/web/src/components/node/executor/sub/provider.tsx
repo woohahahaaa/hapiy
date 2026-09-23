@@ -19,7 +19,7 @@ export interface FlatProviderChild {
   readonly enabled: boolean
   readonly providerStatus: boolean
   readonly autoDisabled: boolean
-  /** 供应商维度的自动禁用状态（provider/base_url/key），用于展示逐维度禁用详情 */
+  /** 供应商维度的故障转移禁用状态（provider/base_url/key），用于展示逐维度禁用详情 */
   readonly disableStatus?: ProviderDisableStatus | null
 }
 

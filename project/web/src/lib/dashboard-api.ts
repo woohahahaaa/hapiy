@@ -1308,7 +1308,7 @@ function parseDisabledValues(value: unknown, field: string): Readonly<Record<str
 
 function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的自动禁用状态格式无效', null)
+    throw new DashboardApiError('服务端返回的故障转移状态格式无效', null)
   }
   return {
     providerId: readString(value.provider_id, 'disable_status.provider_id'),
@@ -1847,10 +1847,10 @@ function parseFailoverRule(value: unknown): FailoverRule {
 }
 
 function parseFailoverAction(value: unknown): FailoverAction {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的自动禁用动作格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError('服务端返回的故障转移动作格式无效', null)
   const dimension = readString(value.dimension, 'rule.actions.dimension')
   if (dimension !== 'base_url' && dimension !== 'key' && dimension !== 'provider') {
-    throw new DashboardApiError('服务端返回的自动禁用动作维度无效', null)
+    throw new DashboardApiError('服务端返回的故障转移动作维度无效', null)
   }
   return {
     dimension,
@@ -2317,7 +2317,7 @@ export const dashboardApi = {
   async listProviderDisableStatuses(): Promise<readonly ProviderDisableStatus[]> {
     const body = await requestFull('/providers/disable-status')
     if (!Array.isArray(body.data)) {
-      throw new DashboardApiError('服务端返回的自动禁用状态列表格式无效', null)
+      throw new DashboardApiError('服务端返回的故障转移状态列表格式无效', null)
     }
     return body.data.map(parseProviderDisableStatus)
   },

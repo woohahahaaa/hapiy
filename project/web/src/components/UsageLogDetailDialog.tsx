@@ -14,7 +14,7 @@ function fmtSeconds(val: number): string {
   return `${Math.max(0.1, val / 1000).toFixed(1)}s`
 }
 
-// Event records (自动禁用/自动恢复/手动恢复/系统管理) carry an empty status.
+// Event records (故障转移/自动恢复/手动恢复/系统管理) carry an empty status.
 function isEventLog(row: UsageLog): boolean {
   return row.status === ''
 }

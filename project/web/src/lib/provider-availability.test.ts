@@ -113,14 +113,14 @@ describe('computeProviderAvailability', () => {
 })
 
 describe('formatAutoDisableSummary', () => {
-  it('供应商自动禁用时只显示供应商', () => {
+  it('供应商故障转移时只显示供应商', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: true,
       baseUrlsDisabled: { 'https://a.example.com': true },
       keysDisabled: { 'sk-a': true },
       baseURLCount: 1,
       keyCount: 1,
-    })).toBe('自动禁用：供应商')
+    })).toBe('故障转移：供应商')
   })
 
   it('部分禁用时按 key、base URL 顺序显示禁用条目数', () => {
@@ -130,7 +130,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 3,
       keyCount: 2,
-    })).toBe('自动禁用：key×1、base URL×2')
+    })).toBe('故障转移：key×1、base URL×2')
   })
 
   it('全部 base URL 禁用时显示完整类别', () => {
@@ -140,7 +140,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: {},
       baseURLCount: 2,
       keyCount: 0,
-    })).toBe('自动禁用：全部 base URL')
+    })).toBe('故障转移：全部 base URL')
   })
 
   it('全部 key 禁用时显示完整类别', () => {
@@ -150,7 +150,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true, 'sk-b': true },
       baseURLCount: 0,
       keyCount: 2,
-    })).toBe('自动禁用：全部 key')
+    })).toBe('故障转移：全部 key')
   })
 
   it('全量与部分禁用混合时同时显示类别和条目数', () => {
@@ -160,6 +160,6 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 2,
       keyCount: 3,
-    })).toBe('自动禁用：全部 base URL、key×1')
+    })).toBe('故障转移：全部 base URL、key×1')
   })
 })

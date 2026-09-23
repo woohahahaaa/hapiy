@@ -110,7 +110,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
-					"message": fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、自动禁用状态、拓扑接线。", relayReq.Model),
+					"message": fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", relayReq.Model),
 					"type":    "service_unavailable",
 				},
 			})
