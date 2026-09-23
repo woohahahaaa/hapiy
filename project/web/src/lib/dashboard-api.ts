@@ -182,6 +182,8 @@ export type UsageLog = {
   // eventDetail is populated for event rows with the matched rule / action explanation; empty for request rows and pre-existing data.
   readonly eventDetail: string
   readonly upstreamUrl: string
+  readonly providerKey: string
+  readonly providerBaseUrl: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full' | 'new'
   readonly affinityReuseParts: readonly string[]
 }
@@ -1381,6 +1383,8 @@ function parseLog(value: unknown): UsageLog {
     errorMessage: readString(value.error_message, 'log.error_message'),
     eventDetail: readString(value.event_detail ?? '', 'log.event_detail'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
+    providerKey: readString(value.provider_key ?? '', 'log.provider_key'),
+    providerBaseUrl: readString(value.provider_base_url ?? '', 'log.provider_base_url'),
     affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',
     affinityReuseParts: typeof value.affinity_reuse_parts === 'string' && value.affinity_reuse_parts !== ''
       ? value.affinity_reuse_parts.split(',').map((s) => s.trim()).filter(Boolean)

@@ -2,12 +2,13 @@
 //
 // 契约：
 //   - 表单 blocks 是"组"，每组自带 conditions；序列化时把组内 conditions 合并到每条 action.conditions。
-//   - 路径字段在表单里不带 `header.` 前缀：当 scope=header 时，序列化时补上、反序列化时剥掉；
-//     scope=body 或 scope=all 时路径原样保留（允许用户在 all 模式下手动写 `header.X-Foo`）。
+//   - 路径字段在表单里不带 `header.` 前缀：scope=header 时序列化补上、反序列化剥掉。
+//     历史数据里的 scope="all" / 缺省按路径前缀推断（`header.` → header，否则 body）。
 //   - 空 / 不合法的 action 在序列化时被丢弃；空的 block 也丢弃；最终空数组输出为 "[]"。
-//   - value 输入遵循「字符串需手动加引号」约定：true/false/null/数字 token 是原生
-//     JSON 字面量，字符串必须写成带引号的 JSON 形式（如 "hello"），其余文本不合法、
-//     序列化时丢弃。详见 parseValueInput。
+//   - set 的 value 遵循「引号约定」：true/false/null/数字（仅 body scope）是原生 JSON
+//     字面量；不带引号的其余裸文本是变量引用（原始请求里的同域值）；字符串必须写成带
+//     引号的 JSON 形式（如 "hello"）。引用在脚本里存成 {"ref":"<name>"}。详见 parseValueInput。
+//   - 条件值沿用旧约定：字面量 + 带引号字符串，裸文本不合法、序列化时丢弃。
 //   - 不合法的 script（顶层不是数组、解析失败）反序列化时回退到一个空 block。
 //
 // 后端契约在 project/backend/internal/relay/rewrite.go 的 compileRewriteChain / applyRewriteChains。
@@ -64,44 +65,72 @@ export const HEADER_PREFIX = 'header.'
 export type ParsedValueInput =
   | { kind: 'literal'; json: boolean | number | null }
   | { kind: 'string'; value: string }
+  | { kind: 'ref'; ref: string }
   | { kind: 'invalid' }
+
+export type ValueInputOptions = {
+  /** true/false/null/数字 token 是否按原生 JSON 字面量解析（默认 true）。 */
+  literals?: boolean
+  /** 不带引号的裸文本是否按变量引用解析（默认 false）。 */
+  refs?: boolean
+}
 
 const NUMBER_PATTERN = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/
 
-// 「字符串需手动加引号」约定：true/false/null/数字 token → 原生 JSON 字面量；
-// 带引号且能 JSON.parse 出字符串的 token（如 "hello"）→ 字符串（去引号）；
-// 其余非空文本 → invalid。空文本也返回 invalid（调用方单独处理空值）。
-export function parseValueInput(text: string): ParsedValueInput {
+// 引号约定：
+//   - true/false/null/数字 token（literals=true 时）→ 原生 JSON 字面量
+//   - 裸文本（refs=true 时）→ 变量引用，引用原始请求里的同域值
+//   - 带引号且能 JSON.parse 出字符串的 token（如 "hello"）→ 固定字符串（去引号）
+//   - 其余（空文本 / 含引号但不合法）→ invalid
+export function parseValueInput(text: string, opts: ValueInputOptions = {}): ParsedValueInput {
+  const literals = opts.literals ?? true
+  const refs = opts.refs ?? false
   const t = text.trim()
-  if (t === 'true') return { kind: 'literal', json: true }
-  if (t === 'false') return { kind: 'literal', json: false }
-  if (t === 'null') return { kind: 'literal', json: null }
-  if (NUMBER_PATTERN.test(t)) return { kind: 'literal', json: Number(t) }
-  if (t.startsWith('"') && t.endsWith('"')) {
-    try {
-      const v: unknown = JSON.parse(t)
-      if (typeof v === 'string') return { kind: 'string', value: v }
-    } catch {
-      // 引号包裹但不是合法 JSON 字符串 → 落到 invalid
-    }
+  if (literals) {
+    if (t === 'true') return { kind: 'literal', json: true }
+    if (t === 'false') return { kind: 'literal', json: false }
+    if (t === 'null') return { kind: 'literal', json: null }
+    if (NUMBER_PATTERN.test(t)) return { kind: 'literal', json: Number(t) }
   }
+  if (t.includes('"')) {
+    // 含引号即视为「想写字符串」：必须是合法的带引号 JSON 字符串，否则 invalid。
+    if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+      try {
+        const v: unknown = JSON.parse(t)
+        if (typeof v === 'string') return { kind: 'string', value: v }
+      } catch {
+        // 引号包裹但不是合法 JSON 字符串 → 落到 invalid
+      }
+    }
+    return { kind: 'invalid' }
+  }
+  if (refs && t !== '') return { kind: 'ref', ref: t }
   return { kind: 'invalid' }
 }
 
-// set 模式且可能命中 JSON body 时 value 支持字面量约定；
-// header 路径（scope=header，或 scope=all 下手写 header. 前缀）永远是字符串语义。
-export function literalCapable(a: Action): boolean {
-  return a.mode === 'set' && (a.scope === 'body' || (a.scope === 'all' && !a.path.startsWith(HEADER_PREFIX)))
+// set 模式且值走引号约定；其余模式（append/replace 等）保持纯字符串语义。
+export function valueConventionActive(a: Action): boolean {
+  return a.mode === 'set'
+}
+
+// header 的值本质是字符串，不解析 JSON 字面量（不带引号的 123 也是变量名）。
+export function allowJsonLiterals(a: Action): boolean {
+  return a.scope === 'body'
+}
+
+// action set 值的解析入口：refs 恒可用，字面量由 scope 决定。
+export function parseActionValue(a: Action, text: string): ParsedValueInput {
+  return parseValueInput(text, { literals: allowJsonLiterals(a), refs: true })
 }
 
 // ── Form factory ──
 
 export function emptyAction(): Action {
-  return { mode: 'set', path: '', value: '', from: '', to: '', dst: '', scope: 'all' }
+  return { mode: 'set', path: '', value: '', from: '', to: '', dst: '', scope: 'body' }
 }
 
 export function emptyCondition(): LeafCondition {
-  return { path: '', op: 'contains', value: '', invert: false, scope: 'all' }
+  return { path: '', op: 'contains', value: '', invert: false, scope: 'body' }
 }
 
 export function emptyConditionGroup(): ConditionGroup {
@@ -140,11 +169,11 @@ export function isActionValid(a: Action): boolean {
   const spec = MODE_BY_VALUE.get(mode as ModeName)!
   for (const f of spec.needs) {
     if (f === 'value') {
-      if (literalCapable(a)) {
-        // 字面量约定：非空且能按约定解析（true/false/null/数字/带引号字符串）。
-        if (!a.value.trim() || parseValueInput(a.value).kind === 'invalid') return false
+      if (valueConventionActive(a)) {
+        // 引号约定：非空且能解析（字面量 / 固定字符串 / 变量引用）。
+        if (!a.value.trim() || parseActionValue(a, a.value).kind === 'invalid') return false
       } else if (!a.value.trim()) {
-        // 非 set / header 路径：纯字符串语义，非空即可。
+        // 非 set 模式：纯字符串语义，非空即可。
         return false
       }
     } else if (f === 'from' && !a.from.trim()) {
@@ -210,7 +239,7 @@ export function conditionToJson(c: Condition): JsonObject {
     o.value = c.value
   }
   if (c.invert) o.invert = true
-  if (c.scope !== 'all') o.scope = c.scope
+  o.scope = c.scope
   return o
 }
 
@@ -219,12 +248,14 @@ function actionToJson(a: Action, conditions: JsonObject[]): JsonObject {
   const op: JsonObject = { mode, path: withHeaderPrefix(a.path.trim(), a.scope) }
   const spec = MODE_BY_VALUE.get(mode)!
   for (const f of spec.needs) {
-    if (f === 'value' && literalCapable(a)) {
-      const parsed = parseValueInput(a.value)
+    if (f === 'value' && valueConventionActive(a)) {
+      const parsed = parseActionValue(a, a.value)
       if (parsed.kind === 'literal') {
         op.value = parsed.json
       } else if (parsed.kind === 'string') {
         op.value = parsed.value
+      } else if (parsed.kind === 'ref') {
+        op.value = { ref: parsed.ref }
       } else {
         // invalid/空：isActionValid 已过滤，这里兜底原文本。
         op.value = a.value.trim()
@@ -233,7 +264,7 @@ function actionToJson(a: Action, conditions: JsonObject[]): JsonObject {
       op[f] = a[f].trim()
     }
   }
-  if (a.scope !== 'all') op.scope = a.scope
+  op.scope = a.scope
   if (conditions.length > 0) op.conditions = conditions
   return op
 }
@@ -297,7 +328,7 @@ function actionFromJson(op: JsonObject): Action | null {
   if (!mode || !MODE_BY_VALUE.has(mode as ModeName)) return null
   const typedMode = mode as ModeName
   const rawPath = typeof op.path === 'string' ? op.path : ''
-  const scope = parseScope(op.scope)
+  const scope = inferScope(op.scope, rawPath)
   const path = stripHeaderPrefix(rawPath, scope)
   const spec = MODE_BY_VALUE.get(typedMode)!
   const a: Action = {
@@ -310,8 +341,8 @@ function actionFromJson(op: JsonObject): Action | null {
     scope,
   }
   for (const f of spec.needs) {
-    if (f === 'value' && literalCapable(a)) {
-      a.value = literalValueDisplay(op.value)
+    if (f === 'value' && valueConventionActive(a)) {
+      a.value = actionValueDisplay(op.value)
     } else {
       a[f] = typeof op[f] === 'string' ? op[f] : ''
     }
@@ -320,7 +351,20 @@ function actionFromJson(op: JsonObject): Action | null {
 }
 
 // JSON value → 输入框显示文本：字符串带引号显示（round-trip 后仍按约定识别为字符串），
-// boolean/number/null 用 token 文本，其余（缺失/对象/数组）留空。
+// {"ref":"..."} 显示为裸变量名，boolean/number/null 用 token 文本，
+// 其余（缺失/对象/数组）留空。
+function actionValueDisplay(v: unknown): string {
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as JsonObject
+    const ref = o.ref
+    if (typeof ref === 'string' && Object.keys(o).length === 1) return ref
+    return ''
+  }
+  return literalValueDisplay(v)
+}
+
+// JSON value → 条件值显示文本：字符串带引号显示，boolean/number/null 用 token 文本，
+// 其余（缺失/对象/数组）留空。
 function literalValueDisplay(v: unknown): string {
   if (typeof v === 'string') return JSON.stringify(v)
   if (typeof v === 'boolean' || typeof v === 'number') return String(v)
@@ -328,9 +372,11 @@ function literalValueDisplay(v: unknown): string {
   return ''
 }
 
-function parseScope(v: unknown): Scope {
+// scope 解析：显式的 header/body 直接用；历史数据（"all" / 缺省 / 未知）按路径
+// 的 header. 前缀推断——去掉 all 之后，域完全由 scope 决定。
+function inferScope(v: unknown, path: string): Scope {
   if (v === 'header' || v === 'body') return v
-  return 'all'
+  return path.startsWith(HEADER_PREFIX) ? 'header' : 'body'
 }
 
 function stripHeaderPrefix(path: string, scope: Scope): string {
@@ -357,9 +403,10 @@ export function conditionsFromJson(raw: unknown): Condition[] {
     }
     const op = typeof c.op === 'string' ? c.op : ''
     if (!op) continue
-    const scope = parseScope(c.scope)
+    const rawPath = typeof c.path === 'string' ? c.path : ''
+    const scope = inferScope(c.scope, rawPath)
     out.push({
-      path: stripHeaderPrefix(typeof c.path === 'string' ? c.path : '', scope),
+      path: stripHeaderPrefix(rawPath, scope),
       op,
       value: literalValueDisplay(c.value),
       invert: c.invert === true,

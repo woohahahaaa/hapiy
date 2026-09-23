@@ -78,10 +78,11 @@ export const COND_OPS: ReadonlyArray<{ value: CondOpName; label: string }> = [
   { value: 'matches', label: '正则匹配' },
 ]
 
-export type Scope = 'all' | 'header' | 'body'
+// 作用域二选一：header 或 body。不做合并模式（路径会分不清域）；
+// 后端仍兼容历史数据的 scope="all" / 缺省，加载时按路径的 header. 前缀推断。
+export type Scope = 'header' | 'body'
 
 export const SCOPE_OPTIONS: ReadonlyArray<{ value: Scope; label: string }> = [
-  { value: 'all', label: 'header+body' },
   { value: 'header', label: 'header' },
   { value: 'body', label: 'body' },
 ]

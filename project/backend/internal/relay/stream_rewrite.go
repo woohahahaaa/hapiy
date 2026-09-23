@@ -194,6 +194,8 @@ func (r *streamRewriteReader) processData(payload []byte) ([]byte, int64) {
 
 	start := time.Now()
 	body := payload
+	// 变量引用取事件原始 payload（不是被前面 op 改过的 body），与缓冲路径一致。
+	origBody := payload
 	matched := make([]rewriteOpRef, 0)
 	for ci := range r.chains {
 		chain := &r.chains[ci]
@@ -222,7 +224,7 @@ func (r *streamRewriteReader) processData(payload []byte) ([]byte, int64) {
 					matched = append(matched, ref)
 				}
 			default:
-				updated, _, err := applyRewriteOp(body, nil, op)
+				updated, _, err := applyRewriteOp(body, nil, origBody, nil, op)
 				if err == nil {
 					body = updated
 				}

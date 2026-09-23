@@ -27,12 +27,13 @@ type RewriteOp struct {
 	Path       string // gjson path
 	Value      string // raw value for set/append/prepend/ensure_*
 	RawValue   json.RawMessage
+	Ref        string             // set: variable reference — same-domain gjson path / header name in the original request
 	From       string             // replace / regex_replace source
 	To         string             // replace / regex_replace target
 	Regex      *regexp.Regexp     // compiled regex for regex_replace
 	DstPath    string             // copy / move destination
 	Conditions []RewriteCondition // optional execution gating
-	Scope      string             // "header" | "body" | "all" (default)
+	Scope      string             // "header" | "body" | "all" (legacy default)
 }
 
 // RewriteCondition evaluates the current value at a path and decides
@@ -100,6 +101,23 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 		raw, ok := entry["value"]
 		if !ok {
 			op.RawValue = json.RawMessage(`""`)
+			break
+		}
+		ref, isRef, err := parseValueRef(raw)
+		if err != nil {
+			return op, fmt.Errorf("rule %s: op %d (set): %w", ruleID, index, err)
+		}
+		if isRef {
+			// 变量引用不跨域：header path 引用 header 名，body path 引用 body gjson 路径。
+			if strings.HasPrefix(op.Path, "header.") {
+				ref = strings.TrimPrefix(ref, "header.")
+			} else if strings.HasPrefix(ref, "header.") {
+				return op, fmt.Errorf("rule %s: op %d (set): ref %q must stay in the same scope as path %q", ruleID, index, ref, op.Path)
+			}
+			if ref == "" {
+				return op, fmt.Errorf("rule %s: op %d (set): ref is empty", ruleID, index)
+			}
+			op.Ref = ref
 			break
 		}
 		op.RawValue = raw
@@ -189,6 +207,33 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 		op.Scope = scope
 	}
 	return op, nil
+}
+
+// parseValueRef recognises the variable-reference form {"ref":"<name>"}.
+// Only an object with exactly one string `ref` key counts as a reference —
+// a body set value may legitimately be any JSON object, so the shape has to
+// be unambiguous.
+func parseValueRef(raw json.RawMessage) (string, bool, error) {
+	if !strings.HasPrefix(strings.TrimSpace(string(raw)), "{") {
+		return "", false, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || len(obj) != 1 {
+		return "", false, nil
+	}
+	refRaw, ok := obj["ref"]
+	if !ok {
+		return "", false, nil
+	}
+	var ref string
+	if err := json.Unmarshal(refRaw, &ref); err != nil {
+		return "", true, fmt.Errorf("ref is not a string: %w", err)
+	}
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", true, fmt.Errorf("ref is empty")
+	}
+	return ref, true, nil
 }
 
 // compileConditions parses the optional conditions array. In its simple
@@ -283,7 +328,13 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 // replacements — no full re-parse. The engine passes req.Body in by
 // marshalling it once because that's the contract used by the existing
 // pipeline (Body is a map[string]any).
+//
+// Variable references ("value":{"ref":...}) resolve against the original
+// (pre-rewrite) body/headers snapshot, so a set-from-ref always reads the
+// value the client actually sent — not one an earlier op may have written.
 func applyRewriteChains(body []byte, headers map[string]string, chains []CompiledRewriteChain) ([]byte, map[string]string, error) {
+	origBody := body
+	origHeaders := cloneHeaders(headers)
 	for ci := range chains {
 		chain := &chains[ci]
 		if headers == nil && chainHasHeaderOp(chain) {
@@ -298,7 +349,7 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 			if !ok {
 				continue
 			}
-			updated, updatedHeaders, err := applyRewriteOp(body, headers, op)
+			updated, updatedHeaders, err := applyRewriteOp(body, headers, origBody, origHeaders, op)
 			if err != nil {
 				return nil, headers, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
 			}
@@ -309,10 +360,24 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 	return body, headers, nil
 }
 
+// cloneHeaders snapshots the header map so variable references can read the
+// original values while ops keep mutating the live map.
+func cloneHeaders(headers map[string]string) map[string]string {
+	if headers == nil {
+		return nil
+	}
+	cp := make(map[string]string, len(headers))
+	for k, v := range headers {
+		cp[k] = v
+	}
+	return cp
+}
+
 // applyRewriteOp performs a single op. Returns the (possibly new) bytes.
-func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+// origBody/origHeaders are the pre-rewrite snapshots used by variable refs.
+func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
 	if strings.HasPrefix(op.Path, "header.") {
-		return applyHeaderOp(body, headers, op)
+		return applyHeaderOp(body, headers, origHeaders, op)
 	}
 	// sjson cannot address array elements by negative index ("-1"), while
 	// gjson (used for condition evaluation above) can. Resolve negative
@@ -324,6 +389,15 @@ func applyRewriteOp(body []byte, headers map[string]string, op *RewriteOp) ([]by
 	}
 	switch op.Mode {
 	case "set":
+		if op.Ref != "" {
+			// 变量引用：拷原始请求里的同域值（保留 JSON 类型）；源不存在则跳过。
+			src := gjson.GetBytes(origBody, op.Ref)
+			if !src.Exists() {
+				return body, headers, nil
+			}
+			updated, err := sjson.SetRawBytes(body, writePath, []byte(src.Raw))
+			return updated, headers, err
+		}
 		updated, err := sjson.SetRawBytes(body, writePath, op.RawValue)
 		return updated, headers, err
 	case "delete":

@@ -28,6 +28,7 @@ import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   AGENT_MODEL_INFO_FIELD_OPS,
+  type AgentModelInfoFieldOp,
   type AgentModelsContainer,
   type AgentModelInfoFieldSpecValue,
   type AgentModelInfoFieldPaths,
@@ -520,25 +521,57 @@ function AgentTypeRulesTab() {
 
 // ── 添加 / 编辑规则 ──
 
-// modelInfoSpecToText renders a stored spec value as editor text. Legacy
-// plain paths are wrapped into the 值写法 object form so the editor
-// only ever shows（and saves）that form; op specs are emitted as-is.
-// Empty/unmapped values render as blank text so they round-trip without
-// tripping the path validation on save.
-function modelInfoSpecToText(v: AgentModelInfoFieldSpecValue): string {
-  if (typeof v === 'string') {
-    if (v.trim() === '') return ''
-    return JSON.stringify({ path: v })
-  }
-  if (!v || typeof v.path !== 'string' || v.path.trim() === '') return ''
-  return JSON.stringify(v)
+// ModelInfoFieldRow — 四个模型信息字段的结构化编辑状态：不再用 JSON 文本，
+// 而是拆成 路径 / 写法(op) / sep / 允许值 / 操作 五列（与下方推荐字段表格
+// 同一套「值 + 写法」规则）。
+type ModelInfoFieldRow = {
+  path: string
+  action: 'set' | 'skip' | 'delete'
+  op: AgentModelInfoFieldOp
+  sep: string
+  valuesText: string
 }
 
-// buildModelInfoFieldsPayload parses the editor text map back into the
-// API payload. Returns an error message when an object-form value is not
-// valid JSON or carries an unknown op.
+const EMPTY_MODEL_INFO_ROW: ModelInfoFieldRow = {
+  path: '',
+  action: 'set',
+  op: 'raw',
+  sep: '',
+  valuesText: '',
+}
+
+// modelInfoRowsFromSpecs 把持久化的字段值（纯路径字符串或「值&写法」对象）
+// 归一为编辑器行。
+function modelInfoRowsFromSpecs(
+  mif: AgentModelInfoFieldPaths | undefined,
+): Record<ModelInfoFieldKey, ModelInfoFieldRow> {
+  const rows: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
+    max_context: { ...EMPTY_MODEL_INFO_ROW },
+    max_output_token: { ...EMPTY_MODEL_INFO_ROW },
+    input_types: { ...EMPTY_MODEL_INFO_ROW },
+    thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
+  }
+  for (const key of MODEL_INFO_FIELD_KEYS) {
+    const v = mif?.[key]
+    if (typeof v === 'string') {
+      if (v.trim() !== '') rows[key].path = v.trim()
+      continue
+    }
+    if (v && typeof v.path === 'string') {
+      rows[key].path = v.path.trim()
+      rows[key].action = v.action ?? 'set'
+      rows[key].op = v.op ?? 'raw'
+      rows[key].sep = v.sep ?? ''
+      rows[key].valuesText = (v.values ?? []).join(', ')
+    }
+  }
+  return rows
+}
+
+// buildModelInfoFieldsPayload 把编辑器行组装回 API payload。空路径的行：
+// 只填了写法（op/sep/允许值/操作）等内容时报错，否则跳过（不写该字段）。
 function buildModelInfoFieldsPayload(
-  texts: Record<ModelInfoFieldKey, string>,
+  rows: Record<ModelInfoFieldKey, ModelInfoFieldRow>,
 ): { fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>; error: string | null } {
   const fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue> = {
     max_context: '',
@@ -547,44 +580,31 @@ function buildModelInfoFieldsPayload(
     thinking_levels: '',
   }
   for (const key of MODEL_INFO_FIELD_KEYS) {
-    const text = texts[key].trim()
-    if (text === '') continue
-    if (!text.startsWith('{')) {
-      return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请使用值&写法（JSON 对象），不允许只填路径` }
+    const row = rows[key]
+    const path = row.path.trim()
+    if (path === '') {
+      const hasOther = row.op !== 'raw' || row.action !== 'set' || row.sep.trim() !== '' || row.valuesText.trim() !== ''
+      if (hasOther) {
+        return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请先填写路径` }
+      }
+      continue
     }
-    try {
-      const parsed = JSON.parse(text) as { path?: unknown; op?: unknown; sep?: unknown; values?: unknown; action?: unknown }
-      if (typeof parsed.path !== 'string' || parsed.path.trim() === '') {
-        return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」写法缺少 path 字段` }
-      }
-      const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]; sep?: string; values?: string[] } = { path: parsed.path.trim() }
-      if (parsed.action === 'skip' || parsed.action === 'delete') {
-        spec.action = parsed.action
-      }
-      if (parsed.op !== undefined) {
-        if (!AGENT_MODEL_INFO_FIELD_OPS.includes(parsed.op as never)) {
-          return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」不支持的 op: ${String(parsed.op)}（可选 ${AGENT_MODEL_INFO_FIELD_OPS.join(' / ')}）` }
-        }
-        spec.op = parsed.op as (typeof AGENT_MODEL_INFO_FIELD_OPS)[number]
-      }
-      if (typeof parsed.sep === 'string' && parsed.sep !== '') spec.sep = parsed.sep
-      if (Array.isArray(parsed.values)) {
-        const values = parsed.values.filter((x): x is string => typeof x === 'string')
-        if (values.length > 0) spec.values = values
-      }
-      fields[key] = spec
-    } catch (err) {
-      return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」JSON 解析失败：` + (err instanceof Error ? err.message : String(err)) }
-    }
+    const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path }
+    if (row.action !== 'set') spec.action = row.action
+    if (row.op !== 'raw') spec.op = row.op
+    if (row.sep.trim() !== '') spec.sep = row.sep.trim()
+    const values = row.valuesText.split(',').map((s) => s.trim()).filter((s) => s !== '')
+    if (values.length > 0) spec.values = values
+    fields[key] = spec
   }
   return { fields, error: null }
 }
 
-const EMPTY_MODEL_INFO_TEXTS: Record<ModelInfoFieldKey, string> = {
-  max_context: '',
-  max_output_token: '',
-  input_types: '',
-  thinking_levels: '',
+const EMPTY_MODEL_INFO_ROWS: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
+  max_context: { ...EMPTY_MODEL_INFO_ROW },
+  max_output_token: { ...EMPTY_MODEL_INFO_ROW },
+  input_types: { ...EMPTY_MODEL_INFO_ROW },
+  thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
 }
 
 function RuleDialog({
@@ -610,7 +630,7 @@ function RuleDialog({
   const [commonError, setCommonError] = useState<string | null>(null)
   const [showCommonJson, setShowCommonJson] = useState(false)
   const [endpointRules, setEndpointRules] = useState<readonly EndpointRuleEdit[]>([])
-  const [modelInfoTexts, setModelInfoTexts] = useState<Record<ModelInfoFieldKey, string>>(EMPTY_MODEL_INFO_TEXTS)
+  const [modelInfoRows, setModelInfoRows] = useState<Record<ModelInfoFieldKey, ModelInfoFieldRow>>(EMPTY_MODEL_INFO_ROWS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // 「使用默认推荐模版」二次确认框。
@@ -633,12 +653,7 @@ function RuleDialog({
       conditions: p.conditions ?? [],
       fieldsJson: JSON.stringify(p.recommendations ?? [], null, 2),
     })))
-    setModelInfoTexts(mif ? {
-      max_context: modelInfoSpecToText(mif.max_context),
-      max_output_token: modelInfoSpecToText(mif.max_output_token),
-      input_types: modelInfoSpecToText(mif.input_types),
-      thinking_levels: modelInfoSpecToText(mif.thinking_levels),
-    } : { ...EMPTY_MODEL_INFO_TEXTS })
+    setModelInfoRows(modelInfoRowsFromSpecs(mif))
   }, [])
 
   useEffect(() => {
@@ -727,7 +742,7 @@ function RuleDialog({
     }
     // 组装回 config_jsonc，保持与结构化编辑同步。
     const configJsonc = buildRuleConfigJsonc(common, protocols)
-    const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoTexts)
+    const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoRows)
     if (mifError) {
       setError(mifError)
       return
@@ -853,7 +868,7 @@ function RuleDialog({
               </p>
             </Field>
 
-            <ModelInfoFieldsEditor value={modelInfoTexts} onChange={setModelInfoTexts} />
+            <ModelInfoFieldsEditor value={modelInfoRows} onChange={setModelInfoRows} />
 
             <Field>
               <div className="flex items-center justify-between">
@@ -869,7 +884,7 @@ function RuleDialog({
                   className="text-xs text-muted-foreground underline underline-offset-2"
                   onClick={() => setShowCommonJson((v) => !v)}
                 >
-                  {showCommonJson ? '收起 JSON' : '编辑为 JSON'}
+                  {showCommonJson ? '收起 JSON' : '编辑 JSON'}
                 </button>
               </div>
               {showCommonJson ? (
@@ -911,7 +926,7 @@ function RuleDialog({
                       <>
                         <p className="pb-1 text-[11px] text-destructive">
                           当前公共配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
-                          请在「编辑为 JSON」里修正
+                          请在「编辑 JSON」里修正
                         </p>
                         <Textarea
                           value={commonText}
@@ -1014,8 +1029,8 @@ function RecommendationTable({
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
-            <th className="w-56 px-2 py-1.5 text-left font-medium">路径</th>
-            {showScope ? <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">落在</th> : null}
+            <th className="w-40 px-2 py-1.5 text-left font-medium">路径</th>
+            {showScope ? <th className="w-[5rem] px-2 py-1.5 text-left font-medium">作用范围</th> : null}
             <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
             <th className="w-[8rem] px-2 py-1.5 text-left font-medium">推荐值</th>
             <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">op</th>
@@ -1168,40 +1183,94 @@ function ModelInfoFieldsEditor({
   value,
   onChange,
 }: {
-  value: Record<ModelInfoFieldKey, string>
-  onChange: (v: Record<ModelInfoFieldKey, string>) => void
+  value: Record<ModelInfoFieldKey, ModelInfoFieldRow>
+  onChange: (v: Record<ModelInfoFieldKey, ModelInfoFieldRow>) => void
 }) {
+  const update = (key: ModelInfoFieldKey, patch: Partial<ModelInfoFieldRow>) => {
+    onChange({ ...value, [key]: { ...value[key], ...patch } })
+  }
+
   return (
     <Field>
       <div className="flex items-center justify-between">
         <FieldLabel>模型通用信息</FieldLabel>
       </div>
       <p className="text-xs text-muted-foreground">
-        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。只允许值&写法（JSON 对象）：
-        <code className="font-mono">{'{"path":"reasoning","op":"bool"}'}</code>
-        ，不允许只填路径。path 为写入位置，op 可选：
-        raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，sep 可选，默认逗号）；
-        action 可选：set（填，默认）/ skip（不填）/ delete（删除字段）；values 可选白名单（如 openclaw input 只允许 text/image/video/audio）。
+        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：
+        路径为写入位置，写法（op）可选 raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/
+        join（数组拼接，可填 sep，默认逗号）；操作可选 填（默认）/ 不填 / 删除字段；允许值为白名单（如 openclaw input
+        只允许 text/image/video/audio），逗号分隔。
       </p>
       <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
-              <th className="w-[40%] px-2 py-1.5 text-left font-medium">模型信息</th>
-              <th className="px-2 py-1.5 text-left font-medium">值&写法</th>
+              <th className="w-[8.5rem] px-2 py-1.5 text-left font-medium">模型信息</th>
+              <th className="w-40 px-2 py-1.5 text-left font-medium">路径</th>
+              <th className="w-[5rem] px-2 py-1.5 text-left font-medium">写法</th>
+              <th className="w-[3.5rem] px-2 py-1.5 text-left font-medium">sep</th>
+              <th className="px-2 py-1.5 text-left font-medium">允许值</th>
+              <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {MODEL_INFO_FIELD_KEYS.map((key) => (
               <tr key={key}>
                 <td className="px-2 py-1.5">{MODEL_INFO_FIELD_LABELS[key]}</td>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-1">
                   <Input
-                    value={value[key]}
-                    onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-                    placeholder={`例如：{"path":"reasoning","op":"bool"}`}
-                    className="h-7 text-xs font-mono"
+                    value={value[key].path}
+                    onChange={(e) => update(key, { path: e.target.value })}
+                    placeholder="reasoning"
+                    className="h-6 text-xs font-mono"
                   />
+                </td>
+                <td className="px-2 py-1">
+                  <Select value={value[key].op} onValueChange={(v) => update(key, { op: v as AgentModelInfoFieldOp })}>
+                    <SelectTrigger className="h-6 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AGENT_MODEL_INFO_FIELD_OPS.map((op) => (
+                        <SelectItem key={op} value={op}>
+                          {op}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-2 py-1">
+                  <Input
+                    value={value[key].sep}
+                    onChange={(e) => update(key, { sep: e.target.value })}
+                    placeholder=","
+                    className="h-6 text-xs font-mono"
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <Input
+                    value={value[key].valuesText}
+                    onChange={(e) => update(key, { valuesText: e.target.value })}
+                    placeholder="text, image, video（逗号分隔）"
+                    className="h-6 text-xs font-mono"
+                  />
+                </td>
+                <td className="px-2 py-1">
+                  <Select
+                    value={value[key].action}
+                    onValueChange={(v) => update(key, { action: v as 'set' | 'skip' | 'delete' })}
+                  >
+                    <SelectTrigger className="h-6 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REC_ACTIONS.map((a) => (
+                        <SelectItem key={a} value={a}>
+                          {REC_ACTION_LABEL[a]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </td>
               </tr>
             ))}
@@ -1316,7 +1385,7 @@ function EndpointRulesEditor({
                       className="text-xs text-muted-foreground underline underline-offset-2"
                       onClick={() => update(ruleIndex, (r) => ({ ...r, showJson: !r.showJson }))}
                     >
-                      {rule.showJson ? '收起 JSON' : '编辑为 JSON'}
+                      {rule.showJson ? '收起 JSON' : '编辑 JSON'}
                     </button>
                   </div>
                   {rule.showJson ? (
@@ -1350,7 +1419,7 @@ function EndpointRulesEditor({
                           <>
                             <p className="pb-1 text-[11px] text-destructive">
                               当前私有配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
-                              请在「编辑为 JSON」里修正
+                              请在「编辑 JSON」里修正
                             </p>
                             <Textarea
                               value={rule.fieldsJson}

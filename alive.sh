@@ -48,7 +48,7 @@ health() {
 stack_up() {
   case "$1" in
     prod) health "http://127.0.0.1:$WEB_PORT/health" ;;
-    dv)   web_ok && health "http://127.0.0.1:$API_PORT/health" ;;
+    dev)  web_ok && health "http://127.0.0.1:$API_PORT/health" ;;
   esac
 }
 

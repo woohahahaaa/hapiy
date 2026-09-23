@@ -134,8 +134,14 @@ type Log struct {
 	// the upstream request was issued; nil when no concurrency rule applies.
 	QueueWaitMs *int `json:"queue_wait_ms,omitempty"`
 	// UpstreamURL is the full URL (base URL + path) actually issued to the upstream; empty when the request never reached upstream.
-	UpstreamURL string    `json:"upstream_url,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	UpstreamURL string `json:"upstream_url,omitempty"`
+	// ProviderKey is the actual provider key used to reach upstream; empty
+	// when the request never reached upstream.
+	ProviderKey string `json:"provider_key,omitempty"`
+	// ProviderBaseURL is the actual provider base URL used to reach upstream;
+	// empty when the request never reached upstream.
+	ProviderBaseURL string    `json:"provider_base_url,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 func (l *Log) BeforeCreate(tx *gorm.DB) error {
@@ -360,16 +366,16 @@ func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
 // one that reached (or tried to reach) the upstream, so its combo is the
 // only one with a meaningful failure context.
 type DisabledRecord struct {
-	ID             string     `gorm:"primaryKey;type:uuid" json:"id"`
-	ProviderID     string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
-	Dimension      string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
-	Value          string     `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
-	BaseURL        string     `gorm:"type:text" json:"base_url"`
-	Key            string     `gorm:"type:text" json:"key"`
-	Model          string     `gorm:"type:text" json:"model"`
-	RequestHeaders string     `gorm:"type:text" json:"request_headers"`
-	RequestBody    string     `gorm:"type:text" json:"request_body"`
-	ErrorMessage   string     `gorm:"type:text" json:"error_message"`
+	ID             string `gorm:"primaryKey;type:uuid" json:"id"`
+	ProviderID     string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
+	Dimension      string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
+	Value          string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
+	BaseURL        string `gorm:"type:text" json:"base_url"`
+	Key            string `gorm:"type:text" json:"key"`
+	Model          string `gorm:"type:text" json:"model"`
+	RequestHeaders string `gorm:"type:text" json:"request_headers"`
+	RequestBody    string `gorm:"type:text" json:"request_body"`
+	ErrorMessage   string `gorm:"type:text" json:"error_message"`
 	// RuleID/RuleName snapshot the failover rule that caused the disable.
 	// Recovery probes re-evaluate the (live) rule before recovering; when
 	// the rule has been deleted the probe falls back to a connectivity

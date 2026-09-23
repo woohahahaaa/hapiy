@@ -602,6 +602,12 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 	} else if resp != nil {
 		resp.UpstreamURL = upstreamURL
 	}
+	// Mirror the channel actually used so log rows can record the key and
+	// base URL that served the request.
+	if resp != nil {
+		resp.ProviderBaseURL = plan.BaseURLs[baseURLIndex]
+		resp.ProviderKey = key
+	}
 	return resp, err
 }
 
