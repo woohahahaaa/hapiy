@@ -55,14 +55,11 @@ model 配置在 `models.providers.{provider_id}.models[]` 数组元素里：
 
 openclaw 模板字段与官方吻合度较高，主要问题如下：
 
-### 1. `apiKey` 位置偏差（已修正描述）
-模板把 `apiKey` 放在 `provider` scope 且 `required: true`。官方实际结构里，`models.providers.{id}` 下**不直接放 apiKey**——apiKey 放在独立的 `auth.profiles` 段，并用环境变量引用（如 `"apiKey": "${ZAI_API_KEY}"`）。**已修正描述**，注明规范位置在 `auth.profiles` 段，不在 `models.providers` 下内联。
+### 1. `apiKey` 位置（描述已注明规范位置）
+模板把 `apiKey` 放在 `provider` scope 且 `required: true`。官方规范位置是独立的 `auth.profiles` 段、用环境变量引用（如 `"apiKey": "${ZAI_API_KEY}"`），描述已注明；但社区配置与 openclaw 本身也接受内联 `models.providers.{id}.apiKey`。本项目的托管生成走内联写法（`apiKeyFieldFor` 靠 `required` 标记定位落点），两者按使用方式取舍。
 
-### 2. 缺失官方模型字段（已补充）
-模板 model scope 原只列了 `id` / `name` / `contextWindow` / `maxTokens` / `input` / `reasoning`，**已补充**官方已有的：
-- `output`（输出类型数组）；
-- `cost`（成本配置对象，含 input/output/cacheRead/cacheWrite）；
-- `supports`（功能支持对象：streaming/functions/vision）。
+### 2. 未列入的官方模型字段（有意不列入）
+本项目模板按「只保留缺了就跑不起来的字段 + 输入格式字段」原则列字段，当前 common 为 `id` / `name` / `contextWindow` / `input` / `reasoning`；`maxTokens` 已由 Anthropic Messages 协议的 endpoint 规则声明为必填，不再在 common 里重复。官方还有的可选字段 `output`（输出类型数组）/ `cost`（input/output/cacheRead/cacheWrite）/ `supports`（streaming/functions/vision）等不做推荐（不干预），需要时可在规则里手动加。
 
 ### 3. `protocols` 按 endpoint 关键词归类 `api`（已修正）
 openclaw 通过 `api` 字段直接指定协议类型（openai-completions/anthropic-messages/ollama/lmstudio）。与 opencode 的 `npm` 同理，`api` 是「必须先填、且必须和 endpoint 匹配」的驱动字段 —— 同一个托管 provider 下不同 endpoint 分组（如 `/v1/messages` 与 `/v1/chat/completions`）走的 SDK 不同，不能全默认 `openai-completions`。本模板已为 openclaw 配置 `protocols`：按 endpoint 关键词自动归入对应 `api` 值并作为该分组的推荐（具体关键词优先）；common 里的 `api` 不给推荐值（避免管理模型把 anthropic 端点误判成 openai-completions），未命中时也不写入 `api`，走 openclaw 官方默认。另：**anthropic-messages 协议下每个模型都必须有 `maxTokens`**（Anthropic 官方要求每次请求带 max_tokens），该协议的 model 级推荐已把 `maxTokens` 标为必填。

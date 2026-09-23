@@ -51,7 +51,7 @@ model 配置在 `provider.{provider_id}.models.{model_id}` 下（key 即模型 I
 | `variants` | object | 否 | 同模型多档配置 | 自定义变体（high/low 等），详见官方 |
 | `disabled` | boolean | 否 | 想禁用某变体时 | 设为 true 禁用该条目 |
 
-> 思考模式（reasoning）在 opencode 里**不是**一个顶层 model boolean 字段，而是通过 `options.thinking`（Anthropic）或 `options.reasoningEffort`（OpenAI）或 `variants` 控制。工具调用能力由 AI SDK 自动处理，无需手动声明。
+> `reasoning` / `tool_call` 都是 schema 里真实存在的可选顶层 model boolean，模板把两者作为「已知字段」列入（不设推荐值也不标必填）；本项目的「模型通用信息」会把思考档位按 bool 写进 `reasoning`。请求级思考调参才走 `options.thinking`（Anthropic）/ `options.reasoningEffort`（OpenAI）或 `variants`。
 
 ---
 
@@ -59,11 +59,9 @@ model 配置在 `provider.{provider_id}.models.{model_id}` 下（key 即模型 I
 
 > 经 opencode 官方 JSON schema（https://opencode.ai/config.json）逐字段核验，更正如下。此前"编造/张冠李戴"判断作废——下列字段均经 schema 确认真实存在。
 
-### 1. 推荐值设置不当（已修正）
-三个可有可无的 options 字段被设了推荐值，按"有利可设、可有可无不干预"原则改为 `null`：
-- `options.timeout`：原 `600000` → 改 `null`（官方默认 300000，属个人偏好）；
-- `options.chunkTimeout`：原 `30000` → 改 `null`（官方默认 300000，原推荐值偏激进，差 10 倍）；
-- `options.setCacheKey`：原 `true` → 改 `null`（缓存优化需模型支持 promptCacheKey 才生效，不应一刀切推荐开启）。
+### 1. 可选字段与推荐值（与当前模板一致）
+- `options.setCacheKey`：模板保留且 recommended `true`（官方默认 false；开启 promptCacheKey 缓存优化。注意：管理模型会把没写该字段的 provider 标为缺字段，一键套用会补 `true`）；
+- `options.timeout` / `options.headerTimeout` / `options.chunkTimeout` / `options.enterpriseUrl` / `blacklist` / `whitelist` 等可选调优/隐藏项已从模板移除，不推荐、不干预（需要时在规则里手动加）。
 
 ### 2. 字段真实性确认（更正此前误判）
 官方 schema 证实以下字段全部真实存在，此前"编造/张冠李戴"判断作废：
