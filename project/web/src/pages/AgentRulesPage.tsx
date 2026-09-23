@@ -1146,10 +1146,12 @@ function RecommendationTable({
                   />
                 </td>
                 <td className="px-2 py-1">
-                  <Checkbox
-                     checked={r.required}
-                     onCheckedChange={(c) => update(i, (x) => ({ ...x, required: c === true }))}
-                   />
+                   <div className="flex h-6 items-center">
+                     <Checkbox
+                       checked={r.required}
+                       onCheckedChange={(c) => update(i, (x) => ({ ...x, required: c === true }))}
+                     />
+                   </div>
                  </td>
                  <td className="px-2 py-1">
                   <Input

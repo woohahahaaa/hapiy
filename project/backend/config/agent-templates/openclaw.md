@@ -25,7 +25,7 @@ provider 配置在 `models.providers.{provider_id}` 下：
 | 字段 | 类型 | 必填 | 推荐 | 说明 |
 |------|------|------|------|------|
 | `baseUrl` | string | 是 | 按官方格式，**不要多写不该有的 `/v1`** | API 端点，如 `https://open.bigmodel.cn/api/coding/paas/v4` |
-| `api` | string | 否 | `openai-completions`（默认推荐） | 协议类型：`openai-completions` / `anthropic-messages` / `ollama` / `lmstudio` 等 |
+| `api` | string | 否 | 不干预（由 endpoint 规则归类） | 协议类型：`openai-completions` / `anthropic-messages` / `ollama` / `lmstudio` 等 |
 | `apiKey` | string | 否 | 推荐放 `auth.profiles` 用环境变量，不写明文 | 认证密钥（见第五节偏差说明） |
 | `models` | array | 否 | 自定义模型列表 | 模型对象数组，见下表 |
 
@@ -65,7 +65,7 @@ openclaw 模板字段与官方吻合度较高，主要问题如下：
 - `supports`（功能支持对象：streaming/functions/vision）。
 
 ### 3. `protocols` 按 endpoint 关键词归类 `api`（已修正）
-openclaw 通过 `api` 字段直接指定协议类型（openai-completions/anthropic-messages/ollama/lmstudio）。与 opencode 的 `npm` 同理，`api` 是「必须先填、且必须和 endpoint 匹配」的驱动字段 —— 同一个托管 provider 下不同 endpoint 分组（如 `/v1/messages` 与 `/v1/chat/completions`）走的 SDK 不同，不能全默认 `openai-completions`。本模板已为 openclaw 配置 `protocols`：按 endpoint 关键词自动归入对应 `api` 值并作为该分组的推荐（具体关键词优先），未命中时退回到通用 openai-completions。另：**anthropic-messages 协议下每个模型都必须有 `maxTokens`**（Anthropic 官方要求每次请求带 max_tokens），该协议的 model 级推荐已把 `maxTokens` 标为必填。
+openclaw 通过 `api` 字段直接指定协议类型（openai-completions/anthropic-messages/ollama/lmstudio）。与 opencode 的 `npm` 同理，`api` 是「必须先填、且必须和 endpoint 匹配」的驱动字段 —— 同一个托管 provider 下不同 endpoint 分组（如 `/v1/messages` 与 `/v1/chat/completions`）走的 SDK 不同，不能全默认 `openai-completions`。本模板已为 openclaw 配置 `protocols`：按 endpoint 关键词自动归入对应 `api` 值并作为该分组的推荐（具体关键词优先）；common 里的 `api` 不给推荐值（避免管理模型把 anthropic 端点误判成 openai-completions），未命中时也不写入 `api`，走 openclaw 官方默认。另：**anthropic-messages 协议下每个模型都必须有 `maxTokens`**（Anthropic 官方要求每次请求带 max_tokens），该协议的 model 级推荐已把 `maxTokens` 标为必填。
 
 ### 4. `baseUrl` 提醒正确
 模板提醒「注意不要多写不该有的 `/v1`」与官方示例（`https://open.bigmodel.cn/api/coding/paas/v4` 不带多余 /v1）一致，这点正确。

@@ -46,9 +46,13 @@ func TestEveryAgentProtocolsMatchSdkDriver(t *testing.T) {
 		}
 	}
 
+	// 单协议 agent 例外：Codex 只支持 responses（wire_api 恒为 responses），
+	// 不存在同一驱动字段多值的问题，无需 protocols 归类。
+	singleProtocol := map[string]bool{"ChatGPT": true}
+
 	// 有驱动字段 → 必须配 protocols（按 endpoint 归类，不能全站同一个值）。
 	for name := range gotDriver {
-		if !hasProtocols[name] {
+		if !hasProtocols[name] && !singleProtocol[name] {
 			t.Fatalf("agent %s declares an SDK-driver field but has no per-endpoint protocols; "+
 				"different endpoints would silently share one driver value", name)
 		}

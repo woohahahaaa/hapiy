@@ -19,7 +19,8 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
     ? MODE_BY_VALUE.get(action.mode as ModeName)!
     : null
   const typedMode = (spec ? action.mode : '') as ModeName | ''
-  const disabled = typedMode === 'delete'
+  // delete 不需要字段：操作符跟在路径后面，只有 move / 前后缀才落第二排。
+  const fields = spec?.needs ?? []
 
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5">
@@ -32,8 +33,6 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
             onChange={(e) => onChange({ ...action, path: e.target.value })}
             placeholder="gjson 路径"
           />
-        </div>
-        <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
           <Select
             value={typedMode}
             onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
@@ -49,14 +48,17 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Input
-            className="h-7 min-w-0 flex-1 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-muted"
-            value={action.value}
-            onChange={(e) => onChange({ ...action, value: e.target.value })}
-            placeholder={valuePlaceholder(typedMode)}
-            disabled={disabled}
-          />
         </div>
+        {fields.length > 0 && (
+          <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
+            <Input
+              className="h-7 min-w-0 flex-1 font-mono text-xs"
+              value={action.value}
+              onChange={(e) => onChange({ ...action, value: e.target.value })}
+              placeholder={valuePlaceholder(typedMode)}
+            />
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -76,7 +78,6 @@ function valuePlaceholder(mode: ModeName | ''): string {
     case 'move': return '新字段路径（如 messages.0.text）'
     case 'first_prepend': return '要加的前缀（如 \n<think>）'
     case 'last_append': return '要加的后缀（如 \n</think>）'
-    case 'delete': return '此操作无需 value'
     default: return 'value'
   }
 }

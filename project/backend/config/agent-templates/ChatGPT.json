@@ -36,6 +36,14 @@
     },
     {
       "scope": "provider",
+      "key": "wire_api",
+      "description": "接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）",
+      "type": "string",
+      "recommended": "responses",
+      "required": false
+    },
+    {
+      "scope": "provider",
       "key": "env_key",
       "description": "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）",
       "type": "string",

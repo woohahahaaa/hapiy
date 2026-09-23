@@ -72,7 +72,7 @@ WorkBuddy 模板字段与官方吻合度较高，主要问题如下：
 `input_types` 映射到 `supportsImages`(bool)、`thinking_levels` 映射到 `supportsReasoning`(bool)——官方 `input_types` 概念上是数组（text/image），这里用 bool 简化。属于系统统一读取模型信息的设计取舍，不算乱写，但会丢失「支持哪些输入类型」的细节。
 
 ### 4. 必填性（已按腾讯云官方字段表核对）
-腾讯云官方字段表明确：**仅 `id` 必填**，`name` / `vendor` / `apiKey` / `url` 均标"否"（非必填，因覆盖内置模型时不必重填）。模板 `required` 标注与官方一致（id=true，其余=false）。`apiKey` 此前误改 `true` 已撤销回 `false`；描述补充"实际密钥值，非环境变量名；Ollama 本地填占位符 ollama"。
+腾讯云官方字段表明确：**仅 `id` 必填**，`name` / `vendor` / `apiKey` / `url` 均标"否"（非必填，因覆盖内置模型时不必重填）。本项目模板有意偏离官方字段表：`url` 与 `apiKey` 标 `required=true` —— 前者是自定义模型接入必需（且须是完整 `/chat/completions` 路径），后者让引擎能定位「写令牌 key 的落点」（`apiKeyFieldFor` 依赖该标记）；`id` 之外其余字段仍为 false。
 
 ### 5. `supportsToolCall` 描述已修正
 原描述"推荐开启"与 recommended `null`（不干预）矛盾，已改为"模型支持 Function Calling 时才开启"。

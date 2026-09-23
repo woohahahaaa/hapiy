@@ -28,6 +28,14 @@
     },
     {
       "scope": "model",
+      "key": "apiKey",
+      "description": "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）",
+      "type": "string",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "model",
       "key": "url",
       "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
       "type": "string",

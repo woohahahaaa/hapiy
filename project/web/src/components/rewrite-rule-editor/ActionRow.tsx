@@ -20,6 +20,9 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
   const spec = action.mode && MODE_BY_VALUE.has(action.mode as ModeName)
     ? MODE_BY_VALUE.get(action.mode as ModeName)!
     : null
+  // delete / trim_space 这类无字段的操作只需要一行；操作符跟在路径后面，
+  // 有需要的值（value/from/to/dst）才落第二排。
+  const fields = spec?.needs ?? []
 
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5">
@@ -47,25 +50,25 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
             onChange={(e) => onChange({ ...action, path: e.target.value })}
             placeholder={action.scope === 'header' ? 'header 名（不用写 header.）' : 'gjson 路径'}
           />
+          <Select
+            value={action.mode}
+            onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
+          >
+            <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
+              <SelectValue placeholder="选择操作" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {MODES.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
-        {spec && (
+        {fields.length > 0 && (
           <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
-            <Select
-              value={action.mode}
-              onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
-            >
-              <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {MODES.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-{spec.needs.length > 0 && spec.needs.map((field) => (
+            {fields.map((field) => (
               field === 'value' ? (
                 <LiteralValueInput
                   key={field}
@@ -83,25 +86,6 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                 />
               )
             ))}
-          </div>
-        )}
-        {!spec && (
-          <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
-            <Select
-              value={action.mode}
-              onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
-            >
-              <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
-                <SelectValue placeholder="选择操作" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {MODES.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
           </div>
         )}
       </div>
