@@ -17,6 +17,7 @@ import {
 } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi,
@@ -174,6 +175,7 @@ function RewritePage() {
   const [editing, setEditing] = useState<RewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
+  const [deleting, setDeleting] = useState<RewriteRule | null>(null)
 
   const handleDelete = async (id: string) => {
     if (mutating) return
@@ -209,7 +211,7 @@ function RewritePage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -273,6 +275,23 @@ function RewritePage() {
         height="full"
       />
       )}
+
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        title="确认删除"
+        description={`将删除规则「${deleting?.name ?? ''}」，删除后不可恢复。`}
+        busy={mutating}
+        onConfirm={() => {
+          if (deleting) {
+            const id = deleting.id
+            setDeleting(null)
+            void handleDelete(id)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -355,7 +374,7 @@ function FailoverPage() {
 
   const columns: ColumnDef<FailoverRule>[] = [
     { key: 'name', label: '名称', defaultWidth: { kind: 'pixel', value: 160 }, render: (_, row) => <span className="font-medium">{row.name}</span> },
-    { key: 'dimension', label: '轮询维度', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
+    { key: 'dimension', label: '转移维度', defaultWidth: { kind: 'pixel', value: 120 }, render: (_, row) => <span className="text-xs">{row.dimension ? failoverDimensionLabel(row.dimension) : '—'}</span> },
     {
       key: 'matchPatterns',
       label: '触发字段',
@@ -403,7 +422,7 @@ function FailoverPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="故障转移"
-        description="主供应商失败时自动切换到备选供应商"
+        description="主供应商失败时自动转移到备选供应商"
       />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <Tabs defaultValue="failover" className="flex min-h-0 flex-1 flex-col">
@@ -513,40 +532,60 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         <Input id="failover-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="规则名称" />
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="failover-dimension">轮询维度</FieldLabel>
-        <div className="flex items-center gap-4">
-          <Select value={form.dimension || 'base_url'} onValueChange={(value) => setForm((p) => ({ ...p, dimension: value as FailoverRule['dimension'] }))}>
-            <SelectTrigger id="failover-dimension" className="w-52">
-              <SelectValue placeholder="选择轮询维度" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {FAILOVER_DIMENSIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground">每个规则只选一个维度。同一请求失败时，只走这一条规则的轮询。</p>
-        <p className="text-xs text-muted-foreground">
-          故障转移：轮询用尽后将出问题的
-          {form.dimension === 'key' ? 'Key' : form.dimension === 'provider' ? '供应商' : 'BaseURL'}
-          标记为禁用。
-        </p>
-      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field>
+          <FieldLabel htmlFor="failover-dimension">转移维度</FieldLabel>
+          <div className="flex items-center gap-4">
+            <Select value={form.dimension || 'base_url'} onValueChange={(value) => setForm((p) => ({ ...p, dimension: value as FailoverRule['dimension'] }))}>
+              <SelectTrigger id="failover-dimension" className="w-full">
+                <SelectValue placeholder="选择转移维度" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {FAILOVER_DIMENSIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">请求失败时，将按该维度进行故障转移。</p>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="failover-auto-disable">自动禁用</FieldLabel>
+          <div className="flex items-center gap-4">
+            <Select value={form.autoDisable ? 'yes' : 'no'} onValueChange={(value) => setForm((p) => ({ ...p, autoDisable: value === 'yes' }))}>
+              <SelectTrigger id="failover-auto-disable" className="w-full">
+                <SelectValue placeholder="是否自动禁用" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="yes">是</SelectItem>
+                  <SelectItem value="no">否</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            选「是」：转移候选用尽后，将出问题的
+            {form.dimension === 'key' ? 'Key' : form.dimension === 'provider' ? '供应商' : 'BaseURL'}
+            标记为禁用（受下方禁用阈值约束）。
+          </p>
+          <p className="text-xs text-muted-foreground">选「否」：每次只转移到下一个候选，不会自动禁用。</p>
+        </Field>
+      </div>
 
       <Field>
         <FieldLabel htmlFor="failover-patterns">上游报错字段包含以下关键词时自动触发</FieldLabel>
         <Textarea id="failover-patterns" value={matchPatterns} onChange={(event) => setMatchPatterns(event.target.value)} placeholder={'每行一个关键词或错误码\n429\nrate_limit_exceeded\ninsufficient_quota'} rows={4} />
-        <p className="text-xs text-muted-foreground">每行一个；任一行出现在上游报错内容中即触发轮询。留空则仅按下方条件触发。</p>
+        <p className="text-xs text-muted-foreground">每行一个；任一行出现在上游报错内容中即触发转移。留空则仅按下方条件触发。</p>
       </Field>
 
       <Field>
         <FieldLabel htmlFor="failover-ttfb">首字超时（秒）</FieldLabel>
         <Input id="failover-ttfb" type="number" min={0} className="w-40" value={form.ttfbSeconds} onChange={(event) => setForm((p) => ({ ...p, ttfbSeconds: Math.max(0, Number(event.target.value) || 0) }))} placeholder="0" />
-        <p className="text-xs text-muted-foreground">填 0 表示不启用此条件；填大于 0 表示首字响应超过 N 秒也会触发轮询（与匹配字段 OR 关系）。</p>
+        <p className="text-xs text-muted-foreground">填 0 表示不启用此条件；填大于 0 表示首字响应超过 N 秒也会触发转移（与匹配字段 OR 关系）。</p>
       </Field>
 
       <Field>

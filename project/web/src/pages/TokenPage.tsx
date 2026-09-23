@@ -13,8 +13,6 @@ type TokenFormProps = {
   readonly token: Token | null
   readonly onSave: (token: TokenInput) => void
   readonly onCancel: () => void
-  readonly onRefresh: () => void
-  readonly pendingKey: string | null
   readonly isSaving: boolean
 }
 
