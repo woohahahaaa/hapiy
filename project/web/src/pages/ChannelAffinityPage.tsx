@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } fr
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import {
   dashboardApi,
   DashboardApiError,
@@ -200,6 +201,7 @@ export function ChannelAffinityPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
 
@@ -313,7 +315,7 @@ export function ChannelAffinityPage() {
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...row, enabled: !row.enabled })}>{row.enabled ? '禁用' : '启用'}</Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(row); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
-          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void handleDeleteRule(row.name)}><AppIcon name="delete" /></Button>
+          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => setDeleting(row.name)}><AppIcon name="delete" /></Button>
         </div>
       ),
     },
@@ -375,6 +377,23 @@ export function ChannelAffinityPage() {
           <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} onCancel={() => setIsFallbackOpen(false)} saving={isSaving} />
         </DialogContent>
       </Dialog>
+
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        title="确认删除"
+        description={`将删除渠道亲和性规则「${deleting ?? ''}」，删除后不可恢复。`}
+        busy={isSaving}
+        onConfirm={() => {
+          if (deleting) {
+            const name = deleting
+            setDeleting(null)
+            void handleDeleteRule(name)
+          }
+        }}
+      />
     </div>
   )
 }
