@@ -882,7 +882,6 @@ var opencodeRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型在界面里的显示名"},
 	{Scope: "model", Key: "limit.context", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限"},
 	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
 	{Scope: "model", Key: "tool_call", Type: "boolean", Description: "模型是否支持工具调用"},
 	{Scope: "model", Key: "attachment", Type: "boolean", Description: "模型是否支持文件/图片附件输入（输入格式）"},
@@ -927,6 +926,9 @@ var codexRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "model_provider", Type: "string", Description: "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）", Required: true},
 	{Scope: "provider", Key: "name", Type: "string", Description: "自定义 provider 的显示名"},
 	{Scope: "provider", Key: "base_url", Type: "string", Description: "该 provider 的 API base URL（如 https://api.example.com/v1）", Required: true},
+	// 2026.02 起 Codex 强制 responses（Responses API），不再支持 Chat Completions；
+	// 网关必须原生支持 Responses API，这里给出唯一可用的取值。
+	{Scope: "provider", Key: "wire_api", Type: "string", Description: "接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）", Recommended: "responses"},
 	{Scope: "provider", Key: "env_key", Type: "string", Description: "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）"},
 }
 
@@ -937,6 +939,9 @@ var codexRecommendations = []AgentRecommendation{
 var workBuddyRecommendations = []AgentRecommendation{
 	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识（官方必填）", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名称"},
+	// apiKey 官方标非必填（覆盖内置模型时可不填），但自定义模型缺它连不上；
+	// 标必填同时让托管生成能找到写入令牌 key 的落点（apiKeyFieldFor 依赖此标记）。
+	{Scope: "model", Key: "apiKey", Type: "string", Description: "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）", Required: true},
 	{Scope: "model", Key: "url", Type: "string", Description: "API 端点，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
 	{Scope: "model", Key: "maxInputTokens", Type: "number", Description: "最大输入 token 数"},
 	{Scope: "model", Key: "maxOutputTokens", Type: "number", Description: "最大输出 token 数"},
@@ -953,13 +958,13 @@ var workBuddyRecommendations = []AgentRecommendation{
 var openclawRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
 	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
-	// api 是协议/SDK 驱动字段，一般由 endpoint 关键词自动归类（见 openclawProtocols）；
-	// 这里保留 openai-completions 作为未命中任何关键词时的兜底。
-	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类", Recommended: "openai-completions"},
+	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见 openclawProtocols）；
+	// common 里只保留字段本身做驱动识别，不给推荐值，避免管理模型把
+	// anthropic-messages 端点误判成 openai-completions。
+	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类"},
 	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识", Required: true},
 	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
 	{Scope: "model", Key: "contextWindow", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限（anthropic-messages 协议下必填）"},
 	{Scope: "model", Key: "input", Type: "array", Description: "支持的输入类型（text/image/video/audio）"},
 	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "是否支持思考模式（官方 schema 校验，未配按 false 处理）"},
 }

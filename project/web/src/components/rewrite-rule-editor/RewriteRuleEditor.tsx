@@ -28,21 +28,34 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
   const [form, setForm] = useState<RuleForm>(() => parseRule(initialScript))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
-  // 标记下一次 form 变化来自 initialScript 重置，跳过回传。
-  const skipNextPush = useRef(false)
+  // 最近一次自己回传给父级的 script。父级会把它作为 initialScript 原样回显，
+  // 必须忽略这个回显：否则每次输入都会「序列化 → 反序列化」往返一次，未填完
+  // （空 path / 空 value）的行会在往返里被丢掉，其他行的位置跟着乱。
+  const lastEmitted = useRef(initialScript)
+  // 外部 initialScript 变化后重置出来的 form：跳过它的首次回传，避免把
+  // parse→serialize 的规范化结果立刻写回父级。
+  const skipPushFor = useRef<RuleForm | null>(null)
+  const mounted = useRef(false)
 
   useEffect(() => {
-    skipNextPush.current = true
-    setForm(parseRule(initialScript))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (initialScript === lastEmitted.current) return
+    const parsed = parseRule(initialScript)
+    skipPushFor.current = parsed
+    setForm(parsed)
   }, [initialScript])
 
   useEffect(() => {
-    if (skipNextPush.current) {
-      skipNextPush.current = false
+    if (!mounted.current) {
+      mounted.current = true
       return
     }
-    onScriptChange(serializeRule(form))
+    if (skipPushFor.current === form) {
+      skipPushFor.current = null
+      return
+    }
+    const next = serializeRule(form)
+    lastEmitted.current = next
+    onScriptChange(next)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form])
 

@@ -44,8 +44,6 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
             onChange={(e) => onChange({ ...condition, path: e.target.value })}
             placeholder={condition.scope === 'header' ? 'header 名（不用写 header.）' : 'gjson 路径'}
           />
-        </div>
-        <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
           <Select
             value={condition.op}
             onValueChange={(v) => onChange({ ...condition, op: v })}
@@ -61,6 +59,8 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
               </SelectGroup>
             </SelectContent>
           </Select>
+        </div>
+        <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
           <ConventionValueInput
             text={condition.value}
             onChange={(value) => onChange({ ...condition, value })}

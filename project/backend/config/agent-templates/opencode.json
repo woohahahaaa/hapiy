@@ -68,14 +68,6 @@
     },
     {
       "scope": "model",
-      "key": "limit.output",
-      "description": "输出 token 上限",
-      "type": "number",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
       "key": "reasoning",
       "description": "模型是否支持思考模式（思考程度统一值→bool）",
       "type": "boolean",

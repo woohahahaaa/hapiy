@@ -31,7 +31,7 @@
       "key": "api",
       "description": "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类",
       "type": "string",
-      "recommended": "openai-completions",
+      "recommended": null,
       "required": false
     },
     {
@@ -54,14 +54,6 @@
       "scope": "model",
       "key": "contextWindow",
       "description": "上下文 token 上限",
-      "type": "number",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
-      "key": "maxTokens",
-      "description": "输出 token 上限",
       "type": "number",
       "recommended": null,
       "required": false
