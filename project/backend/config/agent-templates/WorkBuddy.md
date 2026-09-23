@@ -62,8 +62,8 @@ WorkBuddy 的配置结构是 `models` 数组，每个对象是一个模型（没
 
 WorkBuddy 模板字段与官方吻合度较高，主要问题如下：
 
-### 1. `availableModels` 是真实字段（已恢复，此前误删作废）
-> 更正：此前判断"疑似编造并删除"是错的。腾讯云官方《CodeBuddy model.json 配置指南》有 `availableModels` 专节——类型 `Array<string>`，**顶层字段**（与 `models` 数组平级），控制下拉列表只显示列出的模型 ID（白名单过滤器），不配则显示全部。配置后会隐藏未列出的内置模型（火山云教程明确建议"不要配置，否则内置模型会被全部隐藏"）。**已恢复该字段**，recommended 保持 `null`（不干预）。
+### 1. `availableModels` 是真实字段（模板未列入，不干预）
+> 更正：此前判断"疑似编造并删除"是错的。腾讯云官方《CodeBuddy model.json 配置指南》有 `availableModels` 专节——类型 `Array<string>`，**顶层字段**（与 `models` 数组平级），控制下拉列表只显示列出的模型 ID（白名单过滤器），不配则显示全部。配置后会隐藏未列出的内置模型（火山云教程明确建议"不要配置，否则内置模型会被全部隐藏"）。当前模板**未列入**该字段（不推荐、不干预），需要白名单时在规则里手动加。
 
 ### 2. `maxInputTokens` / `maxOutputTokens` 字段（官方字段表已确认）
 腾讯云官方字段表确认这两个字段真实存在（类型 number，非必填）。`model_info_fields` 把它们映射给 `max_context` / `max_output_token` 合理。
@@ -72,10 +72,10 @@ WorkBuddy 模板字段与官方吻合度较高，主要问题如下：
 `input_types` 映射到 `supportsImages`(bool)、`thinking_levels` 映射到 `supportsReasoning`(bool)——官方 `input_types` 概念上是数组（text/image），这里用 bool 简化。属于系统统一读取模型信息的设计取舍，不算乱写，但会丢失「支持哪些输入类型」的细节。
 
 ### 4. 必填性（已按腾讯云官方字段表核对）
-腾讯云官方字段表明确：**仅 `id` 必填**，`name` / `vendor` / `apiKey` / `url` 均标"否"（非必填，因覆盖内置模型时不必重填）。本项目模板有意偏离官方字段表：`url` 与 `apiKey` 标 `required=true` —— 前者是自定义模型接入必需（且须是完整 `/chat/completions` 路径），后者让引擎能定位「写令牌 key 的落点」（`apiKeyFieldFor` 依赖该标记）；`id` 之外其余字段仍为 false。
+腾讯云官方字段表明确：**仅 `id` 必填**，`name` / `vendor` / `apiKey` / `url` 均标"否"（非必填，因覆盖内置模型时不必重填）。本项目模板有意偏离官方字段表：`url` 与 `apiKey` 标 `required=true` —— 前者是自定义模型接入必需（且须是完整 `/chat/completions` 路径），后者让引擎能定位「写令牌 key 的落点」（`apiKeyFieldFor` 依赖该标记）；`name` / `maxInputTokens` / `maxOutputTokens` / `supportsToolCall` / `supportsImages` / `supportsReasoning` 仍为 false。
 
-### 5. `supportsToolCall` 描述已修正
-原描述"推荐开启"与 recommended `null`（不干预）矛盾，已改为"模型支持 Function Calling 时才开启"。
+### 5. `supportsToolCall` 描述（与现状一致）
+现描述为「是否支持工具调用」，未给推荐值（不干预）；原"推荐开启"的表述已不存在，不再与 recommended `null` 矛盾。
 
 ---
 

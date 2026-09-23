@@ -47,72 +47,6 @@ function toErrorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback
 }
 
-const JSONC_SEED = `{
-  // 通用部分：与请求协议 / SDK 无关的官方字段
-  "common": [
-    {
-      "name": "timeout",
-      "key": "options.timeout",
-      "scope": "provider",
-      "description": "请求超时（毫秒）。默认 300000，复杂任务建议拉长到 600000",
-      "required": false,
-      "recommended": 600000,
-      "candidates": {
-        "300000": "官方默认，常规任务够用",
-        "600000": "复杂任务建议，流式响应更稳"
-      }
-    }
-  ],
-  // 请求协议（SDK）区分部分：每个 SDK 一个块。
-  // endpoint_tags 是关键词，endpoint 含任一关键词（子串匹配）即命中该块；
-  // 命中后该块的字段（如 npm 推荐值）优先生效。顺序即优先级。
-  "protocols": [
-    {
-      "name": "OpenAI Responses API",
-      "endpoint_tags": ["responses"],
-      "fields": [
-        {
-          "name": "npm",
-          "key": "npm",
-          "scope": "provider",
-          "description": "Responses API 使用 OpenAI SDK",
-          "required": true,
-          "recommended": "@ai-sdk/openai"
-        }
-      ]
-    },
-    {
-      "name": "Anthropic Messages API",
-      "endpoint_tags": ["chat/message", "messages"],
-      "fields": [
-        {
-          "name": "npm",
-          "key": "npm",
-          "scope": "provider",
-          "description": "Messages API 使用 Anthropic SDK",
-          "required": true,
-          "recommended": "@ai-sdk/anthropic"
-        }
-      ]
-    },
-    {
-      "name": "OpenAI 兼容 Chat Completions",
-      "endpoint_tags": ["completions", "/v1/chat"],
-      "fields": [
-        {
-          "name": "npm",
-          "key": "npm",
-          "scope": "provider",
-          "description": "Chat Completions API 使用 OpenAI 兼容 SDK",
-          "required": true,
-          "recommended": "@ai-sdk/openai-compatible"
-        }
-      ]
-    }
-  ]
-}
-`
-
 // stripJsoncComments removes // and /* */ comments so JSON.parse can
 // read JSONC documents; string contents are left alone.
 function stripJsoncComments(s: string): string {
@@ -258,8 +192,9 @@ function inferRecommendationType(recommended: unknown): AgentRecommendationType 
 }
 
 // buildRuleConfigJsonc constructs the JSONC document from the parsed
-// recommendations + protocols (used as a fallback before the column
-// exists, e.g. legacy seed rows).
+// recommendations + protocols. Rules with neither yet (e.g. 刚创建的
+// 空规则) serialize to an empty {common, protocols} doc instead of any
+// prefilled sample, so unrelated agents never inherit fake recommendations.
 function buildRuleConfigJsonc(
   recs: readonly AgentRecommendation[],
   protocols: readonly AgentProtocol[],
@@ -277,7 +212,6 @@ function buildRuleConfigJsonc(
       fields: p.recommendations,
     })),
   }
-  if (common.length === 0 && protocols.length === 0) return JSONC_SEED
   return JSON.stringify(doc, null, 2)
 }
 
