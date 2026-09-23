@@ -12,6 +12,7 @@ import * as SelectPrimitive from '@radix-ui/react-select'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 import { toast } from '@/components/ui/toast'
+import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
 import {
@@ -92,6 +93,7 @@ export function ProviderPage() {
   const [error, setError] = useState<string | null>(null)
   const [useKey, setUseKey] = useState(true)
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
+  const [deleting, setDeleting] = useState<Provider | null>(null)
 
   const loadProviders = useCallback(async () => {
     setIsLoading(true)
@@ -170,8 +172,7 @@ export function ProviderPage() {
       defaultWidth: { kind: 'pixel', value: 160 },
       defaultOverflow: 'wrap',
       render: (_, provider) => {
-        // 与拓扑节点卡片的故障转移禁用逻辑一致，但把每个维度的具体禁用数量
-        // 写出来：key n/m、base URL n/m，只展示存在禁用的维度。
+        // 与拓扑节点卡片的故障转移展示保持一致：分数形式 + warning 色。
         const status = disableStatuses.get(provider.id)
         const providerDisabled = status?.provider || provider.autoDisabled
         const urlFlags = status?.baseUrls ?? {}
@@ -186,17 +187,15 @@ export function ProviderPage() {
             {none ? (
               <span className="text-muted-foreground">—</span>
             ) : (
-              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5 font-medium text-warning">
                 {providerDisabled && (
-                  <span className="font-medium text-destructive">供应商</span>
+                  <span>供应商 1/1</span>
                 )}
                 {urlDisabled > 0 && (
-                  <span className="font-medium text-destructive">
-                    base URL {urlDisabled}/{urlTotal}
-                  </span>
+                  <span>base URL {urlDisabled}/{urlTotal}</span>
                 )}
                 {keyDisabled > 0 && (
-                  <span className="font-medium text-destructive">
+                  <span>
                     key {keyDisabled}/{keyTotal}
                   </span>
                 )}
@@ -216,7 +215,7 @@ export function ProviderPage() {
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? '禁用' : '启用'}</Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
-          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.deleteProvider(provider.id))}><AppIcon name="delete" /></Button>
+          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
         </div>
       ),
     },
@@ -257,6 +256,23 @@ export function ProviderPage() {
             <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
           </DialogContent>
         </Dialog>
+
+        <ConfirmDeleteDialog
+          open={deleting !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null)
+          }}
+          title="确认删除"
+          description={`将删除供应商「${deleting?.name ?? ''}」及其全部渠道配置，删除后不可恢复。`}
+          busy={isSaving}
+          onConfirm={() => {
+            if (deleting) {
+              const provider = deleting
+              setDeleting(null)
+              void runMutation(() => dashboardApi.deleteProvider(provider.id))
+            }
+          }}
+        />
       </div>
     </div>
   )

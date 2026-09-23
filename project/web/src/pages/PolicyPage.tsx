@@ -340,6 +340,7 @@ function FailoverPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [editing, setEditing] = useState<FailoverRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const [deleting, setDeleting] = useState<FailoverRule | null>(null)
 
   const clearEditQuery = useCallback(() => {
     const next = new URLSearchParams(searchParams)
@@ -410,7 +411,7 @@ function FailoverPage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -468,6 +469,23 @@ function FailoverPage() {
           <FailoverForm key={editing?.id ?? 'new'} rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); clearEditQuery() }} saving={mutating} />
         </DialogContent>
 </Dialog>
+
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        title="确认删除"
+        description={`将删除规则「${deleting?.name ?? ''}」，删除后不可恢复。`}
+        busy={mutating}
+        onConfirm={() => {
+          if (deleting) {
+            const id = deleting.id
+            setDeleting(null)
+            void handleDelete(id)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -612,6 +630,7 @@ function RewriteResponsePage() {
   const [editing, setEditing] = useState<ResponseRewriteRule | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [testOpen, setTestOpen] = useState(false)
+  const [deleting, setDeleting] = useState<ResponseRewriteRule | null>(null)
 
 
   const handleDelete = async (id: string) => {
@@ -648,7 +667,7 @@ function RewriteResponsePage() {
           <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => void handleDelete(row.id)}>
+          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -712,6 +731,23 @@ function RewriteResponsePage() {
           height="full"
         />
       )}
+
+      <ConfirmDeleteDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null)
+        }}
+        title="确认删除"
+        description={`将删除规则「${deleting?.name ?? ''}」，删除后不可恢复。`}
+        busy={mutating}
+        onConfirm={() => {
+          if (deleting) {
+            const id = deleting.id
+            setDeleting(null)
+            void handleDelete(id)
+          }
+        }}
+      />
     </div>
   )
 }

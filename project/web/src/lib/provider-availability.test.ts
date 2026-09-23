@@ -113,53 +113,53 @@ describe('computeProviderAvailability', () => {
 })
 
 describe('formatAutoDisableSummary', () => {
-  it('供应商故障转移时只显示供应商', () => {
+  it('供应商故障转移时只显示供应商 1/1', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: true,
       baseUrlsDisabled: { 'https://a.example.com': true },
       keysDisabled: { 'sk-a': true },
       baseURLCount: 1,
       keyCount: 1,
-    })).toBe('故障转移：供应商')
+    })).toBe('故障转移：供应商 1/1、base URL 1/1、key 1/1')
   })
 
-  it('部分禁用时按 key、base URL 顺序显示禁用条目数', () => {
+  it('部分禁用时按 key、base URL 顺序显示分数', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: false,
       baseUrlsDisabled: { 'https://a.example.com': true, 'https://b.example.com': true },
       keysDisabled: { 'sk-a': true },
       baseURLCount: 3,
       keyCount: 2,
-    })).toBe('故障转移：key×1、base URL×2')
+    })).toBe('故障转移：base URL 2/3、key 1/2')
   })
 
-  it('全部 base URL 禁用时显示完整类别', () => {
+  it('全部 base URL 禁用时显示 base URL n/n', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: false,
       baseUrlsDisabled: { 'https://a.example.com': true, 'https://b.example.com': true },
       keysDisabled: {},
       baseURLCount: 2,
       keyCount: 0,
-    })).toBe('故障转移：全部 base URL')
+    })).toBe('故障转移：base URL 2/2')
   })
 
-  it('全部 key 禁用时显示完整类别', () => {
+  it('全部 key 禁用时显示 key n/n', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: false,
       baseUrlsDisabled: {},
       keysDisabled: { 'sk-a': true, 'sk-b': true },
       baseURLCount: 0,
       keyCount: 2,
-    })).toBe('故障转移：全部 key')
+    })).toBe('故障转移：key 2/2')
   })
 
-  it('全量与部分禁用混合时同时显示类别和条目数', () => {
+  it('全量与部分禁用混合时按分数同时显示', () => {
     expect(formatAutoDisableSummary({
       providerDisabled: false,
       baseUrlsDisabled: { 'https://a.example.com': true, 'https://b.example.com': true },
       keysDisabled: { 'sk-a': true },
       baseURLCount: 2,
       keyCount: 3,
-    })).toBe('故障转移：全部 base URL、key×1')
+    })).toBe('故障转移：base URL 2/2、key 1/3')
   })
 })

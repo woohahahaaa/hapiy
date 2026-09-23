@@ -46,6 +46,8 @@ export function computeProviderAvailability(input: {
   return { dimensions, counts, overall: dimensions.length === 0 }
 }
 
+// 摘要统一用分数形式展示各维度禁用情况，只列出存在禁用的维度：
+// 供应商 1/1、base URL 2/3、key 0/3。
 export function formatAutoDisableSummary(input: {
   readonly providerDisabled: boolean
   readonly baseUrlsDisabled: Readonly<Record<string, boolean>>
@@ -53,23 +55,13 @@ export function formatAutoDisableSummary(input: {
   readonly baseURLCount: number
   readonly keyCount: number
 }): string | null {
-  if (input.providerDisabled) return '故障转移：供应商'
-
   const disabledBaseURLCount = Object.values(input.baseUrlsDisabled).filter(Boolean).length
   const disabledKeyCount = Object.values(input.keysDisabled).filter(Boolean).length
-  const fullyDisabledItems = [
-    input.baseURLCount > 0 && disabledBaseURLCount === input.baseURLCount
-      ? '全部 base URL'
-      : null,
-    input.keyCount > 0 && disabledKeyCount === input.keyCount
-      ? '全部 key'
-      : null,
+  const items = [
+    input.providerDisabled ? '供应商 1/1' : null,
+    disabledBaseURLCount > 0 ? `base URL ${disabledBaseURLCount}/${input.baseURLCount}` : null,
+    disabledKeyCount > 0 ? `key ${disabledKeyCount}/${input.keyCount}` : null,
   ].filter((item): item is string => item !== null)
-  const partiallyDisabledItems = [
-    disabledKeyCount > 0 && disabledKeyCount < input.keyCount ? `key×${disabledKeyCount}` : null,
-    disabledBaseURLCount > 0 && disabledBaseURLCount < input.baseURLCount ? `base URL×${disabledBaseURLCount}` : null,
-  ].filter((item): item is string => item !== null)
-  const items = [...fullyDisabledItems, ...partiallyDisabledItems]
 
   return items.length > 0 ? `故障转移：${items.join('、')}` : null
 }

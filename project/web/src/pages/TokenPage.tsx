@@ -6,6 +6,7 @@ import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Token, TokenInput } from '@/lib/dashboard-api'
 
@@ -20,18 +21,6 @@ function toErrorMessage(error: unknown): string {
   return error instanceof DashboardApiError ? error.message : '发生意外错误，请重试'
 }
 
-const KEY_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-
-function generatePreviewKey(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  let key = 'hk-'
-  for (const byte of bytes) {
-    key += KEY_CHARS[byte % KEY_CHARS.length]
-  }
-  return key
-}
-
 export function TokenPage() {
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [total, setTotal] = useState(0)
@@ -39,10 +28,10 @@ export function TokenPage() {
   const [limit, setLimit] = useState(50)
   const [editing, setEditing] = useState<Token | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [pendingKey, setPendingKey] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<Token | null>(null)
 
   const loadTokens = useCallback(async (currentOffset: number, currentLimit: number) => {
     setIsLoading(true)
@@ -80,21 +69,12 @@ export function TokenPage() {
   const handleSave = async (token: TokenInput) => {
     const saved = await runMutation(async () => {
       if (!editing) return dashboardApi.createToken(token)
-      if (pendingKey) {
-        const historyKeys = [editing.key, ...editing.historyKeys].slice(0, 5)
-        return dashboardApi.updateToken(editing.id, { ...token, key: pendingKey, historyKeys })
-      }
       return dashboardApi.updateToken(editing.id, token)
     })
     if (saved) {
       setEditing(null)
-      setPendingKey(null)
       setIsDialogOpen(false)
     }
-  }
-
-  const handleRefresh = () => {
-    setPendingKey(generatePreviewKey())
   }
 
   const copyToClipboard = async (key: string) => {
@@ -176,7 +156,6 @@ export function TokenPage() {
             disabled={isSaving}
             onClick={() => {
               setEditing(row)
-              setPendingKey(null)
               setIsDialogOpen(true)
             }}
           >
@@ -186,7 +165,7 @@ export function TokenPage() {
             variant="ghost"
             size="icon"
             disabled={isSaving}
-            onClick={() => void runMutation(() => dashboardApi.deleteToken(row.id))}
+            onClick={() => setDeleting(row)}
           >
             <AppIcon name="delete" />
           </Button>
@@ -221,7 +200,6 @@ export function TokenPage() {
               <Button
                 onClick={() => {
                   setEditing(null)
-                  setPendingKey(null)
                   setIsDialogOpen(true)
                 }}
                 disabled={isSaving}
@@ -242,21 +220,35 @@ export function TokenPage() {
               onSave={handleSave}
               onCancel={() => {
                 setEditing(null)
-                setPendingKey(null)
                 setIsDialogOpen(false)
               }}
-              onRefresh={handleRefresh}
-              pendingKey={pendingKey}
               isSaving={isSaving}
             />
           </DialogContent>
         </Dialog>
+
+        <ConfirmDeleteDialog
+          open={deleting !== null}
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null)
+          }}
+          title="确认删除"
+          description={`将删除令牌「${deleting?.name ?? ''}」，使用该令牌的请求将立即失效，删除后不可恢复。`}
+          busy={isSaving}
+          onConfirm={() => {
+            if (deleting) {
+              const token = deleting
+              setDeleting(null)
+              void runMutation(() => dashboardApi.deleteToken(token.id))
+            }
+          }}
+        />
       </div>
     </div>
   )
 }
 
-function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }: TokenFormProps) {
+function TokenForm({ token, onSave, onCancel, isSaving }: TokenFormProps) {
   const [name, setName] = useState(token?.name ?? '')
   const [quota, setQuota] = useState(token?.quota?.toString() ?? '')
 
@@ -277,8 +269,7 @@ function TokenForm({ token, onSave, onCancel, onRefresh, pendingKey, isSaving }:
       {token ? (
         <Field>
           <FieldLabel>Token</FieldLabel>
-          <code className="block rounded bg-muted px-2 py-2 text-xs font-mono">{pendingKey ?? token.key}</code>
-          <Button variant="outline" size="sm" className="mt-2" disabled={isSaving} onClick={onRefresh}><AppIcon name="refresh" data-icon="inline-start" />{pendingKey ? '已刷新（保存后生效）' : '刷新'}</Button>
+          <code className="block rounded bg-muted px-2 py-2 text-xs font-mono">{token.key}</code>
         </Field>
       ) : (
         <p className="text-sm text-muted-foreground">服务端会在保存后生成 Token Key。</p>
