@@ -47,6 +47,14 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow className="col-span-2" label="模型" value={log.modelName || '-'} />
         <DetailRow className="col-span-2" label="来源" value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">供应商 Key</span>
+          <span className="break-all font-mono">{log.providerKey || '-'}</span>
+        </div>
+        <div className="col-span-2 flex items-baseline gap-2">
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">供应商 Base URL</span>
+          <span className="break-all font-mono">{log.providerBaseUrl || '-'}</span>
+        </div>
+        <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 URL</span>
           <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
         </div>

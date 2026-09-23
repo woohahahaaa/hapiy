@@ -107,7 +107,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		})
 		if err != nil {
 			engine.RecordDispatchRejection(&relayReq, err)
-			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "")
+			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "", "", "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
 					"message": fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", relayReq.Model),
@@ -126,17 +126,17 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			affinityReuse = "new"
 		}
 		common.Global().TrackActiveRequest(common.ActiveRequest{
-			RequestID:   relayReq.RequestID,
-			Model:       relayReq.Model,
-			TokenName:   getString(tokenName),
-			UserID:      getString(userID),
-			Provider:    provider.Name,
-			ProviderID:  provider.ID,
-			Source:      service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
-			Stream:      relayReq.Stream,
-			StartTime:   startTime,
-			Stage:       "queued",
-			PathNodeIds: dispatchResult.PathNodeIDs,
+			RequestID:     relayReq.RequestID,
+			Model:         relayReq.Model,
+			TokenName:     getString(tokenName),
+			UserID:        getString(userID),
+			Provider:      provider.Name,
+			ProviderID:    provider.ID,
+			Source:        service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			Stream:        relayReq.Stream,
+			StartTime:     startTime,
+			Stage:         "queued",
+			PathNodeIds:   dispatchResult.PathNodeIDs,
 			AffinityReuse: affinityReuse,
 		})
 
@@ -167,7 +167,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 			if !matched {
 				err := fmt.Errorf("endpoint not allowed: %s (allowed: %s)", relayReq.Path, strings.Join(allowed, ", "))
-				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "")
+				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "", "", "")
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error": gin.H{
 						"message": err.Error(),
@@ -218,7 +218,8 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 					"request_id": requestID,
 				})
 			}
-			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, upstreamURLFromResp(resp))
+			failKey, failBaseURL := channelFromResp(resp)
+			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, upstreamURLFromResp(resp), failKey, failBaseURL)
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -285,25 +286,27 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// Log successful request
 		useTime := int(time.Since(startTime).Milliseconds())
 		logEntry := model.Log{
-			UserID:            getString(userID),
-			TokenName:         getString(tokenName),
-			ProviderName:      provider.Name,
-			ModelName:         relayReq.Model,
-			Source:            service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
-			IsStream:          relayReq.Stream,
-			Status:            "success",
-			AffinityReuse:     affinityReuse,
+			UserID:             getString(userID),
+			TokenName:          getString(tokenName),
+			ProviderName:       provider.Name,
+			ModelName:          relayReq.Model,
+			Source:             service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			IsStream:           relayReq.Stream,
+			Status:             "success",
+			AffinityReuse:      affinityReuse,
 			AffinityReuseParts: affinityReuseParts,
-			IP:                c.ClientIP(),
-			RequestID:         c.GetString("request_id"),
-			UseTime:           useTime,
-			ConnectMs:         intPtr(resp.ConnectMs),
-			FirstByteMs:       intPtr(firstByteMs),
-			RequestRewriteMs:  intPtr(resp.RequestRewriteMs),
-			ResponseRewriteMs: intPtr(resp.ResponseRewriteMs),
-			StreamRewriteMs:   intPtr(resp.StreamRewriteTotalMs()),
-			QueueWaitMs:       intPtr(resp.QueueWaitMs),
-			UpstreamURL:       resp.UpstreamURL,
+			IP:                 c.ClientIP(),
+			RequestID:          c.GetString("request_id"),
+			UseTime:            useTime,
+			ConnectMs:          intPtr(resp.ConnectMs),
+			FirstByteMs:        intPtr(firstByteMs),
+			RequestRewriteMs:   intPtr(resp.RequestRewriteMs),
+			ResponseRewriteMs:  intPtr(resp.ResponseRewriteMs),
+			StreamRewriteMs:    intPtr(resp.StreamRewriteTotalMs()),
+			QueueWaitMs:        intPtr(resp.QueueWaitMs),
+			UpstreamURL:        resp.UpstreamURL,
+			ProviderKey:        resp.ProviderKey,
+			ProviderBaseURL:    resp.ProviderBaseURL,
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
@@ -492,20 +495,22 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 	return firstByteMs, clientDisconnected
 }
 
-func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL string) {
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL, providerKey, providerBaseURL string) {
 	useTime := int(time.Since(startTime).Milliseconds())
 	service.Logs().Write(&model.Log{
-		UserID:       getString(userID),
-		TokenName:    getString(tokenName),
-		ProviderName: providerName,
-		ModelName:    modelName,
-		Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
-		Status:       "failed",
-		IP:           c.ClientIP(),
-		RequestID:    c.GetString("request_id"),
-		ErrorMessage: err.Error(),
-		UseTime:      useTime,
-		UpstreamURL:  upstreamURL,
+		UserID:          getString(userID),
+		TokenName:       getString(tokenName),
+		ProviderName:    providerName,
+		ModelName:       modelName,
+		Source:          service.ResolveSourceMark(req.SourceMark, req.Path),
+		Status:          "failed",
+		IP:              c.ClientIP(),
+		RequestID:       c.GetString("request_id"),
+		ErrorMessage:    err.Error(),
+		UseTime:         useTime,
+		UpstreamURL:     upstreamURL,
+		ProviderKey:     providerKey,
+		ProviderBaseURL: providerBaseURL,
 	})
 	outcome := "upstream_error"
 	if errors.Is(err, relay.ErrConcurrencyRejected) {
@@ -538,4 +543,13 @@ func upstreamURLFromResp(resp *relay.RelayResponse) string {
 		return ""
 	}
 	return resp.UpstreamURL
+}
+
+// channelFromResp returns the provider key and base URL the relay actually
+// used, or empty strings when the engine never reached the upstream call.
+func channelFromResp(resp *relay.RelayResponse) (key, baseURL string) {
+	if resp == nil {
+		return "", ""
+	}
+	return resp.ProviderKey, resp.ProviderBaseURL
 }

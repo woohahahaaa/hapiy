@@ -254,6 +254,11 @@ type RelayResponse struct {
 	// was actually issued to the upstream provider; empty when the relay
 	// never reached the upstream call.
 	UpstreamURL string
+	// ProviderKey and ProviderBaseURL name the provider channel actually
+	// used for the upstream call (matching UpstreamURL); empty when the
+	// relay never reached the upstream call.
+	ProviderKey     string
+	ProviderBaseURL string
 }
 
 // StreamRewriteTotalMs returns the cumulative streaming rewrite time, or

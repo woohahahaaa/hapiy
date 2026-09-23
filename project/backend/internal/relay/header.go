@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func applyHeaderOp(body []byte, headers map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+func applyHeaderOp(body []byte, headers map[string]string, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
@@ -15,6 +15,15 @@ func applyHeaderOp(body []byte, headers map[string]string, op *RewriteOp) ([]byt
 	}
 	switch op.Mode {
 	case "set":
+		if op.Ref != "" {
+			// 变量引用：拷原始请求里的同名 header；源不存在则跳过。
+			src, ok := origHeaders[op.Ref]
+			if !ok {
+				return body, headers, nil
+			}
+			headers[key] = src
+			break
+		}
 		headers[key] = op.Value
 	case "delete":
 		delete(headers, key)

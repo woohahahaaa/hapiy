@@ -48,11 +48,11 @@ do_start() {
   need lsof
   need curl
 
-  echo "[start-dev] launching backend (forced rebuild -> current source)..."
-  (cd "$BACKEND_DIR" && FORCE_REBUILD=1 ./scripts/backend.sh)
-
   echo "[start-dev] launching frontend (Vite dev server, hot reload)..."
   (cd "$WEB_DIR" && ./scripts/dev.sh)
+
+  echo "[start-dev] launching backend (forced rebuild -> current source)..."
+  (cd "$BACKEND_DIR" && FORCE_REBUILD=1 ./scripts/backend.sh)
 
   wait_port "$API_PORT" 30 || {
     echo "[start-dev] backend not listening on $API_PORT; see /tmp/hapiy-backend.log" >&2

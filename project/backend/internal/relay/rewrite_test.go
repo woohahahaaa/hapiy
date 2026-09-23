@@ -618,3 +618,127 @@ func TestResolveSjsonPath_negative_indexes(t *testing.T) {
 		}
 	}
 }
+
+// ── 变量引用（set 的 {"ref":"..."}） ──
+
+func TestRewriteRefHeaderSetFromOriginalHeader(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.x-opencode-session","mode":"set","value":{"ref":"X-Session-Id"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Session-Id": "session-123"}
+	_, out, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["x-opencode-session"] != "session-123" {
+		t.Fatalf("expected ref value copied, got %q", out["x-opencode-session"])
+	}
+	if out["X-Session-Id"] != "session-123" {
+		t.Fatalf("source header must stay untouched, got %q", out["X-Session-Id"])
+	}
+}
+
+func TestRewriteRefHeaderStripsHeaderPrefixAndSkipsMissingSource(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.X-Copy","mode":"set","value":{"ref":"header.X-Session-Id"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	// 源不存在：op 跳过，不写入空值。
+	_, out, err := applyRewriteChains([]byte(`{}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if _, ok := out["X-Copy"]; ok {
+		t.Fatalf("missing ref source should skip the op, got %q", out["X-Copy"])
+	}
+	// 源存在：header. 前缀被剥掉后按名字查找。
+	headers := map[string]string{"X-Session-Id": "s1"}
+	_, out2, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out2["X-Copy"] != "s1" {
+		t.Fatalf("expected prefixed ref to resolve, got %q", out2["X-Copy"])
+	}
+}
+
+func TestRewriteRefBodyCopiesOriginalValueWithType(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"target","mode":"set","value":{"ref":"source"}}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"source":{"nested":1},"target":null}`)
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"source":{"nested":1},"target":{"nested":1}}` {
+		t.Fatalf("expected raw source value copied, got %s", updated)
+	}
+}
+
+func TestRewriteRefReadsOriginalSnapshotNotEarlierOps(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"source","mode":"set","value":99},
+		{"path":"target","mode":"set","value":{"ref":"source"}}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	updated, _, err := applyRewriteChains([]byte(`{"source":1}`), nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"source":99,"target":1}` {
+		t.Fatalf("ref should read the pre-rewrite value, got %s", updated)
+	}
+}
+
+func TestRewriteRefMissingBodySourceIsNoOp(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"target","mode":"set","value":{"ref":"nope"}}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"target":"keep"}`)
+	updated, _, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != string(body) {
+		t.Fatalf("expected unchanged body, got %s", updated)
+	}
+}
+
+func TestRewriteRefRejectsCrossScope(t *testing.T) {
+	_, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":{"ref":"header.X-Session-Id"},"scope":"body"}]`)
+	if err == nil || !strings.Contains(err.Error(), "same scope") {
+		t.Fatalf("expected cross-scope ref rejection, got: %v", err)
+	}
+}
+
+func TestRewriteRefRejectsBadShapes(t *testing.T) {
+	if _, err := compileRewriteChain("r", `[{"path":"x","mode":"set","value":{"ref":123}}]`); err == nil || !strings.Contains(err.Error(), "ref is not a string") {
+		t.Fatalf("expected non-string ref rejection, got: %v", err)
+	}
+	if _, err := compileRewriteChain("r", `[{"path":"header.X","mode":"set","value":{"ref":"header."},"scope":"header"}]`); err == nil || !strings.Contains(err.Error(), "ref is empty") {
+		t.Fatalf("expected empty ref rejection, got: %v", err)
+	}
+}
+
+func TestRewriteRefObjectLiteralStillWorks(t *testing.T) {
+	// 非引用形状的对象仍是普通对象字面量，别误判成引用。
+	updated, err := ApplyScript([]byte(`{}`), `[{"mode":"set","path":"obj","value":{"a":1}}]`)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"obj":{"a":1}}` {
+		t.Fatalf("expected object literal preserved, got %s", updated)
+	}
+}

@@ -42,7 +42,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
             className="h-7 min-w-0 flex-1 font-mono text-xs"
             value={condition.path}
             onChange={(e) => onChange({ ...condition, path: e.target.value })}
-            placeholder="gjson 路径"
+            placeholder={condition.scope === 'header' ? 'header 名（不用写 header.）' : 'gjson 路径'}
           />
         </div>
         <div className={`flex items-center gap-2 ${FIELDS_LEFT_OFFSET}`}>
@@ -72,9 +72,9 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
               className="size-[18px] bg-background !opacity-100"
               checked={condition.invert}
               onCheckedChange={(v) => onChange({ ...condition, invert: v === true })}
-              aria-label="反向"
+              aria-label="反向匹配"
             />
-            反向
+            反向匹配
           </label>
         </div>
       </div>
