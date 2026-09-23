@@ -322,6 +322,14 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		service.Logs().Write(&logEntry)
 
+		// Post-response speed condition: rules with a speed limit feed the
+		// failover hit counters when the full-request speed (connect
+		// included) falls below the limit. The finished response cannot be
+		// re-routed, but the auto-disable protects future requests.
+		if totalTokens := logEntry.PromptTokens + logEntry.CompletionTokens; totalTokens > 0 && useTime > 0 {
+			engine.RecordResponseSpeedOutcome(plan, &relayReq, useTime, totalTokens)
+		}
+
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
 			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
 			if err := service.Quota().Charge(tokenID, tokens); err != nil {

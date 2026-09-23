@@ -257,6 +257,10 @@ type FailoverRule struct {
 	AutoDisable   bool     `gorm:"default:true" json:"auto_disable"`
 	MatchPatterns []string `gorm:"serializer:json;type:text" json:"match_patterns"`
 	TTFBSeconds   int      `gorm:"default:0" json:"ttfb_seconds"`
+	// SpeedLimit is the minimum response speed in tokens per second
+	// (total tokens over the full request duration, connect included).
+	// 0 disables the speed check.
+	SpeedLimit int `gorm:"default:0" json:"speed_limit"`
 
 	// DisableThreshold counts rule hits before auto-disable fires;
 	// 0 preserves legacy "disable on first match" behavior. DisableWindowMinutes
@@ -366,12 +370,18 @@ type DisabledRecord struct {
 	RequestHeaders string     `gorm:"type:text" json:"request_headers"`
 	RequestBody    string     `gorm:"type:text" json:"request_body"`
 	ErrorMessage   string     `gorm:"type:text" json:"error_message"`
-	DisabledAt     time.Time  `gorm:"index" json:"disabled_at"`
-	LastRetryAt    *time.Time `json:"last_retry_at"`
-	RetryCount     int        `json:"retry_count"`
-	ResolvedAt     *time.Time `json:"resolved_at"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	// RuleID/RuleName snapshot the failover rule that caused the disable.
+	// Recovery probes re-evaluate the (live) rule before recovering; when
+	// the rule has been deleted the probe falls back to a connectivity
+	// check only. RuleName is kept for display after the rule is gone.
+	RuleID      string     `gorm:"default:''" json:"rule_id"`
+	RuleName    string     `gorm:"default:''" json:"rule_name"`
+	DisabledAt  time.Time  `gorm:"index" json:"disabled_at"`
+	LastRetryAt *time.Time `json:"last_retry_at"`
+	RetryCount  int        `json:"retry_count"`
+	ResolvedAt  *time.Time `json:"resolved_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 func (r *DisabledRecord) BeforeCreate(tx *gorm.DB) error {

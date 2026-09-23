@@ -110,6 +110,8 @@ export type DisabledRecord = {
   readonly requestHeaders: string
   readonly requestBody: string
   readonly errorMessage: string
+  readonly ruleId: string
+  readonly ruleName: string
   readonly disabledAt: string
   readonly lastRetryAt: string | null
   readonly retryCount: number
@@ -1282,6 +1284,8 @@ function parseDisabledRecord(value: unknown): DisabledRecord {
     requestHeaders: readString(value.request_headers ?? '', 'disabled_record.request_headers'),
     requestBody: readString(value.request_body ?? '', 'disabled_record.request_body'),
     errorMessage: readString(value.error_message, 'disabled_record.error_message'),
+    ruleId: readString(value.rule_id ?? '', 'disabled_record.rule_id'),
+    ruleName: readString(value.rule_name ?? '', 'disabled_record.rule_name'),
     disabledAt: readString(value.disabled_at, 'disabled_record.disabled_at'),
     lastRetryAt: value.last_retry_at == null || value.last_retry_at === ''
       ? null
@@ -1780,6 +1784,7 @@ export type FailoverRule = {
   readonly autoDisable: boolean
   readonly matchPatterns: readonly string[]
   readonly ttfbSeconds: number
+  readonly speedLimit: number
   readonly disableThreshold: number
   readonly disableWindowMinutes: number
 }
@@ -1841,6 +1846,7 @@ function parseFailoverRule(value: unknown): FailoverRule {
     autoDisable: readBoolean(value.auto_disable, 'rule.auto_disable'),
     matchPatterns: readStringArray(value.match_patterns, 'rule.match_patterns'),
     ttfbSeconds: readNumber(value.ttfb_seconds, 'rule.ttfb_seconds', 0),
+    speedLimit: readNumber(value.speed_limit, 'rule.speed_limit', 0),
     disableThreshold: readNumber(value.disable_threshold, 'rule.disable_threshold', 1),
     disableWindowMinutes: readNumber(value.disable_window_minutes, 'rule.disable_window_minutes', 5),
   }
@@ -1889,6 +1895,7 @@ const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
   auto_disable: (rule as FailoverRule).autoDisable ?? false,
   match_patterns: (rule as FailoverRule).matchPatterns ?? [],
   ttfb_seconds: (rule as FailoverRule).ttfbSeconds ?? 0,
+  speed_limit: (rule as FailoverRule).speedLimit ?? 0,
   disable_threshold: (rule as FailoverRule).disableThreshold ?? 1,
   disable_window_minutes: (rule as FailoverRule).disableWindowMinutes ?? 5,
 })

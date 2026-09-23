@@ -35,6 +35,7 @@ func newIntegrationDB(t *testing.T) *gorm.DB {
 		&model.AutoDisableState{},
 		&model.Setting{},
 		&model.DisabledRecord{},
+		&model.FailoverRule{},
 	); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
@@ -176,12 +177,13 @@ func upstreamHandler(ttfb time.Duration, status int, body string) http.HandlerFu
 }
 
 // 拉起 mock 上游 + 一个 provider + 把第二个 key 标记为禁用，跑一次恢复周期。
+// recoveryRule 挂在 DisabledRecord 上（模拟 failover 禁用时的规则快照）。
 // 返回「探测结果、探测前是否禁用、探测后是否禁用」。
 func runProbeScenario(
 	t *testing.T,
 	scenario string,
 	upstream *httptest.Server,
-	ttfbThreshold time.Duration,
+	recoveryRule *model.FailoverRule,
 ) (probe ProbeResult, beforeDisabled, afterDisabled bool, skipped bool) {
 	db := newIntegrationDB(t)
 	providerID := makeProviderForProbe(t, db,
@@ -191,7 +193,7 @@ func runProbeScenario(
 	)
 	setKeyDisabled(t, db, providerID, "k-broken")
 	// 模拟真实禁用路径：failover 会同时写 DisabledRecord（带原始组合）。
-	if err := db.Save(&model.DisabledRecord{
+	record := model.DisabledRecord{
 		ProviderID: providerID,
 		Dimension:  model.FailoverDimensionKey,
 		Value:      "k-broken",
@@ -199,12 +201,16 @@ func runProbeScenario(
 		Key:        "k-broken",
 		Model:      "gpt-4o",
 		DisabledAt: time.Now(),
-	}).Error; err != nil {
-		t.Fatalf("save disabled record: %v", err)
 	}
-	if ttfbThreshold > 0 {
-		upsertIntegrationSetting(t, db, SettingRecoveryTTFBSecond,
-			fmt.Sprintf("%d", int(ttfbThreshold.Seconds())))
+	if recoveryRule != nil {
+		if err := db.Create(recoveryRule).Error; err != nil {
+			t.Fatalf("create failover rule: %v", err)
+		}
+		record.RuleID = recoveryRule.ID
+		record.RuleName = recoveryRule.Name
+	}
+	if err := db.Save(&record).Error; err != nil {
+		t.Fatalf("save disabled record: %v", err)
 	}
 
 	beforeDisabled = isKeyDisabled(t, db, providerID, "k-broken")
@@ -212,8 +218,7 @@ func runProbeScenario(
 	// 用真实的 defaultChannelProbe（不注入 stub），这样跑通就证明 scheduler 默认配置没问题。
 	// 通过 RunRecoveryCycle 的 RecoveryOptions.Probe 注入；这里直接传入 ChannelProbe（== defaultChannelProbe）。
 	opts := RecoveryOptions{
-		TTFBThreshold: readRecoveryTTFB(db),
-		Probe:         ChannelProbe,
+		Probe: ChannelProbe,
 	}
 	// 拿一次探测结果单独打印，再让 RunRecoveryCycle 走自己的循环逻辑。
 	singleProbe := ChannelProbe(upstream.URL, "k-healthy", "gpt-4o")
@@ -222,8 +227,16 @@ func runProbeScenario(
 	RunRecoveryCycle(db, opts)
 
 	afterDisabled = isKeyDisabled(t, db, providerID, "k-broken")
-	reportProbeResult(t, scenario, probe, ttfbThreshold, beforeDisabled, afterDisabled, !beforeDisabled)
+	reportProbeResult(t, scenario, probe, ruleTTFBLimit(recoveryRule), beforeDisabled, afterDisabled, !beforeDisabled)
 	return probe, beforeDisabled, afterDisabled, false
+}
+
+// ruleTTFBLimit converts a rule's TTFB seconds into a Duration for reporting.
+func ruleTTFBLimit(rule *model.FailoverRule) time.Duration {
+	if rule == nil || rule.TTFBSeconds <= 0 {
+		return 0
+	}
+	return time.Duration(rule.TTFBSeconds) * time.Second
 }
 
 // ── 用例 ───────────────────────────────────────────────────────────────
@@ -237,7 +250,7 @@ func TestRecoveryFlow_UpstreamOK_NoThreshold(t *testing.T) {
 		w.Write([]byte(`{"id":"x","choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
 	}))
 	defer server.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游连通 200 OK，无 TTFB 阈值", server, 0)
+	probe, _, after, _ := runProbeScenario(t, "上游连通 200 OK，无规则", server, nil)
 	if !probe.Success {
 		t.Fatalf("probe expected success, got %+v", probe)
 	}
@@ -253,7 +266,7 @@ func TestRecoveryFlow_UpstreamOK_NoThreshold(t *testing.T) {
 func TestRecoveryFlow_Upstream401_KeepsDisabled(t *testing.T) {
 	server := httptest.NewServer(upstreamHandler(0, http.StatusUnauthorized, `{"error":"bad key"}`))
 	defer server.Close()
-	probe, beforeDisabled, after, _ := runProbeScenario(t, "上游 401 unauthorized", server, 0)
+	probe, beforeDisabled, after, _ := runProbeScenario(t, "上游 401 unauthorized", server, nil)
 	if probe.Success {
 		t.Fatalf("probe expected failure on 401, got %+v", probe)
 	}
@@ -269,7 +282,7 @@ func TestRecoveryFlow_Upstream401_KeepsDisabled(t *testing.T) {
 func TestRecoveryFlow_Upstream500_KeepsDisabled(t *testing.T) {
 	server := httptest.NewServer(upstreamHandler(0, http.StatusInternalServerError, `{"error":"oops"}`))
 	defer server.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游 500 server error", server, 0)
+	probe, _, after, _ := runProbeScenario(t, "上游 500 server error", server, nil)
 	if probe.Success {
 		t.Fatalf("probe expected failure on 500, got %+v", probe)
 	}
@@ -282,7 +295,7 @@ func TestRecoveryFlow_Upstream500_KeepsDisabled(t *testing.T) {
 func TestRecoveryFlow_Upstream200EmptyChoices_KeepsDisabled(t *testing.T) {
 	server := httptest.NewServer(upstreamHandler(0, http.StatusOK, `{"id":"x"}`))
 	defer server.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游 200 OK 但无 choices", server, 0)
+	probe, _, after, _ := runProbeScenario(t, "上游 200 OK 但无 choices", server, nil)
 	if probe.Success {
 		t.Fatalf("probe expected failure when no choices, got %+v", probe)
 	}
@@ -296,7 +309,7 @@ func TestRecoveryFlow_SlowUpstream_WithinThreshold(t *testing.T) {
 	server := httptest.NewServer(upstreamHandler(1500*time.Millisecond, http.StatusOK,
 		`{"id":"x","choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
 	defer server.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游慢 1.5s，阈值 3s", server, 3*time.Second)
+	probe, _, after, _ := runProbeScenario(t, "上游慢 1.5s，规则 TTFB 3s", server, &model.FailoverRule{Name: "ttfb-ok", Dimension: model.FailoverDimensionKey, Status: true, TTFBSeconds: 3})
 	if !probe.Success {
 		t.Fatalf("probe expected success, got %+v", probe)
 	}
@@ -310,7 +323,7 @@ func TestRecoveryFlow_SlowUpstream_ExceedsThreshold(t *testing.T) {
 	server := httptest.NewServer(upstreamHandler(2500*time.Millisecond, http.StatusOK,
 		`{"id":"x","choices":[{"message":{"role":"assistant","content":"hi"}}]}`))
 	defer server.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游慢 2.5s，阈值 1s", server, 1*time.Second)
+	probe, _, after, _ := runProbeScenario(t, "上游慢 2.5s，规则 TTFB 1s", server, &model.FailoverRule{Name: "ttfb-slow", Dimension: model.FailoverDimensionKey, Status: true, TTFBSeconds: 1})
 	if !probe.Success {
 		t.Fatalf("上游 200 应 success=true，但 passProbe 应该因为 TTFB 不通过而拒绝")
 	}
@@ -323,7 +336,7 @@ func TestRecoveryFlow_SlowUpstream_ExceedsThreshold(t *testing.T) {
 func TestRecoveryFlow_UpstreamUnreachable(t *testing.T) {
 	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	closed.Close()
-	probe, _, after, _ := runProbeScenario(t, "上游不可达（连接拒绝）", closed, 0)
+	probe, _, after, _ := runProbeScenario(t, "上游不可达（连接拒绝）", closed, nil)
 	if probe.Success {
 		t.Fatalf("连接被拒绝的探测不该 success")
 	}
@@ -364,7 +377,7 @@ func TestRecoveryFlow_BaseURLDisabled_RecoversViaHealthyKey(t *testing.T) {
 	}
 
 	before := isBaseURLDisabled(t, db, providerID, server.URL)
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 0, Probe: ChannelProbe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: ChannelProbe})
 	after := isBaseURLDisabled(t, db, providerID, server.URL)
 
 	t.Logf("【baseURL 禁用，通过健康 key 探测】")
@@ -412,7 +425,7 @@ func TestRecoveryFlow_ProviderLevelDisabled(t *testing.T) {
 		t.Fatalf("save disabled record: %v", err)
 	}
 
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 0, Probe: ChannelProbe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: ChannelProbe})
 
 	var s model.AutoDisableState
 	if err := db.Where("provider_id = ? AND dimension = ?", providerID,

@@ -324,6 +324,19 @@ export function LogsPage() {
       },
     },
     {
+      key: 'speed',
+      label: '速度',
+      defaultWidth: { kind: 'percent', value: 9 },
+      defaultAlign: 'right',
+      // 速度 = 总 token / 全程耗时（从请求发起到结束，含建连）。
+      accessor: (row) => {
+        if (isEventLog(row) || row.status !== 'success') return null
+        const tokens = row.promptTokens + row.completionTokens
+        if (tokens <= 0 || row.useTime <= 0) return null
+        return `${(tokens * 1000 / row.useTime).toFixed(1)} tok/s`
+      },
+    },
+    {
       key: 'status',
       label: '状态',
       defaultWidth: { kind: 'percent', value: 25 },

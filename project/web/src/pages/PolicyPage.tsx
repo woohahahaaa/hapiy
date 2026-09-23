@@ -520,6 +520,7 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
     autoDisable: true,
     matchPatterns: [],
     ttfbSeconds: 0,
+    speedLimit: 0,
     disableThreshold: 1,
     disableWindowMinutes: 5,
   }
@@ -598,6 +599,12 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
         <FieldLabel htmlFor="failover-patterns">上游报错字段包含以下关键词时自动触发</FieldLabel>
         <Textarea id="failover-patterns" value={matchPatterns} onChange={(event) => setMatchPatterns(event.target.value)} placeholder={'每行一个关键词或错误码\n429\nrate_limit_exceeded\ninsufficient_quota'} rows={4} />
         <p className="text-xs text-muted-foreground">每行一个；任一行出现在上游报错内容中即触发转移。留空则仅按下方条件触发。</p>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="failover-speed">速度限制（token/s）</FieldLabel>
+        <Input id="failover-speed" type="number" min={0} className="w-40" value={form.speedLimit} onChange={(event) => setForm((p) => ({ ...p, speedLimit: Math.max(0, Number(event.target.value) || 0) }))} placeholder="0" />
+        <p className="text-xs text-muted-foreground">填 0 表示不限制；填大于 0 表示请求全程速度（总 token ÷ 含建连的总耗时）低于 N token/s 也算一次失败，计入禁用阈值（与匹配字段 OR 关系）。</p>
       </Field>
 
       <Field>

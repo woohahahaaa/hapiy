@@ -29,7 +29,6 @@ import {
 } from '@/lib/dashboard-api'
 
 const RECOVERY_INTERVAL_KEY = 'automatic_disable_recovery_minutes'
-const RECOVERY_TTFB_KEY = 'recovery_ttfb_seconds'
 const RECOVERY_MODE_KEY = 'recovery_mode'
 const RECOVERY_TIMED_MINUTES_KEY = 'recovery_timed_minutes'
 const RECOVERY_HANDLER_KEY = 'recovery_request_handler'
@@ -167,7 +166,6 @@ export function RecoverySettings() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>('probe')
   const [recoveryMinutes, setRecoveryMinutes] = useState('')
-  const [recoveryTTFB, setRecoveryTTFB] = useState('')
   const [recoveryTimedMinutes, setRecoveryTimedMinutes] = useState('')
   // modeDirty: 用户切换过 dropdown；保存前先藏掉下面的表格，避免与
   // 未生效的模式混在一起展示。
@@ -195,7 +193,6 @@ export function RecoverySettings() {
         const modeRaw = settingsValue(settings, RECOVERY_MODE_KEY)
         setRecoveryMode(modeRaw === 'timed' ? 'timed' : 'probe')
         setRecoveryMinutes(settingsValue(settings, RECOVERY_INTERVAL_KEY))
-        setRecoveryTTFB(settingsValue(settings, RECOVERY_TTFB_KEY))
         const timed = settingsValue(settings, RECOVERY_TIMED_MINUTES_KEY)
         setRecoveryTimedMinutes(timed === '' ? String(DEFAULT_TIMED_MINUTES) : timed)
         setHandler(parseHandler(settingsValue(settings, RECOVERY_HANDLER_KEY)))
@@ -282,13 +279,8 @@ export function RecoverySettings() {
   const handleSaveInterval = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const minutes = Number(recoveryMinutes)
-    const seconds = recoveryTTFB.trim() === '' ? null : Number(recoveryTTFB)
     if (!Number.isFinite(minutes) || minutes < 0) {
       toast.error('时间间隔必须是非负数字')
-      return
-    }
-    if (seconds !== null && (!Number.isFinite(seconds) || seconds < 0)) {
-      toast.error('首字超时必须是非负数字')
       return
     }
     const timedMinutes = Number(recoveryTimedMinutes)
@@ -301,7 +293,6 @@ export function RecoverySettings() {
       await Promise.all([
         dashboardApi.updateSetting(RECOVERY_MODE_KEY, recoveryMode),
         dashboardApi.updateSetting(RECOVERY_INTERVAL_KEY, String(minutes)),
-        dashboardApi.updateSetting(RECOVERY_TTFB_KEY, seconds === null ? '' : String(seconds)),
         dashboardApi.updateSetting(RECOVERY_TIMED_MINUTES_KEY, String(timedMinutes)),
       ])
       setModeDirty(false)
@@ -440,6 +431,14 @@ export function RecoverySettings() {
           return row.value
         },
       },
+      {
+        key: 'ruleName',
+        label: '禁用规则',
+        defaultWidth: { kind: 'pixel', value: 140 },
+        defaultOverflow: 'ellipsis',
+        // 规则被删除后仍显示快照名字；老记录没有规则时显示占位。
+        accessor: (row) => row.ruleName || (row.ruleId ? row.ruleId : '—'),
+      },
       isTimed
         ? {
             key: 'countdown',
@@ -548,34 +547,19 @@ export function RecoverySettings() {
                   </Select>
                 </label>
                 {recoveryMode === 'probe' ? (
-                  <>
-                    <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
-                      自动恢复轮询间隔（分钟）
-                      <Input
-                        id="automatic-disable-recovery-minutes"
-                        className="w-40"
-                        type="number"
-                        min={0}
-                        value={recoveryMinutes}
-                        onChange={(event) => setRecoveryMinutes(event.target.value)}
-                        disabled={savingInterval}
-                        placeholder="1440"
-                      />
-                    </label>
-                    <label className="grid gap-1.5 text-sm" htmlFor="recovery-ttfb-seconds">
-                      限制最低首字速度（秒）
-                      <Input
-                        id="recovery-ttfb-seconds"
-                        className="w-40"
-                        type="number"
-                        min={0}
-                        value={recoveryTTFB}
-                        onChange={(event) => setRecoveryTTFB(event.target.value)}
-                        disabled={savingInterval}
-                        placeholder="留空"
-                      />
-                    </label>
-                  </>
+                  <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
+                    自动恢复轮询间隔（分钟）
+                    <Input
+                      id="automatic-disable-recovery-minutes"
+                      className="w-40"
+                      type="number"
+                      min={0}
+                      value={recoveryMinutes}
+                      onChange={(event) => setRecoveryMinutes(event.target.value)}
+                      disabled={savingInterval}
+                      placeholder="1440"
+                    />
+                  </label>
                 ) : (
                   <label className="grid gap-1.5 text-sm" htmlFor="recovery-timed-minutes">
                     自动恢复时长（分钟）
@@ -598,7 +582,7 @@ export function RecoverySettings() {
               </div>
               <p className="text-xs text-muted-foreground">
                 {recoveryMode === 'probe'
-                  ? '轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。首字限时：留空只判断响应正常；填了则要求首字在 N 秒内。'
+                  ? '轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。探测恢复会按禁用规则校验（首字/速度/关键词），规则已删除时只测连通。'
                   : '禁用后倒计时归零自动恢复；倒计时从禁用瞬间开始算，切换到此模式后立刻按保存时刻起算。'}
               </p>
             </form>
