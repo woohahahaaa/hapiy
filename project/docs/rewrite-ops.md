@@ -37,6 +37,24 @@
 | `move` | 移动字段到新路径（原路径删除） | path, dst | `{"path":"old_name","mode":"move","dst":"new_name"}` |
 | `copy` | 复制字段到新路径（原路径保留） | path, dst | `{"path":"model","mode":"copy","dst":"original_model"}` |
 
+## 变量引用（引用原始值）
+
+`set` 的 `value` 可以写成 `{"ref":"<name>"}`，表示取**原始请求**里的同域值（不受同一条链里更早的操作影响）：
+
+- path 是 header（`header.` 前缀）：`<name>` 是原始 header 名（可写 `header.` 前缀，会被剥掉）
+- path 是 body：`<name>` 是原始 body 的 gjson 路径，值保留原 JSON 类型（数字仍是数字）
+- 引用源不存在时跳过该操作，不写入空值；不支持跨域引用（header 引用 body 或反之）
+- header 名区分大小写（与 header 改写一致）
+
+```json
+[
+  { "path": "header.x-opencode-session", "mode": "set", "value": {"ref":"X-Session-Id"}, "scope": "header" },
+  { "path": "original_model", "mode": "set", "value": {"ref":"model"}, "scope": "body" }
+]
+```
+
+结构化编辑器里的对应写法：值输入框不加引号时就是变量引用（如 `X-Session-Id`）；固定字符串要写成带引号的 JSON 字符串（如 `"hello"`）。
+
 ## 条件执行（conditions）
 
 每个操作可以附加 `conditions` 数组，条件全部满足时操作才执行（逻辑 AND）。
@@ -124,13 +142,12 @@
 
 ### scope 字段
 
-可选的 `scope` 字段控制操作作用域：
+可选的 `scope` 字段控制操作作用域，二选一：
 
 | scope | 说明 |
 |---|---|
 | `header` | 仅操作 header，path 必须以 `header.` 开头 |
 | `body` | 仅操作 body，path 不能以 `header.` 开头 |
-| `all`（默认） | 接受任意 path |
 
 ```json
 [
@@ -139,7 +156,7 @@
 ]
 ```
 
-不填 `scope` 等同于 `scope: "all"`，向后兼容所有现有规则。
+结构化编辑器只在输入框里填名字 / 路径，`header.` 前缀在保存时自动补上、编辑时自动剥掉。不填 `scope` 的历史规则（含旧的 `scope: "all"`）按 path 的 `header.` 前缀推断：有前缀→header，否则→body。
 
 ### 条件支持
 
