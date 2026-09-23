@@ -95,13 +95,15 @@ export function ManagedProviderDialog({
       dashboardApi.listTokens({ limit: 1000, offset: 0 }).catch(() => ({ tokens: [] as readonly Token[], total: 0 })),
       dashboardApi.getSettings().catch(() => [] as ReadonlyArray<{ key: string; value: string }>),
     ])
-      .then(([opts, models, tokensRes, settings]) => {
-        setOptions(opts)
+      .then(([{ options, systemBaseUrl: systemBaseUrlFromBackend }, models, tokensRes, settings]) => {
+        setOptions(options)
         setSnapshot(models)
         setTokens(tokensRes.tokens)
-        // 系统 BaseURL：当前前端域名 + base_url_suffix 设置（BaseURL 设置页逻辑）
+        // 系统 BaseURL：优先取后端暴露的 system_base_url —— 与生成 JSON 用的是
+        // 同一个值（systemBaseURLPrefix），隧道/反代改掉请求 Host 也不偏差；
+        // 未配置时才退回当前前端域名 + base_url_suffix 设置。
         const suffix = settings.find((s) => s.key === 'base_url_suffix')?.value ?? ''
-        const auto = `${window.location.origin}/${(suffix.trim() || 'proxy')}`
+        const auto = (systemBaseUrlFromBackend.trim() || `${window.location.origin}/${(suffix.trim() || 'proxy')}`).replace(/\/+$/, '')
         setAutoBaseUrl(auto)
         if (editing) {
           setName(editing.name)
@@ -125,7 +127,7 @@ export function ManagedProviderDialog({
           // 在重新打开后看起来像丢了（数据其实还在）。
           const checkedIds = new Set(editing.provider_ids)
           const derivable = new Set<string>()
-          for (const o of opts) {
+          for (const o of options) {
             if (!checkedIds.has(o.id) || !o.status) continue
             for (const ep of o.endpoints) derivable.add(ep)
           }
@@ -153,7 +155,7 @@ export function ManagedProviderDialog({
               // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
               // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
               // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
-              const noEpIds = opts
+              const noEpIds = options
                 .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
                 .map((o) => o.id)
               const mergedGroup = noEpIds.length
@@ -415,8 +417,11 @@ export function ManagedProviderDialog({
     }
 
     try {
-      // BaseURL 与系统自动值一致 → 存空（生成时实时跟随系统设置）
-      const storedBaseUrl = baseUrl.trim() === '' || baseUrl.trim() === autoBaseUrl.trim() ? '' : baseUrl.trim()
+      // 与系统自动值一致 → 存空（跟随系统：系统 BaseURL 改这里自动跟）；
+      // 不一致 → 存用户设置的值，生成 JSON 强制用弹窗里这个值。
+      const normalized = baseUrl.trim().replace(/\/+$/, '')
+      const auto = autoBaseUrl.trim().replace(/\/+$/, '')
+      const storedBaseUrl = normalized === '' || normalized === auto ? '' : normalized
       const authFields = {
         api_key: apiKey,
         base_url: storedBaseUrl,

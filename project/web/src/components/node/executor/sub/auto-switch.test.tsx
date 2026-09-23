@@ -16,6 +16,7 @@ const rule: FailoverRule = {
   autoDisable: false,
   matchPatterns: [],
   ttfbSeconds: 5,
+  speedLimit: 0,
   disableThreshold: 1,
   disableWindowMinutes: 5,
 }
