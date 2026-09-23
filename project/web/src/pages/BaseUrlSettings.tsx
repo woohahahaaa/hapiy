@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,6 +7,10 @@ import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 
 const BASE_URL_SUFFIX_KEY = 'base_url_suffix'
+// 完整系统 BaseURL（如 https://hapiying.hihy.me:6060/proxy）。生成代理配置
+// 与托管 provider「跟随系统」时都用它，不再依赖请求 Host，避免隧道/反代
+// 把 Host 改成 localhost 导致生成的 JSON 地址跑偏。
+const SYSTEM_BASE_URL_KEY = 'system_base_url'
 
 type LoadState =
   | { readonly kind: 'loading' }
@@ -22,6 +26,7 @@ function isValidPathName(name: string): boolean {
 export function BaseUrlSettings() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [suffixValue, setSuffixValue] = useState('')
+  const [origin, setOrigin] = useState(window.location.origin)
   const [paths, setPaths] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
@@ -30,6 +35,15 @@ export function BaseUrlSettings() {
       .then(([settings, savedPaths]) => {
         const suffix = settings.find((s) => s.key === BASE_URL_SUFFIX_KEY)
         setSuffixValue(suffix?.value ?? '')
+        // 已配置过 system_base_url 时，域名从设置回填（去尾缀），以便编辑；
+        // 未配置则保持默认 = 当前网页域名。
+        const sys = settings.find((s) => s.key === SYSTEM_BASE_URL_KEY)
+        if (sys?.value) {
+          const slash = sys.value.lastIndexOf('/')
+          setOrigin(slash > 'https://'.length ? sys.value.slice(0, slash) : sys.value)
+        } else {
+          setOrigin(window.location.origin)
+        }
         setPaths([...savedPaths])
         setState({ kind: 'ready' })
       })
@@ -48,8 +62,8 @@ export function BaseUrlSettings() {
     load()
   }
 
-  const origin = useMemo(() => window.location.origin, [])
-  const baseUrl = `${origin}/${suffixValue || 'proxy'}`
+  const originTrimmed = origin.replace(/\/+$/, '')
+  const baseUrl = `${originTrimmed}/${suffixValue.trim() || 'proxy'}`
   const fullUrlFor = (name: string) => `${baseUrl}/__${name}`
 
   const copyUrl = async (url: string) => {
@@ -83,8 +97,10 @@ export function BaseUrlSettings() {
     setSaving(true)
     try {
       const cleaned = paths.map((p) => p.trim()).filter((p) => p !== '')
+      const effective = `${origin.trim().replace(/\/+$/, '')}/${suffixValue.trim() || 'proxy'}`
       await Promise.all([
         dashboardApi.updateSetting(BASE_URL_SUFFIX_KEY, suffixValue),
+        dashboardApi.updateSetting(SYSTEM_BASE_URL_KEY, effective),
         dashboardApi.replaceBaseUrlPaths(cleaned),
       ])
       setPaths(cleaned)
@@ -126,9 +142,14 @@ export function BaseUrlSettings() {
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <div className="grid gap-1.5 text-sm">
               <span>域名</span>
-              <Input value={origin} readOnly disabled />
+              <Input
+                value={origin}
+                onChange={(e) => setOrigin(e.target.value)}
+                placeholder="https://hapiying.hihy.me:6060"
+                className="font-mono"
+              />
               <p className="text-xs text-muted-foreground">
-                自动取当前网页域名，不可修改（公网反代或局域网地址均可）
+                系统对外 BaseURL 的域名（含 scheme 与端口）。生成代理配置与托管「跟随系统」用它，默认取当前网页域名，隧道/反代场景请改成公网地址
               </p>
             </div>
             <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">

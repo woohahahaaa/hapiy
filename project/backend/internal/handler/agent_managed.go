@@ -85,7 +85,10 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 				EndpointCount:  len(eps), ModelCount: len(mods),
 			})
 		}
-		c.JSON(http.StatusOK, gin.H{"data": out})
+		// system_base_url is the same value generation uses (systemBaseURLPrefix),
+		// so the托管 dialog can prefill/compare against the authoritative prefix
+		// instead of window.location.origin.
+		c.JSON(http.StatusOK, gin.H{"data": out, "system_base_url": systemBaseURLPrefix(c, db)})
 	}
 }
 
@@ -933,12 +936,25 @@ func providerBlockName(name, suffix string) string {
 	return strings.TrimSpace(name) + strings.TrimSpace(suffix)
 }
 
-// systemBaseURLPrefix builds the对外 BaseURL the BaseURL settings page
-// shows: scheme://host/{suffix}. The suffix lives in the base_url_suffix
-// setting (default "proxy"); scheme/host come from the current dashboard
-// request so the generated agent config points at the same origin the
-// operator is browsing.
+// settingSystemBaseURL stores the stable system-base-URL prefix configured
+// on the BaseURL settings page (e.g. "https://hapiying.hihy.me:6060/proxy").
+// When set it wins over the request-derived fallback so managed providers
+// that choose 跟随系统 keep the same prefix regardless of which origin the
+// dashboard request arrived through (公网域名/隧道反代会把请求 Host 改掉)。
+const settingSystemBaseURL = "system_base_url"
+
+// systemBaseURLPrefix resolves the对外 BaseURL: the system_base_url
+// setting when configured, else scheme://host/{suffix} derived from the
+// current dashboard request + the base_url_suffix setting. The setting is
+// the single source of truth for both the托管 dialog's 系统自动值 and the
+// generated JSON, so 跟随系统 stays consistent even behind a tunnel that
+// rewrites the request Host.
 func systemBaseURLPrefix(c *gin.Context, db *gorm.DB) string {
+	if v, err := service.GetSetting(db, settingSystemBaseURL); err == nil {
+		if p := strings.TrimSpace(v); p != "" {
+			return strings.TrimSuffix(p, "/")
+		}
+	}
 	scheme := "http"
 	if c != nil && c.Request != nil {
 		if proto := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); proto == "https" {

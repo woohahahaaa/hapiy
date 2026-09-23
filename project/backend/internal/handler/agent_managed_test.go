@@ -237,6 +237,72 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 	}
 }
 
+// TestManagedProviderFollowsSystemBaseURL 覆盖「跟随后台声明的主机走」：
+// 配置了 system_base_url 设置后，托管 provider 的生成 BaseURL 必须用该
+// 设置值而不是同步请求的 Host（隧道/反代会把 Host 改掉，导致生成出
+// localhost）。
+func TestManagedProviderFollowsSystemBaseURL(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","source_name":"SRC","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter"}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	// 未配置 system_base_url：走请求 Host 回退（旧行为）。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	req.Host = "tunnel.example"
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync1: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `http://tunnel.example/proxy/__SRC`) {
+		t.Fatalf("fallback should use request Host: %s", w.Body.String())
+	}
+
+	// 配置 system_base_url 后，即使请求 Host 仍是隧道地址，也必须用设置值。
+	if err := db.Create(&model.Setting{Key: settingSystemBaseURL, Value: "https://hapiying.hihy.me:6060/proxy"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+	req.Host = "tunnel.example"
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("sync2: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `https://hapiying.hihy.me:6060/proxy/__SRC`) {
+		t.Fatalf("sync should follow system_base_url setting, not request Host: %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), `tunnel.example`) {
+		t.Fatalf("sync must not leak request Host once system_base_url is set: %s", w.Body.String())
+	}
+
+	// managed-options 要暴露同一个 system_base_url，供托管弹窗做自动值。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/managed-options", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("options: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"system_base_url":"https://hapiying.hihy.me:6060/proxy"`) {
+		t.Fatalf("options should expose system_base_url: %s", w.Body.String())
+	}
+}
+
 func idsJSON(ids []string) string {
 	b, _ := json.Marshal(ids)
 	return string(b)
