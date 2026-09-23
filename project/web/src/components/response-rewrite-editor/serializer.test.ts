@@ -188,12 +188,12 @@ describe('response-rewrite serializer — legacy script parsing', () => {
 
 describe('response-rewrite serializer — conditions round-trip', () => {
   it('嵌套 AND/OR 条件无损往返', () => {
-    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1' }, { path: 'c', op: 'eq', value: '2' }] }] }])
+    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1', scope: 'body' }, { path: 'c', op: 'eq', value: '2', scope: 'body' }] }] }])
     expect(serializeRule(parseRule(script))).toBe(script)
   })
 
   it('顶层 OR 包装还原为 conditionLogic 再序列化回单组', () => {
-    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1' }] }] }])
+    const script = JSON.stringify([{ mode: 'delete', path: 'a', conditions: [{ logic: 'OR', children: [{ path: 'b', op: 'eq', value: '1', scope: 'body' }] }] }])
     const parsed = parseRule(script)
     expect(parsed.blocks[0].conditionLogic).toBe('OR')
     expect(serializeRule(parsed)).toBe(script)
