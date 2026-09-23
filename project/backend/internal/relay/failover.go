@@ -125,7 +125,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	ttfbMs := 0
 	if err == nil {
 		// 请求本身成功了，但「首字节」超过某条规则的 ttfb_seconds 才到 →
-		// 把它当成一次可轮询的「慢响应」失败，进入 failover 判定。
+		// 把它当成一次可转移的「慢响应」失败，进入 failover 判定。
 		// 与自动恢复探针共用同一套首字节测量（publicfunction 包）。
 		ttfbMs = e.ttfbForSlowUpstream(plan, resp)
 		if ttfbMs == 0 {
