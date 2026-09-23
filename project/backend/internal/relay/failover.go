@@ -193,6 +193,44 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	return resp, err
 }
 
+// RecordResponseSpeedOutcome feeds post-response speed violations into the
+// failover hit counters. A slow response that already finished cannot be
+// re-routed for this request, but the auto-disable machinery still protects
+// future requests: every enabled rule with a speed limit counts one hit
+// when the response speed (tokens/s over the full request, connect
+// included) falls below the limit.
+func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayRequest, elapsedMs, totalTokens int) {
+	if e == nil || e.db == nil || plan == nil || req == nil || elapsedMs <= 0 || totalTokens <= 0 {
+		return
+	}
+	speed := float64(totalTokens) * 1000 / float64(elapsedMs)
+	for _, rule := range plan.FailoverRules {
+		if rule == nil || !rule.Status || rule.SpeedLimit <= 0 || speed >= float64(rule.SpeedLimit) {
+			continue
+		}
+		dimension, autoDisable := rule.SingleAction()
+		if dimension == "" {
+			continue
+		}
+		value := failoverActionValue(plan, req, dimension)
+		if value == "" {
+			continue
+		}
+		hitReached := false
+		if autoDisable {
+			_, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
+		}
+		if hitReached {
+			outcome := upstreamOutcome{
+				message: fmt.Sprintf("响应速度 %.1f token/s 低于规则限制 %d token/s", speed, rule.SpeedLimit),
+			}
+			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome); err != nil {
+				log.Printf("relay: applyFailoverAction(speed) %s/%s: %v", plan.Provider.ID, dimension, err)
+			}
+		}
+	}
+}
+
 // failoverActionValue mirrors the value lookup in applyFailoverAction
 // so the hit counter tracks exactly the entity that would be disabled.
 func failoverActionValue(plan *ExecutionPlan, req *RelayRequest, dimension string) string {
@@ -375,7 +413,7 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 	// 记录当时实际用过的 (baseURL, key)，恢复探针用它，不做 harness 交叉。
 	usedBaseURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
 	usedKey := pickIndex(plan.Keys, req.KeyIndex)
-	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, req, "")
+	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, req, "", rule)
 	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value), failoverEventDetail(rule, dimension, outcome))
 	return nil
 }

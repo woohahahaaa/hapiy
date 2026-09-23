@@ -21,7 +21,7 @@ func newRecoveryTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}, &model.Setting{}, &model.DisabledRecord{}); err != nil {
+	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}, &model.Setting{}, &model.DisabledRecord{}, &model.FailoverRule{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
 	return db
@@ -79,6 +79,32 @@ func setDisabledRecord(t *testing.T, db *gorm.DB, providerID, dimension, value, 
 		Key:        key,
 		Model:      modelName,
 		DisabledAt: time.Now(),
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("create disabled record: %v", err)
+	}
+}
+
+// setDisabledRecordWithRule 与 setDisabledRecord 相同，但额外把触发禁用的
+// failover 规则快照写到记录上（模拟 failover 真实写入路径）。
+func setDisabledRecordWithRule(t *testing.T, db *gorm.DB, providerID, dimension, value, baseURL, key, modelName string, rule *model.FailoverRule) {
+	t.Helper()
+	setDisabled(t, db, providerID, dimension, value)
+	row := model.DisabledRecord{
+		ProviderID: providerID,
+		Dimension:  dimension,
+		Value:      value,
+		BaseURL:    baseURL,
+		Key:        key,
+		Model:      modelName,
+		DisabledAt: time.Now(),
+	}
+	if rule != nil {
+		if err := db.Create(rule).Error; err != nil {
+			t.Fatalf("create failover rule: %v", err)
+		}
+		row.RuleID = rule.ID
+		row.RuleName = rule.Name
 	}
 	if err := db.Create(&row).Error; err != nil {
 		t.Fatalf("create disabled record: %v", err)
@@ -199,23 +225,35 @@ func TestRunTimedRecovery_keepsRecordBeforeDeadline(t *testing.T) {
 	}
 }
 
-func TestPassProbe(t *testing.T) {
+func TestSatisfiesRecoveryRule(t *testing.T) {
 	cases := []struct {
-		name      string
-		result    ProbeResult
-		threshold time.Duration
-		want      bool
+		name   string
+		rule   *model.FailoverRule
+		result ProbeResult
+		want   bool
 	}{
-		{"success_no_threshold", ProbeResult{Success: true}, 0, true},
-		{"success_under_threshold", ProbeResult{Success: true, TTFB: 3 * time.Second}, 5 * time.Second, true},
-		{"success_over_threshold", ProbeResult{Success: true, TTFB: 7 * time.Second}, 5 * time.Second, false},
-		{"fail_no_threshold", ProbeResult{Success: false}, 0, false},
-		{"fail_over_threshold", ProbeResult{Success: false, TTFB: 2 * time.Second}, 5 * time.Second, false},
+		// nil rule → connectivity only.
+		{"no_rule_success", nil, ProbeResult{Success: true}, true},
+		{"no_rule_failure", nil, ProbeResult{Success: false}, false},
+		// TTFB limit.
+		{"ttfb_under", &model.FailoverRule{TTFBSeconds: 5}, ProbeResult{Success: true, TTFB: 3 * time.Second}, true},
+		{"ttfb_over", &model.FailoverRule{TTFBSeconds: 5}, ProbeResult{Success: true, TTFB: 7 * time.Second}, false},
+		// Speed limit.
+		{"speed_ok", &model.FailoverRule{SpeedLimit: 10}, ProbeResult{Success: true, Speed: 20}, true},
+		{"speed_slow", &model.FailoverRule{SpeedLimit: 10}, ProbeResult{Success: true, Speed: 5}, false},
+		{"speed_unknown", &model.FailoverRule{SpeedLimit: 10}, ProbeResult{Success: true}, false},
+		// Match patterns / keywords.
+		{"pattern_hit", &model.FailoverRule{MatchPatterns: []string{"rate_limit"}}, ProbeResult{Success: true, Body: `{"error":"rate_limit_exceeded"}`}, false},
+		{"pattern_clean", &model.FailoverRule{MatchPatterns: []string{"rate_limit"}}, ProbeResult{Success: true, Body: `{"choices":[]}`}, true},
+		{"keyword_hit", &model.FailoverRule{Keywords: []string{"quota"}}, ProbeResult{Success: true, Body: "insufficient quota"}, false},
+		{"keyword_clean", &model.FailoverRule{Keywords: []string{"quota"}}, ProbeResult{Success: true, Body: "all good"}, true},
+		// Connectivity failure always fails regardless of rule.
+		{"fail_with_rule", &model.FailoverRule{TTFBSeconds: 60}, ProbeResult{Success: false}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := passProbe(tc.result, tc.threshold); got != tc.want {
-				t.Fatalf("passProbe(%+v, %v) = %v, want %v", tc.result, tc.threshold, got, tc.want)
+			if got := SatisfiesRecoveryRule(tc.rule, tc.result); got != tc.want {
+				t.Fatalf("SatisfiesRecoveryRule(%+v, %+v) = %v, want %v", tc.rule, tc.result, got, tc.want)
 			}
 		})
 	}
@@ -312,7 +350,7 @@ func TestRunRecoveryCycle_clearsDisabledKeyWhenProbePasses(t *testing.T) {
 		gotKey = key
 		return ProbeResult{Success: true, TTFB: 1 * time.Second}
 	}
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 0, Probe: probe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
 	if gotKey != "k2" {
 		t.Fatalf("probe should hit the recorded key k2, got %q", gotKey)
 	}
@@ -339,41 +377,65 @@ func TestRunRecoveryCycle_keepsDisabledKeyWhenProbeFails(t *testing.T) {
 	}
 }
 
-func TestRunRecoveryCycle_keepsDisabledKeyWhenTTFBExceedsThreshold(t *testing.T) {
+func TestRunRecoveryCycle_keepsDisabledKeyWhenTTFBExceedsRuleLimit(t *testing.T) {
 	db := newRecoveryTestDB(t)
 	providerID := makeProvider(t, db, "openai",
 		[]string{"https://u1"},
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4")
+	setDisabledRecordWithRule(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4",
+		&model.FailoverRule{ID: "rule-ttfb", Name: "慢响应", Dimension: model.FailoverDimensionKey, Status: true, TTFBSeconds: 5})
 
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 10 * time.Second}
 	}
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 5 * time.Second, Probe: probe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
 
 	if isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
-		t.Fatalf("disabled key must stay disabled when TTFB exceeds threshold")
+		t.Fatalf("disabled key must stay disabled when TTFB exceeds the rule limit")
 	}
 }
 
-func TestRunRecoveryCycle_clearsDisabledKeyWhenTTFBUnderThreshold(t *testing.T) {
+func TestRunRecoveryCycle_clearsDisabledKeyWhenTTFBUnderRuleLimit(t *testing.T) {
 	db := newRecoveryTestDB(t)
 	providerID := makeProvider(t, db, "openai",
 		[]string{"https://u1"},
 		[]string{"k1", "k2"},
 		[]string{"gpt-4"},
 	)
-	setDisabledRecord(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4")
+	setDisabledRecordWithRule(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4",
+		&model.FailoverRule{ID: "rule-ttfb", Name: "慢响应", Dimension: model.FailoverDimensionKey, Status: true, TTFBSeconds: 5})
 
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 2 * time.Second}
 	}
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 5 * time.Second, Probe: probe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
 
 	if !isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
-		t.Fatalf("disabled key k2 should be cleared when probe succeeds under TTFB threshold")
+		t.Fatalf("disabled key k2 should be cleared when probe succeeds under the rule TTFB limit")
+	}
+}
+
+func TestRunRecoveryCycle_deletedRuleFallsBackToConnectivity(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	providerID := makeProvider(t, db, "openai",
+		[]string{"https://u1"},
+		[]string{"k1", "k2"},
+		[]string{"gpt-4"},
+	)
+	// RuleID points at a rule that no longer exists — recovery must fall
+	// back to the connectivity-only check.
+	setDisabledRecordWithRule(t, db, providerID, model.FailoverDimensionKey, "k2", "https://u1", "k2", "gpt-4", nil)
+	db.Model(&model.DisabledRecord{}).Where("provider_id = ?", providerID).Update("rule_id", "gone-rule")
+
+	probe := func(baseURL, key, model string) ProbeResult {
+		return ProbeResult{Success: true, TTFB: 60 * time.Second}
+	}
+	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
+
+	if !isEnabled(t, db, providerID, model.FailoverDimensionKey, "k2") {
+		t.Fatalf("deleted rule must degrade to connectivity-only recovery")
 	}
 }
 
@@ -431,7 +493,7 @@ func TestRunRecoveryCycle_clearsProviderLevelDisable(t *testing.T) {
 	probe := func(baseURL, key, model string) ProbeResult {
 		return ProbeResult{Success: true, TTFB: 500 * time.Millisecond}
 	}
-	RunRecoveryCycle(db, RecoveryOptions{TTFBThreshold: 2 * time.Second, Probe: probe})
+	RunRecoveryCycle(db, RecoveryOptions{Probe: probe})
 
 	if !isEnabled(t, db, providerID, model.FailoverDimensionProvider, providerID) {
 		t.Fatalf("expected provider-level disable to be cleared")
@@ -580,25 +642,6 @@ func TestDefaultChannelProbe_connectionErrorSetsTTFB(t *testing.T) {
 	}
 	if res.TTFB <= 0 {
 		t.Fatalf("expected positive TTFB even on failure, got %v", res.TTFB)
-	}
-}
-
-func TestReadRecoveryTTFB(t *testing.T) {
-	db := newRecoveryTestDB(t)
-	if got := readRecoveryTTFB(db); got != 0 {
-		t.Fatalf("unset (defaults to 0) got %v, want 0", got)
-	}
-	upsertSetting(t, db, SettingRecoveryTTFBSecond, "0")
-	if got := readRecoveryTTFB(db); got != 0 {
-		t.Fatalf("explicit 0 got %v, want 0", got)
-	}
-	upsertSetting(t, db, SettingRecoveryTTFBSecond, "12")
-	if got := readRecoveryTTFB(db); got != 12*time.Second {
-		t.Fatalf("explicit 12 got %v, want 12s", got)
-	}
-	upsertSetting(t, db, SettingRecoveryTTFBSecond, "abc")
-	if got := readRecoveryTTFB(db); got != 0 {
-		t.Fatalf("garbage value got %v, want 0", got)
 	}
 }
 

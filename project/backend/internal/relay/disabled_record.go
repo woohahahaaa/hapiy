@@ -76,8 +76,9 @@ func compactValue(v interface{}) interface{} {
 // entity that just got auto-disabled. The unique index on
 // (provider_id, dimension, value) ensures we never create duplicates —
 // a second disable of the same entity overwrites the previous row's
-// request snapshot and resets retry counters.
-func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key string, req *RelayRequest, errMsg string) {
+// request snapshot and resets retry counters. The causing rule is
+// snapshotted (ID + name) so recovery can re-evaluate it.
+func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key string, req *RelayRequest, errMsg string, rule *model.FailoverRule) {
 	if e.db == nil || req == nil {
 		return
 	}
@@ -119,6 +120,10 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key s
 		// existing (provider, dimension, value) row, and a stale
 		// resolved_at would silently hide it from the pending table.
 		ResolvedAt: nil,
+	}
+	if rule != nil {
+		row.RuleID = rule.ID
+		row.RuleName = rule.Name
 	}
 	if dbErr := e.db.Where(
 		model.DisabledRecord{ProviderID: providerID, Dimension: dimension, Value: value},
@@ -234,7 +239,25 @@ func (e *Engine) ReplayDisabledRecord(record *model.DisabledRecord) bool {
 		Updates(updates).Error; updateErr != nil {
 		log.Printf("relay: update disabled-record retry: %v", updateErr)
 	}
-	if !probe.Success {
+	// Rule-aware recovery: the record remembers which failover rule caused
+	// the disable, and the probe result must satisfy that rule before the
+	// entity is recovered. A deleted rule (or a record without one) degrades
+	// to the connectivity-only check.
+	rule := e.loadRecoveryRule(record)
+	if !service.SatisfiesRecoveryRule(rule, probe) {
+		if probe.Success {
+			// Connected, but the rule that caused the disable is not
+			// satisfied — store the reason so the dashboard shows why the
+			// record was left pending.
+			reason := fmt.Sprintf("已连通，但未满足规则「%s」的恢复条件", rule.Name)
+			if rule == nil {
+				reason = "已连通，但未满足恢复条件"
+			}
+			e.db.Model(&model.DisabledRecord{}).
+				Where("id = ?", record.ID).
+				Update("error_message", recordErrorMessage(errors.New(reason)))
+			log.Printf("relay: replay %s/%s connected but rule not satisfied", record.ProviderID, record.Value)
+		}
 		return false
 	}
 	// Recovery succeeded: drop the row entirely instead of marking it
@@ -271,19 +294,26 @@ func sanitizeReplayBody(raw []byte) []byte {
 
 // replayProbe sends the recorded request (compact body + headers) to
 // (baseURL, key) with a fresh chat completions call and reports whether
-// the upstream returned 2xx with a usable body. When a recovery request
-// handler is configured, the recorded body is rewritten first (long user
-// payloads become a short token); otherwise a minimal self-built payload
-// is used.
+// the upstream returned 2xx with a usable body. When the rule that caused
+// the disable carries a speed limit the probe asks for a real (small)
+// completion so tokens/second is measurable; otherwise one token suffices.
+// When a recovery request handler is configured, the recorded body is
+// rewritten first (long user payloads become a short token); otherwise a
+// minimal self-built payload is used.
 func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.DisabledRecord) service.ProbeResult {
 	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
 	if modelName == "" {
 		modelName = "test"
 	}
+	rule := e.loadRecoveryRule(record)
+	maxTokens := 1
+	if rule != nil && rule.SpeedLimit > 0 {
+		maxTokens = service.SpeedProbeMaxTokens
+	}
 	payload := map[string]interface{}{
 		"model":      modelName,
 		"messages":   []map[string]interface{}{{"role": "user", "content": "你好"}},
-		"max_tokens": 1,
+		"max_tokens": maxTokens,
 		"stream":     false,
 	}
 	raw, err := json.Marshal(payload)
@@ -330,6 +360,7 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 	rec := &ttfbRecorder{r: resp.Body, start: start}
 	body, _ := io.ReadAll(rec)
 	ttfb := rec.ttfb()
+	elapsed := time.Since(start)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Surface the upstream's real error payload (e.g. OpenAI's
 		// {"error":{"message":...}}) so the dashboard shows what the
@@ -338,26 +369,42 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 		if excerpt := probeErrorExcerpt(body); excerpt != "" {
 			msg += ": " + excerpt
 		}
-		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
+		return service.ProbeResult{TTFB: ttfb, Body: string(body), ErrorMessage: msg}
 	}
 	var parsed struct {
 		Choices []json.RawMessage `json:"choices"`
+		Usage   *service.ProbeUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {
 		msg := probeErrorExcerpt(body)
 		if msg == "" {
 			msg = "上游响应体不是合法 JSON"
 		}
-		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
+		return service.ProbeResult{TTFB: ttfb, Body: string(body), ErrorMessage: msg}
 	}
 	if len(parsed.Choices) == 0 {
 		msg := probeErrorExcerpt(body)
 		if msg == "" {
 			msg = "上游响应缺少 choices 字段"
 		}
-		return service.ProbeResult{TTFB: ttfb, ErrorMessage: msg}
+		return service.ProbeResult{TTFB: ttfb, Body: string(body), ErrorMessage: msg}
 	}
-	return service.ProbeResult{Success: true, TTFB: ttfb}
+	return service.ProbeResult{
+		Success: true,
+		TTFB:    ttfb,
+		Speed:   service.ProbeSpeed(parsed.Usage, maxTokens, elapsed),
+		Body:    string(body),
+	}
+}
+
+// loadRecoveryRule loads the failover rule recorded on a DisabledRecord.
+// Returns nil when the record carries no rule or the rule has been deleted;
+// recovery then degrades to the connectivity-only check.
+func (e *Engine) loadRecoveryRule(record *model.DisabledRecord) *model.FailoverRule {
+	if e == nil || e.db == nil || record == nil {
+		return nil
+	}
+	return service.RecoveryRuleFor(e.db, record)
 }
 
 // ttfbRecorder stamps the moment the first byte arrives so the caller

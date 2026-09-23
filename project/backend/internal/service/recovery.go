@@ -18,12 +18,16 @@ import (
 
 const (
 	SettingRecoveryInterval    = "automatic_disable_recovery_minutes"
-	SettingRecoveryTTFBSecond  = "recovery_ttfb_seconds"
 	SettingRecoveryMode        = "recovery_mode"
 	SettingRecoveryTimedMinute = "recovery_timed_minutes"
 
 	recoveryModeProbe = "probe"
 	recoveryModeTimed = "timed"
+
+	// SpeedProbeMaxTokens is the max_tokens budget for recovery probes that
+	// must measure generation speed. One-token probes make speed meaningless,
+	// so speed-rule probes ask for a small real completion instead.
+	SpeedProbeMaxTokens = 100
 )
 
 // ProbeResult is what ChannelProbe returns. Success reports whether the
@@ -32,6 +36,13 @@ const (
 type ProbeResult struct {
 	Success bool
 	TTFB    time.Duration
+	// Speed is the measured response speed in tokens per second, computed
+	// over the full probe duration (request start to completion, connect
+	// included) using the usage report. 0 when unknown.
+	Speed float64
+	// Body carries the raw response body so recovery can re-check the
+	// match patterns / keywords of the rule that caused the disable.
+	Body string
 	// ErrorMessage carries the upstream's real feedback when the probe
 	// failed: transport error text or "HTTP <status>: <body excerpt>".
 	ErrorMessage string
@@ -42,15 +53,27 @@ type ProbeResult struct {
 // inject a deterministic stub.
 var ChannelProbe = defaultChannelProbe
 
+// ChannelSpeedProbe is the speed-measuring variant used for records whose
+// disable rule carries a speed limit: it requests a real (small) completion
+// so tokens/second is meaningful.
+var ChannelSpeedProbe = func(baseURL, key, model string) ProbeResult {
+	return probeChannel(baseURL, key, model, SpeedProbeMaxTokens)
+}
+
 func defaultChannelProbe(baseURL, key, model string) ProbeResult {
+	return probeChannel(baseURL, key, model, 1)
+}
+
+func probeChannel(baseURL, key, model string, maxTokens int) ProbeResult {
 	if baseURL == "" || key == "" || model == "" {
 		return ProbeResult{}
 	}
 
 	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
 	body := fmt.Sprintf(
-		`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":1,"stream":false}`,
+		`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":%d,"stream":false}`,
 		model,
+		maxTokens,
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -78,6 +101,7 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 	rec := publicfunction.NewFirstByteProbeReader(resp.Body, start)
 	raw, err := io.ReadAll(rec)
 	ttfb := rec.FirstByteLatency()
+	elapsed := time.Since(start)
 	if err != nil {
 		return ProbeResult{TTFB: ttfb, ErrorMessage: fmt.Sprintf("读取响应失败：%v", err)}
 	}
@@ -87,23 +111,53 @@ func defaultChannelProbe(baseURL, key, model string) ProbeResult {
 		if excerpt := probeErrorExcerpt(raw); excerpt != "" {
 			msg += ": " + excerpt
 		}
-		return ProbeResult{TTFB: ttfb, ErrorMessage: msg}
+		return ProbeResult{TTFB: ttfb, Body: string(raw), ErrorMessage: msg}
 	}
 
 	var parsed struct {
 		Choices []json.RawMessage `json:"choices"`
+		Usage   *ProbeUsage       `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return ProbeResult{TTFB: ttfb, ErrorMessage: fmt.Sprintf("响应体不是合法 JSON：%v", err)}
+		return ProbeResult{TTFB: ttfb, Body: string(raw), ErrorMessage: fmt.Sprintf("响应体不是合法 JSON：%v", err)}
 	}
 	if len(parsed.Choices) == 0 {
 		msg := "响应缺少 choices 字段"
 		if excerpt := probeErrorExcerpt(raw); excerpt != "" {
 			msg = msg + ": " + excerpt
 		}
-		return ProbeResult{TTFB: ttfb, ErrorMessage: msg}
+		return ProbeResult{TTFB: ttfb, Body: string(raw), ErrorMessage: msg}
 	}
-	return ProbeResult{Success: true, TTFB: ttfb}
+	return ProbeResult{
+		Success: true,
+		TTFB:    ttfb,
+		Speed:   ProbeSpeed(parsed.Usage, maxTokens, elapsed),
+		Body:    string(raw),
+	}
+}
+
+// ProbeUsage mirrors the OpenAI usage report on probe responses.
+type ProbeUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+}
+
+// ProbeSpeed converts a usage report + elapsed time into tokens per second.
+// The denominator spans the whole probe (connect included), matching the
+// 使用记录 speed column. Falls back to the requested token count when the
+// upstream omits usage.
+func ProbeSpeed(usage *ProbeUsage, maxTokens int, elapsed time.Duration) float64 {
+	if elapsed <= 0 {
+		return 0
+	}
+	tokens := 0
+	if usage != nil {
+		tokens = usage.PromptTokens + usage.CompletionTokens
+	}
+	if tokens <= 0 {
+		tokens = maxTokens
+	}
+	return float64(tokens) / elapsed.Seconds()
 }
 
 // probeErrorExcerpt 解析 OpenAI / Anthropic 风格的 {"error":{...}}，
@@ -147,16 +201,16 @@ func probeErrorExcerpt(body []byte) string {
 	return snippet
 }
 
-// RecoveryOptions configures one recovery cycle. TTFBThreshold == 0 means
-// "don't check TTFB" — the upstream-success check alone is sufficient.
-// RecordReplay, when set, runs first: every open DisabledRecord is
-// replayed (the recorded request context is sent against a healthy
-// partner) and successful rows are marked resolved. Harness-based
-// recovery then handles anything still left.
+// RecoveryOptions configures one recovery cycle. Probe runs for records
+// whose rule has no speed limit; SpeedProbe (a slower, token-heavier probe)
+// runs for records whose rule measures speed. RecordReplay, when set, runs
+// first: every open DisabledRecord is replayed (the recorded request
+// context is sent against a healthy partner) and successful rows are marked
+// resolved. Harness-based recovery then handles anything still left.
 type RecoveryOptions struct {
-	TTFBThreshold time.Duration
-	Probe         func(baseURL, key, model string) ProbeResult
-	RecordReplay  func() (resolved int, total int)
+	Probe      func(baseURL, key, model string) ProbeResult
+	SpeedProbe func(baseURL, key, model string) ProbeResult
+	RecordReplay func() (resolved int, total int)
 }
 
 // StartRecoveryScheduler runs auto-recovery cycles in the background. The
@@ -221,9 +275,9 @@ func StartRecoverySchedulerWithRecordReplay(db *gorm.DB, recordReplay func() (re
 
 func runProbeCycle(db *gorm.DB, recordReplay func() (resolved, total int)) {
 	RunRecoveryCycle(db, RecoveryOptions{
-		TTFBThreshold: readRecoveryTTFB(db),
-		Probe:         ChannelProbe,
-		RecordReplay:  recordReplay,
+		Probe:        ChannelProbe,
+		SpeedProbe:   ChannelSpeedProbe,
+		RecordReplay: recordReplay,
 	})
 }
 
@@ -262,16 +316,49 @@ func readRecoveryInterval(db *gorm.DB) int {
 	return n
 }
 
-func readRecoveryTTFB(db *gorm.DB) time.Duration {
-	val, err := GetSetting(db, SettingRecoveryTTFBSecond)
-	if err != nil || val == "" {
-		return 0
+// RecoveryRuleFor loads the failover rule recorded on a DisabledRecord.
+// Returns nil when the record has no rule or the rule has since been
+// deleted — callers then fall back to the connectivity-only check.
+func RecoveryRuleFor(db *gorm.DB, record *model.DisabledRecord) *model.FailoverRule {
+	if db == nil || record == nil || record.RuleID == "" {
+		return nil
 	}
-	n, err := strconv.Atoi(val)
-	if err != nil || n <= 0 {
-		return 0
+	var rule model.FailoverRule
+	if err := db.First(&rule, "id = ?", record.RuleID).Error; err != nil {
+		return nil
 	}
-	return time.Duration(n) * time.Second
+	return &rule
+}
+
+// SatisfiesRecoveryRule reports whether a probe result satisfies the rule
+// that caused the disable: the upstream must answer (connectivity), and —
+// when the rule sets limits — TTFB, speed, match patterns and keywords must
+// all stay within bounds. A nil rule (no rule recorded, or rule deleted)
+// degrades to the connectivity-only check.
+func SatisfiesRecoveryRule(rule *model.FailoverRule, result ProbeResult) bool {
+	if !result.Success {
+		return false
+	}
+	if rule == nil {
+		return true
+	}
+	if rule.TTFBSeconds > 0 && result.TTFB > time.Duration(rule.TTFBSeconds)*time.Second {
+		return false
+	}
+	if rule.SpeedLimit > 0 && result.Speed < float64(rule.SpeedLimit) {
+		return false
+	}
+	for _, pattern := range rule.MatchPatterns {
+		if pattern != "" && strings.Contains(result.Body, pattern) {
+			return false
+		}
+	}
+	for _, keyword := range rule.Keywords {
+		if keyword != "" && strings.Contains(result.Body, keyword) {
+			return false
+		}
+	}
+	return true
 }
 
 // RunRecoveryCycle executes one auto-recovery pass. If a RecordReplay
@@ -288,15 +375,19 @@ func RunRecoveryCycle(db *gorm.DB, opts RecoveryOptions) {
 	if probe == nil {
 		probe = defaultChannelProbe
 	}
-	runRecordRecovery(db, probe, opts.TTFBThreshold)
+	speedProbe := opts.SpeedProbe
+	runRecordRecovery(db, probe, speedProbe)
 }
 
 // runRecordRecovery probes every open DisabledRecord using the (baseURL,
 // key, model) captured at disable time — the exact combination that
 // triggered the disable, so we never cross-combine with other entries.
-// Rows missing the captured combo (legacy / backfilled) fall back to the
-// provider's first usable entries so they still get a chance.
-func runRecordRecovery(db *gorm.DB, probe func(baseURL, key, model string) ProbeResult, ttfbThreshold time.Duration) {
+// Records carrying a rule snapshot are recovered only when the probe
+// satisfies that rule (TTFB / speed / patterns); records whose rule is
+// gone fall back to the connectivity-only check. Rows missing the captured
+// combo (legacy / backfilled) fall back to the provider's first usable
+// entries so they still get a chance.
+func runRecordRecovery(db *gorm.DB, probe func(baseURL, key, model string) ProbeResult, speedProbe func(baseURL, key, model string) ProbeResult) {
 	var records []model.DisabledRecord
 	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
 		log.Printf("recovery: load disabled records: %v", err)
@@ -309,8 +400,13 @@ func runRecordRecovery(db *gorm.DB, probe func(baseURL, key, model string) Probe
 		if !ok {
 			continue
 		}
-		result := probe(baseURL, key, modelName)
-		if !passProbe(result, ttfbThreshold) {
+		rule := RecoveryRuleFor(db, r)
+		probeFn := probe
+		if rule != nil && rule.SpeedLimit > 0 && speedProbe != nil {
+			probeFn = speedProbe
+		}
+		result := probeFn(baseURL, key, modelName)
+		if !SatisfiesRecoveryRule(rule, result) {
 			if result.ErrorMessage != "" {
 				log.Printf("recovery: probe %s/%s failed: %s (ttfb=%v)", baseURL, key, result.ErrorMessage, result.TTFB)
 			}
@@ -363,18 +459,6 @@ func recoveryTarget(db *gorm.DB, r *model.DisabledRecord, provider *model.Provid
 		return "", "", "", false
 	}
 	return baseURL, key, modelName, true
-}
-
-// passProbe returns true only when the probe succeeded and the optional
-// TTFB threshold is satisfied. The TTFB threshold of 0 disables the check.
-func passProbe(result ProbeResult, ttfbThreshold time.Duration) bool {
-	if !result.Success {
-		return false
-	}
-	if ttfbThreshold > 0 && result.TTFB > ttfbThreshold {
-		return false
-	}
-	return true
 }
 
 // runTimedRecovery is the timed-mode equivalent of RunRecoveryCycle: any
