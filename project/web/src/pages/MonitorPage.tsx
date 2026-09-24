@@ -42,6 +42,12 @@ function formatBytes(n: number): string {
   return `${n}B`
 }
 
+// 缓存命中率展示：不足 100% 的绝不进位成 100.0%，只有完全相等才显示 100.0%。
+function cacheHitRateText(rate: number): string {
+  if (rate >= 1) return '100.0%'
+  return `${Math.min(rate * 100, 99.9).toFixed(1)}%`
+}
+
 function formatActiveStage(row: ActiveRequest): string {
   const elapsed = `${(row.elapsedMs / 1000).toFixed(1)}s`
   switch (row.stage) {
@@ -374,7 +380,7 @@ function StatsSection() {
             <MetricCard
               icon={<AppIcon name="refresh" />}
               label="缓存命中率"
-              value={cacheActivity && cacheHitRate > 0 ? `${(cacheHitRate * 100).toFixed(1)}%` : '-'}
+              value={cacheActivity && cacheHitRate > 0 ? cacheHitRateText(cacheHitRate) : '-'}
             />
           </div>
         </>

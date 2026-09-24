@@ -58,17 +58,17 @@ type AgentJsonPaths struct {
 // sep for join, Values as an allowed-literal whitelist that drops anything
 // not listed (e.g. openclaw's `input` only accepts text/image/video/audio).
 type AgentRecommendation struct {
-	Name        string            `json:"name,omitempty"`      // 字段名（官方配置里）
-	Scope       string            `json:"scope"`               // "provider" | "model"
-	Key         string            `json:"key"`                 // gjson path, e.g. "maxConcurrency" or "thinking.type"
-	Description string            `json:"description"`         // human-readable meaning
-	Action      string            `json:"action,omitempty"`    // "set" | "skip" | "delete"（缺省 "set"）
-	Recommended any               `json:"recommended"`         // recommended value, or null when not filled
+	Name        string            `json:"name,omitempty"`       // 字段名（官方配置里）
+	Scope       string            `json:"scope"`                // "provider" | "model"
+	Key         string            `json:"key"`                  // gjson path, e.g. "maxConcurrency" or "thinking.type"
+	Description string            `json:"description"`          // human-readable meaning
+	Action      string            `json:"action,omitempty"`     // "set" | "skip" | "delete"（缺省 "set"）
+	Recommended any               `json:"recommended"`          // recommended value, or null when not filled
 	Candidates  map[string]string `json:"candidates,omitempty"` // 多候选值说明 key→含义
-	Required    bool              `json:"required"`            // recommended to be present?
-	Op          string            `json:"op,omitempty"`        // ""|"raw"|"bool"|"first"|"join"
-	Sep         string            `json:"sep,omitempty"`       // join 分隔符
-	Values      []string          `json:"values,omitempty"`    // allowed-literal whitelist
+	Required    bool              `json:"required"`             // recommended to be present?
+	Op          string            `json:"op,omitempty"`         // ""|"raw"|"bool"|"first"|"join"
+	Sep         string            `json:"sep,omitempty"`        // join 分隔符
+	Values      []string          `json:"values,omitempty"`     // allowed-literal whitelist
 }
 
 // RecommendAction resolves the effective action of a recommendation,
@@ -334,10 +334,10 @@ type AgentProtocolCondition struct {
 // Recommendations only take effect when the protocol matches,
 // and override/supplement the rule's common recommendations.
 type AgentProtocol struct {
-	Name            string               `json:"name"`
+	Name            string                   `json:"name"`
 	Conditions      []AgentProtocolCondition `json:"conditions"`
-	EndpointTags    []string             `json:"endpoint_tags"`
-	Recommendations []AgentRecommendation `json:"recommendations"`
+	EndpointTags    []string                 `json:"endpoint_tags"`
+	Recommendations []AgentRecommendation    `json:"recommendations"`
 }
 
 const (
@@ -360,6 +360,13 @@ var ModelInfoFieldLabels = map[string]string{
 // AgentTypeRule — an agent software type (e.g. "opencode") that owns
 // config files managed through the dashboard ("管理规则"). The seeded
 // default rows let the frontend dropdown work on a fresh database.
+//
+// Customized marks whether the user has saved this rule with content that
+// differs from its default template. Untouched rows (Customized=false)
+// fully follow the default template on every startup — template changes
+// (added *and* removed fields) propagate; once customized, the user's
+// version always wins and the seed never touches the row again. Saving
+// content that is again identical to the default clears the flag.
 type AgentTypeRule struct {
 	ID              string    `gorm:"primaryKey;type:uuid" json:"id"`
 	Name            string    `gorm:"uniqueIndex;not null" json:"name"`
@@ -369,6 +376,7 @@ type AgentTypeRule struct {
 	Protocols       string    `gorm:"type:text" json:"-"` // JSON blob of []AgentProtocol
 	ModelInfoFields string    `gorm:"type:text" json:"-"` // JSON blob of AgentModelInfoFieldPaths
 	ConfigJsonc     string    `gorm:"type:text" json:"-"` // 原始 JSONC（含注释）
+	Customized      bool      `gorm:"not null;default:false" json:"customized"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -377,18 +385,18 @@ type AgentTypeRule struct {
 // in the rule dialog. Common holds the SDK-independent fields; Protocols
 // holds per-SDK blocks (each with its own field list + endpoint tags).
 type AgentRuleConfigJsonc struct {
-	Common    []AgentRecommendation  `json:"common"`
-	Protocols []AgentProtocolJsonc   `json:"protocols"`
+	Common    []AgentRecommendation `json:"common"`
+	Protocols []AgentProtocolJsonc  `json:"protocols"`
 }
 
 // AgentProtocolJsonc is the JSONC representation of a protocol block.
 // It matches AgentProtocol except the SDK-specific field list uses the
 // friendlier "fields" key instead of "recommendations".
 type AgentProtocolJsonc struct {
-	Name            string               `json:"name"`
-	Conditions      []AgentProtocolCondition `json:"conditions"`
-	EndpointTags    []string             `json:"endpoint_tags"`
-	Fields          []AgentRecommendation `json:"fields"`
+	Name         string                   `json:"name"`
+	Conditions   []AgentProtocolCondition `json:"conditions"`
+	EndpointTags []string                 `json:"endpoint_tags"`
+	Fields       []AgentRecommendation    `json:"fields"`
 }
 
 // MarshalJSON embeds os_paths, json_paths, recommendations, protocols,
@@ -740,7 +748,7 @@ var builtinAgentRules = []struct {
 			MaxOutputToken: ModelInfoPath(`maxTokens`),
 			// openclaw 的 input 数组只接受 text/image/video/audio，
 			// models.dev 可能带回 pdf 等非法值，写前过滤。
-			InputTypes:     AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image", "video", "audio"}},
+			InputTypes: AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image", "video", "audio"}},
 			// openclaw 的 reasoning 字段同样要求 boolean。
 			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
@@ -977,7 +985,7 @@ type AgentModelConfigSource struct {
 	ProviderID        string    `gorm:"primaryKey" json:"-"`
 	ModelID           string    `gorm:"primaryKey" json:"-"`
 	Mode              string    `gorm:"not null;default:'none'" json:"mode"`
-	SelfSupplier      string    `gorm:"type:text" json:"self_supplier"`   // models.dev supplier name in "self" mode
+	SelfSupplier      string    `gorm:"type:text" json:"self_supplier"`    // models.dev supplier name in "self" mode
 	LinkProviderID    string    `gorm:"type:text" json:"link_provider_id"` // our provider bound in "link" mode
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -1007,11 +1015,11 @@ type ManagedAgentGroup struct {
 // so they are read-only in the 管理模型 view — users can only toggle
 // between the generated views, never edit or "使用推荐值" them.
 type ManagedAgentProvider struct {
-	ID                string    `gorm:"primaryKey;type:uuid" json:"id"`
-	AgentConfigFileID string    `gorm:"not null;index" json:"agent_config_file_id"`
-	Name              string    `gorm:"not null" json:"name"` // 根名，例如 HAPIY
-	ProviderIDs       string    `gorm:"type:text" json:"-"`   // JSON array of system Provider ids
-	Groups            string    `gorm:"type:text" json:"-"`   // JSON blob of []ManagedAgentGroup
+	ID                string `gorm:"primaryKey;type:uuid" json:"id"`
+	AgentConfigFileID string `gorm:"not null;index" json:"agent_config_file_id"`
+	Name              string `gorm:"not null" json:"name"` // 根名，例如 HAPIY
+	ProviderIDs       string `gorm:"type:text" json:"-"`   // JSON array of system Provider ids
+	Groups            string `gorm:"type:text" json:"-"`   // JSON blob of []ManagedAgentGroup
 	// APIKey is the 令牌 (downstream relay token) key the agent uses to
 	// authenticate against the hapiy relay; chosen in the 托管 dialog.
 	// Empty falls back to the first linked provider's key (legacy rows).
@@ -1020,17 +1028,17 @@ type ManagedAgentProvider struct {
 	// lets generation derive it from the current request + base_url_suffix
 	// setting (BaseURL settings page logic).
 	BaseURL string `gorm:"type:text" json:"base_url"`
- 	// SourceName, when non-empty, appends the `__来源` segment after the
- 	// base URL (BaseURL settings page 标记来源 logic); empty = no mark.
- 	SourceName string    `gorm:"type:text" json:"source_name"`
- 	// SyncedBlocks records the provider block names written into the
- 	// config file by the last successful sync（根名 + 各分组后缀）。下次
- 	// 同步时，已不属于当前名字/分组的旧块（改名、删除分组）会被从文件
- 	// 里删掉，避免残留在普通供应商列表中。
- 	SyncedBlocks string    `gorm:"type:text" json:"-"`
- 	CreatedAt    time.Time `json:"created_at"`
- 	UpdatedAt    time.Time `json:"updated_at"`
- }
+	// SourceName, when non-empty, appends the `__来源` segment after the
+	// base URL (BaseURL settings page 标记来源 logic); empty = no mark.
+	SourceName string `gorm:"type:text" json:"source_name"`
+	// SyncedBlocks records the provider block names written into the
+	// config file by the last successful sync（根名 + 各分组后缀）。下次
+	// 同步时，已不属于当前名字/分组的旧块（改名、删除分组）会被从文件
+	// 里删掉，避免残留在普通供应商列表中。
+	SyncedBlocks string    `gorm:"type:text" json:"-"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
 
 func (m *ManagedAgentProvider) BeforeCreate(tx *gorm.DB) error {
 	if m.ID == "" {
@@ -1108,105 +1116,33 @@ func (m *ManagedAgentProvider) SetGroups(groups []ManagedAgentGroup) error {
 	return nil
 }
 
-// EnsureDefaultAgentTypes seeds the agent_type_rules table with the
-// built-in rules. Called right after AutoMigrate on startup; inserts the
-// built-ins that are missing and back-fills os_paths / json_paths /
-// notes / recommendations when the stored rule exists but has none. If
-// a row has a json_paths blob that lacks the {provider_id} placeholder,
-// the model_path is upgraded to the current full-path format so
-// existing databases pick up the new convention on the next launch.
-// User customizations are never overwritten.
+// EnsureDefaultAgentTypes keeps the built-in agent rules in step with
+// their default templates. Called right after AutoMigrate on startup:
+//
+//   - missing rows are created straight from the default template;
+//   - rows the user never customized (Customized=false) fully follow the
+//     default template on every startup — fields added *or* removed by a
+//     template change propagate;
+//   - customized rows are never touched: the user's version wins.
+//
+// The default template is the same source the 「使用默认推荐模版」 button
+// uses: config/agent-templates/<name>.json when present, else the Go
+// built-in (LoadAgentTemplate).
 func EnsureDefaultAgentTypes(db *gorm.DB) error {
-	for _, want := range builtinAgentRules {
+	for _, builtin := range builtinAgentRules {
+		tmpl, ok := LoadAgentTemplate(builtin.Name)
+		if !ok {
+			continue
+		}
 		var rule AgentTypeRule
-		err := db.Where("name = ?", want.Name).First(&rule).Error
+		err := db.Where("name = ?", builtin.Name).First(&rule).Error
 		switch {
 		case err == nil:
-			dirty := false
-			if rule.OsPaths == "" {
-				if err := rule.SetOsPaths(want.OsPaths); err != nil {
-					return err
-				}
-				dirty = true
-			}
-			if rule.JsonPaths == "" || !strings.Contains(rule.JsonPaths, "{provider_id}") {
-				if err := rule.SetJsonPaths(want.JsonPaths); err != nil {
-					return err
-				}
-				dirty = true
-			} else if want.JsonPaths.ModelsContainer != "" {
-				// 老版本的 json_paths blob 没有 models_container 字段（写入
-				// openclaw 文件会把 models 写成对象 map，导致 agent 启动
-				// 崩溃）。从 builtin 把这一字段补回，保留用户自己改的
-				// provider / model 路径。
-				if stored, err := rule.GetJsonPaths(); err == nil && stored.ModelsContainer == "" {
-					stored.ModelsContainer = want.JsonPaths.ModelsContainer
-					if err := rule.SetJsonPaths(stored); err != nil {
-						return err
-					}
-					dirty = true
-				}
-			}
-			if rule.Recommendations == "" && want.Recommendations != nil {
-				if err := rule.SetRecommendations(want.Recommendations); err != nil {
-					return err
-				}
-				dirty = true
-			} else if want.Recommendations != nil && recommendationsMissingLatestKeys(rule.Recommendations, want.Recommendations) {
-				// Existing recommendations on a built-in rule predate the
-				// current seed (e.g. a new field like setCacheKey was added).
-				// Overwrite so the rule picks up the latest keys; users who
-				// want to keep their old version can re-edit after the
-				// restart.
-				if err := rule.SetRecommendations(want.Recommendations); err != nil {
-					return err
-				}
-				dirty = true
-			}
-			// 已有内置规则缺 protocols（或 protocols 是 legacy 空数组）时补
-			// 默认协议（endpoint 关键词 → npm 归类）。用户自己编过 protocols
-			// 的不动。
-			if len(want.Protocols) > 0 && protocolsMissingLatest(rule.Protocols, want.Protocols) {
-				if err := rule.SetProtocols(want.Protocols); err != nil {
-					return err
-				}
-				dirty = true
-			}
-			// config_jsonc 与当前 recommendations + protocols 内容一致时才保留；
-			// 不一致（旧版存着空 protocols / 老字段）用最新配置重编译，让对话框
-			// 读到与结构化编辑一致的内容。
-			if configJsoncUpToDate(rule.ConfigJsonc, rule.Recommendations, rule.Protocols) {
-				// keep
-			} else {
-				curRecs, _ := rule.GetRecommendations()
-				curProtocols, _ := rule.GetProtocols()
-				latest, err := BuildRuleConfigJsonc(curRecs, curProtocols)
-				if err == nil {
-					rule.ConfigJsonc = latest
-					dirty = true
-				}
-			}
-			if rule.ModelInfoFields == "" || modelInfoFieldsMissing(rule.ModelInfoFields, want.ModelInfoFields) {
-				if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
-					return err
-				}
-				dirty = true
-			} else if upgraded, changed := upgradeLegacyThinkingLevels(rule.ModelInfoFields); changed {
-				// 内置规则仍存着旧版纯路径 thinking_levels（写入数组形状，
-				// opencode/openclaw 会因 boolean 校验失败启动不了），原位
-				// 升级为 {"path":"reasoning","op":"bool"}，不动其他自定义路径。
-				rule.ModelInfoFields = upgraded
-				dirty = true
-			} else if upgraded, changed := upgradeMissingModelInfoValues(rule.ModelInfoFields, want.ModelInfoFields); changed {
-				// builtin 新增了 input_types 的 allowed-values 白名单（如
-				// openclaw 的 input 只收 text/image/video/audio），老库存的
-				// input_types 只有路径没有 values，原位补上，避免重新同步时
-				// models.dev 的 pdf 等非法值再次写进配置文件。
-				rule.ModelInfoFields = upgraded
-				dirty = true
-			}
-			if !dirty {
+			if rule.Customized || rule.MatchesTemplate(tmpl) {
 				continue
+			}
+			if err := ApplyTemplateToRule(&rule, tmpl); err != nil {
+				return err
 			}
 			if err := db.Model(&rule).Updates(map[string]any{
 				"os_paths":          rule.OsPaths,
@@ -1218,218 +1154,173 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 			}).Error; err != nil {
 				return err
 			}
-			continue
 		case err != gorm.ErrRecordNotFound:
 			return err
-		}
-		rule = AgentTypeRule{
-			Name: want.Name,
-		}
-		if err := rule.SetOsPaths(want.OsPaths); err != nil {
-			return err
-		}
-		if err := rule.SetJsonPaths(want.JsonPaths); err != nil {
-			return err
-		}
-		if err := rule.SetRecommendations(want.Recommendations); err != nil {
-			return err
-		}
-		if err := rule.SetModelInfoFields(want.ModelInfoFields); err != nil {
-			return err
-		}
-		if err := db.Create(&rule).Error; err != nil {
-			return err
+		default:
+			rule = AgentTypeRule{Name: builtin.Name}
+			if err := ApplyTemplateToRule(&rule, tmpl); err != nil {
+				return err
+			}
+			if err := db.Create(&rule).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+// ApplyTemplateToRule overwrites the rule's editable content with the
+// default template's (os/json paths, recommendations, protocols,
+// model-info fields, and the JSONC rebuilt from them).
+func ApplyTemplateToRule(r *AgentTypeRule, tmpl AgentTemplateConfig) error {
+	if err := r.SetOsPaths(tmpl.OsPaths); err != nil {
+		return err
+	}
+	if err := r.SetJsonPaths(tmpl.JsonPaths); err != nil {
+		return err
+	}
+	if err := r.SetRecommendations(tmpl.Recommendations); err != nil {
+		return err
+	}
+	if err := r.SetProtocols(tmpl.Protocols); err != nil {
+		return err
+	}
+	if err := r.SetModelInfoFields(tmpl.ModelInfoFields); err != nil {
+		return err
+	}
+	jsonc, err := BuildRuleConfigJsonc(tmpl.Recommendations, tmpl.Protocols)
+	if err != nil {
+		return err
+	}
+	r.ConfigJsonc = jsonc
+	return nil
+}
+
+// MatchesTemplate reports whether the rule's editable content is
+// semantically identical to the default template: os/json paths,
+// recommendations, protocols, and the four model-info fields. The
+// comparison is content-based (blobs are parsed and canonicalized), so
+// formatting/comments/`[]`-vs-null never count as customization.
+func (r *AgentTypeRule) MatchesTemplate(tmpl AgentTemplateConfig) bool {
+	stored, ok := r.asTemplateSnapshot()
+	if !ok {
+		return false
+	}
+	return sameTemplateContent(stored, tmpl)
+}
+
+// asTemplateSnapshot parses the rule's blobs in the template's shape.
+// ok=false when any blob fails to parse (treat the rule as customized so
+// a corrupt row is never silently overwritten by the seed).
+func (r *AgentTypeRule) asTemplateSnapshot() (AgentTemplateConfig, bool) {
+	out := AgentTemplateConfig{Name: r.Name}
+	osP, err := r.GetOsPaths()
+	if err != nil {
+		return out, false
+	}
+	out.OsPaths = osP
+	jpaths, err := r.GetJsonPaths()
+	if err != nil {
+		return out, false
+	}
+	out.JsonPaths = jpaths
+	recs, err := r.GetRecommendations()
+	if err != nil {
+		return out, false
+	}
+	normalizeRecs(recs)
+	out.Recommendations = recs
+	protos, err := r.GetProtocols()
+	if err != nil {
+		return out, false
+	}
+	normalizeProtocols(protos)
+	out.Protocols = protos
+	mif, err := r.GetModelInfoFields()
+	if err != nil {
+		return out, false
+	}
+	normalizeModelInfo(mif)
+	out.ModelInfoFields = mif
+	return out, true
+}
+
+// normalizeRecs/normalizeProtocols/normalizeModelInfo nil out empty
+// slices so storage-shape differences (null vs []) never read as a
+// user customization.
+func normalizeRecs(recs []AgentRecommendation) {
+	for i := range recs {
+		if len(recs[i].Values) == 0 {
+			recs[i].Values = nil
+		}
+	}
+}
+
+func normalizeProtocols(protos []AgentProtocol) {
+	for i := range protos {
+		if len(protos[i].Conditions) == 0 {
+			protos[i].Conditions = nil
+		}
+		if len(protos[i].EndpointTags) == 0 {
+			protos[i].EndpointTags = nil
+		}
+		if len(protos[i].Recommendations) == 0 {
+			protos[i].Recommendations = nil
+		}
+		normalizeRecs(protos[i].Recommendations)
+	}
+}
+
+func normalizeModelInfo(mif AgentModelInfoFieldPaths) {
+	specs := []*AgentModelInfoFieldSpec{&mif.MaxContext, &mif.MaxOutputToken, &mif.InputTypes, &mif.ThinkingLevels}
+	for _, s := range specs {
+		if len(s.Values) == 0 {
+			s.Values = nil
+		}
+	}
+}
+
+// normalizeTemplateSnapshot applies the same empty-slice nil-ing to a
+// template loaded from a file or the Go built-ins.
+func normalizeTemplate(tmpl AgentTemplateConfig) AgentTemplateConfig {
+	normalizeRecs(tmpl.Recommendations)
+	normalizeProtocols(tmpl.Protocols)
+	normalizeModelInfo(tmpl.ModelInfoFields)
+	return tmpl
+}
+
+func sameJSON(a, b any) bool {
+	ab, err1 := json.Marshal(a)
+	bb, err2 := json.Marshal(b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return string(ab) == string(bb)
+}
+
+func sameTemplateContent(a, b AgentTemplateConfig) bool {
+	return sameJSON(a.OsPaths, b.OsPaths) &&
+		sameJSON(a.JsonPaths, b.JsonPaths) &&
+		sameJSON(a.Recommendations, b.Recommendations) &&
+		sameJSON(a.Protocols, b.Protocols) &&
+		sameJSON(a.ModelInfoFields, b.ModelInfoFields)
+}
+
+// TemplateForRuleName returns the same-named default template (file
+// first, built-in fallback), for callers deciding whether a save counts
+// as a customization.
+func TemplateForRuleName(name string) (AgentTemplateConfig, bool) {
+	tmpl, ok := LoadAgentTemplate(name)
+	if ok {
+		tmpl = normalizeTemplate(tmpl)
+	}
+	return tmpl, ok
 }
 
 // DeduplicateAgentConfigRecordNames renames duplicate takeover records
 // (kept the oldest, appending " (2)", " (3)" … to the rest) so the
 // RecordName unique index added by AutoMigrate can be created on databases
 // that already accumulated duplicates. Called from main before AutoMigrate.
-// recommendationsMissingLatestKeys reports whether any of the keys from
-// `latest` are absent from `stored`. Used by EnsureDefaultAgentTypes to
-// detect outdated built-in recommendations on existing rows (e.g. when a
-// new field like setCacheKey is added to the seed) and refresh them
-// without losing user-added custom rules.
-func recommendationsMissingLatestKeys(stored string, latest []AgentRecommendation) bool {	var parsed []AgentRecommendation
-	if err := json.Unmarshal([]byte(stored), &parsed); err != nil {
-		return true
-	}
-	have := make(map[string]bool, len(parsed))
-	for _, r := range parsed {
-		have[r.Key] = true
-	}
-	for _, r := range latest {
-		if !have[r.Key] {
-			return true
-		}
-	}
-	return false
-}
-
-// protocolsMissingLatest reports whether the stored protocols blob predates
-// the current seed: empty (never set) or missing any latest protocol.
-// User-authored protocols are never overwritten — only full absence of the
-// seeded keyword protocols triggers a backfill.
-func protocolsMissingLatest(stored string, latest []AgentProtocol) bool {
-	if stored == "" {
-		return true
-	}
-	var parsed []AgentProtocol
-	if err := json.Unmarshal([]byte(stored), &parsed); err != nil {
-		return true
-	}
-	have := make(map[string]bool, len(parsed))
-	for _, p := range parsed {
-		for _, tag := range p.EndpointTags {
-			have[tag] = true
-		}
-	}
-	for _, p := range latest {
-		for _, tag := range p.EndpointTags {
-			if !have[tag] {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// modelInfoFieldsMissing reports whether the stored model-info blob is
-// effectively empty while the seed defines any path (e.g. old `{}` rows),
-// so WorkBuddy-style backfills still apply.
-// upgradeMissingModelInfoValues back-fills the allowed-values whitelist
-// (Values) that a newer built-in rule declares for its model-info fields
-// when an existing stored row has the same field path but no whitelist
-// yet. Other snippets (op, sep, custom paths) are preserved untouched.
-// changed is false when nothing was added.
-func upgradeMissingModelInfoValues(stored string, want AgentModelInfoFieldPaths) (string, bool) {
-	var s AgentModelInfoFieldPaths
-	if err := json.Unmarshal([]byte(stored), &s); err != nil {
-		return stored, false
-	}
-	changed := false
-	fill := func(cur *AgentModelInfoFieldSpec, want AgentModelInfoFieldSpec) {
-		if cur.Path != "" && cur.Path == want.Path && len(cur.Values) == 0 && len(want.Values) > 0 {
-			cur.Values = want.Values
-			changed = true
-		}
-	}
-	fill(&s.InputTypes, want.InputTypes)
-	fill(&s.MaxContext, want.MaxContext)
-	fill(&s.MaxOutputToken, want.MaxOutputToken)
-	fill(&s.ThinkingLevels, want.ThinkingLevels)
-	if !changed {
-		return stored, false
-	}
-	out, err := json.Marshal(s)
-	if err != nil {
-		return stored, false
-	}
-	return string(out), true
-}
-
-func modelInfoFieldsMissing(stored string, want AgentModelInfoFieldPaths) bool {
-	wantJSON, err := json.Marshal(want)
-	if err != nil {
-		return false
-	}
-	var s AgentModelInfoFieldPaths
-	if err := json.Unmarshal([]byte(stored), &s); err != nil {
-		return false
-	}
-	return string(wantJSON) != "{}" && s.MaxContext.Path == "" && s.MaxOutputToken.Path == "" &&
-		s.InputTypes.Path == "" && s.ThinkingLevels.Path == ""
-}
-
-// configJsoncUpToDate reports whether the stored JSONC doc still mirrors the
-// supplied recommendations + protocols rec keys and endpoint tags. Stale
-// docs (empty protocols, older field sets) get rebuilt by the seed so the
-// rule dialog shows data consistent with the structured editor.
-func configJsoncUpToDate(jsonc, recsBlob, protocolsBlob string) bool {
-	if jsonc == "" {
-		return false
-	}
-	var doc AgentRuleConfigJsonc
-	if err := json.Unmarshal([]byte(jsonc), &doc); err != nil {
-		return false
-	}
-	var recs []AgentRecommendation
-	if recsBlob != "" {
-		if err := json.Unmarshal([]byte(recsBlob), &recs); err != nil {
-			return false
-		}
-	}
-	var protocols []AgentProtocol
-	if protocolsBlob != "" {
-		if err := json.Unmarshal([]byte(protocolsBlob), &protocols); err != nil {
-			return false
-		}
-	}
-	// common 的 key 集合必须一致。
-	readKeys := make(map[string]bool, len(doc.Common))
-	writtenKeys := make(map[string]bool, len(doc.Common))
-	for _, r := range doc.Common {
-		readKeys[r.Key] = true
-	}
-	for _, r := range recs {
-		writtenKeys[r.Key] = true
-	}
-	if len(readKeys) != len(writtenKeys) {
-		return false
-	}
-	for k := range readKeys {
-		if writtenKeys[k] != readKeys[k] {
-			return false
-		}
-	}
-	// protocols 的 endpoint_tags 关键词集合必须一致。
-	tagSet := make(map[string]bool)
-	for _, p := range doc.Protocols {
-		for _, t := range p.EndpointTags {
-			tagSet[t] = true
-		}
-	}
-	writtenTags := make(map[string]bool)
-	for _, p := range protocols {
-		for _, t := range p.EndpointTags {
-			writtenTags[t] = true
-		}
-	}
-	if len(tagSet) != len(writtenTags) {
-		return false
-	}
-	for t := range tagSet {
-		if !writtenTags[t] {
-			return false
-		}
-	}
-	return true
-}
-
-// upgradeLegacyThinkingLevels reports-and-fixes the pre-spec blob shape:
-// when thinking_levels is still the old plain-path default ("reasoning",
-// which writes the unified level array and breaks boolean-validated
-// agents), it is rewritten in place to the bool-op spec. Other paths are
-// left untouched so user-customized rules only get the one fix. changed
-// is false for already-upgraded or unparseable blobs.
-func upgradeLegacyThinkingLevels(blob string) (string, bool) {
-	var p AgentModelInfoFieldPaths
-	if err := json.Unmarshal([]byte(blob), &p); err != nil {
-		return blob, false
-	}
-	if p.ThinkingLevels.Path != "reasoning" || p.ThinkingLevels.Op != "" {
-		return blob, false
-	}
-	p.ThinkingLevels = AgentModelInfoFieldSpec{Path: "reasoning", Op: "bool"}
-	data, err := json.Marshal(p)
-	if err != nil {
-		return blob, false
-	}
-	return string(data), true
-}
 
 func DeduplicateAgentConfigRecordNames(db *gorm.DB) error {
 	if !db.Migrator().HasTable(&AgentConfigFile{}) {

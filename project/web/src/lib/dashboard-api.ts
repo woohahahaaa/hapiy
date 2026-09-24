@@ -790,6 +790,8 @@ export type AgentTypeRule = {
   readonly protocols: readonly AgentProtocol[]
   readonly model_info_fields: AgentModelInfoFieldPaths
   readonly config_jsonc: string
+  /** 用户改过且与默认模板不一致：true 时启动种子不再跟随默认模板覆盖 */
+  readonly customized: boolean
   readonly created_at: string
   readonly updated_at: string
   /** 是否存在同名默认推荐模版（编辑弹窗据此显示「使用默认推荐模版」） */
@@ -2090,6 +2092,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
     },
     config_jsonc: typeof value.config_jsonc === 'string' ? value.config_jsonc : '',
+    customized: value.customized === true,
     created_at: readString(value.created_at, 'agent_type_rule.created_at'),
     updated_at: readString(value.updated_at, 'agent_type_rule.updated_at'),
     has_template: value.has_template === true,
