@@ -28,7 +28,7 @@ func TestJsoncRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(common) != 1 || common[0].Recommended != float64(600000) || common[0].Type != "number" {
+	if len(common) != 1 || common[0].Recommended != float64(600000) {
 		t.Fatalf("common wrong: %+v", common)
 	}
 	if len(protocols) != 1 || len(protocols[0].EndpointTags) != 1 || len(protocols[0].Recommendations) != 1 {

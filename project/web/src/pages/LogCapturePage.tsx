@@ -278,11 +278,11 @@ export function LogCapturePage() {
       defaultWidth: { kind: 'pixel', value: 120 },
       render: (_, row) =>
         row.kind === 'pair' ? (
-          <Badge variant={row.pair.has_error ? 'destructive' : 'default'}>
-            {row.pair.type_label}
-            {row.pair.has_rewrite ? (
-              <span className="text-amber-600 dark:text-amber-400"> ·修改过</span>
-            ) : null}
+          // max-w-full + 内层 truncate：tag 不超出列宽被裁掉，左右 padding 恒定；
+          // 「·修改过」用 shrink-0 保证不参与截断，颜色跟随主文案。
+          <Badge variant={row.pair.has_error ? 'destructive' : 'default'} className="max-w-full">
+            <span className="min-w-0 truncate">{row.pair.type_label}</span>
+            {row.pair.has_rewrite ? <span className="shrink-0"> ·修改过</span> : null}
           </Badge>
         ) : (
           <Badge variant="outline">系统</Badge>

@@ -14,7 +14,6 @@
       "scope": "provider",
       "key": "name",
       "description": "在 opencode 界面里的显示名（provider 名称）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -22,7 +21,6 @@
       "scope": "provider",
       "key": "npm",
       "description": "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -30,7 +28,6 @@
       "scope": "provider",
       "key": "options.baseURL",
       "description": "API 端点（不填则走适配器默认）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -38,7 +35,6 @@
       "scope": "provider",
       "key": "options.apiKey",
       "description": "认证密钥",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -46,7 +42,6 @@
       "scope": "provider",
       "key": "options.setCacheKey",
       "description": "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）",
-      "type": "boolean",
       "recommended": true,
       "required": false
     },
@@ -54,7 +49,6 @@
       "scope": "model",
       "key": "name",
       "description": "模型在界面里的显示名",
-      "type": "string",
       "recommended": null,
       "required": false
     },
@@ -62,7 +56,6 @@
       "scope": "model",
       "key": "limit.context",
       "description": "上下文 token 上限",
-      "type": "number",
       "recommended": null,
       "required": false
     },
@@ -70,7 +63,6 @@
       "scope": "model",
       "key": "reasoning",
       "description": "模型是否支持思考模式（思考程度统一值→bool）",
-      "type": "boolean",
       "recommended": null,
       "required": false
     },
@@ -78,7 +70,6 @@
       "scope": "model",
       "key": "tool_call",
       "description": "模型是否支持工具调用",
-      "type": "boolean",
       "recommended": null,
       "required": false
     },
@@ -86,7 +77,6 @@
       "scope": "model",
       "key": "attachment",
       "description": "模型是否支持文件/图片附件输入",
-      "type": "boolean",
       "recommended": null,
       "required": false
     }
@@ -103,7 +93,6 @@
           "scope": "provider",
           "key": "npm",
           "description": "Responses API 使用 OpenAI SDK",
-          "type": "string",
           "recommended": "@ai-sdk/openai",
           "required": false
         }
@@ -122,7 +111,6 @@
           "scope": "provider",
           "key": "npm",
           "description": "Messages API 使用 Anthropic SDK",
-          "type": "string",
           "recommended": "@ai-sdk/anthropic",
           "required": false
         },
@@ -130,7 +118,6 @@
           "scope": "model",
           "key": "limit.output",
           "description": "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）",
-          "type": "number",
           "recommended": null,
           "required": true
         }
@@ -149,7 +136,6 @@
           "scope": "provider",
           "key": "npm",
           "description": "Chat Completions API 使用 OpenAI 兼容 SDK",
-          "type": "string",
           "recommended": "@ai-sdk/openai-compatible",
           "required": false
         }

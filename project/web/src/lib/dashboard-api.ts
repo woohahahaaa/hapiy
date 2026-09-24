@@ -661,7 +661,6 @@ export type AgentJsonPaths = {
 }
 
 export type AgentRecommendationScope = 'provider' | 'model'
-export type AgentRecommendationType = 'string' | 'number' | 'boolean' | 'object' | 'array'
 
 export const MODEL_INFO_FIELD_KEYS = ['max_context', 'max_output_token', 'input_types', 'thinking_levels'] as const
 export type ModelInfoFieldKey = typeof MODEL_INFO_FIELD_KEYS[number]
@@ -771,7 +770,6 @@ export type AgentRecommendation = {
   readonly scope: AgentRecommendationScope
   readonly key: string
   readonly description: string
-  readonly type: AgentRecommendationType
   /** 推荐操作："set"（推荐填，默认）| "skip"（推荐不填）| "delete"（推荐删除字段） */
   readonly action?: 'set' | 'skip' | 'delete'
   readonly recommended: unknown
@@ -2167,12 +2165,9 @@ function parseAgentModelsContainer(value: unknown): AgentModelsContainer {
 
 function parseAgentRecommendation(value: unknown): AgentRecommendation {
   if (!isRecord(value)) {
-    return { scope: 'provider', key: '', description: '', type: 'string', recommended: null, required: false }
+    return { scope: 'provider', key: '', description: '', recommended: null, required: false }
   }
   const scope = value.scope === 'model' ? 'model' : 'provider'
-  const t = value.type
-  const type: AgentRecommendationType =
-    t === 'number' || t === 'boolean' || t === 'object' || t === 'array' ? t : 'string'
   const candidates = isRecord(value.candidates) ? value.candidates : {}
   const out: Record<string, string> = {}
   for (const k of Object.keys(candidates)) {
@@ -2184,7 +2179,6 @@ function parseAgentRecommendation(value: unknown): AgentRecommendation {
     scope,
     key: typeof value.key === 'string' ? value.key : '',
     description: typeof value.description === 'string' ? value.description : '',
-    type,
     action:
       value.action === 'skip' || value.action === 'delete'
         ? (value.action as 'skip' | 'delete')

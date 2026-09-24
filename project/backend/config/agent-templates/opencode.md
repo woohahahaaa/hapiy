@@ -79,7 +79,10 @@ model 配置在 `provider.{provider_id}.models.{model_id}` 下（key 即模型 I
 - model：`family`、`release_date`、`temperature`、`interleaved`、`cost`、`modalities`、`experimental`、`status`、`provider`、`options`、`headers`、`variants`、`limit.input`
 
 ### 4. npm 归类逻辑
-模板 `protocols` 按端点关键词自动归类 npm 包，思路合理；内置 provider 无需 `npm`，仅自定义 provider 需要，模板未区分。
+模板 `protocols` 按端点关键词自动归类 npm 包，思路合理；内置 provider 无需 `npm`，仅自定义 provider 需要，模板未区分。（注：common 里 `npm` 标 `required=true`、各 endpoint 规则里的 `npm` 标 `required=false` —— 后者只负责给推荐值，必填口径以 common 为准。）
+
+### 5. `limit.output` 只在 Anthropic 协议规则里声明必填（有意）
+Anthropic Messages API 官方要求每请求带 `max_tokens`，对应 opencode 的模型 `limit.output`（`model_info_fields.max_output_token` 也指向它）。因此该字段只在 Anthropic Messages 协议的 endpoint 规则里标 `required=true`，common 不再重复列一条（同键重复时后出现的 endpoint 条目生效，common 的重复行没有实际作用）。非 Anthropic 端点不强制。
 
 ---
 
