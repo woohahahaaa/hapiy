@@ -102,14 +102,15 @@ func (w *LogWriter) Flush() {
 	// Aggregate the same batch in memory. Channel/management event rows
 	// (Status == "") are excluded from usage stats.
 	var (
-		reqCount    int64
-		succCount   int64
-		failCount   int64
-		totalTokens int64
-		totalCost   float64
-		cacheHit    int64
-		cacheMiss   int64
-		totalMs     int64
+		reqCount     int64
+		succCount    int64
+		failCount    int64
+		totalTokens  int64
+		promptTokens int64
+		totalCost    float64
+		cacheHit     int64
+		cacheMiss    int64
+		totalMs      int64
 	)
 	for _, l := range batch {
 		switch l.Status {
@@ -119,6 +120,7 @@ func (w *LogWriter) Flush() {
 		case "success":
 			succCount++
 			totalTokens += int64(l.PromptTokens + l.CompletionTokens)
+			promptTokens += int64(l.PromptTokens)
 			cacheHit += int64(l.PromptCacheHitTokens)
 			cacheMiss += int64(l.PromptCacheMissTokens)
 			totalMs += int64(l.UseTime)
@@ -137,19 +139,20 @@ func (w *LogWriter) Flush() {
 	// batch insert succeeds, keeping the two stores in sync.
 	err := w.db.Exec(`
 		INSERT INTO usage_counters
-			(id, total_requests, success_count, failed_count, total_tokens, total_cost, cache_hit_tokens, cache_miss_tokens, total_use_time_ms, updated_at)
-		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			(id, total_requests, success_count, failed_count, total_tokens, prompt_tokens, total_cost, cache_hit_tokens, cache_miss_tokens, total_use_time_ms, updated_at)
+		VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			total_requests    = total_requests    + excluded.total_requests,
 			success_count     = success_count     + excluded.success_count,
 			failed_count      = failed_count      + excluded.failed_count,
 			total_tokens      = total_tokens      + excluded.total_tokens,
+			prompt_tokens     = prompt_tokens     + excluded.prompt_tokens,
 			total_cost        = total_cost        + excluded.total_cost,
 			cache_hit_tokens  = cache_hit_tokens  + excluded.cache_hit_tokens,
 			cache_miss_tokens = cache_miss_tokens + excluded.cache_miss_tokens,
 			total_use_time_ms = total_use_time_ms + excluded.total_use_time_ms,
 			updated_at        = excluded.updated_at
-	`, reqCount, succCount, failCount, totalTokens, totalCost, cacheHit, cacheMiss, totalMs, time.Now()).Error
+	`, reqCount, succCount, failCount, totalTokens, promptTokens, totalCost, cacheHit, cacheMiss, totalMs, time.Now()).Error
 	if err != nil {
 		println("logwriter: usage counter upsert failed:", err.Error())
 	}
@@ -163,6 +166,7 @@ func (w *LogWriter) Flush() {
 		SuccessCount:    succCount,
 		FailedCount:     failCount,
 		TotalTokens:     totalTokens,
+		PromptTokens:    promptTokens,
 		TotalCost:       totalCost,
 		CacheHitTokens:  cacheHit,
 		CacheMissTokens: cacheMiss,

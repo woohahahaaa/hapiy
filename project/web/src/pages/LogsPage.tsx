@@ -36,6 +36,17 @@ function isEventLog(row: UsageLog): boolean {
   return row.status === ''
 }
 
+// 缓存命中率 = 缓存读取 / 分母，分母取「输入」与「缓存读取+缓存写入」的较大者：
+// OpenAI 系输入含缓存计数，比例即 缓存读取/输入（未命中缓存的输入也会拉低比例）；
+// Anthropic 系输入不含缓存计数，退回 缓存读取/(缓存读取+缓存写入)。两者都不会超过 100%。
+// 显示保留 1 位小数，但不足 100% 的绝不进位成 100.0%——只有分子与分母完全相等才显示 100.0%。
+function cacheHitRateText(hit: number, miss: number, promptTokens: number): string | null {
+  const denom = Math.max(promptTokens, hit + miss)
+  if (denom <= 0) return null
+  if (hit >= denom) return '100.0%'
+  return `${Math.min((hit / denom) * 100, 99.9).toFixed(1)}%`
+}
+
 // Event-type label → color (hex) so the "来源" column tints each event
 // type distinctly, matching the visual language of the status badges.
 const EVENT_SOURCE_COLORS: Record<string, string> = {
@@ -280,16 +291,20 @@ export function LogsPage() {
       defaultWidth: { kind: 'percent', value: 22 },
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
-      accessor: (row) =>
-        `输入 ${row.promptTokens} · 缓存写入 ${row.promptCacheMissTokens} · 缓存读取 ${row.promptCacheHitTokens} · 输出 ${row.completionTokens}`,
+      accessor: (row) => {
+        const hitRate = cacheHitRateText(row.promptCacheHitTokens, row.promptCacheMissTokens, row.promptTokens)
+        return `输入 ${row.promptTokens} · 缓存写入 ${row.promptCacheMissTokens} · 缓存读取 ${row.promptCacheHitTokens}${hitRate !== null ? ` (${hitRate})` : ''} · 输出 ${row.completionTokens}`
+      },
       render: (_, row) => {
         const log = row as UsageLog
         if (isEventLog(log)) return <span className="text-muted-foreground/40">-</span>
+        const hitRate = cacheHitRateText(log.promptCacheHitTokens, log.promptCacheMissTokens, log.promptTokens)
         return (
           <div className="text-xs">
             <span className="text-muted-foreground">输入</span> {log.promptTokens}{' '}
             <span className="text-muted-foreground">缓存写入</span> {log.promptCacheMissTokens}{' '}
-            <span className="text-muted-foreground">缓存读取</span> {log.promptCacheHitTokens}{' '}
+            <span className="text-muted-foreground">缓存读取</span> {log.promptCacheHitTokens}
+            {hitRate !== null ? ` (${hitRate})` : ''}{' '}
             <span className="text-muted-foreground">输出</span> {log.completionTokens}
           </div>
         )

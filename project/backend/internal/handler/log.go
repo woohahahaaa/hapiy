@@ -137,7 +137,7 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 		fromStr := c.Query("from")
 		toStr := c.Query("to")
 
-		var totalRequests, successCount, failedCount, totalTokens int64
+		var totalRequests, successCount, failedCount, totalTokens, promptTokens int64
 		var totalCost float64
 		var cacheHitTokens, cacheMissTokens, totalUseTimeMs int64
 
@@ -147,6 +147,7 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 					"COALESCE(SUM(success_count), 0) AS success_count, "+
 					"COALESCE(SUM(failed_count), 0) AS failed_count, "+
 					"COALESCE(SUM(total_tokens), 0) AS total_tokens, "+
+					"COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "+
 					"COALESCE(SUM(total_cost), 0) AS total_cost, "+
 					"COALESCE(SUM(cache_hit_tokens), 0) AS cache_hit_tokens, "+
 					"COALESCE(SUM(cache_miss_tokens), 0) AS cache_miss_tokens, "+
@@ -173,6 +174,7 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 				SuccessCount    int64
 				FailedCount     int64
 				TotalTokens     int64
+				PromptTokens    int64
 				TotalCost       float64
 				CacheHitTokens  int64
 				CacheMissTokens int64
@@ -186,6 +188,7 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 			successCount = agg.SuccessCount
 			failedCount = agg.FailedCount
 			totalTokens = agg.TotalTokens
+			promptTokens = agg.PromptTokens
 			totalCost = agg.TotalCost
 			cacheHitTokens = agg.CacheHitTokens
 			cacheMissTokens = agg.CacheMissTokens
@@ -201,6 +204,7 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 			successCount = counter.SuccessCount
 			failedCount = counter.FailedCount
 			totalTokens = counter.TotalTokens
+			promptTokens = counter.PromptTokens
 			totalCost = counter.TotalCost
 			cacheHitTokens = counter.CacheHitTokens
 			cacheMissTokens = counter.CacheMissTokens
@@ -211,9 +215,19 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 		if successCount > 0 {
 			avgLatency = float64(totalUseTimeMs) / float64(successCount)
 		}
+		// 缓存命中率 = 命中 / 分母，分母取「输入总量」与「命中+未命中」的较大者：
+		// OpenAI 系输入含缓存计数（比例会被未缓存输入拉低），Anthropic 系输入
+		// 不含缓存计数（退回命中/可缓存总量）。与日志页同口径，不会超过 100%。
 		var cacheHitRate float64
-		if denom := cacheHitTokens + cacheMissTokens; denom > 0 {
+		denom := promptTokens
+		if cacheable := cacheHitTokens + cacheMissTokens; cacheable > denom {
+			denom = cacheable
+		}
+		if denom > 0 {
 			cacheHitRate = float64(cacheHitTokens) / float64(denom)
+			if cacheHitRate > 1 {
+				cacheHitRate = 1
+			}
 		}
 		var throughput float64
 		if totalUseTimeMs > 0 {

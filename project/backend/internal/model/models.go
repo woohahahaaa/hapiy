@@ -163,6 +163,7 @@ type UsageCounter struct {
 	SuccessCount    int64     `json:"success_count"`
 	FailedCount     int64     `json:"failed_count"`
 	TotalTokens     int64     `json:"total_tokens"`
+	PromptTokens    int64     `json:"prompt_tokens"`
 	TotalCost       float64   `json:"total_cost"`
 	CacheHitTokens  int64     `json:"cache_hit_tokens"`
 	CacheMissTokens int64     `json:"cache_miss_tokens"`
@@ -181,6 +182,7 @@ type UsageStat struct {
 	SuccessCount    int64     `json:"success_count"`
 	FailedCount     int64     `json:"failed_count"`
 	TotalTokens     int64     `json:"total_tokens"`
+	PromptTokens    int64     `json:"prompt_tokens"`
 	TotalCost       float64   `json:"total_cost"`
 	CacheHitTokens  int64     `json:"cache_hit_tokens"`
 	CacheMissTokens int64     `json:"cache_miss_tokens"`

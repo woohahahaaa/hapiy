@@ -3,6 +3,10 @@ package model
 import (
 	"encoding/json"
 	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // TestAgentModelInfoFieldSpecUnmarshal covers the two accepted shapes:
@@ -99,64 +103,149 @@ func TestAgentModelInfoFieldSpecShape(t *testing.T) {
 	}
 }
 
-// TestUpgradeLegacyThinkingLevels pins the in-place seed upgrade: only
-// the old plain "reasoning" default is rewritten; customized blobs are
-// left alone.
-func TestUpgradeLegacyThinkingLevels(t *testing.T) {
-	oldBlob := `{"max_context":"limit.context","max_output_token":"limit.output","input_types":"modalities.input","thinking_levels":"reasoning"}`
-	upgraded, changed := upgradeLegacyThinkingLevels(oldBlob)
-	if !changed {
-		t.Fatal("legacy blob should be upgraded")
+// TestAgentTypeRuleMatchesTemplate pins the customization detector: a
+// freshly seeded row matches its template; any content edit (even
+// formatting-neutral ones like a different recommended value) breaks the
+// match, and empty-vs-null storage shapes never count as a change.
+func TestAgentTypeRuleMatchesTemplate(t *testing.T) {
+	tmpl, ok := LoadAgentTemplate("opencode")
+	if !ok {
+		t.Fatal("opencode template not found")
 	}
-	var p AgentModelInfoFieldPaths
-	if err := json.Unmarshal([]byte(upgraded), &p); err != nil {
+	tmpl = normalizeTemplate(tmpl)
+
+	var rule AgentTypeRule
+	if err := ApplyTemplateToRule(&rule, tmpl); err != nil {
 		t.Fatal(err)
 	}
-	if p.ThinkingLevels.Path != "reasoning" || p.ThinkingLevels.Op != "bool" {
-		t.Fatalf("thinking_levels not upgraded: %s", upgraded)
+	if !rule.MatchesTemplate(tmpl) {
+		t.Fatal("freshly applied template must match")
 	}
-	if p.MaxContext.Path != "limit.context" {
-		t.Fatalf("other paths must survive: %s", upgraded)
+
+	// Same content with empty arrays instead of nil must still match.
+	rebuilt := rule
+	if err := rebuilt.SetProtocols([]AgentProtocol{{
+		Name:            "OpenAI Responses API",
+		Conditions:      []AgentProtocolCondition{},
+		EndpointTags:    []string{"responses"},
+		Recommendations: tmpl.Protocols[0].Recommendations,
+	}}); err != nil {
+		t.Fatal(err)
 	}
-	if _, changed := upgradeLegacyThinkingLevels(upgraded); changed {
-		t.Fatal("already-upgraded blob must not re-upgrade")
+	// (仅 protocols 一份变了，重放完整模板再测)
+	if err := ApplyTemplateToRule(&rebuilt, tmpl); err != nil {
+		t.Fatal(err)
 	}
-	if _, changed := upgradeLegacyThinkingLevels(`{"thinking_levels":"my.reasoning"}`); changed {
-		t.Fatal("customized path must not be touched")
+	if !rebuilt.MatchesTemplate(tmpl) {
+		t.Fatal("rebuilt template must still match")
+	}
+
+	// A content edit must break the match.
+	edited := tmpl
+	edited.Recommendations = append([]AgentRecommendation(nil), tmpl.Recommendations...)
+	edited.Recommendations[0].Description = "用户改过"
+	var editedRule AgentTypeRule
+	if err := ApplyTemplateToRule(&editedRule, edited); err != nil {
+		t.Fatal(err)
+	}
+	if editedRule.MatchesTemplate(tmpl) {
+		t.Fatal("edited content must not match the template")
 	}
 }
 
-// TestUpgradeMissingModelInfoValues pins the allowed-values back-fill:
-// an existing row that has the same path but no whitelist gets the
-// builtin Values added, while other snippets are preserved.
-func TestUpgradeMissingModelInfoValues(t *testing.T) {
-	want := AgentModelInfoFieldPaths{
-		InputTypes: AgentModelInfoFieldSpec{Path: "input", Values: []string{"text", "image", "video", "audio"}},
-	}
-	stored := `{"max_context":"ctx","input_types":{"path":"input","op":"join","sep":"+"}}`
-	upgraded, changed := upgradeMissingModelInfoValues(stored, want)
-	if !changed {
-		t.Fatalf("should be upgraded: %s", stored)
-	}
-	var p AgentModelInfoFieldPaths
-	if err := json.Unmarshal([]byte(upgraded), &p); err != nil {
+// TestEnsureDefaultAgentTypesFollow pins the follow/customize split:
+// uncustomized rows are fully resynced to the template (additions AND
+// removals), customized rows are never touched, and saving template-
+// identical content keeps a row uncustomized.
+func TestEnsureDefaultAgentTypesFollow(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if p.InputTypes.Path != "input" || p.InputTypes.Op != "join" || p.InputTypes.Sep != "+" {
-		t.Fatalf("custom op/sep must survive: %s", upgraded)
+	if err := AutoMigrate(db); err != nil {
+		t.Fatal(err)
 	}
-	if len(p.InputTypes.Values) != 4 || p.InputTypes.Values[3] != "audio" {
-		t.Fatalf("values not back-filled: %s", upgraded)
+	if err := EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
 	}
-	if p.MaxContext.Path != "ctx" {
-		t.Fatalf("unrelated path must survive: %s", upgraded)
+
+	var rule AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+		t.Fatal(err)
 	}
-	// Already-filled rows are untouched.
-	if _, changed := upgradeMissingModelInfoValues(upgraded, want); changed {
-		t.Fatalf("already-filled row must not change again: %s", upgraded)
+	if rule.Customized {
+		t.Fatal("freshly seeded row must not be customized")
 	}
-	// Different path must not be touched.
-	if _, changed := upgradeMissingModelInfoValues(`{"input_types":"modalities.input"}`, want); changed {
-		t.Fatal("different path must not be rewritten")
+
+	// Simulate an outdated uncustomized row: an extra stale field + a
+	// missing field. The next startup must resync it to the template.
+	recs, _ := rule.GetRecommendations()
+	recs = append(recs, AgentRecommendation{Scope: "model", Key: "stale.legacy"})
+	recs = recs[1:] // drop the first real field too
+	if err := rule.SetRecommendations(recs); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Save(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+	var after AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&after).Error; err != nil {
+		t.Fatal(err)
+	}
+	tmpl, ok := LoadAgentTemplate("opencode")
+	if !ok {
+		t.Fatal("template missing")
+	}
+	if !after.MatchesTemplate(normalizeTemplate(tmpl)) {
+		t.Fatal("uncustomized row must be resynced to the template (add and remove)")
+	}
+
+	// A customized row keeps its content across startups.
+	rule = after
+	recs, _ = rule.GetRecommendations()
+	if len(recs) == 0 {
+		t.Fatal("template should carry recommendations")
+	}
+	recs[0].Description = "用户自己的"
+	if err := rule.SetRecommendations(recs); err != nil {
+		t.Fatal(err)
+	}
+	rule.Customized = true
+	if err := db.Save(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+	var kept AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&kept).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !kept.Customized {
+		t.Fatal("customized flag must survive")
+	}
+	keptRecs, _ := kept.GetRecommendations()
+	if keptRecs[0].Description != "用户自己的" {
+		t.Fatalf("customized row must keep user content: %s", keptRecs[0].Description)
+	}
+
+	// Saving template-identical content clears the flag (same content,
+	// Customized back to false → still follows the template afterwards).
+	kept.Customized = false
+	if err := db.Save(&kept).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+	var back AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&back).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !back.MatchesTemplate(normalizeTemplate(tmpl)) {
+		t.Fatal("row should have been resynced back to the template")
 	}
 }

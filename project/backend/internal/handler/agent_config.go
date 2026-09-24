@@ -166,6 +166,13 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
+		// 保存后重新判定是否仍是「默认模板原样」：内容与默认模板一致时
+		// 清掉 customized 标记，启动种子继续跟随默认；不一致（包括未配置
+		// 默认模板的自建类型）标记为用户自定义，种子永不再覆盖。
+		rule.Customized = true
+		if tmpl, ok := model.TemplateForRuleName(rule.Name); ok {
+			rule.Customized = !rule.MatchesTemplate(tmpl)
+		}
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
@@ -241,6 +248,16 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			}
 		}
 		rule.SetModelInfoFieldsOrZero(req.ModelInfoFields)
+		// 新建规则：同名默认模板存在（如常见 agent 类型）时按模板预置并
+		// 保持未自定义（跟随默认）；否则视为用户自建数据。
+		rule.Customized = true
+		if tmpl, ok := model.TemplateForRuleName(name); ok {
+			if err := model.ApplyTemplateToRule(&rule, tmpl); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			rule.Customized = false
+		}
 		if err := db.Create(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
