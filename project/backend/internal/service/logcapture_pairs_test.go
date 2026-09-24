@@ -750,3 +750,31 @@ func TestReadPair_timing_nil_when_no_timings(t *testing.T) {
 func itoa(i int) string {
 	return string(rune('0' + i))
 }
+
+// TestListPairs_header_only_rewrite_is_modified: the request body is identical
+// before/after but a header was added (e.g. the x-opencode-session rule).
+// Expect Modified/HasRewrite to be true so the log view shows the rewrite.
+func TestListPairs_header_only_rewrite_is_modified(t *testing.T) {
+	w := newPairsTestWriter(t)
+	now := time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+
+	body := map[string]any{"model": "deepseek-v4.1-flash"}
+	writeRow(t, w, "r1", "request", "request_before", body, 0, map[string]string{"X-Session-Id": "ses_1"}, now)
+	writeRow(t, w, "r1", "request", "request_after", body, 0, map[string]string{"X-Session-Id": "ses_1", "x-opencode-session": "ses_1"}, now.Add(time.Second))
+
+	summaries, _, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListPairs: %v", err)
+	}
+	if len(summaries) != 1 || !summaries[0].HasRewrite {
+		t.Fatalf("HasRewrite = false, want true for header-only rewrite")
+	}
+
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if !full.Request.Modified {
+		t.Fatalf("Request.Modified = false, want true for header-only rewrite")
+	}
+}

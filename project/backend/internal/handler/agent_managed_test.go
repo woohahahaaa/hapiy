@@ -36,11 +36,11 @@ func seedManagedDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	if err := rule.SetRecommendations([]model.AgentRecommendation{
-		{Scope: "provider", Key: "npm", Type: "string", Required: true},
-		{Scope: "provider", Key: "options.timeout", Type: "number", Recommended: 600000},
-		{Scope: "provider", Key: "options.baseURL", Type: "string", Required: true},
-		{Scope: "provider", Key: "options.apiKey", Type: "string", Required: true},
-		{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
+		{Scope: "provider", Key: "npm", Required: true},
+		{Scope: "provider", Key: "options.timeout", Recommended: 600000},
+		{Scope: "provider", Key: "options.baseURL", Required: true},
+		{Scope: "provider", Key: "options.apiKey", Required: true},
+		{Scope: "model", Key: "name", Description: "模型显示名"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func seedManagedDB(t *testing.T) *gorm.DB {
 			},
 			EndpointTags: []string{"/v1/chat/completions"},
 			Recommendations: []model.AgentRecommendation{
-				{Scope: "provider", Key: "options.extraBody", Type: "object", Recommended: map[string]any{"foo": "bar"}},
+				{Scope: "provider", Key: "options.extraBody", Recommended: map[string]any{"foo": "bar"}},
 			},
 		},
 	}); err != nil {
@@ -723,8 +723,8 @@ func TestManagedProviderNoEndpointGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rule.SetRecommendations([]model.AgentRecommendation{
-		{Scope: "provider", Key: "options.baseURL", Type: "string", Required: true},
-		{Scope: "provider", Key: "options.apiKey", Type: "string", Required: true},
+		{Scope: "provider", Key: "options.baseURL", Required: true},
+		{Scope: "provider", Key: "options.apiKey", Required: true},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -807,8 +807,8 @@ func TestManagedProviderSyncModelInfoSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := rule.SetRecommendations([]model.AgentRecommendation{
-		{Scope: "provider", Key: "options.baseURL", Type: "string", Required: true},
-		{Scope: "provider", Key: "options.apiKey", Type: "string", Required: true},
+		{Scope: "provider", Key: "options.baseURL", Required: true},
+		{Scope: "provider", Key: "options.apiKey", Required: true},
 	}); err != nil {
 		t.Fatal(err)
 	}

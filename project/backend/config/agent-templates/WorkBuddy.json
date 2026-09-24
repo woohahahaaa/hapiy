@@ -14,7 +14,6 @@
       "scope": "model",
       "key": "id",
       "description": "模型唯一标识（官方必填）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -22,7 +21,6 @@
       "scope": "model",
       "key": "name",
       "description": "模型显示名称",
-      "type": "string",
       "recommended": null,
       "required": false
     },
@@ -30,7 +28,6 @@
       "scope": "model",
       "key": "apiKey",
       "description": "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -38,7 +35,6 @@
       "scope": "model",
       "key": "url",
       "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -46,7 +42,6 @@
       "scope": "model",
       "key": "maxInputTokens",
       "description": "最大输入 token 数",
-      "type": "number",
       "recommended": null,
       "required": false
     },
@@ -54,7 +49,6 @@
       "scope": "model",
       "key": "maxOutputTokens",
       "description": "最大输出 token 数",
-      "type": "number",
       "recommended": null,
       "required": false
     },
@@ -62,7 +56,6 @@
       "scope": "model",
       "key": "supportsToolCall",
       "description": "是否支持工具调用",
-      "type": "boolean",
       "recommended": null,
       "required": false
     },
@@ -70,7 +63,6 @@
       "scope": "model",
       "key": "supportsImages",
       "description": "是否支持图片输入（图片/视频等输入格式）",
-      "type": "boolean",
       "recommended": null,
       "required": false
     },
@@ -78,7 +70,6 @@
       "scope": "model",
       "key": "supportsReasoning",
       "description": "是否支持推理模式",
-      "type": "boolean",
       "recommended": null,
       "required": false
     }

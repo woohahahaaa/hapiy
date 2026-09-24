@@ -62,6 +62,19 @@ function renderHeaders(headers: Record<string, string> | null, showTitle = true)
   )
 }
 
+// Header-only rewrites (e.g. adding x-opencode-session) leave the body
+// byte-identical, so modified stages diff the headers too — otherwise the
+// change is invisible in the detail view.
+function renderHeaderDiff(
+  before: Record<string, string> | null,
+  after: Record<string, string> | null,
+): ReactNode {
+  const hasBefore = !!before && Object.keys(before).length > 0
+  const hasAfter = !!after && Object.keys(after).length > 0
+  if (!hasBefore && !hasAfter) return null
+  return <DiffView before={before ?? {}} after={after ?? {}} />
+}
+
 // ── Circled numbers for response labels (①-⑯ for 1-16; ⑰-⑳ for 17-20) ──
 const CIRCLED_NUMBERS = [
   '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩',
@@ -207,7 +220,9 @@ function StageErrorRow({ error }: { readonly error: string }) {
 }
 
 function renderStageBody(node: StageNode): ReactNode {
-  const headersEl = renderHeaders(node.before?.headers ?? node.after?.headers ?? null, false)
+  const headersEl = node.modified
+    ? renderHeaderDiff(node.before?.headers ?? null, node.after?.headers ?? null)
+    : renderHeaders(node.before?.headers ?? node.after?.headers ?? null, false)
   let bodyEl: ReactNode
   if (node.modified) {
     bodyEl = <DiffView before={node.before?.body} after={node.after?.body} />
@@ -643,7 +658,9 @@ function PairDialog({ requestId, open, onClose }: {
 // ResponseNodeBody: DiffView when modified, otherwise toggle on the
 // available stage row (after preferred, falls back to before).
 function ResponseNodeBody({ resp }: { readonly resp: import('@/lib/dashboard-api').LogCaptureResponseNode }) {
-  const headersEl = renderHeaders(resp.before?.headers ?? resp.after?.headers ?? null, false)
+  const headersEl = resp.modified
+    ? renderHeaderDiff(resp.before?.headers ?? null, resp.after?.headers ?? null)
+    : renderHeaders(resp.before?.headers ?? resp.after?.headers ?? null, false)
   if (resp.modified) {
     return (
       <div className="flex flex-col gap-1.5">

@@ -62,7 +62,6 @@ type AgentRecommendation struct {
 	Scope       string            `json:"scope"`               // "provider" | "model"
 	Key         string            `json:"key"`                 // gjson path, e.g. "maxConcurrency" or "thinking.type"
 	Description string            `json:"description"`         // human-readable meaning
-	Type        string            `json:"type"`                // "string" | "number" | "boolean" | "object" | "array"
 	Action      string            `json:"action,omitempty"`    // "set" | "skip" | "delete"（缺省 "set"）
 	Recommended any               `json:"recommended"`         // recommended value, or null when not filled
 	Candidates  map[string]string `json:"candidates,omitempty"` // 多候选值说明 key→含义
@@ -85,31 +84,6 @@ func (r AgentRecommendation) RecommendAction() string {
 // value before writing. ok=false means "skip this field" after shaping.
 func (r AgentRecommendation) ShapeValue(v any) (any, bool) {
 	return shapeValue(r.Op, r.Sep, r.Values, v)
-}
-
-// InferRecommendationType infers the type field from the recommended
-// value's concrete JSON type so the JSONC editor does not need a manual
-// type column. nil recommended resolves via Candidates keys else "".
-func InferRecommendationType(rec AgentRecommendation) string {
-	switch rec.Recommended.(type) {
-	case float64:
-		return "number"
-	case json.Number:
-		return "number"
-	case string:
-		return "string"
-	case bool:
-		return "boolean"
-	case []any:
-		return "array"
-	case map[string]any:
-		return "object"
-	default:
-		if len(rec.Candidates) > 0 {
-			return "string"
-		}
-		return ""
-	}
 }
 
 // AgentModelInfoFieldSpec — one unified model-info field's write spec.
@@ -563,16 +537,10 @@ func (r *AgentTypeRule) GetConfigJsonc() (string, error) {
 
 // BuildRuleConfigJsonc marshals a rule's recommendations + protocols
 // into the {common, protocols} JSONC document pretty-printed with two
-// spaces, with a trailing newline. Recs are NormalizedTypes first so the
-// document carries the inferred type field.
+// spaces, with a trailing newline.
 func BuildRuleConfigJsonc(recs []AgentRecommendation, protocols []AgentProtocol) (string, error) {
 	common := make([]AgentRecommendation, 0, len(recs))
-	for _, r := range recs {
-		if r.Type == "" {
-			r.Type = InferRecommendationType(r)
-		}
-		common = append(common, r)
-	}
+	common = append(common, recs...)
 	protocolJsonc := make([]AgentProtocolJsonc, 0, len(protocols))
 	for _, p := range protocols {
 		protocolJsonc = append(protocolJsonc, AgentProtocolJsonc{
@@ -589,28 +557,17 @@ func BuildRuleConfigJsonc(recs []AgentRecommendation, protocols []AgentProtocol)
 
 // ParseRuleConfigJsonc parses a JSONC document (comments already
 // stripped by the caller) back into its recommendations + protocols.
-// Types are inferred from the recommended value when absent.
 func ParseRuleConfigJsonc(data []byte) ([]AgentRecommendation, []AgentProtocol, error) {
 	var doc AgentRuleConfigJsonc
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return nil, nil, err
 	}
 	common := make([]AgentRecommendation, 0, len(doc.Common))
-	for _, r := range doc.Common {
-		if r.Type == "" {
-			r.Type = InferRecommendationType(r)
-		}
-		common = append(common, r)
-	}
+	common = append(common, doc.Common...)
 	protocols := make([]AgentProtocol, 0, len(doc.Protocols))
 	for _, p := range doc.Protocols {
 		recs := make([]AgentRecommendation, 0, len(p.Fields))
-		for _, r := range p.Fields {
-			if r.Type == "" {
-				r.Type = InferRecommendationType(r)
-			}
-			recs = append(recs, r)
-		}
+		recs = append(recs, p.Fields...)
 		protocols = append(protocols, AgentProtocol{
 			Name: p.Name, Conditions: p.Conditions, EndpointTags: p.EndpointTags, Recommendations: recs,
 		})
@@ -875,16 +832,16 @@ func ListBuiltinTemplates() []AgentTemplateConfig {
 // 只保留：缺了就跑不起来的必填字段、模型输入格式字段（图片/视频/文字）
 // 与缓存优化字段；其余可选调优项不做推荐。
 var opencodeRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "name", Type: "string", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
-	{Scope: "provider", Key: "npm", Type: "string", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
-	{Scope: "provider", Key: "options.baseURL", Type: "string", Description: "API 端点（不填则走适配器默认）", Required: true},
-	{Scope: "provider", Key: "options.apiKey", Type: "string", Description: "认证密钥", Required: true},
-	{Scope: "provider", Key: "options.setCacheKey", Type: "boolean", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
-	{Scope: "model", Key: "name", Type: "string", Description: "模型在界面里的显示名"},
-	{Scope: "model", Key: "limit.context", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
-	{Scope: "model", Key: "tool_call", Type: "boolean", Description: "模型是否支持工具调用"},
-	{Scope: "model", Key: "attachment", Type: "boolean", Description: "模型是否支持文件/图片附件输入（输入格式）"},
+	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
+	{Scope: "provider", Key: "npm", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
+	{Scope: "provider", Key: "options.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
+	{Scope: "provider", Key: "options.apiKey", Description: "认证密钥", Required: true},
+	{Scope: "provider", Key: "options.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
+	{Scope: "model", Key: "name", Description: "模型在界面里的显示名"},
+	{Scope: "model", Key: "limit.context", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "reasoning", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
+	{Scope: "model", Key: "tool_call", Description: "模型是否支持工具调用"},
+	{Scope: "model", Key: "attachment", Description: "模型是否支持文件/图片附件输入（输入格式）"},
 }
 
 // opencodeProtocols 按 endpoint 关键词把规范化 provider 归入对应的 AI SDK。
@@ -895,24 +852,24 @@ var opencodeProtocols = []AgentProtocol{
 		Name:         "OpenAI Responses API",
 		EndpointTags: []string{"responses"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "npm", Type: "string", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
+			{Scope: "provider", Key: "npm", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
 		},
 	},
 	{
 		Name:         "Anthropic Messages API",
 		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "npm", Type: "string", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
+			{Scope: "provider", Key: "npm", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
 			// Anthropic Messages API 官方要求每次请求带 max_tokens，对应
 			// opencode 的模型 limit.output —— anthropic-messages 协议下必填。
-			{Scope: "model", Key: "limit.output", Type: "number", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
+			{Scope: "model", Key: "limit.output", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
 		},
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
 		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "npm", Type: "string", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
+			{Scope: "provider", Key: "npm", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
 		},
 	},
 }
@@ -923,13 +880,13 @@ var opencodeProtocols = []AgentProtocol{
 // 而非 JSON —— 但字段名与官方一致。只保留缺了就跑不起来的必填字段，
 // 其余官方有默认的调优项不做推荐。
 var codexRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "model_provider", Type: "string", Description: "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）", Required: true},
-	{Scope: "provider", Key: "name", Type: "string", Description: "自定义 provider 的显示名"},
-	{Scope: "provider", Key: "base_url", Type: "string", Description: "该 provider 的 API base URL（如 https://api.example.com/v1）", Required: true},
+	{Scope: "provider", Key: "model_provider", Description: "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）", Required: true},
+	{Scope: "provider", Key: "name", Description: "自定义 provider 的显示名"},
+	{Scope: "provider", Key: "base_url", Description: "该 provider 的 API base URL（如 https://api.example.com/v1）", Required: true},
 	// 2026.02 起 Codex 强制 responses（Responses API），不再支持 Chat Completions；
 	// 网关必须原生支持 Responses API，这里给出唯一可用的取值。
-	{Scope: "provider", Key: "wire_api", Type: "string", Description: "接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）", Recommended: "responses"},
-	{Scope: "provider", Key: "env_key", Type: "string", Description: "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）"},
+	{Scope: "provider", Key: "wire_api", Description: "接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）", Recommended: "responses"},
+	{Scope: "provider", Key: "env_key", Description: "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）"},
 }
 
 // workBuddyRecommendations 对齐 WorkBuddy/CodeBuddy 官方 models.json 指南
@@ -937,17 +894,19 @@ var codexRecommendations = []AgentRecommendation{
 // 接口路径、一般以 /chat/completions 结尾；仅支持 OpenAI 接口格式。只保留
 // 缺了就跑不起来的必填字段与模型能力/输入格式字段，其余选填不做推荐。
 var workBuddyRecommendations = []AgentRecommendation{
-	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识（官方必填）", Required: true},
-	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名称"},
+	{Scope: "model", Key: "id", Description: "模型唯一标识（官方必填）", Required: true},
+	{Scope: "model", Key: "name", Description: "模型显示名称"},
 	// apiKey 官方标非必填（覆盖内置模型时可不填），但自定义模型缺它连不上；
-	// 标必填同时让托管生成能找到写入令牌 key 的落点（apiKeyFieldFor 依赖此标记）。
-	{Scope: "model", Key: "apiKey", Type: "string", Description: "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）", Required: true},
-	{Scope: "model", Key: "url", Type: "string", Description: "API 端点，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
-	{Scope: "model", Key: "maxInputTokens", Type: "number", Description: "最大输入 token 数"},
-	{Scope: "model", Key: "maxOutputTokens", Type: "number", Description: "最大输出 token 数"},
-	{Scope: "model", Key: "supportsToolCall", Type: "boolean", Description: "是否支持工具调用"},
-	{Scope: "model", Key: "supportsImages", Type: "boolean", Description: "是否支持图片输入（图片/视频等输入格式）"},
-	{Scope: "model", Key: "supportsReasoning", Type: "boolean", Description: "是否支持推理模式"},
+	// 这里标必填以与 opencode/openclaw 的 apiKey 口径一致。注意 WorkBuddy 是
+	// 平铺 models 结构（json_paths 为空），apiKeyFieldFor 只扫描 provider 级
+	// 推荐，因此该标记当前只作文档/字段追踪，不参与托管生成。
+	{Scope: "model", Key: "apiKey", Description: "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）", Required: true},
+	{Scope: "model", Key: "url", Description: "API 端点，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
+	{Scope: "model", Key: "maxInputTokens", Description: "最大输入 token 数"},
+	{Scope: "model", Key: "maxOutputTokens", Description: "最大输出 token 数"},
+	{Scope: "model", Key: "supportsToolCall", Description: "是否支持工具调用"},
+	{Scope: "model", Key: "supportsImages", Description: "是否支持图片输入（图片/视频等输入格式）"},
+	{Scope: "model", Key: "supportsReasoning", Description: "是否支持推理模式"},
 }
 
 // openclawRecommendations 对齐 OpenClaw 官方 openclaw.json：models.providers
@@ -956,17 +915,17 @@ var workBuddyRecommendations = []AgentRecommendation{
 // model 字段（如 contextWindow、maxTokens）由 models.dev 同步填充。只保留
 // 缺了就跑不起来的必填字段与输入格式字段（input 收 text/image/video/audio）。
 var openclawRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "baseUrl", Type: "string", Description: "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
-	{Scope: "provider", Key: "apiKey", Type: "string", Description: "认证密钥", Required: true},
+	{Scope: "provider", Key: "baseUrl", Description: "服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
+	{Scope: "provider", Key: "apiKey", Description: "认证密钥", Required: true},
 	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见 openclawProtocols）；
 	// common 里只保留字段本身做驱动识别，不给推荐值，避免管理模型把
 	// anthropic-messages 端点误判成 openai-completions。
-	{Scope: "provider", Key: "api", Type: "string", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类"},
-	{Scope: "model", Key: "id", Type: "string", Description: "模型唯一标识", Required: true},
-	{Scope: "model", Key: "name", Type: "string", Description: "模型显示名"},
-	{Scope: "model", Key: "contextWindow", Type: "number", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "input", Type: "array", Description: "支持的输入类型（text/image/video/audio）"},
-	{Scope: "model", Key: "reasoning", Type: "boolean", Description: "是否支持思考模式（官方 schema 校验，未配按 false 处理）"},
+	{Scope: "provider", Key: "api", Description: "接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类"},
+	{Scope: "model", Key: "id", Description: "模型唯一标识", Required: true},
+	{Scope: "model", Key: "name", Description: "模型显示名"},
+	{Scope: "model", Key: "contextWindow", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "input", Description: "支持的输入类型（text/image/video/audio）"},
+	{Scope: "model", Key: "reasoning", Description: "是否支持思考模式（官方 schema 校验，未配按 false 处理）"},
 }
 
 // openclawProtocols 按 endpoint 关键词把规范化 provider 归入对应的
@@ -979,29 +938,29 @@ var openclawProtocols = []AgentProtocol{
 		Name:         "Anthropic Messages API",
 		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "api", Type: "string", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
-			{Scope: "model", Key: "maxTokens", Type: "number", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
+			{Scope: "provider", Key: "api", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
+			{Scope: "model", Key: "maxTokens", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
 		},
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
 		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "api", Type: "string", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
+			{Scope: "provider", Key: "api", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
 		},
 	},
 	{
 		Name:         "Ollama",
 		EndpointTags: []string{"ollama"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "api", Type: "string", Description: "Ollama 本地推理使用 ollama 协议", Recommended: "ollama"},
+			{Scope: "provider", Key: "api", Description: "Ollama 本地推理使用 ollama 协议", Recommended: "ollama"},
 		},
 	},
 	{
 		Name:         "LM Studio",
 		EndpointTags: []string{"lmstudio"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "api", Type: "string", Description: "LM Studio 本地推理使用 lmstudio 协议", Recommended: "lmstudio"},
+			{Scope: "provider", Key: "api", Description: "LM Studio 本地推理使用 lmstudio 协议", Recommended: "lmstudio"},
 		},
 	},
 }

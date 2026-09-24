@@ -36,7 +36,6 @@ import {
   type AgentProtocolCondition,
   type AgentProtocolConditionOp,
   type AgentRecommendation,
-  type AgentRecommendationType,
   type AgentTypeRule,
   type ModelInfoFieldKey,
 } from '@/lib/dashboard-api'
@@ -111,7 +110,7 @@ function parseRuleConfigJsonc(text: string): {
 }
 
 // normalizeAgentRecommendation coerces a JSONC field entry into the
-// structured shape, inferring the type from recommended when absent.
+// structured shape.
 function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('common 里每一项必须是对象')
@@ -121,7 +120,6 @@ function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
   if (!key.trim()) throw new Error('字段缺少 key（字段路径）')
   const scope = v.scope === 'model' ? 'model' : 'provider'
   const recommended = v.recommended ?? null
-  const type = inferRecommendationType(recommended)
   const candidates = v.candidates && typeof v.candidates === 'object' && !Array.isArray(v.candidates)
     ? (v.candidates as Record<string, unknown>)
     : undefined
@@ -137,7 +135,6 @@ function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
     scope,
     key,
     description: typeof v.description === 'string' ? v.description : '',
-    type,
     action: v.action === 'skip' || v.action === 'delete' ? v.action : undefined,
     recommended,
     candidates: Object.keys(cand).length > 0 ? cand : undefined,
@@ -182,15 +179,6 @@ function normalizeAgentProtocol(value: unknown): AgentProtocol {
   }
 }
 
-function inferRecommendationType(recommended: unknown): AgentRecommendationType {
-  if (recommended === null || recommended === undefined) return 'string'
-  if (typeof recommended === 'number') return 'number'
-  if (typeof recommended === 'boolean') return 'boolean'
-  if (Array.isArray(recommended)) return 'array'
-  if (typeof recommended === 'object') return 'object'
-  return 'string'
-}
-
 // buildRuleConfigJsonc constructs the JSONC document from the parsed
 // recommendations + protocols. Rules with neither yet (e.g. 刚创建的
 // 空规则) serialize to an empty {common, protocols} doc instead of any
@@ -199,12 +187,8 @@ function buildRuleConfigJsonc(
   recs: readonly AgentRecommendation[],
   protocols: readonly AgentProtocol[],
 ): string {
-  const common = recs.map((r) => ({
-    ...r,
-    type: inferRecommendationType(r.recommended),
-  }))
   const doc = {
-    common,
+    common: recs,
     protocols: protocols.map((p) => ({
       name: p.name,
       conditions: p.conditions,
@@ -936,7 +920,7 @@ function RecommendationTable({
     onChange(recs.map((r, i) => (i === index ? patch(r) : r)))
   }
   const addRow = () => {
-    onChange([...recs, { scope: 'model', key: '', description: '', type: 'string', recommended: null, required: false }])
+    onChange([...recs, { scope: 'model', key: '', description: '', recommended: null, required: false }])
   }
   const valueToText = (v: unknown): string => {
     if (v === undefined || v === null) return ''

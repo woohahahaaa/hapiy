@@ -513,20 +513,31 @@ func stageRow(r *model.LogCapture) *LogCaptureStageRow {
 	}
 }
 
-// isModified reports whether the before/after stages of a node differ in body.
-// A node is "modified" only if BOTH before and after exist AND their marshalled
-// bodies differ. nil on either side → not modified (we only have one half).
-// We marshal via json.Marshal which is deterministic for map[string]any with
-// string-keyed top-level maps (the keys sort is not guaranteed by encoding/json
-// for maps, but the byte comparison is still consistent: same map → same bytes
-// because encoding/json sorts map keys lexicographically since Go 1.12).
+// isModified reports whether the before/after stages of a node differ in body
+// or headers. A node is "modified" only if BOTH before and after exist;
+// nil on either side → not modified (we only have one half). Headers count
+// because header-only rewrites (e.g. adding x-opencode-session) leave the body
+// byte-identical and would otherwise read as "not rewritten" in the log view.
 func isModified(before, after *LogCaptureStageRow) bool {
 	if before == nil || after == nil {
 		return false
 	}
-	bb, _ := json.Marshal(before.Body)
-	ab, _ := json.Marshal(after.Body)
-	return !bytes.Equal(bb, ab)
+	if !jsonMapEqual(before.Headers, after.Headers) {
+		return true
+	}
+	return !jsonMapEqual(before.Body, after.Body)
+}
+
+// jsonMapEqual compares two captured maps by their marshalled bytes; nil and
+// empty compare equal so a missing map never reads as a change. Marshalling is
+// deterministic because encoding/json sorts map keys lexicographically.
+func jsonMapEqual(a, b model.JSONMap) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	ab, _ := json.Marshal(a)
+	bb, _ := json.Marshal(b)
+	return bytes.Equal(ab, bb)
 }
 
 // typeLabel renders the Chinese label for a pair's shape:

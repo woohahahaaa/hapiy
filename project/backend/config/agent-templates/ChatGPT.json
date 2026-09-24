@@ -14,7 +14,6 @@
       "scope": "provider",
       "key": "model_provider",
       "description": "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -22,7 +21,6 @@
       "scope": "provider",
       "key": "name",
       "description": "自定义 provider 的显示名",
-      "type": "string",
       "recommended": null,
       "required": false
     },
@@ -30,7 +28,6 @@
       "scope": "provider",
       "key": "base_url",
       "description": "该 provider 的 API base URL（如 https://api.example.com/v1）",
-      "type": "string",
       "recommended": null,
       "required": true
     },
@@ -38,7 +35,6 @@
       "scope": "provider",
       "key": "wire_api",
       "description": "接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）",
-      "type": "string",
       "recommended": "responses",
       "required": false
     },
@@ -46,7 +42,6 @@
       "scope": "provider",
       "key": "env_key",
       "description": "提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）",
-      "type": "string",
       "recommended": null,
       "required": false
     }
