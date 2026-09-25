@@ -222,8 +222,10 @@ type RelayRequest struct {
 	// consumer is not routed back to the same failing entity.
 	AffinityCacheKey string `json:"-"`
 	// ServedProviderID records the provider that actually served the
-	// request (differs from the dispatched provider after a failover), so
-	// failure logs and post-failover handling can name the real target.
+	// request when a provider-dimension failover rotated it away from the
+	// dispatched plan. Empty when the dispatched provider served it.
+	// Affinity recording and the usage-log row use it so both point at the
+	// healthy provider instead of the failing one.
 	ServedProviderID string `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
@@ -463,7 +465,11 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 		e.logDebug(plan, req, resp)
 	}
 
-	e.recordFallbackChannel(req, plan.Provider.ID, req.KeyIndex, req.BaseURLIndex)
+	servedProviderID := plan.Provider.ID
+	if req.ServedProviderID != "" {
+		servedProviderID = req.ServedProviderID
+	}
+	e.recordFallbackChannel(req, servedProviderID, req.KeyIndex, req.BaseURLIndex)
 
 	return resp, nil
 }

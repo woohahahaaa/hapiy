@@ -168,9 +168,9 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
 		if rotated, _ := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, &disableApplied); rotated != nil {
-			if disableApplied {
-				e.recordDisabledAttempt(req, plan, err)
-			}
+			// 转移成功：补记一条原始失败，使用记录里能看出
+			// 「先失败、后经故障转移换通道成功」。
+			e.recordFailoverAttempt(req, plan, err)
 			return rotated, nil
 		}
 	case model.FailoverDimensionProvider:
@@ -184,10 +184,12 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 				_ = resp.Body.Close()
 			}
 			fbResp, fbErr := e.performUpstreamCall(ctx, fallbackPlan, req)
-			if disableApplied {
-				e.recordDisabledAttempt(req, plan, err)
-			}
+			// 无论成败，都暴露实际被尝试的 fallback 供应商，让
+			// handler 的失败记录归到正确的一方。
+			req.ServedProviderID = fallbackPlan.Provider.ID
 			if fbErr == nil {
+				// 转移成功：补记原始失败（见上）。
+				e.recordFailoverAttempt(req, plan, err)
 				e.clearFailoverHit(plan.Provider.ID, dimension, value)
 			}
 			return fbResp, fbErr
@@ -487,15 +489,16 @@ func failoverEventDetail(rule *model.FailoverRule, dimension string, outcome ups
 	return strings.Join(lines, "\n")
 }
 
-// recordDisabledAttempt queues a "failed" usage-log row for the upstream
-// attempt whose failure triggered an auto-disable. Without it a request
-// that recovers via key/BaseURL rotation or a fallback provider only
-// produces the final success row, and the upstream error behind the
-// disable event is lost from the 使用记录. The handler still writes the
-// final row (success, or the fallback's failure); this row carries the
-// original error. Callers must skip it when the original error is the
+// recordFailoverAttempt queues a "failed" usage-log row for the upstream
+// attempt whose failure triggered a failover that then recovered (via
+// key/BaseURL rotation or a fallback provider). Without it a recovered
+// request only produces the final success row, and the upstream error
+// behind the transfer is lost from the 使用记录. The handler still writes
+// the final row (success when recovered; the fallback's own failure when
+// the transfer failed, which carries the fallback provider name via
+// ServedProviderID). Callers must skip it when the original error is the
 // final error the handler logs (the relayWithFailover tail return).
-func (e *Engine) recordDisabledAttempt(req *RelayRequest, plan *ExecutionPlan, failErr error) {
+func (e *Engine) recordFailoverAttempt(req *RelayRequest, plan *ExecutionPlan, failErr error) {
 	service.LogRelayFailure(service.LogRelayFailureInput{
 		UserID:       req.UserID,
 		TokenName:    req.TokenName,
@@ -532,6 +535,10 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 			candidate.KeyIndex = ki
 			resp, err := e.performUpstreamCall(ctx, plan, &candidate)
 			if err == nil {
+				// 旋转成功：把实际用到的索引写回 req，让亲和记录
+				// (规则亲和 + 兜底亲和历史) 指向真正服务的通道。
+				req.BaseURLIndex = candidate.BaseURLIndex
+				req.KeyIndex = candidate.KeyIndex
 				return resp, false
 			}
 			outcome := classifyOutcome(resp, err)
