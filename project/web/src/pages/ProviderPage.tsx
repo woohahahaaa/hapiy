@@ -309,6 +309,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
   const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
   const [refRefreshing, setRefRefreshing] = useState(false)
   const [refSyncing, setRefSyncing] = useState(false)
+  const [bulkRefSetting, setBulkRefSetting] = useState(false)
   const [syncTarget, setSyncTarget] = useState<string | null>(null)
 
   useEffect(() => {
@@ -383,6 +384,30 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     })
     if (!row) {
       setRefSnapshotError(`models.dev 中未查到「${model.model}」在「${providerName}」下的价格，请点刷新重试`)
+    }
+  }
+
+  // 一键为所有「参考 models.dev 供应商」的模型从 models.dev 拉取最新价格
+  // 快照并填充，参考「接管 agent」里的「使用推荐配置」批量动作。
+  const applyModelsDevPricesForAll = async () => {
+    setBulkRefSetting(true)
+    setRefSnapshotError(null)
+    try {
+      const fresh = await refreshModelsDevModels()
+      setRefSnapshot(fresh)
+      const next = form.models.map((model) => {
+        if (model.referenceProvider === null || model.referenceProvider === '') return model
+        const row = findModelsDevProviderRow(fresh, model.model, model.referenceProvider)
+        if (!row) return model
+        return { ...model, referencePrices: refPricesOf(row), referenceAt: new Date().toISOString() }
+      })
+      const applied = next.filter((model, index) => model !== form.models[index]).length
+      setForm((current) => ({ ...current, models: next }))
+      toast(applied > 0 ? `已为 ${applied} 个参考 models.dev 的模型设置价格` : '没有参考 models.dev 的模型，无需设置')
+    } catch {
+      setRefSnapshotError('models.dev 数据拉取失败，价格未设置')
+    } finally {
+      setBulkRefSetting(false)
     }
   }
 
@@ -740,6 +765,19 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 {PRICE_ERROR_TEXT}
               </div>
             )}
+            <div className="flex items-center justify-end pb-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                title="选择参考供应商，为所有参考 models.dev 供应商的模型一键设置最新价格"
+                disabled={bulkRefSetting}
+                onClick={() => void applyModelsDevPricesForAll()}
+              >
+                {bulkRefSetting ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+                一键设置 models.dev 供应商
+              </Button>
+            </div>
             <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
               <span>模型名称</span>
               <span>价格</span>
@@ -773,6 +811,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                   >
                     <SelectTrigger className="w-full"><SelectPrimitive.Value placeholder="未设置" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem key="__unset__" value="__unset__">未设置</SelectItem>
                       {form.endpoints.map((endpoint) => (
                         <SelectItem key={endpoint.pathSuffix} value={endpoint.pathSuffix}>{endpoint.pathSuffix}</SelectItem>
                       ))}
