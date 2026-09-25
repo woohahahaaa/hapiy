@@ -11,7 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -863,5 +865,242 @@ func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.
 	// Then: provider got auto-disabled even though the upstream returned 2xx.
 	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
 		t.Fatal("provider should be auto-disabled when TTFB exceeds the rule limit")
+	}
+}
+
+// TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack verifies the
+// affinity-hit contract: a request dispatched through channel affinity has
+// no TopologyOrigin, but carrying EntryID it must still fail over to an
+// eligible sibling provider, and the failover must sever the affinity
+// bindings (rule cache key + fallback history row) that pinned the request
+// to the failing entity.
+func TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack(t *testing.T) {
+	primaryHits := 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"Go usage limit exceeded"}}`))
+	}))
+	defer primary.Close()
+	alternate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer alternate.Close()
+
+	db := newRelayTestDB(t, &model.Provider{}, &model.TopologyConfig{}, &model.RequestChannelHistory{},
+		&model.TopologySlotAssignment{}, &model.Setting{}, &model.FailoverHitCounter{}, &model.AutoDisableState{})
+	primaryProvider := &model.Provider{ID: "primary", Name: "primary", BaseURLs: `[` + strconv.Quote(primary.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	alternateProvider := &model.Provider{ID: "alternate", Name: "alternate", BaseURLs: `[` + strconv.Quote(alternate.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	if err := db.Create(primaryProvider).Error; err != nil {
+		t.Fatalf("create primary: %v", err)
+	}
+	if err := db.Create(alternateProvider).Error; err != nil {
+		t.Fatalf("create alternate: %v", err)
+	}
+	if err := db.Create(&model.TopologyConfig{ID: topology.ConfigRowID, Version: 1, Flat: `{"nodes":[
+		{"id":"entry","kind":"requestEntry","enabled":true,"weight":1},
+		{"id":"provider-slot","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"primary-node","kind":"provider","provider_id":"primary","enabled":true},
+		{"id":"alternate-node","kind":"provider","provider_id":"alternate","enabled":true}
+	],"wires":[
+		{"source":"entry","target":"provider-slot"},
+		{"source":"provider-slot","target":"primary-node"},
+		{"source":"provider-slot","target":"alternate-node"}
+	]}`}).Error; err != nil {
+		t.Fatalf("create topology: %v", err)
+	}
+	eng := NewEngine(db)
+	rule := &model.FailoverRule{ID: "rule-1", Name: "供应商：转移", Condition: "timeout", Status: true,
+		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"走过","usage limit"}}
+	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"k"}, FailoverRules: []*model.FailoverRule{rule}}
+	alternatePlan := &ExecutionPlan{ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"k"}}
+	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": alternatePlan}
+	eng.providers = map[string]*model.Provider{"primary": primaryProvider, "alternate": alternateProvider}
+
+	// Seed a rule-affinity binding like a previously successful request would.
+	ruleName, sessionID, modelName := "workbuddy", "sess-1", "glm-5.3-flash"
+	affKey := eng.Affinity().Record(ruleName, sessionID, modelName, affinity.Triple{ProviderName: "primary", EntryID: "entry"}, 600)
+	// Seed a fallback-affinity history row pinning (session, model) to primary.
+	history := model.RequestChannelHistory{SessionID: sessionID, Model: modelName, ProviderID: "primary", EntryID: "entry"}
+	if err := db.Create(&history).Error; err != nil {
+		t.Fatalf("create history: %v", err)
+	}
+	eng.fallbackMu.Lock()
+	eng.fallbackConfig = &affinity.FallbackSetting{Enabled: true, SessionIDFields: []string{"X-Session-Id"}, ModelFields: []string{"model"}}
+	eng.fallbackMu.Unlock()
+	if eng.fallbackSetting() == nil || !eng.fallbackSetting().Enabled {
+		t.Fatal("fallback affinity should be enabled")
+	}
+
+	// When: an affinity-hit request (no TopologyOrigin, EntryID set) hits 429.
+	relayReq := &RelayRequest{
+		Model: modelName, Path: "/v1/chat/completions", EntryID: "entry", AffinityCacheKey: affKey,
+		Headers: map[string]string{"X-Session-Id": sessionID},
+	}
+	resp, err := eng.relayWithFailover(context.Background(), primaryPlan, relayReq)
+	if err != nil {
+		t.Fatalf("relay should recover via alternate, got: %v", err)
+	}
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected alternate 200, got %+v", resp)
+	}
+	_ = resp.Body.Close()
+	if relayReq.ServedProviderID != "alternate" {
+		t.Fatalf("ServedProviderID should record the actual serving provider, got %q", relayReq.ServedProviderID)
+	}
+
+	// Then: rule affinity cache entry is gone and fallback history row deleted.
+	if m := eng.Affinity().Lookup(&affinity.Request{Model: modelName, Headers: map[string]string{"X-Session-Id": sessionID}}); m.Matched {
+		t.Fatal("rule affinity must be broken after failover")
+	}
+	var count int64
+	if err := db.Model(&model.RequestChannelHistory{}).Where("session_id = ? AND model = ?", sessionID, modelName).Count(&count).Error; err != nil {
+		t.Fatalf("count history: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("fallback history should be deleted after failover, got %d rows", count)
+	}
+}
+
+// TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider runs
+// the full RelayRequest pipeline: affinity-hit request, provider-dimension
+// failover to a sibling, and the success-path affinity recording. The
+// fallback history must be rebuilt pointing at the ACTUAL serving provider
+// (alternate), not the dispatched failing one — otherwise the next request
+// would be pinned back to the failing provider.
+func TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"Go usage limit exceeded"}}`))
+	}))
+	defer primary.Close()
+	alternate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer alternate.Close()
+
+	db := newRelayTestDB(t, &model.Provider{}, &model.TopologyConfig{}, &model.RequestChannelHistory{},
+		&model.TopologySlotAssignment{}, &model.Setting{}, &model.FailoverHitCounter{}, &model.AutoDisableState{},
+		&model.Log{})
+	service.InitLogWriter(db)
+	primaryProvider := &model.Provider{ID: "primary", Name: "primary", BaseURLs: `[` + strconv.Quote(primary.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	alternateProvider := &model.Provider{ID: "alternate", Name: "alternate", BaseURLs: `[` + strconv.Quote(alternate.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	if err := db.Create(primaryProvider).Error; err != nil {
+		t.Fatalf("create primary: %v", err)
+	}
+	if err := db.Create(alternateProvider).Error; err != nil {
+		t.Fatalf("create alternate: %v", err)
+	}
+	if err := db.Create(&model.TopologyConfig{ID: topology.ConfigRowID, Version: 1, Flat: `{"nodes":[
+		{"id":"entry","kind":"requestEntry","enabled":true,"weight":1},
+		{"id":"provider-slot","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"primary-node","kind":"provider","provider_id":"primary","enabled":true},
+		{"id":"alternate-node","kind":"provider","provider_id":"alternate","enabled":true}
+	],"wires":[
+		{"source":"entry","target":"provider-slot"},
+		{"source":"provider-slot","target":"primary-node"},
+		{"source":"provider-slot","target":"alternate-node"}
+	]}`}).Error; err != nil {
+		t.Fatalf("create topology: %v", err)
+	}
+	eng := NewEngine(db)
+	eng.providers = map[string]*model.Provider{"primary": primaryProvider, "alternate": alternateProvider}
+	rule := &model.FailoverRule{ID: "rule-1", Name: "供应商：转移", Condition: "timeout", Status: true,
+		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"usage limit"}}
+	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"k"}, FailoverRules: []*model.FailoverRule{rule}}
+	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": {ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"k"}}}
+	eng.fallbackMu.Lock()
+	eng.fallbackConfig = &affinity.FallbackSetting{Enabled: true, SessionIDFields: []string{"X-Session-Id"}, ModelFields: []string{"model"}}
+	eng.fallbackMu.Unlock()
+
+	req := &RelayRequest{
+		Model: "glm-5.3-flash", Path: "/v1/chat/completions", EntryID: "entry",
+		Headers: map[string]string{"X-Session-Id": "sess-1"},
+	}
+	if _, err := eng.RelayRequest(context.Background(), primaryPlan, req); err != nil {
+		t.Fatalf("RelayRequest should recover via alternate: %v", err)
+	}
+
+	var row model.RequestChannelHistory
+	if err := db.Where("session_id = ? AND model = ?", "sess-1", "glm-5.3-flash").First(&row).Error; err != nil {
+		t.Fatalf("fallback history should be rebuilt after success: %v", err)
+	}
+	if row.ProviderID != "alternate" {
+		t.Fatalf("history must point at the served provider, got %q", row.ProviderID)
+	}
+	if row.KeyIndex != 0 || row.BaseURLIndex != 0 {
+		t.Fatalf("history channel indices should be the served key/baseURL, got %d/%d", row.KeyIndex, row.BaseURLIndex)
+	}
+
+	// 转移成功后，使用记录应保留一条「原始失败」行（provider 转移前
+	// 的上游错误），否则复盘只能看到 success，看不到转移发生。
+	service.Logs().Flush()
+	var failRows int64
+	if err := db.Model(&model.Log{}).
+		Where("status = ? AND provider_name = ? AND error_message LIKE ?", "failed", "primary", "%usage limit%").
+		Count(&failRows).Error; err != nil {
+		t.Fatalf("count failed log rows: %v", err)
+	}
+	if failRows != 1 {
+		t.Fatalf("expected exactly 1 failed row for the transferred attempt, got %d", failRows)
+	}
+}
+
+// TestRelayRequest_failedTransferWritesServedProviderRow verifies the
+// failure-at-fallback path: when the original provider fails and the
+// fallback provider also fails, the handler writes the failed row under
+// the fallback provider actually tried (ServedProviderID), not the
+// dispatched one — relayWithFailover must expose the attempted provider.
+func TestRelayRequest_failedTransferWritesServedProviderRow(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"Go usage limit exceeded"}}`))
+	}))
+	defer primary.Close()
+	alternate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"alt down"}`))
+	}))
+	defer alternate.Close()
+
+	db := newRelayTestDB(t, &model.Provider{}, &model.TopologyConfig{}, &model.RequestChannelHistory{},
+		&model.TopologySlotAssignment{}, &model.Setting{}, &model.FailoverHitCounter{}, &model.AutoDisableState{},
+		&model.Log{})
+	service.InitLogWriter(db)
+	primaryProvider := &model.Provider{ID: "primary", Name: "primary", BaseURLs: `[` + strconv.Quote(primary.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	alternateProvider := &model.Provider{ID: "alternate", Name: "alternate", BaseURLs: `[` + strconv.Quote(alternate.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
+	if err := db.Create(primaryProvider).Error; err != nil {
+		t.Fatalf("create primary: %v", err)
+	}
+	if err := db.Create(alternateProvider).Error; err != nil {
+		t.Fatalf("create alternate: %v", err)
+	}
+	if err := db.Create(&model.TopologyConfig{ID: topology.ConfigRowID, Version: 1, Flat: `{"nodes":[
+		{"id":"entry","kind":"requestEntry","enabled":true,"weight":1},
+		{"id":"provider-slot","kind":"slot","slot_type":"provider","enabled":true},
+		{"id":"primary-node","kind":"provider","provider_id":"primary","enabled":true},
+		{"id":"alternate-node","kind":"provider","provider_id":"alternate","enabled":true}
+	],"wires":[
+		{"source":"entry","target":"provider-slot"},
+		{"source":"provider-slot","target":"primary-node"},
+		{"source":"provider-slot","target":"alternate-node"}
+	]}`}).Error; err != nil {
+		t.Fatalf("create topology: %v", err)
+	}
+	eng := NewEngine(db)
+	eng.providers = map[string]*model.Provider{"primary": primaryProvider, "alternate": alternateProvider}
+	rule := &model.FailoverRule{ID: "rule-1", Name: "供应商：转移", Condition: "timeout", Status: true,
+		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"usage limit"}}
+	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"k"}, FailoverRules: []*model.FailoverRule{rule}}
+	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": {ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"k"}}}
+
+	req := &RelayRequest{Model: "m1", Path: "/v1/chat/completions", EntryID: "entry"}
+	if _, err := eng.RelayRequest(context.Background(), primaryPlan, req); err == nil {
+		t.Fatal("expected error when both primary and fallback fail")
+	}
+	if req.ServedProviderID != "alternate" {
+		t.Fatalf("ServedProviderID must expose the attempted fallback provider, got %q", req.ServedProviderID)
 	}
 }

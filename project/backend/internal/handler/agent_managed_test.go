@@ -1024,6 +1024,7 @@ func TestManagedOpenclawEndpointApiClassification(t *testing.T) {
 		t.Fatalf("anthropic protocol should mark model maxTokens required")
 	}
 }
+
 // TestLoadRuleCaseInsensitive covers title-based rule recognition: agent
 // config files may store the agent type as "OpenCode" while the rule is
 // named "opencode".
@@ -1241,5 +1242,69 @@ func TestApplyRecToMap_ActionsAndWriters(t *testing.T) {
 	}
 	if _, ok := cfg["emptyArr"]; ok {
 		t.Fatalf("emptyArr should not be written, got %#v", cfg["emptyArr"])
+	}
+}
+
+// TestApplyModelInfoReasoningEffort pins the fifth unified field's write
+// semantics: reasoning_effort 的统一值是 models.dev reasoning_options 的
+// effort 枚举数组（该模型支持哪些档位，跟 input_types 同构），经 spec 的
+// op=first + values 白名单压成单值写入（写哪一档由 spec 决定，统一层不掺
+// 默认值）。没有枚举（toggle/budget_tokens/缺失）、白名单无交集、
+// action=skip 时都不写。
+func TestApplyModelInfoReasoningEffort(t *testing.T) {
+	row := modelsDevModel{
+		ContextLength: 128000, MaxOutput: 8192, InputTypes: []string{"text"}, Reasoning: true,
+		EffortLevels: []string{"none", "low", "medium", "high", "xhigh"},
+	}
+	mif := model.AgentModelInfoFieldPaths{
+		MaxContext:     model.ModelInfoPath("limit.context"),
+		MaxOutputToken: model.ModelInfoPath("limit.output"),
+		InputTypes:     model.ModelInfoPath("modalities.input"),
+		ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
+		ReasoningEffort: model.AgentModelInfoFieldSpec{
+			Path:   "options.reasoningEffort",
+			Op:     "first",
+			Values: []string{"medium"},
+		},
+	}
+	effortOf := func(cfg map[string]any) (any, bool) {
+		opts, ok := cfg["options"].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		v, ok := opts["reasoningEffort"]
+		return v, ok
+	}
+	cfg := map[string]any{}
+	applyModelInfoFromModelsDev(row, mif, cfg)
+	if v, ok := effortOf(cfg); !ok || v != "medium" {
+		t.Fatalf("reasoning_effort should write the whitelisted level, got %#v", v)
+	}
+
+	// 白名单与枚举无交集 → 不写。
+	mif.ReasoningEffort.Values = []string{"bogus"}
+	cfg = map[string]any{}
+	applyModelInfoFromModelsDev(row, mif, cfg)
+	if _, ok := effortOf(cfg); ok {
+		t.Fatal("whitelist mismatch must not write")
+	}
+
+	// action=skip：不写。
+	mif.ReasoningEffort.Values = []string{"medium"}
+	mif.ReasoningEffort.Action = "skip"
+	cfg = map[string]any{}
+	applyModelInfoFromModelsDev(row, mif, cfg)
+	if _, ok := effortOf(cfg); ok {
+		t.Fatal("action=skip must not write reasoning_effort")
+	}
+
+	// models.dev 无 effort 枚举（toggle / budget_tokens / 缺失）→ 不写。
+	row2 := row
+	row2.EffortLevels = nil
+	mif.ReasoningEffort.Action = ""
+	cfg = map[string]any{}
+	applyModelInfoFromModelsDev(row2, mif, cfg)
+	if _, ok := effortOf(cfg); ok {
+		t.Fatal("model without effort enum must not get an effort value")
 	}
 }

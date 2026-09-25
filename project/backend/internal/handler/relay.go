@@ -121,6 +121,9 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 		relayReq.TopologyOrigin = dispatchResult.Origin
 		relayReq.EntryID = dispatchResult.EntryID
+		if dispatchResult.AffinityMatch != nil {
+			relayReq.AffinityCacheKey = dispatchResult.AffinityMatch.CacheKey
+		}
 		affinityReuse := dispatchResult.AffinityReuse
 		if dispatchResult.AffinityMatch != nil && affinityReuse == "" {
 			affinityReuse = "new"
@@ -219,7 +222,15 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				})
 			}
 			failKey, failBaseURL := channelFromResp(resp)
-			logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, upstreamURLFromResp(resp), failKey, failBaseURL)
+			// 转移后仍失败：失败行归到「实际尝试的供应商」（fallback 目标），
+			// 而不是 dispatch 的初始供应商，使用记录才读得懂。
+			errProviderName := provider.Name
+			if relayReq.ServedProviderID != "" && relayReq.ServedProviderID != provider.ID {
+				if p, err2 := engine.GetProvider(relayReq.ServedProviderID); err2 == nil && p != nil {
+					errProviderName = p.Name
+				}
+			}
+			logRelayError(c, userID, tokenName, relayReq.Model, errProviderName, err, startTime, &relayReq, upstreamURLFromResp(resp), failKey, failBaseURL)
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -246,10 +257,22 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			c.Header(k, v)
 		}
 
+		// 记录中的供应商以「实际服务」为准：provider 维度转移后走的是
+		// fallback 供应商，若还按 dispatch 的 provider 记，使用记录会
+		// 把成功错记到失败方头上。
+		recordProvider := provider
+		if relayReq.ServedProviderID != "" && relayReq.ServedProviderID != provider.ID {
+			if p, err := engine.GetProvider(relayReq.ServedProviderID); err == nil && p != nil {
+				recordProvider = p
+			}
+		}
+
 		if dispatchResult.AffinityMatch != nil {
+			// 亲和重建也指向实际服务的通道：否则下一次请求会再次
+			// 粘回失败的供应商。
 			match := dispatchResult.AffinityMatch
 			engine.Affinity().Record(match.RuleName, match.SessionID, match.ModelName, affinity.Triple{
-				ProviderName: provider.Name,
+				ProviderName: recordProvider.Name,
 				KeyIndex:     relayReq.KeyIndex,
 				BaseURLIndex: relayReq.BaseURLIndex,
 				EntryID:      dispatchResult.EntryID,
@@ -288,7 +311,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		logEntry := model.Log{
 			UserID:             getString(userID),
 			TokenName:          getString(tokenName),
-			ProviderName:       provider.Name,
+			ProviderName:       recordProvider.Name,
 			ModelName:          relayReq.Model,
 			Source:             service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			IsStream:           relayReq.Stream,
@@ -314,7 +337,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logEntry.PromptCacheMissTokens = resp.Usage.CacheWriteTokens
 			logEntry.PromptCacheHitTokens = resp.Usage.CacheReadTokens
 			logEntry.Quota, logEntry.Currency = computeQuota(db, quotaRequest{
-				provider:  provider,
+				provider:  recordProvider,
 				modelName: relayReq.Model,
 				usage:     resp.Usage,
 			})

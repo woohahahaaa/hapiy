@@ -202,6 +202,7 @@ export function AgentModelInfoMatchDialog({
       max_output_token: row.maxOutput > 0 ? row.maxOutput : undefined,
       input_types: types.length > 0 ? types : undefined,
       thinking_levels: row.reasoning ? ['high'] : [],
+      reasoning_effort: row.effortLevels.length > 0 ? row.effortLevels : undefined,
     }
   }
 
@@ -211,7 +212,8 @@ export function AgentModelInfoMatchDialog({
     return findModelsDevProviderRow(snapshot ?? [], modelId, supplier)
   }
 
-  // 单个模型的基础字段变更（models.dev 参考供应商）。
+  // 单个模型的基础字段变更（models.dev 参考供应商）。action=skip 的字段
+  // 不产生变更（与后端 writeSpec 的 skip 语义一致）。
   const modelInfoChangesFor = (config: unknown, modelId: string): FieldChange[] => {
     const source = sourceFor(modelId)
     if (!source) return []
@@ -222,6 +224,7 @@ export function AgentModelInfoMatchDialog({
       const spec = modelInfoFields[key]
       const path = typeof spec === 'string' ? spec : spec.path
       if (!path) continue
+      if (typeof spec !== 'string' && spec.action === 'skip') continue
       const raw = sourceMap[key]
       if (raw === undefined || raw === null) continue
       const current = fieldValue(config, path)

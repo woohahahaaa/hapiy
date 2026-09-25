@@ -676,6 +676,7 @@ for (const p of summary?.providers ?? []) {
         max_output_token: '',
         input_types: '',
         thinking_levels: '',
+        reasoning_effort: '',
       }
       // 全部普通供应商（含其全部模型）套用。
       const checked: Record<string, readonly string[]> = {}
@@ -1217,6 +1218,7 @@ for (const p of summary?.providers ?? []) {
             max_output_token: '',
             input_types: '',
             thinking_levels: '',
+            reasoning_effort: '',
           }}
           recommendations={summary?.recommendations ?? []}
           protocols={summary?.protocols ?? []}

@@ -83,6 +83,51 @@ func (e *Engine) lookupFallbackAffinity(req *affinity.Request) fallbackLookupRes
 	}
 }
 
+// breakAffinity severs every channel-affinity binding that routed the
+// request to the failing entity: the rule-affinity cache entry (when the
+// request was dispatched through a recalled rule) and the fallback-affinity
+// history row for (session, model). Deleting both lets the next request
+// re-enter normal selection instead of sticking to the entity that just
+// failed. Best-effort: errors are logged and swallowed.
+func (e *Engine) breakAffinity(req *RelayRequest) {
+	if req == nil {
+		return
+	}
+	if req.AffinityCacheKey != "" {
+		if cs := e.Affinity(); cs != nil {
+			cs.Delete(req.AffinityCacheKey)
+		}
+	}
+	if e.db == nil {
+		return
+	}
+	setting := e.fallbackSetting()
+	if setting == nil || !setting.Enabled {
+		return
+	}
+	affReq := &affinity.Request{
+		Model:   req.Model,
+		Path:    req.Path,
+		Headers: req.Headers,
+		Body:    affinityBodyBytes(req.Body),
+	}
+	sessionID := affinity.ExtractHeaderField(affReq, setting.SessionIDFields)
+	if sessionID == "" {
+		return
+	}
+	modelName := req.Model
+	if modelName == "" {
+		modelName = affinity.ExtractBodyField(affReq, setting.ModelFields)
+	}
+	if modelName == "" {
+		return
+	}
+	if err := e.db.Where("session_id = ? AND model = ?", sessionID, modelName).
+		Delete(&model.RequestChannelHistory{}).Error; err != nil {
+		log.Printf("relay: break fallback affinity history %s/%s: %v", sessionID, modelName, err)
+	}
+}
+
 // recordFallbackChannel upserts the (session_id, model) history row for the
 // channel that just served a request. Errors are logged and swallowed
 // because history recording must never break the relay path.

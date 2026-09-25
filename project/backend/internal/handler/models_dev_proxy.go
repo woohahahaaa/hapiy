@@ -30,6 +30,10 @@ type modelsDevModel struct {
 	InputTypes    []string `json:"input_types"`
 	OutputTypes   []string `json:"output_types"`
 	Reasoning     bool     `json:"reasoning"`
+	// EffortLevels 是该模型支持的思考档位枚举（models.dev
+	// reasoning_options 里 type=effort 的 values），如
+	// none/low/medium/high/xhigh。toggle / budget_tokens 型选项不产生档位。
+	EffortLevels []string `json:"effort_levels"`
 }
 
 type modelsDevSnapshot struct {
@@ -96,6 +100,12 @@ func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 				Output []string `json:"output"`
 			} `json:"modalities"`
 			Reasoning bool `json:"reasoning"`
+			// reasoning_options: [{"type":"toggle"}, {"type":"effort","values":[...]},
+			// {"type":"budget_tokens","min":...}] — 只有 effort 型才给出档位枚举。
+			ReasoningOptions []struct {
+				Type   string   `json:"type"`
+				Values []string `json:"values"`
+			} `json:"reasoning_options"`
 		} `json:"models"`
 	}
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -139,6 +149,7 @@ func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 				InputTypes:    model.Modalities.Input,
 				OutputTypes:   model.Modalities.Output,
 				Reasoning:     model.Reasoning,
+				EffortLevels:  effortLevels(model.ReasoningOptions),
 			})
 		}
 	}
@@ -147,6 +158,22 @@ func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 	p.cached = &modelsDevSnapshot{models: models, fetchedAt: time.Now()}
 	p.mu.Unlock()
 	return models, nil
+}
+
+// effortLevels extracts the effort-enum values from a model's
+// reasoning_options (the "思考档位" list a model supports). toggle /
+// budget_tokens options carry no levels and are ignored.
+func effortLevels(opts []struct {
+	Type   string   `json:"type"`
+	Values []string `json:"values"`
+}) []string {
+	var out []string
+	for _, o := range opts {
+		if o.Type == "effort" && len(o.Values) > 0 {
+			out = append(out, o.Values...)
+		}
+	}
+	return out
 }
 
 type errUpstream struct{ code int }

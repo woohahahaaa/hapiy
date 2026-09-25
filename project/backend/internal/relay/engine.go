@@ -216,6 +216,15 @@ type RelayRequest struct {
 	// EntryID is the request entry whose workflow served the request; it is
 	// recorded into fallback channel history so reuse stays entry-scoped.
 	EntryID string `json:"-"`
+	// AffinityCacheKey is the rule-affinity cache key the request was
+	// dispatched through (empty when no channel affinity was recalled).
+	// relayWithFailover deletes it on a matched failover so the broken
+	// consumer is not routed back to the same failing entity.
+	AffinityCacheKey string `json:"-"`
+	// ServedProviderID records the provider that actually served the
+	// request (differs from the dispatched provider after a failover), so
+	// failure logs and post-failover handling can name the real target.
+	ServedProviderID string `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
 	// caller surface live progress on the monitoring page without polling the
