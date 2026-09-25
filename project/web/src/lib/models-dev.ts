@@ -12,6 +12,8 @@ export type ModelsDevModel = {
   readonly inputTypes: readonly string[]
   readonly outputTypes: readonly string[]
   readonly reasoning: boolean
+  /** 该模型支持的思考档位枚举（models.dev reasoning_options 的 effort 项），如 high/medium/xhigh */
+  readonly effortLevels: readonly string[]
 }
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
@@ -56,6 +58,7 @@ function parseModel(value: unknown): ModelsDevModel {
     inputTypes: readStringArray(value.input_types),
     outputTypes: readStringArray(value.output_types),
     reasoning: value.reasoning === true,
+    effortLevels: readStringArray(value.effort_levels),
   }
 }
 

@@ -144,6 +144,9 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	if !matched {
 		return resp, err
 	}
+	// 故障转移命中：拆掉把请求绑在失败实体上的亲和（规则亲和缓存 +
+	// 兜底亲和历史），后续请求重新进入正常选择，避免继续打向失败方。
+	e.breakAffinity(req)
 	dimension, autoDisable := rule.SingleAction()
 	if dimension == "" {
 		return resp, err
@@ -352,7 +355,24 @@ func (e *Engine) clearFailoverHit(providerID, dimension, value string) {
 }
 
 func (e *Engine) resolveTopologyFallbackPlan(req *RelayRequest, failed *ExecutionPlan) *ExecutionPlan {
-	if req.TopologyOrigin == nil || e.db == nil {
+	if req == nil || e.db == nil {
+		return nil
+	}
+	// 亲和命中的请求没有 TopologyOrigin，但 EntryID 始终有值；用它兜底，
+	// 让亲和流量同样能走「同入口排除当前供应商」的自动转移。
+	entryID := ""
+	providerID := ""
+	if req.TopologyOrigin != nil {
+		entryID = req.TopologyOrigin.EntryID
+		providerID = req.TopologyOrigin.ProviderID
+	}
+	if entryID == "" {
+		entryID = req.EntryID
+	}
+	if providerID == "" {
+		providerID = failed.Provider.ID
+	}
+	if entryID == "" || providerID == "" {
 		return nil
 	}
 	tp, err := topology.NewStore(e.db).Load()
@@ -367,7 +387,7 @@ func (e *Engine) resolveTopologyFallbackPlan(req *RelayRequest, failed *Executio
 		}
 	}
 	eval := switchEvalFor(req.Headers, bodyBytes)
-	for _, candidate := range topology.FindProviderSlotAlternatives(tp, refs, req.Model, req.Path, req.TopologyOrigin.EntryID, req.TopologyOrigin.ProviderID, eval) {
+	for _, candidate := range topology.FindProviderSlotAlternatives(tp, refs, req.Model, req.Path, entryID, providerID, eval) {
 		if candidate.ProviderID == failed.Provider.ID {
 			continue
 		}

@@ -662,7 +662,7 @@ export type AgentJsonPaths = {
 
 export type AgentRecommendationScope = 'provider' | 'model'
 
-export const MODEL_INFO_FIELD_KEYS = ['max_context', 'max_output_token', 'input_types', 'thinking_levels'] as const
+export const MODEL_INFO_FIELD_KEYS = ['max_context', 'max_output_token', 'input_types', 'thinking_levels', 'reasoning_effort'] as const
 export type ModelInfoFieldKey = typeof MODEL_INFO_FIELD_KEYS[number]
 
 // Unified shared vocabulary for the four model-info fields. Every
@@ -673,6 +673,7 @@ export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
   max_output_token: '最大输出token',
   input_types: '支持的输入类型',
   thinking_levels: '支持的思考程度',
+  reasoning_effort: '思考档位',
 }
 
 // AgentModelInfoFieldSpec — 显式的「值写法」对象：path 是模型配置对象内
@@ -723,6 +724,7 @@ export type AgentModelInfoFieldPaths = {
   readonly max_output_token: AgentModelInfoFieldSpecValue
   readonly input_types: AgentModelInfoFieldSpecValue
   readonly thinking_levels: AgentModelInfoFieldSpecValue
+  readonly reasoning_effort: AgentModelInfoFieldSpecValue
 }
 
 // AgentModelConfigSource — one persisted 模型配置参考供应商 selection for a
@@ -2090,6 +2092,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
       max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
       input_types: parseAgentModelInfoSpec(mif.input_types),
       thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
+      reasoning_effort: parseAgentModelInfoSpec(mif.reasoning_effort),
     },
     config_jsonc: typeof value.config_jsonc === 'string' ? value.config_jsonc : '',
     customized: value.customized === true,
@@ -2126,6 +2129,7 @@ function parseAgentTemplateConfig(value: unknown): AgentTemplateConfig {
       max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
       input_types: parseAgentModelInfoSpec(mif.input_types),
       thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
+      reasoning_effort: parseAgentModelInfoSpec(mif.reasoning_effort),
     },
   }
 }
@@ -2277,6 +2281,7 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
       max_output_token: parseAgentModelInfoSpec(mif.max_output_token),
       input_types: parseAgentModelInfoSpec(mif.input_types),
       thinking_levels: parseAgentModelInfoSpec(mif.thinking_levels),
+      reasoning_effort: parseAgentModelInfoSpec(mif.reasoning_effort),
     },
     json_paths: (() => {
       const jp = isRecord(value.json_paths) ? value.json_paths : {}

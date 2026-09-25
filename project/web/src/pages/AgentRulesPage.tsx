@@ -439,7 +439,7 @@ function AgentTypeRulesTab() {
 
 // ── 添加 / 编辑规则 ──
 
-// ModelInfoFieldRow — 四个模型信息字段的结构化编辑状态：不再用 JSON 文本，
+// ModelInfoFieldRow — 模型信息字段的结构化编辑状态：不再用 JSON 文本，
 // 而是拆成 路径 / 写法(op) / sep / 允许值 / 操作 五列（与下方推荐字段表格
 // 同一套「值 + 写法」规则）。
 type ModelInfoFieldRow = {
@@ -468,6 +468,7 @@ function modelInfoRowsFromSpecs(
     max_output_token: { ...EMPTY_MODEL_INFO_ROW },
     input_types: { ...EMPTY_MODEL_INFO_ROW },
     thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
+    reasoning_effort: { ...EMPTY_MODEL_INFO_ROW },
   }
   for (const key of MODEL_INFO_FIELD_KEYS) {
     const v = mif?.[key]
@@ -496,6 +497,7 @@ function buildModelInfoFieldsPayload(
     max_output_token: '',
     input_types: '',
     thinking_levels: '',
+    reasoning_effort: '',
   }
   for (const key of MODEL_INFO_FIELD_KEYS) {
     const row = rows[key]
@@ -523,6 +525,7 @@ const EMPTY_MODEL_INFO_ROWS: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
   max_output_token: { ...EMPTY_MODEL_INFO_ROW },
   input_types: { ...EMPTY_MODEL_INFO_ROW },
   thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
+  reasoning_effort: { ...EMPTY_MODEL_INFO_ROW },
 }
 
 function RuleDialog({
@@ -708,7 +711,7 @@ function RuleDialog({
                 className="mr-auto"
                 onClick={() => setConfirmTemplate(true)}
                 disabled={saving || templateLoading}
-                title="将该规则的全部字段（路径 / 四个模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
+                title="将该规则的全部字段（路径 / 模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
               >
                 <AppIcon name="auto_fix_high" data-icon="inline-start" />
                 使用默认推荐模版
@@ -886,7 +889,7 @@ function RuleDialog({
           }>
             <p className="text-xs text-muted-foreground">
               <span className="break-all">将为规则「{editing?.name ?? ''}」应用系统的默认推荐模版：</span>
-              默认路径、provider/model gjson 路径、四个模型信息字段、公共配置（common）与各 Endpoint
+              默认路径、provider/model gjson 路径、模型信息字段、公共配置（common）与各 Endpoint
               规则的字段推荐会全部替换为默认值。确认？
             </p>
           </DialogScrollBody>
@@ -1116,7 +1119,7 @@ function ModelInfoFieldsEditor({
         <FieldLabel>模型通用信息</FieldLabel>
       </div>
       <p className="text-xs text-muted-foreground">
-        四个统一的模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：
+        模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：
         路径为写入位置，写法（op）可选 raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/
         join（数组拼接，可填 sep，默认逗号）；操作可选 填（默认）/ 不填 / 删除字段；允许值为白名单（如 openclaw input
         只允许 text/image/video/audio），逗号分隔。

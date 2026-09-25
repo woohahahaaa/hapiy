@@ -149,6 +149,12 @@
     "thinking_levels": {
       "path": "reasoning",
       "op": "bool"
+    },
+    "reasoning_effort": {
+      "path": "options.reasoningEffort",
+      "action": "skip",
+      "op": "first",
+      "values": ["medium"]
     }
   }
 }

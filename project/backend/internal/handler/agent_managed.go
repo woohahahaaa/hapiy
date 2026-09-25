@@ -39,17 +39,17 @@ type managedGroupView struct {
 }
 
 type managedProviderView struct {
-	ID               string                   `json:"id"`
-	Name             string                   `json:"name"`
-	ProviderIDs      []string                 `json:"provider_ids"`
-	StaleProviderIDs []string                 `json:"stale_provider_ids"`
-	Groups           []managedGroupView       `json:"groups"`
+	ID               string                    `json:"id"`
+	Name             string                    `json:"name"`
+	ProviderIDs      []string                  `json:"provider_ids"`
+	StaleProviderIDs []string                  `json:"stale_provider_ids"`
+	Groups           []managedGroupView        `json:"groups"`
 	HiddenGroups     []model.ManagedAgentGroup `json:"hidden_groups"`
-	PendingSync      bool                     `json:"pending_sync"`
-	PendingFields    int                      `json:"pending_fields"` // 全部分组待同步字段数之和
-	APIKey           string                   `json:"api_key"`
-	BaseURL          string                   `json:"base_url"`
-	SourceName       string                   `json:"source_name"`
+	PendingSync      bool                      `json:"pending_sync"`
+	PendingFields    int                       `json:"pending_fields"` // 全部分组待同步字段数之和
+	APIKey           string                    `json:"api_key"`
+	BaseURL          string                    `json:"base_url"`
+	SourceName       string                    `json:"source_name"`
 }
 
 // ManagedProviderOptions lists the system Provider rows with endpoint /
@@ -150,7 +150,7 @@ func CreateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 			return
 		}
-			m := model.ManagedAgentProvider{
+		m := model.ManagedAgentProvider{
 			AgentConfigFileID: row.ID,
 			Name:              strings.TrimSpace(req.Name),
 		}
@@ -885,7 +885,7 @@ func apiKeyFieldFor(recs []model.AgentRecommendation) string {
 	return ""
 }
 
-// applyModelInfoFromModelsDev fills the four unified model-config fields
+// applyModelInfoFromModelsDev fills the five unified model-config fields
 // from a models.dev row (matched by the model name + the reference
 // supplier stored in the group's ModelSources), writing each value at its
 // rule-configured path after shaping it with the field spec's op (e.g.
@@ -893,6 +893,11 @@ func apiKeyFieldFor(recs []model.AgentRecommendation) string {
 // "skip" leaves the field untouched, "delete" removes it from the config,
 // and "set" (default) writes the shaped value. Nothing is persisted here:
 // the view / generation reads the live snapshot each time.
+//
+// reasoning_effort 的来源是 models.dev 的 reasoning_options effort 枚举
+// （该模型支持的思考档位数组，跟 input_types 同构），经 spec 的 op/values
+// 变形后写入；没有枚举的模型不写。思考档位的“选哪一档”由 spec 表达
+// （op=first + values 白名单），统一层不掺默认值。
 func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFieldPaths, cfg map[string]any) {
 	writeSpec := func(spec model.AgentModelInfoFieldSpec, raw any) {
 		if spec.Path == "" {
@@ -922,12 +927,15 @@ func applyModelInfoFromModelsDev(row modelsDevModel, mif model.AgentModelInfoFie
 		}
 		writeSpec(mif.InputTypes, vals)
 	}
-	if mif.ThinkingLevels.Path != "" {
-		levels := []any{}
-		if row.Reasoning {
-			levels = append(levels, "high")
+	if mif.ThinkingLevels.Path != "" && row.Reasoning {
+		writeSpec(mif.ThinkingLevels, []any{"high"})
+	}
+	if mif.ReasoningEffort.Path != "" && len(row.EffortLevels) > 0 {
+		levels := make([]any, len(row.EffortLevels))
+		for i, s := range row.EffortLevels {
+			levels[i] = s
 		}
-		writeSpec(mif.ThinkingLevels, levels)
+		writeSpec(mif.ReasoningEffort, levels)
 	}
 }
 

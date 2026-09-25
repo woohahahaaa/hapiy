@@ -73,6 +73,9 @@ export function valuesEqualAt(a: unknown, b: unknown): boolean {
 }
 
 // sourceMapFor builds the unified field snapshot from a models.dev row.
+// reasoning_effort shares its source with thinking_levels: models.dev only
+// publishes a reasoning boolean, so the derived level is "high" — the spec's
+// op/values shape it into the agent's effort knob.
 export function sourceMapFor(row: ModelsDevModel): Record<string, unknown> {
   const types = [...new Set([...row.inputTypes, ...row.outputTypes])]
   return {
@@ -80,16 +83,21 @@ export function sourceMapFor(row: ModelsDevModel): Record<string, unknown> {
     max_output_token: row.maxOutput > 0 ? row.maxOutput : undefined,
     input_types: types.length > 0 ? types : undefined,
     thinking_levels: row.reasoning ? ['high'] : [],
+    // 思考档位：直接用 models.dev 的 reasoning_options effort 枚举（该模型
+    // 支持哪些档位）；没有枚举（toggle/budget_tokens/缺失）就是空，写不出去。
+    reasoning_effort: row.effortLevels.length > 0 ? row.effortLevels : undefined,
   }
 }
 
-// Spec 解析：字符串路径 vs 显式对象（path/op/sep）。
+// Spec 解析：字符串路径 vs 显式对象（path/op/sep/action）。action=skip 的
+// 字段不产生任何变更（与后端 writeSpec 的 skip 语义一致）。
 function specFor(value: AgentModelInfoFieldSpecValue): { path: string; apply: (raw: unknown) => unknown } | null {
   if (typeof value === 'string') {
     if (!value) return null
     return { path: value, apply: (raw) => (raw === undefined || raw === null ? undefined : raw) }
   }
   if (value && typeof value.path === 'string' && value.path) {
+    if (value.action === 'skip') return null
     return {
       path: value.path,
       apply: (raw) => applySpecOp(raw, value as AgentModelInfoFieldSpec),

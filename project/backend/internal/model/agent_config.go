@@ -295,7 +295,7 @@ func ModelInfoOp(p, op string) AgentModelInfoFieldSpec {
 	return AgentModelInfoFieldSpec{Path: p, Op: op}
 }
 
-// AgentModelInfoFieldPaths maps the four unified model-info fields to
+// AgentModelInfoFieldPaths maps the five unified model-info fields to
 // their write specs inside each agent's model config object (see
 // AgentModelInfoFieldSpec for the syntax). Agents name these fields
 // differently (opencode: limit.context // modalities.input; openclaw:
@@ -308,10 +308,11 @@ func ModelInfoOp(p, op string) AgentModelInfoFieldSpec {
 //	input_types       支持的输入类型
 //	thinking_levels   支持的思考程度
 type AgentModelInfoFieldPaths struct {
-	MaxContext     AgentModelInfoFieldSpec `json:"max_context"`
-	MaxOutputToken AgentModelInfoFieldSpec `json:"max_output_token"`
-	InputTypes     AgentModelInfoFieldSpec `json:"input_types"`
-	ThinkingLevels AgentModelInfoFieldSpec `json:"thinking_levels"`
+	MaxContext      AgentModelInfoFieldSpec `json:"max_context"`
+	MaxOutputToken  AgentModelInfoFieldSpec `json:"max_output_token"`
+	InputTypes      AgentModelInfoFieldSpec `json:"input_types"`
+	ThinkingLevels  AgentModelInfoFieldSpec `json:"thinking_levels"`
+	ReasoningEffort AgentModelInfoFieldSpec `json:"reasoning_effort"`
 }
 
 // AgentProtocolCondition — one OR-branch of a request-protocol's match
@@ -341,20 +342,22 @@ type AgentProtocol struct {
 }
 
 const (
-	ModelInfoFieldMaxContext     = "max_context"
-	ModelInfoFieldMaxOutputToken = "max_output_token"
-	ModelInfoFieldInputTypes     = "input_types"
-	ModelInfoFieldThinkingLevels = "thinking_levels"
+	ModelInfoFieldMaxContext      = "max_context"
+	ModelInfoFieldMaxOutputToken  = "max_output_token"
+	ModelInfoFieldInputTypes      = "input_types"
+	ModelInfoFieldThinkingLevels  = "thinking_levels"
+	ModelInfoFieldReasoningEffort = "reasoning_effort"
 )
 
 // ModelInfoFieldLabels is the canonical Chinese label for every unified
 // model-info field. All surfaces (rule table, sync dialog, model info
 // editor) share these strings so the vocabulary stays consistent.
 var ModelInfoFieldLabels = map[string]string{
-	ModelInfoFieldMaxContext:     "最大上下文",
-	ModelInfoFieldMaxOutputToken: "最大输出token",
-	ModelInfoFieldInputTypes:     "支持的输入类型",
-	ModelInfoFieldThinkingLevels: "支持的思考程度",
+	ModelInfoFieldMaxContext:      "最大上下文",
+	ModelInfoFieldMaxOutputToken:  "最大输出token",
+	ModelInfoFieldInputTypes:      "支持的输入类型",
+	ModelInfoFieldThinkingLevels:  "支持的思考程度",
+	ModelInfoFieldReasoningEffort: "思考档位",
 }
 
 // AgentTypeRule — an agent software type (e.g. "opencode") that owns
@@ -678,6 +681,18 @@ var builtinAgentRules = []struct {
 			InputTypes:     ModelInfoPath(`modalities.input`),
 			// opencode 的 reasoning 字段要求 boolean，而统一值是思考档位数组。
 			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
+			// opencode（OpenAI 系模型）的思考档位写在 options.reasoningEffort；
+			// 默认「不填」（action skip）：models.dev 只有 reasoning 布尔，推导
+			// 档位恒为 high，且 Anthropic 系端点不认 reasoningEffort（那是
+			// options.thinking 的形状），是否写入由运营者按端点自行开启。
+			ReasoningEffort: AgentModelInfoFieldSpec{
+				Path:   `options.reasoningEffort`,
+				Action: "skip",
+				Op:     "first",
+				// values 白名单就是「写哪一档」的选择器：统一层给的是该模型
+				// 支持的档位数组（models.dev effort 枚举），过滤后取第一个。
+				Values: []string{"medium"},
+			},
 		},
 		// npm（AI SDK 适配器包）由 endpoint 关键词自动归类：endpoint 是子串
 		// 包含任一关键词即命中该协议，从而拿到对应的 npm 推荐值。顺序即
@@ -1272,7 +1287,7 @@ func normalizeProtocols(protos []AgentProtocol) {
 }
 
 func normalizeModelInfo(mif AgentModelInfoFieldPaths) {
-	specs := []*AgentModelInfoFieldSpec{&mif.MaxContext, &mif.MaxOutputToken, &mif.InputTypes, &mif.ThinkingLevels}
+	specs := []*AgentModelInfoFieldSpec{&mif.MaxContext, &mif.MaxOutputToken, &mif.InputTypes, &mif.ThinkingLevels, &mif.ReasoningEffort}
 	for _, s := range specs {
 		if len(s.Values) == 0 {
 			s.Values = nil

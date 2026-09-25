@@ -84,6 +84,14 @@ model 配置在 `provider.{provider_id}.models.{model_id}` 下（key 即模型 I
 ### 5. `limit.output` 只在 Anthropic 协议规则里声明必填（有意）
 Anthropic Messages API 官方要求每请求带 `max_tokens`，对应 opencode 的模型 `limit.output`（`model_info_fields.max_output_token` 也指向它）。因此该字段只在 Anthropic Messages 协议的 endpoint 规则里标 `required=true`，common 不再重复列一条（同键重复时后出现的 endpoint 条目生效，common 的重复行没有实际作用）。非 Anthropic 端点不强制。
 
+
+### 6. 思考档位（reasoning_effort，第五个模型信息字段）
+opencode 的思考档位写在模型级 `options.reasoningEffort`（OpenAI 系：none/minimal/low/medium/high/xhigh）；
+Anthropic 系模型用的是 `options.thinking`（`{type, budgetTokens}` 形状），一个 path 表达不了两种分叉。
+统一值是 models.dev `reasoning_options` 里 `type:effort` 的枚举数组（该模型支持哪些档位，8173 个模型里约 3700 个带此枚举），
+经 `op:first + values 白名单` 压成单值写入——白名单就是「写哪一档」的选择器（模板默认 `["medium"]`）。
+默认 `action:skip` 不写（是否统一写档位、写哪档，由运营者决定；枚举不含所选档位或模型无枚举时不写）。
+
 ---
 
 ## 五、推荐配置示例（官方风格）
