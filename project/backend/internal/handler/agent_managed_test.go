@@ -1247,10 +1247,10 @@ func TestApplyRecToMap_ActionsAndWriters(t *testing.T) {
 
 // TestApplyModelInfoReasoningEffort pins the fifth unified field's write
 // semantics: reasoning_effort 的统一值是 models.dev reasoning_options 的
-// effort 枚举数组（该模型支持哪些档位，跟 input_types 同构），经 spec 的
-// op=first + values 白名单压成单值写入（写哪一档由 spec 决定，统一层不掺
-// 默认值）。没有枚举（toggle/budget_tokens/缺失）、白名单无交集、
-// action=skip 时都不写。
+// effort 枚举数组（该模型支持哪些档位），经 spec 的 values（允许值）做交集
+// 过滤后，op=variants 把交集里的每个档位写成一条 variants 预设
+// （{"options":{"reasoningEffort":档位}}，opencode 的多档位结构）。
+// 交集为空、白名单无交集、action=skip、模型无枚举时都不写。
 func TestApplyModelInfoReasoningEffort(t *testing.T) {
 	row := modelsDevModel{
 		ContextLength: 128000, MaxOutput: 8192, InputTypes: []string{"text"}, Reasoning: true,
@@ -1262,39 +1262,63 @@ func TestApplyModelInfoReasoningEffort(t *testing.T) {
 		InputTypes:     model.ModelInfoPath("modalities.input"),
 		ThinkingLevels: model.ModelInfoOp("reasoning", "bool"),
 		ReasoningEffort: model.AgentModelInfoFieldSpec{
-			Path:   "options.reasoningEffort",
-			Op:     "first",
-			Values: []string{"medium"},
+			Path:   "variants",
+			Op:     "variants",
+			Values: []string{"none", "minimal", "low", "medium", "high", "xhigh"},
 		},
 	}
-	effortOf := func(cfg map[string]any) (any, bool) {
-		opts, ok := cfg["options"].(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		v, ok := opts["reasoningEffort"]
+	variantsOf := func(cfg map[string]any) (map[string]any, bool) {
+		v, ok := cfg["variants"].(map[string]any)
 		return v, ok
 	}
+
+	// 全档位允许：交集 = 模型枚举（不含 minimal），每个档位一条预设。
 	cfg := map[string]any{}
 	applyModelInfoFromModelsDev(row, mif, cfg)
-	if v, ok := effortOf(cfg); !ok || v != "medium" {
-		t.Fatalf("reasoning_effort should write the whitelisted level, got %#v", v)
+	v, ok := variantsOf(cfg)
+	if !ok {
+		t.Fatal("variants should be written")
+	}
+	for _, lvl := range []string{"none", "low", "medium", "high", "xhigh"} {
+		if _, exists := v[lvl]; !exists {
+			t.Fatalf("variants missing level %s", lvl)
+		}
+	}
+	if _, exists := v["minimal"]; exists {
+		t.Fatal("variants must not include levels the model lacks")
+	}
+	entry, _ := v["high"].(map[string]any)
+	opts, _ := entry["options"].(map[string]any)
+	if opts["reasoningEffort"] != "high" {
+		t.Fatalf("variant high should set reasoningEffort high, got %#v", v["high"])
 	}
 
-	// 白名单与枚举无交集 → 不写。
+	// 允许值收窄（只允许 medium/high）→ 交集只写这两个。
+	mif.ReasoningEffort.Values = []string{"medium", "high"}
+	cfg = map[string]any{}
+	applyModelInfoFromModelsDev(row, mif, cfg)
+	v, ok = variantsOf(cfg)
+	if !ok {
+		t.Fatal("variants should be written when intersection non-empty")
+	}
+	if len(v) != 2 || v["medium"] == nil || v["high"] == nil {
+		t.Fatalf("narrowed allowed values must only write the intersection, got %v", keysOf(v))
+	}
+
+	// 白名单无交集 → 不写。
 	mif.ReasoningEffort.Values = []string{"bogus"}
 	cfg = map[string]any{}
 	applyModelInfoFromModelsDev(row, mif, cfg)
-	if _, ok := effortOf(cfg); ok {
+	if _, ok := variantsOf(cfg); ok {
 		t.Fatal("whitelist mismatch must not write")
 	}
 
 	// action=skip：不写。
-	mif.ReasoningEffort.Values = []string{"medium"}
+	mif.ReasoningEffort.Values = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
 	mif.ReasoningEffort.Action = "skip"
 	cfg = map[string]any{}
 	applyModelInfoFromModelsDev(row, mif, cfg)
-	if _, ok := effortOf(cfg); ok {
+	if _, ok := variantsOf(cfg); ok {
 		t.Fatal("action=skip must not write reasoning_effort")
 	}
 
@@ -1304,7 +1328,15 @@ func TestApplyModelInfoReasoningEffort(t *testing.T) {
 	mif.ReasoningEffort.Action = ""
 	cfg = map[string]any{}
 	applyModelInfoFromModelsDev(row2, mif, cfg)
-	if _, ok := effortOf(cfg); ok {
-		t.Fatal("model without effort enum must not get an effort value")
+	if _, ok := variantsOf(cfg); ok {
+		t.Fatal("model without effort enum must not get variants")
 	}
+}
+
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

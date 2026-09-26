@@ -166,7 +166,9 @@ func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
 // shapeValue transforms a unified/raw value into the concrete value an
 // agent expects: op raw (as-is, filtered by allowed values), bool
 // (non-empty → true, empty → false), first (first element of a list),
-// join (list joined with sep). ok=false means "skip this field".
+// join (list joined with sep), variants (list of allowed levels →
+// {level:{options:{reasoningEffort:level}}} preset map). ok=false means
+// "skip this field".
 // This is the single 值写法 engine shared by the unified model-info
 // fields and AgentRecommendation writing.
 func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
@@ -199,6 +201,23 @@ func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
 			return nil, false
 		}
 		return strings.Join(arr, sep), true
+	case "variants":
+		// 把「允许的档位集合」写成 agent 的 variants 预设对象：
+		// 每个档位一个 {"options":{"reasoningEffort":<档位>}} 条目
+		// （opencode 官方表达多档位的结构）。交集为空则不写。
+		arr, ok := toStrings(v)
+		if !ok {
+			return nil, false
+		}
+		arr = filterValues(allowed, arr)
+		if len(arr) == 0 {
+			return nil, false
+		}
+		out := make(map[string]any, len(arr))
+		for _, lvl := range arr {
+			out[lvl] = map[string]any{"options": map[string]any{"reasoningEffort": lvl}}
+		}
+		return out, true
 	default: // "" | "raw"
 		arr, isArr := toStrings(v)
 		if isArr {
@@ -686,11 +705,12 @@ var builtinAgentRules = []struct {
 			// 档位恒为 high，且 Anthropic 系端点不认 reasoningEffort（那是
 			// options.thinking 的形状），是否写入由运营者按端点自行开启。
 			ReasoningEffort: AgentModelInfoFieldSpec{
-				Path:   `options.reasoningEffort`,
-				Action: "skip",
-				Op:     "first",
+				Path: `variants`,
+				Op:   "variants",
 				// 允许值 = opencode 支持的档位全集（无默认档位）；写值时取
-				// models.dev 枚举 ∩ 允许值的交集，再由 op 决定落到配置里的形状。
+				// models.dev 枚举 ∩ 允许值的交集，op=variants 把每个允许档位
+				// 写成 {"options":{"reasoningEffort":档位}} 预设（opencode 的
+				// 多档位表达结构）。模型无 effort 枚举时不写。
 				Values: []string{"none", "minimal", "low", "medium", "high", "xhigh"},
 			},
 		},

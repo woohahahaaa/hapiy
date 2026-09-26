@@ -684,7 +684,7 @@ export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
 // values: 可选白名单，数组值写入前只保留列出的字面量（如 openclaw 的
 // input 只接受 text/image/video/audio），其它值（如 models.dev 的 pdf）
 // 自动丢弃。
-export type AgentModelInfoFieldOp = 'raw' | 'bool' | 'first' | 'join'
+export type AgentModelInfoFieldOp = 'raw' | 'bool' | 'first' | 'join' | 'variants'
 
 export type AgentModelInfoFieldSpec = {
   readonly path: string
@@ -697,7 +697,7 @@ export type AgentModelInfoFieldSpec = {
 // 每个字段既接受纯路径字符串（等价 raw），也接受上面的对象写法。
 export type AgentModelInfoFieldSpecValue = string | AgentModelInfoFieldSpec
 
-export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['raw', 'bool', 'first', 'join']
+export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['raw', 'bool', 'first', 'join', 'variants']
 
 // parseAgentModelInfoSpec 把服务端返回的字段值归一为 string | spec。
 export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpecValue {
