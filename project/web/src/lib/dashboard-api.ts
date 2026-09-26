@@ -1118,7 +1118,10 @@ function parseModel(value: unknown): ProviderModel {
     endpoints: readStringArray(value.endpoints ?? [], 'models.endpoints'),
     rate: readString(value.rate ?? legacyRate ?? '1', 'models.rate'),
     ratePriceConfigId: typeof value.priceConfigId === 'string' ? value.priceConfigId : null,
-    referenceProvider: typeof value.referenceProvider === 'string' && value.referenceProvider.trim() !== ''
+    // 保留空串 referenceProvider（不归一化为 null）：用户选了「从
+    // models.dev 参考」模式但还没选具体厂商时，模式必须能在保存/重载后
+    // 幸存——空串配合 prices=null 即可还原出 reference 模式，价格按 0。
+    referenceProvider: typeof value.referenceProvider === 'string'
       ? value.referenceProvider
       : null,
     referencePrices: value.referencePrices === null || value.referencePrices === undefined

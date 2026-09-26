@@ -837,7 +837,7 @@ for (const p of summary?.providers ?? []) {
           <PreviewBanner applied={pendingChangeCount} />
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-[280px_320px_minmax(0,1fr)] divide-x divide-border">
+        <div className="grid min-h-0 flex-1 grid-cols-[22%_25%_minmax(0,1fr)] divide-x divide-border">
 {/* Left: 非托管供应商 (normal panel) / 托管供应商 (managed panel) */}
         <div className="flex min-h-0 flex-col">
           {activePanel === 'normal' ? (

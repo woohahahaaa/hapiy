@@ -950,16 +950,16 @@ function RecommendationTable({
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
-            <th className="w-40 px-2 py-1.5 text-left font-medium">路径</th>
-            {showScope ? <th className="w-[5rem] px-2 py-1.5 text-left font-medium">作用范围</th> : null}
-            <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
-            <th className="w-[8rem] px-2 py-1.5 text-left font-medium">推荐值</th>
-            <th className="w-[4.5rem] px-2 py-1.5 text-left font-medium">op</th>
-            <th className="w-[4rem] px-2 py-1.5 text-left font-medium">sep</th>
-            <th className="w-[10rem] px-2 py-1.5 text-left font-medium">允许值</th>
-            <th className="w-[3.5rem] px-2 py-1.5 text-left font-medium">必填</th>
-            <th className="w-[8rem] px-2 py-1.5 pl-0 text-left font-medium">说明</th>
-            <th className="w-9 px-2 py-1.5" />
+            <th className="w-[16%] px-2 py-1.5 text-left font-medium">路径</th>
+            {showScope ? <th className="w-[8%] px-2 py-1.5 text-left font-medium">作用范围</th> : null}
+            <th className="w-[9%] px-2 py-1.5 text-left font-medium">操作</th>
+            <th className="w-[13%] px-2 py-1.5 text-left font-medium">推荐值</th>
+            <th className="w-[7%] px-2 py-1.5 text-left font-medium">op</th>
+            <th className="w-[7%] px-2 py-1.5 text-left font-medium">sep</th>
+            <th className="w-[16%] px-2 py-1.5 text-left font-medium">允许值</th>
+            <th className="w-[6%] px-2 py-1.5 text-left font-medium">必填</th>
+            <th className="w-[13%] px-2 py-1.5 pl-0 text-left font-medium">说明</th>
+            <th className="w-[5%] px-2 py-1.5" />
           </tr>
         </thead>
         <tbody className="divide-y divide-border">

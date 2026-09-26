@@ -689,9 +689,9 @@ var builtinAgentRules = []struct {
 				Path:   `options.reasoningEffort`,
 				Action: "skip",
 				Op:     "first",
-				// values 白名单就是「写哪一档」的选择器：统一层给的是该模型
-				// 支持的档位数组（models.dev effort 枚举），过滤后取第一个。
-				Values: []string{"medium"},
+				// 允许值 = opencode 支持的档位全集（无默认档位）；写值时取
+				// models.dev 枚举 ∩ 允许值的交集，再由 op 决定落到配置里的形状。
+				Values: []string{"none", "minimal", "low", "medium", "high", "xhigh"},
 			},
 		},
 		// npm（AI SDK 适配器包）由 endpoint 关键词自动归类：endpoint 是子串

@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { AppIcon } from "@/components/AppIcon"
 
 const WIDTH_MAP: Record<string, string> = {
-  xs: '!w-[384px] !max-w-[384px]',
-  sm: '!w-[640px] !max-w-[640px]',
-  md: '!w-[960px] !max-w-[960px]',
-  lg: '!w-[1024px] !max-w-[1024px]',
-  xl: '!w-[1280px] !max-w-[1280px]',
+  // 固定目标宽度，但 max-w 始终以视口为上限（留 2rem 边距），窄屏时收缩、永不超屏。
+  xs: '!w-[384px] !max-w-[calc(100vw-2rem)]',
+  sm: '!w-[640px] !max-w-[calc(100vw-2rem)]',
+  md: '!w-[960px] !max-w-[calc(100vw-2rem)]',
+  lg: '!w-[1024px] !max-w-[calc(100vw-2rem)]',
+  xl: '!w-[1280px] !max-w-[calc(100vw-2rem)]',
   full: '!w-screen !max-w-none',
 }
 const HEIGHT_MAP: Record<string, string> = {
