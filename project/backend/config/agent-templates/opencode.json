@@ -151,9 +151,8 @@
       "op": "bool"
     },
     "reasoning_effort": {
-      "path": "options.reasoningEffort",
-      "action": "skip",
-      "op": "first",
+      "path": "variants",
+      "op": "variants",
       "values": [
         "none",
         "minimal",

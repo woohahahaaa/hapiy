@@ -57,6 +57,15 @@ function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
       const filtered = filterValues(spec.values, raw)
       return filtered.length > 0 ? filtered.join(spec.sep ?? ',') : undefined
     }
+    case 'variants': {
+      // 交集档位 → variants 预设对象（与后端 shapeValue 的 variants 一致）
+      if (!Array.isArray(raw) || raw.length === 0) return undefined
+      const filtered = filterValues(spec.values, raw)
+      if (filtered.length === 0) return undefined
+      const out: Record<string, unknown> = {}
+      for (const lvl of filtered) out[lvl] = { options: { reasoningEffort: lvl } }
+      return out
+    }
     default: {
       if (raw === undefined || raw === null) return undefined
       if (Array.isArray(raw)) {
