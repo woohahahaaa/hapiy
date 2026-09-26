@@ -154,7 +154,14 @@
       "path": "options.reasoningEffort",
       "action": "skip",
       "op": "first",
-      "values": ["medium"]
+      "values": [
+        "none",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh"
+      ]
     }
   }
 }

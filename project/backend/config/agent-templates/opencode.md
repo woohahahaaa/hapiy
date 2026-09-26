@@ -89,7 +89,7 @@ Anthropic Messages API 官方要求每请求带 `max_tokens`，对应 opencode �
 opencode 的思考档位写在模型级 `options.reasoningEffort`（OpenAI 系：none/minimal/low/medium/high/xhigh）；
 Anthropic 系模型用的是 `options.thinking`（`{type, budgetTokens}` 形状），一个 path 表达不了两种分叉。
 统一值是 models.dev `reasoning_options` 里 `type:effort` 的枚举数组（该模型支持哪些档位，8173 个模型里约 3700 个带此枚举），
-经 `op:first + values 白名单` 压成单值写入——白名单就是「写哪一档」的选择器（模板默认 `["medium"]`）。
+经 `op + values 白名单` 变形写入——`values` 是允许值（opencode 支持的全档位集，无默认档位），写入前先取 models.dev 枚举与允许值的交集。
 默认 `action:skip` 不写（是否统一写档位、写哪档，由运营者决定；枚举不含所选档位或模型无枚举时不写）。
 
 ---

@@ -18,6 +18,7 @@ import type { Provider, ProviderDisableStatus, ProviderEndpoint, ProviderInput, 
 import {
   findModelsDevProviderRow,
   isModelsDevLab,
+  labProviderIdForModel,
   loadModelsDevModels,
   providersForModel,
   refreshModelsDevModels,
@@ -338,16 +339,23 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     providersForModel(refSnapshot ?? [], modelName)
 
   // Liveness check: shown only when the snapshot is available AND the row is
-  // in reference mode AND its supplier no longer appears for the model.
+  // in reference mode AND it picked a concrete supplier AND that supplier no
+  // longer appears for the model. A reference mode without a picked supplier
+  // (vendor-less) is never "stale".
   const referenceStaleFor = (model: ProviderModel): boolean =>
     refSnapshot !== null &&
     model.referenceProvider !== null &&
+    model.referenceProvider.trim() !== '' &&
     !providersForModel(refSnapshot, model.model)
       .some((p) => p.providerName.toLowerCase() === model.referenceProvider!.toLowerCase())
 
   const refreshReference = async (index: number) => {
     const model = form.models[index]
     if (!model || model.referenceProvider === null) return
+    if (model.referenceProvider.trim() === '') {
+      setRefSnapshotError('尚未选择参考供应商，请先在下拉中指定')
+      return
+    }
     setRefRefreshing(true)
     setRefSnapshotError(null)
     try {
@@ -387,23 +395,48 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
-  // 一键为所有「参考 models.dev 供应商」的模型从 models.dev 拉取最新价格
-  // 快照并填充，参考「接管 agent」里的「使用推荐配置」批量动作。
+  // 一键为所有「从 models.dev 参考」模式的模型（按弹窗当前 UI 状态判断，
+  // 未保存也生效）从 models.dev 拉取最新价格快照并填充。已有参考厂商的
+  // 直接按厂商拉取；没有厂商的尝试推断 models.dev 官方（lab）厂商，推断
+  // 不出的保留参考模式并按 0 计费。参考「接管 agent」里的「使用推荐配置」。
   const applyModelsDevPricesForAll = async () => {
     setBulkRefSetting(true)
     setRefSnapshotError(null)
     try {
       const fresh = await refreshModelsDevModels()
       setRefSnapshot(fresh)
+      let filled = 0
+      let vendorlessKept = 0
       const next = form.models.map((model) => {
-        if (model.referenceProvider === null || model.referenceProvider === '') return model
-        const row = findModelsDevProviderRow(fresh, model.model, model.referenceProvider)
+        // UI 上处于「从 models.dev 参考」模式的模型才处理
+        // （referenceProvider 为 null 表示 unset / prices 模式）。
+        if (model.referenceProvider === null) return model
+        const vendor = model.referenceProvider.trim() !== ''
+          ? model.referenceProvider
+          : labProviderIdForModel(model.model) ?? ''
+        if (vendor === '') {
+          // 无厂商且 models.dev 推断不出官方厂商：保留参考模式，价格按 0。
+          vendorlessKept++
+          return model
+        }
+        const row = findModelsDevProviderRow(fresh, model.model, vendor)
         if (!row) return model
-        return { ...model, referencePrices: refPricesOf(row), referenceAt: new Date().toISOString() }
+        filled++
+        return {
+          ...model,
+          referenceProvider: vendor,
+          referencePrices: refPricesOf(row),
+          referenceAt: new Date().toISOString(),
+        }
       })
-      const applied = next.filter((model, index) => model !== form.models[index]).length
       setForm((current) => ({ ...current, models: next }))
-      toast(applied > 0 ? `已为 ${applied} 个参考 models.dev 的模型设置价格` : '没有参考 models.dev 的模型，无需设置')
+      if (filled > 0) {
+        toast(`已为 ${filled} 个参考 models.dev 的模型设置价格`)
+      } else if (vendorlessKept > 0) {
+        toast(`${vendorlessKept} 个模型未选择参考厂商，无法自动设置价格（保留按 0 计费）`)
+      } else {
+        toast('没有参考 models.dev 的模型，无需设置')
+      }
     } catch {
       setRefSnapshotError('models.dev 数据拉取失败，价格未设置')
     } finally {
@@ -765,19 +798,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 {PRICE_ERROR_TEXT}
               </div>
             )}
-            <div className="flex items-center justify-end pb-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                title="选择参考供应商，为所有参考 models.dev 供应商的模型一键设置最新价格"
-                disabled={bulkRefSetting}
-                onClick={() => void applyModelsDevPricesForAll()}
-              >
-                {bulkRefSetting ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
-                一键设置 models.dev 供应商
-              </Button>
-            </div>
             <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
               <span>模型名称</span>
               <span>价格</span>
@@ -828,6 +848,17 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
               <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
                 {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
                 从上游获取模型
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                title="选择参考供应商，为所有参考 models.dev 供应商的模型一键设置最新价格"
+                disabled={bulkRefSetting}
+                onClick={() => void applyModelsDevPricesForAll()}
+              >
+                {bulkRefSetting ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+                一键设置 models.dev 供应商
               </Button>
               <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
                 <AppIcon name="settings" />
@@ -1131,7 +1162,7 @@ function ModelPriceCell({
             </Tooltip>
           </TooltipProvider>
             <SelectContent>
-              {stale && model.referenceProvider !== null && (
+              {stale && model.referenceProvider !== null && model.referenceProvider.trim() !== '' && (
                 <SelectItem value={model.referenceProvider}>参考供应商已从 models.dev 下架</SelectItem>
               )}
               {snapshotLoading ? (
@@ -1155,9 +1186,13 @@ function ModelPriceCell({
           />
         </div>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          未设置价格，计费按 0
-        </span>
+        <Input
+          value="未设置价格，计费按 0"
+          disabled
+          readOnly
+          title="不设置价格，计费按 0"
+          className="min-w-0 flex-1 px-2 text-xs"
+        />
       )}
       {mode !== 'unset' && (
         <div className="flex items-center gap-0.5">
