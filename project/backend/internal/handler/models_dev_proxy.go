@@ -197,16 +197,25 @@ func itoa(v int) string {
 	return string(buf[i:])
 }
 
+// normalizeModelsDevKey 去掉连字符与空白后的模型名，用于宽松匹配
+// （与前端 normalizeModelKey 保持一致：用户可能输入 "GLM5.3" 或
+// "Kimi K3"，而 models.dev 发布为 "glm-5.3" / "Kimi K3"）。
+func normalizeModelsDevKey(v string) string {
+	return strings.NewReplacer("-", "", " ", "").Replace(v)
+}
+
 // findModelsDevRow returns the models.dev row whose model name matches
 // modelValue (id / name, case-insensitive, falling back to a fully
-// qualified id whose trailing segment equals modelValue) AND whose
-// provider equals supplierName (case-insensitive).
+// qualified id whose trailing segment equals modelValue, and to the
+// hyphen/space-stripped forms) AND whose provider equals supplierName
+// (case-insensitive).
 func findModelsDevRow(models []modelsDevModel, modelValue, supplierName string) (modelsDevModel, bool) {
 	needle := strings.ToLower(strings.TrimSpace(modelValue))
 	supplier := strings.ToLower(strings.TrimSpace(supplierName))
 	if needle == "" || supplier == "" {
 		return modelsDevModel{}, false
 	}
+	nneedle := normalizeModelsDevKey(needle)
 	for _, m := range models {
 		if strings.ToLower(m.ProviderName) != supplier {
 			continue
@@ -215,6 +224,13 @@ func findModelsDevRow(models []modelsDevModel, modelValue, supplierName string) 
 		name := strings.ToLower(m.Name)
 		if id == needle || name == needle || strings.HasSuffix(id, "/"+needle) {
 			return m, true
+		}
+		if nneedle != "" {
+			nid := normalizeModelsDevKey(id)
+			nname := normalizeModelsDevKey(name)
+			if nid == nneedle || nname == nneedle || strings.HasSuffix(nid, "/"+nneedle) {
+				return m, true
+			}
 		}
 	}
 	return modelsDevModel{}, false

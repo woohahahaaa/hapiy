@@ -395,10 +395,10 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     }
   }
 
-  // 一键为所有「从 models.dev 参考」模式的模型（按弹窗当前 UI 状态判断，
-  // 未保存也生效）从 models.dev 拉取最新价格快照并填充。已有参考厂商的
-  // 直接按厂商拉取；没有厂商的尝试推断 models.dev 官方（lab）厂商，推断
-  // 不出的保留参考模式并按 0 计费。参考「接管 agent」里的「使用推荐配置」。
+  // 一键为所有可从 models.dev 定价的模型（按弹窗当前 UI 状态判断，未保存
+  // 也生效）拉取最新价格快照并填充：已处于「从 models.dev 参考」的按当前
+  // 厂商（空则推断官方 lab 厂商）；「不设置」的自动推断官方 lab 厂商并升级
+  // 为参考模式。手动「单独设置价格」的模型不覆盖，尊重用户自定义。
   const applyModelsDevPricesForAll = async () => {
     setBulkRefSetting(true)
     setRefSnapshotError(null)
@@ -408,14 +408,14 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
       let filled = 0
       let vendorlessKept = 0
       const next = form.models.map((model) => {
-        // UI 上处于「从 models.dev 参考」模式的模型才处理
-        // （referenceProvider 为 null 表示 unset / prices 模式）。
-        if (model.referenceProvider === null) return model
-        const vendor = model.referenceProvider.trim() !== ''
+        // 手动设置了价格（prices 模式）的模型不覆盖。
+        if (model.prices !== null) return model
+        // reference 有厂商直接用；reference 空厂商 / unset 推断官方 lab 厂商。
+        const vendor = model.referenceProvider !== null && model.referenceProvider.trim() !== ''
           ? model.referenceProvider
           : labProviderIdForModel(model.model) ?? ''
         if (vendor === '') {
-          // 无厂商且 models.dev 推断不出官方厂商：保留参考模式，价格按 0。
+          // 推断不出官方厂商：保留现状（参考模式或按 0 计费）。
           vendorlessKept++
           return model
         }
@@ -424,18 +424,19 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
         filled++
         return {
           ...model,
-          referenceProvider: vendor,
+          prices: null,
+          referenceProvider: row.providerName,
           referencePrices: refPricesOf(row),
           referenceAt: new Date().toISOString(),
         }
       })
       setForm((current) => ({ ...current, models: next }))
       if (filled > 0) {
-        toast(`已为 ${filled} 个参考 models.dev 的模型设置价格`)
+        toast(`已为 ${filled} 个模型从 models.dev 设置价格`)
       } else if (vendorlessKept > 0) {
-        toast(`${vendorlessKept} 个模型未选择参考厂商，无法自动设置价格（保留按 0 计费）`)
+        toast(`${vendorlessKept} 个模型未在 models.dev 找到官方参考厂商，未自动设置`)
       } else {
-        toast('没有参考 models.dev 的模型，无需设置')
+        toast('没有可自动设置的模型')
       }
     } catch {
       setRefSnapshotError('models.dev 数据拉取失败，价格未设置')
@@ -853,7 +854,7 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
                 type="button"
                 variant="outline"
                 size="sm"
-                title="选择参考供应商，为所有参考 models.dev 供应商的模型一键设置最新价格"
+                title="一键从 models.dev 设置价格：参考模式的模型按参考厂商更新；未设置价格的模型自动匹配官方（lab）参考厂商。手动单独设置价格的模型不覆盖。"
                 disabled={bulkRefSetting}
                 onClick={() => void applyModelsDevPricesForAll()}
               >
@@ -1093,7 +1094,7 @@ function ModelPriceCell({
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Select value={mode} onValueChange={(value) => setMode(value as PriceMode)}>
-        <SelectTrigger className="h-7 w-36 px-2 text-xs"><SelectPrimitive.Value /></SelectTrigger>
+        <SelectTrigger className="w-36 px-2 text-xs"><SelectPrimitive.Value /></SelectTrigger>
         <SelectContent>
           <SelectItem value="prices">单独设置价格</SelectItem>
           <SelectItem value="reference">从 models.dev 同步</SelectItem>
@@ -1130,7 +1131,7 @@ function ModelPriceCell({
             <Tooltip>
               <TooltipTrigger asChild>
                 <SelectTrigger
-                  className={`h-7 min-w-0 flex-1 overflow-hidden px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
+                  className={`min-w-0 flex-1 overflow-hidden px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
                 >
                   <span className="sr-only">
                     <SelectPrimitive.Value>
