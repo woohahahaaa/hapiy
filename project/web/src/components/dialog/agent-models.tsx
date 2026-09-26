@@ -116,6 +116,8 @@ const [error, setError] = useState<string | null>(null)
   // 预览差异：点「预览差异」进入；显示"全部套用推荐模板 + 参考供应商4基础
   // 字段"后的内容与当前内容的差异。切换供应商/模型保持；编辑则取消。
   const [diffPreviewing, setDiffPreviewing] = useState(false)
+  // 预览差异得到的「新版全文」：点底部「应用差异」直接保存它。
+  const [diffApplyContent, setDiffApplyContent] = useState<string | null>(null)
   const [diffBefore, setDiffBefore] = useState<string | null>(null)
   const [diffAfter, setDiffAfter] = useState<string | null>(null)
   const [diffLoading, setDiffLoading] = useState(false)
@@ -470,6 +472,27 @@ for (const p of summary?.providers ?? []) {
     }
   }
 
+  // 预览差异下的「应用差异」：把 diffApplyContent（新版全文）直接保存上盘。
+  const handleApplyDiff = async () => {
+    if (!record || diffApplyContent === null) return
+    setSaving(true)
+    try {
+      await persistContent(diffApplyContent)
+      toast('已应用差异并保存')
+      setSavedOk(true)
+      setDiffPreviewing(false)
+      setDiffBefore(null)
+      setDiffAfter(null)
+      setDiffApplyContent(null)
+      setDiffUnsetModels([])
+      setDiffJumpLine(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleCancelPending = () => {
     setLiveContent(null)
     setTemplateTally(new Map()); setTemplateApplied(0)
@@ -662,6 +685,7 @@ for (const p of summary?.providers ?? []) {
       setDiffPreviewing(false)
       setDiffBefore(null)
       setDiffAfter(null)
+      setDiffApplyContent(null)
       setDiffUnsetModels([])
       return
     }
@@ -726,6 +750,7 @@ for (const p of summary?.providers ?? []) {
         : res.content
       setDiffBefore(base)
       setDiffAfter(afterBlock)
+      setDiffApplyContent(res.content)
       setDiffUnsetModels(unset)
       setDiffPreviewing(true)
     } catch (err) {
@@ -741,6 +766,7 @@ for (const p of summary?.providers ?? []) {
       setDiffPreviewing(false)
       setDiffBefore(null)
       setDiffAfter(null)
+      setDiffApplyContent(null)
       setDiffUnsetModels([])
       setDiffJumpLine(null)
     }
@@ -1132,11 +1158,22 @@ for (const p of summary?.providers ?? []) {
                   }}
                 />
               ) : selectedManagedGroup ? (
-                <JsonEditor
-                  value={selectedManagedGroup.group.generated}
-                  focusLine={focusLineForManagedModel}
-                  readonly
-                />
+                selectedManagedGroup.group.pending && selectedManagedGroup.group.file_provider != null ? (
+                  // 托管分组未同步：默认显示「生成（新） vs 文件实际（旧）」差异，
+                  // 与顶部待同步计数一致，一眼看到将应用的变化。
+                  <DiffView
+                    before={JSON.stringify(selectedManagedGroup.group.file_provider, null, 2)}
+                    after={JSON.stringify(selectedManagedGroup.group.generated, null, 2)}
+                    unsetModels={[]}
+                    onInteract={() => {}}
+                  />
+                ) : (
+                  <JsonEditor
+                    value={selectedManagedGroup.group.generated}
+                    focusLine={focusLineForManagedModel}
+                    readonly
+                  />
+                )
               ) : selectedProvider ? (
                 <JsonEditor
                   value={currentEditableProviderValue}
@@ -1167,15 +1204,15 @@ for (const p of summary?.providers ?? []) {
               </div>
               <Button
                 variant="default"
-                disabled={saving || savedOk || liveContent === null}
-                onClick={() => void handleSavePending()}
+                disabled={saving || savedOk || (diffPreviewing ? diffApplyContent === null : liveContent === null)}
+                onClick={() => void (diffPreviewing ? handleApplyDiff() : handleSavePending())}
               >
                 {saving ? (
                   <AppIcon name="progress_activity" size={14} className="animate-spin" />
                 ) : savedOk ? (
                   <AppIcon name="check" size={14} data-icon="inline-start" />
                 ) : null}
-                {savedOk ? '保存成功' : '保存'}
+                {savedOk ? '保存成功' : diffPreviewing ? '应用差异' : '保存'}
               </Button>
             </>
           ) : (

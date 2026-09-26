@@ -48,6 +48,19 @@ describe('searchModelsDevModels', () => {
     expect(searchModelsDevModels(models, '')).toEqual([])
   })
 
+  it('matches after stripping hyphens/spaces (GLM5.3 ↔ glm-5.3)', () => {
+    const g = [
+      makeModel({ id: 'glm-5.3', name: 'GLM-5.3', providerName: 'Zhipu AI', providerId: 'zhipuai' }),
+      makeModel({ id: 'zai/glm-5.3', name: 'GLM-5.3', providerName: 'Z.AI', providerId: 'zai' }),
+      makeModel({ id: 'kimi-k3', name: 'Kimi K3', providerName: 'Moonshot AI', providerId: 'moonshotai' }),
+    ]
+    // 同分时按 providerName 字母序（'.' < 'h'），所以 Z.AI 在前。
+    const result = searchModelsDevModels(g, 'GLM5.3')
+    expect(result.map((m) => m.id)).toEqual(['zai/glm-5.3', 'glm-5.3'])
+    const kimi = searchModelsDevModels(g, 'KimiK3')
+    expect(kimi.map((m) => m.id)).toEqual(['kimi-k3'])
+  })
+
   it('respects the limit', () => {
     const result = searchModelsDevModels(models, 'gpt', 1)
     expect(result).toHaveLength(1)
@@ -82,6 +95,11 @@ describe('findModelsDevModel', () => {
 
   it('matches name case-insensitively', () => {
     expect(findModelsDevModel(models, 'deepseek v3 flash')?.id).toBe('other')
+  })
+
+  it('matches after stripping hyphens/spaces', () => {
+    expect(findModelsDevModel(models, 'deepseekv3flash')?.id).toBe('deepseek-v3-flash')
+    expect(findModelsDevModel(models, 'DeepSeekV3Flash')?.id).toBe('deepseek-v3-flash')
   })
 
   it('matches an id published as provider/model by its bare trailing segment', () => {
@@ -140,6 +158,22 @@ describe('providersForModel', () => {
     ])
   })
 
+  it('finds providers when the model value strips hyphens/spaces (GLM5.3 ↔ glm-5.3)', () => {
+    const g: readonly ModelsDevModel[] = [
+      makeModel({ id: 'glm-5.3', name: 'GLM-5.3', providerName: 'Zhipu AI', providerId: 'zhipuai' }),
+      makeModel({ id: 'glm-5.3', name: 'GLM-5.3', providerName: 'Deep Infra', providerId: 'deepinfra' }),
+      makeModel({ id: 'kimi-k3', name: 'Kimi K3', providerName: 'Moonshot AI', providerId: 'moonshotai' }),
+    ]
+    // 官方（zhipuai）排最前，其余按供应商名排序。
+    const glm = providersForModel(g, 'GLM5.3')
+    expect(glm).toEqual([
+      { providerId: 'zhipuai', providerName: 'Zhipu AI' },
+      { providerId: 'deepinfra', providerName: 'Deep Infra' },
+    ])
+    const kimi = providersForModel(g, 'KimiK3')
+    expect(kimi).toEqual([{ providerId: 'moonshotai', providerName: 'Moonshot AI' }])
+  })
+
   it('dedupes rows of the same provider', () => {
     const duplicated = [
       ...models,
@@ -176,6 +210,21 @@ describe('findModelsDevProviderRow', () => {
 
   it('returns null when the provider is not present for the model', () => {
     expect(findModelsDevProviderRow(models, 'deepseek-v3-flash', 'OpenAI')).toBeNull()
+  })
+
+  it('finds the row when the model value strips hyphens/spaces', () => {
+    const row = findModelsDevProviderRow(models, 'deepseekv3flash', 'Zhipu AI')
+    expect(row?.providerName).toBe('Zhipu AI')
+  })
+
+  it('matches a provider_id the same way as its provider_name (moonshotai ↔ Moonshot AI)', () => {
+    const kimi: readonly ModelsDevModel[] = [
+      makeModel({ id: 'kimi-k3', name: 'Kimi K3', providerName: 'Moonshot AI', providerId: 'moonshotai' }),
+      makeModel({ id: 'kimi-k3', name: 'Kimi K3', providerName: 'SiliconFlow', providerId: 'siliconflow' }),
+    ]
+    // 手动选择存的是 providerName；lab 推断返回的是 provider_id，两者都要能命中。
+    expect(findModelsDevProviderRow(kimi, 'kimi-k3', 'Moonshot AI')?.providerId).toBe('moonshotai')
+    expect(findModelsDevProviderRow(kimi, 'KimiK3', 'moonshotai')?.providerId).toBe('moonshotai')
   })
 
   it('returns null for an unmatched model value', () => {

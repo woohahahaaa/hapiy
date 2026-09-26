@@ -154,8 +154,15 @@ export function AgentModelInfoMatchDialog({
     if (!open) return
     setLoading(true)
     setError(null)
-    setCheckedProviders({})
-    setCheckedModels({})
+    // 默认全选：供应商及其全部模型都勾选（用户可手动取消）。
+    const allProviders: Record<string, boolean> = {}
+    const allModels: Record<string, boolean> = {}
+    for (const p of providers) {
+      allProviders[p.provider_id] = true
+      for (const m of p.models) allModels[`${p.provider_id}\u0000${m.id}`] = true
+    }
+    setCheckedProviders(allProviders)
+    setCheckedModels(allModels)
     setSupplierByModelId({})
     setPersistedSources(null)
     let cancelled = false

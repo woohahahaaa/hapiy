@@ -85,6 +85,14 @@ export async function loadModelsDevModels(): Promise<readonly ModelsDevModel[]> 
   return loadPromise
 }
 
+// normalizeModelKey 去掉连字符与空白（统一小写）后的模型名，用于宽松匹配。
+// 用户侧可能输入 "GLM5.3"、"Kimi K3"、"deepseek v3 flash" 等变体，而
+// models.dev 发布为 "glm-5.3" / "Kimi K3" / "deepseek-v3-flash"——去掉
+// 连字符/空格后两者一致，供应商页面与接管 agent 都从这里受益。
+function normalizeModelKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[-\s]/g, '')
+}
+
 function scoreMatch(model: ModelsDevModel, needle: string): number {
   const id = model.id.toLowerCase()
   const name = model.name.toLowerCase()
@@ -95,16 +103,30 @@ function scoreMatch(model: ModelsDevModel, needle: string): number {
   if (name.startsWith(needle)) return 3
   if (name.includes(needle)) return 4
   if (provider.includes(needle)) return 5
+  // 归一化兜底：去掉连字符/空格后的匹配（如 "glm53" ↔ "glm-5.3"）。
+  const nid = normalizeModelKey(id)
+  const nname = normalizeModelKey(name)
+  const nprovider = normalizeModelKey(provider)
+  const nneedle = normalizeModelKey(needle)
+  if (nid === nneedle || nname === nneedle) return 6
+  if (nid.includes(nneedle) || nname.includes(nneedle)) return 7
+  if (nprovider.includes(nneedle)) return 8
   return -1
 }
 
 // Models.dev publishes the same model under different id shapes: some
 // providers use "provider/model", others the bare model id. A stored model
 // name therefore matches both the exact id/name and a fully-qualified id
-// whose trailing segment is the model name.
+// whose trailing segment is the model name. 归一化（去连字符/空格）后同样
+// 兜底匹配，见 normalizeModelKey。
 function modelKeyMatches(id: string, name: string, needle: string): boolean {
   if (id === needle || name === needle) return true
-  return id.endsWith(`/${needle}`)
+  if (id.endsWith(`/${needle}`)) return true
+  const nid = normalizeModelKey(id)
+  const nname = normalizeModelKey(name)
+  const nneedle = normalizeModelKey(needle)
+  if (nid === nneedle || nname === nneedle) return true
+  return nid.endsWith(`/${nneedle}`)
 }
 
 export function searchModelsDevModels(
@@ -127,7 +149,8 @@ export function searchModelsDevModels(
 // Trim + case-insensitive id/name match (falling back to a qualified
 // provider/model id's bare trailing segment, see modelKeyMatches); null when
 // nothing matches. The returned row's id keeps its snapshot casing — callers
-// normalize to lowercase before persisting.
+// normalize to lowercase before persisting. 连字符/空格变体（如 "GLM5.3"）
+// 也会归一化后兜底匹配。
 export function findModelsDevModel(
   models: readonly ModelsDevModel[],
   value: string,
@@ -144,7 +167,22 @@ export function findModelsDevModel(
       model.id.toLowerCase() !== needle &&
       model.id.toLowerCase().endsWith(`/${needle}`),
   )
-  return qualified ?? null
+  if (qualified) return qualified
+  const nneedle = normalizeModelKey(needle)
+  if (nneedle) {
+    const loose = models.find(
+      (model) =>
+        normalizeModelKey(model.id) === nneedle ||
+        normalizeModelKey(model.name) === nneedle,
+    )
+    if (loose) return loose
+    return models.find(
+      (model) =>
+        normalizeModelKey(model.id) !== nneedle &&
+        normalizeModelKey(model.id).endsWith(`/${nneedle}`),
+    ) ?? null
+  }
+  return null
 }
 
 // Distinct providers of rows whose id/name equals the committed model value.
@@ -215,18 +253,24 @@ export function isModelsDevLab(modelValue: string, providerId: string): boolean 
   return labProviderIdForModel(modelValue) === providerId
 }
 
-// First models.dev row matching (modelValue, providerName) for refilling prices.
+// First models.dev row matching (modelValue, supplier) for refilling prices.
+// supplier 可以是 providerName（用户手动选择时存的）或 providerId（自动
+// 推断官方厂商时 labProviderIdForModel 返回的是 provider_id），两者在去掉
+// 连字符/空格后都可匹配（如 "moonshotai" ↔ "Moonshot AI"）。
 export function findModelsDevProviderRow(
   models: readonly ModelsDevModel[],
   modelValue: string,
-  providerName: string,
+  supplier: string,
 ): ModelsDevModel | null {
   const needle = modelValue.trim().toLowerCase()
   if (!needle) return null
+  const nsupplier = normalizeModelKey(supplier)
   const found = models.find(
     (model) =>
       modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle) &&
-      model.providerName.toLowerCase() === providerName.toLowerCase(),
+      (model.providerName.toLowerCase() === supplier.toLowerCase() ||
+        normalizeModelKey(model.providerName) === nsupplier ||
+        normalizeModelKey(model.providerId) === nsupplier),
   )
   return found ?? null
 }
