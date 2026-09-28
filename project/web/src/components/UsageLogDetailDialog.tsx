@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,29 @@ export function UsageLogDetailDialog({ log, onOpenChange }: { readonly log: Usag
   )
 }
 
+// 上游 Key 默认模糊，hover 或点击（含触屏）后显示明文，点击后 5 秒恢复模糊。
+function SecretValue({ value }: { value: string }) {
+  const [revealed, setRevealed] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
+
+  const handleClick = () => {
+    setRevealed(true)
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setRevealed(false), 5000)
+  }
+
+  return (
+    <span
+      className={`break-all font-mono blur-sm hover:blur-none ${revealed ? 'blur-none!' : ''}`}
+      onClick={handleClick}
+    >
+      {value || '-'}
+    </span>
+  )
+}
+
 function LogDetailFields({ log }: { log: UsageLog }) {
   const date = new Date(log.createdAt)
   const timeText = Number.isNaN(date.getTime())
@@ -48,7 +71,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow className="col-span-2" label="来源" value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 Key</span>
-          <span className="break-all font-mono">{log.providerKey || '-'}</span>
+          <SecretValue value={log.providerKey || '-'} />
         </div>
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 URL</span>
