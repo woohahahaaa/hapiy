@@ -28,6 +28,7 @@ import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
   AGENT_MODEL_INFO_FIELD_OPS,
+  parseAgentModelInfoSpec,
   type AgentModelInfoFieldOp,
   type AgentModelsContainer,
   type AgentModelInfoFieldSpecValue,
@@ -101,23 +102,23 @@ function parseRuleConfigJsonc(text: string): {
     throw new Error('顶层必须是 { common, protocols } 对象')
   }
   const rec = parsed as Record<string, unknown>
-  const common = Array.isArray(rec.common) ? (rec.common as unknown[]) : []
-  const protocols = Array.isArray(rec.protocols) ? (rec.protocols as unknown[]) : []
+  const common = Array.isArray(rec.common) ? rec.common : []
+  const protocols = Array.isArray(rec.protocols) ? rec.protocols : []
   return {
-    common: common.map((c) => normalizeAgentRecommendation(c)),
+    common: recsFromUnknownArray(common),
     protocols: protocols.map((p) => normalizeAgentProtocol(p)),
   }
 }
 
-// normalizeAgentRecommendation coerces a JSONC field entry into the
-// structured shape.
-function normalizeAgentRecommendation(value: unknown): AgentRecommendation {
+// coerceRecommendation coerces a JSON field entry into the structured
+// shape without requiring key; the array parsers pair it with
+// recsFromUnknownArray (blank rows dropped, remaining rows validated).
+function coerceRecommendation(value: unknown): AgentRecommendation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('common 里每一项必须是对象')
+    throw new Error('字段每一项必须是对象')
   }
   const v = value as Record<string, unknown>
   const key = typeof v.key === 'string' ? v.key : ''
-  if (!key.trim()) throw new Error('字段缺少 key（字段路径）')
   const scope = v.scope === 'model' ? 'model' : 'provider'
   const recommended = v.recommended ?? null
   const candidates = v.candidates && typeof v.candidates === 'object' && !Array.isArray(v.candidates)
@@ -175,8 +176,32 @@ function normalizeAgentProtocol(value: unknown): AgentProtocol {
       }
     }),
     endpoint_tags: tags.filter((t): t is string => typeof t === 'string'),
-    recommendations: fields.map((f) => normalizeAgentRecommendation(f)),
+    recommendations: recsFromUnknownArray(fields),
   }
+}
+
+// isEmptyRecommendation — 全空的推荐字段行（表格里新增却没填任何内容的
+// 空行）。保存时静默丢弃这类行，不再报错。
+function isEmptyRecommendation(r: AgentRecommendation): boolean {
+  return r.key.trim() === ''
+    && (r.recommended ?? null) === null
+    && (!r.candidates || Object.keys(r.candidates).length === 0)
+    && !r.required
+    && r.action === undefined
+    && r.op === undefined
+    && (r.sep ?? '') === ''
+    && (!r.values || r.values.length === 0)
+    && (r.description ?? '') === ''
+}
+
+// recsFromUnknownArray coerces raw field entries into recommendations:
+// blank rows are dropped, remaining rows must carry a key.
+function recsFromUnknownArray(items: readonly unknown[]): AgentRecommendation[] {
+  const out = items.map(coerceRecommendation).filter((r) => !isEmptyRecommendation(r))
+  for (const r of out) {
+    if (!r.key.trim()) throw new Error('字段缺少 key（字段路径）')
+  }
+  return out
 }
 
 // buildRuleConfigJsonc constructs the JSONC document from the parsed
@@ -203,13 +228,12 @@ function buildRuleConfigJsonc(
 
 // EndpointRuleEdit ─ one {protocol} card in the rule editor: a rule name,
 // the endpoint keywords it inducts (归纳范围), and the endpoint's private
-// fields JSON block (每个 endpoint 一个 JSON 块).
+// fields table (每个 endpoint 一个字段推荐表).
 interface EndpointRuleEdit {
   readonly name: string
   readonly tagsText: string
   readonly conditions: readonly AgentProtocolCondition[]
   readonly fieldsJson: string
-  readonly showJson?: boolean
 }
 
 // emptyEndpointRule is the starting card shape for a newly added endpoint rule.
@@ -228,20 +252,32 @@ function fieldsJsonToRecs(text: string): AgentRecommendation[] {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
   if (!Array.isArray(parsed)) throw new Error('字段必须写成 JSON 数组，每项一个推荐字段对象')
-  return parsed.map(normalizeAgentRecommendation)
+  return recsFromUnknownArray(parsed)
 }
 
 function tagsTextToArray(text: string): string[] {
   return text.split(',').map((s) => s.trim()).filter(Boolean)
 }
 
-// parseCommonArray parses the common JSON editor text into an array of
-// recommendations. Throws on invalid JSON / non-array / bad rows.
+// parseCommonArray parses the common config storage text into an array of
+// recommendations. Throws on invalid JSON / non-array / bad rows; blank
+// rows are dropped (isRecommendationRowEmpty).
 function parseCommonArray(text: string): AgentRecommendation[] {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
   if (!Array.isArray(parsed)) throw new Error('公共配置必须是 JSON 数组')
-  return parsed.map(normalizeAgentRecommendation)
+  return recsFromUnknownArray(parsed)
+}
+
+// isEmptyEndpointRule — 一张 Endpoint 卡片是否整行空白（名称 / 归纳范围 /
+// 条件 / 字段全部为空）。保存时空白卡片直接丢弃。
+function isEmptyEndpointRule(rule: EndpointRuleEdit): boolean {
+  if (rule.name.trim() !== '' || rule.tagsText.trim() !== '' || rule.conditions.length > 0) return false
+  try {
+    return fieldsJsonToRecs(rule.fieldsJson).length === 0
+  } catch {
+    return false
+  }
 }
 
 // ruleToProtocol converts an endpoint rule card into an AgentProtocol,
@@ -488,7 +524,8 @@ function modelInfoRowsFromSpecs(
 }
 
 // buildModelInfoFieldsPayload 把编辑器行组装回 API payload。空路径的行：
-// 只填了写法（op/sep/允许值/操作）等内容时报错，否则跳过（不写该字段）。
+// 只填了写法（op/sep/允许值/操作）等内容时报错，否则跳过（不写该字段）；
+// 出错不提前返回，其余字段照常组装（整弹窗 JSON 序列化依赖完整结果）。
 function buildModelInfoFieldsPayload(
   rows: Record<ModelInfoFieldKey, ModelInfoFieldRow>,
 ): { fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>; error: string | null } {
@@ -499,13 +536,14 @@ function buildModelInfoFieldsPayload(
     thinking_levels: '',
     reasoning_effort: '',
   }
+  let error: string | null = null
   for (const key of MODEL_INFO_FIELD_KEYS) {
     const row = rows[key]
     const path = row.path.trim()
     if (path === '') {
       const hasOther = row.op !== 'raw' || row.action !== 'set' || row.sep.trim() !== '' || row.valuesText.trim() !== ''
-      if (hasOther) {
-        return { fields, error: `「${MODEL_INFO_FIELD_LABELS[key]}」请先填写路径` }
+      if (hasOther && error === null) {
+        error = `「${MODEL_INFO_FIELD_LABELS[key]}」请先填写路径`
       }
       continue
     }
@@ -517,7 +555,7 @@ function buildModelInfoFieldsPayload(
     if (values.length > 0) spec.values = values
     fields[key] = spec
   }
-  return { fields, error: null }
+  return { fields, error }
 }
 
 const EMPTY_MODEL_INFO_ROWS: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
@@ -526,6 +564,123 @@ const EMPTY_MODEL_INFO_ROWS: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
   input_types: { ...EMPTY_MODEL_INFO_ROW },
   thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
   reasoning_effort: { ...EMPTY_MODEL_INFO_ROW },
+}
+
+// ── 整弹窗 JSON 编辑模式 ──────────────────────────────────────────────
+
+// RuleDialogDoc — 「切换到 JSON 编辑模式」里展示 / 编辑的整份弹窗 JSON。
+// 形状与后端 API 一致，方便对照；common 里协议块的私有字段仍叫 fields。
+type RuleDialogDoc = {
+  readonly name: string
+  readonly os_paths: { readonly windows: string; readonly mac: string }
+  readonly json_paths: {
+    readonly provider: string
+    readonly model: string
+    readonly models_container: AgentModelsContainer
+  }
+  readonly model_info_fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>
+  readonly common: readonly AgentRecommendation[]
+  readonly protocols: readonly AgentProtocol[]
+}
+
+// buildDialogDoc 从当前表格态构造整份 JSON 文档（宽松：不校验必填项，
+// 半填的行原样带出，校验留到保存 / 切回表格时做）。
+function buildDialogDoc(state: {
+  name: string
+  windowsPath: string
+  macPath: string
+  providerPath: string
+  modelPath: string
+  modelsContainer: AgentModelsContainer
+  modelInfoRows: Record<ModelInfoFieldKey, ModelInfoFieldRow>
+  common: readonly AgentRecommendation[]
+  protocols: readonly AgentProtocol[]
+}): RuleDialogDoc {
+  const { fields } = buildModelInfoFieldsPayload(state.modelInfoRows)
+  return {
+    name: state.name,
+    os_paths: { windows: state.windowsPath, mac: state.macPath },
+    json_paths: {
+      provider: state.providerPath,
+      model: state.modelPath,
+      models_container: state.modelsContainer,
+    },
+    model_info_fields: fields,
+    common: state.common,
+    protocols: state.protocols,
+  }
+}
+
+// parseDialogDoc 校验整份弹窗 JSON：合法则还原为结构化数据，否则抛错
+// （不合法就无法还原成表格，保存 / 切回表格都会被阻止）。
+function parseDialogDoc(text: string): RuleDialogDoc {
+  const cleaned = stripJsoncComments(text)
+  const parsed: unknown = JSON.parse(cleaned)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('顶层必须是 JSON 对象（含 name / os_paths / json_paths / model_info_fields / common / protocols）')
+  }
+  const v = parsed as Record<string, unknown>
+  const name = typeof v.name === 'string' ? v.name : ''
+  if (!name.trim()) throw new Error('缺少 name（规则名称）')
+  const osRaw = v.os_paths && typeof v.os_paths === 'object' && !Array.isArray(v.os_paths)
+    ? (v.os_paths as Record<string, unknown>)
+    : {}
+  const jpRaw = v.json_paths && typeof v.json_paths === 'object' && !Array.isArray(v.json_paths)
+    ? (v.json_paths as Record<string, unknown>)
+    : {}
+  const container = jpRaw.models_container
+  const mifRaw = v.model_info_fields
+  if (mifRaw !== undefined && (typeof mifRaw !== 'object' || mifRaw === null || Array.isArray(mifRaw))) {
+    throw new Error('model_info_fields 必须是对象')
+  }
+  const mif: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue> = {
+    max_context: '',
+    max_output_token: '',
+    input_types: '',
+    thinking_levels: '',
+    reasoning_effort: '',
+  }
+  if (mifRaw && typeof mifRaw === 'object' && !Array.isArray(mifRaw)) {
+    const rec = mifRaw as Record<string, unknown>
+    for (const key of MODEL_INFO_FIELD_KEYS) {
+      if (!(key in rec)) continue
+      const raw = rec[key]
+      // 对象写法（值+写法）必须带非空 path；否则与表格模式不一致——
+      // 表格里只填 op/sep/允许值而不填路径会报「请先填写路径」。
+      if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+        const spec = raw as Record<string, unknown>
+        if (typeof spec.path !== 'string' || spec.path.trim() === '') {
+          throw new Error(`model_info_fields.${key}：请先填写 path（${MODEL_INFO_FIELD_LABELS[key]} 的写入位置）`)
+        }
+      }
+      mif[key] = parseAgentModelInfoSpec(raw)
+    }
+  }
+  let common: readonly AgentRecommendation[] = []
+  if (v.common !== undefined && v.common !== null) {
+    if (!Array.isArray(v.common)) throw new Error('common 必须是 JSON 数组')
+    common = recsFromUnknownArray(v.common)
+  }
+  let protocols: readonly AgentProtocol[] = []
+  if (v.protocols !== undefined && v.protocols !== null) {
+    if (!Array.isArray(v.protocols)) throw new Error('protocols 必须是 JSON 数组')
+    protocols = v.protocols.map((p) => normalizeAgentProtocol(p))
+  }
+  return {
+    name,
+    os_paths: {
+      windows: typeof osRaw.windows === 'string' ? osRaw.windows : '',
+      mac: typeof osRaw.mac === 'string' ? osRaw.mac : '',
+    },
+    json_paths: {
+      provider: typeof jpRaw.provider === 'string' ? jpRaw.provider : '',
+      model: typeof jpRaw.model === 'string' ? jpRaw.model : '',
+      models_container: container === 'array' || container === 'object' ? container : '',
+    },
+    model_info_fields: mif,
+    common,
+    protocols,
+  }
 }
 
 function RuleDialog({
@@ -548,12 +703,16 @@ function RuleDialog({
   // 结构化的字段推荐编辑器：公共配置一个 JSON（common），每个 endpoint
   // 一套独立规则（名称 / 归纳范围关键词 / 字段推荐值表）。
   const [commonText, setCommonText] = useState('[]')
-  const [commonError, setCommonError] = useState<string | null>(null)
-  const [showCommonJson, setShowCommonJson] = useState(false)
   const [endpointRules, setEndpointRules] = useState<readonly EndpointRuleEdit[]>([])
   const [modelInfoRows, setModelInfoRows] = useState<Record<ModelInfoFieldKey, ModelInfoFieldRow>>(EMPTY_MODEL_INFO_ROWS)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 整弹窗 JSON 编辑模式：true 时弹窗正文是一个大 Textarea，可编辑整份
+  // 规则 JSON（含名称 / 路径 / 模型信息 / common / protocols）；保存或切回
+  // 表格前都会校验，JSON 不合法则阻止。
+  const [jsonMode, setJsonMode] = useState(false)
+  const [docText, setDocText] = useState('')
+  const [docError, setDocError] = useState<string | null>(null)
   // 「使用默认推荐模版」二次确认框。
   const [confirmTemplate, setConfirmTemplate] = useState(false)
   const [templateLoading, setTemplateLoading] = useState(false)
@@ -567,7 +726,6 @@ function RuleDialog({
     mif: AgentModelInfoFieldPaths | undefined,
   ) => {
     setCommonText(JSON.stringify(common, null, 2))
-    setCommonError(null)
     setEndpointRules(protocols.map((p) => ({
       name: p.name,
       tagsText: p.endpoint_tags.join(', '),
@@ -604,6 +762,9 @@ function RuleDialog({
       }
       fillFromParts(common, protocols, editing?.model_info_fields)
       setError(null)
+      setJsonMode(false)
+      setDocText('')
+      setDocError(null)
       setConfirmTemplate(false)
       setTemplateLoading(false)
       setSaving(false)
@@ -638,12 +799,44 @@ function RuleDialog({
 
   const handleSave = async () => {
     if (saving) return
+    // JSON 编辑模式：整份 doc 是唯一数据源。校验合法才允许保存，
+    // 同时把结果同步回表格态，保证切回表格时内容一致。
+    if (jsonMode) {
+      let doc: RuleDialogDoc
+      try {
+        doc = parseDialogDoc(docText)
+      } catch (err) {
+        setDocError(err instanceof Error ? err.message : String(err))
+        return
+      }
+      // 模型信息字段的「值+写法」半填行校验：与表格模式走同一个函数，
+      // 保证两条编辑路径的校验完全一致。
+      const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoRowsFromSpecs(doc.model_info_fields))
+      if (mifError) {
+        setDocError(mifError)
+        return
+      }
+      applyDocToState(doc)
+      await persistRule({
+        name: doc.name.trim(),
+        windowsPath: doc.os_paths.windows,
+        macPath: doc.os_paths.mac,
+        providerPath: doc.json_paths.provider,
+        modelPath: doc.json_paths.model,
+        modelsContainer: doc.json_paths.models_container,
+        modelInfoFields,
+        common: doc.common,
+        protocols: doc.protocols,
+        configJsonc: buildRuleConfigJsonc(doc.common, doc.protocols),
+      })
+      return
+    }
     const trimmed = name.trim()
     if (!trimmed) {
       setError('请填写名称')
       return
     }
-    // 公共配置 JSON 必须可解析成数组。
+    // 公共配置 JSON 必须可解析成数组（整行空白的行会被静默丢弃）。
     let common: AgentRecommendation[]
     try {
       common = parseCommonArray(commonText)
@@ -651,10 +844,13 @@ function RuleDialog({
       setError('公共配置 JSON 解析失败：' + (err instanceof Error ? err.message : String(err)))
       return
     }
-    // 每个 endpoint 规则的名称 / 归纳范围 / 字段推荐表校验。
+    // 整张卡片全空（名称 / 归纳范围 / 条件 / 字段都没填）的 endpoint 规则
+    // 静默丢弃；只填了一半的仍按下方校验报错（序号沿用原始卡片序号）。
     const protocols: AgentProtocol[] = []
     for (let i = 0; i < endpointRules.length; i++) {
-      const converted = ruleToProtocol(endpointRules[i], i)
+      const rule = endpointRules[i]
+      if (isEmptyEndpointRule(rule)) continue
+      const converted = ruleToProtocol(rule, i)
       if (typeof converted === 'string') {
         setError(converted)
         return
@@ -668,24 +864,62 @@ function RuleDialog({
       setError(mifError)
       return
     }
+    await persistRule({
+      name: trimmed,
+      windowsPath,
+      macPath,
+      providerPath,
+      modelPath,
+      modelsContainer,
+      modelInfoFields,
+      common,
+      protocols,
+      configJsonc,
+    })
+  }
+
+  // persistRule 发送保存请求（更新 / 新建共用）。
+  const persistRule = async (p: {
+    name: string
+    windowsPath: string
+    macPath: string
+    providerPath: string
+    modelPath: string
+    modelsContainer: AgentModelsContainer
+    modelInfoFields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>
+    common: readonly AgentRecommendation[]
+    protocols: readonly AgentProtocol[]
+    configJsonc: string
+  }) => {
     setSaving(true)
     setError(null)
+    setDocError(null)
     try {
       if (editing) {
         await dashboardApi.updateAgentTypeRule(editing.id, {
-          name: trimmed,
-          windows: windowsPath.trim(),
-          mac: macPath.trim(),
-          provider_path: providerPath.trim(),
-          model_path: modelPath.trim(),
-          models_container: modelsContainer,
-          recommendations: common,
-          protocols,
-          model_info_fields: modelInfoFields,
-          config_jsonc: configJsonc,
+          name: p.name,
+          windows: p.windowsPath.trim(),
+          mac: p.macPath.trim(),
+          provider_path: p.providerPath.trim(),
+          model_path: p.modelPath.trim(),
+          models_container: p.modelsContainer,
+          recommendations: p.common,
+          protocols: [...p.protocols],
+          model_info_fields: p.modelInfoFields,
+          config_jsonc: p.configJsonc,
         })
       } else {
-        await dashboardApi.createAgentTypeRule(trimmed)
+        await dashboardApi.createAgentTypeRule(p.name, {
+          windows: p.windowsPath.trim(),
+          mac: p.macPath.trim(),
+          provider_path: p.providerPath.trim(),
+          model_path: p.modelPath.trim(),
+          models_container: p.modelsContainer,
+          recommendations: p.common,
+          protocols: [...p.protocols],
+          model_info_fields: p.modelInfoFields,
+          config_jsonc: p.configJsonc,
+        })
       }
       toast(editing ? '已更新' : '已添加')
       onOpenChange(false)
@@ -697,6 +931,70 @@ function RuleDialog({
     }
   }
 
+  // applyDocToState 把校验过的整份 JSON 写回表格态（切回表格 / JSON 模式
+  // 下保存共用，保证两种视图内容一致）。
+  const applyDocToState = (doc: RuleDialogDoc) => {
+    setName(doc.name)
+    setWindowsPath(doc.os_paths.windows)
+    setMacPath(doc.os_paths.mac)
+    setProviderPath(doc.json_paths.provider)
+    setModelPath(doc.json_paths.model)
+    setModelsContainer(doc.json_paths.models_container)
+    setModelInfoRows(modelInfoRowsFromSpecs(doc.model_info_fields))
+    setCommonText(JSON.stringify(doc.common, null, 2))
+    setEndpointRules(doc.protocols.map((p) => ({
+      name: p.name,
+      tagsText: p.endpoint_tags.join(', '),
+      conditions: [...p.conditions],
+      fieldsJson: JSON.stringify(p.recommendations ?? [], null, 2),
+    })))
+  }
+
+  // toggleJsonMode 切换表格 / 整弹窗 JSON 两种编辑视图。切回表格要求
+  // JSON 合法（能还原成表格），否则留在 JSON 模式并提示错误。
+  const toggleJsonMode = () => {
+    if (jsonMode) {
+      try {
+        const doc = parseDialogDoc(docText)
+        applyDocToState(doc)
+        setDocError(null)
+        setError(null)
+        setJsonMode(false)
+      } catch (err) {
+        setDocError('JSON 无法还原成表格：' + (err instanceof Error ? err.message : String(err)))
+      }
+      return
+    }
+    const doc = buildDialogDoc({
+      name,
+      windowsPath,
+      macPath,
+      providerPath,
+      modelPath,
+      modelsContainer,
+      modelInfoRows,
+      common: parseCommonArray(commonText),
+      protocols: endpointRules.map((r) => {
+        let recs: AgentRecommendation[] = []
+        try {
+          recs = fieldsJsonToRecs(r.fieldsJson)
+        } catch {
+          recs = []
+        }
+        return {
+          name: r.name.trim(),
+          conditions: [...r.conditions],
+          endpoint_tags: tagsTextToArray(r.tagsText),
+          recommendations: recs,
+        }
+      }),
+    })
+    setDocText(JSON.stringify(doc, null, 2))
+    setDocError(null)
+    setError(null)
+    setJsonMode(true)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="xl" scrollFooter>
@@ -705,10 +1003,18 @@ function RuleDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            {editing?.has_template && (
+            <Button
+              variant="outline"
+              className="mr-auto"
+              onClick={toggleJsonMode}
+              disabled={saving}
+              title={jsonMode ? '校验 JSON 并还原成表格编辑；不合法则无法切回' : '把整个弹窗（名称 / 路径 / 模型信息 / 公共配置 / Endpoint 规则）作为一份 JSON 编辑'}
+            >
+              {jsonMode ? '切换回表格编辑' : '切换到 JSON 编辑模式'}
+            </Button>
+            {editing?.has_template && !jsonMode && (
               <Button
                 variant="outline"
-                className="mr-auto"
                 onClick={() => setConfirmTemplate(true)}
                 disabled={saving || templateLoading}
                 title="将该规则的全部字段（路径 / 模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
@@ -717,12 +1023,31 @@ function RuleDialog({
                 使用默认推荐模版
               </Button>
             )}
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
-            <Button onClick={() => void handleSave()} disabled={saving || name.trim() === ''}>
+            <Button onClick={() => void handleSave()} disabled={saving || (!jsonMode && name.trim() === '')}>
               {saving ? '保存中...' : '保存'}
             </Button>
           </>
         }>
+          {jsonMode ? (
+            <Field>
+              <p className="text-xs text-muted-foreground">
+                整个弹窗的 JSON（含名称 / 路径 / 模型信息字段 / 公共配置 common / 各 Endpoint 规则 protocols）。
+                保存与切回表格前都会校验；JSON 不合法将无法保存，也无法还原成表格。
+              </p>
+              <Textarea
+                value={docText}
+                onChange={(e) => {
+                  setDocText(e.target.value)
+                  setDocError(null)
+                }}
+                className="h-[440px] resize-y font-mono text-xs leading-relaxed"
+                spellCheck={false}
+              />
+              {docError && (
+                <p className="text-[11px] text-destructive">{docError}</p>
+              )}
+            </Field>
+          ) : (
           <FieldGroup>
           <Field>
             <FieldLabel>名称</FieldLabel>
@@ -797,69 +1122,28 @@ function RuleDialog({
               </div>
               <p className="text-xs text-muted-foreground">
                 与请求协议 / SDK 无关的字段推荐值。每行一个字段：路径 / 落在（provider|model）/ 推荐操作（填 / 不填 / 删除）/
-                推荐值 / 值写法（op / sep / 允许值白名单）/ 必填 / 说明。与页面里其余配置用同一套「值 + 写法」规则。
+                推荐值 / 值写法（op / sep / 允许值白名单）/ 必填 / 说明。与页面里其余配置用同一套「值 + 写法」规则；
+                整行空白的行保存时自动丢弃。需要直接改 JSON 时，用左下角「切换到 JSON 编辑模式」。
               </p>
-              <div className="flex items-center justify-end py-1">
-                <button
-                  type="button"
-                  className="text-xs text-muted-foreground underline underline-offset-2"
-                  onClick={() => setShowCommonJson((v) => !v)}
-                >
-                  {showCommonJson ? '收起 JSON' : '编辑 JSON'}
-                </button>
-              </div>
-              {showCommonJson ? (
-                <>
-                  <Textarea
-                    value={commonText}
-                    onChange={(e) => {
-                      setCommonText(e.target.value)
-                      try {
-                        parseCommonArray(e.target.value)
-                        setCommonError(null)
-                      } catch (err) {
-                        setCommonError(err instanceof Error ? err.message : String(err))
-                      }
-                    }}
-                    className={
-                      'h-[180px] resize-y font-mono text-xs leading-relaxed ' +
-                      (commonError ? 'border-destructive focus-visible:ring-destructive' : '')
-                    }
-                    spellCheck={false}
-                  />
-                  {commonError && (
-                    <p className="text-[11px] text-destructive">{commonError}</p>
-                  )}
-                </>
-              ) : (
-                (() => {
-                  try {
-                    const commonRecs = parseCommonArray(commonText)
-                    return (
-                      <RecommendationTable
-                        showScope
-                        recs={commonRecs}
-                        onChange={(next) => setCommonText(JSON.stringify(next, null, 2))}
-                      />
-                    )
-                  } catch (err) {
-                    return (
-                      <>
-                        <p className="pb-1 text-[11px] text-destructive">
-                          当前公共配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
-                          请在「编辑 JSON」里修正
-                        </p>
-                        <Textarea
-                          value={commonText}
-                          onChange={(e) => setCommonText(e.target.value)}
-                          className="h-[120px] resize-y font-mono text-xs leading-relaxed border-destructive"
-                          spellCheck={false}
-                        />
-                      </>
-                    )
-                  }
-                })()
-              )}
+              {(() => {
+                try {
+                  const commonRecs = parseCommonArray(commonText)
+                  return (
+                    <RecommendationTable
+                      showScope
+                      recs={commonRecs}
+                      onChange={(next) => setCommonText(JSON.stringify(next, null, 2))}
+                    />
+                  )
+                } catch (err) {
+                  return (
+                    <p className="pb-1 text-[11px] text-destructive">
+                      当前公共配置不是合法数据：{(err instanceof Error ? err.message : String(err))}，
+                      可用左下角「切换到 JSON 编辑模式」修正
+                    </p>
+                  )
+                }
+              })()}
             </Field>
 
             <EndpointRulesEditor value={endpointRules} onChange={setEndpointRules} />
@@ -871,6 +1155,7 @@ function RuleDialog({
             </div>
           )}
         </FieldGroup>
+          )}
         </DialogScrollBody>
       </DialogContent>
 
@@ -881,7 +1166,6 @@ function RuleDialog({
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setConfirmTemplate(false)} disabled={templateLoading}>取消</Button>
               <Button variant="default" onClick={() => void applyDefaultTemplate()} disabled={templateLoading}>
                 {templateLoading ? '加载中…' : '确认应用'}
               </Button>
@@ -942,11 +1226,6 @@ function RecommendationTable({
 
   return (
     <div className="overflow-hidden rounded-md border border-border">
-      <div className="flex items-center justify-end border-b border-border bg-muted/40 px-2 py-1">
-        <Button type="button" variant="outline" size="xs" onClick={addRow}>
-          添加字段
-        </Button>
-      </div>
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
@@ -966,7 +1245,7 @@ function RecommendationTable({
           {recs.length === 0 ? (
             <tr>
               <td colSpan={showScope ? 10 : 9} className="px-2 py-2 text-muted-foreground">
-                暂无字段；点击「添加字段」开始。
+                暂无字段；点击底部「添加一行」开始，整行空白的行保存时自动丢弃。
               </td>
             </tr>
           ) : (
@@ -1098,6 +1377,11 @@ function RecommendationTable({
           )}
         </tbody>
       </table>
+      <div className="flex items-center justify-end border-t border-border bg-muted/40 px-2 py-1">
+        <Button type="button" variant="outline" size="xs" onClick={addRow}>
+          添加一行
+        </Button>
+      </div>
     </div>
   )
 }
@@ -1216,7 +1500,8 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
 
 // EndpointRulesEditor ─ 动态的 endpoint 规则列表：手动点「添加」才出现一张
 // 卡片；每张卡片 = 规则名称 + 归纳范围（endpoint 关键词，逗号分隔）+
-// 私有配置 JSON 块（该 endpoint 的字段推荐值，一个 endpoint 一个 JSON 块）。
+// 私有配置字段推荐表（该 endpoint 的字段推荐值）。整张卡片全空的卡片在
+// 保存时自动丢弃。
 function EndpointRulesEditor({
   value,
   onChange,
@@ -1248,6 +1533,7 @@ function EndpointRulesEditor({
         每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），
         scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）
         —— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={'{"@ai-sdk/openai-compatible"'}+、必填勾上。
+        需要直接改 JSON 时，用弹窗左下角「切换到 JSON 编辑模式」。
       </p>
 
       {value.length === 0 ? (
@@ -1303,58 +1589,26 @@ function EndpointRulesEditor({
                 <Field>
                   <div className="flex items-center justify-between">
                     <FieldLabel>私有配置（该 endpoint 的字段推荐表）</FieldLabel>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground underline underline-offset-2"
-                      onClick={() => update(ruleIndex, (r) => ({ ...r, showJson: !r.showJson }))}
-                    >
-                      {rule.showJson ? '收起 JSON' : '编辑 JSON'}
-                    </button>
                   </div>
-                  {rule.showJson ? (
-                    <>
-                      <Textarea
-                        value={rule.fieldsJson}
-                        onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
-                        className={
-                          'h-[140px] resize-y font-mono text-xs leading-relaxed ' +
-                          (fieldsError ? 'border-destructive focus-visible:ring-destructive' : '')
-                        }
-                        spellCheck={false}
-                      />
-                      {fieldsError && (
-                        <p className="text-[11px] text-destructive">{fieldsError}</p>
-                      )}
-                    </>
-                  ) : (
-                    (() => {
-                      try {
-                        const recs = fieldsJsonToRecs(rule.fieldsJson)
-                        return (
-                          <RecommendationTable
-                            showScope
-                            recs={recs}
-                            onChange={(next) => update(ruleIndex, (r) => ({ ...r, fieldsJson: JSON.stringify(next, null, 2) }))}
-                          />
-                        )
-                      } catch (err) {
-                        return (
-                          <>
-                            <p className="pb-1 text-[11px] text-destructive">
-                              当前私有配置不是合法 JSON：{(err instanceof Error ? err.message : String(err))}，
-                              请在「编辑 JSON」里修正
-                            </p>
-                            <Textarea
-                              value={rule.fieldsJson}
-                              onChange={(e) => update(ruleIndex, (r) => ({ ...r, fieldsJson: e.target.value }))}
-                              className="h-[120px] resize-y font-mono text-xs leading-relaxed border-destructive"
-                              spellCheck={false}
-                            />
-                          </>
-                        )
-                      }
-                    })()
-                  )}
+                  {(() => {
+                    try {
+                      const recs = fieldsJsonToRecs(rule.fieldsJson)
+                      return (
+                        <RecommendationTable
+                          showScope
+                          recs={recs}
+                          onChange={(next) => update(ruleIndex, (r) => ({ ...r, fieldsJson: JSON.stringify(next, null, 2) }))}
+                        />
+                      )
+                    } catch (err) {
+                      return (
+                        <p className="pb-1 text-[11px] text-destructive">
+                          当前私有配置不是合法数据：{(err instanceof Error ? err.message : String(err))}，
+                          可用左下角「切换到 JSON 编辑模式」修正
+                        </p>
+                      )
+                    }
+                  })()}
                 </Field>
               </div>
             )

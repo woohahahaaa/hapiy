@@ -128,9 +128,6 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
 
         <DialogScrollBody className="flex flex-col gap-4" footer={
           <>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
             <Button onClick={handleSave}>保存</Button>
           </>
         }>

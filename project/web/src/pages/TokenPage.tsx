@@ -13,7 +13,6 @@ import type { Token, TokenInput } from '@/lib/dashboard-api'
 type TokenFormProps = {
   readonly token: Token | null
   readonly onSave: (token: TokenInput) => void
-  readonly onCancel: () => void
   readonly isSaving: boolean
 }
 
@@ -218,10 +217,6 @@ export function TokenPage() {
             <TokenForm
               token={editing}
               onSave={handleSave}
-              onCancel={() => {
-                setEditing(null)
-                setIsDialogOpen(false)
-              }}
               isSaving={isSaving}
             />
           </DialogContent>
@@ -248,14 +243,13 @@ export function TokenPage() {
   )
 }
 
-function TokenForm({ token, onSave, onCancel, isSaving }: TokenFormProps) {
+function TokenForm({ token, onSave, isSaving }: TokenFormProps) {
   const [name, setName] = useState(token?.name ?? '')
   const [quota, setQuota] = useState(token?.quota?.toString() ?? '')
 
   return (
     <DialogScrollBody footer={
       <>
-        <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
         <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
           {isSaving ? '保存中...' : '保存'}
         </Button>

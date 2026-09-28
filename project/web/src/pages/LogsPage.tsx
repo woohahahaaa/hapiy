@@ -522,9 +522,6 @@ export function LogsPage() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" size="sm" onClick={() => setClearDialogOpen(false)}>
-                取消
-              </Button>
               <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
                 清空当前页面的
               </Button>

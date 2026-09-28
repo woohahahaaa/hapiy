@@ -60,9 +60,6 @@ export function TokenUsageFieldsDialog({ open, onOpenChange, initial, onSave }: 
             <Button variant="outline" size="sm" onClick={() => setDraft(DEFAULT_TOKEN_USAGE_FIELDS)}>
               恢复默认
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
             <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
               {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
               保存

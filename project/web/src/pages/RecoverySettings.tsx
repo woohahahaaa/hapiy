@@ -791,9 +791,6 @@ function RecoveryHandlerDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              取消
-            </Button>
             <Button onClick={() => void handleSave()} disabled={saving}>
               {saving ? '保存中...' : '保存'}
             </Button>

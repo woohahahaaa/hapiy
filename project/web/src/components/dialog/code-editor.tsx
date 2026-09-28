@@ -182,7 +182,6 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
           {loading ? <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">正在加载文件内容…</div> : content !== null && <CodeSurface value={content} onChange={setContent} readOnly={mode === 'preview' || saving} />}
         </div>
 <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading || saving}>{mode === 'preview' ? '关闭' : '取消'}</Button>
           {mode === 'editable' && (
             <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>
           )}
@@ -197,7 +196,6 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
               </DialogHeader>
               <DialogScrollBody footer={
                 <>
-                  <Button variant="outline" onClick={() => setConfirmSave(false)} disabled={saving}>取消</Button>
                   <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>{saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}</Button>
                 </>
               } />

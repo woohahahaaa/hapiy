@@ -2940,10 +2940,10 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const data = await request(`/agent-type-rules/${encodeURIComponent(name)}/template`)
     return parseAgentTemplateConfig(data)
   },
-  async createAgentTypeRule(name: string): Promise<AgentTypeRule> {
+  async createAgentTypeRule(name: string, input?: Omit<AgentTypeRuleInput, 'name'>): Promise<AgentTypeRule> {
     return parseAgentTypeRule(await request('/agent-type-rules', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ ...input, name }),
     }))
   },
   async updateAgentTypeRule(id: string, input: AgentTypeRuleInput): Promise<AgentTypeRule> {

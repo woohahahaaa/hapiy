@@ -141,9 +141,6 @@ function CountdownControl({
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>
-                取消
-              </Button>
               <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
                 确认
               </Button>

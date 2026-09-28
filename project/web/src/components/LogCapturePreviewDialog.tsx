@@ -582,11 +582,7 @@ function PairDialog({ requestId, open, onClose }: {
             {pair && <Badge variant={pairHasError(pair) ? 'destructive' : 'default'}>{typeLabel}</Badge>}
           </DialogTitle>
         </DialogHeader>
-        <DialogScrollBody footer={
-          <>
-            <Button variant="outline" onClick={onClose}>关闭</Button>
-          </>
-        }>
+        <DialogScrollBody>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
             <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>
@@ -723,11 +719,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
             {row && <Badge variant="outline">系统</Badge>}
           </DialogTitle>
         </DialogHeader>
-        <DialogScrollBody footer={
-          <>
-            <Button variant="outline" onClick={onClose}>关闭</Button>
-          </>
-        }>
+        <DialogScrollBody>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
             <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>

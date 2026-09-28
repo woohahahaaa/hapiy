@@ -2338,9 +2338,6 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
             </DialogHeader>
             <DialogScrollBody footer={
               <>
-                <Button variant="outline" onClick={() => setConfirmDelete(null)}>
-                  取消
-                </Button>
                 <Button
                   variant="destructive"
                   onClick={() => {

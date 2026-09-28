@@ -396,9 +396,6 @@ export function TopologyVersionsModal({
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setConfirmRestoreId(null)} disabled={actionBusy !== null}>
-                取消
-              </Button>
               <Button onClick={() => void handleRestore()} disabled={actionBusy !== null}>
                 {actionBusy === 'restore' && <AppIcon name="progress_activity" size={16} className="animate-spin" data-icon="inline-start" />}
                 确认恢复

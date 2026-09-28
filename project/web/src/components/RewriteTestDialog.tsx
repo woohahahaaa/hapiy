@@ -206,7 +206,6 @@ export function RewriteTestDialog({
         </div>
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
-          <Button variant="outline" onClick={onClose}>取消</Button>
           <Button disabled={loading || (readonlyRule ? rules.length === 0 : !selectedRuleId)} onClick={handleRunTest}>
             {loading ? '测试中...' : '运行测试'}
           </Button>

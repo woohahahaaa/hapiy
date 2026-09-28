@@ -1224,9 +1224,6 @@ for (const p of summary?.providers ?? []) {
                   </span>
                 )}
               </div>
-              <Button variant="outline" onClick={tryClose} disabled={syncingAllManaged}>
-                关闭
-              </Button>
               <Button
                 variant="default"
                 disabled={syncingAllManaged || syncOk || !managed.some((m) => m.pending_sync)}
@@ -1341,7 +1338,6 @@ for (const p of summary?.providers ?? []) {
             </DialogHeader>
             <DialogScrollBody footer={
               <>
-                <Button variant="outline" onClick={() => setConfirmingTemplate(false)} disabled={applying}>取消</Button>
                 <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
                   {applying ? '应用中...' : '确认并生效'}
                 </Button>
@@ -1412,7 +1408,6 @@ function RenameProviderDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
             <Button
               disabled={!value.trim() || value.trim() === currentName}
               onClick={() => onConfirm(value.trim())}
@@ -2667,9 +2662,6 @@ function ConfirmSyncManagedDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={syncing}>
-              取消
-            </Button>
             <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
               {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
             </Button>

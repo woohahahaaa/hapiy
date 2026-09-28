@@ -126,7 +126,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1 text-left", className)}
+      className={cn("flex flex-col gap-1 pb-4 text-left", className)}
       {...props}
     />
   )
@@ -143,7 +143,7 @@ function DialogScrollBody({
   children,
   footer,
 }: React.ComponentProps<"div"> & {
-  footer: React.ReactNode
+  footer?: React.ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   return (
@@ -151,9 +151,7 @@ function DialogScrollBody({
       <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto p-4", className)}>
         {children}
       </div>
-      <DialogFooter scrollRef={scrollRef} bleed>
-        {footer}
-      </DialogFooter>
+      {footer && <DialogFooter scrollRef={scrollRef} bleed>{footer}</DialogFooter>}
     </>
   )
 }
