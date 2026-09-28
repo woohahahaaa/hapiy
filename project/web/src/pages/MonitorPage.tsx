@@ -403,9 +403,6 @@ function StatsSection() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" size="sm" onClick={() => closeClearDialog(false)} disabled={clearing}>
-                取消
-              </Button>
               <Button
                 variant="destructive"
                 size="sm"
@@ -430,9 +427,6 @@ function StatsSection() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" size="sm" onClick={() => closeClearConfirmDialog(false)} disabled={clearing}>
-                取消
-              </Button>
               <Button variant="destructive" size="sm" onClick={() => void handleClearUsage()} disabled={clearing}>
                 {clearing ? '清空中…' : '确认清空'}
               </Button>
@@ -657,9 +651,6 @@ function ActiveRequestsSection() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                取消
-              </Button>
               <Button onClick={() => void handleSave()} disabled={saving}>
                 {saving ? '保存中…' : '保存'}
               </Button>

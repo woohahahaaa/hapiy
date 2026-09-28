@@ -493,7 +493,6 @@ export function ManagedProviderDialog({
                 删除
               </Button>
             )}
-            <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
             <Button onClick={() => void submit()}>保存</Button>
           </>
         }>
@@ -728,7 +727,6 @@ export function ManagedProviderDialog({
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setConfirmDelete(false)} disabled={deleting}>取消</Button>
               <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
                 {deleting ? '删除中…' : '确认删除'}
               </Button>

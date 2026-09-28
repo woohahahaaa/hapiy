@@ -81,7 +81,6 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={onClose} disabled={saving}>取消</Button>
               <Button variant="outline" onClick={handleFormat} disabled={saving}>
                 <AppIcon name="auto_fix_high" data-icon="inline-start" />
                 格式化

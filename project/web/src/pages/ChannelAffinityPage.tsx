@@ -40,10 +40,9 @@ const parseList = (text: string): string[] => {
   return out
 }
 
-function RuleForm({ rule, onSave, onCancel, saving }: {
+function RuleForm({ rule, onSave, saving }: {
   readonly rule: ChannelAffinityRule | null
   readonly onSave: (rule: ChannelAffinityRule) => void | Promise<void>
-  readonly onCancel: () => void
   readonly saving: boolean
 }) {
   const [form, setForm] = useState<ChannelAffinityRule>(rule ?? emptyRule())
@@ -64,7 +63,6 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
   return (
     <DialogScrollBody footer={
       <>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button
           disabled={saving || !form.name.trim() || parseList(sessionText).length === 0}
           onClick={() => void handleSave()}
@@ -111,10 +109,9 @@ function RuleForm({ rule, onSave, onCancel, saving }: {
   )
 }
 
-function FallbackForm({ fallback, onSave, onCancel, saving }: {
+function FallbackForm({ fallback, onSave, saving }: {
   readonly fallback: ChannelAffinityFallback
   readonly onSave: (next: ChannelAffinityFallback) => void | Promise<void>
-  readonly onCancel: () => void
   readonly saving: boolean
 }) {
   const [enabled, setEnabled] = useState(fallback.enabled)
@@ -126,7 +123,6 @@ function FallbackForm({ fallback, onSave, onCancel, saving }: {
   return (
     <DialogScrollBody footer={
       <>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button
           disabled={saving}
           onClick={async () => {
@@ -367,14 +363,14 @@ export function ChannelAffinityPage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent width="md" scrollFooter>
           <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
-          <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} saving={isSaving} />
+          <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} saving={isSaving} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isFallbackOpen} onOpenChange={setIsFallbackOpen}>
         <DialogContent width="md" scrollFooter>
           <DialogHeader><DialogTitle>兜底渠道亲和性匹配</DialogTitle></DialogHeader>
-          <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} onCancel={() => setIsFallbackOpen(false)} saving={isSaving} />
+          <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} saving={isSaving} />
         </DialogContent>
       </Dialog>
 

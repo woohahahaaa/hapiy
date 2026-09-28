@@ -842,7 +842,6 @@ function AgentConfigFormDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
             <Button onClick={() => void handleSave()} disabled={saving}>
               {saving ? '保存中...' : record ? '保存修改' : '保存'}
             </Button>
@@ -1092,7 +1091,6 @@ export function ConfirmDeleteDialog({
         </DialogHeader>
         <DialogScrollBody footer={
           <>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>取消</Button>
             <Button variant="destructive" onClick={onConfirm} disabled={busy}>
               {busy ? '删除中...' : '确认删除'}
             </Button>

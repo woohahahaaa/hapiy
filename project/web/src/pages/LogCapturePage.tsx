@@ -470,9 +470,6 @@ export function LogCapturePage() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" disabled={clearing} onClick={() => setClearOpen(false)}>
-                取消
-              </Button>
               <Button
                 variant="destructive"
                 disabled={clearing}

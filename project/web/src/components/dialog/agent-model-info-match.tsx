@@ -476,7 +476,6 @@ export function AgentModelInfoMatchDialog({
             >
               {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '使用推荐配置'}
             </Button>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={applying}>关闭</Button>
           </>
         }>
         <div className="flex min-h-0 flex-1 flex-col">

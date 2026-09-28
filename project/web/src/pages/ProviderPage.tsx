@@ -28,7 +28,6 @@ import {
 type ProviderFormProps = {
   readonly provider: Provider | null
   readonly onSave: (provider: ProviderInput) => void
-  readonly onCancel: () => void
   readonly isSaving: boolean
   readonly useKey: boolean
   readonly onUseKeyChange: (next: boolean) => void
@@ -254,7 +253,7 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? '编辑供应商' : '添加供应商'}</DialogTitle></DialogHeader>
-            <ProviderForm provider={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsDialogOpen(false) }} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
+            <ProviderForm provider={editing} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
           </DialogContent>
         </Dialog>
 
@@ -279,7 +278,7 @@ export function ProviderPage() {
   )
 }
 
-function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
   const [form, setForm] = useState<ProviderInput>(provider ?? emptyProvider)
   // Per-key remarks as a parallel array aligned with form.keys (array instead
   // of a key→note map so editing a key text keeps its note). Converted back to
@@ -695,7 +694,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
     <>
       <DialogScrollBody footer={
         <>
-          <Button variant="outline" onClick={onCancel} disabled={isSaving}>取消</Button>
           <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? '保存中...' : '保存'}</Button>
         </>
       }>
@@ -881,7 +879,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           <DialogHeader><DialogTitle>模型列表接口</DialogTitle></DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setIsEndpointDialogOpen(false)}>取消</Button>
               <Button onClick={() => void handleSaveEndpoint()} disabled={isEndpointSaving}>{isEndpointSaving ? '保存中...' : '保存'}</Button>
             </>
           }>
@@ -913,7 +910,6 @@ function ProviderForm({ provider, onSave, onCancel, isSaving, useKey, onUseKeyCh
           <DialogHeader><DialogTitle>同步价格设置</DialogTitle></DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setSyncTarget(null)} disabled={refSyncing}>取消</Button>
               <Button onClick={() => void syncReference()} disabled={refSyncing}>{refSyncing ? '同步中...' : '确认同步'}</Button>
             </>
           }>

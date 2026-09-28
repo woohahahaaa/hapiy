@@ -21,11 +21,10 @@ import {
 interface RewriteResponseFormProps {
   rule: ResponseRewriteRule | null
   onSave: (r: ResponseRewriteRule) => void
-  onCancel: () => void
   saving: boolean
 }
 
-export function RewriteResponseForm({ rule, onSave, onCancel, saving }: RewriteResponseFormProps) {
+export function RewriteResponseForm({ rule, onSave, saving }: RewriteResponseFormProps) {
   const [form, setForm] = useState<RuleForm>(() => parseRule(rule?.script ?? ''))
   const [name, setName] = useState(rule?.name ?? '')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -77,9 +76,6 @@ export function RewriteResponseForm({ rule, onSave, onCancel, saving }: RewriteR
   return (
     <DialogScrollBody footer={
       <>
-        <Button variant="outline" onClick={onCancel}>
-          取消
-        </Button>
         <Button disabled={disabled} onClick={handleSave}>
           {saving ? '保存中...' : '保存'}
         </Button>

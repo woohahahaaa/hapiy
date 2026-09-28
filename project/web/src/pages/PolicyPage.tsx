@@ -259,7 +259,7 @@ function RewritePage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <RewriteForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
+          <RewriteForm rule={editing} onSave={handleSave} saving={mutating} />
         </DialogContent>
       </Dialog>
 
@@ -296,7 +296,7 @@ function RewritePage() {
   )
 }
 
-function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; onCancel: () => void; saving: boolean }) {
+function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; saving: boolean }) {
   const [form, setForm] = useState<RewriteRule>(
     rule || { id: '', name: '', script: '[]', status: true }
   )
@@ -309,7 +309,6 @@ function RewriteForm({ rule, onSave, onCancel, saving }: { rule: RewriteRule | n
         <div className="flex w-full items-center justify-between gap-2">
           <GjsonPathHelp />
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onCancel}>取消</Button>
             <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? '保存中...' : '保存'}</Button>
           </div>
         </div>
@@ -466,7 +465,7 @@ function FailoverPage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <FailoverForm key={editing?.id ?? 'new'} rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); clearEditQuery() }} saving={mutating} />
+          <FailoverForm key={editing?.id ?? 'new'} rule={editing} onSave={handleSave} saving={mutating} />
         </DialogContent>
 </Dialog>
 
@@ -503,7 +502,7 @@ function failoverDimensionLabel(dimension: FailoverRule['dimension']): string {
   return '未选择'
 }
 
-function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; onCancel: () => void; saving: boolean }) {
+function FailoverForm({ rule, onSave, saving }: { rule: FailoverRule | null; onSave: (r: FailoverRule) => void; saving: boolean }) {
   const initial: FailoverRule = rule ? {
     ...rule,
     disableThreshold: rule.disableThreshold >= 1 ? rule.disableThreshold : 1,
@@ -530,7 +529,6 @@ function FailoverForm({ rule, onSave, onCancel, saving }: { rule: FailoverRule |
   return (
     <DialogScrollBody footer={
       <>
-        <Button variant="outline" onClick={onCancel}>取消</Button>
         <Button
           disabled={saving || !form.name.trim() || !form.dimension}
           onClick={() =>
@@ -722,7 +720,7 @@ function RewriteResponsePage() {
           <DialogHeader>
             <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
           </DialogHeader>
-          <RewriteResponseForm rule={editing} onSave={handleSave} onCancel={() => { setEditing(null); setIsOpen(false); }} saving={mutating} />
+          <RewriteResponseForm rule={editing} onSave={handleSave} saving={mutating} />
         </DialogContent>
       </Dialog>
 

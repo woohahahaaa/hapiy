@@ -290,9 +290,6 @@ export function BillingSettings() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setSettingsOpen(false)} disabled={refreshing}>
-                取消
-              </Button>
               <Button onClick={handleSaveExchangeConfig} disabled={refreshing}>
                 {refreshing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                 保存并刷新
