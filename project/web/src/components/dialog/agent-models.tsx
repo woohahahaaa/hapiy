@@ -1480,13 +1480,13 @@ function ProviderRow({
         </div>
       ) : null}
       <div className={'flex min-w-0 flex-1 flex-col gap-0.5 text-left ' + (indent ? 'pl-3' : '')}>
-        <span className={'flex min-w-0 items-center truncate text-sm ' + (selected ? 'font-bold text-primary-foreground' : 'font-medium')}>{name}</span>
+        <span className={'flex min-w-0 items-center truncate text-sm ' + (selected ? 'font-medium text-primary-foreground' : 'font-medium')}>{name}</span>
         {(info || badge) && (
           <span
             className={
               'flex min-w-0 items-center gap-1 text-[11px] ' +
               (selected
-                ? 'font-bold text-primary-foreground/80'
+                ? 'text-primary-foreground/80'
                 : info !== null && typeof info === 'object' && info.green
                   ? 'text-success'
                   : 'text-muted-foreground')
@@ -1543,7 +1543,7 @@ function ModelRow({
       >
         {info ? (
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className={'flex min-w-0 items-center gap-2 truncate text-sm ' + (selected ? 'font-bold text-primary-foreground' : 'font-medium')}>
+            <span className={'flex min-w-0 items-center gap-2 truncate text-sm ' + (selected ? 'font-medium text-primary-foreground' : 'font-medium')}>
               <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
               {name}
             </span>
@@ -1551,7 +1551,7 @@ function ModelRow({
               className={
                 'truncate text-[11px] ' +
                 (selected
-                  ? 'font-bold text-primary-foreground/80'
+                  ? 'text-primary-foreground/80'
                   : typeof info === 'object' && info.green
                     ? 'text-success'
                     : 'text-muted-foreground')
@@ -1563,7 +1563,7 @@ function ModelRow({
         ) : (
           <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm">
             <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
-            <span className={selected ? 'font-bold text-primary-foreground' : 'font-medium'}>{name}</span>
+            <span className={selected ? 'font-medium text-primary-foreground' : 'font-medium'}>{name}</span>
           </span>
         )}
       </button>
@@ -2047,7 +2047,20 @@ function wrapRootScope(
   rawContent?: string | null,
 ): string {
   if (!summary || !providerId) return edited
-  const root = currentActualContent(summary, rawContent) as Record<string, unknown>
+  // Base the edit on the real file when we have it, so unrelated top-level
+  // keys ($schema, mcp, plugin, …) survive the round-trip and are never
+  // dropped on save. Only fall back to a root rebuilt from the summary when
+  // the raw content is missing or its provider root can't be located.
+  let root: Record<string, unknown> | null = null
+  if (rawContent && rawContent.trim() !== '') {
+    try {
+      const parsed = JSON.parse(stripJsoncComments(rawContent)) as Record<string, unknown>
+      if (providerRootOfContent(parsed)) root = parsed
+    } catch {
+      root = null
+    }
+  }
+  if (!root) root = currentActualContent(summary, rawContent) as Record<string, unknown>
   const providerMapContainer =
     root.providers && typeof root.providers === 'object'
       ? (root.providers as Record<string, unknown>)

@@ -90,7 +90,7 @@ export function NodeExecutorLogOutputItem({
             placeholder={t('logOutput.prefixPlaceholder')}
           />
         </div>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <CheckField
             label={t('logOutput.recordRequest')}
             checked={entry.recordRequest}
@@ -119,6 +119,7 @@ function CheckField({
   return (
     <label className="flex cursor-pointer items-center gap-1.5">
       <Checkbox
+        size={13}
         checked={checked}
         onCheckedChange={(v) => onChange(v === true)}
       />

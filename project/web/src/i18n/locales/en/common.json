@@ -51,6 +51,11 @@
     "toDark": "Switch to dark theme",
     "toLight": "Switch to light theme"
   },
+  "datePicker": {
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month",
+    "today": "Today"
+  },
   "nav": {
     "topology": "Topology",
     "monitor": "Monitor",

@@ -28,7 +28,7 @@ function DebugToggle({
           className="shrink-0"
         />
       </div>
-      <div className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{description}</div>
+      <div className="mt-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{description}</div>
     </div>
   )
 }

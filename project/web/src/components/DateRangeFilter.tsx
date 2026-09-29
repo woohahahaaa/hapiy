@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
+import { DatePicker } from '@/components/DatePicker'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { DateRange } from '@/lib/dashboard-api'
 
@@ -67,33 +67,19 @@ export function DateRangeFilter({
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <div className="relative">
-        <Input
-          type="date"
-          value={value.from ?? ''}
-          onChange={(e) => onChange({ ...value, from: e.target.value || undefined })}
-          className={cn('w-36', !value.from && '[&::-webkit-datetime-edit]:text-transparent')}
-        />
-        {!value.from && (
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            {t('dateRange.start')}
-          </span>
-        )}
-      </div>
+      <DatePicker
+        value={value.from}
+        onChange={(from) => onChange({ ...value, from })}
+        placeholder={t('dateRange.start')}
+        aria-label={t('dateRange.start')}
+      />
       <span className="text-xs text-muted-foreground">{t('dateRange.to')}</span>
-      <div className="relative">
-        <Input
-          type="date"
-          value={value.to ?? ''}
-          onChange={(e) => onChange({ ...value, to: e.target.value || undefined })}
-          className={cn('w-36', !value.to && '[&::-webkit-datetime-edit]:text-transparent')}
-        />
-        {!value.to && (
-          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            {t('dateRange.end')}
-          </span>
-        )}
-      </div>
+      <DatePicker
+        value={value.to}
+        onChange={(to) => onChange({ ...value, to })}
+        placeholder={t('dateRange.end')}
+        aria-label={t('dateRange.end')}
+      />
       <div className="flex items-center gap-1 ml-1">
         {QUICK_OPTIONS.map((opt) => (
           <Button

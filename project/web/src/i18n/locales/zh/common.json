@@ -51,6 +51,11 @@
     "toDark": "切换到深色主题",
     "toLight": "切换到浅色主题"
   },
+  "datePicker": {
+    "prevMonth": "上个月",
+    "nextMonth": "下个月",
+    "today": "今天"
+  },
   "nav": {
     "topology": "转发拓扑",
     "monitor": "监控",
