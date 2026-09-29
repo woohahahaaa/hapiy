@@ -239,7 +239,10 @@ function NavLink({
               type="button"
               aria-label={isOpen ? `折叠 ${item.label}` : `展开 ${item.label}`}
               onClick={onToggle}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                selfActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
+              )}
             >
               <AppIcon
                 name="chevron_right"
