@@ -228,8 +228,12 @@ function NavLink({
     if (parentClickable) {
       return (
         <SidebarMenuItem>
-          <div className="flex w-full items-center">
-            <SidebarMenuButton asChild isActive={selfActive}>
+          <div className="group/menu-row flex w-full items-center">
+            <SidebarMenuButton
+              asChild
+              isActive={selfActive}
+              className="group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground"
+            >
               <Link to={item.href!} onClick={onExpand}>
                 {item.icon}
                 <span>{item.label}</span>
@@ -240,7 +244,7 @@ function NavLink({
               aria-label={isOpen ? `折叠 ${item.label}` : `展开 ${item.label}`}
               onClick={onToggle}
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
                 selfActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
               )}
             >
