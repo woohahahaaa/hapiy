@@ -1,6 +1,8 @@
 {
   "dataTable": {
     "empty": "No data",
+    "loading": "Loading...",
+    "retry": "Retry",
     "widthRequired": "Width is required",
     "widthFormatInvalid": "Must end with % or pt/px (e.g. \"200 px\" or \"30 %\")"
   },

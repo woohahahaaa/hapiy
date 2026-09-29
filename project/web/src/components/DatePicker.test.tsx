@@ -21,4 +21,26 @@ describe('DatePicker', () => {
     expect(html).not.toContain('开始')
     expect(html).not.toContain('type="date"')
   })
+
+  it('month_precision_renders_year_month_label', () => {
+    const html = renderToStaticMarkup(
+      <DatePicker value="2026-09" precision="month" onChange={() => {}} placeholder="开始" />,
+    )
+    expect(html).toContain('2026年9月')
+    expect(html).not.toContain('type="date"')
+  })
+
+  it('time_mode_renders_time_label', () => {
+    const html = renderToStaticMarkup(
+      <DatePicker
+        value="14:30:05"
+        precision="second"
+        mode="time"
+        onChange={() => {}}
+        placeholder="开始"
+      />,
+    )
+    expect(html).toContain('14:30:05')
+    expect(html).not.toContain('type="date"')
+  })
 })

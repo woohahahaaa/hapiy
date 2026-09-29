@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadAgentTemplate(t *testing.T) {
-	for _, name := range []string{"opencode", "WorkBuddy", "ChatGPT", "openclaw"} {
+	for _, name := range []string{"opencode-v1", "opencode-v2", "WorkBuddy", "ChatGPT", "openclaw"} {
 		tmpl, ok := LoadAgentTemplate(name)
 		if !ok {
 			t.Fatalf("template %s not found", name)
@@ -27,7 +27,7 @@ func TestLoadAgentTemplate(t *testing.T) {
 // OpenAI 兼容、Codex 仅 responses）不需要 protocols。复现 openclaw 曾缺失
 // protocols 的回归。
 func TestEveryAgentProtocolsMatchSdkDriver(t *testing.T) {
-	driverKeys := map[string]bool{"api": true, "npm": true, "wire_api": true, "wireapi": true, "sdk": true, "adapter": true}
+	driverKeys := map[string]bool{"api": true, "npm": true, "package": true, "wire_api": true, "wireapi": true, "sdk": true, "adapter": true}
 	agents := ListBuiltinTemplates()
 	if len(agents) == 0 {
 		t.Fatal("no builtin agent templates")

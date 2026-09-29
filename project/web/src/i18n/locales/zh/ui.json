@@ -1,6 +1,8 @@
 {
   "dataTable": {
     "empty": "暂无数据",
+    "loading": "加载中...",
+    "retry": "重试",
     "widthRequired": "宽度不能为空",
     "widthFormatInvalid": "必须以 % 或 pt/px 结尾（如 \"200 px\" 或 \"30 %\"）"
   },

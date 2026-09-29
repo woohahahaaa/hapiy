@@ -54,7 +54,15 @@
   "datePicker": {
     "prevMonth": "上个月",
     "nextMonth": "下个月",
-    "today": "今天"
+    "prevYear": "上一年",
+    "nextYear": "下一年",
+    "prevDecade": "上十年",
+    "nextDecade": "下十年",
+    "today": "今天",
+    "now": "现在",
+    "hour": "时",
+    "minute": "分",
+    "second": "秒"
   },
   "nav": {
     "topology": "转发拓扑",

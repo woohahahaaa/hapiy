@@ -83,7 +83,7 @@ func (r AgentRecommendation) RecommendAction() string {
 // ShapeValue applies the 值写法 (op/sep/values) to the recommendation's
 // value before writing. ok=false means "skip this field" after shaping.
 func (r AgentRecommendation) ShapeValue(v any) (any, bool) {
-	return shapeValue(r.Op, r.Sep, r.Values, v)
+	return shapeValue(r.Op, r.Sep, r.Values, "", v)
 }
 
 // AgentModelInfoFieldSpec — one unified model-info field's write spec.
@@ -109,11 +109,15 @@ func (r AgentRecommendation) ShapeValue(v any) (any, bool) {
 // unified value, "delete" removes the field from the model config
 // entirely, and "skip" leaves any existing value untouched.
 type AgentModelInfoFieldSpec struct {
-	Path   string   `json:"path"`
-	Action string   `json:"action,omitempty"` // "set" | "skip" | "delete"（缺省 "set"）
-	Op     string   `json:"op,omitempty"`
-	Sep    string   `json:"sep,omitempty"`
-	Values []string `json:"values,omitempty"`
+	Path         string   `json:"path"`
+	Action       string   `json:"action,omitempty"` // "set" | "skip" | "delete"（缺省 "set"）
+	Op           string   `json:"op,omitempty"`
+	Sep          string   `json:"sep,omitempty"`
+	Values       []string `json:"values,omitempty"`
+	// VariantShape 仅对 op="variants" 生效："" = 旧版对象 map
+	// ({level:{options:{reasoningEffort}}})，openclaw/opencode-v1 用；
+	// "array" = opencode-v2 数组形状 ([{id,settings:{reasoningEffort}}])。
+	VariantShape string `json:"variant_shape,omitempty"`
 }
 
 // RecommendAction resolves the effective action of a model-info field
@@ -160,18 +164,20 @@ func (s AgentModelInfoFieldSpec) MarshalJSON() ([]byte, error) {
 // (empty raw / first / join values), so agents never receive e.g. an
 // empty array where a boolean is expected.
 func (s AgentModelInfoFieldSpec) Shape(v any) (any, bool) {
-	return shapeValue(s.Op, s.Sep, s.Values, v)
+	return shapeValue(s.Op, s.Sep, s.Values, s.VariantShape, v)
 }
 
 // shapeValue transforms a unified/raw value into the concrete value an
 // agent expects: op raw (as-is, filtered by allowed values), bool
 // (non-empty → true, empty → false), first (first element of a list),
-// join (list joined with sep), variants (list of allowed levels →
-// {level:{options:{reasoningEffort:level}}} preset map). ok=false means
-// "skip this field".
+// join (list joined with sep), variants (list of allowed levels → preset
+// map/array of reasoningEffort). ok=false means "skip this field".
+// variantShape selects the variants preset shape: "" → legacy object map
+// ({level:{options:{reasoningEffort:level}}}), "array" → opencode-v2 array
+// ([{id,settings:{reasoningEffort:level}}]).
 // This is the single 值写法 engine shared by the unified model-info
 // fields and AgentRecommendation writing.
-func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
+func shapeValue(op, sep string, allowed []string, variantShape string, v any) (any, bool) {
 	switch op {
 	case "bool":
 		if v == nil {
@@ -202,9 +208,10 @@ func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
 		}
 		return strings.Join(arr, sep), true
 	case "variants":
-		// 把「允许的档位集合」写成 agent 的 variants 预设对象：
+		// 把「允许的档位集合」写成 agent 的 variants 预设。""（旧版）：
 		// 每个档位一个 {"options":{"reasoningEffort":<档位>}} 条目
-		// （opencode 官方表达多档位的结构）。交集为空则不写。
+		// （opencode-v1 的对象 map）；"array"（opencode-v2）：
+		// [{id:<档位>, settings:{reasoningEffort:<档位>}}]。交集为空则不写。
 		arr, ok := toStrings(v)
 		if !ok {
 			return nil, false
@@ -212,6 +219,16 @@ func shapeValue(op, sep string, allowed []string, v any) (any, bool) {
 		arr = filterValues(allowed, arr)
 		if len(arr) == 0 {
 			return nil, false
+		}
+		if variantShape == "array" {
+			out := make([]map[string]any, 0, len(arr))
+			for _, lvl := range arr {
+				out = append(out, map[string]any{
+					"id":       lvl,
+					"settings": map[string]any{"reasoningEffort": lvl},
+				})
+			}
+			return out, true
 		}
 		out := make(map[string]any, len(arr))
 		for _, lvl := range arr {
@@ -682,7 +699,7 @@ var builtinAgentRules = []struct {
 	Protocols       []AgentProtocol
 }{
 	{
-		Name: "opencode",
+		Name: "opencode-v1",
 		OsPaths: AgentOsPaths{
 			Windows: `%USERPROFILE%\.config\opencode\opencode.json`,
 			Mac:     `~/.config/opencode/opencode.json`,
@@ -718,6 +735,36 @@ var builtinAgentRules = []struct {
 		// 包含任一关键词即命中该协议，从而拿到对应的 npm 推荐值。顺序即
 		// 优先级 —— 关键词越具体越靠前，避免误命中。
 		Protocols: opencodeProtocols,
+	},
+	{
+		// opencode-v2：新版 opencode（V2）配置结构。V2 的 provider 用
+		// `providers`（复数）顶层键、驱动字段叫 `package`、端点/密钥写在
+		// `settings.*`（V1 是 provider/options.*），reasoning 档位 variants
+		// 是 [{id,settings:{reasoningEffort}}] 数组形状。白名单含 max。
+		Name: "opencode-v2",
+		OsPaths: AgentOsPaths{
+			Windows: `%USERPROFILE%\.config\opencode\opencode.json`,
+			Mac:     `~/.config/opencode/opencode.json`,
+		},
+		JsonPaths: AgentJsonPaths{
+			Provider:        `providers`,
+			Model:           `providers.{provider_id}.models`,
+			ModelsContainer: "object",
+		},
+		Recommendations: opencodeV2Recommendations,
+		ModelInfoFields: AgentModelInfoFieldPaths{
+			MaxContext:     ModelInfoPath(`limit.context`),
+			MaxOutputToken: ModelInfoPath(`limit.output`),
+			InputTypes:     ModelInfoPath(`modalities.input`),
+			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
+			ReasoningEffort: AgentModelInfoFieldSpec{
+				Path:         `variants`,
+				Op:           "variants",
+				Values:       []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"},
+				VariantShape: "array",
+			},
+		},
+		Protocols: opencodeV2Protocols,
 	},
 	{
 		Name: "WorkBuddy",
@@ -968,6 +1015,47 @@ var opencodeProtocols = []AgentProtocol{
 		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "npm", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
+		},
+	},
+}
+
+// opencodeV2Recommendations / opencodeV2Protocols —— opencode V2 结构：
+// provider 驱动字段叫 `package`，端点/密钥写在 `settings.*`（V1 是
+// options.*）。其余字段与 opencode-v1 相同。
+var opencodeV2Recommendations = []AgentRecommendation{
+	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
+	{Scope: "provider", Key: "package", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
+	{Scope: "provider", Key: "settings.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
+	{Scope: "provider", Key: "settings.apiKey", Description: "认证密钥", Required: true},
+	{Scope: "provider", Key: "settings.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
+	{Scope: "model", Key: "name", Description: "模型在界面里的显示名"},
+	{Scope: "model", Key: "limit.context", Description: "上下文 token 上限"},
+	{Scope: "model", Key: "reasoning", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
+	{Scope: "model", Key: "tool_call", Description: "模型是否支持工具调用"},
+	{Scope: "model", Key: "attachment", Description: "模型是否支持文件/图片附件输入（输入格式）"},
+}
+
+var opencodeV2Protocols = []AgentProtocol{
+	{
+		Name:         "OpenAI Responses API",
+		EndpointTags: []string{"responses"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "package", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
+		},
+	},
+	{
+		Name:         "Anthropic Messages API",
+		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "package", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
+			{Scope: "model", Key: "limit.output", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
+		},
+	},
+	{
+		Name:         "OpenAI 兼容 Chat Completions",
+		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "package", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
 		},
 	},
 }

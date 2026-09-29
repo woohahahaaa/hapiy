@@ -108,9 +108,9 @@ func TestAgentModelInfoFieldSpecShape(t *testing.T) {
 // formatting-neutral ones like a different recommended value) breaks the
 // match, and empty-vs-null storage shapes never count as a change.
 func TestAgentTypeRuleMatchesTemplate(t *testing.T) {
-	tmpl, ok := LoadAgentTemplate("opencode")
+	tmpl, ok := LoadAgentTemplate("opencode-v1")
 	if !ok {
-		t.Fatal("opencode template not found")
+		t.Fatal("opencode-v1 template not found")
 	}
 	tmpl = normalizeTemplate(tmpl)
 
@@ -170,7 +170,7 @@ func TestEnsureDefaultAgentTypesFollow(t *testing.T) {
 	}
 
 	var rule AgentTypeRule
-	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+	if err := db.Where("name = ?", "opencode-v1").First(&rule).Error; err != nil {
 		t.Fatal(err)
 	}
 	if rule.Customized {
@@ -192,10 +192,10 @@ func TestEnsureDefaultAgentTypesFollow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var after AgentTypeRule
-	if err := db.Where("name = ?", "opencode").First(&after).Error; err != nil {
+	if err := db.Where("name = ?", "opencode-v1").First(&after).Error; err != nil {
 		t.Fatal(err)
 	}
-	tmpl, ok := LoadAgentTemplate("opencode")
+	tmpl, ok := LoadAgentTemplate("opencode-v1")
 	if !ok {
 		t.Fatal("template missing")
 	}
@@ -221,7 +221,7 @@ func TestEnsureDefaultAgentTypesFollow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var kept AgentTypeRule
-	if err := db.Where("name = ?", "opencode").First(&kept).Error; err != nil {
+	if err := db.Where("name = ?", "opencode-v1").First(&kept).Error; err != nil {
 		t.Fatal(err)
 	}
 	if !kept.Customized {
@@ -242,7 +242,7 @@ func TestEnsureDefaultAgentTypesFollow(t *testing.T) {
 		t.Fatal(err)
 	}
 	var back AgentTypeRule
-	if err := db.Where("name = ?", "opencode").First(&back).Error; err != nil {
+	if err := db.Where("name = ?", "opencode-v1").First(&back).Error; err != nil {
 		t.Fatal(err)
 	}
 	if !back.MatchesTemplate(normalizeTemplate(tmpl)) {

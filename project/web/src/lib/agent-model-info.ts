@@ -58,10 +58,15 @@ function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
       return filtered.length > 0 ? filtered.join(spec.sep ?? ',') : undefined
     }
     case 'variants': {
-      // 交集档位 → variants 预设对象（与后端 shapeValue 的 variants 一致）
+      // 交集档位 → variants 预设。""=旧版对象 map（opencode-v1，
+      // {level:{options:{reasoningEffort}}}）；"array"=opencode-v2
+      // 数组（[{id,settings:{reasoningEffort}}]）。与后端 shapeValue 一致。
       if (!Array.isArray(raw) || raw.length === 0) return undefined
       const filtered = filterValues(spec.values, raw)
       if (filtered.length === 0) return undefined
+      if (spec.variant_shape === 'array') {
+        return filtered.map((lvl) => ({ id: lvl, settings: { reasoningEffort: lvl } }))
+      }
       const out: Record<string, unknown> = {}
       for (const lvl of filtered) out[String(lvl)] = { options: { reasoningEffort: lvl } }
       return out
