@@ -142,34 +142,36 @@ export function BaseUrlSettings() {
         )}
 
         {state.kind === 'ready' && (
-          <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+          <form className="flex max-w-2xl flex-col gap-5" onSubmit={handleSubmit}>
             <div className="grid gap-1.5 text-sm">
               <span>{t('baseUrl.originLabel')}</span>
               <Input
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="https://hapiying.hihy.me:6060"
-                className="max-w-md font-mono"
+                className="w-96 font-mono"
               />
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.originHint')}
               </p>
             </div>
-            <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
-              {t('baseUrl.suffixLabel')}
+            <div className="grid gap-1.5 text-sm">
+              <label htmlFor="base-url-suffix">
+                {t('baseUrl.suffixLabel')}
+              </label>
               <Input
                 id="base-url-suffix"
                 value={suffixValue}
                 onChange={(event) => setSuffixValue(event.target.value)}
                 disabled={saving}
                 placeholder="proxy"
-                className="max-w-md"
+                className="w-48"
               />
-            </label>
+            </div>
             <div className="grid gap-1.5 text-sm">
               <span>{t('baseUrl.finalUrlLabel')}</span>
               <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+                <code className="w-96 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                   {baseUrl}
                 </code>
                 <Button
@@ -188,51 +190,55 @@ export function BaseUrlSettings() {
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
               </p>
-              {paths.map((p, index) => {
-                const name = p.trim()
-                return (
-                  <div key={index} className="flex items-center gap-2">
-                    <Input
-                      value={p}
-                      onChange={(event) => updatePath(index, event.target.value)}
-                      disabled={saving}
-                      placeholder={t('baseUrl.sourceNamePlaceholder')}
-                      className="w-36 shrink-0"
-                    />
-                    <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
-                      {name ? fullUrlFor(name) : `${baseUrl}/__…`}
-                    </code>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyUrl(fullUrlFor(name))}
-                      disabled={saving || !name}
-                    >
-                      <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removePath(index)}
-                      disabled={saving}
-                      aria-label={t('baseUrl.removePathAria')}
-                    >
-                      <AppIcon name="delete" size={14} />
-                    </Button>
-                  </div>
-                )
-              })}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addPath}
-                disabled={saving}
-              >
-                      <AppIcon name="add" size={14} /> {t('baseUrl.addSource')}
-              </Button>
+              <div className="flex flex-col gap-2">
+                {paths.map((p, index) => {
+                  const name = p.trim()
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={p}
+                        onChange={(event) => updatePath(index, event.target.value)}
+                        disabled={saving}
+                        placeholder={t('baseUrl.sourceNamePlaceholder')}
+                        className="w-36 shrink-0"
+                      />
+                      <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+                        {name ? fullUrlFor(name) : `${baseUrl}/__…`}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyUrl(fullUrlFor(name))}
+                        disabled={saving || !name}
+                      >
+                        <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removePath(index)}
+                        disabled={saving}
+                        aria-label={t('baseUrl.removePathAria')}
+                      >
+                        <AppIcon name="delete" size={14} />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addPath}
+                  disabled={saving}
+                >
+                  <AppIcon name="add" size={14} /> {t('baseUrl.addSource')}
+                </Button>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
               {t('baseUrl.requestExamplePrefix')}<code>{`${baseUrl}/__${t('baseUrl.sourcePathSegment')}/v1/chat/completions`}</code>

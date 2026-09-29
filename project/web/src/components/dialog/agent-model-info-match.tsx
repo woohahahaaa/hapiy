@@ -651,7 +651,7 @@ export function AgentModelInfoMatchDialog({
                                     <ul className="space-y-1">
                                       {changes.slice(0, 3).map((c, i) => (
                                         <li key={i} className="break-all text-[11px] leading-snug">
-                                          <span className="font-medium">{c.label}</span>
+                                          <span className="font-medium">{t('modelInfoFields.' + c.label)}</span>
                                           <span className="mx-1 text-muted-foreground">
                                             {displayValue(c.oldValue)} → {displayValue(c.newValue)}
                                           </span>

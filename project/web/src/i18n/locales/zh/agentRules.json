@@ -170,5 +170,12 @@
       "loadFailed": "加载失败",
       "applyFailed": "应用失败"
     }
+  },
+  "modelInfoFields": {
+    "maxContext": "最大上下文",
+    "maxOutputToken": "最大输出token",
+    "inputTypes": "支持的输入类型",
+    "thinkingLevels": "支持的思考程度",
+    "reasoningEffort": "思考档位"
   }
 }

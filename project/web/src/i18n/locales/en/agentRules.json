@@ -170,5 +170,12 @@
       "loadFailed": "Failed to load",
       "applyFailed": "Apply failed"
     }
+  },
+  "modelInfoFields": {
+    "maxContext": "Max context",
+    "maxOutputToken": "Max output tokens",
+    "inputTypes": "Supported input types",
+    "thinkingLevels": "Supported reasoning levels",
+    "reasoningEffort": "Reasoning effort"
   }
 }
