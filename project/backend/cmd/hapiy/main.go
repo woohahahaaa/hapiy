@@ -225,6 +225,8 @@ func main() {
 			dashboardAuthed.POST("/agent-config-files/test-ssh", handler.TestAgentSshConnection())
 			dashboardAuthed.GET("/agent-config-files/:id/content", handler.GetAgentConfigFileContent(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id/content", handler.PutAgentConfigFileContent(db, encKey))
+			dashboardAuthed.GET("/agent-config-files/:id/versions", handler.ListAgentConfigVersions(db, encKey))
+			dashboardAuthed.POST("/agent-config-files/:id/versions/:vid/restore", handler.RestoreAgentConfigVersion(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id", handler.UpdateAgentConfigFile(db, encKey))
 			dashboardAuthed.DELETE("/agent-config-files/:id", handler.DeleteAgentConfigFile(db))
 			dashboardAuthed.GET("/agent-config-files/:id/models", handler.GetAgentConfigFileModels(db, encKey))

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/i18n"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/gin-gonic/gin"
@@ -102,7 +103,7 @@ func ListLogCapturePairs(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "log capture not initialized"})
 			return
 		}
-		pairs, total, err := writer.ListPairs(params)
+		pairs, total, err := writer.ListPairs(i18n.Lang(c.Request), params)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

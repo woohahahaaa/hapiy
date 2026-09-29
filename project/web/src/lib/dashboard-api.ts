@@ -886,6 +886,18 @@ export type AgentConfigFileInput = {
   readonly ssh_config: AgentSshConfig | null
 }
 
+export type AgentConfigVersionRef = {
+  readonly id: string
+  readonly createdAt: string
+}
+
+export type AgentConfigVersion = {
+  readonly id: string
+  readonly createdAt: string
+  readonly current: boolean
+  readonly restoredFrom: AgentConfigVersionRef | null
+}
+
 export type AgentConfigListParams = {
   readonly limit: number
   readonly offset: number
@@ -2298,6 +2310,36 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
   }
 }
 
+function parseAgentConfigVersionRef(value: unknown): AgentConfigVersionRef | null {
+  if (value === null || value === undefined) return null
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('version') }), null)
+  }
+  return {
+    id: readString(value.id, 'version.id'),
+    createdAt: readString(value.created_at, 'version.created_at'),
+  }
+}
+
+function parseAgentConfigVersion(value: unknown): AgentConfigVersion {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('version') }), null)
+  }
+  return {
+    id: readString(value.id, 'version.id'),
+    createdAt: readString(value.created_at, 'version.created_at'),
+    current: readBoolean(value.current, 'version.current'),
+    restoredFrom: parseAgentConfigVersionRef(value.restored_from),
+  }
+}
+
+function parseAgentConfigVersionList(value: unknown): readonly AgentConfigVersion[] {
+  if (!isRecord(value) || !Array.isArray(value.versions)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('versionList') }), null)
+  }
+  return value.versions.map(parseAgentConfigVersion)
+}
+
 function parseAgentModelSummary(value: unknown): AgentModelSummary {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelSummary') }), null)
@@ -3076,6 +3118,17 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ content }),
     })
+  },
+  async listAgentConfigFileVersions(id: string): Promise<readonly AgentConfigVersion[]> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/versions`)
+    return parseAgentConfigVersionList(data)
+  },
+  async restoreAgentConfigFileVersion(id: string, versionId: string): Promise<readonly AgentConfigVersion[]> {
+    const data = await request(
+      `/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
+      { method: 'POST' },
+    )
+    return parseAgentConfigVersionList(data)
   },
   async updateAgentConfigFile(id: string, input: AgentConfigFileInput): Promise<AgentConfigFile> {
     return parseAgentConfigFile(await request(`/agent-config-files/${encodeURIComponent(id)}`, {

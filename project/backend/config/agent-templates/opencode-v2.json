@@ -48,7 +48,7 @@
     {
       "scope": "provider",
       "key": "package",
-      "description": "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类",
+      "description": "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类",
       "recommended": null,
       "required": true
     },
