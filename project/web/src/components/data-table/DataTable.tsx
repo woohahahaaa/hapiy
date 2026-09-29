@@ -779,7 +779,16 @@ export function DataTable<T extends Record<string, unknown>>({
             <div
               key={col.key}
               data-measure-col={i}
-              className="w-max whitespace-nowrap px-2 py-2"
+              className={cn(
+                'w-max whitespace-nowrap px-2 py-2',
+                // Mirror the real <td> padding (see the cell classes above):
+                // the first column is indented with pl-6 and the last carries
+                // pr-6. Without this the measured width undercounts those
+                // columns by that extra padding, which is enough to clip a
+                // button down to its bare text after the proportional split.
+                i === 0 && 'pl-6',
+                i === columns.length - 1 && 'pr-6',
+              )}
             >
               {renderCellContent(col, pendingReference.row as T, 'ellipsis')}
             </div>
