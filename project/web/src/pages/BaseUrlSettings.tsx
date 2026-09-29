@@ -149,7 +149,7 @@ export function BaseUrlSettings() {
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
                 placeholder="https://hapiying.hihy.me:6060"
-                className="font-mono"
+                className="max-w-md font-mono"
               />
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.originHint')}
@@ -163,6 +163,7 @@ export function BaseUrlSettings() {
                 onChange={(event) => setSuffixValue(event.target.value)}
                 disabled={saving}
                 placeholder="proxy"
+                className="max-w-md"
               />
             </label>
             <div className="grid gap-1.5 text-sm">

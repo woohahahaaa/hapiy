@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { i18n } from '@/i18n/i18n'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -99,7 +101,7 @@ function parseRuleConfigJsonc(text: string): {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('顶层必须是 { common, protocols } 对象')
+    throw new Error(i18n.t('agentRules:errors.topMustBeObject'))
   }
   const rec = parsed as Record<string, unknown>
   const common = Array.isArray(rec.common) ? rec.common : []
@@ -115,7 +117,7 @@ function parseRuleConfigJsonc(text: string): {
 // recsFromUnknownArray (blank rows dropped, remaining rows validated).
 function coerceRecommendation(value: unknown): AgentRecommendation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('字段每一项必须是对象')
+    throw new Error(i18n.t('agentRules:errors.fieldItemMustBeObject'))
   }
   const v = value as Record<string, unknown>
   const key = typeof v.key === 'string' ? v.key : ''
@@ -148,23 +150,23 @@ function coerceRecommendation(value: unknown): AgentRecommendation {
 
 function normalizeAgentProtocol(value: unknown): AgentProtocol {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('protocols 里每一项必须是对象')
+    throw new Error(i18n.t('agentRules:errors.protocolItemMustBeObject'))
   }
   const v = value as Record<string, unknown>
   if (typeof v.name !== 'string' || !v.name.trim()) {
-    throw new Error('协议块缺少 name')
+    throw new Error(i18n.t('agentRules:errors.protocolMissingName'))
   }
   const conditions = Array.isArray(v.conditions) ? v.conditions : []
   const tags = Array.isArray(v.endpoint_tags) ? v.endpoint_tags : []
   if (tags.length === 0) {
-    throw new Error(`协议「${v.name}」缺少 endpoint_tags（根据 endpoint 来判断，必填）`)
+    throw new Error(i18n.t('agentRules:errors.protocolMissingTags', { name: v.name }))
   }
   const fields = Array.isArray(v.fields) ? v.fields : []
   return {
     name: v.name,
     conditions: conditions.map((c) => {
       if (!c || typeof c !== 'object' || Array.isArray(c)) {
-        throw new Error(`协议「${v.name}」的 conditions 项格式错误`)
+        throw new Error(i18n.t('agentRules:errors.protocolConditionInvalid', { name: v.name }))
       }
       const cv = c as Record<string, unknown>
       const op = cv.op
@@ -199,7 +201,7 @@ function isEmptyRecommendation(r: AgentRecommendation): boolean {
 function recsFromUnknownArray(items: readonly unknown[]): AgentRecommendation[] {
   const out = items.map(coerceRecommendation).filter((r) => !isEmptyRecommendation(r))
   for (const r of out) {
-    if (!r.key.trim()) throw new Error('字段缺少 key（字段路径）')
+    if (!r.key.trim()) throw new Error(i18n.t('agentRules:errors.fieldMissingKey'))
   }
   return out
 }
@@ -251,7 +253,7 @@ function emptyEndpointRule(): EndpointRuleEdit {
 function fieldsJsonToRecs(text: string): AgentRecommendation[] {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
-  if (!Array.isArray(parsed)) throw new Error('字段必须写成 JSON 数组，每项一个推荐字段对象')
+  if (!Array.isArray(parsed)) throw new Error(i18n.t('agentRules:errors.fieldsMustBeArray'))
   return recsFromUnknownArray(parsed)
 }
 
@@ -265,7 +267,7 @@ function tagsTextToArray(text: string): string[] {
 function parseCommonArray(text: string): AgentRecommendation[] {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
-  if (!Array.isArray(parsed)) throw new Error('公共配置必须是 JSON 数组')
+  if (!Array.isArray(parsed)) throw new Error(i18n.t('agentRules:errors.commonMustBeArray'))
   return recsFromUnknownArray(parsed)
 }
 
@@ -284,14 +286,14 @@ function isEmptyEndpointRule(rule: EndpointRuleEdit): boolean {
 // returning an error string when the card is incomplete.
 function ruleToProtocol(rule: EndpointRuleEdit, index: number): AgentProtocol | string {
   const name = rule.name.trim()
-  if (!name) return `Endpoint 规则 #${index + 1}：缺少规则名称`
+  if (!name) return i18n.t('agentRules:errors.endpointRuleMissingName', { n: index + 1 })
   const tags = tagsTextToArray(rule.tagsText)
-  if (tags.length === 0) return `Endpoint 规则「${name}」：归纳范围为空（endpoint_tags 必填）`
+  if (tags.length === 0) return i18n.t('agentRules:errors.endpointRuleTagsEmpty', { name })
   let recommendations: AgentRecommendation[]
   try {
     recommendations = fieldsJsonToRecs(rule.fieldsJson)
   } catch (err) {
-    return `Endpoint 规则「${name}」的字段 JSON 解析失败：` + (err instanceof Error ? err.message : String(err))
+    return i18n.t('agentRules:errors.endpointRuleFieldsParseFailed', { name }) + (err instanceof Error ? err.message : String(err))
   }
   return {
     name,
@@ -316,11 +318,12 @@ function formatTime(iso: string): string {
 }
 
 export function AgentRulesPage() {
+  const { t } = useTranslation('agentRules')
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="接管Agent"
-        description="配置各 Agent 默认配置文件的位置、修改与解析规则；通常沿用系统默认，无需手动添加"
+        title={t('common:nav.agent')}
+        description={t('page.description')}
       />
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentTypeRulesTab />
@@ -330,6 +333,7 @@ export function AgentRulesPage() {
 }
 
 function AgentTypeRulesTab() {
+  const { t } = useTranslation('agentRules')
   const [rules, setRules] = useState<readonly AgentTypeRule[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -349,7 +353,7 @@ function AgentTypeRulesTab() {
       setRules(result.rules)
       setTotal(result.total)
     } catch (err) {
-      setError(toErrorMessage(err, '加载失败'))
+      setError(toErrorMessage(err, t('errors.loadFailed')))
     } finally {
       setLoading(false)
     }
@@ -364,10 +368,10 @@ function AgentTypeRulesTab() {
     setConfirmDelete(null)
     try {
       await dashboardApi.deleteAgentTypeRule(row.id)
-      toast('已删除')
+      toast(t('toast.deleted'))
       void fetch()
     } catch (err) {
-      toast.error(toErrorMessage(err, '删除失败'))
+      toast.error(toErrorMessage(err, t('errors.deleteFailed')))
     } finally {
       setMutating(false)
     }
@@ -376,13 +380,13 @@ function AgentTypeRulesTab() {
   const columns: ColumnDef<AgentTypeRule>[] = useMemo(() => [
     {
       key: 'name',
-      label: '名称',
+      label: t('columns.name'),
       defaultWidth: { kind: 'percent', value: 50 },
       accessor: (row) => row.name,
     },
     {
       key: 'createdAt',
-      label: '创建时间',
+      label: t('columns.createdAt'),
       defaultWidth: { kind: 'pixel', value: 180 },
       slot: {
         line1: (row) => formatDate(row.created_at),
@@ -391,7 +395,7 @@ function AgentTypeRulesTab() {
     },
     {
       key: 'actions',
-      label: '操作',
+      label: t('columns.actions'),
       defaultWidth: { kind: 'pixel', value: 90 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
@@ -401,7 +405,7 @@ function AgentTypeRulesTab() {
             variant="ghost"
             size="icon-sm"
             disabled={mutating}
-            title="编辑"
+            title={t('common:action.edit')}
             onClick={() => setEditingRule(row)}
           >
             <AppIcon name="edit" />
@@ -410,7 +414,7 @@ function AgentTypeRulesTab() {
             variant="ghost"
             size="icon-sm"
             disabled={mutating}
-            title="删除"
+            title={t('common:action.delete')}
             onClick={() => setConfirmDelete(row)}
           >
             <AppIcon name="delete" />
@@ -418,7 +422,7 @@ function AgentTypeRulesTab() {
         </div>
       ),
     },
-  ], [mutating])
+  ], [mutating, t])
 
   return (
     <>
@@ -433,12 +437,12 @@ function AgentTypeRulesTab() {
         limit={limit}
         onOffsetChange={setOffset}
         onLimitChange={setLimit}
-        emptyText="暂无规则，点击「添加规则」创建第一条"
+        emptyText={t('list.empty')}
         onRetry={() => void fetch()}
         actions={
           <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
             <AppIcon name="add" data-icon="inline-start" />
-            添加接管规则
+            {t('list.add')}
           </Button>
         }
       />
@@ -460,8 +464,8 @@ function AgentTypeRulesTab() {
         onOpenChange={(open) => {
           if (!open) setConfirmDelete(null)
         }}
-        title="确认删除"
-        description={`将删除规则「${confirmDelete?.name ?? ''}」，删除后不可恢复。`}
+        title={t('dialog.deleteTitle')}
+        description={t('dialog.deleteDescription', { name: confirmDelete?.name ?? '' })}
         busy={mutating}
         onConfirm={() => {
           if (confirmDelete) void handleDelete(confirmDelete)
@@ -541,7 +545,7 @@ function buildModelInfoFieldsPayload(
     if (path === '') {
       const hasOther = row.op !== 'raw' || row.action !== 'set' || row.sep.trim() !== '' || row.valuesText.trim() !== ''
       if (hasOther && error === null) {
-        error = `「${MODEL_INFO_FIELD_LABELS[key]}」请先填写路径`
+        error = i18n.t('agentRules:errors.modelInfoPathRequired', { label: MODEL_INFO_FIELD_LABELS[key] })
       }
       continue
     }
@@ -681,11 +685,11 @@ function parseDialogDoc(text: string): RuleDialogDoc {
   const cleaned = stripJsoncComments(text)
   const parsed: unknown = JSON.parse(cleaned)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('顶层必须是 JSON 对象（含 name / os_paths / json_paths / model_info_fields / common / protocols）')
+    throw new Error(i18n.t('agentRules:errors.topMustBeJsonObject'))
   }
   const v = parsed as Record<string, unknown>
   const name = typeof v.name === 'string' ? v.name : ''
-  if (!name.trim()) throw new Error('缺少 name（规则名称）')
+  if (!name.trim()) throw new Error(i18n.t('agentRules:errors.dialogNameRequired'))
   const osRaw = v.os_paths && typeof v.os_paths === 'object' && !Array.isArray(v.os_paths)
     ? (v.os_paths as Record<string, unknown>)
     : {}
@@ -695,7 +699,7 @@ function parseDialogDoc(text: string): RuleDialogDoc {
   const container = jpRaw.models_container
   const mifRaw = v.model_info_fields
   if (mifRaw !== undefined && (typeof mifRaw !== 'object' || mifRaw === null || Array.isArray(mifRaw))) {
-    throw new Error('model_info_fields 必须是对象')
+    throw new Error(i18n.t('agentRules:errors.modelInfoFieldsMustBeObject'))
   }
   const mif: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue> = {
     max_context: '',
@@ -714,7 +718,7 @@ function parseDialogDoc(text: string): RuleDialogDoc {
       if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
         const spec = raw as Record<string, unknown>
         if (typeof spec.path !== 'string' || spec.path.trim() === '') {
-          throw new Error(`model_info_fields.${key}：请先填写 path（${MODEL_INFO_FIELD_LABELS[key]} 的写入位置）`)
+          throw new Error(i18n.t('agentRules:errors.modelInfoPathRequiredAt', { key, label: MODEL_INFO_FIELD_LABELS[key] }))
         }
       }
       mif[key] = parseAgentModelInfoSpec(raw)
@@ -722,12 +726,12 @@ function parseDialogDoc(text: string): RuleDialogDoc {
   }
   let common: readonly AgentRecommendation[] = []
   if (v.common !== undefined && v.common !== null) {
-    if (!Array.isArray(v.common)) throw new Error('common 必须是 JSON 数组')
+    if (!Array.isArray(v.common)) throw new Error(i18n.t('agentRules:errors.commonMustBeJsonArray'))
     common = recsFromUnknownArray(v.common)
   }
   let protocols: readonly AgentProtocol[] = []
   if (v.protocols !== undefined && v.protocols !== null) {
-    if (!Array.isArray(v.protocols)) throw new Error('protocols 必须是 JSON 数组')
+    if (!Array.isArray(v.protocols)) throw new Error(i18n.t('agentRules:errors.protocolsMustBeJsonArray'))
     protocols = v.protocols.map((p) => normalizeAgentProtocol(p))
   }
   return {
@@ -758,6 +762,7 @@ function RuleDialog({
   onCreated: () => void
   editing: AgentTypeRule | null
 }) {
+  const { t } = useTranslation('agentRules')
   const [name, setName] = useState('')
   const [windowsPath, setWindowsPath] = useState('')
   const [macPath, setMacPath] = useState('')
@@ -820,7 +825,7 @@ function RuleDialog({
         common = parsed.common
         protocols = parsed.protocols
       } catch (err) {
-        setError('解析既有配置失败：' + (err instanceof Error ? err.message : String(err)))
+        setError(t('errors.parseExistingFailed') + (err instanceof Error ? err.message : String(err)))
         common = editing?.recommendations ?? []
         protocols = editing?.protocols ?? []
       }
@@ -853,9 +858,9 @@ function RuleDialog({
       fillFromParts(tmpl.recommendations, tmpl.protocols, tmpl.model_info_fields)
       setError(null)
       setConfirmTemplate(false)
-      toast('已应用默认推荐模版，检查后保存即可生效')
+      toast(t('toast.templateApplied'))
     } catch (err) {
-      setError(toErrorMessage(err, '加载默认推荐模版失败'))
+      setError(toErrorMessage(err, t('errors.loadTemplateFailed')))
     } finally {
       setTemplateLoading(false)
     }
@@ -898,7 +903,7 @@ function RuleDialog({
     }
     const trimmed = name.trim()
     if (!trimmed) {
-      setError('请填写名称')
+      setError(t('errors.nameRequired'))
       return
     }
     // 公共配置 JSON 必须可解析成数组（整行空白的行会被静默丢弃）。
@@ -906,7 +911,7 @@ function RuleDialog({
     try {
       common = parseCommonArray(commonText)
     } catch (err) {
-      setError('公共配置 JSON 解析失败：' + (err instanceof Error ? err.message : String(err)))
+      setError(t('errors.commonParseFailed') + (err instanceof Error ? err.message : String(err)))
       return
     }
     // 整张卡片全空（名称 / 归纳范围 / 条件 / 字段都没填）的 endpoint 规则
@@ -998,11 +1003,11 @@ function RuleDialog({
           config_jsonc: p.configJsonc,
         })
       }
-      toast(editing ? '已更新' : '已添加')
+      toast(t(editing ? 'toast.updated' : 'toast.added'))
       onOpenChange(false)
       onCreated()
     } catch (err) {
-      setError(toErrorMessage(err, editing ? '更新失败' : '添加失败'))
+      setError(toErrorMessage(err, editing ? t('errors.updateFailed') : t('errors.addFailed')))
     } finally {
       setSaving(false)
     }
@@ -1038,7 +1043,7 @@ function RuleDialog({
         setError(null)
         setJsonMode(false)
       } catch (err) {
-        setDocError('JSON 无法还原成表格：' + (err instanceof Error ? err.message : String(err)))
+        setDocError(t('errors.jsonToTableFailed') + (err instanceof Error ? err.message : String(err)))
       }
       return
     }
@@ -1076,7 +1081,7 @@ function RuleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="xl" scrollFooter>
         <DialogHeader>
-          <DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle>
+          <DialogTitle>{editing ? t('dialog.editTitle') : t('dialog.addTitle')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
@@ -1085,32 +1090,30 @@ function RuleDialog({
               className="mr-auto"
               onClick={toggleJsonMode}
               disabled={saving}
-              title={jsonMode ? '校验 JSON 并还原成表格编辑；不合法则无法切回' : '把整个弹窗（名称 / 路径 / 模型信息 / 公共配置 / Endpoint 规则）作为一份 JSON 编辑'}
+              title={jsonMode ? t('actions.jsonModeBackTitle') : t('actions.jsonModeForwardTitle')}
             >
-              {jsonMode ? '切换回表格编辑' : '切换到 JSON 编辑模式'}
+              {jsonMode ? t('actions.switchBackToTable') : t('actions.switchToJsonMode')}
             </Button>
             {editing?.has_template && !jsonMode && (
               <Button
                 variant="outline"
                 onClick={() => setConfirmTemplate(true)}
                 disabled={saving || templateLoading}
-                title="将该规则的全部字段（路径 / 模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版"
+                title={t('actions.templateResetTitle')}
               >
                 <AppIcon name="auto_fix_high" data-icon="inline-start" />
-                使用默认推荐模版
+                {t('actions.useDefaultTemplate')}
               </Button>
             )}
             <Button onClick={() => void handleSave()} disabled={saving || (!jsonMode && name.trim() === '')}>
-              {saving ? '保存中...' : '保存'}
+              {saving ? t('actions.saving') : t('common:action.save')}
             </Button>
           </>
         }>
           {jsonMode ? (
             <Field>
               <p className="text-xs text-muted-foreground">
-                整个弹窗的 JSONC（含名称 / 路径 / 模型信息字段 / 公共配置 common / 各 Endpoint 规则 protocols）。
-                顶部与每个区块都带 // 说明注释，方便交给其他 Agent 处理；注释不影响保存。
-                保存与切回表格前都会校验；JSONC 不合法将无法保存，也无法还原成表格。
+                {t('jsonMode.hint')}
               </p>
               <Textarea
                 value={docText}
@@ -1128,67 +1131,67 @@ function RuleDialog({
           ) : (
           <FieldGroup>
           <Field>
-            <FieldLabel>名称</FieldLabel>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：opencode" />
+            <FieldLabel>{t('form.nameLabel')}</FieldLabel>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('form.namePlaceholder')} />
           </Field>
 
-          <Group label="Agent软件配置文件默认路径">
+          <Group label={t('form.defaultPathsGroup')}>
             <Field>
-              <FieldLabel>Windows 默认路径</FieldLabel>
+              <FieldLabel>{t('form.windowsPathLabel')}</FieldLabel>
               <Input
                 value={windowsPath}
                 onChange={(e) => setWindowsPath(e.target.value)}
-                placeholder="例如：%USERPROFILE%\.config\opencode\opencode.json"
+                placeholder={t('form.windowsPathPlaceholder')}
               />
-              <p className="text-xs text-muted-foreground">支持 %APPDATA%、%USERPROFILE% 等环境变量</p>
+              <p className="text-xs text-muted-foreground">{t('form.windowsPathHint')}</p>
             </Field>
             <Field>
-              <FieldLabel>Mac 默认路径</FieldLabel>
+              <FieldLabel>{t('form.macPathLabel')}</FieldLabel>
               <Input
                 value={macPath}
                 onChange={(e) => setMacPath(e.target.value)}
-                placeholder="例如：~/.config/opencode/opencode.json"
+                placeholder={t('form.macPathPlaceholder')}
               />
-              <p className="text-xs text-muted-foreground">支持 ~ 和 $HOME</p>
+              <p className="text-xs text-muted-foreground">{t('form.macPathHint')}</p>
             </Field>
           </Group>
 
-          <Group label="供应商与模型推荐配置表">
+          <Group label={t('form.jsonPathsGroup')}>
             <Field>
-              <FieldLabel>provider gjson 路径</FieldLabel>
+              <FieldLabel>{t('form.providerPathLabel')}</FieldLabel>
               <Input
                 value={providerPath}
                 onChange={(e) => setProviderPath(e.target.value)}
-                placeholder="例如：provider"
+                placeholder={t('form.providerPathPlaceholder')}
               />
             </Field>
             <Field>
-              <FieldLabel>model gjson 路径</FieldLabel>
+              <FieldLabel>{t('form.modelPathLabel')}</FieldLabel>
               <Input
                 value={modelPath}
                 onChange={(e) => setModelPath(e.target.value)}
-                placeholder="例如：provider.{provider_id}.models"
+                placeholder={t('form.modelPathPlaceholder')}
               />
               <p className="text-xs text-muted-foreground">
-                完整 gjson 路径，model 里用 {'{provider_id}'} 占位当前 provider 键名
+                {t('form.modelPathHint')}
               </p>
             </Field>
             <Field>
-              <FieldLabel>模型列表容器格式（models_container）</FieldLabel>
+              <FieldLabel>{t('form.modelsContainerLabel')}</FieldLabel>
               <Select
                 value={modelsContainer || 'object'}
                 onValueChange={(v) => setModelsContainer(v === 'object' ? '' : 'array')}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择格式" />
+                  <SelectValue placeholder={t('form.modelsContainerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="array">数组 [{'{"id": ...}'}]（openclaw）</SelectItem>
-                  <SelectItem value="object">对象 map {'{"模型id": {...}}'}（opencode）</SelectItem>
+                  <SelectItem value="array">{t('form.containerArray')}</SelectItem>
+                  <SelectItem value="object">{t('form.containerObject')}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                决定托管同步时 models 写进配置文件的样子。数组每项带 id；对象以模型名做键。选错会导致 agent 启动校验失败
+                {t('form.modelsContainerHint')}
               </p>
             </Field>
 
@@ -1196,12 +1199,10 @@ function RuleDialog({
 
             <Field>
               <div className="flex items-center justify-between">
-                <FieldLabel>公共配置（common）</FieldLabel>
+                <FieldLabel>{t('form.commonLabel')}</FieldLabel>
               </div>
               <p className="text-xs text-muted-foreground">
-                与请求协议 / SDK 无关的字段推荐值。每行一个字段：路径 / 落在（provider|model）/ 推荐操作（填 / 不填 / 删除）/
-                推荐值 / 值写法（op / sep / 允许值白名单）/ 必填 / 说明。与页面里其余配置用同一套「值 + 写法」规则；
-                整行空白的行保存时自动丢弃。需要直接改 JSON 时，用左下角「切换到 JSON 编辑模式」。
+                {t('form.commonHint')}
               </p>
               {(() => {
                 try {
@@ -1216,8 +1217,7 @@ function RuleDialog({
                 } catch (err) {
                   return (
                     <p className="pb-1 text-[11px] text-destructive">
-                      当前公共配置不是合法数据：{(err instanceof Error ? err.message : String(err))}，
-                      可用左下角「切换到 JSON 编辑模式」修正
+                      {t('errors.commonInvalid', { message: err instanceof Error ? err.message : String(err) })}
                     </p>
                   )
                 }
@@ -1240,19 +1240,18 @@ function RuleDialog({
       <Dialog open={confirmTemplate} onOpenChange={(o) => !o && setConfirmTemplate(false)}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>使用默认推荐模版</DialogTitle>
+            <DialogTitle>{t('dialog.templateConfirmTitle')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button variant="default" onClick={() => void applyDefaultTemplate()} disabled={templateLoading}>
-                {templateLoading ? '加载中…' : '确认应用'}
+                {templateLoading ? t('common:state.loading') : t('dialog.confirmApply')}
               </Button>
             </>
           }>
             <p className="text-xs text-muted-foreground">
-              <span className="break-all">将为规则「{editing?.name ?? ''}」应用系统的默认推荐模版：</span>
-              默认路径、provider/model gjson 路径、模型信息字段、公共配置（common）与各 Endpoint
-              规则的字段推荐会全部替换为默认值。确认？
+              <span className="break-all">{t('dialog.templateApplyFor', { name: editing?.name ?? '' })}</span>
+              {t('dialog.templateApplyDetail')}
             </p>
           </DialogScrollBody>
         </DialogContent>
@@ -1262,11 +1261,6 @@ function RuleDialog({
 }
 
 const REC_ACTIONS = ['set', 'skip', 'delete'] as const
-const REC_ACTION_LABEL: Record<string, string> = {
-  set: '填',
-  skip: '不填',
-  delete: '删除',
-}
 
 // RecommendationTable — 结构化字段推荐编辑器，同时用于公共配置与每个
 // endpoint 的私有配置。每行一个推荐字段：路径 / 推荐操作 / 推荐值 /
@@ -1281,6 +1275,7 @@ function RecommendationTable({
   onChange: (recs: AgentRecommendation[]) => void
   showScope?: boolean
 }) {
+  const { t } = useTranslation('agentRules')
   const update = (index: number, patch: (r: AgentRecommendation) => AgentRecommendation) => {
     onChange(recs.map((r, i) => (i === index ? patch(r) : r)))
   }
@@ -1307,15 +1302,15 @@ function RecommendationTable({
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
-            <th className="w-[16%] px-2 py-1.5 text-left font-medium">路径</th>
-            {showScope ? <th className="w-[8%] px-2 py-1.5 text-left font-medium">作用范围</th> : null}
-            <th className="w-[9%] px-2 py-1.5 text-left font-medium">操作</th>
-            <th className="w-[13%] px-2 py-1.5 text-left font-medium">推荐值</th>
+            <th className="w-[16%] px-2 py-1.5 text-left font-medium">{t('recTable.path')}</th>
+            {showScope ? <th className="w-[8%] px-2 py-1.5 text-left font-medium">{t('recTable.scope')}</th> : null}
+            <th className="w-[9%] px-2 py-1.5 text-left font-medium">{t('recTable.action')}</th>
+            <th className="w-[13%] px-2 py-1.5 text-left font-medium">{t('recTable.recommended')}</th>
             <th className="w-[7%] px-2 py-1.5 text-left font-medium">op</th>
             <th className="w-[7%] px-2 py-1.5 text-left font-medium">sep</th>
-            <th className="w-[16%] px-2 py-1.5 text-left font-medium">允许值</th>
-            <th className="w-[6%] px-2 py-1.5 text-left font-medium">必填</th>
-            <th className="w-[13%] px-2 py-1.5 pl-0 text-left font-medium">说明</th>
+            <th className="w-[16%] px-2 py-1.5 text-left font-medium">{t('recTable.allowedValues')}</th>
+            <th className="w-[6%] px-2 py-1.5 text-left font-medium">{t('recTable.required')}</th>
+            <th className="w-[13%] px-2 py-1.5 pl-0 text-left font-medium">{t('recTable.description')}</th>
             <th className="w-[5%] px-2 py-1.5" />
           </tr>
         </thead>
@@ -1323,7 +1318,7 @@ function RecommendationTable({
           {recs.length === 0 ? (
             <tr>
               <td colSpan={showScope ? 10 : 9} className="px-2 py-2 text-muted-foreground">
-                暂无字段；点击底部「添加一行」开始，整行空白的行保存时自动丢弃。
+                {t('recTable.empty')}
               </td>
             </tr>
           ) : (
@@ -1361,8 +1356,8 @@ function RecommendationTable({
                     <SelectContent>
                       {REC_ACTIONS.map((a) => (
                         <SelectItem key={a} value={a}>
-                          {REC_ACTION_LABEL[a]}
-                          {a === 'set' ? '（推荐填）' : a === 'skip' ? '（推荐不填）' : '（删除字段）'}
+                          {t('recAction.' + a)}
+                          {a === 'set' ? t('recAction.setSuffix') : a === 'skip' ? t('recAction.skipSuffix') : t('recAction.deleteSuffix')}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1420,7 +1415,7 @@ function RecommendationTable({
                       }))
                     }
                     className="h-6 text-xs font-mono"
-                    placeholder="text, image, video（逗号分隔）"
+                    placeholder={t('recTable.valuesPlaceholder')}
                   />
                 </td>
                 <td className="px-2 py-1">
@@ -1436,7 +1431,7 @@ function RecommendationTable({
                     value={r.description}
                     onChange={(e) => update(i, (x) => ({ ...x, description: e.target.value }))}
                     className="h-6 text-xs font-mono"
-                    placeholder="说明"
+                    placeholder={t('recTable.descriptionPlaceholder')}
                   />
                  </td>
                   <td className="px-2 py-1 text-right">
@@ -1447,7 +1442,7 @@ function RecommendationTable({
                       className="text-destructive"
                       onClick={() => onChange(recs.filter((_, j) => j !== i))}
                     >
-                      删除
+                      {t('common:action.delete')}
                     </Button>
                   </td>
               </tr>
@@ -1457,13 +1452,14 @@ function RecommendationTable({
       </table>
       <div className="flex items-center justify-end border-t border-border bg-muted/40 px-2 py-1">
         <Button type="button" variant="outline" size="xs" onClick={addRow}>
-          添加一行
+          {t('recTable.addRow')}
         </Button>
       </div>
     </div>
   )
 }
 
+&&#1111;
 function ModelInfoFieldsEditor({
   value,
   onChange,
@@ -1536,7 +1532,7 @@ function ModelInfoFieldsEditor({
                   <Input
                     value={value[key].valuesText}
                     onChange={(e) => update(key, { valuesText: e.target.value })}
-                    placeholder="text, image, video（逗号分隔）"
+                    placeholder={t('recTable.valuesPlaceholder')}
                     className="h-6 text-xs font-mono"
                   />
                 </td>

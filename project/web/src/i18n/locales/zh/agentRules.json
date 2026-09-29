@@ -1,0 +1,173 @@
+{
+  "page": {
+    "description": "配置各 Agent 默认配置文件的位置、修改与解析规则；通常沿用系统默认，无需手动添加"
+  },
+  "columns": {
+    "name": "名称",
+    "createdAt": "创建时间",
+    "actions": "操作"
+  },
+  "list": {
+    "empty": "暂无规则，点击「添加规则」创建第一条",
+    "add": "添加接管规则"
+  },
+  "dialog": {
+    "addTitle": "添加规则",
+    "editTitle": "编辑规则",
+    "deleteTitle": "确认删除",
+    "deleteDescription": "将删除规则「{{name}}」，删除后不可恢复。",
+    "templateConfirmTitle": "使用默认推荐模版",
+    "templateApplyFor": "将为规则「{{name}}」应用系统的默认推荐模版：",
+    "templateApplyDetail": "默认路径、provider/model gjson 路径、模型信息字段、公共配置（common）与各 Endpoint 规则的字段推荐会全部替换为默认值。确认？",
+    "confirmApply": "确认应用"
+  },
+  "actions": {
+    "switchToJsonMode": "切换到 JSON 编辑模式",
+    "switchBackToTable": "切换回表格编辑",
+    "jsonModeForwardTitle": "把整个弹窗（名称 / 路径 / 模型信息 / 公共配置 / Endpoint 规则）作为一份 JSON 编辑",
+    "jsonModeBackTitle": "校验 JSON 并还原成表格编辑；不合法则无法切回",
+    "useDefaultTemplate": "使用默认推荐模版",
+    "templateResetTitle": "将该规则的全部字段（路径 / 模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版",
+    "saving": "保存中...",
+    "addRow": "添加一行"
+  },
+  "form": {
+    "nameLabel": "名称",
+    "namePlaceholder": "例如：opencode",
+    "defaultPathsGroup": "Agent软件配置文件默认路径",
+    "windowsPathLabel": "Windows 默认路径",
+    "windowsPathPlaceholder": "例如：%USERPROFILE%\\.config\\opencode\\opencode.json",
+    "windowsPathHint": "支持 %APPDATA%、%USERPROFILE% 等环境变量",
+    "macPathLabel": "Mac 默认路径",
+    "macPathPlaceholder": "例如：~/.config/opencode/opencode.json",
+    "macPathHint": "支持 ~ 和 $HOME",
+    "jsonPathsGroup": "供应商与模型推荐配置表",
+    "providerPathLabel": "provider gjson 路径",
+    "providerPathPlaceholder": "例如：provider",
+    "modelPathLabel": "model gjson 路径",
+    "modelPathPlaceholder": "例如：provider.{provider_id}.models",
+    "modelPathHint": "完整 gjson 路径，model 里用 {provider_id} 占位当前 provider 键名",
+    "modelsContainerLabel": "模型列表容器格式（models_container）",
+    "modelsContainerPlaceholder": "选择格式",
+    "containerArray": "数组 [{\"id\": ...}]（openclaw）",
+    "containerObject": "对象 map {\"模型id\": {...}}（opencode）",
+    "modelsContainerHint": "决定托管同步时 models 写进配置文件的样子。数组每项带 id；对象以模型名做键。选错会导致 agent 启动校验失败",
+    "commonLabel": "公共配置（common）",
+    "commonHint": "与请求协议 / SDK 无关的字段推荐值。每行一个字段：路径 / 落在（provider|model）/ 推荐操作（填 / 不填 / 删除）/ 推荐值 / 值写法（op / sep / 允许值白名单）/ 必填 / 说明。与页面里其余配置用同一套「值 + 写法」规则；整行空白的行保存时自动丢弃。需要直接改 JSON 时，用左下角「切换到 JSON 编辑模式」。"
+  },
+  "jsonMode": {
+    "hint": "整个弹窗的 JSONC（含名称 / 路径 / 模型信息字段 / 公共配置 common / 各 Endpoint 规则 protocols）。顶部与每个区块都带 // 说明注释，方便交给其他 Agent 处理；注释不影响保存。保存与切回表格前都会校验；JSONC 不合法将无法保存，也无法还原成表格。"
+  },
+  "errors": {
+    "loadFailed": "加载失败",
+    "deleteFailed": "删除失败",
+    "parseExistingFailed": "解析既有配置失败：",
+    "loadTemplateFailed": "加载默认推荐模版失败",
+    "nameRequired": "请填写名称",
+    "commonParseFailed": "公共配置 JSON 解析失败：",
+    "jsonToTableFailed": "JSON 无法还原成表格：",
+    "commonInvalid": "当前公共配置不是合法数据：{{message}}，可用左下角「切换到 JSON 编辑模式」修正",
+    "privateInvalid": "当前私有配置不是合法数据：{{message}}，可用左下角「切换到 JSON 编辑模式」修正",
+    "updateFailed": "更新失败",
+    "addFailed": "添加失败",
+    "topMustBeObject": "顶层必须是 { common, protocols } 对象",
+    "topMustBeJsonObject": "顶层必须是 JSON 对象（含 name / os_paths / json_paths / model_info_fields / common / protocols）",
+    "fieldItemMustBeObject": "字段每一项必须是对象",
+    "fieldMissingKey": "字段缺少 key（字段路径）",
+    "protocolItemMustBeObject": "protocols 里每一项必须是对象",
+    "protocolMissingName": "协议块缺少 name",
+    "protocolMissingTags": "协议「{{name}}」缺少 endpoint_tags（根据 endpoint 来判断，必填）",
+    "protocolConditionInvalid": "协议「{{name}}」的 conditions 项格式错误",
+    "fieldsMustBeArray": "字段必须写成 JSON 数组，每项一个推荐字段对象",
+    "commonMustBeArray": "公共配置必须是 JSON 数组",
+    "endpointRuleMissingName": "Endpoint 规则 #{{n}}：缺少规则名称",
+    "endpointRuleTagsEmpty": "Endpoint 规则「{{name}}」：归纳范围为空（endpoint_tags 必填）",
+    "endpointRuleFieldsParseFailed": "Endpoint 规则「{{name}}」的字段 JSON 解析失败：",
+    "modelInfoPathRequired": "「{{label}}」请先填写路径",
+    "dialogNameRequired": "缺少 name（规则名称）",
+    "modelInfoFieldsMustBeObject": "model_info_fields 必须是对象",
+    "modelInfoPathRequiredAt": "model_info_fields.{{key}}：请先填写 path（{{label}} 的写入位置）",
+    "commonMustBeJsonArray": "common 必须是 JSON 数组",
+    "protocolsMustBeJsonArray": "protocols 必须是 JSON 数组"
+  },
+  "toast": {
+    "deleted": "已删除",
+    "templateApplied": "已应用默认推荐模版，检查后保存即可生效",
+    "updated": "已更新",
+    "added": "已添加"
+  },
+  "recAction": {
+    "set": "填",
+    "skip": "不填",
+    "delete": "删除",
+    "setSuffix": "（推荐填）",
+    "skipSuffix": "（推荐不填）",
+    "deleteSuffix": "（删除字段）"
+  },
+  "recTable": {
+    "path": "路径",
+    "scope": "作用范围",
+    "action": "操作",
+    "recommended": "推荐值",
+    "allowedValues": "允许值",
+    "required": "必填",
+    "description": "说明",
+    "empty": "暂无字段；点击底部「添加一行」开始，整行空白的行保存时自动丢弃。",
+    "valuesPlaceholder": "text, image, video（逗号分隔）",
+    "descriptionPlaceholder": "说明",
+    "addRow": "添加一行"
+  },
+  "modelInfoEditor": {
+    "title": "模型通用信息",
+    "hint": "模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：路径为写入位置，写法（op）可选 raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，可填 sep，默认逗号）；操作可选 填（默认）/ 不填 / 删除字段；允许值为白名单（如 openclaw input 只允许 text/image/video/audio），逗号分隔。",
+    "columns": {
+      "modelInfo": "模型信息",
+      "op": "写法"
+    }
+  },
+  "endpointRules": {
+    "title": "Endpoint 规则（按 SDK 区分，一个规则一张卡片）",
+    "add": "添加 Endpoint 规则",
+    "hint": "每个 endpoint 一条规则：归纳范围填 endpoint 关键词（如 completions / responses / chat/message，逗号分隔），任一关键词命中该 endpoint 的子串即应用本规则，顺序即优先级。私有配置用「值 + 写法」表格：每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）—— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={\"@ai-sdk/openai-compatible\"}+、必填勾上。需要直接改 JSON 时，用弹窗左下角「切换到 JSON 编辑模式」。",
+    "empty": "尚未添加任何 Endpoint 规则；点击右上「添加 Endpoint 规则」新建。",
+    "index": "Endpoint 规则 {{n}}",
+    "nameLabel": "规则名称",
+    "namePlaceholder": "例如：OpenAI 兼容 Chat Completions",
+    "tagsLabel": "归纳范围（endpoint 关键词，逗号分隔）",
+    "tagsPlaceholder": "例如：completions, /v1/chat, responses, chat/message",
+    "privateLabel": "私有配置（该 endpoint 的字段推荐表）"
+  },
+  "match": {
+    "title": "使用推荐配置",
+    "emptyProviders": "该配置文件下没有可配置的供应商",
+    "checkedCount": "已勾选 {{checked}} / {{total}} 项",
+    "officialTitle": "把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个",
+    "officialButton": "批量设置参考厂商",
+    "checkAllAria": "全选",
+    "checkProviderAria": "勾选供应商 {{name}}",
+    "checkModelAria": "勾选模型 {{name}}",
+    "columns": {
+      "syncFromModelsDev": "从 models.dev 同步模型配置",
+      "fieldDiff": "字段对比"
+    },
+    "providerLevel": "供应商级推荐",
+    "modelLevel": "模型级推荐",
+    "selectSupplier": "选择参考厂商",
+    "dontSync": "不同步",
+    "officialSuffix": "（官方）",
+    "modelNotFound": "未在 models.dev 查到该模型信息",
+    "selectSupplierFirst": "请先选择参考厂商",
+    "alreadyCompliant": "— 已符合推荐",
+    "moreItems": "…等 {{count}} 项",
+    "toast": {
+      "officialApplied": "已把全部模型设为官方参考厂商（无官方的取候选第一个）",
+      "officialAlready": "模型均已是最佳参考厂商",
+      "saveSupplierFailed": "保存参考厂商选择失败",
+      "noChanges": "没有可应用的变更（勾选项均已符合推荐）"
+    },
+    "errors": {
+      "loadFailed": "加载失败",
+      "applyFailed": "应用失败"
+    }
+  }
+}

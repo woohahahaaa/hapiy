@@ -16,7 +16,6 @@ interface ConditionListProps {
 // 组内再次递归。组卡片可切换 logic、可删组；新增入口由外层（BlockCard 等）
 // 的「添加条件」按钮承担，这里只负责渲染与编辑。
 export function ConditionList({ conditions, onChange }: ConditionListProps) {
-  const { t } = useTranslation('rewrite')
   const update = (i: number, next: Condition) => {
     onChange(conditions.map((c, ci) => (ci === i ? next : c)))
   }
