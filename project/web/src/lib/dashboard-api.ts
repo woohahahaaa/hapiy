@@ -1,6 +1,7 @@
 import { parseTopologyDocument } from './topology-document'
 import type { Workflow } from './topology-document'
 import type { SlotEntry } from '@/components/node/slot/items'
+import { i18n } from '@/i18n/i18n'
 export { parseTopologyDocument } from './topology-document'
 export type { Workflow } from './topology-document'
 export type TopologyDocument = Workflow[]
@@ -961,11 +962,18 @@ export class DashboardApiError extends Error {
   readonly name = 'DashboardApiError'
   readonly status: number | null
   readonly currentRevision: number | null
+  readonly code: string | null
 
-  constructor(message: string, status: number | null, currentRevision: number | null = null) {
+  constructor(
+    message: string,
+    status: number | null,
+    currentRevision: number | null = null,
+    code: string | null = null,
+  ) {
     super(message)
     this.status = status
     this.currentRevision = currentRevision
+    this.code = code
   }
 }
 
@@ -1599,12 +1607,44 @@ function parseActiveRequestConfig(value: unknown): ActiveRequestConfig {
   return { retentionMinutes: minutes }
 }
 
+// Backend error responses may carry a stable machine code (plus interpolation
+// params). Prefer the code-based translation; fall back to the backend message.
+const ERROR_NAMESPACES = ['errorsCore', 'errorsAgent'] as const
+
+function translateBackendError(code: string, params?: Record<string, unknown>): string | null {
+  for (const ns of ERROR_NAMESPACES) {
+    const key = `${ns}:${code}`
+    if (i18n.exists(key)) {
+      return i18n.t(key, params as Record<string, string> | undefined)
+    }
+  }
+  return null
+}
+
+function describeHttpError(
+  body: unknown,
+  status: number,
+  currentRevision: number | null,
+): DashboardApiError {
+  const record = isRecord(body) ? body : null
+  const code = record && typeof record.code === 'string' ? record.code : null
+  const params =
+    record && isRecord(record.params) ? (record.params as Record<string, unknown>) : undefined
+  if (code) {
+    const translated = translateBackendError(code, params)
+    if (translated) return new DashboardApiError(translated, status, currentRevision, code)
+  }
+  const message =
+    record && typeof record.error === 'string' ? record.error : i18n.t('api:httpError', { status })
+  return new DashboardApiError(message, status, currentRevision, code)
+}
+
 function parseEnvelope(value: unknown): unknown {
   if (!isRecord(value)) {
     throw new DashboardApiError('服务端返回格式无效', null)
   }
   if ('error' in value && typeof value.error === 'string') {
-    throw new DashboardApiError(value.error, null)
+    throw describeHttpError(value, 200, null)
   }
   return value.data
 }
@@ -1633,19 +1673,18 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
     })
   } catch (error) {
     if (error instanceof Error) {
-      throw new DashboardApiError(`无法连接后端：${error.message}`, null)
+      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
     }
-    throw new DashboardApiError('无法连接后端', null)
+    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
   }
 
   const text = await response.text()
   const body = text === '' ? null : parseJson(text, '响应体')
   if (!response.ok) {
-    const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
     const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
       ? body.current_revision
       : null
-    throw new DashboardApiError(message, response.status, currentRevision)
+    throw describeHttpError(body, response.status, currentRevision)
   }
   return parseEnvelope(body)
 }
@@ -1660,18 +1699,17 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
     })
   } catch (error) {
     if (error instanceof Error) {
-      throw new DashboardApiError(`无法连接后端：${error.message}`, null)
+      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
     }
-    throw new DashboardApiError('无法连接后端', null)
+    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
   }
 
   const body = await parseResponseBody(response)
   if (!response.ok) {
-    const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
     const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
       ? body.current_revision
       : null
-    throw new DashboardApiError(message, response.status, currentRevision)
+    throw describeHttpError(body, response.status, currentRevision)
   }
   if (!isRecord(body)) {
     throw new DashboardApiError('服务端返回格式无效', null)
@@ -1692,14 +1730,14 @@ async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
     })
   } catch (error) {
     if (error instanceof Error) {
-      throw new DashboardApiError(`无法连接后端：${error.message}`, null)
+      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
     }
-    throw new DashboardApiError('无法连接后端', null)
+    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
   }
 
   const body = await parseResponseBody(response)
   if (!response.ok) {
-    const message = isRecord(body) && typeof body.error === 'string' ? body.error : `请求失败（HTTP ${response.status}）`
+    const message = isRecord(body) && typeof body.error === 'string' ? body.error : i18n.t('api:httpError', { status: response.status })
     throw new DashboardApiError(message, response.status)
   }
   return body
@@ -2711,7 +2749,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     if (!response.ok) {
       const text = await response.text()
       const body = text === '' ? null : parseJson(text, '登录响应')
-      const message = isRecord(body) && typeof body.error === 'string' ? body.error : `登录失败（HTTP ${response.status}）`
+      const message = isRecord(body) && typeof body.error === 'string' ? body.error : i18n.t('api:httpError', { status: response.status })
       throw new DashboardApiError(message, response.status)
     }
   },
