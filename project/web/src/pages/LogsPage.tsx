@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
@@ -57,6 +58,7 @@ const EVENT_SOURCE_COLORS: Record<string, string> = {
 }
 
 export function LogsPage() {
+  const { t } = useTranslation('logs')
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
   const [initialLoading, setInitialLoading] = useState(false)
@@ -102,13 +104,13 @@ export function LogsPage() {
       setTotal(result.total)
     } catch (err) {
       if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '加载失败')
+      setError(err instanceof Error ? err.message : t('error.loadFailed'))
     } finally {
       if (mountedRef.current) {
         setInitialLoading(false)
       }
     }
-  }, [filterArgs, limit, offset])
+  }, [filterArgs, limit, offset, t])
 
   useEffect(() => {
     mountedRef.current = true
@@ -142,12 +144,12 @@ export function LogsPage() {
       if (dateRange.to) filters.to = dateRange.to
       const deleted = await dashboardApi.clearLogs({ scope: 'filtered', filters })
       setClearDialogOpen(false)
-      toast(`已清空 ${deleted} 条记录`)
+      toast(t('clear.filteredDone', { count: deleted }))
       void fetchPage()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '清空失败')
+      toast.error(err instanceof Error ? err.message : t('error.clearFailed'))
     }
-  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage])
+  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage, t])
 
   const handleResetFilters = useCallback(() => {
     setTokenFilter('all')
@@ -165,11 +167,11 @@ export function LogsPage() {
       setClearDialogOpen(false)
       setLogs([])
       setTotal(0)
-      toast(`已清空全部 ${deleted} 条记录`)
+      toast(t('clear.allDone', { count: deleted }))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '清空失败')
+      toast.error(err instanceof Error ? err.message : t('error.clearFailed'))
     }
-  }, [])
+  }, [t])
 
   // Load the full provider/model option pools once so filters stay stable
   // across pagination (previously the model list came from the current page).
@@ -248,7 +250,7 @@ export function LogsPage() {
   const columns: ColumnDef<UsageLog>[] = [
     {
       key: 'createdAt',
-      label: '时间',
+      label: t('columns.time'),
       defaultWidth: { kind: 'pixel', value: 160 },
       defaultOverflow: 'wrap',
       slot: {
@@ -258,7 +260,7 @@ export function LogsPage() {
     },
     {
       key: 'source',
-      label: '来源',
+      label: t('columns.source'),
       defaultWidth: { kind: 'percent', value: 8 },
       accessor: (row) => {
         if (row.source) {
@@ -269,31 +271,37 @@ export function LogsPage() {
         return null
       },
     },
-    { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
-    { key: 'providerName', label: '供应商', defaultWidth: { kind: 'percent', value: 10 } },
-    { key: 'modelName', label: '模型', defaultWidth: { kind: 'percent', value: 12 } },
+    { key: 'tokenName', label: t('columns.token'), defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'providerName', label: t('columns.provider'), defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'modelName', label: t('columns.model'), defaultWidth: { kind: 'percent', value: 12 } },
     {
       key: 'affinityReuse',
-      label: '渠道亲和性',
+      label: t('columns.affinity'),
       defaultWidth: { kind: 'percent', value: 8 },
       accessor: (row) => {
         const log = row as UsageLog
         if (log.affinityReuse === '') return null
-        if (log.affinityReuse === 'full') return '<#16a34a>复用渠道</#16a34a>'
-        if (log.affinityReuse === 'partial') return '<#d97706>部分复用</#d97706>'
-        if (log.affinityReuse === 'new') return '<#0ea5e9>新渠道</#0ea5e9>'
-        return '<#9ca3af>创建渠道</#9ca3af>'
+        if (log.affinityReuse === 'full') return `<#16a34a>${t('affinity.full')}</#16a34a>`
+        if (log.affinityReuse === 'partial') return `<#d97706>${t('affinity.partial')}</#d97706>`
+        if (log.affinityReuse === 'new') return `<#0ea5e9>${t('affinity.new')}</#0ea5e9>`
+        return `<#9ca3af>${t('affinity.create')}</#9ca3af>`
       },
     },
     {
       key: 'promptTokens',
-      label: 'Tokens',
+      label: t('columns.tokens'),
       defaultWidth: { kind: 'percent', value: 22 },
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
       accessor: (row) => {
         const hitRate = cacheHitRateText(row.promptCacheHitTokens, row.promptCacheMissTokens, row.promptTokens)
-        return `输入 ${row.promptTokens} · 缓存写入 ${row.promptCacheMissTokens} · 缓存读取 ${row.promptCacheHitTokens}${hitRate !== null ? ` (${hitRate})` : ''} · 输出 ${row.completionTokens}`
+        return t('tokens.summary', {
+          input: row.promptTokens,
+          cacheWrite: row.promptCacheMissTokens,
+          cacheRead: row.promptCacheHitTokens,
+          output: row.completionTokens,
+          hitRate: hitRate !== null ? ` (${hitRate})` : '',
+        })
       },
       render: (_, row) => {
         const log = row as UsageLog
@@ -301,31 +309,31 @@ export function LogsPage() {
         const hitRate = cacheHitRateText(log.promptCacheHitTokens, log.promptCacheMissTokens, log.promptTokens)
         return (
           <div className="text-xs">
-            <span className="text-muted-foreground">输入</span> {log.promptTokens}{' '}
-            <span className="text-muted-foreground">缓存写入</span> {log.promptCacheMissTokens}{' '}
-            <span className="text-muted-foreground">缓存读取</span> {log.promptCacheHitTokens}
+            <span className="text-muted-foreground">{t('tokens.input')}</span> {log.promptTokens}{' '}
+            <span className="text-muted-foreground">{t('tokens.cacheWrite')}</span> {log.promptCacheMissTokens}{' '}
+            <span className="text-muted-foreground">{t('tokens.cacheRead')}</span> {log.promptCacheHitTokens}
             {hitRate !== null ? ` (${hitRate})` : ''}{' '}
-            <span className="text-muted-foreground">输出</span> {log.completionTokens}
+            <span className="text-muted-foreground">{t('tokens.output')}</span> {log.completionTokens}
           </div>
         )
       },
     },
     {
       key: 'isStream',
-      label: '流式',
+      label: t('columns.stream'),
       defaultWidth: { kind: 'percent', value: 5 },
       accessor: (row) => (row.isStream ? 'SSE' : null),
     },
     {
       key: 'quota',
-      label: '消耗',
+      label: t('columns.quota'),
       defaultWidth: { kind: 'percent', value: 8 },
       defaultAlign: 'right',
       accessor: (row) => (row.quota > 0 ? formatQuota(row) : null),
     },
     {
       key: 'useTime',
-      label: '耗时',
+      label: t('columns.latency'),
       defaultWidth: { kind: 'percent', value: 13 },
       defaultAlign: 'right',
       defaultOverflow: 'wrap',
@@ -335,12 +343,12 @@ export function LogsPage() {
         const firstByte = fmtSeconds(row.firstByteMs)
         // 首字超过 20 秒标红
         const fbColored = row.firstByteMs > 20000 ? `<#dc2626>${firstByte}</#dc2626>` : firstByte
-        return `${total}（首字:${fbColored}）`
+        return t('columns.latencyWithFirstByte', { total, firstByte: fbColored })
       },
     },
     {
       key: 'speed',
-      label: '速度',
+      label: t('columns.speed'),
       defaultWidth: { kind: 'percent', value: 9 },
       defaultAlign: 'right',
       // 速度 = 总 token / 全程耗时（从请求发起到结束，含建连）。
@@ -353,13 +361,13 @@ export function LogsPage() {
     },
     {
       key: 'status',
-      label: '状态',
+      label: t('columns.status'),
       defaultWidth: { kind: 'percent', value: 25 },
       defaultOverflow: 'wrap',
       slot: {
         line1: (row) => {
-          if (row.status === 'success') return '<#16a34a>成功</#16a34a>'
-          if (row.status === 'failed') return '<#dc2626>失败</#dc2626>'
+          if (row.status === 'success') return `<#16a34a>${t('status.success')}</#16a34a>`
+          if (row.status === 'failed') return `<#dc2626>${t('status.failed')}</#dc2626>`
           // 事件行（故障转移/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
           // 长文本（errorMessage/eventDetail）统一放进详情字段。
           return row.source ? `<#9ca3af>${row.source}</#9ca3af>` : null
@@ -371,9 +379,9 @@ export function LogsPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="使用记录"
-        description="查询 API 请求的使用记录、消耗与耗时"
-        status={total > 0 ? `${total} 条记录` : undefined}
+        title={t('page.usage.title')}
+        description={t('page.usage.description')}
+        status={total > 0 ? t('page.recordCount', { count: total }) : undefined}
       />
       <div className="p-6">
         <DataTable
@@ -400,16 +408,16 @@ export function LogsPage() {
                 onValueChange={(value) => setTypeFilter(value as LogTypeFilter | 'all')}
               >
                 <SelectTrigger className="w-32">
-                  <SelectValue placeholder="类型" />
+                  <SelectValue placeholder={t('filters.type')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部类型</SelectItem>
-                    <SelectItem value="request">请求</SelectItem>
-                    <SelectItem value="channel_disabled">故障转移</SelectItem>
-                    <SelectItem value="channel_recovered_auto">自动恢复</SelectItem>
-                    <SelectItem value="channel_recovered_manual">手动恢复</SelectItem>
-                    <SelectItem value="system_admin">系统管理</SelectItem>
+                    <SelectItem value="all">{t('filters.allTypes')}</SelectItem>
+                    <SelectItem value="request">{t('filters.typeRequest')}</SelectItem>
+                    <SelectItem value="channel_disabled">{t('filters.typeChannelDisabled')}</SelectItem>
+                    <SelectItem value="channel_recovered_auto">{t('filters.typeChannelRecoveredAuto')}</SelectItem>
+                    <SelectItem value="channel_recovered_manual">{t('filters.typeChannelRecoveredManual')}</SelectItem>
+                    <SelectItem value="system_admin">{t('filters.typeSystemAdmin')}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -418,12 +426,12 @@ export function LogsPage() {
                 onValueChange={(value) => handleFilterChange(setSourceFilter, value)}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="来源" />
+                  <SelectValue placeholder={t('filters.source')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部来源</SelectItem>
-                    <SelectItem value={LOG_SOURCE_UNMARKED}>未标注来源</SelectItem>
+                    <SelectItem value="all">{t('filters.allSources')}</SelectItem>
+                    <SelectItem value={LOG_SOURCE_UNMARKED}>{t('filters.unmarkedSource')}</SelectItem>
                     {sourceOptions.map((s) => (
                       <SelectItem key={s} value={s}>{s.replace(/^__/, '')}</SelectItem>
                     ))}
@@ -435,11 +443,11 @@ export function LogsPage() {
                 onValueChange={(value) => setTokenFilter(value)}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="令牌" />
+                  <SelectValue placeholder={t('filters.token')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部令牌</SelectItem>
+                    <SelectItem value="all">{t('filters.allTokens')}</SelectItem>
                     {tokenOptions.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
@@ -451,11 +459,11 @@ export function LogsPage() {
                 onValueChange={(value) => handleFilterChange(setProviderFilter, value)}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="供应商" />
+                  <SelectValue placeholder={t('filters.provider')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部供应商</SelectItem>
+                    <SelectItem value="all">{t('filters.allProviders')}</SelectItem>
                     {providerOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
@@ -467,11 +475,11 @@ export function LogsPage() {
                 onValueChange={(value) => handleFilterChange(setModelFilter, value)}
               >
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="模型" />
+                  <SelectValue placeholder={t('filters.model')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部模型</SelectItem>
+                    <SelectItem value="all">{t('filters.allModels')}</SelectItem>
                     {modelOptions.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
@@ -483,18 +491,18 @@ export function LogsPage() {
                 onValueChange={(value) => handleFilterChange(setStatusFilter, value)}
               >
                 <SelectTrigger className="w-32">
-                  <SelectValue placeholder="状态" />
+                  <SelectValue placeholder={t('filters.status')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部状态</SelectItem>
-                    <SelectItem value="success">成功</SelectItem>
-                    <SelectItem value="failed">失败</SelectItem>
+                    <SelectItem value="all">{t('filters.allStatuses')}</SelectItem>
+                    <SelectItem value="success">{t('status.success')}</SelectItem>
+                    <SelectItem value="failed">{t('status.failed')}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
               <Button variant="outline" size="sm" onClick={handleResetFilters}>
-                重置筛选
+                {t('filters.reset')}
               </Button>
             </>
           }
@@ -505,7 +513,7 @@ export function LogsPage() {
                 size="sm"
                 onClick={() => setClearDialogOpen(true)}
               >
-                清空
+                {t('common:action.clear')}
               </Button>
             </>
           }
@@ -515,18 +523,18 @@ export function LogsPage() {
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
+            <DialogTitle>{t('clear.confirmTitle')}</DialogTitle>
             <DialogDescription>
-              此操作不可恢复，清空后无法找回相关记录。
+              {t('clear.description')}
             </DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
-                清空当前页面的
+                {t('clear.filtered')}
               </Button>
               <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
-                清空所有页面的
+                {t('clear.all')}
               </Button>
             </>
           }>

@@ -2,8 +2,10 @@
 
 import type { ReactNode } from "react"
 import * as React from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { dashboardApi } from "@/lib/dashboard-api"
+import { i18n } from "@/i18n/i18n"
 import { cn } from "@/lib/utils"
 import type {
   ColumnDef,
@@ -65,8 +67,8 @@ function parseWidthInput(raw: string): { ok: true; value: ColumnWidthConfig } | 
   if (pctMatch) return { ok: true, value: { kind: 'percent', value: Number(pctMatch[1]) } }
   const pxMatch = /^([0-9]+(?:\.[0-9]+)?)(pt|px)$/.exec(trimmed)
   if (pxMatch) return { ok: true, value: { kind: 'pixel', value: Number(pxMatch[1]) } }
-  if (trimmed === '') return { ok: false, error: '宽度不能为空' }
-  return { ok: false, error: '必须以 % 或 pt/px 结尾（如 "200 px" 或 "30 %"）' }
+  if (trimmed === '') return { ok: false, error: i18n.t('ui:dataTable.widthRequired') }
+  return { ok: false, error: i18n.t('ui:dataTable.widthFormatInvalid') }
 }
 
 function defaultConfigForColumn(col: ColumnDef<unknown>): ColumnDisplayConfig {
@@ -210,7 +212,7 @@ export function DataTable<T extends Record<string, unknown>>({
   onLimitChange,
   filters,
   actions,
-  emptyText = "暂无数据",
+  emptyText = undefined,
   onRetry,
   onRowClick,
   showPagination = true,
@@ -219,6 +221,7 @@ export function DataTable<T extends Record<string, unknown>>({
   rowHoverBackgroundColor,
   hoverClassName,
 }: DataTableProps<T>) {
+  const { t } = useTranslation('ui')
   // Fail loudly if any column is missing the required defaultWidth.
   const missing = columns.find((c) => !c.defaultWidth)
   if (missing) {
@@ -650,7 +653,7 @@ export function DataTable<T extends Record<string, unknown>>({
             {!loading && !error && data.length === 0 && (
               <tr data-slot="table-row">
                 <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
-                  {emptyText}
+                  {emptyText ?? t('dataTable.empty')}
                 </td>
               </tr>
             )}

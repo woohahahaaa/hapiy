@@ -1,0 +1,138 @@
+{
+  "drag": {
+    "sortLabel": "Drag to reorder",
+    "sortTitle": "Drag to adjust order"
+  },
+  "rule": {
+    "number": "Rule {{name}}",
+    "conditions_one": "{{count}} condition",
+    "conditions_other": "{{count}} conditions",
+    "actions_one": "{{count}} action",
+    "actions_other": "{{count}} actions",
+    "deleteLabel": "Delete rule",
+    "deleteTitle": "Delete rule",
+    "addLabel": "Add rule",
+    "addTitle": "Add rule",
+    "empty": "No rules yet. Click “Add rule” below to start."
+  },
+  "section": {
+    "conditions": "Conditions",
+    "actions": "Actions (run in order)",
+    "addCondition": "Add condition",
+    "addAction": "Add action",
+    "deleteAction_one": "Delete action {{count}}",
+    "deleteAction_other": "Delete actions {{count}}",
+    "noConditions": "No conditions — empty means unconditional",
+    "atLeastOneAction": "At least one action is required"
+  },
+  "logic": {
+    "and": "AND (all must match)",
+    "or": "OR (any must match)"
+  },
+  "group": {
+    "label": "Group",
+    "count_one": "{{count}} item",
+    "count_other": "{{count}} items",
+    "deleteLabel": "Delete condition group",
+    "deleteTitle": "Delete condition group"
+  },
+  "mode": {
+    "set": "Set value (set)",
+    "delete": "Delete field (delete)",
+    "append": "Append string (append)",
+    "prepend": "Prepend string (prepend)",
+    "firstPrepend": "Streaming first-chunk prepend (first_prepend)",
+    "lastAppend": "Streaming last-chunk append (last_append)",
+    "trimPrefix": "Trim prefix (trim_prefix)",
+    "trimSuffix": "Trim suffix (trim_suffix)",
+    "ensurePrefix": "Ensure prefix (ensure_prefix)",
+    "ensureSuffix": "Ensure suffix (ensure_suffix)",
+    "trimSpace": "Trim whitespace (trim_space)",
+    "toLower": "To lowercase (to_lower)",
+    "toUpper": "To uppercase (to_upper)",
+    "replace": "String replace (replace)",
+    "regexReplace": "Regex replace (regex_replace)",
+    "move": "Rename/move (move)",
+    "copy": "Copy (copy)"
+  },
+  "respMode": {
+    "move": "Rename field (move)",
+    "firstPrepend": "Add prefix (first_prepend)",
+    "lastAppend": "Add suffix (last_append)",
+    "delete": "Delete field (delete)"
+  },
+  "condOp": {
+    "contains": "Contains",
+    "prefix": "Starts with prefix",
+    "suffix": "Ends with suffix",
+    "eq": "Equals",
+    "neq": "Not equals",
+    "gt": "Greater than",
+    "gte": "Greater than or equal",
+    "lt": "Less than",
+    "lte": "Less than or equal",
+    "matches": "Regex match"
+  },
+  "path": {
+    "headerPlaceholder": "Header name (no header. prefix)",
+    "gjsonPlaceholder": "gjson path"
+  },
+  "selectModePlaceholder": "Select operation",
+  "field": {
+    "valuePlaceholder": "value or variable name",
+    "dstPlaceholder": "dst target path"
+  },
+  "value": {
+    "invalidHint": "Strings need manual quotes"
+  },
+  "convention": {
+    "refHint": "No quotes → variable: same-scope value from the original request (header name / gjson path)",
+    "literalHint": "true / false / null / number → JSON literal",
+    "stringHint": "Quoted → fixed string; the content inside the quotes"
+  },
+  "invert": {
+    "label": "Invert match",
+    "ariaLabel": "Invert match"
+  },
+  "gjson": {
+    "triggerLabel": "gjson path examples",
+    "triggerAria": "gjson path examples",
+    "syntaxTitle": "gjson path syntax",
+    "examples": {
+      "topLevel": "Top-level field",
+      "arrayIndex": "Field of array item 0",
+      "arrayLast": "Last array item (negative index)",
+      "nested": "Nested field",
+      "header": "HTTP header (with scope=header, use only the name, e.g. X-Request-ID)"
+    }
+  },
+  "form": {
+    "name": "Name",
+    "namePlaceholder": "Rule name",
+    "rewriteRules": "Rewrite rules"
+  },
+  "respValue": {
+    "movePlaceholder": "New field path (e.g. messages.0.text)",
+    "firstPrependPlaceholder": "Prefix to add (e.g. \n<think>)",
+    "lastAppendPlaceholder": "Suffix to add (e.g. \n</think>)"
+  },
+  "testDialog": {
+    "title": "Rule test",
+    "titleSlot": "Rule test (slot)",
+    "selectRule": "Select rule:",
+    "selectPlaceholder": "Select a rule",
+    "sequentialHint_one": "Will run {{count}} rule in order",
+    "sequentialHint_other": "Will run {{count}} rules in order",
+    "executionOrder": "Execution order:",
+    "input": "Input",
+    "result": "Result",
+    "runTest": "Run test",
+    "running": "Testing...",
+    "emptyResult": "Click “Run test” to see the result",
+    "invalidJson": "Invalid JSON, please check the input",
+    "progress": "Running rule {{current}}/{{total}}: {{name}}",
+    "ruleFailed": "Rule {{index}} \"{{name}}\" failed: {{error}}",
+    "unknownError": "Unknown error",
+    "testFailed": "Test failed"
+  }
+}

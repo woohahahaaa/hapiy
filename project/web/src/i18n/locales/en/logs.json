@@ -1,0 +1,220 @@
+{
+  "page": {
+    "activity": {
+      "title": "Activity Monitor",
+      "description": "Live active requests and runtime statistics"
+    },
+    "usage": {
+      "title": "Usage Logs",
+      "description": "Browse API request usage, cost and latency"
+    },
+    "capture": {
+      "title": "Log Capture",
+      "description": "View captured request/response log bodies"
+    },
+    "recordCount_one": "{{count}} record",
+    "recordCount_other": "{{count}} records"
+  },
+  "action": {
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "columns": {
+    "time": "Time",
+    "startTime": "Start Time",
+    "source": "Source",
+    "token": "Token",
+    "provider": "Provider",
+    "model": "Model",
+    "status": "Status",
+    "stream": "Stream",
+    "latency": "Duration",
+    "latencyWithFirstByte": "{{total}} (first byte: {{firstByte}})",
+    "affinity": "Channel Affinity",
+    "tokens": "Tokens",
+    "quota": "Cost",
+    "speed": "Speed",
+    "operation": "Actions",
+    "prefix": "Folder Path",
+    "type": "Type",
+    "fileName": "File / Request ID",
+    "size": "Size"
+  },
+  "status": {
+    "success": "Success",
+    "failed": "Failed"
+  },
+  "affinity": {
+    "full": "Reused channel",
+    "partial": "Partially reused",
+    "new": "New channel",
+    "create": "Channel created",
+    "withParts": "{{state}} (reused: {{parts}})",
+    "partsSeparator": ", "
+  },
+  "tokens": {
+    "input": "Input",
+    "cacheWrite": "Cache write",
+    "cacheRead": "Cache read",
+    "output": "Output",
+    "summary": "Input {{input}} · Cache write {{cacheWrite}} · Cache read {{cacheRead}}{{hitRate}} · Output {{output}}",
+    "detailOpen": " (",
+    "detailClose": ") /"
+  },
+  "filters": {
+    "type": "Type",
+    "source": "Source",
+    "token": "Token",
+    "provider": "Provider",
+    "model": "Model",
+    "status": "Status",
+    "folder": "Folder",
+    "allTypes": "All types",
+    "allSources": "All sources",
+    "allTokens": "All tokens",
+    "allProviders": "All providers",
+    "allModels": "All models",
+    "allStatuses": "All statuses",
+    "allFolders": "All folders",
+    "unmarkedSource": "Unmarked source",
+    "typeRequest": "Request",
+    "typeChannelDisabled": "Failover",
+    "typeChannelRecoveredAuto": "Auto recovery",
+    "typeChannelRecoveredManual": "Manual recovery",
+    "typeSystemAdmin": "System admin",
+    "reset": "Reset filters"
+  },
+  "clear": {
+    "confirmTitle": "Clear everything under the current filters. Continue?",
+    "description": "This cannot be undone. Cleared records cannot be recovered.",
+    "filtered": "Clear current page",
+    "all": "Clear all pages",
+    "filteredDone_one": "Cleared {{count}} record",
+    "filteredDone_other": "Cleared {{count}} records",
+    "allDone_one": "Cleared all {{count}} record",
+    "allDone_other": "Cleared all {{count}} records"
+  },
+  "monitor": {
+    "stats": {
+      "title": "Statistics"
+    },
+    "clear": {
+      "button": "Clear usage",
+      "tooltip": "Clear cumulative usage statistics (request records are kept)",
+      "dialogDescription": "This clears cumulative usage statistics; request records are kept.",
+      "confirmTitle": "Clear usage?",
+      "clearing": "Clearing…",
+      "confirm": "Confirm clear",
+      "done": "Usage cleared"
+    },
+    "saved": "Saved",
+    "metrics": {
+      "totalRequests": "Total requests",
+      "successRequests": "Successful",
+      "failedRequests": "Failed",
+      "totalTokens": "Total Tokens",
+      "averageLatency": "Avg. latency",
+      "successRate": "Success rate",
+      "cost": "Cost",
+      "throughput": "Throughput",
+      "cacheHitRate": "Cache hit rate"
+    },
+    "active": {
+      "title": "Active Requests",
+      "stageQueued": "Queued · waited {{elapsed}}",
+      "stageConnecting": "Connecting {{provider}} · {{elapsed}}",
+      "stageWaitingUpstream": "Waiting for upstream · {{elapsed}}",
+      "stageReceivingStream": "Receiving · chunk #{{chunk}} · {{bytes}}",
+      "stageReceiving": "Receiving response · read {{bytes}}",
+      "stageActive": "Active",
+      "outcomeClientDisconnected": "Client disconnected",
+      "outcomeUpstreamError": "Upstream error",
+      "outcomeNoProvider": "No provider available",
+      "outcomeConcurrency": "Concurrency limit",
+      "outcomeParseError": "Parse error",
+      "outcomeKilled": "Killed",
+      "outcomeFinished": "Finished"
+    },
+    "kill": {
+      "button": "Kill",
+      "killing": "Killing…",
+      "tooltip": "Kill this request (aborts the upstream request)",
+      "done": "Killed"
+    },
+    "retention": {
+      "immediate": "Remove immediately after completion",
+      "seconds": "{{count}} seconds",
+      "minutes": "{{count}} minutes",
+      "label": "Show active requests within {{retention}}",
+      "unknown": "Retention unknown",
+      "setTooltip": "Set retention time",
+      "dialogTitle": "Retention Settings",
+      "dialogDescription": "How long requests stay in the list after they finish"
+    }
+  },
+  "capture": {
+    "empty": "No captured logs",
+    "system": "System",
+    "modified": "·Modified"
+  },
+  "typeLabel": {
+    "request": "Request",
+    "response": "Response",
+    "requestResponse": "Request + Response",
+    "requestResponseMany": "Request + Response ×{{count}}",
+    "errorSuffix": "+error",
+    "incompleteSuffix": "+incomplete"
+  },
+  "preview": {
+    "loading": "Loading...",
+    "empty": "No content",
+    "request": "Request",
+    "response": "Response",
+    "requestHeaders": "Request Headers",
+    "requestBody": "Request Body",
+    "responseHeaders": "Response Headers",
+    "responseBody": "Response Body",
+    "mergeJson": "Merge JSON",
+    "raw": "Raw content",
+    "merging": "Merging…",
+    "noData": "(no data)",
+    "systemLog": "System Log",
+    "responseStatus": "Status code: {{status}}",
+    "timing": {
+      "queue": "Queue",
+      "requestRewrite": "Request rewrite",
+      "connect": "Connect",
+      "firstByte": "First byte",
+      "responseRewrite": "Response rewrite",
+      "streamRewrite": "Stream rewrite"
+    }
+  },
+  "detail": {
+    "title": "Log Details {{id}}",
+    "requestId": "Request ID",
+    "providerKey": "Upstream Key",
+    "upstreamUrl": "Upstream URL",
+    "details": "Details",
+    "timing": "Queue {{queue}} · Request rewrite {{requestRewrite}} · Connect {{connect}} · First byte {{firstByte}} · Response rewrite {{responseRewrite}} · Stream rewrite {{streamRewrite}}"
+  },
+  "error": {
+    "loadFailed": "Failed to load",
+    "clearFailed": "Failed to clear",
+    "mergeFailed": "Merge failed",
+    "statsFailed": "Failed to load statistics",
+    "activeFailed": "Failed to load active requests",
+    "retentionFailed": "Failed to load retention setting",
+    "killFailed": "Failed to kill request",
+    "saveFailed": "Failed to save"
+  },
+  "dateRange": {
+    "all": "All",
+    "lastMonth": "Last month",
+    "lastWeek": "Last week",
+    "lastDay": "Last day",
+    "today": "Today",
+    "start": "Start",
+    "to": "to",
+    "end": "End"
+  }
+}

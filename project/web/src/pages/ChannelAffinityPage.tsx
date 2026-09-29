@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+import { i18n } from '@/i18n/i18n'
 import {
   dashboardApi,
   DashboardApiError,
@@ -45,6 +47,7 @@ function RuleForm({ rule, onSave, saving }: {
   readonly onSave: (rule: ChannelAffinityRule) => void | Promise<void>
   readonly saving: boolean
 }) {
+  const { t } = useTranslation('settings')
   const [form, setForm] = useState<ChannelAffinityRule>(rule ?? emptyRule())
 
   // Keep raw textarea text (newlines included) so Enter works live; cleanup
@@ -67,40 +70,40 @@ function RuleForm({ rule, onSave, saving }: {
           disabled={saving || !form.name.trim() || parseList(sessionText).length === 0}
           onClick={() => void handleSave()}
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('savingEllipsis') : t('common:action.save')}
         </Button>
       </>
     }>
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="aff-rule-name">规则名称</FieldLabel>
-        <Input id="aff-rule-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="如：DeepSeek 会话亲和" />
+        <FieldLabel htmlFor="aff-rule-name">{t('affinity.ruleName')}</FieldLabel>
+        <Input id="aff-rule-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder={t('affinity.ruleNamePlaceholder')} />
       </Field>
 
       <Field>
-        <FieldLabel>Session ID 请求头（每行一个，大小写不敏感）</FieldLabel>
+        <FieldLabel>{t('affinity.sessionFieldsLabel')}</FieldLabel>
         <Textarea
           rows={3}
           value={sessionText}
           onChange={(event) => setSessionText(event.target.value)}
         />
-        <p className="text-xs text-muted-foreground">只在请求头里查找（不读 body），第一个有值的生效。</p>
-        <p className="text-xs text-muted-foreground">常见字段名：X-Session-Id、X-Conversation-Id、x-litellm-session-id、X-Request-Id、X-Client-Session-Id、X-Claude-Code-Session-Id</p>
+        <p className="text-xs text-muted-foreground">{t('affinity.sessionFieldsHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('affinity.sessionFieldsCommon')}</p>
       </Field>
 
       <Field>
-        <FieldLabel>Model 字段（gjson 路径，每行一个）</FieldLabel>
+        <FieldLabel>{t('affinity.modelFieldsLabel')}</FieldLabel>
         <Textarea
           rows={3}
           value={modelText}
           onChange={(event) => setModelText(event.target.value)}
         />
-        <p className="text-xs text-muted-foreground">在请求体里按 gjson 路径查找模型名；留空时直接用请求的 model 字段（OpenAI 标准）。</p>
-        <p className="text-xs text-muted-foreground">常见路径：model</p>
+        <p className="text-xs text-muted-foreground">{t('affinity.modelFieldsHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('affinity.modelFieldsCommon')}</p>
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="aff-ttl">缓存有效期（秒）</FieldLabel>
+        <FieldLabel htmlFor="aff-ttl">{t('affinity.ttlLabel')}</FieldLabel>
         <Input id="aff-ttl" type="number" min={1} value={form.ttlSeconds ?? 1800} onChange={(event) => setForm((current) => ({ ...current, ttlSeconds: Number(event.target.value) || 1800 }))} />
       </Field>
 
@@ -114,6 +117,7 @@ function FallbackForm({ fallback, onSave, saving }: {
   readonly onSave: (next: ChannelAffinityFallback) => void | Promise<void>
   readonly saving: boolean
 }) {
+  const { t } = useTranslation('settings')
   const [enabled, setEnabled] = useState(fallback.enabled)
   // Keep raw textarea text (newlines included) so Enter works live; cleanup
   // happens only when saving.
@@ -133,7 +137,7 @@ function FallbackForm({ fallback, onSave, saving }: {
             })
           }}
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('savingEllipsis') : t('common:action.save')}
         </Button>
       </>
     }>
@@ -144,32 +148,32 @@ function FallbackForm({ fallback, onSave, saving }: {
             checked={enabled}
             onCheckedChange={setEnabled}
           />
-          开启（关闭时不读取兜底字段，正常走亲和性规则 / 拓扑选择）
+          {t('affinity.fallbackEnabled')}
         </label>
       </Field>
 
       {enabled && (
         <>
           <Field>
-            <FieldLabel>Session ID 请求头（每行一个，大小写不敏感）</FieldLabel>
+            <FieldLabel>{t('affinity.sessionFieldsLabel')}</FieldLabel>
             <Textarea
               rows={3}
               value={sessionText}
               onChange={(event) => setSessionText(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">只在请求头里查找（不读 body），第一个有值的生效。</p>
-            <p className="text-xs text-muted-foreground">常见字段名：X-Session-Id、X-Conversation-Id、x-litellm-session-id、X-Request-Id、X-Client-Session-Id、X-Claude-Code-Session-Id</p>
+            <p className="text-xs text-muted-foreground">{t('affinity.sessionFieldsHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('affinity.sessionFieldsCommon')}</p>
           </Field>
 
           <Field>
-            <FieldLabel>Model 字段（gjson 路径，每行一个）</FieldLabel>
+            <FieldLabel>{t('affinity.modelFieldsLabel')}</FieldLabel>
             <Textarea
               rows={3}
               value={modelText}
               onChange={(event) => setModelText(event.target.value)}
             />
-            <p className="text-xs text-muted-foreground">在请求体里按 gjson 路径查找模型名；留空时直接用请求的 model 字段（OpenAI 标准）。</p>
-            <p className="text-xs text-muted-foreground">常见路径：model</p>
+            <p className="text-xs text-muted-foreground">{t('affinity.modelFieldsHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('affinity.modelFieldsCommon')}</p>
           </Field>
         </>
       )}
@@ -190,6 +194,7 @@ function emptySetting(): ChannelAffinitySetting {
 }
 
 export function ChannelAffinityPage() {
+  const { t } = useTranslation('settings')
   const [payload, setPayload] = useState<ChannelAffinityPayload | null>(null)
   const [editing, setEditing] = useState<ChannelAffinityRule | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -207,7 +212,7 @@ export function ChannelAffinityPage() {
     try {
       setPayload(await dashboardApi.getChannelAffinity())
     } catch (loadError) {
-      setError(loadError instanceof DashboardApiError ? loadError.message : '加载渠道亲和性配置失败')
+      setError(loadError instanceof DashboardApiError ? loadError.message : i18n.t('settings:affinity.loadFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -223,7 +228,7 @@ export function ChannelAffinityPage() {
       setPayload(saved)
       return true
     } catch (saveError) {
-      setError(saveError instanceof DashboardApiError ? saveError.message : '保存渠道亲和性配置失败')
+      setError(saveError instanceof DashboardApiError ? saveError.message : i18n.t('settings:affinity.saveFailed'))
       return false
     } finally {
       setIsSaving(false)
@@ -272,44 +277,44 @@ export function ChannelAffinityPage() {
   const columns: ColumnDef<ChannelAffinityRule>[] = [
     {
       key: 'name',
-      label: '规则名称',
+      label: t('affinity.ruleName'),
       defaultWidth: { kind: 'pixel', value: 160 },
       render: (_, row) => <span className="font-medium">{row.name}</span>,
     },
     {
       key: 'sessionIdFields',
-      label: 'Session 字段',
+      label: t('affinity.colSessionFields'),
       defaultWidth: { kind: 'pixel', value: 200 },
       render: (_, row) => <span className="text-xs">{row.sessionIdFields.join(', ') || '—'}</span>,
     },
     {
       key: 'modelFields',
-      label: 'Model 字段',
+      label: t('affinity.colModelFields'),
       defaultWidth: { kind: 'pixel', value: 200 },
       render: (_, row) => <span className="text-xs">{row.modelFields.join(', ') || '—'}</span>,
     },
     {
       key: 'ttlSeconds',
-      label: 'TTL（秒）',
+      label: t('affinity.colTtl'),
       defaultWidth: { kind: 'pixel', value: 100 },
       defaultAlign: 'right',
       render: (_, row) => <span className="text-xs">{row.ttlSeconds ?? setting.defaultTtlSeconds}</span>,
     },
     {
       key: 'enabled',
-      label: '状态',
+      label: t('table.status'),
       defaultWidth: { kind: 'pixel', value: 100 },
-      render: (_, row) => <span className={row.enabled ? 'text-success' : 'text-destructive'}>{row.enabled ? '启用' : '禁用'}</span>,
+      render: (_, row) => <span className={row.enabled ? 'text-success' : 'text-destructive'}>{row.enabled ? t('common:action.enable') : t('common:action.disable')}</span>,
     },
     {
       key: 'actions',
-      label: '操作',
+      label: t('table.actions'),
       defaultWidth: { kind: 'pixel', value: 180 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...row, enabled: !row.enabled })}>{row.enabled ? '禁用' : '启用'}</Button>
+          <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void handleSaveRule({ ...row, enabled: !row.enabled })}>{row.enabled ? t('common:action.disable') : t('common:action.enable')}</Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(row); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => setDeleting(row.name)}><AppIcon name="delete" /></Button>
         </div>
@@ -320,9 +325,9 @@ export function ChannelAffinityPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="渠道亲和性"
-        description="请求按亲和字段（模型 + 会话 + endpoint）命中规则后，优先复用上次使用的渠道"
-        status={`${total} 条规则`}
+        title={t('common:nav.channelAffinity')}
+        description={t('affinity.pageDescription')}
+        status={t('affinity.status', { count: total })}
       />
       <div className="flex flex-wrap items-center gap-2 px-6 pt-2">
         <Button
@@ -335,7 +340,7 @@ export function ChannelAffinityPage() {
               : ''
           }
         >
-          兜底渠道亲和性匹配：{fallback.enabled ? '开启' : '关闭'}
+          {t('affinity.fallbackButton', { state: fallback.enabled ? t('affinity.stateOn') : t('affinity.stateOff') })}
         </Button>
       </div>
       <div className="p-6">
@@ -350,11 +355,11 @@ export function ChannelAffinityPage() {
           limit={limit}
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
-          emptyText="暂无规则"
+          emptyText={t('affinity.empty')}
           onRetry={() => void load()}
           actions={
             <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving || isLoading}>
-              <AppIcon name="add" data-icon="inline-start" />添加规则
+              <AppIcon name="add" data-icon="inline-start" />{t('affinity.addRule')}
             </Button>
           }
         />
@@ -362,14 +367,14 @@ export function ChannelAffinityPage() {
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent width="md" scrollFooter>
-          <DialogHeader><DialogTitle>{editing ? '编辑规则' : '添加规则'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? t('affinity.editRule') : t('affinity.addRule')}</DialogTitle></DialogHeader>
           <RuleForm rule={editing} onSave={(rule) => void handleSaveRule(rule)} saving={isSaving} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={isFallbackOpen} onOpenChange={setIsFallbackOpen}>
         <DialogContent width="md" scrollFooter>
-          <DialogHeader><DialogTitle>兜底渠道亲和性匹配</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{t('affinity.fallbackTitle')}</DialogTitle></DialogHeader>
           <FallbackForm fallback={fallback} onSave={(next) => void handleSaveFallback(next)} saving={isSaving} />
         </DialogContent>
       </Dialog>
@@ -379,8 +384,8 @@ export function ChannelAffinityPage() {
         onOpenChange={(open) => {
           if (!open) setDeleting(null)
         }}
-        title="确认删除"
-        description={`将删除渠道亲和性规则「${deleting ?? ''}」，删除后不可恢复。`}
+        title={t('affinity.confirmDeleteTitle')}
+        description={t('affinity.confirmDeleteDescription', { name: deleting ?? '' })}
         busy={isSaving}
         onConfirm={() => {
           if (deleting) {

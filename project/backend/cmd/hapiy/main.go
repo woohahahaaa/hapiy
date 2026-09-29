@@ -406,7 +406,7 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 	modelList := func(c *gin.Context) bool {
 		endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败", "code": "SETTING_READ_FAILED"})
 			return true
 		}
 		expected := strings.TrimSpace(endpoint)
@@ -433,15 +433,15 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			}
 			endpoint, err := service.GetSetting(db, "own_model_list_endpoint")
 			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败"})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "配置读取失败", "code": "SETTING_READ_FAILED"})
 				return
 			}
 			expected := strings.TrimSpace(endpoint)
 			if expected == "" {
-				c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置"})
+				c.JSON(http.StatusNotFound, gin.H{"error": "模型列表接口未配置", "code": "OWN_MODEL_LIST_ENDPOINT_UNCONFIGURED"})
 				return
 			}
-			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在", "code": "PATH_NOT_FOUND"})
 			return
 		}
 		fileServer := http.FileServer(http.Dir(webDist))

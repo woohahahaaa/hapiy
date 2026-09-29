@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Switch } from '@/components/ui/switch'
 import { dashboardApi } from '@/lib/dashboard-api'
 
@@ -32,6 +33,7 @@ function OtherToggle({
 }
 
 export function OtherSettings() {
+  const { t } = useTranslation('settings')
   const [agentEnabled, setAgentEnabled] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
@@ -61,8 +63,8 @@ export function OtherSettings() {
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border border-border bg-card p-4">
         <OtherToggle
-          title="开启接管Agent"
-          description={"开启后侧边栏显示“接管Agent”入口（含配置文件、管理规则等）。\n关闭后侧边栏隐藏该入口。"}
+          title={t('other.title')}
+          description={t('other.toggleDescription')}
           checked={loaded && agentEnabled}
           onChange={handleToggle}
         />

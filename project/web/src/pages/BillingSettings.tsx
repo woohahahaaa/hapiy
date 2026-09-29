@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import {
 } from '@/components/dialog'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
+import { i18n } from '@/i18n/i18n'
 
 const BILLING_CURRENCY_KEY = 'billing_currency'
 const EXCHANGE_RATE_KEY = 'exchange_rate_usd_cny'
@@ -42,10 +44,11 @@ function settingsValue(settings: readonly { key: string; value: string }[], key:
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof DashboardApiError) return err.message
-  return err instanceof Error ? err.message : '操作失败，请重试'
+  return err instanceof Error ? err.message : i18n.t('settings:errors.operationFailed')
 }
 
 export function BillingSettings() {
+  const { t } = useTranslation('settings')
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [currency, setCurrency] = useState<BillingCurrency>('CNY')
   const [rate, setRate] = useState('7.2')
@@ -73,7 +76,7 @@ export function BillingSettings() {
       })
       .catch((err) => {
         const message =
-          err instanceof DashboardApiError ? err.message : '获取设置失败'
+          err instanceof DashboardApiError ? err.message : i18n.t('settings:errors.fetchSettingsFailed')
         setState({ kind: 'error', message })
       })
   }, [])
@@ -90,14 +93,14 @@ export function BillingSettings() {
   const handleSaveBilling = async () => {
     const rateValue = Number(rate)
     if (!Number.isFinite(rateValue) || rateValue <= 0) {
-      toast.error('汇率必须大于 0')
+      toast.error(t('billing.rateMustBePositive'))
       return
     }
     setSavingBilling(true)
     try {
       await dashboardApi.updateSetting(BILLING_CURRENCY_KEY, currency)
       await dashboardApi.updateSetting(EXCHANGE_RATE_KEY, String(rateValue))
-      toast('已保存')
+      toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -113,12 +116,12 @@ export function BillingSettings() {
   const handleTestExchange = async () => {
     const url = apiUrl.trim()
     if (!/^https?:\/\//.test(url)) {
-      setTestResult({ kind: 'error', message: '接口地址必须以 http:// 或 https:// 开头' })
+      setTestResult({ kind: 'error', message: t('billing.invalidUrl') })
       return
     }
     const field = fieldPath.trim()
     if (!field) {
-      setTestResult({ kind: 'error', message: '请填写人民币汇率字段路径' })
+      setTestResult({ kind: 'error', message: t('billing.missingField') })
       return
     }
     setTesting(true)
@@ -136,12 +139,12 @@ export function BillingSettings() {
   const handleSaveExchangeConfig = async () => {
     const url = apiUrl.trim()
     if (!/^https?:\/\//.test(url)) {
-      setTestResult({ kind: 'error', message: '接口地址必须以 http:// 或 https:// 开头' })
+      setTestResult({ kind: 'error', message: t('billing.invalidUrl') })
       return
     }
     const field = fieldPath.trim()
     if (!field) {
-      setTestResult({ kind: 'error', message: '请填写人民币汇率字段路径' })
+      setTestResult({ kind: 'error', message: t('billing.missingField') })
       return
     }
     setRefreshing(true)
@@ -153,11 +156,12 @@ export function BillingSettings() {
       try {
         const newRate = await dashboardApi.refreshExchangeRate()
         setRate(String(newRate))
-        toast(`已刷新汇率：1 美元 = ${newRate} 人民币`)
+        toast(t('billing.refreshedRate', { rate: newRate }))
       } catch (err) {
         const message = toErrorMessage(err)
-        setTestResult({ kind: 'error', message: `接口配置已保存，但刷新失败：${message}` })
-        toast.error(`接口配置已保存，但刷新失败：${message}`)
+        const savedButFailed = t('billing.savedButRefreshFailed', { message })
+        setTestResult({ kind: 'error', message: savedButFailed })
+        toast.error(savedButFailed)
       }
       setSettingsOpen(false)
     } catch (err) {
@@ -174,7 +178,7 @@ export function BillingSettings() {
     try {
       const newRate = await dashboardApi.refreshExchangeRate()
       setRate(String(newRate))
-      toast(`已刷新：1 美元 = ${newRate} 人民币`)
+      toast(t('billing.refreshed', { rate: newRate }))
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -187,14 +191,14 @@ export function BillingSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="sell" size={16} /> 币种汇率
+            <AppIcon name="sell" size={16} /> {t('common:nav.billing')}
           </CardTitle>
-          <CardDescription>使用记录、模型信息等所有金额展示与计费的币种与汇率</CardDescription>
+          <CardDescription>{t('billing.cardDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {state.kind === 'loading' && (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
             </div>
           )}
 
@@ -203,7 +207,7 @@ export function BillingSettings() {
               <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
-                <AppIcon name="refresh" data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>
             </div>
           )}
@@ -211,27 +215,27 @@ export function BillingSettings() {
           {state.kind === 'ready' && (
             <div className="flex flex-col gap-5">
               <div className="grid gap-1.5 text-sm">
-                <span>全局消耗统计币种</span>
+                <span>{t('billing.currencyLabel')}</span>
                 <Select value={currency} onValueChange={(v) => setCurrency(v as BillingCurrency)}>
                   <SelectTrigger className="w-52">
-                    <SelectValue placeholder="选择币种" />
+                    <SelectValue placeholder={t('billing.currencyPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="CNY">人民币 (CNY)</SelectItem>
-                      <SelectItem value="USD">美元 (USD)</SelectItem>
+                      <SelectItem value="CNY">{t('billing.currencyCny')}</SelectItem>
+                      <SelectItem value="USD">{t('billing.currencyUsd')}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  切换币种后，历史使用记录保持落库时的币种与金额不变，仅影响新产生的记录。
+                  {t('billing.currencyHint')}
                 </p>
               </div>
 
               <div className="grid gap-1.5 text-sm">
-                <span>汇率</span>
+                <span>{t('billing.rateLabel')}</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">1 美元 =</span>
+                  <span className="text-xs text-muted-foreground">{t('billing.oneUsdEquals')}</span>
                   <Input
                     className="w-40"
                     type="number"
@@ -241,16 +245,16 @@ export function BillingSettings() {
                     onChange={(e) => setRate(e.target.value)}
                     disabled={savingBilling || refreshing}
                   />
-                  <span className="text-xs text-muted-foreground">人民币</span>
+                  <span className="text-xs text-muted-foreground">{t('billing.currencyUnit')}</span>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={handleManualRefresh}
                     disabled={refreshing}
-                    title="在线获取最新汇率"
+                    title={t('billing.refreshTitle')}
                   >
                     <AppIcon name="refresh" data-icon="inline-start" className={refreshing ? 'animate-spin' : ''} />
-                    刷新
+                    {t('common:action.refresh')}
                   </Button>
                   <Button
                     type="button"
@@ -258,21 +262,21 @@ export function BillingSettings() {
                     size="icon-sm"
                     onClick={handleOpenExchangeDialog}
                     disabled={refreshing}
-                    title="汇率接口设置"
-                    aria-label="汇率接口设置"
+                    title={t('billing.exchangeDialogTitle')}
+                    aria-label={t('billing.exchangeDialogTitle')}
                   >
                     <AppIcon name="settings" size={14} />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  点击「刷新」可在线获取最新汇率；点击右侧的齿轮按钮可配置汇率来源接口地址、人民币汇率字段与自动刷新。
+                  {t('billing.rateHint')}
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
                 <Button onClick={handleSaveBilling} disabled={savingBilling || refreshing}>
                   {savingBilling && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                  保存
+                  {t('common:action.save')}
                 </Button>
               </div>
             </div>
@@ -283,40 +287,40 @@ export function BillingSettings() {
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>汇率接口设置</DialogTitle>
+            <DialogTitle>{t('billing.exchangeDialogTitle')}</DialogTitle>
             <DialogDescription>
-              配置在线获取人民币兑美元汇率的接口：通过 GET 方法请求接口地址，从返回的 JSON 中读取人民币汇率字段。
+              {t('billing.exchangeDialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button onClick={handleSaveExchangeConfig} disabled={refreshing}>
                 {refreshing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                保存并刷新
+                {t('billing.saveAndRefresh')}
               </Button>
             </>
           }>
           <div className="flex flex-col gap-4">
             <div className="grid gap-1.5 text-sm">
-              <span>接口地址</span>
+              <span>{t('billing.apiUrlLabel')}</span>
               <Input
                 value={apiUrl}
                 onChange={(e) => setApiUrl(e.target.value)}
                 placeholder="https://open.er-api.com/v6/latest/USD"
               />
               <p className="text-xs text-muted-foreground">
-                这是一个通过 GET 方法可以请求到的地址，返回的 JSON 中需包含人民币汇率字段。
+                {t('billing.apiUrlHint')}
               </p>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <span>人民币/美元汇率字段</span>
+              <span>{t('billing.fieldLabel')}</span>
               <Input
                 value={fieldPath}
                 onChange={(e) => setFieldPath(e.target.value)}
-                placeholder="rates.CNY 或 conversion_rates.CNY"
+                placeholder={t('billing.fieldPlaceholder')}
               />
               <p className="text-xs text-muted-foreground">
-                返回 JSON 中人民币兑美元汇率所在的字段路径，支持点号分隔，例如 rates.CNY。
+                {t('billing.fieldHint')}
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -324,10 +328,10 @@ export function BillingSettings() {
                 checked={autoRefresh}
                 onCheckedChange={(checked) => setAutoRefresh(checked === true)}
               />
-              每天自动刷新
+              {t('billing.autoRefreshLabel')}
             </label>
             <p className="text-xs text-muted-foreground">
-              勾选后每天自动从接口获取最新汇率；若某次自动刷新失败，会在半小时后自动重试。
+              {t('billing.autoRefreshHint')}
             </p>
             <div className="flex items-center gap-3">
               <Button
@@ -338,11 +342,11 @@ export function BillingSettings() {
                 disabled={testing || refreshing}
               >
                 {testing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                测试接口
+                {t('billing.testApi')}
               </Button>
               {testResult?.kind === 'success' && (
                 <p role="status" className="text-xs text-emerald-600">
-                  连接成功：1 美元 = {testResult.rate} 人民币
+                  {t('billing.testSuccess', { rate: testResult.rate })}
                 </p>
               )}
               {testResult?.kind === 'error' && (

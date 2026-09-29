@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
+import { i18n } from '@/i18n/i18n'
 
 const DEFAULT_MODEL_LIST_ENDPOINT_KEY = 'default_model_list_endpoint'
 const OWN_MODEL_LIST_ENDPOINT_KEY = 'own_model_list_endpoint'
@@ -20,7 +22,7 @@ function settingsValue(settings: readonly { key: string; value: string }[], key:
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof DashboardApiError) return err.message
-  return err instanceof Error ? err.message : '操作失败，请重试'
+  return err instanceof Error ? err.message : i18n.t('settings:errors.operationFailed')
 }
 
 function isValidPath(value: string): boolean {
@@ -28,6 +30,7 @@ function isValidPath(value: string): boolean {
 }
 
 export function GeneralSettings() {
+  const { t } = useTranslation('settings')
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
 
   const [defaultEndpoint, setDefaultEndpoint] = useState('')
@@ -46,7 +49,7 @@ export function GeneralSettings() {
       })
       .catch((err) => {
         const message =
-          err instanceof DashboardApiError ? err.message : '获取设置失败'
+          err instanceof DashboardApiError ? err.message : i18n.t('settings:errors.fetchSettingsFailed')
         setState({ kind: 'error', message })
       })
   }, [])
@@ -63,13 +66,13 @@ export function GeneralSettings() {
   const handleSaveDefault = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!isValidPath(defaultEndpoint)) {
-      toast.error('路径必须以斜杠开头（/）')
+      toast.error(t('general.pathMustStartSlash'))
       return
     }
     setSavingDefault(true)
     try {
       await dashboardApi.updateSetting(DEFAULT_MODEL_LIST_ENDPOINT_KEY, defaultEndpoint)
-      toast('已保存')
+      toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -80,13 +83,13 @@ export function GeneralSettings() {
   const handleSaveOwn = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!isValidPath(ownEndpoint)) {
-      toast.error('路径必须以斜杠开头（/）')
+      toast.error(t('general.pathMustStartSlash'))
       return
     }
     setSavingOwn(true)
     try {
       await dashboardApi.updateSetting(OWN_MODEL_LIST_ENDPOINT_KEY, ownEndpoint)
-      toast('已保存')
+      toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -99,14 +102,14 @@ export function GeneralSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="cloud_download" size={16} /> 上游模型列表接口
+            <AppIcon name="cloud_download" size={16} /> {t('general.upstreamTitle')}
           </CardTitle>
-          <CardDescription>从供应商获取模型列表时的默认接口路径</CardDescription>
+          <CardDescription>{t('general.upstreamDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {state.kind === 'loading' && (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
             </div>
           )}
 
@@ -115,7 +118,7 @@ export function GeneralSettings() {
               <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
-                <AppIcon name="refresh" data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>
             </div>
           )}
@@ -126,7 +129,7 @@ export function GeneralSettings() {
                 className="grid gap-1.5 text-sm"
                 htmlFor="general-default-model-list-endpoint"
               >
-                默认模型列表接口路径
+                {t('general.defaultEndpointLabel')}
                 <Input
                   id="general-default-model-list-endpoint"
                   value={defaultEndpoint}
@@ -136,12 +139,12 @@ export function GeneralSettings() {
                 />
               </label>
               <p className="text-xs text-muted-foreground">
-                路径必须以斜杠开头（/），将拼接在供应商的 Base URL 之后。当供应商表单中"从上游获取模型"未单独配置接口地址时，将使用此路径作为回退。
+                {t('general.defaultEndpointHint')}
               </p>
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={savingDefault}>
                   {savingDefault && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                  保存
+                  {t('common:action.save')}
                 </Button>
               </div>
             </form>
@@ -152,14 +155,14 @@ export function GeneralSettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="database" size={16} /> hapiy 模型列表接口
+            <AppIcon name="database" size={16} /> {t('general.ownTitle')}
           </CardTitle>
-          <CardDescription>对外暴露的 hapiy 自身模型列表路径</CardDescription>
+          <CardDescription>{t('general.ownDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {state.kind === 'loading' && (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
             </div>
           )}
 
@@ -168,7 +171,7 @@ export function GeneralSettings() {
               <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
-                <AppIcon name="refresh" data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>
             </div>
           )}
@@ -179,7 +182,7 @@ export function GeneralSettings() {
                 className="grid gap-1.5 text-sm"
                 htmlFor="general-own-model-list-endpoint"
               >
-                hapiy 模型列表接口路径
+                {t('general.ownEndpointLabel')}
                 <Input
                   id="general-own-model-list-endpoint"
                   value={ownEndpoint}
@@ -189,12 +192,12 @@ export function GeneralSettings() {
                 />
               </label>
               <p className="text-xs text-muted-foreground">
-                路径必须以斜杠开头（/）。访问该路径时，hapiy 会以 OpenAI 兼容格式返回自身已知的模型列表（<code>{'{"data": [{"id", "object", "owned_by"}]}'}</code>），使用 Bearer Token 鉴权，调用方式与其他对外接口一致。
+                {t('general.ownEndpointHintPrefix')}<code>{'{"data": [{"id", "object", "owned_by"}]}'}</code>{t('general.ownEndpointHintSuffix')}
               </p>
               <div className="flex items-center gap-3">
                 <Button type="submit" disabled={savingOwn}>
                   {savingOwn && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                  保存
+                  {t('common:action.save')}
                 </Button>
               </div>
             </form>

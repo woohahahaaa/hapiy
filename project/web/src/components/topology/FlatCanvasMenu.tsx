@@ -1,13 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { REQUEST_REWRITE_SLOT_TYPES, type RewriteSlotType } from '@/lib/flat-topology'
-
-const REWRITE_SLOT_LABELS: Record<RewriteSlotType, string> = {
-  requestModify: '请求改写',
-  responseModify: '响应改写',
-  concurrency: '并发控制',
-  autoSwitch: '故障转移',
-  logOutput: '日志抓取',
-}
 
 const ROW_CLASS = 'flex min-h-8 w-full items-center rounded-sm px-2 text-sm transition-colors'
 const PLAIN_ROW_CLASS = cn(ROW_CLASS, 'bg-muted/40 hover:bg-muted hover:text-foreground')
@@ -38,6 +31,7 @@ export function FlatCanvasMenu({
   onAddSwitch,
   onClose,
 }: FlatCanvasMenuProps) {
+  const { t } = useTranslation('topology')
   const positionStyle = mode === 'corner' ? { right: x, bottom: y } : { left: x, top: y }
 
   return (
@@ -68,7 +62,7 @@ export function FlatCanvasMenu({
           }}
           className={PLAIN_ROW_CLASS}
         >
-          <span>添加完整工作流</span>
+          <span>{t('menu.addFullWorkflow')}</span>
         </button>
         <div className="my-1.5 border-t border-border" />
         <button
@@ -79,7 +73,7 @@ export function FlatCanvasMenu({
           }}
           className={PLAIN_ROW_CLASS}
         >
-          <span>添加请求入口</span>
+          <span>{t('menu.addEntry')}</span>
         </button>
         <button
           type="button"
@@ -89,7 +83,7 @@ export function FlatCanvasMenu({
           }}
           className={PLAIN_ROW_CLASS}
         >
-          <span>添加供应商插槽</span>
+          <span>{t('menu.addProviderSlot')}</span>
         </button>
         {REQUEST_REWRITE_SLOT_TYPES.map((slotType) => (
           <button
@@ -101,7 +95,7 @@ export function FlatCanvasMenu({
             }}
             className={PLAIN_ROW_CLASS}
           >
-            <span>添加 {REWRITE_SLOT_LABELS[slotType]} 插槽</span>
+            <span>{t('menu.addSlot', { slot: t(`slot.${slotType}`) })}</span>
           </button>
         ))}
         <button
@@ -112,7 +106,7 @@ export function FlatCanvasMenu({
           }}
           className={PLAIN_ROW_CLASS}
         >
-          <span>添加 条件开关</span>
+          <span>{t('menu.addSwitch')}</span>
         </button>
         <div className="my-1.5 border-t border-border" />
         <button
@@ -123,7 +117,7 @@ export function FlatCanvasMenu({
           }}
           className={EMERGENCY_ROW_CLASS}
         >
-          <span>添加应急供应商</span>
+          <span>{t('menu.addEmergencyWorkflow')}</span>
         </button>
       </div>
     </>

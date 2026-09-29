@@ -1,6 +1,7 @@
 "use client"
 
 import type { JSX } from "react"
+import { useTranslation } from "react-i18next"
 import {
   Select,
   SelectContent,
@@ -30,11 +31,14 @@ export function Pagination({
   onOffsetChange,
   onLimitChange,
 }: PaginationProps): JSX.Element | null {
+  const { t } = useTranslation('ui')
   if (total === 0) return null
 
   const hasPrev = offset > 0
   const hasNext = offset + limit < total
-  const pageText = total > 0 ? `第 ${Math.floor(offset / limit) + 1} 页，共 ${total} 条` : ""
+  const currentPage = Math.floor(offset / limit) + 1
+  const pageText =
+    total > 0 ? t('pagination.pageOf', { page: currentPage, total }) : ""
 
   const handleLimitChange = (value: string) => {
     const next = Number(value)
@@ -46,7 +50,7 @@ export function Pagination({
   return (
     <div className="mt-4 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">每页</span>
+        <span className="text-xs text-muted-foreground">{t('pagination.perPage')}</span>
         <Select value={String(limit)} onValueChange={handleLimitChange}>
           <SelectTrigger className="w-20">
             <SelectValue />
@@ -61,9 +65,11 @@ export function Pagination({
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="text-xs text-muted-foreground">条</span>
+        <span className="text-xs text-muted-foreground">{t('pagination.rows')}</span>
       </div>
-      <div className="text-xs text-muted-foreground">{pageText || "第 1 页，共 0 条"}</div>
+      <div className="text-xs text-muted-foreground">
+        {pageText || t('pagination.pageOf', { page: 1, total: 0 })}
+      </div>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -71,7 +77,7 @@ export function Pagination({
           disabled={!hasPrev}
           onClick={() => onOffsetChange(Math.max(0, offset - limit))}
         >
-          上一页
+          {t('pagination.prev')}
         </Button>
         <Button
           variant="outline"
@@ -79,7 +85,7 @@ export function Pagination({
           disabled={!hasNext}
           onClick={() => onOffsetChange(offset + limit)}
         >
-          下一页
+          {t('pagination.next')}
         </Button>
       </div>
     </div>

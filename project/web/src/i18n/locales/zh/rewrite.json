@@ -1,0 +1,133 @@
+{
+  "drag": {
+    "sortLabel": "拖动排序",
+    "sortTitle": "拖动调整顺序"
+  },
+  "rule": {
+    "number": "规则 {{name}}",
+    "conditions": "{{count}} 条件",
+    "actions": "{{count}} 执行",
+    "deleteLabel": "删除规则",
+    "deleteTitle": "删除规则",
+    "addLabel": "添加规则",
+    "addTitle": "添加规则",
+    "empty": "暂无规则，点击下方「添加规则」开始配置"
+  },
+  "section": {
+    "conditions": "条件",
+    "actions": "执行（按顺序串行）",
+    "addCondition": "添加条件",
+    "addAction": "添加执行",
+    "deleteAction": "删除执行 {{count}}",
+    "noConditions": "暂无条件，留空表示无条件执行",
+    "atLeastOneAction": "至少需要一条执行"
+  },
+  "logic": {
+    "and": "AND（都满足）",
+    "or": "OR（任一满足）"
+  },
+  "group": {
+    "label": "组",
+    "count": "{{count}} 项",
+    "deleteLabel": "删除条件组",
+    "deleteTitle": "删除条件组"
+  },
+  "mode": {
+    "set": "设置值 (set)",
+    "delete": "删除字段 (delete)",
+    "append": "追加字符串 (append)",
+    "prepend": "前置字符串 (prepend)",
+    "firstPrepend": "流式首段前置 (first_prepend)",
+    "lastAppend": "流式末段追加 (last_append)",
+    "trimPrefix": "去除前缀 (trim_prefix)",
+    "trimSuffix": "去除后缀 (trim_suffix)",
+    "ensurePrefix": "确保前缀 (ensure_prefix)",
+    "ensureSuffix": "确保后缀 (ensure_suffix)",
+    "trimSpace": "去首尾空白 (trim_space)",
+    "toLower": "转小写 (to_lower)",
+    "toUpper": "转大写 (to_upper)",
+    "replace": "字符串替换 (replace)",
+    "regexReplace": "正则替换 (regex_replace)",
+    "move": "重命名/移动 (move)",
+    "copy": "复制 (copy)"
+  },
+  "respMode": {
+    "move": "重命名字段 (move)",
+    "firstPrepend": "加前缀 (first_prepend)",
+    "lastAppend": "加后缀 (last_append)",
+    "delete": "删除字段 (delete)"
+  },
+  "condOp": {
+    "contains": "包含",
+    "prefix": "以前缀开头",
+    "suffix": "以后缀结尾",
+    "eq": "等于",
+    "neq": "不等于",
+    "gt": "大于",
+    "gte": "大于等于",
+    "lt": "小于",
+    "lte": "小于等于",
+    "matches": "正则匹配"
+  },
+  "path": {
+    "headerPlaceholder": "header 名（不用写 header.）",
+    "gjsonPlaceholder": "gjson 路径"
+  },
+  "selectModePlaceholder": "选择操作",
+  "field": {
+    "valuePlaceholder": "value 或变量名",
+    "dstPlaceholder": "dst 目标路径"
+  },
+  "value": {
+    "invalidHint": "字符串需要手动添加引号"
+  },
+  "convention": {
+    "refHint": "不加引号 → 变量：取原始请求里的同域值（header 名 / gjson 路径）",
+    "literalHint": "true / false / null / 数字 → JSON 字面量",
+    "stringHint": "加引号 → 固定字符串，引号内为实际内容"
+  },
+  "invert": {
+    "label": "反向匹配",
+    "ariaLabel": "反向匹配"
+  },
+  "gjson": {
+    "triggerLabel": "gjson 路径实例",
+    "triggerAria": "gjson 路径实例",
+    "syntaxTitle": "gjson 路径语法",
+    "examples": {
+      "topLevel": "顶层字段",
+      "arrayIndex": "数组第 0 项的字段",
+      "arrayLast": "数组最后一项（负数索引）",
+      "nested": "嵌套字段",
+      "header": "HTTP header（scope=header 时，路径只填名字，如 X-Request-ID）"
+    }
+  },
+  "form": {
+    "name": "名称",
+    "namePlaceholder": "规则名称",
+    "rewriteRules": "改写规则"
+  },
+  "respValue": {
+    "movePlaceholder": "新字段路径（如 messages.0.text）",
+    "firstPrependPlaceholder": "要加的前缀（如 \n<think>）",
+    "lastAppendPlaceholder": "要加的后缀（如 \n</think>）"
+  },
+  "testDialog": {
+    "title": "规则测试",
+    "titleSlot": "规则测试（插槽）",
+    "selectRule": "选择规则:",
+    "selectPlaceholder": "选择一条规则",
+    "sequentialHint": "将按顺序执行 {{count}} 条规则",
+    "executionOrder": "执行顺序：",
+    "input": "输入",
+    "result": "结果",
+    "runTest": "运行测试",
+    "running": "测试中...",
+    "emptyResult": "点击「运行测试」查看结果",
+    "invalidJson": "JSON 格式无效，请检查输入",
+    "progress": "正在执行第 {{current}}/{{total}} 条规则：{{name}}",
+    "ruleFailed": "第 {{index}} 条规则「{{name}}」执行失败：{{error}}",
+    "unknownError": "未知错误",
+    "testFailed": "测试失败"
+  }
+}

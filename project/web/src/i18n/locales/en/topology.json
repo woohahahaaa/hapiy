@@ -1,0 +1,120 @@
+{
+  "page": {
+    "description": "Visualize and edit how requests are forwarded",
+    "status": "Entries: {{active}}/{{total}} · {{nodes}} nodes"
+  },
+  "state": {
+    "loadingTopology": "Loading topology data…"
+  },
+  "error": {
+    "loadData": "Failed to load data"
+  },
+  "toast": {
+    "saveRetry": "Failed to save topology; retrying automatically",
+    "layoutSaveFailed": "Failed to save layout",
+    "topologyChangedElsewhere": "The topology was modified in another page. Refresh to load the latest data.",
+    "layoutChangedElsewhere": "The layout was modified in another page. Refresh to load the latest layout.",
+    "layoutLoadFailed": "Failed to load layout; using default positions",
+    "nothingToCopy": "No selected nodes to copy",
+    "duplicateProvider": "Provider ({{name}}) cannot be enabled in multiple active workflows"
+  },
+  "validation": {
+    "duplicateSlot": "A workflow cannot contain more than one {{slot}}",
+    "switchMaxOutgoing": "A switch node allows at most two outgoing edges (yes/no)",
+    "switchSameTarget": "The two branches of a switch node cannot target the same node",
+    "maxOneOutgoing": "Each node allows at most one outgoing edge",
+    "cycle": "A cycle cannot be formed"
+  },
+  "node": {
+    "entry": "Request Entry",
+    "emergencyEntry": "Emergency Request Entry",
+    "providerSlot": "Providers",
+    "switch": "Switch",
+    "slotFallback": "Slot"
+  },
+  "slot": {
+    "requestModify": "Request Rewrite",
+    "responseModify": "Response Rewrite",
+    "concurrency": "Concurrency",
+    "autoSwitch": "Failover",
+    "logOutput": "Log Capture"
+  },
+  "toolbar": {
+    "undo": "Undo",
+    "undoTitle": "Undo (Ctrl/Cmd+Z)",
+    "redo": "Redo",
+    "redoTitle": "Redo (Ctrl/Cmd+Shift+Z)",
+    "versions": "Version History",
+    "deleteSelected": "Delete selected nodes",
+    "deleteSelectedTitle": "Delete selected nodes (Delete)",
+    "boxSelect": "Box select",
+    "boxSelectOn": "Box select is on; drag to select nodes",
+    "addNode": "Add node",
+    "autoLayout": "Auto layout",
+    "fitAll": "Fit all nodes"
+  },
+  "delete": {
+    "title": "Confirm Delete",
+    "descriptionWithNodesAndEdges": "This will delete {{nodeCount}} node(s) and {{edgeCount}} edge(s); you can undo this.",
+    "descriptionWithNodes": "This will delete {{nodeCount}} node(s); you can undo this.",
+    "descriptionEdges": "This will delete {{edgeCount}} edge(s); you can undo this.",
+    "confirm": "Confirm Delete"
+  },
+  "menu": {
+    "addFullWorkflow": "Add full workflow",
+    "addEntry": "Add request entry",
+    "addProviderSlot": "Add provider slot",
+    "addSlot": "Add {{slot}} slot",
+    "addSwitch": "Add switch",
+    "addEmergencyWorkflow": "Add emergency provider"
+  },
+  "colors": {
+    "title": "Model node colors",
+    "description": "Assign flow-light colors to model nodes; colors are reused in sequence. The theme color is used when none are configured.",
+    "empty": "Not configured; using the theme color",
+    "removeAria": "Remove color",
+    "placeholder": "HEX colors, space-separated, e.g. #4ade80 #38bdf8",
+    "add": "Add"
+  },
+  "versions": {
+    "title": "Version History",
+    "archived": "Archived",
+    "archive": "Archive",
+    "archiveFailed": "Failed to archive",
+    "loadFailed": "Failed to load version history",
+    "previewFailed": "Failed to load version",
+    "restoreFailed": "Failed to restore",
+    "restored": "Restored to this version",
+    "current": "Current Version",
+    "workflowSummary": "Workflows {{active}}/{{total}} · {{nodes}} nodes",
+    "restore": "Restore",
+    "empty": "No version history",
+    "previewHint": "Select an item on the left to preview",
+    "restoreDialogTitle": "Restore Version",
+    "restoreConfirm": "Confirm Restore",
+    "restoreDialogBody": "The current version will be archived automatically before restoring. Restore to this version?"
+  },
+  "nodeMenu": {
+    "title": "Create workflow from provider",
+    "empty": "No providers available"
+  },
+  "jsonEdit": {
+    "title": "Edit JSON",
+    "format": "Format",
+    "formatFailed": "Format failed: invalid JSON",
+    "saving": "Saving...",
+    "saveConfirmTitle": "Save JSON",
+    "saveConfirmDescription": "You modified the JSON content. Save it to the backend? The ID fields are strongly bound to data associated by ID, such as usage records and history. Changing any ID may cause these records to stop matching. Please confirm you understand this risk.",
+    "reconsider": "Let me reconsider",
+    "confirmSave": "Confirm Save",
+    "topLevelArray": "The JSON top level must be an array",
+    "invalidId": "Each record's ID must be an integer greater than 0",
+    "duplicateId": "Duplicate ID {{id}}"
+  },
+  "jsonEditor": {
+    "contentAria": "JSON content"
+  },
+  "diff": {
+    "empty": "(empty)"
+  }
+}

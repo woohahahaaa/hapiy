@@ -124,7 +124,7 @@ func ReplayDisabledRecord(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		id := c.Param("id")
 		var record model.DisabledRecord
 		if err := db.First(&record, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "记录不存在"})
+			respondError(c, http.StatusNotFound, "DISABLED_RECORD_NOT_FOUND", "记录不存在")
 			return
 		}
 		if record.ResolvedAt != nil {
@@ -154,16 +154,16 @@ func ExtendDisabledRecordCountdown(db *gorm.DB) gin.HandlerFunc {
 			Minutes int `json:"minutes"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体格式无效"})
+			respondError(c, http.StatusBadRequest, "REQUEST_BODY_MALFORMED", "请求体格式无效")
 			return
 		}
 		if body.Minutes <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "minutes 必须为正数"})
+			respondError(c, http.StatusBadRequest, "MINUTES_INVALID", "minutes 必须为正数")
 			return
 		}
 		var record model.DisabledRecord
 		if err := db.First(&record, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "记录不存在"})
+			respondError(c, http.StatusNotFound, "DISABLED_RECORD_NOT_FOUND", "记录不存在")
 			return
 		}
 		if record.ResolvedAt != nil {
@@ -189,7 +189,7 @@ func RestoreDisabledRecordDirectly(db *gorm.DB, engine *relay.Engine) gin.Handle
 		id := c.Param("id")
 		var record model.DisabledRecord
 		if err := db.First(&record, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "记录不存在"})
+			respondError(c, http.StatusNotFound, "DISABLED_RECORD_NOT_FOUND", "记录不存在")
 			return
 		}
 		if err := db.Model(&model.AutoDisableState{}).

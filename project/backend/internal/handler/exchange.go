@@ -35,7 +35,7 @@ func TestExchangeRate() gin.HandlerFunc {
 			return
 		}
 		if req.URL == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "接口地址不能为空"})
+			respondError(c, http.StatusBadRequest, "EXCHANGE_URL_REQUIRED", "接口地址不能为空")
 			return
 		}
 		rate, err := service.FetchRateFromAPI(req.URL, req.Field)

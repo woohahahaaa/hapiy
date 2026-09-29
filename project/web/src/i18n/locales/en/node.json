@@ -1,0 +1,81 @@
+{
+  "switch": {
+    "dialogTitle": "Takes effect when the following provider, request header, and request body conditions are met",
+    "dialogDescription": "When provider/model filters or conditions are configured, matching any one of them outputs from \"yes\"; if none match, it outputs from \"no\". With no filters or conditions configured, it defaults to outputting from \"yes\".",
+    "ruleNameLabel": "Rule name",
+    "ruleNamePlaceholder": "Conditional switch",
+    "modeProvider": "Apply to selected providers",
+    "modeModel": "Apply to selected models",
+    "selectProviderPlaceholder": "Select providers (applies to all when none selected)",
+    "selectModelPlaceholder": "Select models (applies to all when none selected)",
+    "removeOption": "Remove {{name}}",
+    "noProviders": "No providers",
+    "noModels": "No models",
+    "conditions": "Conditions",
+    "logicAnd": "AND (all match)",
+    "logicOr": "OR (any match)",
+    "addCondition": "Add condition",
+    "noConditions": "No conditions; empty means unconditional execution",
+    "invertPrefix": "NOT ",
+    "filterProvider": "Provider",
+    "filterModel": "Model",
+    "allProviders": "All providers",
+    "allModels": "All models",
+    "notSet": "Not set",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "ruleSelect": {
+    "emptyHint": "No rules available",
+    "loadFailed": "Failed to load"
+  },
+  "modelHub": {
+    "title": "Model Hub",
+    "copyTitle": "Click to copy model name",
+    "copied": "Copied model name: {{name}}",
+    "count_one": "{{count}} model",
+    "count_other": "{{count}} models"
+  },
+  "slotEnableControl": {
+    "open": "On",
+    "close": "Off",
+    "remaining": "{{hours}}h {{minutes}}m {{seconds}}s left",
+    "dialogTitle": "Set active duration",
+    "hours": "h",
+    "minutes": "m",
+    "seconds": "s"
+  },
+  "slotErrorBox": {
+    "executionFailed": "Rule execution failed"
+  },
+  "slotContainer": {
+    "add": "Add"
+  },
+  "slotItemCard": {
+    "dragToReorder": "Drag to reorder"
+  },
+  "slotProvider": {
+    "strategySequential": "Sequential",
+    "strategyRandom": "Random",
+    "strategyRoundRobin": "Round robin"
+  },
+  "slotLabels": {
+    "requestModify": "Request Rewrite",
+    "responseModify": "Response Rewrite",
+    "concurrency": "Concurrency",
+    "autoSwitch": "Failover",
+    "logOutput": "Log Capture"
+  },
+  "slotDefs": {
+    "provider": "Provider",
+    "requestModify": "Request Rewrite",
+    "responseModify": "Response Rewrite",
+    "concurrency": "Concurrency",
+    "autoSwitch": "Failover",
+    "logOutput": "Log Capture",
+    "placeholderRequestModify": "Select rewrite rule",
+    "placeholderResponseModify": "Select response rewrite rule",
+    "placeholderConcurrency": "Select concurrency rule",
+    "placeholderAutoSwitch": "Select failover rule"
+  }
+}

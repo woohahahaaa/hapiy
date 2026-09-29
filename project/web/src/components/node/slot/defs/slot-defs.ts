@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n/i18n'
 import type {
   RewriteRule,
   ResponseRewriteRule,
@@ -81,7 +82,7 @@ export interface NodeTypeSlotDefs {
 
 export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   provider: {
-    label: '供应商',
+    label: i18n.t('node:slotDefs.provider'),
     slotOrder: 0,
     headerSlot: { enabled: true, showOrder: false },
     ruleBindingSlot: { enabled: false },
@@ -93,10 +94,10 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   requestModify: {
-    label: '请求改写',
+    label: i18n.t('node:slotDefs.requestModify'),
     slotOrder: 1,
     headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'rewrite', placeholder: '选择改写规则' },
+    ruleBindingSlot: { enabled: true, ruleKind: 'rewrite', placeholder: i18n.t('node:slotDefs.placeholderRequestModify') },
     orderSlot: { enabled: true },
     logConfigSlot: { enabled: false },
     recordConfigSlot: { enabled: false },
@@ -105,10 +106,10 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   responseModify: {
-    label: '响应改写',
+    label: i18n.t('node:slotDefs.responseModify'),
     slotOrder: 2,
     headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'rewrite-response', placeholder: '选择响应改写规则' },
+    ruleBindingSlot: { enabled: true, ruleKind: 'rewrite-response', placeholder: i18n.t('node:slotDefs.placeholderResponseModify') },
     orderSlot: { enabled: true },
     logConfigSlot: { enabled: false },
     recordConfigSlot: { enabled: false },
@@ -118,10 +119,10 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
 
 
   concurrency: {
-    label: '并发控制',
+    label: i18n.t('node:slotDefs.concurrency'),
     slotOrder: 4,
     headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'concurrency', placeholder: '选择并发规则' },
+    ruleBindingSlot: { enabled: true, ruleKind: 'concurrency', placeholder: i18n.t('node:slotDefs.placeholderConcurrency') },
     orderSlot: { enabled: true },
     logConfigSlot: { enabled: false },
     recordConfigSlot: { enabled: false },
@@ -130,10 +131,10 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   autoSwitch: {
-    label: '故障转移',
+    label: i18n.t('node:slotDefs.autoSwitch'),
     slotOrder: 5,
     headerSlot: { enabled: true, showOrder: true },
-    ruleBindingSlot: { enabled: true, ruleKind: 'failover', placeholder: '选择故障转移规则' },
+    ruleBindingSlot: { enabled: true, ruleKind: 'failover', placeholder: i18n.t('node:slotDefs.placeholderAutoSwitch') },
     orderSlot: { enabled: true },
     logConfigSlot: { enabled: false },
     recordConfigSlot: { enabled: false },
@@ -142,7 +143,7 @@ export const NODE_TYPE_SLOT_DEFS: Record<NodeType, NodeTypeSlotDefs> = {
   },
 
   logOutput: {
-    label: '日志抓取',
+    label: i18n.t('node:slotDefs.logOutput'),
     slotOrder: 6,
     headerSlot: { enabled: true, showOrder: false },
     ruleBindingSlot: { enabled: false },

@@ -1,5 +1,6 @@
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
@@ -18,6 +19,7 @@ interface NodeModelProps {
 }
 
 export function NodeModel({ data, id }: NodeModelProps) {
+  const { t } = useTranslation('node')
   const models = data.models || []
   const simplified = data.simplified === true
   const flashLayers = data.flashLayers ?? []
@@ -50,7 +52,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
           className="border-b border-border"
           style={{ padding: `${pad.paddingY + 2}px ${pad.paddingX}px` }}
         >
-          <span className="text-sm font-medium">模型中心</span>
+          <span className="text-sm font-medium">{t('modelHub.title')}</span>
         </div>
       )}
 
@@ -67,10 +69,10 @@ export function NodeModel({ data, id }: NodeModelProps) {
             <span className="size-3 rounded-[2px]" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
             <button
               type="button"
-              title="点击复制模型名"
+              title={t('modelHub.copyTitle')}
               onClick={() => {
                 void navigator.clipboard.writeText(m.label).then(() => {
-                  toast(`已复制模型名：${m.label}`)
+                  toast(t('modelHub.copied', { name: m.label }))
                 })
               }}
               className="nodrag nopan min-w-0 cursor-pointer truncate text-left transition-colors hover:underline"
@@ -97,7 +99,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
           className="border-t border-border text-[10px]"
           style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
         >
-          {models.length} models
+          {t('modelHub.count', { count: models.length })}
         </div>
       )}
     </div>

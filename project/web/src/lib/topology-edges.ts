@@ -1,5 +1,6 @@
 import type { Edge } from '@xyflow/react'
 import type { Provider } from '@/lib/dashboard-api'
+import { i18n } from '@/i18n/i18n'
 import { SLOT_ORDER, type SlotType } from '@/components/node/slot/items/types'
 import type { Workflow, WorkflowEntry } from '@/lib/topology-document'
 import { topologyConfig } from '@/config/topology-config'
@@ -76,16 +77,18 @@ function validSlotRef(ref: string, providerKeys: ReadonlyMap<string, boolean>): 
  * contain a participant and a shared tail. */
 function parseEdgeUnit(value: unknown, position: string): TopologyEdgeUnit {
   if (!Array.isArray(value)) {
-    throw new TopologyEdgesError(`连线单元 ${position} 必须是数组`)
+    throw new TopologyEdgesError(i18n.t('lib:edge.unitMustBeArray', { position }))
   }
   if (value.length === 0) {
-    throw new TopologyEdgesError(`连线单元 ${position} 不能为空`)
+    throw new TopologyEdgesError(i18n.t('lib:edge.unitNotEmpty', { position }))
   }
   const allStrings = value.every((item) => typeof item === 'string')
   if (allStrings) return value.slice() as string[]
-  const children = value.map((item, i) => parseEdgeUnit(item, `${position} 的第 ${i + 1} 个子单元`))
+  const children = value.map((item, i) =>
+    parseEdgeUnit(item, i18n.t('lib:edge.childUnit', { index: i + 1 })),
+  )
   if (children.length < 2) {
-    throw new TopologyEdgesError(`连线聚合单元 ${position} 必须至少包含一个参与链和一个共享尾`)
+    throw new TopologyEdgesError(i18n.t('lib:edge.clusterNeedsParticipantTail', { position }))
   }
   return children
 }
@@ -94,8 +97,8 @@ function parseEdgeUnit(value: unknown, position: string): TopologyEdgeUnit {
  * structural checks. Throws `TopologyEdgesError` with a Chinese message on
  * malformed input. */
 export function parseTopologyEdges(value: unknown): TopologyEdgeUnit[] {
-  if (!Array.isArray(value)) throw new TopologyEdgesError('连线文档必须是数组')
-  return value.map((unit, i) => parseEdgeUnit(unit, `第 ${i + 1} 个`))
+  if (!Array.isArray(value)) throw new TopologyEdgesError(i18n.t('lib:edge.documentMustBeArray'))
+  return value.map((unit, i) => parseEdgeUnit(unit, i18n.t('lib:edge.unitIndex', { index: i + 1 })))
 }
 
 // ── Expand: flatten clusters into full chains (mirrors Go `Expand`) ──
@@ -121,7 +124,7 @@ function expandNode(node: TopologyEdgeUnit, pool: string[][]): void {
 
 function expandCluster(cluster: readonly TopologyEdgeUnit[], pool: string[][]): void {
   if (cluster.length < 2) {
-    throw new TopologyEdgesError('连线聚合单元必须至少包含一个参与链和一个共享尾')
+    throw new TopologyEdgesError(i18n.t('lib:edge.clusterNeedsParticipantTailBare'))
   }
   const participants = cluster.slice(0, cluster.length - 1)
   const tail = cluster[cluster.length - 1]
@@ -169,15 +172,15 @@ function expandCluster(cluster: readonly TopologyEdgeUnit[], pool: string[][]): 
 /** Resolves a Tail into slot-headed chain continuations. */
 function continuationOf(tail: TopologyEdgeUnit): string[][] {
   if (isChainUnit(tail)) {
-    if (tail.length === 0) throw new TopologyEdgesError('连线共享尾不能为空')
+    if (tail.length === 0) throw new TopologyEdgesError(i18n.t('lib:edge.tailNotEmpty'))
     if (tail[0].startsWith('pv-')) {
-      throw new TopologyEdgesError(`连线共享尾必须以槽位引用开头，实际为 ${tail[0]}`)
+      throw new TopologyEdgesError(i18n.t('lib:edge.tailMustStartWithSlot', { ref: tail[0] }))
     }
     return [tail.slice()]
   }
   const pool: string[][] = []
   expandCluster(tail, pool)
-  if (pool.length === 0) throw new TopologyEdgesError('连线共享尾聚合展开为空')
+  if (pool.length === 0) throw new TopologyEdgesError(i18n.t('lib:edge.tailExpansionEmpty'))
   return pool
 }
 
@@ -199,36 +202,48 @@ export function validateTopologyEdges(units: readonly TopologyEdgeUnit[], workfl
   const expanded = expandTopologyEdges(units)
   const seenProvider = new Set<string>()
   for (const chain of expanded) {
-    if (chain.length === 0) throw new TopologyEdgesError('连线链不能为空')
+    if (chain.length === 0) throw new TopologyEdgesError(i18n.t('lib:edge.chainNotEmpty'))
     if (!chain[0].startsWith('pv-') && !chain[0].startsWith('slot-')) {
-      throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: 引用 ${chain[0]} 必须以 pv- 或 slot- 开头`)
+      throw new TopologyEdgesError(
+        i18n.t('lib:edge.chainRefMustStart', { chain: JSON.stringify(chain), ref: chain[0] }),
+      )
     }
     if (chain[0].startsWith('slot-')) {
       for (const ref of chain) {
         if (!validSlotRef(ref, providerKeys)) {
-          throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: 未知的槽位引用 ${ref}`)
+          throw new TopologyEdgesError(
+            i18n.t('lib:edge.unknownSlotRef', { chain: JSON.stringify(chain), ref }),
+          )
         }
       }
       continue
     }
     const key = chain[0].slice(3)
     if (!providerKeys.has(key)) {
-      throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: 未知的 provider 引用 ${chain[0]}`)
+      throw new TopologyEdgesError(
+        i18n.t('lib:edge.unknownProviderRef', { chain: JSON.stringify(chain), ref: chain[0] }),
+      )
     }
     if (seenProvider.has(key)) {
-      throw new TopologyEdgesError(`provider ${key} 出现在多条连线链中`)
+      throw new TopologyEdgesError(i18n.t('lib:edge.providerDuplicated', { key }))
     }
     seenProvider.add(key)
     const slots = new Set<string>()
     for (const ref of chain.slice(1)) {
       if (!ref.startsWith('slot-')) {
-        throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: provider 之后出现非槽位引用 ${ref}`)
+        throw new TopologyEdgesError(
+          i18n.t('lib:edge.providerFollowedByNonSlot', { chain: JSON.stringify(chain), ref }),
+        )
       }
       if (!validSlotRef(ref, providerKeys)) {
-        throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: 未知的槽位引用 ${ref}`)
+        throw new TopologyEdgesError(
+          i18n.t('lib:edge.unknownSlotRef', { chain: JSON.stringify(chain), ref }),
+        )
       }
       if (slots.has(ref)) {
-        throw new TopologyEdgesError(`连线链 ${JSON.stringify(chain)}: 槽位 ${ref} 在链中出现多次`)
+        throw new TopologyEdgesError(
+          i18n.t('lib:edge.slotRefDuplicated', { chain: JSON.stringify(chain), ref }),
+        )
       }
       slots.add(ref)
     }

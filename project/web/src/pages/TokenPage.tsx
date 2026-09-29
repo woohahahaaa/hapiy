@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } fr
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+import { i18n } from '@/i18n/i18n'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Token, TokenInput } from '@/lib/dashboard-api'
 
@@ -17,10 +19,11 @@ type TokenFormProps = {
 }
 
 function toErrorMessage(error: unknown): string {
-  return error instanceof DashboardApiError ? error.message : '发生意外错误，请重试'
+  return error instanceof DashboardApiError ? error.message : i18n.t('token:errors.unexpected')
 }
 
 export function TokenPage() {
+  const { t } = useTranslation('token')
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -80,14 +83,14 @@ export function TokenPage() {
     try {
       await navigator.clipboard.writeText(key)
     } catch (err) {
-      setError(err instanceof Error ? `复制失败：${err.message}` : '复制失败')
+      setError(err instanceof Error ? t('toast.copyFailedWith', { message: err.message }) : t('toast.copyFailed'))
     }
   }
 
   const columns: ColumnDef<Token>[] = [
     {
       key: 'name',
-      label: '名称',
+      label: t('columns.name'),
       defaultWidth: { kind: 'pixel', value: 160 },
       render: (_, row) => <span className="font-medium">{row.name}</span>,
     },
@@ -106,11 +109,11 @@ export function TokenPage() {
     },
     {
       key: 'quota',
-      label: '额度',
+      label: t('columns.quota'),
       defaultWidth: { kind: 'pixel', value: 220 },
       render: (_, row) =>
         row.quota === null ? (
-          <span className="text-xs">无限制</span>
+          <span className="text-xs">{t('list.unlimited')}</span>
         ) : (
           <div className="flex items-center gap-2">
             <span className="text-xs">¥{row.usedQuota} / ¥{row.quota}</span>
@@ -125,17 +128,17 @@ export function TokenPage() {
     },
     {
       key: 'status',
-      label: '状态',
+      label: t('columns.status'),
       defaultWidth: { kind: 'pixel', value: 100 },
       render: (_, row) => (
         <span className={row.status ? 'text-success' : 'text-destructive'}>
-          {row.status ? '启用' : '禁用'}
+          {row.status ? t('common:action.enable') : t('common:action.disable')}
         </span>
       ),
     },
     {
       key: 'id',
-      label: '操作',
+      label: t('columns.actions'),
       defaultWidth: { kind: 'pixel', value: 160 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
@@ -147,7 +150,7 @@ export function TokenPage() {
             disabled={isSaving}
             onClick={() => void runMutation(() => dashboardApi.toggleToken(row.id))}
           >
-            {row.status ? '禁用' : '启用'}
+            {row.status ? t('common:action.disable') : t('common:action.enable')}
           </Button>
           <Button
             variant="ghost"
@@ -176,9 +179,9 @@ export function TokenPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="令牌"
-        description="为客户端签发 API 访问令牌，配置访问额度与允许的模型"
-        status={`${total} 个令牌`}
+        title={t('common:nav.token')}
+        description={t('description')}
+        status={t('list.statusCount', { count: total })}
       />
       <div className="p-6">
         <DataTable<Token>
@@ -192,7 +195,7 @@ export function TokenPage() {
           limit={limit}
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
-          emptyText="暂无令牌。添加一个令牌开始使用。"
+          emptyText={t('list.empty')}
           onRetry={() => void loadTokens(offset, limit)}
           actions={
             <>
@@ -203,7 +206,7 @@ export function TokenPage() {
                 }}
                 disabled={isSaving}
               >
-                <AppIcon name="add" data-icon="inline-start" />添加令牌
+                <AppIcon name="add" data-icon="inline-start" />{t('list.add')}
               </Button>
             </>
           }
@@ -212,7 +215,7 @@ export function TokenPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent scrollFooter>
             <DialogHeader>
-              <DialogTitle>{editing ? '编辑令牌' : '添加令牌'}</DialogTitle>
+              <DialogTitle>{editing ? t('dialog.editTitle') : t('list.add')}</DialogTitle>
             </DialogHeader>
             <TokenForm
               token={editing}
@@ -227,8 +230,8 @@ export function TokenPage() {
           onOpenChange={(open) => {
             if (!open) setDeleting(null)
           }}
-          title="确认删除"
-          description={`将删除令牌「${deleting?.name ?? ''}」，使用该令牌的请求将立即失效，删除后不可恢复。`}
+          title={t('dialog.deleteTitle')}
+          description={t('dialog.deleteDescription', { name: deleting?.name ?? '' })}
           busy={isSaving}
           onConfirm={() => {
             if (deleting) {
@@ -244,6 +247,7 @@ export function TokenPage() {
 }
 
 function TokenForm({ token, onSave, isSaving }: TokenFormProps) {
+  const { t } = useTranslation('token')
   const [name, setName] = useState(token?.name ?? '')
   const [quota, setQuota] = useState(token?.quota?.toString() ?? '')
 
@@ -251,13 +255,13 @@ function TokenForm({ token, onSave, isSaving }: TokenFormProps) {
     <DialogScrollBody footer={
       <>
         <Button disabled={isSaving || !name.trim()} onClick={() => onSave({ name: name.trim(), quota: quota === '' ? null : Number(quota), status: token?.status ?? true })}>
-          {isSaving ? '保存中...' : '保存'}
+          {isSaving ? t('actions.saving') : t('common:action.save')}
         </Button>
       </>
     }>
       <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="token-name">名称</FieldLabel>
+        <FieldLabel htmlFor="token-name">{t('columns.name')}</FieldLabel>
         <Input id="token-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Production Token" />
       </Field>
       {token ? (
@@ -266,11 +270,11 @@ function TokenForm({ token, onSave, isSaving }: TokenFormProps) {
           <code className="block rounded bg-muted px-2 py-2 text-xs font-mono">{token.key}</code>
         </Field>
       ) : (
-        <p className="text-sm text-muted-foreground">服务端会在保存后生成 Token Key。</p>
+        <p className="text-sm text-muted-foreground">{t('form.serverGenerates')}</p>
       )}
       <Field>
-        <FieldLabel htmlFor="token-quota">额度 (¥，留空=无限制)</FieldLabel>
-        <Input id="token-quota" type="number" value={quota} onChange={(event) => setQuota(event.target.value)} placeholder="无限制" />
+        <FieldLabel htmlFor="token-quota">{t('form.quotaLabel')}</FieldLabel>
+        <Input id="token-quota" type="number" value={quota} onChange={(event) => setQuota(event.target.value)} placeholder={t('form.unlimitedPlaceholder')} />
       </Field>
         </FieldGroup>
     </DialogScrollBody>

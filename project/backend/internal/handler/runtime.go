@@ -54,7 +54,7 @@ func PutActiveRequestConfig(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if req.RetentionMinutes < 0 || req.RetentionMinutes > 1440 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "retention_minutes 必须在 0-1440 之间"})
+			respondError(c, http.StatusBadRequest, "RETENTION_MINUTES_OUT_OF_RANGE", "retention_minutes 必须在 0-1440 之间")
 			return
 		}
 
@@ -90,7 +90,7 @@ func KillActiveRequest() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		requestID := c.Param("requestId")
 		if !common.Global().CancelRequest(requestID) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "请求不存在或已结束"})
+			respondError(c, http.StatusNotFound, "ACTIVE_REQUEST_NOT_FOUND", "请求不存在或已结束")
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"request_id": requestID}})

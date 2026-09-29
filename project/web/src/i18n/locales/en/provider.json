@@ -1,0 +1,142 @@
+{
+  "description": "Manage upstream API provider configurations",
+  "columns": {
+    "name": "Name",
+    "baseUrls": "Base URLs",
+    "keys": "Keys",
+    "endpoints": "Endpoints",
+    "models": "Models",
+    "status": "Status",
+    "failover": "Failover",
+    "actions": "Actions"
+  },
+  "list": {
+    "statusCount_one": "{{count}} provider",
+    "statusCount_other": "{{count}} providers",
+    "empty": "No providers yet. Add a provider to start configuring.",
+    "add": "Add provider",
+    "urls": "{{count}} URLs",
+    "keys": "{{count}} Keys",
+    "endpoints": "{{count}} Endpoints"
+  },
+  "failoverStatus": {
+    "provider": "Provider {{disabled}}/{{total}}",
+    "baseUrl": "base URL {{disabled}}/{{total}}",
+    "key": "key {{disabled}}/{{total}}",
+    "dimensionDisabled": "{{label}} disabled {{count}}",
+    "restore": "Restore"
+  },
+  "dialog": {
+    "editProvider": "Edit provider",
+    "endpointTitle": "Model list endpoint",
+    "endpointPathLabel": "Model list endpoint path",
+    "endpointPathHint": "The path must start with a slash (/); it is appended to the Base URL",
+    "endpointUseKey": "Send Key",
+    "endpointUseKeyHint": "Uses the provider's first Key as the Bearer credential",
+    "syncTitle": "Sync price settings",
+    "syncConfirm": "Confirm sync",
+    "syncing": "Syncing...",
+    "syncQuestion": "Sync the current price settings of model \"{{model}}\" to the same-named models of other providers?",
+    "syncDetail": "The price mode, reference provider, price snapshot and multiplier are written to the same-named models of other providers.",
+    "deleteTitle": "Confirm deletion",
+    "deleteDescription": "Provider \"{{name}}\" and all of its channel configurations will be deleted. This cannot be undone."
+  },
+  "actions": {
+    "saving": "Saving...",
+    "addRow": "Add row",
+    "fetchModels": "Fetch models from upstream",
+    "bulkPrice": "Set models.dev providers in one click",
+    "bulkPriceTitle": "Set prices from models.dev in one click: models in reference mode are refreshed from their reference provider; models without prices are auto-matched to their official (lab) reference provider. Models with manually set prices are not overridden."
+  },
+  "form": {
+    "apiKeys": "API Keys",
+    "notesPlaceholder": "Note (optional)",
+    "note": "Note",
+    "noteAria": "{{label}} note",
+    "deleteValueAria": "Delete {{label}}",
+    "endpointPlaceholder": "e.g. /chat/completions or /responses",
+    "deleteEndpointAria": "Delete Endpoint",
+    "endpointHint": "Paths the request is allowed to access (must start with /). Leave empty to allow any request path.",
+    "modelNamePlaceholder": "Model name"
+  },
+  "price": {
+    "columnPrice": "Price",
+    "columnEndpoint": "Endpoint",
+    "endpointUnset": "Not set",
+    "modePrices": "Set prices individually",
+    "modeReference": "Sync from models.dev",
+    "modeUnset": "Not set",
+    "fields": {
+      "input": "Input",
+      "cacheWrite": "Cache write",
+      "cacheRead": "Cache read",
+      "output": "Output"
+    },
+    "errorPrefix": "Must start with $ or ¥",
+    "prefixTitle": "Start with $ or ¥",
+    "rateTitle": "Multiplier, supports fractions such as 1/2",
+    "selectReference": "Select reference provider",
+    "noSnapshot": "Snapshot not fetched",
+    "noSnapshotRefresh": "No price snapshot yet, click refresh",
+    "stale": "Reference provider was removed from models.dev",
+    "notFound": "Model not found on models.dev",
+    "official": " (official)",
+    "unsetPrice": "No price set, billed as 0",
+    "unsetPriceTitle": "No price set, billed as 0",
+    "refreshAria": "Refresh reference price",
+    "syncAria": "Sync to other providers",
+    "tooltip": "Input {{input}} · Cache write {{cacheWrite}} · Cache read {{cacheRead}} · Output {{output}}",
+    "rateTooltip": "Multiplier {{rate}}"
+  },
+  "fetchDialog": {
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "replaceAndAdd": "Clear existing and add",
+    "add": "Add",
+    "adding": "Adding..."
+  },
+  "errors": {
+    "unexpected": "Something unexpected happened, please try again",
+    "modelsDevLoad": "Failed to load models.dev data, please check your network",
+    "noReferenceSelected": "No reference provider selected yet, pick one from the dropdown first",
+    "referenceGone": "Reference provider \"{{reference}}\" is no longer in the models.dev provider list for \"{{model}}\"; the price snapshot was not updated",
+    "refreshFailed": "Failed to fetch models.dev data; the price snapshot was not overwritten",
+    "priceNotFound": "models.dev has no price for \"{{model}}\" under \"{{provider}}\", click refresh to retry",
+    "bulkRefreshFailed": "Failed to fetch models.dev data; prices were not set",
+    "syncFailed": "Sync failed: {{message}}",
+    "unknown": "Unknown error",
+    "duplicateEndpoint": "This path was already added",
+    "noDefaultEndpoint": "Configure a default model list endpoint in Settings first, or click the gear to set the endpoint URL",
+    "pathMustStartSlash": "Path must start with a slash (/)",
+    "baseUrlRequired": "Fill in Base URLs above first"
+  },
+  "toast": {
+    "disableReset": "Failover disabled state restored",
+    "snapshotUpdated": "Price snapshot updated from models.dev",
+    "bulkFilled_one": "Set prices from models.dev for {{count}} model",
+    "bulkFilled_other": "Set prices from models.dev for {{count}} models",
+    "bulkVendorless_one": "Skipped {{count}} model: no official reference provider found on models.dev",
+    "bulkVendorless_other": "Skipped {{count}} models: no official reference provider found on models.dev",
+    "noAutoModels": "No models available for automatic setup",
+    "synced_one": "Synced to the same-named model of {{count}} other provider",
+    "synced_other": "Synced to the same-named models of {{count}} other providers"
+  },
+  "rateRules": {
+    "hint": "Rules are matched from top to bottom by priority; matching stops at the first hit",
+    "empty": "No rate rules yet. Click \"Add rate\" below to create the first one",
+    "dragAria": "Drag to reorder",
+    "patternPlaceholder": "provider name or regex",
+    "multiplierPlaceholder": "Multiplier",
+    "deleteAria": "Delete rule",
+    "fillHint": "Enter a name or regex to see matches",
+    "hit_one": "Matches {{count}} existing provider",
+    "hit_other": "Matches {{count}} existing providers",
+    "hitBlocked": "Matched {{n}}, blocked {{m}}",
+    "add": "Add rate"
+  },
+  "autocomplete": {
+    "loading": "Loading models.dev data...",
+    "noMatch": "No matching model found",
+    "placeholder": "Enter model name"
+  }
+}

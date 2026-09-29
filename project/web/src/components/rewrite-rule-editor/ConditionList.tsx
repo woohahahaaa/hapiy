@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { ConditionRow } from './ConditionRow'
 import {
   isConditionLeaf,
@@ -15,6 +16,7 @@ interface ConditionListProps {
 // 组内再次递归。组卡片可切换 logic、可删组；新增入口由外层（BlockCard 等）
 // 的「添加条件」按钮承担，这里只负责渲染与编辑。
 export function ConditionList({ conditions, onChange }: ConditionListProps) {
+  const { t } = useTranslation('rewrite')
   const update = (i: number, next: Condition) => {
     onChange(conditions.map((c, ci) => (ci === i ? next : c)))
   }
@@ -56,10 +58,11 @@ interface ConditionGroupCardProps {
 }
 
 function ConditionGroupCard({ group, onChange, onRemove, canRemove }: ConditionGroupCardProps) {
+  const { t } = useTranslation('rewrite')
   return (
     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2">
       <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-xs text-muted-foreground">组</span>
+        <span className="text-xs text-muted-foreground">{t('group.label')}</span>
         <Select
           value={group.logic}
           onValueChange={(v) => onChange({ ...group, logic: v as 'AND' | 'OR' })}
@@ -74,14 +77,14 @@ function ConditionGroupCard({ group, onChange, onRemove, canRemove }: ConditionG
             </SelectGroup>
           </SelectContent>
         </Select>
-        <span className="text-xs text-muted-foreground tabular-nums">{group.children.length} 项</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{t('group.count', { count: group.children.length })}</span>
         <button
           type="button"
           onClick={onRemove}
           disabled={!canRemove}
           className="nodrag nopan ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="删除条件组"
-          title="删除条件组"
+          aria-label={t('group.deleteLabel')}
+          title={t('group.deleteTitle')}
         >
           <AppIcon name="close" size={14} />
         </button>

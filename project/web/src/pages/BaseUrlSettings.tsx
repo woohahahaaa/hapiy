@@ -1,10 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
+import { i18n } from '@/i18n/i18n'
 
 const BASE_URL_SUFFIX_KEY = 'base_url_suffix'
 // 完整系统 BaseURL（如 https://hapiying.hihy.me:6060/proxy）。生成代理配置
@@ -24,6 +26,7 @@ function isValidPathName(name: string): boolean {
 }
 
 export function BaseUrlSettings() {
+  const { t } = useTranslation('settings')
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [suffixValue, setSuffixValue] = useState('')
   const [origin, setOrigin] = useState(window.location.origin)
@@ -48,7 +51,7 @@ export function BaseUrlSettings() {
         setState({ kind: 'ready' })
       })
       .catch((err) => {
-        const message = err instanceof DashboardApiError ? err.message : '获取设置失败'
+        const message = err instanceof DashboardApiError ? err.message : i18n.t('settings:errors.fetchSettingsFailed')
         setState({ kind: 'error', message })
       })
   }, [])
@@ -69,9 +72,9 @@ export function BaseUrlSettings() {
   const copyUrl = async (url: string) => {
     try {
       await navigator.clipboard.writeText(url)
-      toast('已复制')
+      toast(t('common:action.copied'))
     } catch {
-      toast.error('复制失败')
+      toast.error(t('baseUrl.copyFailed'))
     }
   }
 
@@ -91,7 +94,7 @@ export function BaseUrlSettings() {
     event.preventDefault()
     const invalid = paths.find((p) => p.trim() !== '' && !isValidPathName(p.trim()))
     if (invalid) {
-      toast.error(`来源名 "${invalid.trim()}" 无效：不能包含 / 或 __，且长度不超过 ${MAX_PATH_LEN}`)
+      toast.error(t('baseUrl.invalidPathName', { name: invalid.trim(), max: MAX_PATH_LEN }))
       return
     }
     setSaving(true)
@@ -104,9 +107,9 @@ export function BaseUrlSettings() {
         dashboardApi.replaceBaseUrlPaths(cleaned),
       ])
       setPaths(cleaned)
-      toast('已保存')
+      toast(t('toast.saved'))
     } catch (err) {
-      const message = err instanceof DashboardApiError ? err.message : '保存设置失败'
+      const message = err instanceof DashboardApiError ? err.message : t('baseUrl.saveFailed')
       toast.error(message)
     } finally {
       setSaving(false)
@@ -117,14 +120,14 @@ export function BaseUrlSettings() {
     <Card>
       <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="link" size={16} /> BaseURL
+            <AppIcon name="link" size={16} /> {t('common:nav.baseUrl')}
           </CardTitle>
-        <CardDescription>配置系统的对外 BaseURL，用于 Agent 软件接入</CardDescription>
+        <CardDescription>{t('baseUrl.cardDescription')}</CardDescription>
       </CardHeader>
       <CardContent>
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-            <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
+            <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
           </div>
         )}
 
@@ -133,7 +136,7 @@ export function BaseUrlSettings() {
             <AppIcon name="warning" size={32} className="text-destructive" />
             <p className="text-sm text-muted-foreground">{state.message}</p>
             <Button variant="outline" size="sm" onClick={handleRetry}>
-              <AppIcon name="refresh" data-icon="inline-start" /> 重试
+              <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
             </Button>
           </div>
         )}
@@ -141,7 +144,7 @@ export function BaseUrlSettings() {
         {state.kind === 'ready' && (
           <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
             <div className="grid gap-1.5 text-sm">
-              <span>域名</span>
+              <span>{t('baseUrl.originLabel')}</span>
               <Input
                 value={origin}
                 onChange={(e) => setOrigin(e.target.value)}
@@ -149,11 +152,11 @@ export function BaseUrlSettings() {
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                系统对外 BaseURL 的域名（含 scheme 与端口）。生成代理配置与托管「跟随系统」用它，默认取当前网页域名，隧道/反代场景请改成公网地址
+                {t('baseUrl.originHint')}
               </p>
             </div>
             <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
-              后缀
+              {t('baseUrl.suffixLabel')}
               <Input
                 id="base-url-suffix"
                 value={suffixValue}
@@ -163,7 +166,7 @@ export function BaseUrlSettings() {
               />
             </label>
             <div className="grid gap-1.5 text-sm">
-              <span>最终 BaseURL</span>
+              <span>{t('baseUrl.finalUrlLabel')}</span>
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                   {baseUrl}
@@ -175,16 +178,14 @@ export function BaseUrlSettings() {
                   onClick={() => copyUrl(baseUrl)}
                   disabled={saving}
                 >
-                  <AppIcon name="content_copy" size={14} /> 复制
+                  <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
                 </Button>
               </div>
             </div>
             <div className="grid gap-1.5 text-sm">
-              <span>标记来源</span>
+              <span>{t('baseUrl.sourceMarkerLabel')}</span>
               <p className="text-xs text-muted-foreground">
-                在 BaseURL 后追加 <code>__来源名</code> 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。
-                也可以不使用来源标记，直接以「最终 BaseURL」作为接入地址，系统同样会正常转发。
-                下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。
+                {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
               </p>
               {paths.map((p, index) => {
                 const name = p.trim()
@@ -194,7 +195,7 @@ export function BaseUrlSettings() {
                       value={p}
                       onChange={(event) => updatePath(index, event.target.value)}
                       disabled={saving}
-                      placeholder="来源名，如 ABC"
+                      placeholder={t('baseUrl.sourceNamePlaceholder')}
                       className="w-36 shrink-0"
                     />
                     <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
@@ -207,7 +208,7 @@ export function BaseUrlSettings() {
                       onClick={() => copyUrl(fullUrlFor(name))}
                       disabled={saving || !name}
                     >
-                      <AppIcon name="content_copy" size={14} /> 复制
+                      <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
                     </Button>
                     <Button
                       type="button"
@@ -215,7 +216,7 @@ export function BaseUrlSettings() {
                       size="sm"
                       onClick={() => removePath(index)}
                       disabled={saving}
-                      aria-label="删除该路径"
+                      aria-label={t('baseUrl.removePathAria')}
                     >
                       <AppIcon name="delete" size={14} />
                     </Button>
@@ -229,16 +230,16 @@ export function BaseUrlSettings() {
                 onClick={addPath}
                 disabled={saving}
               >
-                      <AppIcon name="add" size={14} /> 添加来源
+                      <AppIcon name="add" size={14} /> {t('baseUrl.addSource')}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              请求示例：<code>{baseUrl}/__来源/v1/chat/completions</code>
+              {t('baseUrl.requestExamplePrefix')}<code>{`${baseUrl}/__${t('baseUrl.sourcePathSegment')}/v1/chat/completions`}</code>
             </p>
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={saving}>
                 {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                保存
+                {t('common:action.save')}
               </Button>
             </div>
           </form>

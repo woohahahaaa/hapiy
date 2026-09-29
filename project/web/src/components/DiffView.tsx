@@ -1,5 +1,6 @@
 import { diffLines } from 'diff'
 import { JsonTokens } from '@/components/JsonHighlight'
+import { i18n } from '@/i18n/i18n'
 
 interface DiffViewProps {
   readonly before: unknown
@@ -17,7 +18,7 @@ export function DiffView({ before, after }: DiffViewProps) {
   const afterText = formatBody(after)
 
   if (!beforeText && !afterText) {
-    return <span className="text-xs text-muted-foreground">（空）</span>
+    return <span className="text-xs text-muted-foreground">{i18n.t('topology:diff.empty')}</span>
   }
 
   if (!beforeText || !afterText) {

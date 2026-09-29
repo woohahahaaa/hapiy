@@ -24,7 +24,7 @@ type ownModelListItem struct {
 func OwnModelList(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if engine == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "引擎未就绪"})
+			respondError(c, http.StatusServiceUnavailable, "ENGINE_NOT_READY", "引擎未就绪")
 			return
 		}
 		models := engine.OwnModels()

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 
 interface SlotErrorBoxProps {
@@ -7,6 +8,7 @@ interface SlotErrorBoxProps {
 }
 
 export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
+  const { t } = useTranslation('node')
   const [expanded, setExpanded] = useState(false)
 
   if (!error) return null
@@ -24,7 +26,7 @@ export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
           ) : (
             <AppIcon name="chevron_right" size={12} />
           )}
-          规则执行失败
+          {t('slotErrorBox.executionFailed')}
         </button>
         {onDismiss && (
           <button

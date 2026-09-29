@@ -2,6 +2,8 @@
 // 与 project/backend/internal/relay/rewrite.go 的 compileRewriteOp / compileConditionLeaf
 // 字段集合保持一致：新增 mode 或 op 必须后端先支持，这里才能暴露。
 
+import { i18n } from '@/i18n/i18n'
+
 export type ModeName =
   | 'set'
   | 'delete'
@@ -30,23 +32,23 @@ export type ModeSpec = {
 }
 
 export const MODES: readonly ModeSpec[] = [
-  { value: 'set', label: '设置值 (set)', needs: ['value'] },
-  { value: 'delete', label: '删除字段 (delete)', needs: [] },
-  { value: 'append', label: '追加字符串 (append)', needs: ['value'] },
-  { value: 'prepend', label: '前置字符串 (prepend)', needs: ['value'] },
-  { value: 'first_prepend', label: '流式首段前置 (first_prepend)', needs: ['value'] },
-  { value: 'last_append', label: '流式末段追加 (last_append)', needs: ['value'] },
-  { value: 'trim_prefix', label: '去除前缀 (trim_prefix)', needs: ['value'] },
-  { value: 'trim_suffix', label: '去除后缀 (trim_suffix)', needs: ['value'] },
-  { value: 'ensure_prefix', label: '确保前缀 (ensure_prefix)', needs: ['value'] },
-  { value: 'ensure_suffix', label: '确保后缀 (ensure_suffix)', needs: ['value'] },
-  { value: 'trim_space', label: '去首尾空白 (trim_space)', needs: [] },
-  { value: 'to_lower', label: '转小写 (to_lower)', needs: [] },
-  { value: 'to_upper', label: '转大写 (to_upper)', needs: [] },
-  { value: 'replace', label: '字符串替换 (replace)', needs: ['from', 'to'] },
-  { value: 'regex_replace', label: '正则替换 (regex_replace)', needs: ['from', 'to'] },
-  { value: 'move', label: '重命名/移动 (move)', needs: ['dst'] },
-  { value: 'copy', label: '复制 (copy)', needs: ['dst'] },
+  { value: 'set', label: i18n.t('rewrite:mode.set'), needs: ['value'] },
+  { value: 'delete', label: i18n.t('rewrite:mode.delete'), needs: [] },
+  { value: 'append', label: i18n.t('rewrite:mode.append'), needs: ['value'] },
+  { value: 'prepend', label: i18n.t('rewrite:mode.prepend'), needs: ['value'] },
+  { value: 'first_prepend', label: i18n.t('rewrite:mode.firstPrepend'), needs: ['value'] },
+  { value: 'last_append', label: i18n.t('rewrite:mode.lastAppend'), needs: ['value'] },
+  { value: 'trim_prefix', label: i18n.t('rewrite:mode.trimPrefix'), needs: ['value'] },
+  { value: 'trim_suffix', label: i18n.t('rewrite:mode.trimSuffix'), needs: ['value'] },
+  { value: 'ensure_prefix', label: i18n.t('rewrite:mode.ensurePrefix'), needs: ['value'] },
+  { value: 'ensure_suffix', label: i18n.t('rewrite:mode.ensureSuffix'), needs: ['value'] },
+  { value: 'trim_space', label: i18n.t('rewrite:mode.trimSpace'), needs: [] },
+  { value: 'to_lower', label: i18n.t('rewrite:mode.toLower'), needs: [] },
+  { value: 'to_upper', label: i18n.t('rewrite:mode.toUpper'), needs: [] },
+  { value: 'replace', label: i18n.t('rewrite:mode.replace'), needs: ['from', 'to'] },
+  { value: 'regex_replace', label: i18n.t('rewrite:mode.regexReplace'), needs: ['from', 'to'] },
+  { value: 'move', label: i18n.t('rewrite:mode.move'), needs: ['dst'] },
+  { value: 'copy', label: i18n.t('rewrite:mode.copy'), needs: ['dst'] },
 ]
 
 export const MODE_BY_VALUE: ReadonlyMap<ModeName, ModeSpec> = new Map(
@@ -66,16 +68,16 @@ export type CondOpName =
   | 'matches'
 
 export const COND_OPS: ReadonlyArray<{ value: CondOpName; label: string }> = [
-  { value: 'contains', label: '包含' },
-  { value: 'prefix', label: '以前缀开头' },
-  { value: 'suffix', label: '以后缀结尾' },
-  { value: 'eq', label: '等于' },
-  { value: 'neq', label: '不等于' },
-  { value: 'gt', label: '大于' },
-  { value: 'gte', label: '大于等于' },
-  { value: 'lt', label: '小于' },
-  { value: 'lte', label: '小于等于' },
-  { value: 'matches', label: '正则匹配' },
+  { value: 'contains', label: i18n.t('rewrite:condOp.contains') },
+  { value: 'prefix', label: i18n.t('rewrite:condOp.prefix') },
+  { value: 'suffix', label: i18n.t('rewrite:condOp.suffix') },
+  { value: 'eq', label: i18n.t('rewrite:condOp.eq') },
+  { value: 'neq', label: i18n.t('rewrite:condOp.neq') },
+  { value: 'gt', label: i18n.t('rewrite:condOp.gt') },
+  { value: 'gte', label: i18n.t('rewrite:condOp.gte') },
+  { value: 'lt', label: i18n.t('rewrite:condOp.lt') },
+  { value: 'lte', label: i18n.t('rewrite:condOp.lte') },
+  { value: 'matches', label: i18n.t('rewrite:condOp.matches') },
 ]
 
 // 作用域二选一：header 或 body。不做合并模式（路径会分不清域）；

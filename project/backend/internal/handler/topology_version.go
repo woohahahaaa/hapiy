@@ -214,7 +214,7 @@ func TopologyVersionGet(db *gorm.DB) gin.HandlerFunc {
 		var version model.TopologyVersion
 		if err := db.Where("id = ?", id).First(&version).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
+				respondError(c, http.StatusNotFound, "TOPOLOGY_VERSION_NOT_FOUND", "版本不存在")
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -237,7 +237,7 @@ func TopologyVersionRestore(db *gorm.DB, refresher TopologyRefresher) gin.Handle
 		var version model.TopologyVersion
 		if err := db.Where("id = ?", id).First(&version).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"error": "版本不存在"})
+				respondError(c, http.StatusNotFound, "TOPOLOGY_VERSION_NOT_FOUND", "版本不存在")
 				return
 			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

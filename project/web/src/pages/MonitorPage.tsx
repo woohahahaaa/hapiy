@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
@@ -48,40 +50,40 @@ function cacheHitRateText(rate: number): string {
   return `${Math.min(rate * 100, 99.9).toFixed(1)}%`
 }
 
-function formatActiveStage(row: ActiveRequest): string {
+function formatActiveStage(row: ActiveRequest, t: TFunction): string {
   const elapsed = `${(row.elapsedMs / 1000).toFixed(1)}s`
   switch (row.stage) {
     case 'queued':
-      return `排队中·已等${elapsed}`
+      return t('monitor.active.stageQueued', { elapsed })
     case 'connecting':
-      return `连接上游${row.provider ?? ''}·已${elapsed}`
+      return t('monitor.active.stageConnecting', { provider: row.provider ?? '', elapsed })
     case 'waiting_upstream':
-      return `等待上游响应·已${elapsed}`
+      return t('monitor.active.stageWaitingUpstream', { elapsed })
     case 'receiving_stream':
-      return `接收中·第${row.chunkCount}chunk·已收${formatBytes(row.bytesReceived)}`
+      return t('monitor.active.stageReceivingStream', { chunk: row.chunkCount, bytes: formatBytes(row.bytesReceived) })
     case 'receiving':
-      return `接收响应中·已读${formatBytes(row.bytesReceived)}`
+      return t('monitor.active.stageReceiving', { bytes: formatBytes(row.bytesReceived) })
     default:
-      return '活跃中'
+      return t('monitor.active.stageActive')
   }
 }
 
-function formatOutcome(outcome: string): string {
+function formatOutcome(outcome: string, t: TFunction): string {
   switch (outcome) {
     case 'client_disconnected':
-      return '客户端断开'
+      return t('monitor.active.outcomeClientDisconnected')
     case 'upstream_error':
-      return '上游报错'
+      return t('monitor.active.outcomeUpstreamError')
     case 'failed':
-      return '无可用供应商'
+      return t('monitor.active.outcomeNoProvider')
     case 'queued_rejected':
-      return '并发超限'
+      return t('monitor.active.outcomeConcurrency')
     case 'invalid_request':
-      return '解析错误'
+      return t('monitor.active.outcomeParseError')
     case 'killed':
-      return '已掐断'
+      return t('monitor.active.outcomeKilled')
     default:
-      return '已结束'
+      return t('monitor.active.outcomeFinished')
   }
 }
 
@@ -122,67 +124,69 @@ function formatDateTimeCell(value: unknown): { date: string; time: string } | nu
   }
 }
 
-const ACTIVE_REQUEST_COLUMNS: ColumnDef<ActiveRequest>[] = [
-  {
-    key: 'status',
-    label: '状态',
-    defaultWidth: { kind: 'pixel', value: 230 },
-    render: (_, row) => {
-      const finished = row.endTime !== null
-      return (
-        <span className={finished ? formatOutcomeClass(row.outcome) : 'text-success'}>
-          {finished ? formatOutcome(row.outcome) : formatActiveStage(row)}
-        </span>
-      )
+function buildActiveRequestColumns(t: TFunction): ColumnDef<ActiveRequest>[] {
+  return [
+    {
+      key: 'status',
+      label: t('columns.status'),
+      defaultWidth: { kind: 'pixel', value: 230 },
+      render: (_, row) => {
+        const finished = row.endTime !== null
+        return (
+          <span className={finished ? formatOutcomeClass(row.outcome) : 'text-success'}>
+            {finished ? formatOutcome(row.outcome, t) : formatActiveStage(row, t)}
+          </span>
+        )
+      },
+      rowClassName: (row) => {
+        if (row.endTime !== null) return ''
+        return row.stage === 'queued' ? 'bg-warning/30' : 'bg-primary/15'
+      },
     },
-    rowClassName: (row) => {
-      if (row.endTime !== null) return ''
-      return row.stage === 'queued' ? 'bg-warning/30' : 'bg-primary/15'
+    {
+      key: 'startTime',
+      label: t('columns.startTime'),
+      defaultWidth: { kind: 'pixel', value: 160 },
+      defaultOverflow: 'wrap',
+      slot: {
+        line1: (row) => formatDateTimeCell(row.startTime)?.time ?? null,
+      },
     },
-  },
-  {
-    key: 'startTime',
-    label: '开始时间',
-    defaultWidth: { kind: 'pixel', value: 160 },
-    defaultOverflow: 'wrap',
-    slot: {
-      line1: (row) => formatDateTimeCell(row.startTime)?.time ?? null,
+    { key: 'source', label: t('columns.source'), defaultWidth: { kind: 'percent', value: 8 }, accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null) },
+    { key: 'tokenName', label: t('columns.token'), defaultWidth: { kind: 'percent', value: 10 } },
+    { key: 'provider', label: t('columns.provider'), defaultWidth: { kind: 'percent', value: 12 } },
+    { key: 'model', label: t('columns.model'), defaultWidth: { kind: 'percent', value: 15 } },
+    {
+      key: 'affinityReuse',
+      label: t('columns.affinity'),
+      defaultWidth: { kind: 'percent', value: 8 },
+      accessor: (row) => {
+        const a = (row as ActiveRequest).affinityReuse ?? ''
+        if (a === '') return null
+        if (a === 'full') return `<#16a34a>${t('affinity.full')}</#16a34a>`
+        if (a === 'partial') return `<#d97706>${t('affinity.partial')}</#d97706>`
+        if (a === 'new') return `<#0ea5e9>${t('affinity.new')}</#0ea5e9>`
+        return `<#9ca3af>${t('affinity.create')}</#9ca3af>`
+      },
     },
-  },
-  { key: 'source', label: '来源', defaultWidth: { kind: 'percent', value: 8 }, accessor: (row) => (row.source ? row.source.replace(/^__/, '') : null) },
-  { key: 'tokenName', label: '令牌', defaultWidth: { kind: 'percent', value: 10 } },
-  { key: 'provider', label: '供应商', defaultWidth: { kind: 'percent', value: 12 } },
-  { key: 'model', label: '模型', defaultWidth: { kind: 'percent', value: 15 } },
-  {
-    key: 'affinityReuse',
-    label: '渠道亲和性',
-    defaultWidth: { kind: 'percent', value: 8 },
-    accessor: (row) => {
-      const a = (row as ActiveRequest).affinityReuse ?? ''
-      if (a === '') return null
-      if (a === 'full') return '<#16a34a>复用渠道</#16a34a>'
-      if (a === 'partial') return '<#d97706>部分复用</#d97706>'
-      if (a === 'new') return '<#0ea5e9>新渠道</#0ea5e9>'
-      return '<#9ca3af>创建渠道</#9ca3af>'
+    { key: 'stream', label: t('columns.stream'), defaultWidth: { kind: 'percent', value: 5 }, accessor: (row) => (row.stream ? 'SSE' : null) },
+    {
+      key: 'elapsedMs',
+      label: t('columns.latency'),
+      defaultWidth: { kind: 'percent', value: 13 },
+      defaultAlign: 'right',
+      defaultOverflow: 'wrap',
+      accessor: (row) => {
+        const total = fmtSeconds(row.elapsedMs)
+        const firstByte = row.firstByteMs != null ? fmtSeconds(row.firstByteMs) : '-'
+        const fbColored = row.firstByteMs != null && row.firstByteMs > 20000
+          ? `<#dc2626>${firstByte}</#dc2626>`
+          : firstByte
+        return t('columns.latencyWithFirstByte', { total, firstByte: fbColored })
+      },
     },
-  },
-  { key: 'stream', label: '流式', defaultWidth: { kind: 'percent', value: 5 }, accessor: (row) => (row.stream ? 'SSE' : null) },
-  {
-    key: 'elapsedMs',
-    label: '耗时',
-    defaultWidth: { kind: 'percent', value: 13 },
-    defaultAlign: 'right',
-    defaultOverflow: 'wrap',
-    accessor: (row) => {
-      const total = fmtSeconds(row.elapsedMs)
-      const firstByte = row.firstByteMs != null ? fmtSeconds(row.firstByteMs) : '-'
-      const fbColored = row.firstByteMs != null && row.firstByteMs > 20000
-        ? `<#dc2626>${firstByte}</#dc2626>`
-        : firstByte
-      return `${total}（首字:${fbColored}）`
-    },
-  },
-]
+  ]
+}
 
 type MetricCardProps = {
   icon: React.ReactNode
@@ -225,6 +229,7 @@ function MetricSkeleton() {
 // ── 统计模块 ──
 
 function StatsSection() {
+  const { t } = useTranslation('logs')
   const [dateRange, setDateRange] = useState<DateRange>({})
   const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -243,11 +248,11 @@ function StatsSection() {
       setStats(data)
     } catch (err) {
       if (!mountedRef.current) return
-      setError(err instanceof Error ? err.message : '获取统计失败')
+      setError(err instanceof Error ? err.message : t('error.statsFailed'))
     } finally {
       if (mountedRef.current) setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     mountedRef.current = true
@@ -280,15 +285,15 @@ function StatsSection() {
     setClearing(true)
     try {
       await dashboardApi.clearUsage()
-      toast('用量已清空')
+      toast(t('monitor.clear.done'))
       setClearConfirmOpen(false)
       void fetchStats(dateRange)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '清空失败')
+      toast.error(err instanceof Error ? err.message : t('error.clearFailed'))
     } finally {
       setClearing(false)
     }
-  }, [clearing, fetchStats, dateRange])
+  }, [clearing, fetchStats, dateRange, t])
 
   const closeClearDialog = useCallback((open: boolean) => {
     if (clearing) return
@@ -303,17 +308,17 @@ function StatsSection() {
   return (
     <section className="mb-6">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-medium">统计</h3>
+        <h3 className="text-sm font-medium">{t('monitor.stats.title')}</h3>
         <div className="flex items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
           <Button
             variant="outline"
             size="sm"
             onClick={() => setClearOpen(true)}
-            title="清空累计用量统计（不影响请求记录）"
+            title={t('monitor.clear.tooltip')}
           >
             <AppIcon name="delete" data-icon="inline-start" />
-            清空用量
+            {t('monitor.clear.button')}
           </Button>
         </div>
       </div>
@@ -330,7 +335,7 @@ function StatsSection() {
             <p className="text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={handleRetry}>
               <AppIcon name="refresh" data-icon="inline-start" />
-              重试
+              {t('common:action.retry')}
             </Button>
           </div>
         </div>
@@ -339,47 +344,47 @@ function StatsSection() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             <MetricCard
               icon={<AppIcon name="hashtag" />}
-              label="总请求"
+              label={t('monitor.metrics.totalRequests')}
               value={String(stats.totalRequests)}
             />
             <MetricCard
               icon={<AppIcon name="check_circle" />}
-              label="成功请求"
+              label={t('monitor.metrics.successRequests')}
               value={String(stats.successCount)}
             />
             <MetricCard
               icon={<AppIcon name="cancel" />}
-              label="失败请求"
+              label={t('monitor.metrics.failedRequests')}
               value={String(stats.failedCount)}
             />
             <MetricCard
               icon={<AppIcon name="chat" />}
-              label="总 Token"
+              label={t('monitor.metrics.totalTokens')}
               value={formatTokens(stats.totalTokens)}
             />
             <MetricCard
               icon={<AppIcon name="schedule" />}
-              label="平均延迟"
+              label={t('monitor.metrics.averageLatency')}
               value={formatLatency(stats.averageLatency)}
             />
             <MetricCard
               icon={<AppIcon name="dns" />}
-              label="成功率"
+              label={t('monitor.metrics.successRate')}
               value={successRate}
             />
             <MetricCard
               icon={<AppIcon name="sell" />}
-              label="花费"
+              label={t('monitor.metrics.cost')}
               value={`¥${totalCost.toFixed(2)}`}
             />
             <MetricCard
               icon={<AppIcon name="bolt" />}
-              label="吞吐量"
+              label={t('monitor.metrics.throughput')}
               value={throughput > 0 ? `${throughput.toFixed(2)} tokens/s` : '-'}
             />
             <MetricCard
               icon={<AppIcon name="refresh" />}
-              label="缓存命中率"
+              label={t('monitor.metrics.cacheHitRate')}
               value={cacheActivity && cacheHitRate > 0 ? cacheHitRateText(cacheHitRate) : '-'}
             />
           </div>
@@ -396,9 +401,9 @@ function StatsSection() {
       <Dialog open={clearOpen} onOpenChange={closeClearDialog}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>清空用量</DialogTitle>
+            <DialogTitle>{t('monitor.clear.button')}</DialogTitle>
             <DialogDescription>
-              将清空累计用量统计，不影响请求记录。
+              {t('monitor.clear.dialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
@@ -412,7 +417,7 @@ function StatsSection() {
                   setClearConfirmOpen(true)
                 }}
               >
-                清空
+                {t('common:action.clear')}
               </Button>
             </>
           }>
@@ -423,12 +428,12 @@ function StatsSection() {
       <Dialog open={clearConfirmOpen} onOpenChange={closeClearConfirmDialog}>
         <DialogContent width="xs" scrollFooter>
           <DialogHeader>
-            <DialogTitle>确认清空用量？</DialogTitle>
+            <DialogTitle>{t('monitor.clear.confirmTitle')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button variant="destructive" size="sm" onClick={() => void handleClearUsage()} disabled={clearing}>
-                {clearing ? '清空中…' : '确认清空'}
+                {clearing ? t('monitor.clear.clearing') : t('monitor.clear.confirm')}
               </Button>
             </>
           }>
@@ -441,30 +446,21 @@ function StatsSection() {
 
 // ── 活跃请求模块 ──
 
-const RETENTION_CHOICES: readonly { value: number; label: string }[] = [
-  { value: 0, label: '请求完成后立即移除' },
-  { value: 0.5, label: '30 秒' },
-  { value: 1, label: '1 分钟' },
-  { value: 2, label: '2 分钟' },
-  { value: 5, label: '5 分钟' },
-  { value: 10, label: '10 分钟' },
-  { value: 30, label: '30 分钟' },
-]
+const RETENTION_MINUTES: readonly number[] = [0, 0.5, 1, 2, 5, 10, 30]
 
-function formatRetention(minutes: number): string {
-  if (minutes <= 0) return '请求完成后立即移除'
-  if (minutes < 1) return `${Math.round(minutes * 60)} 秒`
-  if (minutes === 1) return '1 分钟'
-  if (Number.isInteger(minutes)) return `${minutes} 分钟`
-  return `${minutes} 分钟`
+function formatRetention(minutes: number, t: TFunction): string {
+  if (minutes <= 0) return t('monitor.retention.immediate')
+  if (minutes < 1) return t('monitor.retention.seconds', { count: Math.round(minutes * 60) })
+  return t('monitor.retention.minutes', { count: minutes })
 }
 
-function retentionLabel(minutes: number): string {
-  if (minutes <= 0) return '请求完成后立即移除'
-  return `显示 ${formatRetention(minutes)} 内的活跃请求`
+function retentionLabel(minutes: number, t: TFunction): string {
+  if (minutes <= 0) return t('monitor.retention.immediate')
+  return t('monitor.retention.label', { retention: formatRetention(minutes, t) })
 }
 
 function ActiveRequestsSection() {
+  const { t } = useTranslation('logs')
   const [requests, setRequests] = useState<readonly ActiveRequest[]>([])
   const [config, setConfig] = useState<ActiveRequestConfig | null>(null)
   const [configError, setConfigError] = useState<string | null>(null)
@@ -490,11 +486,11 @@ function ActiveRequestsSection() {
       setError(null)
     } catch (err) {
       if (!mountedRef.current || seq !== fetchSeqRef.current) return
-      setError(err instanceof Error ? err.message : '获取活跃请求失败')
+      setError(err instanceof Error ? err.message : t('error.activeFailed'))
     } finally {
       if (mountedRef.current && seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     mountedRef.current = true
@@ -513,30 +509,30 @@ function ActiveRequestsSection() {
     dashboardApi.getActiveRequestConfig()
       .then((c) => { if (active) setConfig(c) })
       .catch((err) => {
-        if (active) setConfigError(err instanceof Error ? err.message : '获取保留时间失败')
+        if (active) setConfigError(err instanceof Error ? err.message : t('error.retentionFailed'))
       })
     return () => { active = false }
-  }, [])
+  }, [t])
 
   const handleKill = useCallback(async (row: ActiveRequest) => {
     if (killingId !== null) return
     setKillingId(row.requestId)
     try {
       await dashboardApi.killActiveRequest(row.requestId)
-      toast('已掐断')
+      toast(t('monitor.kill.done'))
       void fetchActive()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '掐断失败')
+      toast.error(err instanceof Error ? err.message : t('error.killFailed'))
     } finally {
       setKillingId(null)
     }
-  }, [killingId, fetchActive])
+  }, [killingId, fetchActive, t])
 
   const columns = useMemo<ColumnDef<ActiveRequest>[]>(() => [
-    ...ACTIVE_REQUEST_COLUMNS,
+    ...buildActiveRequestColumns(t),
     {
       key: 'actions',
-      label: '操作',
+      label: t('columns.operation'),
       defaultWidth: { kind: 'pixel', value: 90 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
@@ -547,17 +543,17 @@ function ActiveRequestsSection() {
             size="sm"
             className="h-7 px-2 text-xs"
             disabled={killingId !== null}
-            title="掐断该请求（将中止上游请求）"
+            title={t('monitor.kill.tooltip')}
             onClick={(event) => {
               event.stopPropagation()
               void handleKill(row)
             }}
           >
-            {killingId === row.requestId ? '掐断中…' : '掐断'}
+            {killingId === row.requestId ? t('monitor.kill.killing') : t('monitor.kill.button')}
           </Button>
         ),
     },
-  ], [killingId, handleKill])
+  ], [killingId, handleKill, t])
 
   const handleOpenDialog = () => {
     setDraft(config?.retentionMinutes ?? 5)
@@ -572,9 +568,9 @@ function ActiveRequestsSection() {
       setConfig(updated)
       setConfigError(null)
       setDialogOpen(false)
-      toast('已保存')
+      toast(t('monitor.saved'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '保存失败')
+      toast.error(err instanceof Error ? err.message : t('error.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -584,7 +580,7 @@ function ActiveRequestsSection() {
     <section>
       <div className="mb-4 flex items-center gap-2 text-sm font-medium">
         <AppIcon name="bolt" className="text-muted-foreground" />
-        活跃请求
+        {t('monitor.active.title')}
         {requests.length > 0 && (
           <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
             {requests.length}
@@ -624,12 +620,12 @@ function ActiveRequestsSection() {
             {configError ? (
               <Button variant="outline" size="sm" onClick={handleOpenDialog} title={configError}>
                 <AppIcon name="settings" data-icon="inline-start" />
-                保留时间未知
+                {t('monitor.retention.unknown')}
               </Button>
             ) : config ? (
-              <Button variant="outline" size="sm" onClick={handleOpenDialog} title="设置保留时间">
+              <Button variant="outline" size="sm" onClick={handleOpenDialog} title={t('monitor.retention.setTooltip')}>
                 <AppIcon name="settings" data-icon="inline-start" />
-                {retentionLabel(config.retentionMinutes)}
+                {retentionLabel(config.retentionMinutes, t)}
               </Button>
             ) : (
               <Button variant="outline" size="sm" onClick={handleOpenDialog}>
@@ -644,27 +640,27 @@ function ActiveRequestsSection() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent scrollFooter>
           <DialogHeader>
-            <DialogTitle>保留时间设置</DialogTitle>
+            <DialogTitle>{t('monitor.retention.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              请求结束后，在列表中保留多久
+              {t('monitor.retention.dialogDescription')}
             </DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button onClick={() => void handleSave()} disabled={saving}>
-                {saving ? '保存中…' : '保存'}
+                {saving ? t('common:state.saving') : t('common:action.save')}
               </Button>
             </>
           }>
           <div className="flex flex-wrap gap-2">
-            {RETENTION_CHOICES.map((choice) => (
+            {RETENTION_MINUTES.map((value) => (
               <Button
-                key={choice.value}
-                variant={draft === choice.value ? 'default' : 'outline'}
+                key={value}
+                variant={draft === value ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setDraft(choice.value)}
+                onClick={() => setDraft(value)}
               >
-                {choice.label}
+                {formatRetention(value, t)}
               </Button>
             ))}
           </div>
@@ -683,11 +679,12 @@ function ActiveRequestsSection() {
 }
 
 export function MonitorPage() {
+  const { t } = useTranslation('logs')
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="活动监视"
-        description="实时活动请求与运行统计"
+        title={t('page.activity.title')}
+        description={t('page.activity.description')}
       />
       <div className="flex-1 overflow-auto p-6">
         <StatsSection />

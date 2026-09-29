@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { JSX } from "react"
+import { useTranslation } from "react-i18next";
 
 import { AppIcon } from "@/components/AppIcon";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import {
 } from "@/components/dialog";
 import { cn } from "@/lib/utils";
 
-const TOOLTIP_TEXT = "请点击一行作为宽度参考";
 const TOOLTIP_OFFSET_PX = 12;
 
 // ── Trigger button ──
@@ -31,6 +31,7 @@ export function MagicWandButton({
   onActivate,
   isActive = false,
 }: MagicWandButtonProps): JSX.Element {
+  const { t } = useTranslation('ui');
   const handleToggle = React.useCallback(() => {
     onActivate?.(!isActive);
   }, [isActive, onActivate]);
@@ -40,8 +41,8 @@ export function MagicWandButton({
       variant={isActive ? "secondary" : "outline"}
       size="icon-sm"
       className="border border-border"
-      aria-label={isActive ? "退出自动列宽" : "自动列宽"}
-      title={isActive ? "退出自动列宽" : "自动列宽"}
+      aria-label={isActive ? t("magicWand.exitAutoWidth") : t("magicWand.autoWidth")}
+      title={isActive ? t("magicWand.exitAutoWidth") : t("magicWand.autoWidth")}
       onClick={handleToggle}
     >
       <AppIcon name="auto_fix_high" size={24} theme="outline" fill="currentColor" />
@@ -84,6 +85,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
     cursorPos = null,
     pendingReference = null,
   } = props;
+  const { t } = useTranslation('ui');
 
   const dialogOpen = pendingReference !== null;
 
@@ -147,8 +149,8 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
           scrollFooter
         >
           <DialogHeader>
-            <DialogTitle>宽度参考已选择</DialogTitle>
-            <DialogDescription>选择宽度单位</DialogDescription>
+            <DialogTitle>{t('magicWand.referencePicked')}</DialogTitle>
+            <DialogDescription>{t('magicWand.chooseUnit')}</DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
@@ -158,7 +160,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
                 className="flex-1"
                 onClick={() => handlePick("percent")}
               >
-                百分比
+                {t('magicWand.percent')}
               </Button>
               <Button
                 variant="outline"
@@ -166,7 +168,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
                 className="flex-1"
                 onClick={() => handlePick("pixel")}
               >
-                像素
+                {t('magicWand.pixel')}
               </Button>
             </>
           } />
@@ -188,7 +190,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
             visibility: clampedPos ? "visible" : "hidden",
           }}
         >
-          {TOOLTIP_TEXT}
+          {t('magicWand.pickHint')}
         </div>
       )}
     </>

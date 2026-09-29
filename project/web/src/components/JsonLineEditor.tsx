@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { JsonTokens } from '@/components/JsonHighlight'
 import { splitJsonLines } from '@/lib/json-lines'
@@ -21,6 +22,7 @@ export function JsonLineEditor({
   readOnly = false,
   className,
 }: JsonLineEditorProps) {
+  const { t } = useTranslation('topology')
   const gutterRef = useRef<HTMLDivElement>(null)
   const backdropRef = useRef<HTMLPreElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -89,7 +91,7 @@ export function JsonLineEditor({
           spellCheck={false}
           wrap="soft"
           readOnly={readOnly}
-          aria-label="JSON 内容"
+          aria-label={t('jsonEditor.contentAria')}
         />
       </div>
     </div>

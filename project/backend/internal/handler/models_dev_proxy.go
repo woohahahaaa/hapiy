@@ -240,7 +240,7 @@ func ModelsDevList() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		models, err := modelsDev.load()
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "获取 models.dev 数据失败，请稍后重试"})
+			respondError(c, http.StatusBadGateway, "MODELS_DEV_FETCH_FAILED", "获取 models.dev 数据失败，请稍后重试")
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": models})

@@ -1,0 +1,44 @@
+{
+  "edge": {
+    "unitMustBeArray": "连线单元 {{position}} 必须是数组",
+    "unitNotEmpty": "连线单元 {{position}} 不能为空",
+    "childUnit": "{{position}} 的第 {{index}} 个子单元",
+    "clusterNeedsParticipantTail": "连线聚合单元 {{position}} 必须至少包含一个参与链和一个共享尾",
+    "clusterNeedsParticipantTailBare": "连线聚合单元必须至少包含一个参与链和一个共享尾",
+    "documentMustBeArray": "连线文档必须是数组",
+    "unitIndex": "第 {{index}} 个",
+    "tailNotEmpty": "连线共享尾不能为空",
+    "tailMustStartWithSlot": "连线共享尾必须以槽位引用开头，实际为 {{ref}}",
+    "tailExpansionEmpty": "连线共享尾聚合展开为空",
+    "chainNotEmpty": "连线链不能为空",
+    "chainRefMustStart": "连线链 {{chain}}：引用 {{ref}} 必须以 pv- 或 slot- 开头",
+    "unknownSlotRef": "连线链 {{chain}}：未知的槽位引用 {{ref}}",
+    "unknownProviderRef": "连线链 {{chain}}：未知的 provider 引用 {{ref}}",
+    "providerDuplicated": "provider {{key}} 出现在多条连线链中",
+    "providerFollowedByNonSlot": "连线链 {{chain}}：provider 之后出现非槽位引用 {{ref}}",
+    "slotRefDuplicated": "连线链 {{chain}}：槽位 {{ref}} 在链中出现多次"
+  },
+  "doc": {
+    "nonEmptyString": "{{field}} 必须是非空字符串",
+    "boolean": "{{field}} 必须是布尔值",
+    "nonNegativeInteger": "{{field}} 必须是非负整数",
+    "nodeMustBeObject": "节点必须是对象",
+    "unknownNodeType": "未知的节点类型: {{type}}",
+    "documentMustBeArray": "拓扑文档必须是数组",
+    "workflowMustBeArray": "第 {{index}} 条 workflow 必须是数组",
+    "workflowNotEmpty": "第 {{index}} 条 workflow 不能为空",
+    "workflowFirstNode": "第 {{index}} 条 workflow 的第一个节点必须是 provider",
+    "unknownNodeConversion": "无法转换节点类型: {{type}}"
+  },
+  "modelsDev": {
+    "invalidFormat": "models.dev 数据格式无效",
+    "requestFailed": "models.dev 数据请求失败（{{status}}）"
+  },
+  "availability": {
+    "providerItem": "供应商 {{count}}/{{total}}",
+    "baseUrlItem": "base URL {{count}}/{{total}}",
+    "keyItem": "key {{count}}/{{total}}",
+    "summary": "故障转移：{{items}}",
+    "join": "、"
+  }
+}

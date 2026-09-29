@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ type ModelAutocompleteProps = {
 // Candidate rows: the first is always the bare committed model name, the rest
 // are models.dev matches rendered with their upstream provider.
 export function ModelAutocomplete({ value, onChange, searchable = false, onPickProvider }: ModelAutocompleteProps) {
+  const { t } = useTranslation('provider')
   const [draft, setDraft] = useState(value)
   const [all, setAll] = useState<readonly ModelsDevModel[]>([])
   const [loading, setLoading] = useState(true)
@@ -174,24 +176,24 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
             handleBlur()
           }
         }}
-        placeholder="输入模型名称"
+        placeholder={t('autocomplete.placeholder')}
         autoComplete="off"
       />
       {searchable && open && loading && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
-          models.dev 数据加载中...
+          {t('autocomplete.loading')}
         </div>
       )}
       {searchable && open && !loading && !loadError && suggestions.length === 0 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
-          未找到匹配的模型
+          {t('autocomplete.noMatch')}
         </div>
       )}
       {searchable && open && loadError && (
         <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 shadow-md">
-          <p role="alert" className="text-xs text-destructive">models.dev 数据加载失败，请检查网络</p>
+          <p role="alert" className="text-xs text-destructive">{t('errors.modelsDevLoad')}</p>
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={retry}>
-            重试
+            {t('common:action.retry')}
           </Button>
         </div>
       )}

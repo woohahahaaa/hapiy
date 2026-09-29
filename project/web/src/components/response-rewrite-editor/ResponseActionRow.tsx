@@ -1,3 +1,4 @@
+import { useTranslation, type TFunction } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppIcon } from '@/components/AppIcon'
@@ -15,6 +16,7 @@ interface ResponseActionRowProps {
 const FIELDS_LEFT_OFFSET = 'pl-[24px]'
 
 export function ResponseActionRow({ index, action, onChange, onRemove, canRemove }: ResponseActionRowProps) {
+  const { t } = useTranslation('rewrite')
   const spec = action.mode && MODE_BY_VALUE.has(action.mode as ModeName)
     ? MODE_BY_VALUE.get(action.mode as ModeName)!
     : null

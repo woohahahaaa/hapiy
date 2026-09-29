@@ -102,7 +102,7 @@ func CreateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusConflict, gin.H{"error": "供应商名称已存在"})
+			respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
 			return
 		}
 
@@ -137,7 +137,7 @@ func UpdateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusConflict, gin.H{"error": "供应商名称已存在"})
+			respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
 			return
 		}
 
@@ -214,7 +214,7 @@ func ToggleWorkflow(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				return
 			}
 			if count > 0 {
-				c.JSON(http.StatusConflict, gin.H{"error": "当前已有一个同名供应商的工作流在启用，请先将另一个关闭"})
+				respondError(c, http.StatusConflict, "PROVIDER_WORKFLOW_ALREADY_ENABLED", "当前已有一个同名供应商的工作流在启用，请先将另一个关闭")
 				return
 			}
 		}

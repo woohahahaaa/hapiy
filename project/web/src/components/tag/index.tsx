@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 
@@ -7,7 +8,7 @@ import { cn } from '@/lib/utils'
 export function RemovableTag({
   label,
   onRemove,
-  removeTitle = '移除',
+  removeTitle,
   className,
 }: {
   readonly label: ReactNode
@@ -15,6 +16,8 @@ export function RemovableTag({
   readonly removeTitle?: string
   readonly className?: string
 }) {
+  const { t } = useTranslation('ui')
+  const title = removeTitle ?? t('tag.remove')
   return (
     <span
       className={cn(
@@ -24,8 +27,8 @@ export function RemovableTag({
     >
       <button
         type="button"
-        aria-label={removeTitle}
-        title={removeTitle}
+        aria-label={title}
+        title={title}
         onClick={(e) => {
           // tag 常被渲染在可点击容器（如下拉触发器）内，阻止冒泡避免
           // 点 × 移除时连带触发父级点击（例如把下拉召唤出来）。

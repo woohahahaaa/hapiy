@@ -1,5 +1,6 @@
 import { Handle, Position, useStore, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
@@ -34,6 +35,7 @@ const opLabel = (op: string): string => COND_OPS.find((o) => o.value === op)?.la
 // 正文表格竖向一分为二：左列显示生效供应商与条件明细（baseURL 计数行样式），
 // 右列单独划分出「是/否」两条输出（各带一条 pill handlebar）。
 export function NodeSwitch({ data, id }: NodeSwitchProps) {
+  const { t } = useTranslation('node')
   const {
     title,
     name,
@@ -100,12 +102,12 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
   const selectedNames = mode === 'model'
     ? (config?.models ?? [])
     : providers.filter((p) => providerIds.includes(p.id)).map((p) => p.name)
-  const filterLabel = mode === 'model' ? '模型' : '供应商'
+  const filterLabel = mode === 'model' ? t('switch.filterModel') : t('switch.filterProvider')
   const conditionSummary =
     (config?.conditions ?? [])
-      .map((c) => ('path' in c ? `${c.invert ? '非 ' : ''}${c.path} ${opLabel(c.op)} ${c.value}`.trim() : `(${c.logic})`))
+      .map((c) => ('path' in c ? `${c.invert ? t('switch.invertPrefix') : ''}${c.path} ${opLabel(c.op)} ${c.value}`.trim() : `(${c.logic})`))
       .join(' · ')
-  const displayTitle = name && name.trim() !== '' ? name : title || '条件开关'
+  const displayTitle = name && name.trim() !== '' ? name : title || t('switch.ruleNamePlaceholder')
 
   return (
     <>
@@ -133,7 +135,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
               setConfigOpen(true)
             }}
           >
-            编辑
+            {t('common:action.edit')}
           </button>
         </div>
 
@@ -141,14 +143,14 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
         <div className="flex items-stretch">
           {/* 左列：生效供应商/模型与条件明细（供应商卡片的 baseURL 行样式） */}
 <div className="min-w-0 flex-1 space-y-1 px-3 py-2 text-xs">
-            <div>{filterLabel} {selectedNames.length === 0 ? `全部${filterLabel}` : selectedNames.join(' · ')}</div>
-            <div>条件 {(config?.conditions ?? []).length === 0 ? '未设置' : conditionSummary}</div>
+            <div>{filterLabel} {selectedNames.length === 0 ? (mode === 'model' ? t('switch.allModels') : t('switch.allProviders')) : selectedNames.join(' · ')}</div>
+            <div>{t('switch.conditions')} {(config?.conditions ?? []).length === 0 ? t('switch.notSet') : conditionSummary}</div>
           </div>
 
           {/* 右列：单独划分出的「是/否」输出（各带一条 pill handlebar） */}
           <div className="flex shrink-0 flex-col border-l border-border">
             <div className="relative flex flex-1 items-center justify-end gap-1.5 px-2 py-1.5">
-              <span className="text-[10px]">是</span>
+              <span className="text-[10px]">{t('switch.yes')}</span>
               <Handle
                 type="source"
                 position={Position.Right}
@@ -158,7 +160,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
               />
             </div>
             <div className="relative flex flex-1 items-center justify-end gap-1.5 border-t border-border px-2 py-1.5">
-              <span className="text-[10px]">否</span>
+              <span className="text-[10px]">{t('switch.no')}</span>
               <Handle
                 type="source"
                 position={Position.Right}

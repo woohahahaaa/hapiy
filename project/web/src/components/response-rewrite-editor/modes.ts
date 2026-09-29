@@ -6,6 +6,8 @@
 //
 // 请求改写的完整 mode 集在 src/components/rewrite-rule-editor/modes.ts 里。
 
+import { i18n } from '@/i18n/i18n'
+
 export type ModeName = 'move' | 'first_prepend' | 'last_append' | 'delete'
 
 export type ModeField = 'value'
@@ -17,10 +19,10 @@ export type ModeSpec = {
 }
 
 export const MODES: readonly ModeSpec[] = [
-  { value: 'move', label: '重命名字段 (move)', needs: ['value'] },
-  { value: 'first_prepend', label: '加前缀 (first_prepend)', needs: ['value'] },
-  { value: 'last_append', label: '加后缀 (last_append)', needs: ['value'] },
-  { value: 'delete', label: '删除字段 (delete)', needs: [] },
+  { value: 'move', label: i18n.t('rewrite:respMode.move'), needs: ['value'] },
+  { value: 'first_prepend', label: i18n.t('rewrite:respMode.firstPrepend'), needs: ['value'] },
+  { value: 'last_append', label: i18n.t('rewrite:respMode.lastAppend'), needs: ['value'] },
+  { value: 'delete', label: i18n.t('rewrite:respMode.delete'), needs: [] },
 ]
 
 export const MODE_BY_VALUE: ReadonlyMap<ModeName, ModeSpec> = new Map(

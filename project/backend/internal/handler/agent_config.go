@@ -77,7 +77,7 @@ func GetAgentTypeRuleTemplate() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tmpl, ok := model.LoadAgentTemplate(c.Param("name"))
 		if !ok {
-			c.JSON(http.StatusNotFound, gin.H{"error": "该软件类型没有默认推荐模版"})
+			respondError(c, http.StatusNotFound, "AGENT_TYPE_TEMPLATE_NOT_FOUND", "该软件类型没有默认推荐模版")
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": tmpl})
@@ -103,7 +103,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var rule model.AgentTypeRule
 		if err := db.First(&rule, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "规则不存在"})
+			respondError(c, http.StatusNotFound, "AGENT_TYPE_RULE_NOT_FOUND", "规则不存在")
 			return
 		}
 		var req updateAgentTypeRuleRequest
@@ -118,7 +118,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 				return
 			}
 			if count > 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型已存在"})
+				respondError(c, http.StatusBadRequest, "AGENT_TYPE_EXISTS", "该软件类型已存在")
 				return
 			}
 			rule.Name = name
@@ -199,7 +199,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 		}
 		name := strings.TrimSpace(req.Name)
 		if name == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "软件类型名称不能为空"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_NAME_REQUIRED", "软件类型名称不能为空")
 			return
 		}
 		var count int64
@@ -208,7 +208,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型已存在"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_EXISTS", "该软件类型已存在")
 			return
 		}
 		rule := model.AgentTypeRule{
@@ -271,7 +271,7 @@ func DeleteAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 		id := c.Param("id")
 		var rule model.AgentTypeRule
 		if err := db.First(&rule, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "规则不存在"})
+			respondError(c, http.StatusNotFound, "AGENT_TYPE_RULE_NOT_FOUND", "规则不存在")
 			return
 		}
 		if err := db.Delete(&rule).Error; err != nil {
@@ -338,7 +338,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		req.AgentType = strings.TrimSpace(req.AgentType)
 		req.TargetOS = strings.TrimSpace(req.TargetOS)
 		if req.RecordName == "" || req.AgentType == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
+			respondError(c, http.StatusBadRequest, "RECORD_NAME_AND_TYPE_REQUIRED", "记录名称和软件类型不能为空")
 			return
 		}
 		var dupCount int64
@@ -349,7 +349,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if dupCount > 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在（同名不区分大小写），请使用其他名称"})
+			respondError(c, http.StatusBadRequest, "RECORD_NAME_EXISTS", "记录名称已存在（同名不区分大小写），请使用其他名称")
 			return
 		}
 
@@ -359,24 +359,24 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			// Any file extension is allowed (builtin templates include
 			// .json and .toml); existence is verified by caller.
 			if req.TargetOS != "windows" && req.TargetOS != "mac" && req.TargetOS != "other" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "本机系统必须是 windows、mac 或 other"})
+				respondError(c, http.StatusBadRequest, "SYSTEM_OS_INVALID", "本机系统必须是 windows、mac 或 other")
 				return
 			}
 		case "ssh":
 			if len(req.SshConfig) == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置不能为空"})
+				respondError(c, http.StatusBadRequest, "SSH_CONFIG_REQUIRED", "SSH 配置不能为空")
 				return
 			}
 			if err := parseSshConfig(req.SshConfig, &sshCfg); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusBadRequest, "SSH_CONFIG_PARSE_FAILED", "SSH 配置解析失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
-			if msg := validateSshConfig(sshCfg); msg != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			if code, msg := validateSshConfig(sshCfg); msg != "" {
+				respondError(c, http.StatusBadRequest, code, msg)
 				return
 			}
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "模式必须是 local 或 ssh"})
+			respondError(c, http.StatusBadRequest, "MODE_INVALID", "模式必须是 local 或 ssh")
 			return
 		}
 
@@ -434,7 +434,7 @@ func GetAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -454,7 +454,7 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var req struct {
@@ -517,7 +517,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var req updateAgentConfigFileRequest
@@ -529,7 +529,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		req.AgentType = strings.TrimSpace(req.AgentType)
 		req.TargetOS = strings.TrimSpace(req.TargetOS)
 		if req.RecordName == "" || req.AgentType == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称和软件类型不能为空"})
+			respondError(c, http.StatusBadRequest, "RECORD_NAME_AND_TYPE_REQUIRED", "记录名称和软件类型不能为空")
 			return
 		}
 		if !strings.EqualFold(req.RecordName, row.RecordName) {
@@ -541,7 +541,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 				return
 			}
 			if dupCount > 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "记录名称已存在（同名不区分大小写），请使用其他名称"})
+				respondError(c, http.StatusBadRequest, "RECORD_NAME_EXISTS", "记录名称已存在（同名不区分大小写），请使用其他名称")
 				return
 			}
 		}
@@ -550,16 +550,16 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 		switch req.Mode {
 		case "local":
 			if req.TargetOS != "windows" && req.TargetOS != "mac" && req.TargetOS != "other" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "本机系统必须是 windows、mac 或 other"})
+				respondError(c, http.StatusBadRequest, "SYSTEM_OS_INVALID", "本机系统必须是 windows、mac 或 other")
 				return
 			}
 		case "ssh":
 			if len(req.SshConfig) == 0 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置不能为空"})
+				respondError(c, http.StatusBadRequest, "SSH_CONFIG_REQUIRED", "SSH 配置不能为空")
 				return
 			}
 			if err := parseSshConfig(req.SshConfig, &sshCfg); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusBadRequest, "SSH_CONFIG_PARSE_FAILED", "SSH 配置解析失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
 			if row.Mode == "ssh" && row.SshConfig != "" {
@@ -585,8 +585,8 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 					sshCfg.JumpPrivateKey = existing.JumpPrivateKey
 				}
 			}
-			if msg := validateSshConfig(sshCfg); msg != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			if code, msg := validateSshConfig(sshCfg); msg != "" {
+				respondError(c, http.StatusBadRequest, code, msg)
 				return
 			}
 			if err := sshCfg.EncryptSensitive(key); err != nil {
@@ -594,7 +594,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 				return
 			}
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": "模式必须是 local 或 ssh"})
+			respondError(c, http.StatusBadRequest, "MODE_INVALID", "模式必须是 local 或 ssh")
 			return
 		}
 
@@ -655,7 +655,7 @@ func CheckAgentConfigPath() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := strings.TrimSpace(c.Query("path"))
 		if raw == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			respondError(c, http.StatusBadRequest, "PATH_PARAM_REQUIRED", "缺少 path 参数")
 			return
 		}
 		expanded := service.ExpandPath(raw)
@@ -676,7 +676,7 @@ func ReadAgentConfigPath() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := strings.TrimSpace(c.Query("path"))
 		if raw == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			respondError(c, http.StatusBadRequest, "PATH_PARAM_REQUIRED", "缺少 path 参数")
 			return
 		}
 		content, err := service.ReadLocalFile(service.ExpandPath(raw))
@@ -706,16 +706,16 @@ func ReadAgentConfigRemotePath() gin.HandlerFunc {
 		}
 		path := strings.TrimSpace(req.Path)
 		if path == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "缺少 path 参数"})
+			respondError(c, http.StatusBadRequest, "PATH_PARAM_REQUIRED", "缺少 path 参数")
 			return
 		}
 		var cfg service.SshConfig
 		if err := parseSshConfig(req.SshConfig, &cfg); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "SSH_CONFIG_PARSE_FAILED", "SSH 配置解析失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		if msg := validateSshConfig(cfg); msg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		if code, msg := validateSshConfig(cfg); msg != "" {
+			respondError(c, http.StatusBadRequest, code, msg)
 			return
 		}
 		content, err := service.ReadRemoteFile(cfg, path, strings.TrimSpace(req.TargetOS))
@@ -747,16 +747,16 @@ func TestAgentSshConnection() gin.HandlerFunc {
 		}
 		var cfg service.SshConfig
 		if err := parseSshConfig(req.SshConfig, &cfg); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "SSH 配置解析失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "SSH_CONFIG_PARSE_FAILED", "SSH 配置解析失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		if msg := validateSshConfig(cfg); msg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		if code, msg := validateSshConfig(cfg); msg != "" {
+			respondError(c, http.StatusBadRequest, code, msg)
 			return
 		}
 		targetOS := strings.TrimSpace(req.TargetOS)
 		if targetOS != "" && targetOS != "windows" && targetOS != "mac" && targetOS != "other" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "目标系统必须是 windows、mac 或 other"})
+			respondError(c, http.StatusBadRequest, "TARGET_OS_INVALID", "目标系统必须是 windows、mac 或 other")
 			return
 		}
 		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path), targetOS)
@@ -785,48 +785,48 @@ func parseSshConfig(raw json.RawMessage, cfg *service.SshConfig) error {
 	return json.Unmarshal(raw, cfg)
 }
 
-// validateSshConfig returns a Chinese error message when the config is
-// incomplete, or "" when it is usable.
-func validateSshConfig(cfg service.SshConfig) string {
+// validateSshConfig returns a stable code plus a Chinese error message when
+// the config is incomplete, or ("", "") when it is usable.
+func validateSshConfig(cfg service.SshConfig) (string, string) {
 	if strings.TrimSpace(cfg.Host) == "" {
-		return "SSH 主机地址不能为空"
+		return "SSH_HOST_REQUIRED", "SSH 主机地址不能为空"
 	}
 	if strings.TrimSpace(cfg.Username) == "" {
-		return "SSH 用户名不能为空"
+		return "SSH_USERNAME_REQUIRED", "SSH 用户名不能为空"
 	}
 	switch cfg.AuthType {
 	case "password":
 		if cfg.Password == "" {
-			return "SSH 密码不能为空"
+			return "SSH_PASSWORD_REQUIRED", "SSH 密码不能为空"
 		}
 	case "key":
 		if strings.TrimSpace(cfg.PrivateKey) == "" {
-			return "SSH 私钥不能为空"
+			return "SSH_PRIVATE_KEY_REQUIRED", "SSH 私钥不能为空"
 		}
 	default:
-		return "SSH 认证方式必须是 password 或 key"
+		return "SSH_AUTH_TYPE_INVALID", "SSH 认证方式必须是 password 或 key"
 	}
 	if cfg.JumpEnabled {
 		if strings.TrimSpace(cfg.JumpHost) == "" {
-			return "跳板机主机地址不能为空"
+			return "JUMP_HOST_REQUIRED", "跳板机主机地址不能为空"
 		}
 		if strings.TrimSpace(cfg.JumpUsername) == "" {
-			return "跳板机用户名不能为空"
+			return "JUMP_USERNAME_REQUIRED", "跳板机用户名不能为空"
 		}
 		switch cfg.JumpAuthType {
 		case "password":
 			if cfg.JumpPassword == "" {
-				return "跳板机密码不能为空"
+				return "JUMP_PASSWORD_REQUIRED", "跳板机密码不能为空"
 			}
 		case "key":
 			if strings.TrimSpace(cfg.JumpPrivateKey) == "" {
-				return "跳板机私钥不能为空"
+				return "JUMP_PRIVATE_KEY_REQUIRED", "跳板机私钥不能为空"
 			}
 		default:
-			return "跳板机认证方式必须是 password 或 key"
+			return "JUMP_AUTH_TYPE_INVALID", "跳板机认证方式必须是 password 或 key"
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // readAgentConfigFileContent re-reads the live file (local or SSH) behind
@@ -892,12 +892,12 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var rule model.AgentTypeRule
 		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 			return
 		}
 		jpaths, err := rule.GetJsonPaths()
@@ -906,7 +906,7 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径，请先在「接管Agent」中填写 provider/model gjson"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL", "该软件类型尚未配置 json 路径，请先在「接管Agent」中填写 provider/model gjson")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -1058,12 +1058,12 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var rule model.AgentTypeRule
 		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 			return
 		}
 		jpaths, err := rule.GetJsonPaths()
@@ -1072,7 +1072,7 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
 			return
 		}
 		var req applyReq
@@ -1082,13 +1082,13 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		providerID := strings.TrimSpace(req.ProviderID)
 		if providerID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "provider_id 不能为空"})
+			respondError(c, http.StatusBadRequest, "PROVIDER_ID_REQUIRED", "provider_id 不能为空")
 			return
 		}
 		recs, _ := rule.GetRecommendations()
 		protocols, _ := rule.GetProtocols()
 		if len(recs) == 0 && len(protocols) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_NO_RECOMMENDATIONS", "该规则尚未配置推荐项")
 			return
 		}
 
@@ -1134,12 +1134,12 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var rule model.AgentTypeRule
 		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 			return
 		}
 		jpaths, err := rule.GetJsonPaths()
@@ -1148,13 +1148,13 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
 			return
 		}
 		recs, _ := rule.GetRecommendations()
 		protocols, _ := rule.GetProtocols()
 		if len(recs) == 0 && len(protocols) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该规则尚未配置推荐项"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_NO_RECOMMENDATIONS", "该规则尚未配置推荐项")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -1346,12 +1346,12 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var rule model.AgentTypeRule
 		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 			return
 		}
 		jpaths, err := rule.GetJsonPaths()
@@ -1360,7 +1360,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
 			return
 		}
 		recs, _ := rule.GetRecommendations()
@@ -1371,7 +1371,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if len(req.Checked) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请至少勾选一个供应商或模型"})
+			respondError(c, http.StatusBadRequest, "CHECKED_PROVIDER_OR_MODEL_REQUIRED", "请至少勾选一个供应商或模型")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -1586,12 +1586,12 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
 		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
 		var rule model.AgentTypeRule
 		if err := db.Where("name = ?", row.AgentType).First(&rule).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+			respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 			return
 		}
 		jpaths, err := rule.GetJsonPaths()
@@ -1600,7 +1600,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "该软件类型尚未配置 json 路径"})
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
 			return
 		}
 		var req syncReq
@@ -1609,11 +1609,11 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(req.ProviderID) == "" || strings.TrimSpace(req.ModelID) == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "provider_id 与 model_id 不能为空"})
+			respondError(c, http.StatusBadRequest, "PROVIDER_AND_MODEL_ID_REQUIRED", "provider_id 与 model_id 不能为空")
 			return
 		}
 		if len(req.Fields) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "fields 不能为空"})
+			respondError(c, http.StatusBadRequest, "FIELDS_REQUIRED", "fields 不能为空")
 			return
 		}
 
@@ -1626,7 +1626,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 		resolvedModels := strings.ReplaceAll(jpaths.Model, "{provider_id}", escapeSjsonKey(req.ProviderID))
 		base, ok := modelEntryPath([]byte(cleaned), resolvedModels, req.ModelID)
 		if !ok {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "未在配置文件的 " + resolvedModels + " 中找到模型 " + req.ModelID})
+			respondErrorWithParams(c, http.StatusBadRequest, "MODEL_NOT_FOUND_IN_CONFIG", "未在配置文件的 "+resolvedModels+" 中找到模型 "+req.ModelID, gin.H{"path": resolvedModels, "model": req.ModelID})
 			return
 		}
 		buf := []byte(cleaned)

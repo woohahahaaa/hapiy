@@ -464,10 +464,10 @@ export type DuplicateActivation = {
 }
 
 function parseFlatNode(value: unknown): FlatNode {
-  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑节点格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidFlatNode'), null)
   const kind = value.kind
   if (kind !== 'requestEntry' && kind !== 'provider' && kind !== 'slot' && kind !== 'switch') {
-    throw new DashboardApiError('扁平拓扑节点类型无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidFlatNodeType'), null)
   }
   let config: SwitchNodeConfig | undefined
   if (isRecord(value.config)) {
@@ -508,7 +508,7 @@ function isProviderStrategy(value: unknown): value is ProviderStrategy {
 }
 
 function parseFlatWire(value: unknown): FlatWire {
-  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑连线格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidFlatWire'), null)
   const branch = value.branch === 'yes' || value.branch === 'no' ? value.branch : undefined
   return {
     source: readString(value.source, 'wire.source'),
@@ -518,7 +518,7 @@ function parseFlatWire(value: unknown): FlatWire {
 }
 
 function parseFlatTopology(value: unknown): FlatTopology {
-  if (!isRecord(value)) throw new DashboardApiError('扁平拓扑格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidFlatTopology'), null)
   const nodes = readObjectArray(value.nodes, 'flat.nodes', parseFlatNode)
   const wires = readObjectArray(value.wires, 'flat.wires', parseFlatWire)
   // 心跳回复（autoReply）插槽已下线：加载时剔除残留节点并丢弃触达它的连线，
@@ -593,7 +593,7 @@ function parseLayoutResponse(value: unknown): { layout: LayoutSnapshot; version:
 }
 
 function parseDuplicateActivation(value: unknown): DuplicateActivation {
-  if (!isRecord(value)) throw new DashboardApiError('重复激活冲突格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidDuplicateActivation'), null)
   return {
     providerName: readString(value.provider_name, 'dup.provider_name'),
     entryIds: readStringArray(value.entry_ids, 'dup.entry_ids'),
@@ -995,14 +995,14 @@ function toStrMap(value: unknown): Readonly<Record<string, string>> {
 
 function readString(value: unknown, field: string): string {
   if (typeof value !== 'string') {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   return value
 }
 
 function readBoolean(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   return value
 }
@@ -1014,14 +1014,14 @@ function readNumber(value: unknown, field: string, fallback?: number): number {
   if (fallback !== undefined && value === undefined) {
     return fallback
   }
-  throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+  throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
 }
 
 function parseJson(value: string, field: string): unknown {
   try {
     return JSON.parse(value) as unknown
   } catch {
-    throw new DashboardApiError(`服务端返回的 ${field} 不是有效 JSON`, null)
+    throw new DashboardApiError(i18n.t('api:invalidJson', { field }), null)
   }
 }
 
@@ -1040,7 +1040,7 @@ function toRFC3339Date(date: string | undefined, endOfDay: boolean): string | un
 
 function parseSystemSetting(value: unknown): SystemSetting {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的设置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '设置' }), null)
   }
   return {
     key: readString(value.key, 'setting.key'),
@@ -1050,7 +1050,7 @@ function parseSystemSetting(value: unknown): SystemSetting {
 
 function parseFetchedModel(value: unknown): FetchedModel {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的模型格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型' }), null)
   }
   const id = readString(value.id, 'model.id')
   return {
@@ -1065,7 +1065,7 @@ function readStringArray(value: unknown, field: string): readonly string[] {
   }
   const parsed = typeof value === 'string' ? parseJson(value, field) : value
   if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   return parsed
 }
@@ -1076,14 +1076,14 @@ function readStringRecord(value: unknown, field: string): Readonly<Record<string
   }
   const parsed = typeof value === 'string' ? parseJson(value, field) : value
   if (!isRecord(parsed) || Object.values(parsed).some((item) => typeof item !== 'string')) {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   return parsed as Record<string, string>
 }
 
 function parseEndpoint(value: unknown): ProviderEndpoint {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 endpoints 格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'endpoints' }), null)
   }
   return {
     pathSuffix: readString(value.pathSuffix ?? value.path_suffix, 'endpoints.path_suffix'),
@@ -1092,7 +1092,7 @@ function parseEndpoint(value: unknown): ProviderEndpoint {
 
 function parseModelPrices(value: unknown): ModelPrices {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 models.prices 格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'models.prices' }), null)
   }
   return {
     input: readString(value.input ?? '', 'models.prices.input'),
@@ -1104,7 +1104,7 @@ function parseModelPrices(value: unknown): ModelPrices {
 
 function parseModelReferencePrices(value: unknown): ModelReferencePrices {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 models.referencePrices 格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'models.referencePrices' }), null)
   }
   return {
     input: readNumber(value.input ?? value.input_price ?? 0, 'models.referencePrices.input'),
@@ -1116,7 +1116,7 @@ function parseModelReferencePrices(value: unknown): ModelReferencePrices {
 
 function parseModel(value: unknown): ProviderModel {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 models 格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'models' }), null)
   }
   const legacyRate = typeof value.discount === 'number' && Number.isFinite(value.discount)
     ? String(value.discount)
@@ -1146,14 +1146,14 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
   }
   const parsed = typeof value === 'string' ? parseJson(value, field) : value
   if (!Array.isArray(parsed)) {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   return parsed.map(parseItem)
 }
 
 function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的亲和规则格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '亲和规则' }), null)
   }
   return {
     name: readString(value.name, 'affinity_rule.name'),
@@ -1166,7 +1166,7 @@ function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
 
 function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的渠道亲和配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '渠道亲和配置' }), null)
   }
   return {
     enabled: readBoolean(value.enabled, 'affinity.enabled'),
@@ -1188,7 +1188,7 @@ function parseChannelAffinityFallback(value: unknown): ChannelAffinityFallback {
 
 function parseChannelAffinityPayload(value: unknown): ChannelAffinityPayload {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的渠道亲和配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '渠道亲和配置' }), null)
   }
   return {
     setting: parseChannelAffinity(value.setting),
@@ -1219,14 +1219,14 @@ function parseColumnDisplayConfig(value: unknown): ColumnDisplayConfig | null {
 
 function parseTableConfig(value: unknown): TableConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的表格配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '表格配置' }), null)
   }
   const rawConfigs = value.configs
   let parsedConfigs: readonly ColumnDisplayConfig[] = []
   if (typeof rawConfigs === 'string') {
     const decoded = parseJson(rawConfigs, 'table.configs')
     if (!Array.isArray(decoded)) {
-      throw new DashboardApiError('table.configs 必须是数组', null)
+      throw new DashboardApiError(i18n.t('api:invalidArray', { field: 'table.configs' }), null)
     }
     parsedConfigs = decoded
       .map(parseColumnDisplayConfig)
@@ -1236,7 +1236,7 @@ function parseTableConfig(value: unknown): TableConfig {
       .map(parseColumnDisplayConfig)
       .filter((cfg): cfg is ColumnDisplayConfig => cfg !== null)
   } else {
-    throw new DashboardApiError('table.configs 必须是数组', null)
+    throw new DashboardApiError(i18n.t('api:invalidArray', { field: 'table.configs' }), null)
   }
   return {
     id: readString(value.id, 'table.id'),
@@ -1262,7 +1262,7 @@ function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecor
 
 function parseProvider(value: unknown): Provider {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的供应商格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商' }), null)
   }
   return {
     id: readString(value.id, 'provider.id'),
@@ -1284,11 +1284,11 @@ function isDisabledRecordDimension(value: unknown): value is DisabledRecordDimen
 
 function parseDisabledRecord(value: unknown): DisabledRecord {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的禁用记录格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '禁用记录' }), null)
   }
   const dimension = readString(value.dimension, 'disabled_record.dimension')
   if (!isDisabledRecordDimension(dimension)) {
-    throw new DashboardApiError(`服务端返回的禁用维度无效: ${dimension}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidDisabledDimension', { value: dimension }), null)
   }
   return {
     id: readString(value.id, 'disabled_record.id'),
@@ -1315,7 +1315,7 @@ function parseDisabledRecord(value: unknown): DisabledRecord {
 
 function parseDisabledValues(value: unknown, field: string): Readonly<Record<string, boolean>> {
   if (!isRecord(value)) {
-    throw new DashboardApiError(`服务端返回的 ${field} 格式无效`, null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field }), null)
   }
   const values: Record<string, boolean> = {}
   for (const [key, disabled] of Object.entries(value)) {
@@ -1326,7 +1326,7 @@ function parseDisabledValues(value: unknown, field: string): Readonly<Record<str
 
 function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的故障转移状态格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移状态' }), null)
   }
   return {
     providerId: readString(value.provider_id, 'disable_status.provider_id'),
@@ -1338,7 +1338,7 @@ function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
 
 function parseToken(value: unknown): Token {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的令牌格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '令牌' }), null)
   }
   const quota = value.quota
   return {
@@ -1362,11 +1362,11 @@ function parseStageMs(value: unknown): number {
 
 function parseLog(value: unknown): UsageLog {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的日志格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '日志' }), null)
   }
   const status = readString(value.status, 'log.status')
   if (status !== 'success' && status !== 'failed' && status !== '') {
-    throw new DashboardApiError(`无效的日志状态: ${status}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '日志状态', value: status }), null)
   }
   return {
     id: readString(value.id, 'log.id'),
@@ -1405,11 +1405,11 @@ function parseLog(value: unknown): UsageLog {
 
 function parseLogCaptureFile(value: unknown): LogCaptureFile {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取日志格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志' }), null)
   }
   const type = readString(value.type, 'capture.type')
   if (type !== 'request' && type !== 'response' && type !== 'system') {
-    throw new DashboardApiError(`无效的抓取日志类型: ${type}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '抓取日志类型', value: type }), null)
   }
   return {
     id: readString(value.id, 'capture.id'),
@@ -1424,7 +1424,7 @@ function parseLogCaptureFile(value: unknown): LogCaptureFile {
 
 function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取阶段格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取阶段' }), null)
   }
   const headers = value.headers
   let parsedHeaders: Record<string, string> | null
@@ -1433,7 +1433,7 @@ function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
   } else if (isRecord(headers)) {
     parsedHeaders = headers as Record<string, string>
   } else {
-    throw new DashboardApiError('capture stage headers 格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidCaptureStageHeaders'), null)
   }
   return {
     headers: parsedHeaders,
@@ -1446,7 +1446,7 @@ function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
 
 function parseLogCaptureRequestNode(value: unknown): LogCaptureRequestNode {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取请求节点格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取请求节点' }), null)
   }
   return {
     before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
@@ -1457,7 +1457,7 @@ function parseLogCaptureRequestNode(value: unknown): LogCaptureRequestNode {
 
 function parseLogCaptureResponseNode(value: unknown): LogCaptureResponseNode {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取响应节点格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取响应节点' }), null)
   }
   return {
     before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
@@ -1469,11 +1469,11 @@ function parseLogCaptureResponseNode(value: unknown): LogCaptureResponseNode {
 
 function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取日志对格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对' }), null)
   }
   const responseCount = readNumber(value.response_count, 'pair.response_count')
   if (responseCount < 0) {
-    throw new DashboardApiError('response_count 不能为负', null)
+    throw new DashboardApiError(i18n.t('api:invalidResponseCount'), null)
   }
   return {
     request_id: readString(value.request_id, 'pair.request_id'),
@@ -1497,10 +1497,10 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
 
 function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取日志对详情格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对详情' }), null)
   }
   if (!Array.isArray(value.responses)) {
-    throw new DashboardApiError('responses 必须是数组', null)
+    throw new DashboardApiError(i18n.t('api:invalidArray', { field: 'responses' }), null)
   }
   return {
     request_id: readString(value.request_id, 'pair.request_id'),
@@ -1518,7 +1518,7 @@ function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
 
 function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的抓取耗时格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取耗时' }), null)
   }
   return {
     connectMs: parseStageMs(value.connect_ms),
@@ -1532,7 +1532,7 @@ function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
 
 function parseLogCaptureMergedBody(value: unknown): LogCaptureMergedBody {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的整合响应体格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '整合响应体' }), null)
   }
   return {
     value: value.value,
@@ -1544,7 +1544,7 @@ function parseLogCaptureMergedBody(value: unknown): LogCaptureMergedBody {
 
 function parseModelStat(value: unknown): ModelStat {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的模型统计格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型统计' }), null)
   }
   return {
     model: readString(value.model, 'stat.model'),
@@ -1555,7 +1555,7 @@ function parseModelStat(value: unknown): ModelStat {
 
 function parseLogStats(value: unknown): LogStats {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的统计格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '统计' }), null)
   }
   return {
     totalRequests: readNumber(value.total_requests, 'stat.total_requests'),
@@ -1572,7 +1572,7 @@ function parseLogStats(value: unknown): LogStats {
 
 function parseActiveRequest(value: unknown): ActiveRequest {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的活跃请求格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求' }), null)
   }
   return {
     requestId: readString(value.request_id, 'active.request_id'),
@@ -1598,11 +1598,11 @@ function parseActiveRequest(value: unknown): ActiveRequest {
 
 function parseActiveRequestConfig(value: unknown): ActiveRequestConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的活跃请求配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求配置' }), null)
   }
   const minutes = readNumber(value.retention_minutes, 'config.retention_minutes')
   if (minutes < 0 || minutes > 1440) {
-    throw new DashboardApiError('服务端返回的保留时间无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidRetention'), null)
   }
   return { retentionMinutes: minutes }
 }
@@ -1641,7 +1641,7 @@ function describeHttpError(
 
 function parseEnvelope(value: unknown): unknown {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidResponse'), null)
   }
   if ('error' in value && typeof value.error === 'string') {
     throw describeHttpError(value, 200, null)
@@ -1712,7 +1712,7 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
     throw describeHttpError(body, response.status, currentRevision)
   }
   if (!isRecord(body)) {
-    throw new DashboardApiError('服务端返回格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidResponse'), null)
   }
   if ('error' in body && typeof body.error === 'string') {
     throw new DashboardApiError(body.error, null)
@@ -1750,7 +1750,7 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text) as unknown
   } catch {
-    const prefix = response.ok ? '服务端返回的响应体不是有效 JSON' : `请求失败（HTTP ${response.status}）：响应不是有效 JSON`
+    const prefix = response.ok ? i18n.t('api:invalidJson', { field: '响应体' }) : i18n.t('api:invalidHttpJson', { status: response.status })
     throw new DashboardApiError(prefix, response.status)
   }
 }
@@ -1862,7 +1862,7 @@ export type RuleListResult<T> = {
 // ── Rule parse / serialize ──
 
 function parseRewriteRule(value: unknown): RewriteRule {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
@@ -1872,7 +1872,7 @@ function parseRewriteRule(value: unknown): RewriteRule {
 }
 
 function parseFailoverRule(value: unknown): FailoverRule {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
   const rawCondition = readString(value.condition, 'rule.condition')
   const condition = rawCondition === 'timeout' || rawCondition === 'error' || rawCondition === 'rate_limit' ? rawCondition : 'timeout'
   const rawDimension = readString(value.dimension, 'rule.dimension')
@@ -1898,10 +1898,10 @@ function parseFailoverRule(value: unknown): FailoverRule {
 }
 
 function parseFailoverAction(value: unknown): FailoverAction {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的故障转移动作格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移动作' }), null)
   const dimension = readString(value.dimension, 'rule.actions.dimension')
   if (dimension !== 'base_url' && dimension !== 'key' && dimension !== 'provider') {
-    throw new DashboardApiError('服务端返回的故障转移动作维度无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidFailoverActionDimension'), null)
   }
   return {
     dimension,
@@ -1911,7 +1911,7 @@ function parseFailoverAction(value: unknown): FailoverAction {
 }
 
 function parseResponseRewriteRule(value: unknown): ResponseRewriteRule {
-  if (!isRecord(value)) throw new DashboardApiError('服务端返回的规则格式无效', null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
@@ -1983,7 +1983,7 @@ export type RuntimeMetrics = {
 
 function parseMetrics(value: unknown): RuntimeMetrics {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的运行时指标格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '运行时指标' }), null)
   }
   const models: Record<string, number> = {}
   const rawModels = value.models
@@ -2009,7 +2009,7 @@ function parseMetrics(value: unknown): RuntimeMetrics {
 
 function parseTopologyVersionSummary(value: unknown): TopologyVersionSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的版本格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本' }), null)
   }
   return {
     id: readString(value.id, 'version.id'),
@@ -2022,7 +2022,7 @@ function parseTopologyVersionSummary(value: unknown): TopologyVersionSummary {
 
 function parseTopologyCurrentVersion(value: unknown): TopologyCurrentVersion {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的当前版本格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '当前版本' }), null)
   }
   return {
     archived: readBoolean(value.archived, 'version.archived'),
@@ -2035,11 +2035,11 @@ function parseTopologyCurrentVersion(value: unknown): TopologyCurrentVersion {
 
 function parseTopologyVersionList(value: unknown): TopologyVersionList {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的版本列表格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本列表' }), null)
   }
   const versions = value.versions
   if (!Array.isArray(versions)) {
-    throw new DashboardApiError('服务端返回的版本列表格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本列表' }), null)
   }
   return {
     current: value.current === null ? null : parseTopologyCurrentVersion(value.current),
@@ -2057,22 +2057,22 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
     try {
       record = parseJson(value, 'ssh_config')
     } catch {
-      throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 配置' }), null)
     }
   }
   if (!isRecord(record)) {
-    throw new DashboardApiError('服务端返回的 SSH 配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 配置' }), null)
   }
   const authType = readString(record.auth_type, 'ssh_config.auth_type')
   if (authType !== 'password' && authType !== 'key') {
-    throw new DashboardApiError(`无效的 SSH 认证方式: ${authType}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: 'SSH 认证方式', value: authType }), null)
   }
   const jumpAuthTypeValue = record.jump_auth_type
   const jumpAuthType = jumpAuthTypeValue === undefined || jumpAuthTypeValue === null || jumpAuthTypeValue === ''
     ? undefined
     : readString(jumpAuthTypeValue, 'ssh_config.jump_auth_type')
   if (jumpAuthType !== undefined && jumpAuthType !== 'password' && jumpAuthType !== 'key') {
-    throw new DashboardApiError(`无效的跳板机认证方式: ${jumpAuthType}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '跳板机认证方式', value: jumpAuthType }), null)
   }
   return {
     host: readString(record.host, 'ssh_config.host'),
@@ -2107,7 +2107,7 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
 
 function parseAgentTypeRule(value: unknown): AgentTypeRule {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的软件类型规则格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型规则' }), null)
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
@@ -2145,7 +2145,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
 
 function parseAgentTemplateConfig(value: unknown): AgentTemplateConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的默认推荐模版格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '默认推荐模版' }), null)
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
@@ -2244,7 +2244,7 @@ function parseAgentRecommendation(value: unknown): AgentRecommendation {
 
 function parseAgentPathCheckResult(value: unknown): AgentPathCheckResult {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的路径检测结果无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidPathCheck'), null)
   }
   return {
     exists: readBoolean(value.exists, 'path_check.exists'),
@@ -2256,7 +2256,7 @@ function parseAgentPathCheckResult(value: unknown): AgentPathCheckResult {
 
 function parseAgentSshProbeResult(value: unknown): AgentSshProbeResult {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的 SSH 探测结果无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidSshProbe'), null)
   }
   return {
     ok: readBoolean(value.ok, 'ssh_probe.ok'),
@@ -2267,15 +2267,15 @@ function parseAgentSshProbeResult(value: unknown): AgentSshProbeResult {
 
 function parseAgentConfigFile(value: unknown): AgentConfigFile {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的接管配置格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '接管配置' }), null)
   }
   const mode = readString(value.mode, 'agent_config.mode')
   if (mode !== 'local' && mode !== 'ssh') {
-    throw new DashboardApiError(`无效的接管模式: ${mode}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '接管模式', value: mode }), null)
   }
   const targetOs = value.target_os
   if (targetOs !== null && targetOs !== '' && targetOs !== 'windows' && targetOs !== 'mac' && targetOs !== 'other') {
-    throw new DashboardApiError(`无效的目标系统: ${String(targetOs)}`, null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '目标系统', value: String(targetOs) }), null)
   }
   return {
     id: readString(value.id, 'agent_config.id'),
@@ -2292,7 +2292,7 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
 
 function parseAgentModelSummary(value: unknown): AgentModelSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError('服务端返回的模型摘要格式无效', null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型摘要' }), null)
   }
   const providers = Array.isArray(value.providers) ? value.providers : []
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
@@ -2344,7 +2344,7 @@ export const dashboardApi = {
     const body = await requestFull(`/providers?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的供应商列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商列表' }), null)
     }
     return {
       providers: data.map(parseProvider),
@@ -2369,7 +2369,7 @@ export const dashboardApi = {
   async listProviderDisableStatuses(): Promise<readonly ProviderDisableStatus[]> {
     const body = await requestFull('/providers/disable-status')
     if (!Array.isArray(body.data)) {
-      throw new DashboardApiError('服务端返回的故障转移状态列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移状态列表' }), null)
     }
     return body.data.map(parseProviderDisableStatus)
   },
@@ -2399,7 +2399,7 @@ export const dashboardApi = {
   async listDisabledRecords(): Promise<readonly DisabledRecord[]> {
     const data = await request('/disabled-records')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的禁用记录列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '禁用记录列表' }), null)
     }
     return data.map(parseDisabledRecord)
   },
@@ -2433,7 +2433,7 @@ export const dashboardApi = {
     const body = await requestFull(`/tokens?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的令牌列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '令牌列表' }), null)
     }
     return {
       tokens: data.map(parseToken),
@@ -2474,7 +2474,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的日志列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '日志列表' }), null)
     }
     return {
       logs: data.map(parseLog),
@@ -2512,7 +2512,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs/capture?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的抓取日志列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志列表' }), null)
     }
     return {
       files: data.map(parseLogCaptureFile),
@@ -2564,7 +2564,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的抓取日志对列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对列表' }), null)
     }
     return {
       pairs: data.map(parseLogCapturePairSummary),
@@ -2576,7 +2576,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/prefixes')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的抓取文件夹列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取文件夹列表' }), null)
     }
     return data.map((v) => readString(v, 'prefix.name'))
   },
@@ -2585,7 +2585,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/sources')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的来源列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '来源列表' }), null)
     }
     return data.map((v) => readString(v, 'source.name'))
   },
@@ -2594,7 +2594,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/models')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型列表' }), null)
     }
     return data.map((v) => readString(v, 'model.name'))
   },
@@ -2603,7 +2603,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/sources')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的抓取来源列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取来源列表' }), null)
     }
     return data.map((v) => readString(v, 'source.name'))
   },
@@ -2612,7 +2612,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/models')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的抓取模型列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取模型列表' }), null)
     }
     return data.map((v) => readString(v, 'model.name'))
   },
@@ -2646,7 +2646,7 @@ export const dashboardApi = {
   async getActiveRequests(): Promise<readonly ActiveRequest[]> {
     const data = await request('/active-requests')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的活跃请求列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求列表' }), null)
     }
     return data.map(parseActiveRequest)
   },
@@ -2674,7 +2674,7 @@ export const dashboardApi = {
     qp.set('offset', String(params.offset))
     const body = await requestFull(`/rules/${encodeURIComponent(type)}?${qp.toString()}`)
     const data = body.data
-    if (!Array.isArray(data)) throw new DashboardApiError('服务端返回的规则列表格式无效', null)
+    if (!Array.isArray(data)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则列表' }), null)
     return {
       rules: data.map(ruleParserForType(type)) as readonly T[],
       total: readNumber(body.total, 'total', 0),
@@ -2703,14 +2703,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'POST',
       body: JSON.stringify({ body }),
     })
-    if (!isRecord(data)) throw new DashboardApiError('服务端返回格式无效', null)
+    if (!isRecord(data)) throw new DashboardApiError(i18n.t('api:invalidResponse'), null)
     return { original: data.original, modified: data.modified }
   },
 
   async currentUser(): Promise<CurrentUser> {
     const body = await request('/users/me')
     if (!isRecord(body)) {
-      throw new DashboardApiError('服务端返回的用户信息格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '用户信息' }), null)
     }
     return {
       id: readString(body.id, 'user.id'),
@@ -2724,7 +2724,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ username }),
     })
     if (!isRecord(body)) {
-      throw new DashboardApiError('服务端返回的用户信息格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '用户信息' }), null)
     }
     return {
       id: readString(body.id, 'user.id'),
@@ -2749,7 +2749,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     if (!response.ok) {
       const text = await response.text()
       const body = text === '' ? null : parseJson(text, '登录响应')
-      const message = isRecord(body) && typeof body.error === 'string' ? body.error : i18n.t('api:httpError', { status: response.status })
+      const message = isRecord(body) && typeof body.error === 'string' ? body.error : i18n.t('api:loginFailed', { status: response.status })
       throw new DashboardApiError(message, response.status)
     }
   },
@@ -2779,7 +2779,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await request('/exchange-rate/refresh', { method: 'POST' })
     const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
     if (rate <= 0) {
-      throw new DashboardApiError('服务端返回的汇率格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '汇率' }), null)
     }
     return rate
   },
@@ -2790,14 +2790,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
     const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
     if (rate <= 0) {
-      throw new DashboardApiError('服务端返回的汇率格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '汇率' }), null)
     }
     return rate
   },
   async getBaseUrlPaths(): Promise<readonly string[]> {
     const data = await request('/settings/base-url-paths')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的路径列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '路径列表' }), null)
     }
     return data.filter(isRecord).map((v) => readString(v.path, 'base-url-path.path'))
   },
@@ -2815,7 +2815,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ endpoint, ...(key !== undefined ? { key } : {}) }),
     })
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的模型列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型列表' }), null)
     }
     return data.map(parseFetchedModel)
   },
@@ -2893,13 +2893,13 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async validateFlatTopology(): Promise<readonly DuplicateActivation[]> {
     const body = await request('/flat-topology/validate')
-    if (!Array.isArray(body)) throw new DashboardApiError('服务端返回的重复激活冲突格式无效', null)
+    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '重复激活冲突' }), null)
     return body.map(parseDuplicateActivation)
   },
 
   async listConcurrencyWindows(): Promise<readonly ConcurrencyWindowActive[]> {
     const body = await request('/concurrency/windows')
-    if (!Array.isArray(body)) throw new DashboardApiError('服务端返回的并发窗口状态格式无效', null)
+    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '并发窗口状态' }), null)
     return body.map((raw) => {
       const nodeId = isRecord(raw) && typeof raw.node_id === 'string' ? raw.node_id : ''
       const windowCount = isRecord(raw) && typeof raw.window_count === 'number' ? raw.window_count : 0
@@ -2917,7 +2917,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getTopologyVersion(id: string): Promise<{ version: TopologyVersionSummary; document: FlatTopology }> {
     const body = await request(`/topology/versions/${encodeURIComponent(id)}`)
     if (!isRecord(body)) {
-      throw new DashboardApiError('服务端返回的版本详情格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本详情' }), null)
     }
     return {
       version: parseTopologyVersionSummary(body),
@@ -2936,14 +2936,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       })
     } catch (error) {
       if (error instanceof Error) {
-        throw new DashboardApiError(`无法连接后端：${error.message}`, null)
+        throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
       }
-      throw new DashboardApiError('无法连接后端', null)
+      throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
     }
 
     const text = await response.text()
     if (!response.ok) {
-      throw new DashboardApiError(`获取指标失败（HTTP ${response.status}）`, response.status)
+      throw new DashboardApiError(i18n.t('api:metricsFailed', { status: response.status }), response.status)
     }
 
     const body = text === '' ? null : parseJson(text, '指标响应')
@@ -2954,11 +2954,11 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async listAgentTypes(): Promise<readonly string[]> {
     const data = await request('/agent-types')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的软件类型列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型列表' }), null)
     }
     return data.map((name) => {
       if (typeof name !== 'string') {
-        throw new DashboardApiError('服务端返回的软件类型列表格式无效', null)
+        throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型列表' }), null)
       }
       return name
     })
@@ -2967,7 +2967,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull('/agent-type-rules?limit=1000&offset=0')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的软件类型规则列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型规则列表' }), null)
     }
     return {
       rules: data.map(parseAgentTypeRule),
@@ -3000,7 +3000,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async readAgentConfigPath(rawPath: string): Promise<string> {
     const data = await request(`/agent-config-files/read?path=${encodeURIComponent(rawPath)}`)
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError('服务端返回的文件内容格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '文件内容' }), null)
     }
     return data.content
   },
@@ -3018,7 +3018,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的 SSH 测试结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 测试结果' }), null)
     }
     return {
       connect: parseAgentSshProbeResult(data.connect),
@@ -3032,7 +3032,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ ssh_config: sshConfig, path, target_os }),
     })
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError('服务端返回的远程文件内容格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '远程文件内容' }), null)
     }
     return data.content
   },
@@ -3043,7 +3043,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull(`/agent-config-files?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的接管配置列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '接管配置列表' }), null)
     }
     return {
       files: data.map(parseAgentConfigFile),
@@ -3059,7 +3059,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getAgentConfigFileContent(id: string): Promise<string> {
     const data = await request(`/agent-config-files/${encodeURIComponent(id)}/content`)
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError('服务端返回的文件内容格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '文件内容' }), null)
     }
     return data.content
   },
@@ -3091,7 +3091,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3113,7 +3113,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'POST',
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
     }
     const providers = Array.isArray(data.providers) ? data.providers : []
     return {
@@ -3145,7 +3145,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ checked, model_fields: modelFields }),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的套用结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3165,7 +3165,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的同步结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '同步结果' }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3175,7 +3175,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getAgentModelConfigSources(id: string): Promise<AgentModelConfigSources> {
     const data = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`)
     if (!isRecord(data.data)) {
-      throw new DashboardApiError('服务端返回的模型配置参考供应商格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型配置参考供应商' }), null)
     }
     const out: Record<string, Record<string, AgentModelConfigSource>> = {}
     for (const [providerId, rawModels] of Object.entries(data.data as Record<string, unknown>)) {
@@ -3203,7 +3203,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull('/agent-config-files/managed-options')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的供应商选项格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商选项' }), null)
     }
     const systemBaseUrl = typeof body.system_base_url === 'string' ? body.system_base_url : ''
     return {
@@ -3238,7 +3238,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async listManagedProviders(id: string): Promise<readonly ManagedProviderView[]> {
     const data = await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`)
     if (!Array.isArray(data)) {
-      throw new DashboardApiError('服务端返回的托管 provider 列表格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '托管 provider 列表' }), null)
     }
     return data.map((raw) => {
       if (!isRecord(raw)) {
@@ -3319,7 +3319,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       { method: 'POST' },
     )
     if (!isRecord(data)) {
-      throw new DashboardApiError('服务端返回的同步结果格式无效', null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: '同步结果' }), null)
     }
     return {
       synced: readNumber(data.synced, 'synced', 0),

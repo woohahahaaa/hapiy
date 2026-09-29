@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,7 @@ interface LocationState {
 }
 
 export function LoginPage() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const location = useLocation()
   const redirectTo = (location.state as LocationState | null)?.from ?? '/'
@@ -27,7 +29,7 @@ export function LoginPage() {
       await dashboardApi.login(username.trim(), password)
       navigate(redirectTo, { replace: true })
     } catch (err) {
-      setError(err instanceof DashboardApiError ? err.message : '登录失败')
+      setError(err instanceof DashboardApiError ? err.message : t('login.failed'))
     } finally {
       setSubmitting(false)
     }
@@ -44,26 +46,26 @@ export function LoginPage() {
 
         <FieldGroup>
           <Field>
-            <FieldLabel htmlFor="login-username">用户名</FieldLabel>
+            <FieldLabel htmlFor="login-username">{t('login.usernameLabel')}</FieldLabel>
             <Input
               id="login-username"
               value={username}
               autoComplete="username"
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="请输入用户名，默认 admin"
+              placeholder={t('login.usernamePlaceholder')}
               disabled={submitting}
               className="rounded-none"
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="login-password">密码</FieldLabel>
+            <FieldLabel htmlFor="login-password">{t('login.passwordLabel')}</FieldLabel>
             <Input
               id="login-password"
               type="password"
               value={password}
               autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码，默认 admin"
+              placeholder={t('login.passwordPlaceholder')}
               disabled={submitting}
               className="rounded-none"
             />
@@ -84,10 +86,10 @@ export function LoginPage() {
         >
           {submitting ? (
             <>
-              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 登录中…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('login.submitting')}
             </>
           ) : (
-            '登录'
+            t('login.submit')
           )}
         </Button>
       </form>

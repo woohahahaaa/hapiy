@@ -1,0 +1,80 @@
+{
+  "switch": {
+    "dialogTitle": "满足以下供应商和请求头、请求体条件时，生效",
+    "dialogDescription": "配置了供应商/模型筛选或判断条件时，命中其中任一即从「是」输出；全部未命中从「否」输出。未配置任何筛选和条件时，默认从「是」输出。",
+    "ruleNameLabel": "规则名称",
+    "ruleNamePlaceholder": "条件开关",
+    "modeProvider": "对选中供应商生效",
+    "modeModel": "对选中模型生效",
+    "selectProviderPlaceholder": "选择供应商（不选时对全部生效）",
+    "selectModelPlaceholder": "选择模型（不选时对全部生效）",
+    "removeOption": "移除 {{name}}",
+    "noProviders": "暂无供应商",
+    "noModels": "暂无模型",
+    "conditions": "条件",
+    "logicAnd": "AND（都满足）",
+    "logicOr": "OR（任一满足）",
+    "addCondition": "添加条件",
+    "noConditions": "暂无条件，留空表示无条件执行",
+    "invertPrefix": "非 ",
+    "filterProvider": "供应商",
+    "filterModel": "模型",
+    "allProviders": "全部供应商",
+    "allModels": "全部模型",
+    "notSet": "未设置",
+    "yes": "是",
+    "no": "否"
+  },
+  "ruleSelect": {
+    "emptyHint": "暂无可用规则",
+    "loadFailed": "加载失败"
+  },
+  "modelHub": {
+    "title": "模型中心",
+    "copyTitle": "点击复制模型名",
+    "copied": "已复制模型名：{{name}}",
+    "count": "{{count}} 个模型"
+  },
+  "slotEnableControl": {
+    "open": "开启",
+    "close": "关闭",
+    "remaining": "剩余 {{hours}}小时{{minutes}}分{{seconds}}秒",
+    "dialogTitle": "设置开启时长",
+    "hours": "时",
+    "minutes": "分",
+    "seconds": "秒"
+  },
+  "slotErrorBox": {
+    "executionFailed": "规则执行失败"
+  },
+  "slotContainer": {
+    "add": "添加"
+  },
+  "slotItemCard": {
+    "dragToReorder": "拖动排序"
+  },
+  "slotProvider": {
+    "strategySequential": "按顺序",
+    "strategyRandom": "随机",
+    "strategyRoundRobin": "轮询"
+  },
+  "slotLabels": {
+    "requestModify": "请求改写",
+    "responseModify": "响应改写",
+    "concurrency": "并发控制",
+    "autoSwitch": "故障转移",
+    "logOutput": "日志抓取"
+  },
+  "slotDefs": {
+    "provider": "供应商",
+    "requestModify": "请求改写",
+    "responseModify": "响应改写",
+    "concurrency": "并发控制",
+    "autoSwitch": "故障转移",
+    "logOutput": "日志抓取",
+    "placeholderRequestModify": "选择改写规则",
+    "placeholderResponseModify": "选择响应改写规则",
+    "placeholderConcurrency": "选择并发规则",
+    "placeholderAutoSwitch": "选择故障转移规则"
+  }
+}

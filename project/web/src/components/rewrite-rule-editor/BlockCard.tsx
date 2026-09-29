@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { ConditionList } from './ConditionList'
 import { ActionRow } from './ActionRow'
@@ -39,6 +40,7 @@ export function BlockCard({
   isDragging = false,
   isDragOver = false,
 }: BlockCardProps) {
+  const { t } = useTranslation('rewrite')
   const updateAction = (i: number, next: Block['actions'][number]) => {
     onChange({
       ...block,
@@ -88,15 +90,15 @@ export function BlockCard({
                 onDragStart()
               }}
               className="nodrag nopan flex h-6 w-6 cursor-grab items-center justify-center rounded text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground active:cursor-grabbing"
-              aria-label="拖动排序"
-              title="拖动调整顺序"
+              aria-label={t('drag.sortLabel')}
+              title={t('drag.sortTitle')}
             >
               <AppIcon name="drag_handle" size={16} />
             </button>
           )}
-          <span className="text-xs font-medium text-foreground">规则 {ruleNumber(block.id, index)}</span>
+          <span className="text-xs font-medium text-foreground">{t('rule.number', { name: ruleNumber(block.id, index) })}</span>
           <span className="text-xs text-muted-foreground tabular-nums">
-            {block.conditions.length} 条件 · {block.actions.length} 执行
+            {t('rule.conditions', { count: block.conditions.length })} · {t('rule.actions', { count: block.actions.length })}
           </span>
         </div>
         <button
@@ -104,8 +106,8 @@ export function BlockCard({
           onClick={onRemove}
           disabled={!canRemove}
           className="nodrag nopan flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-          aria-label="删除规则"
-          title="删除规则"
+          aria-label={t('rule.deleteLabel')}
+          title={t('rule.deleteTitle')}
         >
           <AppIcon name="delete" size={14} />
         </button>
@@ -115,7 +117,7 @@ export function BlockCard({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-              条件
+              {t('section.conditions')}
             </span>
             <div className="flex items-center gap-1.5">
               <Select
@@ -127,8 +129,8 @@ export function BlockCard({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="AND">AND（都满足）</SelectItem>
-                    <SelectItem value="OR">OR（任一满足）</SelectItem>
+                    <SelectItem value="AND">{t('logic.and')}</SelectItem>
+                    <SelectItem value="OR">{t('logic.or')}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -136,17 +138,17 @@ export function BlockCard({
                 type="button"
                 onClick={() => onChange({ ...block, conditions: [...block.conditions, emptyCondition()] })}
                 className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
-                aria-label="添加条件"
-                title="添加条件"
+                aria-label={t('section.addCondition')}
+                title={t('section.addCondition')}
               >
                 <AppIcon name="add" size={12} />
-                添加条件
+                {t('section.addCondition')}
               </button>
             </div>
           </div>
           {block.conditions.length === 0 ? (
             <div className="rounded border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
-              暂无条件，留空表示无条件执行
+              {t('section.noConditions')}
             </div>
           ) : (
             <ConditionList
@@ -159,22 +161,22 @@ export function BlockCard({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center rounded-md bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
-              执行（按顺序串行）
+              {t('section.actions')}
             </span>
             <button
               type="button"
               onClick={addAction}
               className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-sky-500/10 hover:text-sky-700"
-              aria-label="添加执行"
-              title="添加执行"
+              aria-label={t('section.addAction')}
+              title={t('section.addAction')}
             >
               <AppIcon name="add" size={12} />
-              添加执行
+              {t('section.addAction')}
             </button>
           </div>
           {block.actions.length === 0 ? (
             <div className="rounded border border-dashed border-sky-500/30 bg-sky-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
-              至少需要一条执行
+              {t('section.atLeastOneAction')}
             </div>
           ) : (
             <div className="space-y-1.5">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ export type RateRulesEditorProps = {
 }
 
 export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEditorProps) {
+  const { t } = useTranslation('provider')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
 
@@ -36,11 +38,11 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <p className="text-xs text-muted-foreground">规则从上到下按优先级匹配，命中第一条后停止</p>
+      <p className="text-xs text-muted-foreground">{t('rateRules.hint')}</p>
 
       {rate.length === 0 && (
         <p className="border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
-          暂无倍率规则，点击下方「添加倍率」创建第一条
+          {t('rateRules.empty')}
         </p>
       )}
 
@@ -74,7 +76,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
                 variant="ghost"
                 size="icon"
                 tabIndex={-1}
-                aria-label="拖拽调整顺序"
+                aria-label={t('rateRules.dragAria')}
                 onDragStart={(e) => {
                   const row = e.currentTarget.closest('[data-rule-row]')
                   e.dataTransfer.effectAllowed = 'move'
@@ -94,7 +96,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
                     rate.map((r, i) => (i === index ? { ...r, pattern: e.target.value } : r)),
                   )
                 }
-                placeholder="provider 名称或正则"
+                placeholder={t('rateRules.patternPlaceholder')}
               />
               <Input
                 type="number"
@@ -107,14 +109,14 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
                     ),
                   )
                 }
-                placeholder="倍率"
+                placeholder={t('rateRules.multiplierPlaceholder')}
                 className="w-20"
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label="删除规则"
+                aria-label={t('rateRules.deleteAria')}
                 onClick={() => onChange(rate.filter((_, i) => i !== index))}
                 className="text-muted-foreground"
               >
@@ -124,12 +126,12 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
 
             <div className="flex flex-col gap-0.5 pl-8">
               {patternEmpty ? (
-                <p className="text-xs text-muted-foreground">填写名称或正则后显示命中情况</p>
+                <p className="text-xs text-muted-foreground">{t('rateRules.fillHint')}</p>
               ) : (
                 <>
-                  <p className="text-xs text-green-600">命中 {hit.n} 个现有 provider</p>
+                  <p className="text-xs text-green-600">{t('rateRules.hit', { count: hit.n })}</p>
                   {hit.m > 0 && (
-                    <p className="text-xs text-amber-600">命中 {hit.n} 个，被拦截 {hit.m} 个</p>
+                    <p className="text-xs text-amber-600">{t('rateRules.hitBlocked', { n: hit.n, m: hit.m })}</p>
                   )}
                 </>
               )}
@@ -146,7 +148,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
           onClick={() => onChange([...rate, { pattern: '', multiplier: 1 }])}
         >
           <AppIcon name="add" data-icon="inline-start" />
-          添加倍率
+          {t('rateRules.add')}
         </Button>
       </div>
     </div>

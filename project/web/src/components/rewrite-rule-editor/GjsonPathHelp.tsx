@@ -1,15 +1,17 @@
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 
-const EXAMPLES: ReadonlyArray<{ readonly path: string; readonly desc: string }> = [
-  { path: 'model', desc: '顶层字段' },
-  { path: 'messages.0.content', desc: '数组第 0 项的字段' },
-  { path: 'messages.-1.content', desc: '数组最后一项（负数索引）' },
-  { path: 'body.hello', desc: '嵌套字段' },
-  { path: 'header.X-Request-ID', desc: 'HTTP header（scope=header 时，路径只填名字，如 X-Request-ID）' },
+const EXAMPLES: ReadonlyArray<{ readonly path: string; readonly descKey: string }> = [
+  { path: 'model', descKey: 'gjson.examples.topLevel' },
+  { path: 'messages.0.content', descKey: 'gjson.examples.arrayIndex' },
+  { path: 'messages.-1.content', descKey: 'gjson.examples.arrayLast' },
+  { path: 'body.hello', descKey: 'gjson.examples.nested' },
+  { path: 'header.X-Request-ID', descKey: 'gjson.examples.header' },
 ]
 
 export function GjsonPathHelp() {
+  const { t } = useTranslation('rewrite')
   return (
     <TooltipProvider delayDuration={150}>
       <Tooltip>
@@ -17,10 +19,10 @@ export function GjsonPathHelp() {
           <button
             type="button"
             className="nodrag nopan inline-flex items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            aria-label="gjson 路径实例"
+            aria-label={t('gjson.triggerAria')}
           >
             <AppIcon name="help" size={14} />
-            <span>gjson 路径实例</span>
+            <span>{t('gjson.triggerLabel')}</span>
           </button>
         </TooltipTrigger>
         <TooltipContent
@@ -29,12 +31,12 @@ export function GjsonPathHelp() {
           className="w-72 !px-0 !py-0"
         >
           <div className="space-y-2 px-3 py-2.5">
-            <div className="text-[11px] font-semibold">gjson 路径语法</div>
+            <div className="text-[11px] font-semibold">{t('gjson.syntaxTitle')}</div>
             <ul className="space-y-1">
               {EXAMPLES.map((ex) => (
                 <li key={ex.path} className="flex items-start gap-2 text-[11px]">
                   <code className="shrink-0 rounded bg-white/15 px-1 py-px font-mono">{ex.path}</code>
-                  <span className="text-zinc-300">{ex.desc}</span>
+                  <span className="text-zinc-300">{t(ex.descKey)}</span>
                 </li>
               ))}
             </ul>
