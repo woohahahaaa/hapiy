@@ -1,7 +1,7 @@
 {
   "AGENT_TYPE_EXISTS": "This software type already exists",
   "AGENT_TYPE_JSON_PATHS_UNCONFIGURED": "This software type has no JSON paths configured",
-  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL": "This software type has no JSON paths configured; please fill in provider/model gjson under 接管Agent first",
+  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL": "This software type has no JSON paths configured; please fill in provider/model gjson under Agent Takeover first",
   "AGENT_TYPE_NAME_REQUIRED": "Software type name cannot be empty",
   "AGENT_TYPE_NO_RECOMMENDATIONS": "This rule has no recommendations configured",
   "AGENT_TYPE_RULE_MISSING": "No rule found for this software type: {{name}}",

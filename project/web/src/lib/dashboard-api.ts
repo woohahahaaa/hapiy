@@ -2,6 +2,10 @@ import { parseTopologyDocument } from './topology-document'
 import type { Workflow } from './topology-document'
 import type { SlotEntry } from '@/components/node/slot/items'
 import { i18n } from '@/i18n/i18n'
+// tField resolves a server-shape field label through the api:fields dictionary,
+// so client-side validation errors read correctly in the active language.
+const tField = (key: string): string => i18n.t('api:fields.' + key)
+
 export { parseTopologyDocument } from './topology-document'
 export type { Workflow } from './topology-document'
 export type TopologyDocument = Workflow[]
@@ -694,6 +698,8 @@ export type AgentModelInfoFieldSpec = {
   readonly op?: AgentModelInfoFieldOp
   readonly sep?: string
   readonly values?: readonly string[]
+  /** op="variants" 时：""=旧版对象 map（{level:{options}}）；"array"=opencode-v2 数组（[{id,settings}]）。 */
+  readonly variant_shape?: string
 }
 
 // 每个字段既接受纯路径字符串（等价 raw），也接受上面的对象写法。
@@ -705,7 +711,7 @@ export const AGENT_MODEL_INFO_FIELD_OPS: readonly AgentModelInfoFieldOp[] = ['ra
 export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpecValue {
   if (typeof value === 'string') return value
   if (isRecord(value) && typeof value.path === 'string') {
-    const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path: value.path }
+    const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: AgentModelInfoFieldOp; sep?: string; values?: string[]; variant_shape?: string } = { path: value.path }
     if (value.action === 'skip' || value.action === 'delete') {
       spec.action = value.action
     }
@@ -716,6 +722,7 @@ export function parseAgentModelInfoSpec(value: unknown): AgentModelInfoFieldSpec
     if (Array.isArray(value.values)) {
       spec.values = value.values.filter((x): x is string => typeof x === 'string')
     }
+    if (value.variant_shape === 'array') spec.variant_shape = value.variant_shape
     return spec
   }
   return ''
@@ -1041,7 +1048,7 @@ function toRFC3339Date(date: string | undefined, endOfDay: boolean): string | un
 
 function parseSystemSetting(value: unknown): SystemSetting {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '设置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('settings') }), null)
   }
   return {
     key: readString(value.key, 'setting.key'),
@@ -1051,7 +1058,7 @@ function parseSystemSetting(value: unknown): SystemSetting {
 
 function parseFetchedModel(value: unknown): FetchedModel {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('model') }), null)
   }
   const id = readString(value.id, 'model.id')
   return {
@@ -1154,7 +1161,7 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
 
 function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '亲和规则' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('affinityRules') }), null)
   }
   return {
     name: readString(value.name, 'affinity_rule.name'),
@@ -1167,7 +1174,7 @@ function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
 
 function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '渠道亲和配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('channelAffinity') }), null)
   }
   return {
     enabled: readBoolean(value.enabled, 'affinity.enabled'),
@@ -1189,7 +1196,7 @@ function parseChannelAffinityFallback(value: unknown): ChannelAffinityFallback {
 
 function parseChannelAffinityPayload(value: unknown): ChannelAffinityPayload {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '渠道亲和配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('channelAffinity') }), null)
   }
   return {
     setting: parseChannelAffinity(value.setting),
@@ -1220,7 +1227,7 @@ function parseColumnDisplayConfig(value: unknown): ColumnDisplayConfig | null {
 
 function parseTableConfig(value: unknown): TableConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '表格配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('tableConfig') }), null)
   }
   const rawConfigs = value.configs
   let parsedConfigs: readonly ColumnDisplayConfig[] = []
@@ -1263,7 +1270,7 @@ function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecor
 
 function parseProvider(value: unknown): Provider {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('provider') }), null)
   }
   return {
     id: readString(value.id, 'provider.id'),
@@ -1285,7 +1292,7 @@ function isDisabledRecordDimension(value: unknown): value is DisabledRecordDimen
 
 function parseDisabledRecord(value: unknown): DisabledRecord {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '禁用记录' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('disabledRecord') }), null)
   }
   const dimension = readString(value.dimension, 'disabled_record.dimension')
   if (!isDisabledRecordDimension(dimension)) {
@@ -1327,7 +1334,7 @@ function parseDisabledValues(value: unknown, field: string): Readonly<Record<str
 
 function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移状态' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('failoverStatus') }), null)
   }
   return {
     providerId: readString(value.provider_id, 'disable_status.provider_id'),
@@ -1339,7 +1346,7 @@ function parseProviderDisableStatus(value: unknown): ProviderDisableStatus {
 
 function parseToken(value: unknown): Token {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '令牌' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('token') }), null)
   }
   const quota = value.quota
   return {
@@ -1363,11 +1370,11 @@ function parseStageMs(value: unknown): number {
 
 function parseLog(value: unknown): UsageLog {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '日志' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('log') }), null)
   }
   const status = readString(value.status, 'log.status')
   if (status !== 'success' && status !== 'failed' && status !== '') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '日志状态', value: status }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('logStatus'), value: status }), null)
   }
   return {
     id: readString(value.id, 'log.id'),
@@ -1406,11 +1413,11 @@ function parseLog(value: unknown): UsageLog {
 
 function parseLogCaptureFile(value: unknown): LogCaptureFile {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureLog') }), null)
   }
   const type = readString(value.type, 'capture.type')
   if (type !== 'request' && type !== 'response' && type !== 'system') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '抓取日志类型', value: type }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('captureLogType'), value: type }), null)
   }
   return {
     id: readString(value.id, 'capture.id'),
@@ -1425,7 +1432,7 @@ function parseLogCaptureFile(value: unknown): LogCaptureFile {
 
 function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取阶段' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureStage') }), null)
   }
   const headers = value.headers
   let parsedHeaders: Record<string, string> | null
@@ -1447,7 +1454,7 @@ function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
 
 function parseLogCaptureRequestNode(value: unknown): LogCaptureRequestNode {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取请求节点' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureRequestNode') }), null)
   }
   return {
     before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
@@ -1458,7 +1465,7 @@ function parseLogCaptureRequestNode(value: unknown): LogCaptureRequestNode {
 
 function parseLogCaptureResponseNode(value: unknown): LogCaptureResponseNode {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取响应节点' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureResponseNode') }), null)
   }
   return {
     before: value.before == null ? undefined : parseLogCaptureStageRow(value.before),
@@ -1470,7 +1477,7 @@ function parseLogCaptureResponseNode(value: unknown): LogCaptureResponseNode {
 
 function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureLogPair') }), null)
   }
   const responseCount = readNumber(value.response_count, 'pair.response_count')
   if (responseCount < 0) {
@@ -1498,7 +1505,7 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
 
 function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对详情' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureLogPairDetail') }), null)
   }
   if (!Array.isArray(value.responses)) {
     throw new DashboardApiError(i18n.t('api:invalidArray', { field: 'responses' }), null)
@@ -1519,7 +1526,7 @@ function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
 
 function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取耗时' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureDuration') }), null)
   }
   return {
     connectMs: parseStageMs(value.connect_ms),
@@ -1533,7 +1540,7 @@ function parseLogCaptureTiming(value: unknown): LogCaptureTiming {
 
 function parseLogCaptureMergedBody(value: unknown): LogCaptureMergedBody {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '整合响应体' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('mergedResponseBody') }), null)
   }
   return {
     value: value.value,
@@ -1545,7 +1552,7 @@ function parseLogCaptureMergedBody(value: unknown): LogCaptureMergedBody {
 
 function parseModelStat(value: unknown): ModelStat {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型统计' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelStats') }), null)
   }
   return {
     model: readString(value.model, 'stat.model'),
@@ -1556,7 +1563,7 @@ function parseModelStat(value: unknown): ModelStat {
 
 function parseLogStats(value: unknown): LogStats {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '统计' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('stats') }), null)
   }
   return {
     totalRequests: readNumber(value.total_requests, 'stat.total_requests'),
@@ -1573,7 +1580,7 @@ function parseLogStats(value: unknown): LogStats {
 
 function parseActiveRequest(value: unknown): ActiveRequest {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('activeRequests') }), null)
   }
   return {
     requestId: readString(value.request_id, 'active.request_id'),
@@ -1599,7 +1606,7 @@ function parseActiveRequest(value: unknown): ActiveRequest {
 
 function parseActiveRequestConfig(value: unknown): ActiveRequestConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('activeRequestsConfig') }), null)
   }
   const minutes = readNumber(value.retention_minutes, 'config.retention_minutes')
   if (minutes < 0 || minutes > 1440) {
@@ -1680,7 +1687,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   }
 
   const text = await response.text()
-  const body = text === '' ? null : parseJson(text, '响应体')
+  const body = text === '' ? null : parseJson(text, tField('responseBody'))
   if (!response.ok) {
     const currentRevision = isRecord(body) && typeof body.current_revision === 'number'
       ? body.current_revision
@@ -1751,7 +1758,7 @@ async function parseResponseBody(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text) as unknown
   } catch {
-    const prefix = response.ok ? i18n.t('api:invalidJson', { field: '响应体' }) : i18n.t('api:invalidHttpJson', { status: response.status })
+    const prefix = response.ok ? i18n.t('api:invalidJson', { field: tField('responseBody') }) : i18n.t('api:invalidHttpJson', { status: response.status })
     throw new DashboardApiError(prefix, response.status)
   }
 }
@@ -1863,7 +1870,7 @@ export type RuleListResult<T> = {
 // ── Rule parse / serialize ──
 
 function parseRewriteRule(value: unknown): RewriteRule {
-  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('rule') }), null)
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
@@ -1873,7 +1880,7 @@ function parseRewriteRule(value: unknown): RewriteRule {
 }
 
 function parseFailoverRule(value: unknown): FailoverRule {
-  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('rule') }), null)
   const rawCondition = readString(value.condition, 'rule.condition')
   const condition = rawCondition === 'timeout' || rawCondition === 'error' || rawCondition === 'rate_limit' ? rawCondition : 'timeout'
   const rawDimension = readString(value.dimension, 'rule.dimension')
@@ -1899,7 +1906,7 @@ function parseFailoverRule(value: unknown): FailoverRule {
 }
 
 function parseFailoverAction(value: unknown): FailoverAction {
-  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移动作' }), null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('failoverAction') }), null)
   const dimension = readString(value.dimension, 'rule.actions.dimension')
   if (dimension !== 'base_url' && dimension !== 'key' && dimension !== 'provider') {
     throw new DashboardApiError(i18n.t('api:invalidFailoverActionDimension'), null)
@@ -1912,7 +1919,7 @@ function parseFailoverAction(value: unknown): FailoverAction {
 }
 
 function parseResponseRewriteRule(value: unknown): ResponseRewriteRule {
-  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则' }), null)
+  if (!isRecord(value)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('rule') }), null)
   return {
     id: readString(value.id, 'rule.id'),
     name: readString(value.name, 'rule.name'),
@@ -1984,7 +1991,7 @@ export type RuntimeMetrics = {
 
 function parseMetrics(value: unknown): RuntimeMetrics {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '运行时指标' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('runtimeMetrics') }), null)
   }
   const models: Record<string, number> = {}
   const rawModels = value.models
@@ -2010,7 +2017,7 @@ function parseMetrics(value: unknown): RuntimeMetrics {
 
 function parseTopologyVersionSummary(value: unknown): TopologyVersionSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('version') }), null)
   }
   return {
     id: readString(value.id, 'version.id'),
@@ -2023,7 +2030,7 @@ function parseTopologyVersionSummary(value: unknown): TopologyVersionSummary {
 
 function parseTopologyCurrentVersion(value: unknown): TopologyCurrentVersion {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '当前版本' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('currentVersion') }), null)
   }
   return {
     archived: readBoolean(value.archived, 'version.archived'),
@@ -2036,11 +2043,11 @@ function parseTopologyCurrentVersion(value: unknown): TopologyCurrentVersion {
 
 function parseTopologyVersionList(value: unknown): TopologyVersionList {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本列表' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('versionList') }), null)
   }
   const versions = value.versions
   if (!Array.isArray(versions)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本列表' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('versionList') }), null)
   }
   return {
     current: value.current === null ? null : parseTopologyCurrentVersion(value.current),
@@ -2058,22 +2065,22 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
     try {
       record = parseJson(value, 'ssh_config')
     } catch {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 配置' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('sshConfig') }), null)
     }
   }
   if (!isRecord(record)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('sshConfig') }), null)
   }
   const authType = readString(record.auth_type, 'ssh_config.auth_type')
   if (authType !== 'password' && authType !== 'key') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: 'SSH 认证方式', value: authType }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('sshAuthType'), value: authType }), null)
   }
   const jumpAuthTypeValue = record.jump_auth_type
   const jumpAuthType = jumpAuthTypeValue === undefined || jumpAuthTypeValue === null || jumpAuthTypeValue === ''
     ? undefined
     : readString(jumpAuthTypeValue, 'ssh_config.jump_auth_type')
   if (jumpAuthType !== undefined && jumpAuthType !== 'password' && jumpAuthType !== 'key') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '跳板机认证方式', value: jumpAuthType }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('jumpAuthType'), value: jumpAuthType }), null)
   }
   return {
     host: readString(record.host, 'ssh_config.host'),
@@ -2108,7 +2115,7 @@ function parseAgentSshConfig(value: unknown): AgentSshConfig | null {
 
 function parseAgentTypeRule(value: unknown): AgentTypeRule {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型规则' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('softwareTypeRule') }), null)
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
@@ -2146,7 +2153,7 @@ function parseAgentTypeRule(value: unknown): AgentTypeRule {
 
 function parseAgentTemplateConfig(value: unknown): AgentTemplateConfig {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '默认推荐模版' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('defaultRecommendationTemplate') }), null)
   }
   const osPaths = isRecord(value.os_paths) ? value.os_paths : {}
   const jsonPaths = isRecord(value.json_paths) ? value.json_paths : {}
@@ -2268,15 +2275,15 @@ function parseAgentSshProbeResult(value: unknown): AgentSshProbeResult {
 
 function parseAgentConfigFile(value: unknown): AgentConfigFile {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '接管配置' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('takeoverConfig') }), null)
   }
   const mode = readString(value.mode, 'agent_config.mode')
   if (mode !== 'local' && mode !== 'ssh') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '接管模式', value: mode }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('takeoverMode'), value: mode }), null)
   }
   const targetOs = value.target_os
   if (targetOs !== null && targetOs !== '' && targetOs !== 'windows' && targetOs !== 'mac' && targetOs !== 'other') {
-    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: '目标系统', value: String(targetOs) }), null)
+    throw new DashboardApiError(i18n.t('api:invalidEnum', { what: tField('targetOs'), value: String(targetOs) }), null)
   }
   return {
     id: readString(value.id, 'agent_config.id'),
@@ -2293,7 +2300,7 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
 
 function parseAgentModelSummary(value: unknown): AgentModelSummary {
   if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型摘要' }), null)
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelSummary') }), null)
   }
   const providers = Array.isArray(value.providers) ? value.providers : []
   const recs = Array.isArray(value.recommendations) ? value.recommendations : []
@@ -2345,7 +2352,7 @@ export const dashboardApi = {
     const body = await requestFull(`/providers?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('providerList') }), null)
     }
     return {
       providers: data.map(parseProvider),
@@ -2370,7 +2377,7 @@ export const dashboardApi = {
   async listProviderDisableStatuses(): Promise<readonly ProviderDisableStatus[]> {
     const body = await requestFull('/providers/disable-status')
     if (!Array.isArray(body.data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '故障转移状态列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('failoverStatusList') }), null)
     }
     return body.data.map(parseProviderDisableStatus)
   },
@@ -2400,7 +2407,7 @@ export const dashboardApi = {
   async listDisabledRecords(): Promise<readonly DisabledRecord[]> {
     const data = await request('/disabled-records')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '禁用记录列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('disabledRecordList') }), null)
     }
     return data.map(parseDisabledRecord)
   },
@@ -2434,7 +2441,7 @@ export const dashboardApi = {
     const body = await requestFull(`/tokens?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '令牌列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('tokenList') }), null)
     }
     return {
       tokens: data.map(parseToken),
@@ -2475,7 +2482,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '日志列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('logList') }), null)
     }
     return {
       logs: data.map(parseLog),
@@ -2513,7 +2520,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs/capture?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureLogList') }), null)
     }
     return {
       files: data.map(parseLogCaptureFile),
@@ -2565,7 +2572,7 @@ export const dashboardApi = {
     const body = await requestFull(`/logs/capture/pairs?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取日志对列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureLogPairList') }), null)
     }
     return {
       pairs: data.map(parseLogCapturePairSummary),
@@ -2577,7 +2584,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/prefixes')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取文件夹列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureFolderList') }), null)
     }
     return data.map((v) => readString(v, 'prefix.name'))
   },
@@ -2586,7 +2593,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/sources')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '来源列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('sourceList') }), null)
     }
     return data.map((v) => readString(v, 'source.name'))
   },
@@ -2595,7 +2602,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/models')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelList') }), null)
     }
     return data.map((v) => readString(v, 'model.name'))
   },
@@ -2604,7 +2611,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/sources')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取来源列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureSourceList') }), null)
     }
     return data.map((v) => readString(v, 'source.name'))
   },
@@ -2613,7 +2620,7 @@ export const dashboardApi = {
     const body = await requestFull('/logs/capture/models')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '抓取模型列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('captureModelList') }), null)
     }
     return data.map((v) => readString(v, 'model.name'))
   },
@@ -2647,7 +2654,7 @@ export const dashboardApi = {
   async getActiveRequests(): Promise<readonly ActiveRequest[]> {
     const data = await request('/active-requests')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '活跃请求列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('activeRequestList') }), null)
     }
     return data.map(parseActiveRequest)
   },
@@ -2675,7 +2682,7 @@ export const dashboardApi = {
     qp.set('offset', String(params.offset))
     const body = await requestFull(`/rules/${encodeURIComponent(type)}?${qp.toString()}`)
     const data = body.data
-    if (!Array.isArray(data)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '规则列表' }), null)
+    if (!Array.isArray(data)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('ruleList') }), null)
     return {
       rules: data.map(ruleParserForType(type)) as readonly T[],
       total: readNumber(body.total, 'total', 0),
@@ -2711,7 +2718,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async currentUser(): Promise<CurrentUser> {
     const body = await request('/users/me')
     if (!isRecord(body)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '用户信息' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('userInfo') }), null)
     }
     return {
       id: readString(body.id, 'user.id'),
@@ -2725,7 +2732,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ username }),
     })
     if (!isRecord(body)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '用户信息' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('userInfo') }), null)
     }
     return {
       id: readString(body.id, 'user.id'),
@@ -2749,7 +2756,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
     if (!response.ok) {
       const text = await response.text()
-      const body = text === '' ? null : parseJson(text, '登录响应')
+      const body = text === '' ? null : parseJson(text, tField('loginResponse'))
       const message = isRecord(body) && typeof body.error === 'string' ? body.error : i18n.t('api:loginFailed', { status: response.status })
       throw new DashboardApiError(message, response.status)
     }
@@ -2780,7 +2787,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await request('/exchange-rate/refresh', { method: 'POST' })
     const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
     if (rate <= 0) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '汇率' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('exchangeRate') }), null)
     }
     return rate
   },
@@ -2791,14 +2798,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
     const rate = isRecord(body) ? readNumber(body.rate, 'exchange-rate.rate', 0) : 0
     if (rate <= 0) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '汇率' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('exchangeRate') }), null)
     }
     return rate
   },
   async getBaseUrlPaths(): Promise<readonly string[]> {
     const data = await request('/settings/base-url-paths')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '路径列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('pathList') }), null)
     }
     return data.filter(isRecord).map((v) => readString(v.path, 'base-url-path.path'))
   },
@@ -2816,7 +2823,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ endpoint, ...(key !== undefined ? { key } : {}) }),
     })
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelList') }), null)
     }
     return data.map(parseFetchedModel)
   },
@@ -2894,13 +2901,13 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async validateFlatTopology(): Promise<readonly DuplicateActivation[]> {
     const body = await request('/flat-topology/validate')
-    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '重复激活冲突' }), null)
+    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('duplicateActivationConflict') }), null)
     return body.map(parseDuplicateActivation)
   },
 
   async listConcurrencyWindows(): Promise<readonly ConcurrencyWindowActive[]> {
     const body = await request('/concurrency/windows')
-    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: '并发窗口状态' }), null)
+    if (!Array.isArray(body)) throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('concurrencyWindowState') }), null)
     return body.map((raw) => {
       const nodeId = isRecord(raw) && typeof raw.node_id === 'string' ? raw.node_id : ''
       const windowCount = isRecord(raw) && typeof raw.window_count === 'number' ? raw.window_count : 0
@@ -2918,7 +2925,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getTopologyVersion(id: string): Promise<{ version: TopologyVersionSummary; document: FlatTopology }> {
     const body = await request(`/topology/versions/${encodeURIComponent(id)}`)
     if (!isRecord(body)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '版本详情' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('versionDetail') }), null)
     }
     return {
       version: parseTopologyVersionSummary(body),
@@ -2947,7 +2954,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       throw new DashboardApiError(i18n.t('api:metricsFailed', { status: response.status }), response.status)
     }
 
-    const body = text === '' ? null : parseJson(text, '指标响应')
+    const body = text === '' ? null : parseJson(text, tField('metricsResponse'))
     return parseMetrics(body)
   },
 
@@ -2955,11 +2962,11 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async listAgentTypes(): Promise<readonly string[]> {
     const data = await request('/agent-types')
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('softwareTypeList') }), null)
     }
     return data.map((name) => {
       if (typeof name !== 'string') {
-        throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型列表' }), null)
+        throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('softwareTypeList') }), null)
       }
       return name
     })
@@ -2968,7 +2975,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull('/agent-type-rules?limit=1000&offset=0')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '软件类型规则列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('softwareTypeRuleList') }), null)
     }
     return {
       rules: data.map(parseAgentTypeRule),
@@ -3001,7 +3008,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async readAgentConfigPath(rawPath: string): Promise<string> {
     const data = await request(`/agent-config-files/read?path=${encodeURIComponent(rawPath)}`)
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '文件内容' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
     }
     return data.content
   },
@@ -3019,7 +3026,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: 'SSH 测试结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('sshTestResult') }), null)
     }
     return {
       connect: parseAgentSshProbeResult(data.connect),
@@ -3033,7 +3040,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ ssh_config: sshConfig, path, target_os }),
     })
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '远程文件内容' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('remoteFileContent') }), null)
     }
     return data.content
   },
@@ -3044,7 +3051,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull(`/agent-config-files?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '接管配置列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('takeoverConfigList') }), null)
     }
     return {
       files: data.map(parseAgentConfigFile),
@@ -3060,7 +3067,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getAgentConfigFileContent(id: string): Promise<string> {
     const data = await request(`/agent-config-files/${encodeURIComponent(id)}/content`)
     if (!isRecord(data) || typeof data.content !== 'string') {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '文件内容' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
     }
     return data.content
   },
@@ -3092,7 +3099,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('applyResult') }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3114,7 +3121,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'POST',
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('applyResult') }), null)
     }
     const providers = Array.isArray(data.providers) ? data.providers : []
     return {
@@ -3146,7 +3153,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ checked, model_fields: modelFields }),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '套用结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('applyResult') }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3166,7 +3173,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify(input),
     })
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '同步结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('syncResult') }), null)
     }
     return {
       applied: readNumber(data.applied, 'applied', 0),
@@ -3176,7 +3183,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getAgentModelConfigSources(id: string): Promise<AgentModelConfigSources> {
     const data = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`)
     if (!isRecord(data.data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '模型配置参考供应商' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelConfigReferenceProvider') }), null)
     }
     const out: Record<string, Record<string, AgentModelConfigSource>> = {}
     for (const [providerId, rawModels] of Object.entries(data.data as Record<string, unknown>)) {
@@ -3204,7 +3211,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const body = await requestFull('/agent-config-files/managed-options')
     const data = body.data
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '供应商选项' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('providerOptions') }), null)
     }
     const systemBaseUrl = typeof body.system_base_url === 'string' ? body.system_base_url : ''
     return {
@@ -3239,7 +3246,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async listManagedProviders(id: string): Promise<readonly ManagedProviderView[]> {
     const data = await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`)
     if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '托管 provider 列表' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('managedProviderList') }), null)
     }
     return data.map((raw) => {
       if (!isRecord(raw)) {
@@ -3320,7 +3327,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       { method: 'POST' },
     )
     if (!isRecord(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: '同步结果' }), null)
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('syncResult') }), null)
     }
     return {
       synced: readNumber(data.synced, 'synced', 0),

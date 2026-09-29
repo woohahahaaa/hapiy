@@ -1,6 +1,6 @@
 // ───────────────────────────────────────────────────────────────
-// 默认推荐模板 JSONC —— opencode
-// 本文件是「opencode」这个 Agent 的默认模板，交给别的 Agent 处理时请先读说明：
+// 默认推荐模板 JSONC —— opencode-v1
+// 本文件是「opencode-v1」这个 Agent（旧版 opencode，V1 结构）的默认模板：
 //
 // name            规则名称（对应一个 Agent 软件类型，唯一）
 // os_paths        该软件的配置文件默认路径（windows 支持 %USERPROFILE% 等；mac 支持 ~ / $HOME）
@@ -18,14 +18,14 @@
 // model_info_fields  模型信息字段的写入方式（string 或 {path,op,sep,values,action}）
 // ───────────────────────────────────────────────────────────────
 {
-  "name": "opencode",
+  "name": "opencode-v1",
   "os_paths": {
     "windows": "%USERPROFILE%\\.config\\opencode\\opencode.json",
     "mac": "~/.config/opencode/opencode.json"
   },
   "json_paths": {
-    "provider": "providers",
-    "model": "providers.{provider_id}.models",
+    "provider": "provider",
+    "model": "provider.{provider_id}.models",
     "models_container": "object"
   },
   "recommendations": [

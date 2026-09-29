@@ -153,7 +153,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			cleaned := stripJSON5Comments(req.ConfigJsonc)
 			common, protocols, err := model.ParseRuleConfigJsonc([]byte(cleaned))
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "JSONC 解析失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusBadRequest, "JSONC_PARSE_FAILED", "JSONC 解析失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
 			if err := rule.SetRecommendations(common); err != nil {
@@ -235,7 +235,7 @@ func CreateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 			cleaned := stripJSON5Comments(req.ConfigJsonc)
 			common, protocols, err := model.ParseRuleConfigJsonc([]byte(cleaned))
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "JSONC 解析失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusBadRequest, "JSONC_PARSE_FAILED", "JSONC 解析失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
 			if err := rule.SetRecommendations(common); err != nil {
@@ -390,7 +390,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 
@@ -439,7 +439,7 @@ func GetAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		if err := db.Model(&row).Update("content", content).Error; err != nil {
@@ -466,11 +466,11 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		formatted, err := prettifyJSON(req.Content)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "JSON 格式化失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "JSON_FORMAT_FAILED", "JSON 格式化失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		if err := writeAgentConfigFileContent(&row, formatted, key); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "保存失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "SAVE_FAILED", "保存失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		if err := db.Model(&row).Update("content", formatted).Error; err != nil {
@@ -565,11 +565,11 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			if row.Mode == "ssh" && row.SshConfig != "" {
 				var existing service.SshConfig
 				if err := existing.Unmarshal(row.SshConfig); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "现有 SSH 配置解析失败: " + err.Error()})
+					respondErrorWithParams(c, http.StatusInternalServerError, "SSH_CONFIG_PARSE_FAILED", "现有 SSH 配置解析失败: "+err.Error(), gin.H{"error": err.Error()})
 					return
 				}
 				if err := existing.DecryptSensitive(key); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "现有 SSH 凭据解密失败: " + err.Error()})
+					respondErrorWithParams(c, http.StatusInternalServerError, "SSH_CREDENTIALS_DECRYPT_FAILED", "现有 SSH 凭据解密失败: "+err.Error(), gin.H{"error": err.Error()})
 					return
 				}
 				if sshCfg.Password == "" {
@@ -590,7 +590,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 				return
 			}
 			if err := sshCfg.EncryptSensitive(key); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH 凭据加密失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusInternalServerError, "SSH_CREDENTIALS_ENCRYPT_FAILED", "SSH 凭据加密失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
 		default:
@@ -606,14 +606,14 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 
 		var sshBlob string
 		if req.Mode == "ssh" {
 			if err := sshCfg.EncryptSensitive(key); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH 凭据加密失败: " + err.Error()})
+				respondErrorWithParams(c, http.StatusInternalServerError, "SSH_CREDENTIALS_ENCRYPT_FAILED", "SSH 凭据加密失败: "+err.Error(), gin.H{"error": err.Error()})
 				return
 			}
 			sshBlob, err = sshCfg.Marshal()
@@ -681,7 +681,7 @@ func ReadAgentConfigPath() gin.HandlerFunc {
 		}
 		content, err := service.ReadLocalFile(service.ExpandPath(raw))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": content}})
@@ -720,7 +720,7 @@ func ReadAgentConfigRemotePath() gin.HandlerFunc {
 		}
 		content, err := service.ReadRemoteFile(cfg, path, strings.TrimSpace(req.TargetOS))
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"content": content}})
@@ -911,7 +911,7 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		providers, err := parseAgentModels(content, jpaths.Provider, jpaths.Model)
@@ -1094,7 +1094,7 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		// sjson needs valid JSON, so strip JSON5 comments before mutating.
@@ -1159,7 +1159,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		cleaned := stripJSON5Comments(content)
@@ -1212,7 +1212,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if gjson.Parse(string(buf)).Get(full).Exists() {
 						next, err := sjson.DeleteBytes(buf, full)
 						if err != nil {
-							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err)})
+							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
 							return
 						}
 						buf = next
@@ -1226,7 +1226,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 					}
 					next, err := sjson.SetBytes(buf, full, r.Recommended)
 					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err)})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
 						return
 					}
 					buf = next
@@ -1255,7 +1255,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 							if gjson.Parse(string(buf)).Get(full).Exists() {
 								next, err := sjson.DeleteBytes(buf, full)
 								if err != nil {
-									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
+									respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
 									return
 								}
 								buf = next
@@ -1271,7 +1271,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 							}
 							next, err := sjson.SetBytes(buf, full, r.Recommended)
 							if err != nil {
-								c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
 								return
 							}
 							buf = next
@@ -1376,7 +1376,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		buf := []byte(stripJSON5Comments(content))
@@ -1420,7 +1420,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if gjson.Parse(string(buf)).Get(full).Exists() {
 						next, err := sjson.DeleteBytes(buf, full)
 						if err != nil {
-							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err)})
+							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
 							return
 						}
 						buf = next
@@ -1434,7 +1434,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 					}
 					next, err := sjson.SetBytes(buf, full, r.Recommended)
 					if err != nil {
-						c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err)})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
 						return
 					}
 					buf = next
@@ -1471,7 +1471,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 							if gjson.Parse(string(buf)).Get(full).Exists() {
 								next, err := sjson.DeleteBytes(buf, full)
 								if err != nil {
-									c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err)})
+									respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
 									return
 								}
 								buf = next
@@ -1487,7 +1487,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 							}
 							next, err := sjson.SetBytes(buf, full, r.Recommended)
 							if err != nil {
-								c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err)})
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
 								return
 							}
 							buf = next
@@ -1518,7 +1518,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 						full := base + "." + path
 						next, err := sjson.SetBytes(buf, full, val)
 						if err != nil {
-							c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("model %s 字段 %s 写入失败: %v", mid, path, err)})
+							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", mid, path, err), gin.H{"scope": "model", "id": mid, "field": path, "error": err})
 							return
 						}
 						buf = next
@@ -1619,7 +1619,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		cleaned := stripJSON5Comments(content)
@@ -1635,7 +1635,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			full := base + "." + path
 			next, err := sjson.SetBytes(buf, full, val)
 			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("写入字段 %s 失败: %v", path, err)})
+				respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("写入字段 %s 失败: %v", path, err), gin.H{"scope": "model", "id": req.ModelID, "field": path, "error": err})
 				return
 			}
 			buf = next

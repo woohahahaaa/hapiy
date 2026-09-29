@@ -119,7 +119,7 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		content, err := readAgentConfigFileContent(&row, key)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "读取失败: " + err.Error()})
+			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
 		out := make([]managedProviderView, 0, len(managed))
@@ -883,7 +883,7 @@ func looksLikeURIField(field string) bool {
 func ruleAppendsPathItself(recs []model.AgentRecommendation) bool {
 	for _, r := range recs {
 		switch strings.ToLower(strings.TrimSpace(r.Key)) {
-		case "api", "npm", "wire_api", "wireapi", "sdk", "adapter":
+		case "api", "npm", "package", "wire_api", "wireapi", "sdk", "adapter":
 			return true
 		}
 	}

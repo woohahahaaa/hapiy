@@ -13,5 +13,13 @@
   "BASE_URL_PATH_INVALID": "来源名 {{name}} 无效：不能包含 / 或 __，且长度不超过 32",
   "RETENTION_MINUTES_OUT_OF_RANGE": "retention_minutes 必须在 0-1440 之间",
   "ACTIVE_REQUEST_NOT_FOUND": "请求不存在或已结束",
-  "MODELS_DEV_FETCH_FAILED": "获取 models.dev 数据失败，请稍后重试"
+  "MODELS_DEV_FETCH_FAILED": "获取 models.dev 数据失败，请稍后重试",
+  "JSONC_PARSE_FAILED": "JSONC 解析失败: {{error}}",
+  "JSON_FORMAT_FAILED": "JSON 格式化失败: {{error}}",
+  "READ_FAILED": "读取失败: {{error}}",
+  "SAVE_FAILED": "保存失败: {{error}}",
+  "SSH_CREDENTIALS_DECRYPT_FAILED": "SSH 凭据解密失败: {{error}}",
+  "SSH_CREDENTIALS_ENCRYPT_FAILED": "SSH 凭据加密失败: {{error}}",
+  "FIELD_DELETE_FAILED": "{{scope}} {{id}} 字段 {{field}} 删除失败: {{error}}",
+  "FIELD_WRITE_FAILED": "{{scope}} {{id}} 字段 {{field}} 写入失败: {{error}}"
 }

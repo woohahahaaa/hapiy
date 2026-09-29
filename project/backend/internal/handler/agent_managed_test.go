@@ -641,12 +641,12 @@ func TestManagedRealRuleConverges(t *testing.T) {
 		t.Fatal(err)
 	}
 	var rule model.AgentTypeRule
-	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+	if err := db.Where("name = ?", "opencode-v1").First(&rule).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	file := model.AgentConfigFile{
-		RecordName: "real-open", AgentType: "opencode",
+		RecordName: "real-open", AgentType: "opencode-v1",
 		Mode: "local", TargetOS: "mac", Path: "/tmp/hapiy-real-open.json",
 		Content: `{"$schema":"https://opencode.ai/config.json","theme":"opencode"}`,
 	}
@@ -1291,6 +1291,33 @@ func TestApplyModelInfoReasoningEffort(t *testing.T) {
 	opts, _ := entry["options"].(map[string]any)
 	if opts["reasoningEffort"] != "high" {
 		t.Fatalf("variant high should set reasoningEffort high, got %#v", v["high"])
+	}
+
+	// opencode-v2 数组形状：variant_shape="array" 输出
+	// [{id,settings:{reasoningEffort}}]，每个档位一条。
+	mifArr := mif
+	mifArr.ReasoningEffort.VariantShape = "array"
+	cfg = map[string]any{}
+	applyModelInfoFromModelsDev(row, mifArr, cfg)
+	arr, ok := cfg["variants"].([]map[string]any)
+	if !ok {
+		t.Fatalf("array variant shape should write []map[string]any, got %T", cfg["variants"])
+	}
+	if len(arr) != 5 {
+		t.Fatalf("array variants should have 5 levels, got %d", len(arr))
+	}
+	highFound := false
+	for _, it := range arr {
+		if it["id"] == "high" {
+			highFound = true
+			s, _ := it["settings"].(map[string]any)
+			if s["reasoningEffort"] != "high" {
+				t.Fatalf("array variant high should set settings.reasoningEffort=high, got %#v", it)
+			}
+		}
+	}
+	if !highFound {
+		t.Fatal("array variants missing high")
 	}
 
 	// 允许值收窄（只允许 medium/high）→ 交集只写这两个。

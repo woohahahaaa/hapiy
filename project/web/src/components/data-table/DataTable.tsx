@@ -632,7 +632,7 @@ export function DataTable<T extends Record<string, unknown>>({
             {loading && (
               <tr data-slot="table-row">
                 <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
-                  加载中...
+                  {t('dataTable.loading')}
                 </td>
               </tr>
             )}
@@ -643,7 +643,7 @@ export function DataTable<T extends Record<string, unknown>>({
                     <span className="text-xs text-destructive">{error}</span>
                     {onRetry && (
                       <Button variant="outline" size="sm" onClick={onRetry}>
-                        重试
+                        {t('dataTable.retry')}
                       </Button>
                     )}
                   </div>

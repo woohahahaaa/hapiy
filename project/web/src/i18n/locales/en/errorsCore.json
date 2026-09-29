@@ -13,5 +13,13 @@
   "BASE_URL_PATH_INVALID": "Source name {{name}} is invalid: it must not contain / or __ and must be at most 32 characters",
   "RETENTION_MINUTES_OUT_OF_RANGE": "retention_minutes must be between 0 and 1440",
   "ACTIVE_REQUEST_NOT_FOUND": "The request does not exist or has already finished",
-  "MODELS_DEV_FETCH_FAILED": "Failed to fetch models.dev data, please try again later"
+  "MODELS_DEV_FETCH_FAILED": "Failed to fetch models.dev data, please try again later",
+  "JSONC_PARSE_FAILED": "Failed to parse JSONC: {{error}}",
+  "JSON_FORMAT_FAILED": "Failed to format JSON: {{error}}",
+  "READ_FAILED": "Failed to read: {{error}}",
+  "SAVE_FAILED": "Failed to save: {{error}}",
+  "SSH_CREDENTIALS_DECRYPT_FAILED": "Failed to decrypt SSH credentials: {{error}}",
+  "SSH_CREDENTIALS_ENCRYPT_FAILED": "Failed to encrypt SSH credentials: {{error}}",
+  "FIELD_DELETE_FAILED": "Failed to delete {{field}} of {{scope}} {{id}}: {{error}}",
+  "FIELD_WRITE_FAILED": "Failed to write field {{field}} ({{scope}} {{id}}): {{error}}"
 }

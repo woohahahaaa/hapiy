@@ -54,7 +54,15 @@
   "datePicker": {
     "prevMonth": "Previous month",
     "nextMonth": "Next month",
-    "today": "Today"
+    "prevYear": "Previous year",
+    "nextYear": "Next year",
+    "prevDecade": "Previous decade",
+    "nextDecade": "Next decade",
+    "today": "Today",
+    "now": "Now",
+    "hour": "Hour",
+    "minute": "Minute",
+    "second": "Second"
   },
   "nav": {
     "topology": "Topology",
