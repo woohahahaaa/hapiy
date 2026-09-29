@@ -71,7 +71,7 @@
     "baseUrl": "BaseURL",
     "general": "查询 Model 列表",
     "billing": "币种汇率",
-    "tokenUsage": "查询token用量",
+    "tokenUsage": "查询 Token 用量",
     "debug": "Debug",
     "profile": "个人资料",
     "section": "导航",

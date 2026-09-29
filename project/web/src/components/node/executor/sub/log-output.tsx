@@ -90,7 +90,7 @@ export function NodeExecutorLogOutputItem({
             placeholder={t('logOutput.prefixPlaceholder')}
           />
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-3">
           <CheckField
             label={t('logOutput.recordRequest')}
             checked={entry.recordRequest}

@@ -40,7 +40,7 @@ export function LanguageToggle({ className, size = "icon-sm" }: LanguageTogglePr
           <AppIcon name="translate" size={16} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="bottom" sideOffset={6}>
+      <DropdownMenuContent align="center" side="bottom" sideOffset={6}>
         {SUPPORTED_LANGUAGES.map((lng) => (
           <DropdownMenuItem
             key={lng}

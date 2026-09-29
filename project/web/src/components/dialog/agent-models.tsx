@@ -1769,6 +1769,7 @@ function extractFromLiveContent(
   }
   const providerObj = readPath(parsed, ['models', 'providers', providerId])
     ?? readPath(parsed, ['provider', providerId])
+    ?? readPath(parsed, ['providers', providerId])
   if (!providerObj || typeof providerObj !== 'object') return null
   if (scope === 'model') {
     if (!modelId) return null
@@ -1827,6 +1828,7 @@ function protocolMatchesConditions(
 // returns the segments to the provider map plus the leaf path to write.
 function providerRootOfContent(parsed: Record<string, unknown>): readonly string[] | null {
   if (parsed.provider && typeof parsed.provider === 'object') return ['provider']
+  if (parsed.providers && typeof parsed.providers === 'object') return ['providers']
   if (parsed.models && typeof parsed.models === 'object') {
     const models = parsed.models as Record<string, unknown>
     if (models.providers && typeof models.providers === 'object') return ['models', 'providers']
@@ -2047,9 +2049,11 @@ function wrapRootScope(
   if (!summary || !providerId) return edited
   const root = currentActualContent(summary, rawContent) as Record<string, unknown>
   const providerMapContainer =
-    root.models && typeof root.models === 'object'
-      ? ((root.models as Record<string, unknown>).providers ?? {}) as Record<string, unknown>
-      : (root.provider ?? {}) as Record<string, unknown>
+    root.providers && typeof root.providers === 'object'
+      ? (root.providers as Record<string, unknown>)
+      : root.models && typeof root.models === 'object'
+        ? ((root.models as Record<string, unknown>).providers ?? {}) as Record<string, unknown>
+        : (root.provider ?? {}) as Record<string, unknown>
   const provider = (providerMapContainer[providerId] ?? {}) as Record<string, unknown>
   let parsed: unknown
   try {
@@ -2481,13 +2485,15 @@ function currentActualContent(
   const out: Record<string, unknown> = {}
 
   // Detect the real root shape from the raw file when available: opencode
-  // puts providers under "provider", openclaw under "models.providers".
-  // Building from the wrong shape corrupts openclaw's file on save.
+  // v1 uses "provider", opencode v2 uses "providers", openclaw uses
+  // "models.providers". Building from the wrong shape corrupts the file on save.
   let rootKey: string = 'provider'
   if (rawContent && rawContent.trim() !== '') {
     try {
       const parsed = JSON.parse(rawContent) as Record<string, unknown>
-      if (parsed.models && typeof parsed.models === 'object') {
+      if (parsed.providers && typeof parsed.providers === 'object') {
+        rootKey = 'providers'
+      } else if (parsed.models && typeof parsed.models === 'object') {
         const models = parsed.models as Record<string, unknown>
         if (models.providers && typeof models.providers === 'object') {
           rootKey = 'models'
@@ -2526,6 +2532,10 @@ function currentActualContent(
 
   if (rootKey === 'provider') {
     out.provider = providers
+    return out
+  }
+  if (rootKey === 'providers') {
+    out.providers = providers
     return out
   }
   const modelsObj: Record<string, unknown> = {}

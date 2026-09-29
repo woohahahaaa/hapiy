@@ -71,7 +71,7 @@
     "sourceMarkerLabel": "标记来源",
     "sourceMarkerHintPrefix": "在 BaseURL 后追加 ",
     "sourceMarkerInlineCode": "__来源名",
-    "sourceMarkerHintSuffix": " 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。\n也可以不使用来源标记，直接以「最终 BaseURL」作为接入地址，系统同样会正常转发。\n下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。",
+    "sourceMarkerHintSuffix": " 段即可标记请求来源，系统会按该规则自动识别，无需预先登记。也可以不使用来源标记，直接以「最终 BaseURL」作为接入地址，系统同样会正常转发。下面登记的来源仅用于生成并复制完整地址，方便配置 Agent 时直接粘贴。",
     "sourceNamePlaceholder": "来源名，如 ABC",
     "removePathAria": "删除该路径",
     "addSource": "添加来源",

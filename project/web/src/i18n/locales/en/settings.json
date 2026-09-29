@@ -71,7 +71,7 @@
     "sourceMarkerLabel": "Source tags",
     "sourceMarkerHintPrefix": "Append ",
     "sourceMarkerInlineCode": "__source-name",
-    "sourceMarkerHintSuffix": " to the BaseURL to tag the request source; the system recognizes it automatically with no pre-registration needed.\nYou can also skip source tags and use the \"Final BaseURL\" directly as the access address; the system forwards normally either way.\nThe sources registered below are only used to generate and copy full addresses, so you can paste them directly when configuring an Agent.",
+    "sourceMarkerHintSuffix": " to the BaseURL to tag the request source; the system recognizes it automatically with no pre-registration needed. You can also skip source tags and use the \"Final BaseURL\" directly as the access address; the system forwards normally either way. The sources registered below are only used to generate and copy full addresses, so you can paste them directly when configuring an Agent.",
     "sourceNamePlaceholder": "Source name, e.g. ABC",
     "removePathAria": "Delete this path",
     "addSource": "Add source",
