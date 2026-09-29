@@ -89,22 +89,15 @@
     },
     {
       "scope": "model",
-      "key": "reasoning",
-      "description": "模型是否支持思考模式（思考程度统一值→bool）",
-      "recommended": null,
-      "required": false
-    },
-    {
-      "scope": "model",
-      "key": "tool_call",
+      "key": "capabilities.tools",
       "description": "模型是否支持工具调用",
       "recommended": null,
       "required": false
     },
     {
       "scope": "model",
-      "key": "attachment",
-      "description": "模型是否支持文件/图片附件输入",
+      "key": "capabilities.input",
+      "description": "支持的输入类型（text/image/video/audio/pdf）",
       "recommended": null,
       "required": false
     }
@@ -121,7 +114,7 @@
           "scope": "provider",
           "key": "package",
           "description": "Responses API 使用 OpenAI SDK",
-          "recommended": "@ai-sdk/openai",
+          "recommended": "@opencode/ai/providers/openai",
           "required": false
         }
       ]
@@ -139,7 +132,7 @@
           "scope": "provider",
           "key": "package",
           "description": "Messages API 使用 Anthropic SDK",
-          "recommended": "@ai-sdk/anthropic",
+          "recommended": "@opencode/ai/providers/anthropic",
           "required": false
         },
         {
@@ -164,7 +157,7 @@
           "scope": "provider",
           "key": "package",
           "description": "Chat Completions API 使用 OpenAI 兼容 SDK",
-          "recommended": "@ai-sdk/openai-compatible",
+          "recommended": "@opencode/ai/providers/openai-compatible",
           "required": false
         }
       ]
@@ -173,11 +166,8 @@
   "model_info_fields": {
     "max_context": "limit.context",
     "max_output_token": "limit.output",
-    "input_types": "modalities.input",
-    "thinking_levels": {
-      "path": "reasoning",
-      "op": "bool"
-    },
+    "input_types": "capabilities.input",
+    "thinking_levels": "",
     "reasoning_effort": {
       "path": "variants",
       "op": "variants",

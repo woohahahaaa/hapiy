@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/i18n"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -434,7 +435,7 @@ type SshProbeResult struct {
 // OpenSSH-for-Windows default); anything else assumes a POSIX shell. The
 // caller passes the user's selection from the takeover dialog so the probe
 // matches the remote host.
-func TestSshConnection(cfg SshConfig, path, targetOS string) (connect, read, write SshProbeResult) {
+func TestSshConnection(cfg SshConfig, path, targetOS, lang string) (connect, read, write SshProbeResult) {
 	client, err := dialSSH(cfg)
 	if err != nil {
 		errResult := SshProbeResult{OK: false, Error: err.Error()}
@@ -443,11 +444,11 @@ func TestSshConnection(cfg SshConfig, path, targetOS string) (connect, read, wri
 	defer client.Close()
 	connect = SshProbeResult{OK: true}
 	if strings.TrimSpace(path) == "" {
-		read = SshProbeResult{OK: false, Error: "未提供路径"}
+		read = SshProbeResult{OK: false, Error: i18n.S(lang, "未提供路径", "no path provided")}
 	} else {
-		read = probeSshRead(client, path, targetOS)
+		read = probeSshRead(client, path, targetOS, lang)
 	}
-	write = probeSshWrite(client, targetOS)
+	write = probeSshWrite(client, targetOS, lang)
 	return
 }
 
@@ -481,10 +482,10 @@ func cmdQuote(s string) string {
 // probeSshRead runs the OS-appropriate read probe and treats any non-zero
 // exit as a read failure. stderr is included in the error so the operator
 // sees why (permission denied, missing file, ...).
-func probeSshRead(client *sshClient, path, targetOS string) SshProbeResult {
+func probeSshRead(client *sshClient, path, targetOS, lang string) SshProbeResult {
 	session, err := client.client.NewSession()
 	if err != nil {
-		return SshProbeResult{OK: false, Error: "创建 SSH 会话失败: " + err.Error()}
+		return SshProbeResult{OK: false, Error: i18n.S(lang, "创建 SSH 会话失败: ", "failed to create SSH session: ") + err.Error()}
 	}
 	defer session.Close()
 	var stdout, stderr bytes.Buffer
@@ -493,11 +494,11 @@ func probeSshRead(client *sshClient, path, targetOS string) SshProbeResult {
 	if err := session.Run(probeReadCommand(targetOS, path)); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
-			return SshProbeResult{OK: false, Error: "读取失败: " + err.Error() + " (" + detail + ")"}
+			return SshProbeResult{OK: false, Error: i18n.S(lang, "读取失败: ", "read failed: ") + err.Error() + " (" + detail + ")"}
 		}
-		return SshProbeResult{OK: false, Error: "读取失败: " + err.Error()}
+		return SshProbeResult{OK: false, Error: i18n.S(lang, "读取失败: ", "read failed: ") + err.Error()}
 	}
-	return SshProbeResult{OK: true, Detail: fmt.Sprintf("已读取 %d 字节", stdout.Len())}
+	return SshProbeResult{OK: true, Detail: fmt.Sprintf(i18n.S(lang, "已读取 %d 字节", "read %d bytes"), stdout.Len())}
 }
 
 // probeSshWrite asks the remote shell to create a temp file, consume stdin
@@ -505,10 +506,10 @@ func probeSshRead(client *sshClient, path, targetOS string) SshProbeResult {
 // so a successful run implies the account has write access somewhere on the
 // remote filesystem (typically $TMPDIR or %TEMP%). stderr is surfaced on
 // failure.
-func probeSshWrite(client *sshClient, targetOS string) SshProbeResult {
+func probeSshWrite(client *sshClient, targetOS, lang string) SshProbeResult {
 	session, err := client.client.NewSession()
 	if err != nil {
-		return SshProbeResult{OK: false, Error: "创建 SSH 会话失败: " + err.Error()}
+		return SshProbeResult{OK: false, Error: i18n.S(lang, "创建 SSH 会话失败: ", "failed to create SSH session: ") + err.Error()}
 	}
 	defer session.Close()
 	session.Stdin = strings.NewReader("__hapiy_probe__\n")
@@ -517,9 +518,9 @@ func probeSshWrite(client *sshClient, targetOS string) SshProbeResult {
 	if err := session.Run(probeWriteCommand(targetOS)); err != nil {
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
-			return SshProbeResult{OK: false, Error: "写入失败: " + err.Error() + " (" + detail + ")"}
+			return SshProbeResult{OK: false, Error: i18n.S(lang, "写入失败: ", "write failed: ") + err.Error() + " (" + detail + ")"}
 		}
-		return SshProbeResult{OK: false, Error: "写入失败: " + err.Error()}
+		return SshProbeResult{OK: false, Error: i18n.S(lang, "写入失败: ", "write failed: ") + err.Error()}
 	}
-	return SshProbeResult{OK: true, Detail: "临时文件已创建 → 写入 → 删除"}
+	return SshProbeResult{OK: true, Detail: i18n.S(lang, "临时文件已创建 → 写入 → 删除", "temp file created → written → removed")}
 }
