@@ -478,6 +478,7 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		recordAgentConfigVersion(db, row.ID, formatted)
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true, "content": formatted}})
 	}
 }

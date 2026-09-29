@@ -368,6 +368,7 @@ function AgentConfigFilesTab() {
             if (!open) setEditing(null)
           }}
           record={editing}
+          onRestored={() => void fetch()}
         />
       )}
 

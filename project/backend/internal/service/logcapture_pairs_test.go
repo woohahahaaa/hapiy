@@ -81,7 +81,7 @@ func TestListPairs_request_plus_single_response(t *testing.T) {
 	writeRow(t, w, "r1", "response", "response_before", map[string]any{"b": 1}, 0, nil, now.Add(2*time.Second))
 	writeRow(t, w, "r1", "response", "response_after", map[string]any{"b": 2}, 200, nil, now.Add(3*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestListPairs_request_plus_multi_response(t *testing.T) {
 	writeRow(t, w, "r1", "response", "response_before", map[string]any{"c": 1}, 0, nil, now.Add(4*time.Second))
 	writeRow(t, w, "r1", "response", "response_after", map[string]any{"c": 2}, 201, nil, now.Add(5*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestListPairs_request_only(t *testing.T) {
 
 	writeRow(t, w, "r1", "request", "request_before", map[string]any{"a": 1}, 0, nil, now)
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestListPairs_response_only(t *testing.T) {
 
 	writeRow(t, w, "r1", "response", "response_before", map[string]any{"b": 1}, 0, nil, now)
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestListPairs_header_filter_hits_request_not_response(t *testing.T) {
 	// ridB: response-only, no x-trace header anywhere
 	writeRow(t, w, "ridB", "response", "response_before", map[string]any{"b": 2}, 200, nil, now.Add(2*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{
+	summaries, total, err := w.ListPairs("zh", LogListParams{
 		Limit:        50,
 		HeaderKey:    "x-trace",
 		HeaderValue:  "abc",
@@ -288,7 +288,7 @@ func TestListPairs_type_filter_request_includes_pairs_with_responses(t *testing.
 	// ridB: response only
 	writeRow(t, w, "ridB", "response", "response_before", map[string]any{"b": 2}, 200, nil, now.Add(2*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{
+	summaries, total, err := w.ListPairs("zh", LogListParams{
 		Limit: 50,
 		Types: []string{"request"},
 	})
@@ -316,7 +316,7 @@ func TestListPairs_type_filter_response_excludes_request_only_pair(t *testing.T)
 	// ridB: response only
 	writeRow(t, w, "ridB", "response", "response_before", map[string]any{"b": 1}, 200, nil, now.Add(1*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{
+	summaries, total, err := w.ListPairs("zh", LogListParams{
 		Limit: 50,
 		Types: []string{"response"},
 	})
@@ -348,7 +348,7 @@ func TestListPairs_pagination(t *testing.T) {
 			map[string]any{"i": i}, 0, nil, base.Add(time.Duration(i)*time.Second))
 	}
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 2, Offset: 2})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 2, Offset: 2})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -445,7 +445,7 @@ func TestListPairs_empty_response_placeholders_are_filtered(t *testing.T) {
 	writeRow(t, w, "r1", "response", "response_after", nil, 0, nil, now.Add(2*time.Second))
 	writeRow(t, w, "r1", "response", "response_after", nil, 0, nil, now.Add(3*time.Second))
 
-	summaries, total, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, total, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestReadPair_keeps_error_response_row(t *testing.T) {
 		t.Fatalf("create errRow: %v", err)
 	}
 
-	summaries, _, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, _, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}
@@ -577,7 +577,7 @@ func TestListPairs_system_type_filtered_out(t *testing.T) {
 		t.Fatalf("create sysRow: %v", err)
 	}
 
-	summaries, total, err := w.ListPairs(LogListParams{
+	summaries, total, err := w.ListPairs("zh", LogListParams{
 		Limit: 50,
 		Types: []string{"request", "response"},
 	})
@@ -762,7 +762,7 @@ func TestListPairs_header_only_rewrite_is_modified(t *testing.T) {
 	writeRow(t, w, "r1", "request", "request_before", body, 0, map[string]string{"X-Session-Id": "ses_1"}, now)
 	writeRow(t, w, "r1", "request", "request_after", body, 0, map[string]string{"X-Session-Id": "ses_1", "x-opencode-session": "ses_1"}, now.Add(time.Second))
 
-	summaries, _, err := w.ListPairs(LogListParams{Limit: 50, Offset: 0})
+	summaries, _, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
 	if err != nil {
 		t.Fatalf("ListPairs: %v", err)
 	}

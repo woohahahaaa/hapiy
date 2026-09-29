@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Dialog,
@@ -25,6 +26,8 @@ type DialogCodeEditorProps = {
   readonly loadContent: () => Promise<string>
   readonly onSave?: (content: string) => Promise<void>
   readonly onSaved?: () => void
+  /** Extra top-right header buttons (e.g. the history entry). */
+  readonly headerActions?: ReactNode
 }
 
 function jsonWarning(text: string): string | null {
@@ -107,7 +110,7 @@ function CodeSurface({ value, onChange, readOnly }: {
   )
 }
 
-export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, loadContent, onSave, onSaved }: DialogCodeEditorProps) {
+export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, loadContent, onSave, onSaved, headerActions }: DialogCodeEditorProps) {
   const { t } = useTranslation('agentConfig')
   const [content, setContent] = useState<string | null>(null)
   const [original, setOriginal] = useState<string | null>(null)
@@ -165,21 +168,23 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
   return (
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent width="full" height="full" bare className="flex flex-col !gap-0 overflow-hidden p-0">
-        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border px-6 py-4">
+        <DialogHeader className="flex shrink-0 flex-row items-center gap-3 border-b border-border py-4 pl-6 pr-14">
           <DialogTitle className="text-base">{title}</DialogTitle>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
-          {mode === 'editable' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="absolute top-2 right-11 z-10"
-              title={t('codeEditor.prettifyTitle')}
-              onClick={prettify}
-              disabled={loading || saving}
-            >
-              {t('codeEditor.prettify')}
-            </Button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {mode === 'editable' && (
+              <Button
+                variant="outline"
+                size="sm"
+                title={t('codeEditor.prettifyTitle')}
+                onClick={prettify}
+                disabled={loading || saving}
+              >
+                {t('codeEditor.prettify')}
+              </Button>
+            )}
+            {headerActions}
+          </div>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {error && <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}

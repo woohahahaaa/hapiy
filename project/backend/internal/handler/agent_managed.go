@@ -413,6 +413,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 	if err := db.Model(row).Update("content", formatted).Error; err != nil {
 		return "", 0, err
 	}
+	recordAgentConfigVersion(db, row.ID, formatted)
 	// 记录本次写入的块名，供下次同步清理改名/删分组后的旧块。
 	names := make([]string, 0, len(currentNames))
 	for n := range currentNames {

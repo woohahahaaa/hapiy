@@ -315,6 +315,21 @@
     "noneMergeHint": "Matched an existing group “{{endpoint}}”{{suffixHint}}; saving with this empty will auto-merge",
     "noneMergeSuffixPart": " (suffix {{suffix}})"
   },
+  "versions": {
+    "entry": "History",
+    "title": "Version history",
+    "description": "History of “{{name}}”. Click a version to restore it as the current version.",
+    "empty": "No version history yet",
+    "current": "Current",
+    "currentHint": "This is the current version",
+    "restoredFrom": "Restored from {{time}}",
+    "restore": "Restore",
+    "restoreDialogTitle": "Restore version",
+    "restoreDialogBody": "This writes the selected version back to the config file and records it as the new current version. The current content is saved to history first. Unsaved edits in the editor will be lost. Restore?",
+    "restoreConfirm": "Restore",
+    "restored": "Restored as the current version",
+    "restoreFailed": "Restore failed"
+  },
   "jsonErrors": {
     "providerRootUnrecognized": "Cannot recognize the provider root path in the config file",
     "providerRootInvalid": "Provider root path {{segment}} is invalid",
