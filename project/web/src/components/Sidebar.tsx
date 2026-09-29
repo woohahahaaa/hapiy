@@ -4,6 +4,7 @@ import * as HoverCard from '@radix-ui/react-hover-card'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 import { ModeToggle } from '@/components/ModeToggle'
+import { LanguageToggle } from '@/components/LanguageToggle'
 import { AppIcon } from '@/components/AppIcon'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/OtherSettings'
 import { dashboardApi } from '@/lib/dashboard-api'
@@ -96,7 +97,6 @@ const navigation: NavItem[] = [
       { id: 'general', label: '查询Model', href: '/settings/general' },
       { id: 'billing', label: '币种汇率', href: '/settings/billing' },
       { id: 'token-usage', label: '查询token用量', href: '/settings/token-usage' },
-      { id: 'other', label: '开启接管Agent', href: '/settings/other' },
       { id: 'debug', label: 'Debug', href: '/settings/debug' },
     ],
   },
@@ -416,7 +416,8 @@ export function AppSidebar() {
                 : 'flex flex-col items-center gap-1'
             }
           >
-            <ModeToggle size="icon" />
+            {showLabel && <LanguageToggle size="icon" />}
+            {showLabel && <ModeToggle size="icon" />}
             <SidebarTrigger size="icon" />
           </div>
         </div>

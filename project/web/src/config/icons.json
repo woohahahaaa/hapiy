@@ -66,6 +66,7 @@
   "paragraph_break": "ParagraphBreak",
   "wrap_truncation": "TextWrapTruncation",
   "palette": "BackgroundColor",
-  "fullscreen": "FullScreen"
+  "fullscreen": "FullScreen",
+  "translate": "Translate"
  }
 }
