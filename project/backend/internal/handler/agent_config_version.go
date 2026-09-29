@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,40 +17,52 @@ import (
 // oldest entries are trimmed once the cap is exceeded.
 const maxAgentConfigVersions = 50
 
-// agentConfigVersionRef points at the version a snapshot was restored from.
-type agentConfigVersionRef struct {
+// agentConfigVersionDTO is one archived history entry.
+type agentConfigVersionDTO struct {
 	ID        string    `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
+	Lines     int       `json:"lines"`
+	Size      int       `json:"size"`
 }
 
-// agentConfigVersionDTO is one history entry. The newest entry is marked
-// current; RestoredFrom is set when a restore produced this entry.
-type agentConfigVersionDTO struct {
-	ID           string                 `json:"id"`
-	CreatedAt    time.Time              `json:"created_at"`
-	Current      bool                   `json:"current"`
-	RestoredFrom *agentConfigVersionRef `json:"restored_from"`
+// agentConfigCurrentVersionDTO describes the live (current) file content and
+// whether it has already been captured as a snapshot. UpdatedAt is set only
+// when archived and points at that snapshot's time.
+type agentConfigCurrentVersionDTO struct {
+	Archived  bool       `json:"archived"`
+	Lines     int        `json:"lines"`
+	Size      int        `json:"size"`
+	UpdatedAt *time.Time `json:"updated_at"`
 }
 
-// archiveAgentConfigVersion stores content as a new snapshot of a config file.
-// Ordinary saves whose content equals the newest snapshot are a no-op (force
-// false) so repeated saves don't crowd out the history; restores pass force
-// true so the operation always shows up on the timeline.
-func archiveAgentConfigVersion(db *gorm.DB, configID, content, sourceVersionID string, force bool) (*model.AgentConfigVersion, error) {
-	if !force {
-		var latest model.AgentConfigVersion
-		err := db.Where("config_id = ?", configID).Order("created_at DESC, id DESC").First(&latest).Error
-		if err == nil && latest.Content == content {
-			return nil, nil
-		}
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("load latest agent config version: %w", err)
-		}
+func countAgentConfigLines(content string) int {
+	if content == "" {
+		return 0
 	}
-	version := model.AgentConfigVersion{ConfigID: configID, Content: content, SourceVersionID: sourceVersionID}
+	lines := strings.Count(content, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		lines++
+	}
+	return lines
+}
+
+// archiveAgentConfigVersion appends content as a new snapshot unless it is
+// already the newest snapshot, then trims the history to the cap.
+func archiveAgentConfigVersion(db *gorm.DB, configID, content string) (*model.AgentConfigVersion, error) {
+	var latest model.AgentConfigVersion
+	err := db.Where("config_id = ?", configID).Order("created_at DESC, id DESC").First(&latest).Error
+	if err == nil && latest.Content == content {
+		return nil, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("load latest agent config version: %w", err)
+	}
+
+	version := model.AgentConfigVersion{ConfigID: configID, Content: content}
 	if err := db.Create(&version).Error; err != nil {
 		return nil, fmt.Errorf("create agent config version: %w", err)
 	}
+
 	// Trim history to the newest maxAgentConfigVersions for this config.
 	var keep []string
 	if err := db.Model(&model.AgentConfigVersion{}).Where("config_id = ?", configID).
@@ -64,41 +77,68 @@ func archiveAgentConfigVersion(db *gorm.DB, configID, content, sourceVersionID s
 	return &version, nil
 }
 
+// archiveCurrentAgentConfig snapshots the live file as a version. It is a
+// no-op when the live content already matches the newest snapshot.
+func archiveCurrentAgentConfig(db *gorm.DB, row *model.AgentConfigFile, key []byte) (*model.AgentConfigVersion, error) {
+	content, err := readAgentConfigFileContent(row, key)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	return archiveAgentConfigVersion(db, row.ID, content)
+}
+
 // recordAgentConfigVersion is the best-effort hook called after a live-file
-// write. A history failure must never fail the write that already succeeded,
-// so the error is only logged.
+// write to snapshot the freshly written content. A history failure must never
+// fail the write that already succeeded, so the error is only logged.
 func recordAgentConfigVersion(db *gorm.DB, configID, content string) {
-	if _, err := archiveAgentConfigVersion(db, configID, content, "", false); err != nil {
+	if _, err := archiveAgentConfigVersion(db, configID, content); err != nil {
 		log.Printf("agent config history: %v", err)
 	}
 }
 
-// agentConfigVersionList returns a config's history, newest first, with each
-// restore's source resolved to its timestamp.
-func agentConfigVersionList(db *gorm.DB, configID string) ([]agentConfigVersionDTO, error) {
+// agentConfigVersionList returns the view the dialog renders: the current live
+// file (derived, not stored) plus the archived history (newest first). When the
+// current content has been archived, that newest duplicate is skipped because
+// the UI shows it as the current row.
+func agentConfigVersionList(db *gorm.DB, row *model.AgentConfigFile, key []byte) (gin.H, error) {
 	var versions []model.AgentConfigVersion
-	if err := db.Where("config_id = ?", configID).Order("created_at DESC, id DESC").Find(&versions).Error; err != nil {
+	if err := db.Where("config_id = ?", row.ID).Order("created_at DESC, id DESC").Find(&versions).Error; err != nil {
 		return nil, fmt.Errorf("list agent config versions: %w", err)
 	}
-	createdByID := make(map[string]time.Time, len(versions))
-	for _, v := range versions {
-		createdByID[v.ID] = v.CreatedAt
-	}
-	out := make([]agentConfigVersionDTO, 0, len(versions))
-	for i, v := range versions {
-		dto := agentConfigVersionDTO{ID: v.ID, CreatedAt: v.CreatedAt, Current: i == 0}
-		if v.SourceVersionID != "" {
-			dto.RestoredFrom = &agentConfigVersionRef{ID: v.SourceVersionID, CreatedAt: createdByID[v.SourceVersionID]}
+
+	content, readErr := readAgentConfigFileContent(row, key)
+	archived := readErr == nil && len(versions) > 0 && versions[0].Content == content
+
+	var current *agentConfigCurrentVersionDTO
+	if readErr == nil {
+		current = &agentConfigCurrentVersionDTO{
+			Archived: archived,
+			Lines:    countAgentConfigLines(content),
+			Size:     len(content),
 		}
-		out = append(out, dto)
+		if archived {
+			current.UpdatedAt = &versions[0].CreatedAt
+		}
 	}
-	return out, nil
+
+	summary := make([]agentConfigVersionDTO, 0, len(versions))
+	for i, v := range versions {
+		if archived && i == 0 {
+			continue
+		}
+		summary = append(summary, agentConfigVersionDTO{
+			ID:        v.ID,
+			CreatedAt: v.CreatedAt,
+			Lines:     countAgentConfigLines(v.Content),
+			Size:      len(v.Content),
+		})
+	}
+
+	return gin.H{"current": current, "versions": summary}, nil
 }
 
-// ListAgentConfigVersions returns the snapshot history for one config file. On
-// the first call for a config that has no history yet, the live file is
-// captured as the baseline entry so configs taken over before this feature
-// existed get a starting point.
+// ListAgentConfigVersions returns the current state plus the snapshot history
+// for one config file.
 func ListAgentConfigVersions(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
@@ -106,33 +146,40 @@ func ListAgentConfigVersions(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 			return
 		}
-		var count int64
-		if err := db.Model(&model.AgentConfigVersion{}).Where("config_id = ?", row.ID).Count(&count).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if count == 0 {
-			// Best effort: if the live file cannot be read the history simply
-			// starts empty instead of failing the request.
-			if content, err := readAgentConfigFileContent(&row, key); err == nil {
-				if _, err := archiveAgentConfigVersion(db, row.ID, content, "", false); err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-					return
-				}
-			}
-		}
-		versions, err := agentConfigVersionList(db, row.ID)
+		payload, err := agentConfigVersionList(db, &row, key)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"versions": versions}})
+		c.JSON(http.StatusOK, gin.H{"data": payload})
 	}
 }
 
-// RestoreAgentConfigVersion writes an archived snapshot back to the live file
-// and records it as a new version annotated with the restored-from id, so the
-// timeline keeps every state and the restore itself is auditable.
+// ArchiveAgentConfigVersion snapshots the live file on demand (used by the
+// "存档" button when the current state has not been captured yet).
+func ArchiveAgentConfigVersion(db *gorm.DB, key []byte) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var row model.AgentConfigFile
+		if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
+			respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
+			return
+		}
+		if _, err := archiveCurrentAgentConfig(db, &row, key); err != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "ARCHIVE_FAILED", "存档失败: "+err.Error(), gin.H{"error": err.Error()})
+			return
+		}
+		payload, err := agentConfigVersionList(db, &row, key)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": payload})
+	}
+}
+
+// RestoreAgentConfigVersion archives the current file first, then writes the
+// selected snapshot back to the live file. The restored content becomes the
+// live "current" state (no new snapshot is recorded for it).
 func RestoreAgentConfigVersion(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var row model.AgentConfigFile
@@ -149,6 +196,12 @@ func RestoreAgentConfigVersion(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+
+		// 恢复前先存档当前版本（若尚未存档），避免当前状态丢失.
+		if _, err := archiveCurrentAgentConfig(db, &row, key); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		if err := writeAgentConfigFileContent(&row, version.Content, key); err != nil {
 			respondErrorWithParams(c, http.StatusBadRequest, "SAVE_FAILED", "恢复失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
@@ -157,15 +210,12 @@ func RestoreAgentConfigVersion(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if _, err := archiveAgentConfigVersion(db, row.ID, version.Content, version.ID, true); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		versions, err := agentConfigVersionList(db, row.ID)
+
+		payload, err := agentConfigVersionList(db, &row, key)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"versions": versions}})
+		c.JSON(http.StatusOK, gin.H{"data": payload})
 	}
 }
