@@ -64,8 +64,10 @@ export function RuleSelect({
         if (open) onOpenRefresh?.()
       }}
     >
-      <SelectTrigger size="sm" className="w-full">
-        <SelectValue placeholder={placeholder}>{displayValue}</SelectValue>
+      <SelectTrigger size="sm" className="w-0 min-w-full">
+        <SelectValue placeholder={placeholder} className="min-w-0">
+          <span className="block min-w-0 truncate">{displayValue}</span>
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {loading ? (

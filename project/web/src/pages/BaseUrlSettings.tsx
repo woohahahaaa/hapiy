@@ -167,11 +167,7 @@ export function BaseUrlSettings() {
               <div className="grid gap-1.5 text-sm">
                 <span>{t('baseUrl.finalUrlLabel')}</span>
                 <div className="flex items-center gap-2">
-                  <code
-                    className="w-96 cursor-pointer truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs"
-                    onClick={() => copyUrl(baseUrl)}
-                    title={t('common:action.copy')}
-                  >
+                  <code className="w-96 cursor-not-allowed truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                     {baseUrl}
                   </code>
                   <Button
@@ -186,14 +182,15 @@ export function BaseUrlSettings() {
                 </div>
               </div>
             </div>
-            <p className="max-w-2xl text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('baseUrl.originHint')}
             </p>
-            <div className="grid max-w-2xl gap-1.5 text-sm">
+            <div className="grid gap-1.5 text-sm">
               <span>{t('baseUrl.sourceMarkerLabel')}</span>
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
               </p>
+              <div className="grid max-w-2xl gap-1.5">
               <div className="flex flex-col gap-2">
                 {paths.map((p, index) => {
                   const name = p.trim()
@@ -206,13 +203,7 @@ export function BaseUrlSettings() {
                         placeholder={t('baseUrl.sourceNamePlaceholder')}
                         className="w-36 shrink-0"
                       />
-                      <code
-                        className="flex-1 cursor-pointer truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs"
-                        onClick={() => {
-                          if (name) void copyUrl(fullUrlFor(name))
-                        }}
-                        title={name ? fullUrlFor(name) : undefined}
-                      >
+                      <code className="flex-1 cursor-not-allowed truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
                         {name ? fullUrlFor(name) : `${baseUrl}/__…`}
                       </code>
                       <Button
@@ -248,6 +239,7 @@ export function BaseUrlSettings() {
                 >
                   <AppIcon name="add" size={14} /> {t('baseUrl.addSource')}
                 </Button>
+              </div>
               </div>
             </div>
             <p className="max-w-2xl text-xs text-muted-foreground">
