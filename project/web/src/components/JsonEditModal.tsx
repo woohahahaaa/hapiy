@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { AppIcon } from '@/components/AppIcon'
+import { i18n } from '@/i18n/i18n'
 
 export type JsonEditorIdMap = ReadonlyMap<number, string>
 
@@ -18,16 +20,16 @@ interface JsonEditModalProps<T extends { readonly id: string }> {
 
 export function parseJsonEditorArray<T>(data: unknown): readonly (Omit<T, 'id'> & JsonEditorItem)[] {
   if (!Array.isArray(data)) {
-    throw new Error('JSON 顶层必须是数组')
+    throw new Error(i18n.t('topology:jsonEdit.topLevelArray'))
   }
 
   const ids = new Set<number>()
   for (const item of data) {
     if (typeof item !== 'object' || item === null || !('id' in item) || typeof item.id !== 'number' || !Number.isSafeInteger(item.id) || item.id < 1) {
-      throw new Error('每条记录的 ID 必须是大于 0 的整数')
+      throw new Error(i18n.t('topology:jsonEdit.invalidId'))
     }
     if (ids.has(item.id)) {
-      throw new Error(`ID ${item.id} 重复`)
+      throw new Error(i18n.t('topology:jsonEdit.duplicateId', { id: item.id }))
     }
     ids.add(item.id)
   }
@@ -36,6 +38,7 @@ export function parseJsonEditorArray<T>(data: unknown): readonly (Omit<T, 'id'> 
 }
 
 export function JsonEditModal<T extends { readonly id: string }>({ data, onSave, onClose }: JsonEditModalProps<T>) {
+  const { t } = useTranslation('topology')
   const { editorData, idMap } = useMemo(() => {
     const ids = new Map<number, string>()
     const items = data.map((item, index) => {
@@ -68,7 +71,7 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
       setText(JSON.stringify(JSON.parse(text), null, 2))
       setError(null)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '格式化失败：JSON 无效')
+      setError(e instanceof Error ? e.message : t('jsonEdit.formatFailed'))
     }
   }
 
@@ -77,15 +80,15 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
       <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
         <DialogContent width="md" height="auto" scrollFooter className="flex flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>编辑 JSON</DialogTitle>
+            <DialogTitle>{t('jsonEdit.title')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button variant="outline" onClick={handleFormat} disabled={saving}>
                 <AppIcon name="auto_fix_high" data-icon="inline-start" />
-                格式化
+                {t('jsonEdit.format')}
               </Button>
-              <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? '保存中...' : '保存'}</Button>
+              <Button onClick={() => setShowConfirm(true)} disabled={saving}>{saving ? t('jsonEdit.saving') : t('common:action.save')}</Button>
             </>
           }>
             {error && (
@@ -105,15 +108,15 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
       <Dialog open={showConfirm} onOpenChange={(open) => { if (!open) setShowConfirm(false) }}>
         <DialogContent scrollFooter>
           <DialogHeader>
-            <DialogTitle>保存 JSON</DialogTitle>
+            <DialogTitle>{t('jsonEdit.saveConfirmTitle')}</DialogTitle>
             <DialogDescription>
-              你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。
+              {t('jsonEdit.saveConfirmDescription')}
             </DialogDescription>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={saving}>我再想想</Button>
-              <Button onClick={() => { setShowConfirm(false); void handleSave() }} disabled={saving}>确认保存</Button>
+              <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={saving}>{t('jsonEdit.reconsider')}</Button>
+              <Button onClick={() => { setShowConfirm(false); void handleSave() }} disabled={saving}>{t('jsonEdit.confirmSave')}</Button>
             </>
           } />
         </DialogContent>

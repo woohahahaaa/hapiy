@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { AppIcon } from '@/components/AppIcon'
 import {
@@ -21,6 +22,7 @@ type FlowColorsPanelProps = {
  * used. Changes persist through the caller (backend setting).
  */
 export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
+  const { t } = useTranslation('topology')
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -46,21 +48,21 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
         variant="outline"
         size="icon"
         onClick={() => setOpen(true)}
-        title="模型节点色值"
-        aria-label="模型节点色值"
+        title={t('colors.title')}
+        aria-label={t('colors.title')}
       >
         <AppIcon name="palette" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>模型节点色值</DialogTitle>
+            <DialogTitle>{t('colors.title')}</DialogTitle>
             <DialogDescription>
-              为模型节点分配流光颜色，按顺序循环使用；未配置时使用主题色
+              {t('colors.description')}
             </DialogDescription>
           </DialogHeader>
           {colors.length === 0 && (
-            <div className="mb-1 text-xs">未配置，使用主题色</div>
+            <div className="mb-1 text-xs">{t('colors.empty')}</div>
           )}
           <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
             {colors.map((c, i) => (
@@ -71,7 +73,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
                   type="button"
                   className="hover:text-destructive"
                   onClick={() => remove(i)}
-                  aria-label="删除色值"
+                  aria-label={t('colors.removeAria')}
                 >
                   <AppIcon name="close" className="size-3.5" />
                 </button>
@@ -85,11 +87,11 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') add()
               }}
-              placeholder="HEX 色值，空格分隔多个，如 #4ade80 #38bdf8"
+              placeholder={t('colors.placeholder')}
               className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
             />
             <Button variant="outline" size="sm" onClick={add}>
-              添加
+              {t('colors.add')}
             </Button>
           </div>
         </DialogContent>

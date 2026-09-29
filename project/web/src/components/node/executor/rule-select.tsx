@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import {
   Select,
@@ -38,20 +39,22 @@ export function RuleSelect({
   options,
   placeholder,
   onChange,
-  emptyHint = '暂无可用规则',
+  emptyHint,
   loading = false,
   error = null,
   onOpenRefresh,
 }: RuleSelectProps) {
+  const { t } = useTranslation('node')
   const isEmpty = options.length === 0
   const selected = options.find((o) => o.id === value)
   const triggerValue = value ?? NONE_VALUE
+  const resolvedEmptyHint = emptyHint ?? t('ruleSelect.emptyHint')
   // 触发区展示：命中规则 → 规则名；未绑定/孤儿引用/加载失败 → 占位文案。
   const displayValue =
     selected != null
       ? selected.label
       : value == null && isEmpty && !loading && error == null
-        ? emptyHint
+        ? resolvedEmptyHint
         : placeholder
   return (
     <Select
@@ -68,11 +71,11 @@ export function RuleSelect({
         {loading ? (
           <div className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs text-muted-foreground">
             <AppIcon name="progress_activity" size={12} className="animate-spin" />
-            加载中…
+            {t('common:state.loading')}
           </div>
         ) : error ? (
           <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-xs">
-            <span className="text-destructive">加载失败</span>
+            <span className="text-destructive">{t('ruleSelect.loadFailed')}</span>
             <button
               type="button"
               onPointerDown={(e) => e.stopPropagation()}
@@ -82,12 +85,12 @@ export function RuleSelect({
               }}
               className="rounded-sm border border-border/60 px-1.5 py-0.5 transition-colors hover:bg-muted/60"
             >
-              重试
+              {t('common:action.retry')}
             </button>
           </div>
         ) : (
           <>
-            <SelectItem value={NONE_VALUE}>{isEmpty ? emptyHint : placeholder}</SelectItem>
+            <SelectItem value={NONE_VALUE}>{isEmpty ? resolvedEmptyHint : placeholder}</SelectItem>
             {options.map((opt) => (
               <SelectItem key={opt.id} value={opt.id} disabled={opt.disabled}>
                 {opt.label}

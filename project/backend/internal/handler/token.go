@@ -58,7 +58,7 @@ func CreateToken(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusConflict, gin.H{"error": "令牌名称已存在"})
+			respondError(c, http.StatusConflict, "TOKEN_NAME_EXISTS", "令牌名称已存在")
 			return
 		}
 
@@ -96,7 +96,7 @@ func UpdateToken(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		if count > 0 {
-			c.JSON(http.StatusConflict, gin.H{"error": "令牌名称已存在"})
+			respondError(c, http.StatusConflict, "TOKEN_NAME_EXISTS", "令牌名称已存在")
 			return
 		}
 

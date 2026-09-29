@@ -1,3 +1,4 @@
+import { i18n } from '@/i18n/i18n'
 import type {
   RewriteRule,
   ResponseRewriteRule,
@@ -89,11 +90,11 @@ export const SLOT_ORDER: readonly SlotType[] = [
 ] as const
 
 export const SLOT_LABELS: Record<SlotType, string> = {
-  requestModify: '请求改写',
-  responseModify: '响应改写',
-  concurrency: '并发控制',
-  autoSwitch: '故障转移',
-  logOutput: '日志抓取',
+  requestModify: i18n.t('node:slotLabels.requestModify'),
+  responseModify: i18n.t('node:slotLabels.responseModify'),
+  concurrency: i18n.t('node:slotLabels.concurrency'),
+  autoSwitch: i18n.t('node:slotLabels.autoSwitch'),
+  logOutput: i18n.t('node:slotLabels.logOutput'),
 }
 
 import type { FlowLayerOverlay } from '@/modules/flow-hub'

@@ -1,0 +1,36 @@
+{
+  "dataTable": {
+    "empty": "No data",
+    "widthRequired": "Width is required",
+    "widthFormatInvalid": "Must end with % or pt/px (e.g. \"200 px\" or \"30 %\")"
+  },
+  "columns": {
+    "settings": "Column settings",
+    "widthPlaceholder": "e.g. 200 px or 30 %",
+    "alignLeft": "Align left",
+    "alignRight": "Align right",
+    "ellipsis": "Truncate",
+    "wrap": "Wrap",
+    "lock": "Lock",
+    "unlock": "Unlock"
+  },
+  "magicWand": {
+    "autoWidth": "Auto width",
+    "exitAutoWidth": "Exit auto width",
+    "pickHint": "Click a row as the width reference",
+    "referencePicked": "Width reference selected",
+    "chooseUnit": "Choose a width unit",
+    "percent": "Percent",
+    "pixel": "Pixels"
+  },
+  "pagination": {
+    "perPage": "Per page",
+    "rows": "rows",
+    "pageOf": "Page {{page}} of {{total}}",
+    "prev": "Previous",
+    "next": "Next"
+  },
+  "tag": {
+    "remove": "Remove"
+  }
+}

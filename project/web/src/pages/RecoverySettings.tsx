@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,7 @@ import {
 } from '@/components/dialog'
 import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import {
   dashboardApi,
@@ -35,9 +37,9 @@ const RECOVERY_HANDLER_KEY = 'recovery_request_handler'
 const DISABLED_RECORDS_PAGE_SIZE = 50
 
 type RecoveryMode = 'probe' | 'timed'
-const RECOVERY_MODES: readonly { value: RecoveryMode; label: string }[] = [
-  { value: 'probe', label: '测试上游恢复' },
-  { value: 'timed', label: '定时恢复' },
+const RECOVERY_MODES: readonly { value: RecoveryMode; labelKey: string }[] = [
+  { value: 'probe', labelKey: 'recovery.modeProbe' },
+  { value: 'timed', labelKey: 'recovery.modeTimed' },
 ]
 const DEFAULT_TIMED_MINUTES = 60
 
@@ -110,9 +112,9 @@ function parseHandler(json: string | undefined): RecoveryRequestHandler {
 }
 
 const DIMENSION_LABEL: Record<DisabledRecordDimension, string> = {
-  key: 'Key',
-  base_url: 'BaseURL',
-  provider: '供应商',
+  key: 'recovery.dimensionKey',
+  base_url: 'recovery.dimensionBaseUrl',
+  provider: 'recovery.dimensionProvider',
 }
 
 type LoadState =
@@ -131,7 +133,7 @@ function settingsValue(settings: readonly { key: string; value: string }[], key:
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof DashboardApiError) return err.message
-  return err instanceof Error ? err.message : '操作失败，请重试'
+  return err instanceof Error ? err.message : i18n.t('settings:errors.operationFailed')
 }
 
 function formatDateTime(iso: string): string {
@@ -142,14 +144,14 @@ function formatDateTime(iso: string): string {
 }
 
 function formatCountdown(remainingMs: number): string {
-	if (remainingMs <= 0) return '已超时'
+	if (remainingMs <= 0) return i18n.t('settings:recovery.overdue')
 	const totalSeconds = Math.ceil(remainingMs / 1000)
 	const hours = Math.floor(totalSeconds / 3600)
 	const minutes = Math.floor((totalSeconds % 3600) / 60)
 	const seconds = totalSeconds % 60
-	if (hours > 0) return `${hours}小时${minutes}分${seconds}秒`
-	if (minutes > 0) return `${minutes}分${seconds}秒`
-	return `${seconds}秒`
+	if (hours > 0) return i18n.t('settings:recovery.countdownHms', { hours, minutes, seconds })
+	if (minutes > 0) return i18n.t('settings:recovery.countdownMs', { minutes, seconds })
+	return i18n.t('settings:recovery.countdownS', { seconds })
 }
 
 function disabledAtMs(row: DisabledRecord): number {
@@ -163,6 +165,7 @@ function isPastDeadline(row: DisabledRecord, durationMs: number): boolean {
 }
 
 export function RecoverySettings() {
+  const { t } = useTranslation('settings')
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [recoveryMode, setRecoveryMode] = useState<RecoveryMode>('probe')
   const [recoveryMinutes, setRecoveryMinutes] = useState('')
@@ -201,7 +204,7 @@ export function RecoverySettings() {
       })
       .catch((err) => {
         const message =
-          err instanceof DashboardApiError ? err.message : '获取设置失败'
+          err instanceof DashboardApiError ? err.message : i18n.t('settings:errors.fetchSettingsFailed')
         setState({ kind: 'error', message })
       })
   }, [])
@@ -211,7 +214,7 @@ export function RecoverySettings() {
     try {
       await dashboardApi.updateSetting(RECOVERY_HANDLER_KEY, JSON.stringify(next))
       setHandler(next)
-      toast('已保存')
+      toast(t('toast.saved'))
       return true
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -219,7 +222,7 @@ export function RecoverySettings() {
     } finally {
       setSavingHandler(false)
     }
-  }, [])
+  }, [t])
 
   const loadRecords = useCallback(() => {
     setRecordsState({ kind: 'loading' })
@@ -230,7 +233,7 @@ export function RecoverySettings() {
       })
       .catch((err) => {
         const message =
-          err instanceof DashboardApiError ? err.message : '获取待恢复记录失败'
+          err instanceof DashboardApiError ? err.message : i18n.t('settings:recovery.fetchRecordsFailed')
         setRecordsState({ kind: 'error', message })
       })
     dashboardApi.listProviders({ limit: 1000, offset: 0 }).then(({ providers }) => {
@@ -280,12 +283,12 @@ export function RecoverySettings() {
     event.preventDefault()
     const minutes = Number(recoveryMinutes)
     if (!Number.isFinite(minutes) || minutes < 0) {
-      toast.error('时间间隔必须是非负数字')
+      toast.error(t('recovery.intervalInvalid'))
       return
     }
     const timedMinutes = Number(recoveryTimedMinutes)
     if (!Number.isFinite(timedMinutes) || timedMinutes <= 0) {
-      toast.error('定时恢复时长必须是正数')
+      toast.error(t('recovery.timedMinutesInvalid'))
       return
     }
     setSavingInterval(true)
@@ -297,7 +300,7 @@ export function RecoverySettings() {
       ])
       setModeDirty(false)
       loadRecords()
-      toast('已保存')
+      toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
     } finally {
@@ -315,7 +318,7 @@ export function RecoverySettings() {
             ? { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
             : current,
         )
-        toast('已直接恢复')
+        toast(t('recovery.restoredDirect'))
       }
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -344,7 +347,7 @@ export function RecoverySettings() {
             ? { kind: 'ready', records: current.records.filter((r) => r.id !== id) }
             : current,
         )
-        toast('已立即恢复')
+        toast(t('recovery.restoredImmediate'))
       }
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -358,7 +361,7 @@ export function RecoverySettings() {
     const id = currentPastDeadlineRecord.id
     const minutes = Number(recoveryTimedMinutes)
     if (!Number.isFinite(minutes) || minutes <= 0) {
-      toast.error('恢复时长未设置')
+      toast.error(t('recovery.durationNotSet'))
       return
     }
     setReplayingId(id)
@@ -376,7 +379,7 @@ export function RecoverySettings() {
           next.add(id)
           return next
         })
-        toast(`已延后 ${minutes} 分钟`)
+        toast(t('recovery.extended', { minutes }))
       }
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -401,26 +404,26 @@ export function RecoverySettings() {
     return [
       {
         key: 'disabledAt',
-        label: '时间',
+        label: t('recovery.colTime'),
         defaultWidth: { kind: 'pixel', value: 160 },
         isTime: true,
         accessor: (row) => formatDateTime(row.disabledAt),
       },
       {
         key: 'providerId',
-        label: '供应商',
+        label: t('recovery.provider'),
         defaultWidth: { kind: 'pixel', value: 160 },
         accessor: (row) => providerNameById.get(row.providerId) ?? row.providerId,
       },
       {
         key: 'dimension',
-        label: '维度',
+        label: t('recovery.colDimension'),
         defaultWidth: { kind: 'pixel', value: 100 },
-        accessor: (row) => DIMENSION_LABEL[row.dimension],
+        accessor: (row) => t(DIMENSION_LABEL[row.dimension]),
       },
       {
         key: 'value',
-        label: '值',
+        label: t('recovery.colValue'),
         defaultWidth: { kind: 'percent', value: 20 },
         defaultOverflow: 'ellipsis',
         accessor: (row) => {
@@ -433,7 +436,7 @@ export function RecoverySettings() {
       },
       {
         key: 'ruleName',
-        label: '禁用规则',
+        label: t('recovery.colRule'),
         defaultWidth: { kind: 'pixel', value: 140 },
         defaultOverflow: 'ellipsis',
         // 规则被删除后仍显示快照名字；老记录没有规则时显示占位。
@@ -442,25 +445,25 @@ export function RecoverySettings() {
       isTimed
         ? {
             key: 'countdown',
-            label: '剩余倒计时',
+            label: t('recovery.colCountdown'),
             defaultWidth: { kind: 'pixel', value: 140 },
             defaultAlign: 'right',
             accessor: (row) => {
               const disabledAt = disabledAtMs(row)
               if (!Number.isFinite(disabledAt)) return '-'
               const text = formatCountdown(disabledAt + timedMs - Date.now())
-              return extendedRecordIds.has(row.id) ? `${text}（延长）` : text
+              return extendedRecordIds.has(row.id) ? t('recovery.extendedSuffix', { text }) : text
             },
           }
         : {
             key: 'retryCount',
-            label: '测试上游次数',
+            label: t('recovery.colRetryCount'),
             defaultWidth: { kind: 'pixel', value: 100 },
             defaultAlign: 'right',
           },
       {
         key: 'actions',
-        label: '操作',
+        label: t('table.actions'),
         defaultWidth: { kind: 'pixel', value: 200 },
         defaultAlign: 'right',
         showEmptyPlaceholder: false,
@@ -473,7 +476,7 @@ export function RecoverySettings() {
                 disabled={replayingId !== null}
                 onClick={() => setPreviewRecord(row)}
               >
-                测试上游
+                {t('recovery.testUpstream')}
               </Button>
             )}
             <Button
@@ -482,27 +485,27 @@ export function RecoverySettings() {
               disabled={replayingId !== null}
               onClick={() => void handleRestoreDirect(row.id)}
             >
-              直接恢复
+              {t('recovery.restoreDirect')}
             </Button>
           </div>
         ),
       },
     ]
-  }, [replayingId, providerNameById, recoveryMode, recoveryTimedMinutes, extendedRecordIds, handleRestoreDirect])
+  }, [replayingId, providerNameById, recoveryMode, recoveryTimedMinutes, extendedRecordIds, handleRestoreDirect, t])
 
   return (
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="refresh" size={16} /> 自动恢复
+            <AppIcon name="refresh" size={16} /> {t('recovery.cardTitle')}
           </CardTitle>
-          <CardDescription>定期检查被禁用的项；上游恢复后自动解除。</CardDescription>
+          <CardDescription>{t('recovery.cardDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           {state.kind === 'loading' && (
             <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载设置…
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
             </div>
           )}
 
@@ -511,7 +514,7 @@ export function RecoverySettings() {
               <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
-                <AppIcon name="refresh" data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>
             </div>
           )}
@@ -520,7 +523,7 @@ export function RecoverySettings() {
             <form className="flex flex-col gap-4" onSubmit={handleSaveInterval}>
               <div className="flex flex-wrap items-end gap-4">
                 <label className="grid gap-1.5 text-sm">
-                  恢复模式
+                  {t('recovery.modeLabel')}
                   <Select
                     value={recoveryMode}
                     onValueChange={(next) => {
@@ -539,7 +542,7 @@ export function RecoverySettings() {
                       <SelectGroup>
                         {RECOVERY_MODES.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
+                            {t(opt.labelKey)}
                           </SelectItem>
                         ))}
                       </SelectGroup>
@@ -548,7 +551,7 @@ export function RecoverySettings() {
                 </label>
                 {recoveryMode === 'probe' ? (
                   <label className="grid gap-1.5 text-sm" htmlFor="automatic-disable-recovery-minutes">
-                    自动恢复轮询间隔（分钟）
+                    {t('recovery.intervalLabel')}
                     <Input
                       id="automatic-disable-recovery-minutes"
                       className="w-40"
@@ -562,7 +565,7 @@ export function RecoverySettings() {
                   </label>
                 ) : (
                   <label className="grid gap-1.5 text-sm" htmlFor="recovery-timed-minutes">
-                    自动恢复时长（分钟）
+                    {t('recovery.timedMinutesLabel')}
                     <Input
                       id="recovery-timed-minutes"
                       className="w-40"
@@ -577,13 +580,13 @@ export function RecoverySettings() {
                 )}
                 <Button type="submit" disabled={savingInterval}>
                   {savingInterval && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                  保存
+                  {t('common:action.save')}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {recoveryMode === 'probe'
-                  ? '轮询间隔：0 = 关闭；建议 ≥ 60；默认 60。探测恢复会按禁用规则校验（首字/速度/关键词），规则已删除时只测连通。'
-                  : '禁用后倒计时归零自动恢复；倒计时从禁用瞬间开始算，切换到此模式后立刻按保存时刻起算。'}
+                  ? t('recovery.probeHint')
+                  : t('recovery.timedHint')}
               </p>
             </form>
           )}
@@ -594,9 +597,9 @@ export function RecoverySettings() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="history" size={16} /> 待恢复记录（{recordsCount} 条）
+            <AppIcon name="history" size={16} /> {t('recovery.recordsTitle', { count: recordsCount })}
           </CardTitle>
-          <CardDescription>上游仍异常、可手动测试上游的禁用记录；恢复后会从列表移除。</CardDescription>
+          <CardDescription>{t('recovery.recordsDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
           <DataTable
@@ -609,7 +612,7 @@ export function RecoverySettings() {
             offset={recordsOffset}
             limit={DISABLED_RECORDS_PAGE_SIZE}
             onOffsetChange={setRecordsOffset}
-            emptyText="暂无待恢复记录"
+            emptyText={t('recovery.recordsEmpty')}
             onRetry={() => void loadRecords()}
             actions={
               <>
@@ -617,10 +620,10 @@ export function RecoverySettings() {
                   variant="outline"
                   size="sm"
                   onClick={() => setHandlerDialogOpen(true)}
-                  title="被禁用的瞬间保存请求，按 JSON 处理方法简化后再存储"
+                  title={t('recovery.handlerButtonTitle')}
                 >
                   <AppIcon name="settings" data-icon="inline-start" />
-                  测试方法
+                  {t('recovery.handlerButton')}
                   {handler.ops.length > 0 && (
                     <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[11px] leading-4 text-primary">
                       {handler.ops.length}
@@ -638,7 +641,7 @@ export function RecoverySettings() {
                   ) : (
                     <AppIcon name="refresh" data-icon="inline-start" />
                   )}
-                  刷新
+                  {t('common:action.refresh')}
                 </Button>
               </>
             }
@@ -700,41 +703,42 @@ function PastDeadlineDialog({
   onImmediate: () => void
   onExtend: () => void
 }) {
+  const { t } = useTranslation('settings')
   return (
     <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onCancel() }}>
       <DialogContent width="sm" scrollFooter>
         <DialogHeader>
-          <DialogTitle>自动恢复已超时</DialogTitle>
+          <DialogTitle>{t('recovery.pastDeadlineTitle')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button variant="outline" onClick={onCancel} disabled={busy}>
-              全部取消
+              {t('recovery.cancelAll')}
             </Button>
             <Button variant="outline" onClick={onSkip} disabled={busy}>
-              跳过这条
+              {t('recovery.skipOne')}
             </Button>
             <Button variant="outline" onClick={onExtend} disabled={busy}>
               {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-              下个周期再恢复
+              {t('recovery.extendOneCycle')}
             </Button>
             <Button onClick={onImmediate} disabled={busy}>
               {busy && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-              立即恢复
+              {t('recovery.restoreImmediate')}
             </Button>
           </>
         }>
           <div className="flex flex-col gap-2 text-sm text-muted-foreground">
             <p>
-              该条禁用记录的自动恢复已超过设定的恢复时长
+              {t('recovery.pastDeadlineLead')}
               {remaining < 0 && (
                 <>
-                  （已超时
+                  {t('recovery.pastDeadlineOverduePrefix')}
                   <span className="mx-1 font-medium text-foreground">{formatCountdown(-remaining)}</span>
-                  ）
+                  {t('recovery.pastDeadlineOverdueSuffix')}
                 </>
               )}
-              。可立即解除，或为它再延后恢复时长，等下个周期再判断。
+              {t('recovery.pastDeadlineTail')}
             </p>
           </div>
         </DialogScrollBody>
@@ -756,6 +760,7 @@ function RecoveryHandlerDialog({
   saving: boolean
   onSave: (next: RecoveryRequestHandler) => Promise<boolean>
 }) {
+  const { t } = useTranslation('settings')
   const [draft, setDraft] = useState<RecoveryRequestHandler>(handler)
 
   useEffect(() => {
@@ -787,23 +792,23 @@ function RecoveryHandlerDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm" scrollFooter>
         <DialogHeader>
-          <DialogTitle>测试方法</DialogTitle>
+          <DialogTitle>{t('recovery.handlerButton')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? '保存中...' : '保存'}
+              {saving ? t('savingEllipsis') : t('common:action.save')}
             </Button>
           </>
         }>
           <FieldGroup>
             <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-              禁用瞬间保存请求，按下列 JSON 规则简化；字段不存在时自动跳过。
+              {t('recovery.handlerDescription')}
             </p>
             {draft.ops.length === 0 ? (
               <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                暂无规则，点击「添加规则」开始配置
+                {t('recovery.noRules')}
               </div>
             ) : (
               draft.ops.map((op, i) => (
@@ -817,7 +822,7 @@ function RecoveryHandlerDialog({
                         className="h-7 min-w-0 flex-1 font-mono text-xs"
                         value={op.path}
                         onChange={(e) => updateOp(i, { ...op, path: e.target.value })}
-                        placeholder="gjson 路径，如 messages.0.content"
+                        placeholder={t('recovery.pathPlaceholder')}
                       />
                       <Select
                         value={op.action}
@@ -828,20 +833,20 @@ function RecoveryHandlerDialog({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="replace">替换</SelectItem>
-                            <SelectItem value="delete">删除</SelectItem>
+                            <SelectItem value="replace">{t('recovery.opReplace')}</SelectItem>
+                            <SelectItem value="delete">{t('common:action.delete')}</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>
                     </div>
                     {op.action === 'replace' && (
                       <div className="flex items-center gap-2 pl-[24px]">
-                        <span className="shrink-0 text-xs text-muted-foreground/60">替换为</span>
+                        <span className="shrink-0 text-xs text-muted-foreground/60">{t('recovery.replaceWith')}</span>
                         <Input
                           className="h-7 min-w-0 flex-1 font-mono text-xs"
                           value={op.value}
                           onChange={(e) => updateOp(i, { ...op, value: e.target.value })}
-                          placeholder="你好"
+                          placeholder={t('recovery.valuePlaceholder')}
                         />
                       </div>
                     )}
@@ -850,7 +855,7 @@ function RecoveryHandlerDialog({
                     type="button"
                     onClick={() => removeOp(i)}
                     className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                    aria-label={`删除规则 ${i + 1}`}
+                    aria-label={t('recovery.removeRuleAria', { index: i + 1 })}
                   >
                     <AppIcon name="close" size={14} />
                   </button>
@@ -864,7 +869,7 @@ function RecoveryHandlerDialog({
                 size="sm"
                 onClick={addOp}
               >
-                <AppIcon name="add" data-icon="inline-start" /> 添加规则
+                <AppIcon name="add" data-icon="inline-start" /> {t('recovery.addRule')}
               </Button>
               <Button
                 type="button"
@@ -873,13 +878,13 @@ function RecoveryHandlerDialog({
                 onClick={() => setDraft({ ops: [...DEFAULT_HANDLER_OPS], timeoutHours: DEFAULT_TIMEOUT_HOURS })}
               >
                 <AppIcon name="refresh" data-icon="inline-start" />
-                恢复默认
+                {t('restoreDefaults')}
               </Button>
             </div>
 
             <div className="flex flex-col gap-1.5 border-t border-border pt-3">
               <label className="grid gap-1.5 text-sm">
-                缺失请求体的记录，超时自动恢复（小时）
+                {t('recovery.timeoutHoursLabel')}
                 <Input
                   className="w-40"
                   type="number"
@@ -889,11 +894,11 @@ function RecoveryHandlerDialog({
                     const v = Number(e.target.value)
                     setDraft((p) => ({ ...p, timeoutHours: Number.isFinite(v) && v >= 0 ? v : 0 }))
                   }}
-                  placeholder="0 = 立即测试上游"
+                  placeholder={t('recovery.timeoutHoursPlaceholder')}
                 />
               </label>
               <p className="text-xs text-muted-foreground">
-                查漏补缺等无请求体的记录，会在禁用满该时长后自动尝试恢复；0 表示不等待。
+                {t('recovery.timeoutHoursHint')}
               </p>
             </div>
           </div>
@@ -921,6 +926,7 @@ function RequestPreviewDialog({
   onClose: () => void
   onResolved: (id: string) => void
 }) {
+  const { t } = useTranslation('settings')
   const [testing, setTesting] = useState(false)
   const [result, setResult] = useState<{ kind: 'success' } | { kind: 'error'; message: string } | null>(null)
 
@@ -934,7 +940,7 @@ function RequestPreviewDialog({
         setResult({ kind: 'success' })
         onResolved(record.id)
       } else {
-        setResult({ kind: 'error', message: updated.errorMessage || '上游未通过' })
+        setResult({ kind: 'error', message: updated.errorMessage || t('recovery.upstreamNotPassed') })
       }
     } catch (err) {
       setResult({ kind: 'error', message: toErrorMessage(err) })
@@ -949,12 +955,12 @@ function RequestPreviewDialog({
     <Dialog open={record !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <DialogContent width="md" scrollFooter>
         <DialogHeader>
-          <DialogTitle>测试上游</DialogTitle>
+          <DialogTitle>{t('recovery.testUpstream')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button variant="outline" onClick={onClose}>
-              关闭
+              {t('common:action.close')}
             </Button>
           </>
         }>
@@ -962,18 +968,18 @@ function RequestPreviewDialog({
           <div className="flex flex-col gap-3 text-xs">
             {errorMessage && !result && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <div className="mb-1 font-medium text-destructive">触发原因</div>
+                <div className="mb-1 font-medium text-destructive">{t('recovery.triggerReason')}</div>
                 <div className="whitespace-pre-wrap break-words text-destructive/90">{errorMessage}</div>
               </div>
             )}
             {result?.kind === 'success' && (
               <div className="rounded-md border border-success/30 bg-success/5 p-3 font-medium text-success">
-                上游测试通过，已恢复
+                {t('recovery.testPassed')}
               </div>
             )}
             {result?.kind === 'error' && (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-                <div className="mb-1 font-medium text-destructive">上游报错</div>
+                <div className="mb-1 font-medium text-destructive">{t('recovery.upstreamError')}</div>
                 <div className="whitespace-pre-wrap break-words text-destructive/90">{result.message}</div>
               </div>
             )}
@@ -984,18 +990,18 @@ function RequestPreviewDialog({
                 onClick={() => void handleTest()}
               >
                 {testing && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                开始测试
+                {t('recovery.startTest')}
               </Button>
-              {testing && <span className="text-muted-foreground">正在测试…</span>}
+              {testing && <span className="text-muted-foreground">{t('recovery.testing')}</span>}
             </div>
             <div>
-              <div className="mb-1 font-medium text-muted-foreground">请求头</div>
+              <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestHeaders')}</div>
               <pre className="max-h-48 overflow-auto rounded-md border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestHeaders ? formatJson(record.requestHeaders) : '-'}
               </pre>
             </div>
             <div>
-              <div className="mb-1 font-medium text-muted-foreground">请求体预览</div>
+              <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestBodyPreview')}</div>
               <pre className="max-h-96 overflow-auto rounded-md border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestBody ? formatJson(record.requestBody) : '-'}
               </pre>

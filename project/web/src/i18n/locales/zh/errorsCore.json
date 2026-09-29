@@ -1,0 +1,17 @@
+{
+  "PROVIDER_NAME_EXISTS": "供应商名称已存在",
+  "PROVIDER_WORKFLOW_ALREADY_ENABLED": "当前已有一个同名供应商的工作流在启用，请先将另一个关闭",
+  "TOKEN_NAME_EXISTS": "令牌名称已存在",
+  "RULE_NAME_EXISTS": "改写规则名称 {{name}} 已存在",
+  "FAILOVER_RULE_NAME_EXISTS": "故障转移规则名称 {{name}} 已存在",
+  "RESPONSE_REWRITE_RULE_NAME_EXISTS": "响应改写规则名称 {{name}} 已存在",
+  "REWRITE_RESULT_PARSE_FAILED": "改写结果解析失败",
+  "TOPOLOGY_VERSION_NOT_FOUND": "版本不存在",
+  "ENGINE_NOT_READY": "引擎未就绪",
+  "EXCHANGE_URL_REQUIRED": "接口地址不能为空",
+  "SETTING_KEY_REQUIRED": "key 不能为空",
+  "BASE_URL_PATH_INVALID": "来源名 {{name}} 无效：不能包含 / 或 __，且长度不超过 32",
+  "RETENTION_MINUTES_OUT_OF_RANGE": "retention_minutes 必须在 0-1440 之间",
+  "ACTIVE_REQUEST_NOT_FOUND": "请求不存在或已结束",
+  "MODELS_DEV_FETCH_FAILED": "获取 models.dev 数据失败，请稍后重试"
+}

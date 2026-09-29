@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { i18n } from '@/i18n/i18n'
 import {
   dashboardApi,
   type RewriteRule,
@@ -99,7 +100,7 @@ export async function loadAllSlotRules(): Promise<{ rules: SlotRuleMap; status: 
     if (result.status === 'fulfilled') {
       assignRuleList(rules, key, result.value)
     } else {
-      status[key] = { loading: false, error: '加载失败' }
+      status[key] = { loading: false, error: i18n.t('node:ruleSelect.loadFailed') }
     }
   })
   return { rules, status }
@@ -142,7 +143,7 @@ export function useSlotRules(): {
         setStatus((prev) => ({ ...prev, [key]: { loading: false, error: null } }))
       })
       .catch(() => {
-        setStatus((prev) => ({ ...prev, [key]: { loading: false, error: '加载失败' } }))
+        setStatus((prev) => ({ ...prev, [key]: { loading: false, error: i18n.t('node:ruleSelect.loadFailed') } }))
       })
   }, [])
 

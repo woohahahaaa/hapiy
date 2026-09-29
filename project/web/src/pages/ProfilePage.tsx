@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,6 +14,7 @@ import type { CurrentUser } from '@/lib/dashboard-api'
 type AccountUser = { readonly id: string; readonly username: string; readonly role: string }
 
 export function ProfilePage() {
+  const { t } = useTranslation('settings')
   const navigate = useNavigate()
   const [state, setState] = useState<
     | { readonly kind: 'loading' }
@@ -52,7 +54,7 @@ export function ProfilePage() {
     event.preventDefault()
     const nextUsername = username.trim()
     if (!nextUsername) {
-      toast.error('用户名不能为空')
+      toast.error(t('profile.usernameEmpty'))
       return
     }
     setSavingUsername(true)
@@ -60,9 +62,9 @@ export function ProfilePage() {
       const user = await dashboardApi.updateUsername(nextUsername)
       setUsername(user.username)
       updateReadyUser(user)
-      toast('用户名已更新')
+      toast(t('profile.usernameUpdated'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '更新用户名失败')
+      toast.error(error instanceof Error ? error.message : t('profile.usernameUpdateFailed'))
     } finally {
       setSavingUsername(false)
     }
@@ -71,15 +73,15 @@ export function ProfilePage() {
   const handlePasswordSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!currentPassword || !newPassword || !passwordConfirmation) {
-      toast.error('请填写所有密码字段')
+      toast.error(t('profile.passwordFieldsRequired'))
       return
     }
     if (newPassword.length < 8) {
-      toast.error('新密码至少需要 8 个字符')
+      toast.error(t('profile.passwordTooShort'))
       return
     }
     if (newPassword !== passwordConfirmation) {
-      toast.error('两次输入的新密码不一致')
+      toast.error(t('profile.passwordMismatch'))
       return
     }
     setSavingPassword(true)
@@ -88,9 +90,9 @@ export function ProfilePage() {
       setCurrentPassword('')
       setNewPassword('')
       setPasswordConfirmation('')
-      toast('密码已更新')
+      toast(t('profile.passwordUpdated'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '更新密码失败')
+      toast.error(error instanceof Error ? error.message : t('profile.passwordUpdateFailed'))
     } finally {
       setSavingPassword(false)
     }
@@ -99,20 +101,20 @@ export function ProfilePage() {
   const handleLogout = async () => {
     setLoggingOut(true)
     await dashboardApi.logout()
-    toast('已退出登录')
+    toast(t('profile.loggedOut'))
     navigate('/login', { replace: true })
   }
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="个人资料"
-        description="管理账户信息与修改登录密码"
+        title={t('common:nav.profile')}
+        description={t('profile.pageDescription')}
       />
       <div className="flex-1 space-y-6 p-6">
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
-            <AppIcon name="progress_activity" size={16} className="animate-spin" /> 正在加载账户信息…
+            <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('profile.loading')}
           </div>
         )}
 
@@ -122,7 +124,7 @@ export function ProfilePage() {
               <AppIcon name="warning" size={32} className="text-destructive" />
               <p className="text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={load}>
-                <AppIcon name="refresh" data-icon="inline-start" /> 重试
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>
             </CardContent>
           </Card>
@@ -139,20 +141,20 @@ export function ProfilePage() {
               ) : (
                 <AppIcon name="logout" data-icon="inline-start" />
               )}
-              退出登录
+              {t('profile.logout')}
             </Button>
 
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <AppIcon name="shield" size={16} /> 安全设置
+                  <AppIcon name="shield" size={16} /> {t('profile.securityTitle')}
                 </CardTitle>
-                <CardDescription>更新登录用户名和密码</CardDescription>
+                <CardDescription>{t('profile.securityDescription')}</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-6 lg:grid-cols-2">
                 <form className="space-y-3" onSubmit={handleUsernameSave}>
                   <label className="grid gap-1.5 text-sm" htmlFor="profile-username">
-                    用户名
+                    {t('profile.usernameLabel')}
                     <Input
                       id="profile-username"
                       value={username}
@@ -162,12 +164,12 @@ export function ProfilePage() {
                   </label>
                   <Button type="submit" disabled={savingUsername}>
                     {savingUsername && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                    保存用户名
+                    {t('profile.saveUsername')}
                   </Button>
                 </form>
                 <form className="space-y-3" onSubmit={handlePasswordSave}>
                   <label className="grid gap-1.5 text-sm" htmlFor="profile-current-password">
-                    当前密码
+                    {t('profile.currentPasswordLabel')}
                     <Input
                       id="profile-current-password"
                       type="password"
@@ -177,7 +179,7 @@ export function ProfilePage() {
                     />
                   </label>
                   <label className="grid gap-1.5 text-sm" htmlFor="profile-new-password">
-                    新密码
+                    {t('profile.newPasswordLabel')}
                     <Input
                       id="profile-new-password"
                       type="password"
@@ -187,7 +189,7 @@ export function ProfilePage() {
                     />
                   </label>
                   <label className="grid gap-1.5 text-sm" htmlFor="profile-password-confirmation">
-                    确认新密码
+                    {t('profile.confirmPasswordLabel')}
                     <Input
                       id="profile-password-confirmation"
                       type="password"
@@ -198,7 +200,7 @@ export function ProfilePage() {
                   </label>
                   <Button type="submit" disabled={savingPassword}>
                     {savingPassword && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                    保存密码
+                    {t('profile.savePassword')}
                   </Button>
                 </form>
               </CardContent>

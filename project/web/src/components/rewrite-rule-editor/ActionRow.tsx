@@ -1,3 +1,4 @@
+import { useTranslation, type TFunction } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppIcon } from '@/components/AppIcon'
@@ -17,6 +18,7 @@ interface ActionRowProps {
 const FIELDS_LEFT_OFFSET = 'pl-[24px]'
 
 export function ActionRow({ index, action, onChange, onRemove, canRemove }: ActionRowProps) {
+  const { t } = useTranslation('rewrite')
   const spec = action.mode && MODE_BY_VALUE.has(action.mode as ModeName)
     ? MODE_BY_VALUE.get(action.mode as ModeName)!
     : null
@@ -48,14 +50,14 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
             className="h-7 min-w-0 flex-1 font-mono text-xs"
             value={action.path}
             onChange={(e) => onChange({ ...action, path: e.target.value })}
-            placeholder={action.scope === 'header' ? 'header 名（不用写 header.）' : 'gjson 路径'}
+            placeholder={action.scope === 'header' ? t('path.headerPlaceholder') : t('path.gjsonPlaceholder')}
           />
           <Select
             value={action.mode}
             onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
           >
             <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
-              <SelectValue placeholder="选择操作" />
+              <SelectValue placeholder={t('selectModePlaceholder')} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -74,7 +76,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                   key={field}
                   action={action}
                   onChange={onChange}
-                  placeholder={fieldPlaceholder(field)}
+                  placeholder={fieldPlaceholder(t, field)}
                 />
               ) : (
                 <Input
@@ -82,7 +84,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
                   className="h-7 min-w-0 flex-1 font-mono text-xs"
                   value={action[field]}
                   onChange={(e) => onChange({ ...action, [field]: e.target.value })}
-                  placeholder={fieldPlaceholder(field)}
+                  placeholder={fieldPlaceholder(t, field)}
                 />
               )
             ))}
@@ -94,7 +96,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
         onClick={onRemove}
         disabled={!canRemove}
         className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-        aria-label={`删除执行 ${index + 1}`}
+        aria-label={t('section.deleteAction', { count: index + 1 })}
       >
         <AppIcon name="close" size={14} />
       </button>
@@ -102,11 +104,11 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
   )
 }
 
-function fieldPlaceholder(field: 'value' | 'from' | 'to' | 'dst'): string {
+function fieldPlaceholder(t: TFunction, field: 'value' | 'from' | 'to' | 'dst'): string {
   switch (field) {
-    case 'value': return 'value 或变量名'
+    case 'value': return t('field.valuePlaceholder')
     case 'from': return 'from'
     case 'to': return 'to'
-    case 'dst': return 'dst 目标路径'
+    case 'dst': return t('field.dstPlaceholder')
   }
 }

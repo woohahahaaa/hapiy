@@ -145,9 +145,9 @@ func CreateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		msg := validateManagedProviderRequest(db, row, key, req, "")
+		code, msg, params := validateManagedProviderRequest(db, row, key, req, "")
 		if msg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			respondValidationError(c, code, msg, params)
 			return
 		}
 		m := model.ManagedAgentProvider{
@@ -182,7 +182,7 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		var m model.ManagedAgentProvider
 		if err := db.First(&m, "id = ?", c.Param("mid")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "托管 provider 不存在"})
+			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管 provider 不存在")
 			return
 		}
 		var req managedProviderRequest
@@ -190,9 +190,9 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		msg := validateManagedProviderRequest(db, row, key, req, m.ID)
+		code, msg, params := validateManagedProviderRequest(db, row, key, req, m.ID)
 		if msg != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			respondValidationError(c, code, msg, params)
 			return
 		}
 		m.Name = strings.TrimSpace(req.Name)
@@ -244,7 +244,7 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		var m model.ManagedAgentProvider
 		if err := db.First(&m, "id = ?", c.Param("mid")).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "托管 provider 不存在"})
+			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管 provider 不存在")
 			return
 		}
 		formatted, synced, err := rebuildManagedBlocks(c, db, &row, &m, key)
@@ -452,17 +452,19 @@ func applyManagedAuthFields(m *model.ManagedAgentProvider, req managedProviderRe
 // suffix) must not collide with providers already in the file or with
 // other managed providers' group names. selfID ("" on create) excludes
 // the managed provider itself from the managed-name conflict check.
-func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key []byte, req managedProviderRequest, selfID string) string {
+// It returns a stable code + message (+ interpolation params) for
+// user-facing validation errors, and code "" for internal failures.
+func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key []byte, req managedProviderRequest, selfID string) (string, string, gin.H) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return "供应商名字不能为空"
+		return "MANAGED_NAME_REQUIRED", "供应商名字不能为空", nil
 	}
 	if len(req.ProviderIDs) == 0 {
-		return "请至少选择一个供应商"
+		return "MANAGED_PROVIDER_REQUIRED", "请至少选择一个供应商", nil
 	}
 	liveProviders, err := loadLiveProviders(db)
 	if err != nil {
-		return err.Error()
+		return "", err.Error(), nil
 	}
 	live, _ := liveProvision(req.ProviderIDs, liveProviders)
 	byID := map[string]model.Provider{}
@@ -487,7 +489,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		}
 	}
 	if len(activeGroups) == 0 {
-		return "所选供应商没有可用的 endpoint"
+		return "MANAGED_NO_AVAILABLE_ENDPOINT", "所选供应商没有可用的 endpoint", nil
 	}
 
 	// 1. suffix rules: required; 后缀唯一性按 (endpoint, 后缀) 判定 ——
@@ -498,10 +500,10 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		for _, g := range activeGroups {
 			suffix := strings.TrimSpace(g.Suffix)
 			if suffix == "" {
-				return fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", g.Endpoint)
+				return "MANAGED_SUFFIX_REQUIRED", fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", g.Endpoint), gin.H{"endpoint": g.Endpoint}
 			}
 			if prev, ok := suffixEndpoint[suffix]; ok && prev != g.Endpoint {
-				return fmt.Sprintf("后缀 %q 重复", suffix)
+				return "MANAGED_SUFFIX_DUPLICATE", fmt.Sprintf("后缀 %q 重复", suffix), gin.H{"suffix": suffix}
 			}
 			suffixEndpoint[suffix] = g.Endpoint
 		}
@@ -510,11 +512,11 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 	// 2. name conflicts against the live file's providers.
 	content, err := readAgentConfigFileContent(&row, key)
 	if err != nil {
-		return "读取配置失败: " + err.Error()
+		return "", "读取配置失败: " + err.Error(), nil
 	}
 	rule, err := loadRule(db, row.AgentType)
 	if err != nil {
-		return err.Error()
+		return "", err.Error(), nil
 	}
 	jpaths, _ := rule.GetJsonPaths()
 	existing := map[string]bool{}
@@ -544,7 +546,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		full := providerBlockName(name, strings.TrimSpace(g.Suffix))
 		// 本托管 provider 自己上次同步生成的块不算冲突：重存/合并时原地覆盖。
 		if existing[full] && !ownBlocks[full] {
-			return fmt.Sprintf("名称 %q 与配置文件里已有的 provider 同名，请更换名字或后缀", full)
+			return "MANAGED_NAME_CONFLICT_FILE", fmt.Sprintf("名称 %q 与配置文件里已有的 provider 同名，请更换名字或后缀", full), gin.H{"name": full}
 		}
 	}
 
@@ -553,14 +555,14 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 	// each final group name must not collide with their group names.
 	var managed []model.ManagedAgentProvider
 	if err := db.Where("agent_config_file_id = ?", row.ID).Find(&managed).Error; err != nil {
-		return err.Error()
+		return "", err.Error(), nil
 	}
 	for _, m := range managed {
 		if selfID != "" && m.ID == selfID {
 			continue
 		}
 		if m.Name == name {
-			return fmt.Sprintf("名称 %q 与其他托管 provider 同名", name)
+			return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管 provider 同名", name), gin.H{"name": name}
 		}
 		mGroups, err := m.GetGroups()
 		if err != nil {
@@ -569,17 +571,32 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		for _, g := range mGroups {
 			blockName := providerBlockName(m.Name, g.Suffix)
 			if blockName == name {
-				return fmt.Sprintf("名称 %q 与其他托管 provider 同名", name)
+				return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管 provider 同名", name), gin.H{"name": name}
 			}
 			for _, ag := range activeGroups {
 				full := providerBlockName(name, strings.TrimSpace(ag.Suffix))
 				if blockName == full && full != "" {
-					return fmt.Sprintf("名称 %q 与其他托管 provider 的分组同名", full)
+					return "MANAGED_GROUP_NAME_CONFLICT", fmt.Sprintf("名称 %q 与其他托管 provider 的分组同名", full), gin.H{"name": full}
 				}
 			}
 		}
 	}
-	return ""
+	return "", "", nil
+}
+
+// respondValidationError writes a structured 400 response for a
+// validateManagedProviderRequest result. Internal failures (code "")
+// keep the raw message fallback.
+func respondValidationError(c *gin.Context, code, msg string, params gin.H) {
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		return
+	}
+	if len(params) > 0 {
+		respondErrorWithParams(c, http.StatusBadRequest, code, msg, params)
+		return
+	}
+	respondError(c, http.StatusBadRequest, code, msg)
 }
 
 // deriveManagedProvider recomputes the endpoint groups from the live
@@ -1414,7 +1431,7 @@ func loadRule(db *gorm.DB, name string) (model.AgentTypeRule, error) {
 func loadConfigFile(c *gin.Context, db *gorm.DB) (model.AgentConfigFile, bool) {
 	var row model.AgentConfigFile
 	if err := db.First(&row, "id = ?", c.Param("id")).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "配置不存在"})
+		respondError(c, http.StatusNotFound, "CONFIG_NOT_FOUND", "配置不存在")
 		return row, false
 	}
 	return row, true
@@ -1423,7 +1440,7 @@ func loadConfigFile(c *gin.Context, db *gorm.DB) (model.AgentConfigFile, bool) {
 func loadRuleForRow(c *gin.Context, db *gorm.DB, row model.AgentConfigFile) (model.AgentTypeRule, bool) {
 	rule, err := loadRule(db, row.AgentType)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "未找到该软件类型的规则: " + row.AgentType})
+		respondErrorWithParams(c, http.StatusBadRequest, "AGENT_TYPE_RULE_MISSING", "未找到该软件类型的规则: "+row.AgentType, gin.H{"name": row.AgentType})
 		return rule, false
 	}
 	return rule, true

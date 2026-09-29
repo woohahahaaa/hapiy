@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ export function SlotContainer({
   onExecutorPick,
   active = true,
 }: SlotContainerProps) {
+  const { t } = useTranslation('node')
   const hasNodes = Boolean(children)
 
   return (
@@ -58,7 +60,7 @@ export function SlotContainer({
               className="mt-2 flex w-full items-center justify-center rounded-xs border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
             >
               <AppIcon name="add" size={12} className="mr-1" />
-              添加
+              {t('slotContainer.add')}
             </button>
           )}
         </>

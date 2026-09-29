@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
 import { cn } from '@/lib/utils'
@@ -28,6 +29,7 @@ export function ConventionValueInput({
   refs = false,
   literals = true,
 }: ConventionValueInputProps) {
+  const { t } = useTranslation('rewrite')
   const [focused, setFocused] = useState(false)
   const kind = active ? parseValueInput(text, { literals, refs }).kind : null
   const invalid = kind === 'invalid' && text.trim() !== ''
@@ -62,16 +64,16 @@ export function ConventionValueInput({
               <div className="flex flex-col items-start gap-0.5 text-left">
                 {refs && (
                   <p className="text-xs">
-                    不加引号 → 变量：取原始请求里的同域值（header 名 / gjson 路径）
+                    {t('convention.refHint')}
                   </p>
                 )}
                 {literals && (
                   <p className="text-xs">
-                    true / false / null / 数字 → JSON 字面量
+                    {t('convention.literalHint')}
                   </p>
                 )}
                 <p className="text-xs">
-                  加引号 → 固定字符串，引号内为实际内容
+                  {t('convention.stringHint')}
                 </p>
               </div>
             </TooltipContent>
@@ -80,7 +82,7 @@ export function ConventionValueInput({
       ) : (
         input
       )}
-      {invalid && <p className="text-xs text-muted-foreground">字符串需要手动添加引号</p>}
+      {invalid && <p className="text-xs text-muted-foreground">{t('value.invalidHint')}</p>}
     </div>
   )
 }

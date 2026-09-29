@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
@@ -44,6 +45,7 @@ export function SlotItemCard({
   picked = false,
   onPickToken,
 }: SlotItemCardProps) {
+  const { t } = useTranslation('node')
   const layers = flashLayers ?? []
   return (
     <div
@@ -86,7 +88,7 @@ export function SlotItemCard({
                 onDragStart()
               }}
               className="nodrag nopan cursor-grab active:cursor-grabbing"
-              aria-label="拖动排序"
+              aria-label={t('slotItemCard.dragToReorder')}
             >
               <AppIcon name="drag_handle" size={14} />
             </span>
@@ -100,7 +102,7 @@ export function SlotItemCard({
             <Switch
               checked={enabled}
               onCheckedChange={(v) => onToggleEnabled(v === true)}
-              aria-label={enabled ? '禁用' : '启用'}
+              aria-label={enabled ? t('common:action.disable') : t('common:action.enable')}
               className="nodrag nopan shrink-0"
             />
           )}

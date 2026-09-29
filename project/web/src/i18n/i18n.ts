@@ -4,7 +4,7 @@ import { initReactI18next } from 'react-i18next'
 import { namespaces, resources } from './resources'
 import { DEFAULT_LANGUAGE, htmlLang, isLanguage } from './languages'
 
-// `initImmediate: false` keeps init synchronous so that plain modules
+// `initAsync: false` keeps init synchronous so that plain modules
 // (`i18n.t(...)`) and SSR/snapshot tests can translate right after import.
 void i18n.use(initReactI18next).init({
   resources,
@@ -15,7 +15,7 @@ void i18n.use(initReactI18next).init({
   supportedLngs: ['zh', 'en'],
   interpolation: { escapeValue: false },
   returnNull: false,
-  initImmediate: false,
+  initAsync: false,
 })
 
 i18n.on('languageChanged', (lng) => {

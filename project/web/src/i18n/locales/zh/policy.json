@@ -1,0 +1,92 @@
+{
+  "preview": {
+    "noAction": "无操作",
+    "summary": "{{rules}} 规则 · {{actions}} 执行"
+  },
+  "unknown": {
+    "title": "未知策略类型",
+    "notExist": "该策略类型不存在",
+    "available": "可用的策略类型：{{types}}",
+    "back": "返回请求改写"
+  },
+  "name": "名称",
+  "columns": {
+    "preview": "规则预览",
+    "actions": "操作"
+  },
+  "statusCount": "{{count}} 条规则",
+  "dialog": {
+    "addRule": "添加规则",
+    "editRule": "编辑规则",
+    "deleteTitle": "确认删除",
+    "deleteDescription": "将删除规则「{{name}}」，删除后不可恢复。"
+  },
+  "actions": {
+    "saving": "保存中..."
+  },
+  "errors": {
+    "loadFailed": "加载失败",
+    "createFailed": "创建失败",
+    "updateFailed": "更新失败",
+    "deleteFailed": "删除失败"
+  },
+  "form": {
+    "ruleName": "规则名称"
+  },
+  "rewrite": {
+    "description": "使用 JSON 操作数组修改请求体字段",
+    "empty": "暂无请求改写规则，点击\"添加规则\"创建第一条",
+    "rewriteRules": "改写规则"
+  },
+  "failover": {
+    "description": "主供应商失败时自动转移到备选供应商",
+    "recoveryTab": "自动恢复",
+    "empty": "暂无故障转移规则，点击\"添加规则\"创建第一条",
+    "notSet": "未设置",
+    "notEnabled": "未启用",
+    "unlimitedWindow": "不限",
+    "windowMinutes": "{{count}}分钟",
+    "thresholdValue": "{{count}} 次 / {{window}}",
+    "columns": {
+      "dimension": "转移维度",
+      "trigger": "触发字段",
+      "ttfb": "首字超时",
+      "threshold": "禁用阈值"
+    },
+    "dimensions": {
+      "baseUrl": "Base URL",
+      "key": "Key",
+      "provider": "供应商",
+      "unselected": "未选择"
+    },
+    "form": {
+      "dimension": "转移维度",
+      "selectDimension": "选择转移维度",
+      "dimensionHint": "请求失败时，将按该维度进行故障转移。",
+      "autoDisable": "自动禁用",
+      "autoDisablePlaceholder": "是否自动禁用",
+      "yes": "是",
+      "no": "否",
+      "autoDisableYesHint": "选「是」：转移候选用尽后，将出问题的{{target}}标记为禁用（受下方禁用阈值约束）。",
+      "autoDisableNoHint": "选「否」：每次只转移到下一个候选，不会自动禁用。",
+      "patternsLabel": "上游报错字段包含以下关键词时自动触发",
+      "patternsPlaceholder": "每行一个关键词或错误码\n429\nrate_limit_exceeded\ninsufficient_quota",
+      "patternsHint": "每行一个；任一行出现在上游报错内容中即触发转移。留空则仅按下方条件触发。",
+      "speedLabel": "速度限制（token/s）",
+      "speedHint": "填 0 表示不限制；填大于 0 表示请求全程速度（总 token ÷ 含建连的总耗时）低于 N token/s 也算一次失败，计入禁用阈值（与匹配字段 OR 关系）。",
+      "ttfbLabel": "首字超时（秒）",
+      "ttfbHint": "填 0 表示不启用此条件；填大于 0 表示首字响应超过 N 秒也会触发转移（与匹配字段 OR 关系）。",
+      "thresholdLabel": "禁用阈值",
+      "thresholdEvery": "每",
+      "thresholdWindowSuffix": "分钟命中",
+      "thresholdTimesSuffix": "次则禁用",
+      "windowAria": "命中时间窗口（分钟）",
+      "thresholdAria": "禁用前命中次数",
+      "thresholdHint": "窗口期内连续命中 N 次才禁用。窗口填 0 表示不限时间；次数填 1 等于「一次就禁」。"
+    }
+  },
+  "response": {
+    "description": "按顺序对响应字段执行：重命名 / 加前缀 / 加后缀 / 删除",
+    "empty": "暂无响应改写规则，点击\"添加规则\"创建第一条"
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { BlockCard } from './BlockCard'
 import {
@@ -25,6 +26,7 @@ interface RewriteRuleEditorProps {
  * 静默回推会覆盖父级持有的原始 script，打开弹窗即破坏数据。
  */
 export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRuleEditorProps) {
+  const { t } = useTranslation('rewrite')
   const [form, setForm] = useState<RuleForm>(() => parseRule(initialScript))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -90,7 +92,7 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
     <div className="flex w-full flex-col gap-3">
       {form.blocks.length === 0 ? (
         <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-          暂无规则，点击下方「添加规则」开始配置
+          {t('rule.empty')}
         </div>
       ) : (
         form.blocks.map((b, i) => (
@@ -116,8 +118,8 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
         type="button"
         onClick={addBlock}
         className="nodrag nopan inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-        aria-label="添加规则"
-        title="添加规则"
+        aria-label={t('rule.addLabel')}
+        title={t('rule.addTitle')}
       >
         <AppIcon name="add" size={16} />
       </button>

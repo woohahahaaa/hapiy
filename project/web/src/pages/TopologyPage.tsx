@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ReactFlow,
   Background,
@@ -14,6 +15,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AppIcon } from '@/components/AppIcon'
+import { i18n } from '@/i18n/i18n'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import {
@@ -184,7 +186,8 @@ function wouldCreateCycle(wires: readonly FlatWire[], source: string, target: st
 }
 
 function slotLabel(slotType: string): string {
-  return SLOT_LABELS[slotType as SlotType] ?? slotType ?? '插槽'
+  if (slotType in SLOT_LABELS) return i18n.t(`topology:slot.${slotType}`)
+  return slotType || i18n.t('topology:node.slotFallback')
 }
 
 /**
@@ -233,7 +236,7 @@ function slotDuplicateReason(
     if (st) {
       const prior = seen.get(st)
       if (prior !== undefined && prior !== cur) {
-        return `一个工作流里面不能有多个${slotLabel(st)}`
+        return i18n.t('topology:validation.duplicateSlot', { slot: slotLabel(st) })
       }
       seen.set(st, cur)
     }
@@ -252,12 +255,12 @@ function invalidConnectionReason(
   const outgoingFromSource = wires.filter((w) => w.source === source)
   if (sourceNode?.kind === 'switch') {
     // 条件开关：是/否两条出边，且两个分支不能连向同一个节点。
-    if (outgoingFromSource.length >= 2) return '条件开关最多两条出边（是/否）'
-    if (outgoingFromSource.some((w) => w.target === target)) return '条件开关的两个分支不能连向同一个节点'
+    if (outgoingFromSource.length >= 2) return i18n.t('topology:validation.switchMaxOutgoing')
+    if (outgoingFromSource.some((w) => w.target === target)) return i18n.t('topology:validation.switchSameTarget')
   } else if (outgoingFromSource.length >= 1) {
-    return '每个节点最多一条出边'
+    return i18n.t('topology:validation.maxOneOutgoing')
   }
-  if (wouldCreateCycle(wires, source, target)) return '不能形成环路'
+  if (wouldCreateCycle(wires, source, target)) return i18n.t('topology:validation.cycle')
   return slotDuplicateReason(nodes, wires, source, target)
 }
 
@@ -299,6 +302,7 @@ function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
 }
 
 export function TopologyPage() {
+  const { t } = useTranslation('topology')
   // A-group wiring: 绑定下拉框按类型读取 加载中/加载失败 状态并支持打开时刷新
   const { rules: slotRules, status: slotRuleStatus, refreshRuleType } = useSlotRules()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
@@ -834,7 +838,7 @@ export function TopologyPage() {
           position: layoutSnapshot[node.id] ?? { x: 300, y: 20 },
           style: accentStyleOf(node.id),
           data: {
-            label: node.name ?? '请求入口',
+            label: node.name ?? t('node.entry'),
             enabled: node.enabled,
             weight: node.weight ?? 1,
             accentColor: isEmergencyEntry(node) ? 'var(--warning)' : undefined,
@@ -892,7 +896,7 @@ export function TopologyPage() {
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
           style: accentStyleOf(node.id),
           data: {
-            title: '供应商',
+            title: t('node.providerSlot'),
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
             connectionCount: slotConnectionCount.get(node.id) ?? 1,
@@ -919,7 +923,7 @@ export function TopologyPage() {
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
           style: accentStyleOf(node.id),
           data: {
-            title: '条件开关',
+            title: t('node.switch'),
             name: node.name,
             connectionCount: slotConnectionCount.get(node.id) ?? 1,
             externallyDisabled: false,
@@ -945,7 +949,7 @@ export function TopologyPage() {
           position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
           style: accentStyleOf(node.id),
           data: {
-            title: SLOT_LABELS[slotType] ?? node.slotType ?? '插槽',
+            title: SLOT_LABELS[slotType] ?? node.slotType ?? t('node.slotFallback'),
             slotType: node.slotType ?? '',
             enabled: node.enabled,
             isProviderSlot: false,
@@ -1325,11 +1329,11 @@ export function TopologyPage() {
       }
       await loadLayoutBestEffort()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载数据失败')
+      setError(err instanceof Error ? err.message : t('error.loadData'))
     } finally {
       setLoading(false)
     }
-  }, [setTopology, syncHistory, loadLayoutBestEffort, applyFlowColors])
+  }, [setTopology, syncHistory, loadLayoutBestEffort, applyFlowColors, t])
 
   useEffect(() => {
     loadData()
@@ -1365,7 +1369,7 @@ export function TopologyPage() {
       dirtyRef.current = false
       setDirty(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '拓扑保存失败，稍后自动重试')
+      toast.error(err instanceof Error ? err.message : t('toast.saveRetry'))
       // 失败后 1 秒自动重试，直到成功，避免改动静默丢失。
       if (persistRetryRef.current !== null) window.clearTimeout(persistRetryRef.current)
       persistRetryRef.current = window.setTimeout(() => {
@@ -1373,7 +1377,7 @@ export function TopologyPage() {
         void persistTopology()
       }, 1000)
     }
-  }, [])
+  }, [t])
 
   const persistLayoutSnapshot = useCallback((snapshot: LayoutSnapshot) => {
     setLayoutSnapshot(snapshot)
@@ -1382,9 +1386,9 @@ export function TopologyPage() {
         lastKnownLayoutVersionRef.current = version
       })
       .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : '布局保存失败')
+        toast.error(err instanceof Error ? err.message : t('toast.layoutSaveFailed'))
       })
-  }, [])
+  }, [t])
 
   useEffect(() => {
     if (!dirty) return
@@ -1422,7 +1426,7 @@ export function TopologyPage() {
         const known = lastKnownVersionRef.current
         if (known === null || flat.version === undefined) return
         if (flat.version === known) return
-        toast.error('拓扑已在其他页面被修改，请刷新以加载最新数据')
+        toast.error(t('toast.topologyChangedElsewhere'))
         lastKnownVersionRef.current = flat.version
       } catch {
         // transient network error — the next tick retries silently
@@ -1432,7 +1436,7 @@ export function TopologyPage() {
       void check()
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [t])
 
   // Poll the backend layout version every 5s. If another tab saved a layout,
   // the backend version diverges from the version we loaded/saved last —
@@ -1444,7 +1448,7 @@ export function TopologyPage() {
       try {
         const { version } = await dashboardApi.getLayout()
         if (version > known) {
-          toast.error('布局已在其他页面被修改，请刷新以加载最新布局')
+          toast.error(t('toast.layoutChangedElsewhere'))
           lastKnownLayoutVersionRef.current = version
         }
       } catch {
@@ -1452,7 +1456,7 @@ export function TopologyPage() {
       }
     }, 5000)
     return () => window.clearInterval(timer)
-  }, [])
+  }, [t])
 
   // One-shot retry after 5s if the initial layout GET failed — give the
   // backend one more chance before settling on default positions. If it still
@@ -1465,11 +1469,11 @@ export function TopologyPage() {
         setLayoutSnapshot(layout)
         lastKnownLayoutVersionRef.current = version
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : '布局加载失败，使用默认位置')
+        toast.error(err instanceof Error ? err.message : t('toast.layoutLoadFailed'))
       }
     }, 5000)
     return () => window.clearTimeout(timer)
-  }, [])
+  }, [t])
 
   const handlePaneClick = useCallback(() => {
     setSelectedExecutor(null)
@@ -1718,11 +1722,11 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     const selectedIds = new Set(selectionRef.current.nodes.map((n) => n.id))
     const snapshot = buildCopySnapshot(cur.nodes, cur.wires, selectedIds)
     if (!snapshot) {
-      toast.info('没有可复制的选中节点')
+      toast.info(t('toast.nothingToCopy'))
       return
     }
     clipboardRef.current = snapshot
-  }, [])
+  }, [t])
 
   const handlePaste = useCallback(() => {
     const snapshot = clipboardRef.current
@@ -1873,7 +1877,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     const cur = tpRef.current
     if (!cur) return
     const id = `entry-${crypto.randomUUID().slice(0, 8)}`
-    const node: FlatNode = { id, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 }
+    const node: FlatNode = { id, kind: 'requestEntry', name: t('node.entry'), enabled: true, weight: 1 }
     const next: FlatTopology = { nodes: [...cur.nodes, node], wires: cur.wires }
     if (sameFlatTopology(cur, next)) return
     commitHistory(cur)
@@ -1881,7 +1885,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     setTopology(next)
     markDirty()
     placeNewNodes([{ id, width: topologyConfig.fallbackNodeSize.width }])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation, t])
 
   const handleAddProviderSlot = useCallback(() => {
     const cur = tpRef.current
@@ -1958,7 +1962,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         const alreadyActive = dup.includes(providerId) || dup.includes(name)
         defaultEnabled = !(slotInEnabledEntry && alreadyActive)
         if (!defaultEnabled) {
-          toast.error(`同一个 Provider（${name}）不能在多个激活工作流中被启用`)
+          toast.error(t('toast.duplicateProvider', { name }))
         }
       }
       updateTopologyNodes((list) =>
@@ -1967,7 +1971,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         ),
       )
     },
-    [updateTopologyNodes, providerById],
+    [updateTopologyNodes, providerById, t],
   )
 
   const handleReorderProvider = useCallback(
@@ -2008,7 +2012,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
     const newNodes: FlatNode[] = [
       ...cur.nodes,
-      { id: entryId, kind: 'requestEntry', name: '请求入口', enabled: true, weight: 1 },
+      { id: entryId, kind: 'requestEntry', name: t('node.entry'), enabled: true, weight: 1 },
       { id: pslotId, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true },
       ...slotIds.map((st) => ({
         id: nodeIds.get(st)!,
@@ -2033,7 +2037,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       { id: pslotId, width: topologyConfig.render.slot.shellMinWidth },
       ...slotIds.map((st) => ({ id: nodeIds.get(st)!, width: topologyConfig.render.slot.shellMinWidth })),
     ])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation, t])
 
   const handleAddEmergencyWorkflow = useCallback(() => {
     const cur = tpRef.current
@@ -2047,7 +2051,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
     const newNodes: FlatNode[] = [
       ...cur.nodes,
-      { id: entryId, kind: 'requestEntry', name: '应急请求入口', enabled: true, weight: 1, emergency: true },
+      { id: entryId, kind: 'requestEntry', name: t('node.emergencyEntry'), enabled: true, weight: 1, emergency: true },
       { id: pslotId, kind: 'slot', slotType: PROVIDER_SLOT_TYPE, enabled: true },
       ...slotIds.map((st) => ({
         id: nodeIds.get(st)!,
@@ -2072,7 +2076,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       { id: pslotId, width: topologyConfig.render.slot.shellMinWidth },
       ...slotIds.map((st) => ({ id: nodeIds.get(st)!, width: topologyConfig.render.slot.shellMinWidth })),
     ])
-  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation])
+  }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation, t])
 
   const handleAddButtonClick = useCallback(() => {
     const btn = addButtonRef.current
@@ -2103,10 +2107,10 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" description="可视化编辑请求转发的拓扑结构" />
+        <PageHeader title={t('common:nav.topology')} description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center gap-3">
           <AppIcon name="progress_activity" size={20} className="animate-spin" />
-          <span className="text-sm">加载拓扑数据…</span>
+          <span className="text-sm">{t('state.loadingTopology')}</span>
         </div>
       </div>
     )
@@ -2115,14 +2119,14 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title="转发拓扑" description="可视化编辑请求转发的拓扑结构" />
+        <PageHeader title={t('common:nav.topology')} description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
             <AppIcon name="warning" size={40} className="text-destructive" />
             <p className="max-w-md text-sm">{error}</p>
             <Button variant="outline" onClick={loadData}>
               <AppIcon name="refresh" data-icon="inline-start" />
-              重试
+              {t('common:action.retry')}
             </Button>
           </div>
         </div>
@@ -2133,9 +2137,9 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   return (
     <div className="flex h-screen flex-col">
       <PageHeader
-        title="转发拓扑"
-        description="可视化编辑请求转发的拓扑结构"
-        status={`请求入口：${activeEntries}/${totalEntries} · ${nodes.filter((n) => n.type !== 'modelHub').length} 节点`}
+        title={t('common:nav.topology')}
+        description={t('page.description')}
+        status={t('page.status', { active: activeEntries, total: totalEntries, nodes: nodes.filter((n) => n.type !== 'modelHub').length })}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -2143,8 +2147,8 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
               size="icon"
               onClick={handleUndo}
               disabled={!canUndo}
-              title="撤销 (Ctrl/Cmd+Z)"
-              aria-label="撤销"
+              title={t('toolbar.undoTitle')}
+              aria-label={t('toolbar.undo')}
               className="disabled:opacity-60"
             >
               <AppIcon name="undo" />
@@ -2154,15 +2158,15 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
               size="icon"
               onClick={handleRedo}
               disabled={!canRedo}
-              title="重做 (Ctrl/Cmd+Shift+Z)"
-              aria-label="重做"
+              title={t('toolbar.redoTitle')}
+              aria-label={t('toolbar.redo')}
               className="disabled:opacity-60"
             >
               <AppIcon name="redo" />
             </Button>
             <Button variant="outline" size="default" onClick={() => setVersionsOpen(true)}>
               <AppIcon name="history" data-icon="inline-start" />
-              历史版本
+              {t('toolbar.versions')}
             </Button>
           </div>
         }
@@ -2213,8 +2217,8 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
               variant="outline"
               size="icon"
               onClick={requestDeleteSelected}
-              title="删除选中节点 (Delete)"
-              aria-label="删除选中节点"
+              title={t('toolbar.deleteSelectedTitle')}
+              aria-label={t('toolbar.deleteSelected')}
             >
               <AppIcon name="delete" />
             </Button>
@@ -2224,8 +2228,8 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
               variant={selMode ? 'default' : 'outline'}
               size="icon"
               onClick={() => setSelMode((v) => !v)}
-              title={selMode ? '框选模式已开启，点击拖拽框选节点' : '框选模式'}
-              aria-label="框选模式"
+              title={selMode ? t('toolbar.boxSelectOn') : t('toolbar.boxSelect')}
+              aria-label={t('toolbar.boxSelect')}
             >
               <AppIcon name="rect_select" />
             </Button>
@@ -2233,16 +2237,16 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
               variant="outline"
               size="icon"
               onClick={handleAddButtonClick}
-              title="添加节点"
-              aria-label="添加节点"
+              title={t('toolbar.addNode')}
+              aria-label={t('toolbar.addNode')}
               ref={addButtonRef}
             >
               <AppIcon name="add" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleAutoLayout} title="自动布局">
+            <Button variant="outline" size="icon" onClick={handleAutoLayout} title={t('toolbar.autoLayout')}>
               <AppIcon name="auto_fix_high" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleFitAll} title="最大化显示全部节点">
+            <Button variant="outline" size="icon" onClick={handleFitAll} title={t('toolbar.fitAll')}>
               <AppIcon name="fullscreen" />
             </Button>
             <FlowColorsPanel colors={flowColors} onChange={handleFlowColorsChange} />
@@ -2329,11 +2333,13 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         >
           <DialogContent width="sm" scrollFooter>
             <DialogHeader>
-              <DialogTitle>确认删除</DialogTitle>
+              <DialogTitle>{t('delete.title')}</DialogTitle>
               <DialogDescription>
                 {confirmDelete?.nodeCount && confirmDelete.nodeCount > 0
-                  ? `将删除 ${confirmDelete.nodeCount} 个节点${confirmDelete.edgeCount > 0 ? `和 ${confirmDelete.edgeCount} 条连线` : ''},删除后可通过撤销恢复。`
-                  : `将删除 ${confirmDelete?.edgeCount ?? 0} 条连线,删除后可通过撤销恢复。`}
+                  ? confirmDelete.edgeCount > 0
+                    ? t('delete.descriptionWithNodesAndEdges', { nodeCount: confirmDelete.nodeCount, edgeCount: confirmDelete.edgeCount })
+                    : t('delete.descriptionWithNodes', { nodeCount: confirmDelete.nodeCount })
+                  : t('delete.descriptionEdges', { edgeCount: confirmDelete?.edgeCount ?? 0 })}
               </DialogDescription>
             </DialogHeader>
             <DialogScrollBody footer={
@@ -2345,7 +2351,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
                     setConfirmDelete(null)
                   }}
                 >
-                  确认删除
+                  {t('delete.confirm')}
                 </Button>
               </>
             }>

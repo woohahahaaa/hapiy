@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -31,12 +32,13 @@ export function SlotEnableControl({
   onStartCapture,
   onAutoClose,
 }: SlotEnableControlProps) {
+  const { t } = useTranslation('node')
   if (variant === 'switch') {
     return (
       <Switch
         checked={enabled}
         onCheckedChange={(v) => onToggle(v === true)}
-        aria-label={enabled ? '禁用' : '启用'}
+        aria-label={enabled ? t('common:action.disable') : t('common:action.enable')}
         className="nodrag nopan shrink-0"
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
@@ -71,6 +73,7 @@ function CountdownControl({
   onStartCapture?: (deadlineAt: number) => void
   onAutoClose?: () => void
 }) {
+  const { t } = useTranslation('node')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [hours, setHours] = useState('0')
   const [minutes, setMinutes] = useState('5')
@@ -121,13 +124,13 @@ function CountdownControl({
       <div className="flex items-center gap-2">
         {capturing && (
           <span className="whitespace-nowrap text-[10px]">
-            剩余 {remainingHours}小时{remainingMinutes}分{remainingSeconds}秒
+            {t('slotEnableControl.remaining', { hours: remainingHours, minutes: remainingMinutes, seconds: remainingSeconds })}
           </span>
         )}
         <Switch
           checked={capturing}
           onCheckedChange={handleToggle}
-          aria-label={capturing ? '关闭' : '开启'}
+          aria-label={capturing ? t('slotEnableControl.close') : t('slotEnableControl.open')}
           className="nodrag nopan shrink-0"
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
@@ -137,19 +140,19 @@ function CountdownControl({
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>设置开启时长</DialogTitle>
+            <DialogTitle>{t('slotEnableControl.dialogTitle')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button size="sm" disabled={totalSeconds <= 0} onClick={handleConfirm}>
-                确认
+                {t('common:action.confirm')}
               </Button>
             </>
           }>
             <div className="flex items-end justify-center gap-2">
-              <TimeField label="时" value={hours} onChange={setHours} />
-              <TimeField label="分" value={minutes} onChange={setMinutes} />
-              <TimeField label="秒" value={seconds} onChange={setSeconds} />
+              <TimeField label={t('slotEnableControl.hours')} value={hours} onChange={setHours} />
+              <TimeField label={t('slotEnableControl.minutes')} value={minutes} onChange={setMinutes} />
+              <TimeField label={t('slotEnableControl.seconds')} value={seconds} onChange={setSeconds} />
             </div>
           </DialogScrollBody>
         </DialogContent>

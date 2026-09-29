@@ -115,7 +115,7 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("改写规则名称 %q 已存在", r.Name)})
+				respondErrorWithParams(c, http.StatusBadRequest, "RULE_NAME_EXISTS", fmt.Sprintf("改写规则名称 %q 已存在", r.Name), gin.H{"name": r.Name})
 				return
 			}
 			rule = &r
@@ -134,7 +134,7 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name)})
+				respondErrorWithParams(c, http.StatusBadRequest, "FAILOVER_RULE_NAME_EXISTS", fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name), gin.H{"name": r.Name})
 				return
 			}
 			rule = &r
@@ -148,7 +148,7 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("响应改写规则名称 %q 已存在", r.Name)})
+				respondErrorWithParams(c, http.StatusBadRequest, "RESPONSE_REWRITE_RULE_NAME_EXISTS", fmt.Sprintf("响应改写规则名称 %q 已存在", r.Name), gin.H{"name": r.Name})
 				return
 			}
 			rule = &r
@@ -204,7 +204,7 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name)})
+				respondErrorWithParams(c, http.StatusBadRequest, "FAILOVER_RULE_NAME_EXISTS", fmt.Sprintf("故障转移规则名称 %q 已存在", r.Name), gin.H{"name": r.Name})
 				return
 			}
 			rule = &r
@@ -222,7 +222,7 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			} else if dup {
-				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("响应改写规则名称 %q 已存在", r.Name)})
+				respondErrorWithParams(c, http.StatusBadRequest, "RESPONSE_REWRITE_RULE_NAME_EXISTS", fmt.Sprintf("响应改写规则名称 %q 已存在", r.Name), gin.H{"name": r.Name})
 				return
 			}
 			rule = &r
@@ -321,7 +321,7 @@ func TestRewriteRule(db *gorm.DB) gin.HandlerFunc {
 
 		var modifiedRaw interface{}
 		if err := json.Unmarshal(modified, &modifiedRaw); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "改写结果解析失败"})
+			respondError(c, http.StatusInternalServerError, "REWRITE_RESULT_PARSE_FAILED", "改写结果解析失败")
 			return
 		}
 

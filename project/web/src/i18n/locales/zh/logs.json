@@ -1,0 +1,217 @@
+{
+  "page": {
+    "activity": {
+      "title": "活动监视",
+      "description": "实时活动请求与运行统计"
+    },
+    "usage": {
+      "title": "使用记录",
+      "description": "查询 API 请求的使用记录、消耗与耗时"
+    },
+    "capture": {
+      "title": "日志抓取",
+      "description": "查看已抓取的请求/响应日志原文"
+    },
+    "recordCount": "{{count}} 条记录"
+  },
+  "action": {
+    "copy": "复制",
+    "copied": "已复制"
+  },
+  "columns": {
+    "time": "时间",
+    "startTime": "开始时间",
+    "source": "来源",
+    "token": "令牌",
+    "provider": "供应商",
+    "model": "模型",
+    "status": "状态",
+    "stream": "流式",
+    "latency": "耗时",
+    "latencyWithFirstByte": "{{total}}（首字:{{firstByte}}）",
+    "affinity": "渠道亲和性",
+    "tokens": "Tokens",
+    "quota": "消耗",
+    "speed": "速度",
+    "operation": "操作",
+    "prefix": "文件夹路径",
+    "type": "类型",
+    "fileName": "文件名/请求ID",
+    "size": "大小"
+  },
+  "status": {
+    "success": "成功",
+    "failed": "失败"
+  },
+  "affinity": {
+    "full": "复用渠道",
+    "partial": "部分复用",
+    "new": "新渠道",
+    "create": "创建渠道",
+    "withParts": "{{state}}（复用：{{parts}}）",
+    "partsSeparator": "、"
+  },
+  "tokens": {
+    "input": "输入",
+    "cacheWrite": "缓存写入",
+    "cacheRead": "缓存读取",
+    "output": "输出",
+    "summary": "输入 {{input}} · 缓存写入 {{cacheWrite}} · 缓存读取 {{cacheRead}}{{hitRate}} · 输出 {{output}}",
+    "detailOpen": "（",
+    "detailClose": "）/"
+  },
+  "filters": {
+    "type": "类型",
+    "source": "来源",
+    "token": "令牌",
+    "provider": "供应商",
+    "model": "模型",
+    "status": "状态",
+    "folder": "文件夹",
+    "allTypes": "全部类型",
+    "allSources": "全部来源",
+    "allTokens": "全部令牌",
+    "allProviders": "全部供应商",
+    "allModels": "全部模型",
+    "allStatuses": "全部状态",
+    "allFolders": "全部文件夹",
+    "unmarkedSource": "未标注来源",
+    "typeRequest": "请求",
+    "typeChannelDisabled": "故障转移",
+    "typeChannelRecoveredAuto": "自动恢复",
+    "typeChannelRecoveredManual": "手动恢复",
+    "typeSystemAdmin": "系统管理",
+    "reset": "重置筛选"
+  },
+  "clear": {
+    "confirmTitle": "清空当前筛选条件下的所有内容，确认吗？",
+    "description": "此操作不可恢复，清空后无法找回相关记录。",
+    "filtered": "清空当前页面的",
+    "all": "清空所有页面的",
+    "filteredDone": "已清空 {{count}} 条记录",
+    "allDone": "已清空全部 {{count}} 条记录"
+  },
+  "monitor": {
+    "stats": {
+      "title": "统计"
+    },
+    "clear": {
+      "button": "清空用量",
+      "tooltip": "清空累计用量统计（不影响请求记录）",
+      "dialogDescription": "将清空累计用量统计，不影响请求记录。",
+      "confirmTitle": "确认清空用量？",
+      "clearing": "清空中…",
+      "confirm": "确认清空",
+      "done": "用量已清空"
+    },
+    "saved": "已保存",
+    "metrics": {
+      "totalRequests": "总请求",
+      "successRequests": "成功请求",
+      "failedRequests": "失败请求",
+      "totalTokens": "总 Token",
+      "averageLatency": "平均延迟",
+      "successRate": "成功率",
+      "cost": "花费",
+      "throughput": "吞吐量",
+      "cacheHitRate": "缓存命中率"
+    },
+    "active": {
+      "title": "活跃请求",
+      "stageQueued": "排队中·已等{{elapsed}}",
+      "stageConnecting": "连接上游{{provider}}·已{{elapsed}}",
+      "stageWaitingUpstream": "等待上游响应·已{{elapsed}}",
+      "stageReceivingStream": "接收中·第{{chunk}}chunk·已收{{bytes}}",
+      "stageReceiving": "接收响应中·已读{{bytes}}",
+      "stageActive": "活跃中",
+      "outcomeClientDisconnected": "客户端断开",
+      "outcomeUpstreamError": "上游报错",
+      "outcomeNoProvider": "无可用供应商",
+      "outcomeConcurrency": "并发超限",
+      "outcomeParseError": "解析错误",
+      "outcomeKilled": "已掐断",
+      "outcomeFinished": "已结束"
+    },
+    "kill": {
+      "button": "掐断",
+      "killing": "掐断中…",
+      "tooltip": "掐断该请求（将中止上游请求）",
+      "done": "已掐断"
+    },
+    "retention": {
+      "immediate": "请求完成后立即移除",
+      "seconds": "{{count}} 秒",
+      "minutes": "{{count}} 分钟",
+      "label": "显示 {{retention}} 内的活跃请求",
+      "unknown": "保留时间未知",
+      "setTooltip": "设置保留时间",
+      "dialogTitle": "保留时间设置",
+      "dialogDescription": "请求结束后，在列表中保留多久"
+    }
+  },
+  "capture": {
+    "empty": "暂无抓取日志",
+    "system": "系统",
+    "modified": "·修改过"
+  },
+  "typeLabel": {
+    "request": "请求",
+    "response": "响应",
+    "requestResponse": "请求+响应",
+    "requestResponseMany": "请求+响应×{{count}}",
+    "errorSuffix": "+报错",
+    "incompleteSuffix": "+不完整"
+  },
+  "preview": {
+    "loading": "加载中...",
+    "empty": "暂无内容",
+    "request": "请求",
+    "response": "响应",
+    "requestHeaders": "请求头",
+    "requestBody": "请求体",
+    "responseHeaders": "响应头",
+    "responseBody": "响应体",
+    "mergeJson": "整合JSON",
+    "raw": "原始内容",
+    "merging": "整合中…",
+    "noData": "（无 data）",
+    "systemLog": "系统日志",
+    "responseStatus": "响应状态码: {{status}}",
+    "timing": {
+      "queue": "排队",
+      "requestRewrite": "请求改写",
+      "connect": "连接",
+      "firstByte": "首字",
+      "responseRewrite": "响应改写",
+      "streamRewrite": "流式改写"
+    }
+  },
+  "detail": {
+    "title": "记录详情 {{id}}",
+    "requestId": "请求 id",
+    "providerKey": "上游 Key",
+    "upstreamUrl": "上游 URL",
+    "details": "详细信息",
+    "timing": "排队 {{queue}} · 请求改写 {{requestRewrite}} · 连接 {{connect}} · 首字 {{firstByte}} · 响应改写 {{responseRewrite}} · 流式改写 {{streamRewrite}}"
+  },
+  "error": {
+    "loadFailed": "加载失败",
+    "clearFailed": "清空失败",
+    "mergeFailed": "整合失败",
+    "statsFailed": "获取统计失败",
+    "activeFailed": "获取活跃请求失败",
+    "retentionFailed": "获取保留时间失败",
+    "killFailed": "掐断失败",
+    "saveFailed": "保存失败"
+  },
+  "dateRange": {
+    "all": "全部",
+    "lastMonth": "一个月",
+    "lastWeek": "一周",
+    "lastDay": "一天",
+    "today": "今天",
+    "start": "开始",
+    "to": "至",
+    "end": "结束"
+  }
+}

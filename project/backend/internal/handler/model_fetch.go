@@ -37,13 +37,13 @@ func FetchModels() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req fetchModelsRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请求体格式错误"})
+			respondError(c, http.StatusBadRequest, "REQUEST_BODY_INVALID", "请求体格式错误")
 			return
 		}
 
 		parsed, err := url.Parse(req.Endpoint)
 		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "接口地址必须是 http(s) URL"})
+			respondError(c, http.StatusBadRequest, "MODEL_FETCH_URL_INVALID", "接口地址必须是 http(s) URL")
 			return
 		}
 
@@ -52,7 +52,7 @@ func FetchModels() gin.HandlerFunc {
 
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, req.Endpoint, nil)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无法连接上游: " + truncateErr(err)})
+			respondErrorWithParams(c, http.StatusBadRequest, "UPSTREAM_UNREACHABLE", "无法连接上游: "+truncateErr(err), gin.H{"error": truncateErr(err)})
 			return
 		}
 		request.Header.Set("Accept", "application/json")
@@ -62,19 +62,19 @@ func FetchModels() gin.HandlerFunc {
 
 		response, err := service.DefaultClient().Do(request)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无法连接上游: " + truncateErr(err)})
+			respondErrorWithParams(c, http.StatusBadRequest, "UPSTREAM_UNREACHABLE", "无法连接上游: "+truncateErr(err), gin.H{"error": truncateErr(err)})
 			return
 		}
 		defer response.Body.Close()
 
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "无法连接上游: " + truncateErr(err)})
+			respondErrorWithParams(c, http.StatusBadRequest, "UPSTREAM_UNREACHABLE", "无法连接上游: "+truncateErr(err), gin.H{"error": truncateErr(err)})
 			return
 		}
 
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("上游返回错误状态码: %d", response.StatusCode)})
+			respondErrorWithParams(c, http.StatusBadRequest, "UPSTREAM_STATUS_ERROR", fmt.Sprintf("上游返回错误状态码: %d", response.StatusCode), gin.H{"status": response.StatusCode})
 			return
 		}
 
@@ -82,7 +82,7 @@ func FetchModels() gin.HandlerFunc {
 			Data []upstreamModelItem `json:"data"`
 		}
 		if err := json.Unmarshal(body, &payload); err != nil || payload.Data == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "上游响应缺少 data 数组"})
+			respondError(c, http.StatusBadRequest, "UPSTREAM_BODY_INVALID", "上游响应缺少 data 数组")
 			return
 		}
 

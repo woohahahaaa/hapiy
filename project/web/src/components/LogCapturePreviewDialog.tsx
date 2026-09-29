@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   Dialog,
   DialogContent,
@@ -46,11 +48,11 @@ function renderBody(title: string, body: unknown) {
   )
 }
 
-function renderHeaders(headers: Record<string, string> | null, showTitle = true) {
+function renderHeaders(headers: Record<string, string> | null, showTitle = true, title = '') {
   if (!headers || Object.keys(headers).length === 0) return null
   return (
     <div className="flex flex-col gap-1.5">
-      {showTitle && <div className="font-mono text-xs font-medium text-foreground">请求头</div>}
+      {showTitle && <div className="font-mono text-xs font-medium text-foreground">{title}</div>}
       <div className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
         {Object.entries(headers).map(([k, v]) => (
           <div key={k}>
@@ -92,19 +94,19 @@ function circledNumber(n: number): string {
 // rendered below (the backend can produce empty entries from failover retries).
 // Suffixes (+报错 / +不完整) mirror the backend's label so the dialog header
 // matches the list view.
-function computeTypeLabel(pair: LogCapturePairFull): string {
+function computeTypeLabel(pair: LogCapturePairFull, t: TFunction): string {
   const hasRequest = !!pair.request
   const live = pair.responses.filter((r) => r.before || r.after)
   const n = live.length
   let base: string
-  if (!hasRequest && n > 0) base = '响应'
-  else if (hasRequest && n === 0) base = '请求'
-  else if (n === 1) base = '请求+响应'
-  else base = `请求+响应×${n}`
+  if (!hasRequest && n > 0) base = t('typeLabel.response')
+  else if (hasRequest && n === 0) base = t('typeLabel.request')
+  else if (n === 1) base = t('typeLabel.requestResponse')
+  else base = t('typeLabel.requestResponseMany', { count: n })
   const hasError = pairHasError(pair)
   const isIncomplete = hasRequest && live.some((r) => r.before && !r.after)
-  if (hasError) base += '+报错'
-  if (isIncomplete) base += '+不完整'
+  if (hasError) base += t('typeLabel.errorSuffix')
+  if (isIncomplete) base += t('typeLabel.incompleteSuffix')
   return base
 }
 
@@ -150,6 +152,7 @@ function Node({ label, defaultOpen = true, actions, children }: {
 // `getText` is a thunk so the copy reads the current value at click time
 // (the pair may have reloaded since this button mounted).
 function CopyButton({ getText }: { readonly getText: () => string }) {
+  const { t } = useTranslation('common')
   const [copied, setCopied] = useState(false)
   const onClick = useCallback(() => {
     const text = getText()
@@ -166,7 +169,7 @@ function CopyButton({ getText }: { readonly getText: () => string }) {
   }, [getText])
   return (
     <Button size="sm" variant="outline" onClick={onClick}>
-      {copied ? '已复制' : '复制'}
+      {copied ? t('action.copied') : t('action.copy')}
     </Button>
   )
 }
@@ -219,7 +222,7 @@ function StageErrorRow({ error }: { readonly error: string }) {
   )
 }
 
-function renderStageBody(node: StageNode): ReactNode {
+function renderStageBody(node: StageNode, t: TFunction): ReactNode {
   const headersEl = node.modified
     ? renderHeaderDiff(node.before?.headers ?? null, node.after?.headers ?? null)
     : renderHeaders(node.before?.headers ?? node.after?.headers ?? null, false)
@@ -234,8 +237,8 @@ function renderStageBody(node: StageNode): ReactNode {
   return (
     <>
       {stageError !== '' && <StageErrorRow error={stageError} />}
-      {headersEl !== null && <Node label="请求头">{headersEl}</Node>}
-      {bodyEl !== null && <Node label="请求体">{bodyEl}</Node>}
+      {headersEl !== null && <Node label={t('preview.requestHeaders')}>{headersEl}</Node>}
+      {bodyEl !== null && <Node label={t('preview.requestBody')}>{bodyEl}</Node>}
     </>
   )
 }
@@ -288,6 +291,7 @@ function RawSseView({ text }: { readonly text: string }) {
 // ── SseBlock: one SSE event — collapsed by default, title shows the data
 // payload's `id` (falling back to event type when absent).
 function SseBlock({ index, block }: { readonly index: number; readonly block: string }) {
+  const { t } = useTranslation('logs')
   const [open, setOpen] = useState(false)
   const lines = block.split('\n')
   const eventLine = lines.find((l) => l.startsWith('event:'))
@@ -330,7 +334,7 @@ function SseBlock({ index, block }: { readonly index: number; readonly block: st
           ) : data ? (
             <JsonHighlight value={data} className="border-0 bg-transparent p-0" />
           ) : (
-            <div className="font-mono text-[10px] text-muted-foreground">（无 data）</div>
+            <div className="font-mono text-[10px] text-muted-foreground">{t('preview.noData')}</div>
           )}
         </div>
       )}
@@ -342,6 +346,7 @@ function SseBlock({ index, block }: { readonly index: number; readonly block: st
 // toggle. Toggle is hidden when the stage has no "raw" text or its
 // content-type is not SSE.
 function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow }) {
+  const { t } = useTranslation('logs')
   const [mode, setMode] = useState<'raw' | 'merged'>('merged')
   const [merged, setMerged] = useState<unknown>(undefined)
   const [mergeLoading, setMergeLoading] = useState(false)
@@ -363,10 +368,10 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
       })
       .then((result) => setMerged(result.value))
       .catch((err: unknown) =>
-        setMergeError(err instanceof Error ? err.message : '整合失败'),
+        setMergeError(err instanceof Error ? err.message : t('error.mergeFailed')),
       )
       .finally(() => setMergeLoading(false))
-  }, [stageRow])
+  }, [stageRow, t])
 
   // Eagerly fetch merged JSON on first render when the toggle is visible;
   // this matches the default 'merged' mode and avoids an extra click.
@@ -386,7 +391,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
         if (!cancelled) setMerged(result.value)
       })
       .catch((err: unknown) => {
-        if (!cancelled) setMergeError(err instanceof Error ? err.message : '整合失败')
+        if (!cancelled) setMergeError(err instanceof Error ? err.message : t('error.mergeFailed'))
       })
       .finally(() => {
         if (!cancelled) setMergeLoading(false)
@@ -394,7 +399,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
     return () => {
       cancelled = true
     }
-  }, [canMerge, merged, stageRow])
+  }, [canMerge, merged, stageRow, t])
 
   const switchTo = useCallback(
     (next: 'raw' | 'merged') => {
@@ -408,8 +413,8 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
     return (
       <div className="flex flex-col gap-1.5">
         {stageRow.error && <StageErrorRow error={stageRow.error} />}
-        {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
-        <Node label="响应体">
+        {headersEl !== null && <Node label={t('preview.responseHeaders')}>{headersEl}</Node>}
+        <Node label={t('preview.responseBody')}>
           <JsonHighlight value={stageRow.body} />
         </Node>
       </div>
@@ -419,9 +424,9 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
   return (
     <div className="flex flex-col gap-1.5">
       {stageRow.error && <StageErrorRow error={stageRow.error} />}
-      {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
+      {headersEl !== null && <Node label={t('preview.responseHeaders')}>{headersEl}</Node>}
       <Node
-        label="响应体"
+        label={t('preview.responseBody')}
         actions={
           <div className="flex items-center gap-1">
             <Button
@@ -430,14 +435,14 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
               disabled={mergeLoading}
               onClick={() => switchTo('merged')}
             >
-              {mergeLoading ? '整合中…' : '整合JSON'}
+              {mergeLoading ? t('preview.merging') : t('preview.mergeJson')}
             </Button>
             <Button
               size="sm"
               variant={mode === 'raw' ? 'default' : 'outline'}
               onClick={() => switchTo('raw')}
             >
-              原始内容
+              {t('preview.raw')}
             </Button>
           </div>
         }
@@ -449,7 +454,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
             </div>
           ) : merged === undefined ? (
             <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-              整合中…
+              {t('preview.merging')}
             </div>
           ) : (
             <JsonHighlight value={merged} />
@@ -487,14 +492,15 @@ export function LogCapturePreviewDialog(props: LogCapturePreviewDialogProps) {
 
 // ── Timing block: request-level stage timings from the pair read ──
 function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
+  const { t } = useTranslation('logs')
   const fmtMs = (val: number) => (val >= 0 ? `${val}ms` : '-')
   const rows: ReadonlyArray<[string, number]> = [
-    ['排队', timing.queueWaitMs],
-    ['请求改写', timing.requestRewriteMs],
-    ['连接', timing.connectMs],
-    ['首字', timing.firstByteMs],
-    ['响应改写', timing.responseRewriteMs],
-    ['流式改写', timing.streamRewriteMs],
+    [t('preview.timing.queue'), timing.queueWaitMs],
+    [t('preview.timing.requestRewrite'), timing.requestRewriteMs],
+    [t('preview.timing.connect'), timing.connectMs],
+    [t('preview.timing.firstByte'), timing.firstByteMs],
+    [t('preview.timing.responseRewrite'), timing.responseRewriteMs],
+    [t('preview.timing.streamRewrite'), timing.streamRewriteMs],
   ]
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
@@ -517,6 +523,7 @@ function PairDialog({ requestId, open, onClose }: {
   readonly open: boolean
   readonly onClose: () => void
 }) {
+  const { t } = useTranslation('logs')
   const [pair, setPair] = useState<LogCapturePairFull | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -538,7 +545,7 @@ function PairDialog({ requestId, open, onClose }: {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
+          setError(err instanceof Error ? err.message : t('error.loadFailed'))
         }
       })
       .finally(() => {
@@ -571,7 +578,7 @@ function PairDialog({ requestId, open, onClose }: {
     }
   }, [pair, requestId])
 
-  const typeLabel = pair ? computeTypeLabel(pair) : ''
+  const typeLabel = pair ? computeTypeLabel(pair, t) : ''
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
@@ -585,11 +592,11 @@ function PairDialog({ requestId, open, onClose }: {
         <DialogScrollBody>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
-            <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>
+            <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.loading')}</div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
               <span className="text-xs text-destructive">{error}</span>
-              <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>重试</Button>
+              <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>{t('common:action.retry')}</Button>
             </div>
           ) : pair ? (
             <div className="flex flex-col gap-3">
@@ -600,21 +607,21 @@ function PairDialog({ requestId, open, onClose }: {
               )}
               {pair.timing && <TimingBlock timing={pair.timing} />}
               {!pair.request && pair.responses.length === 0 ? (
-                <div className="py-16 text-center text-xs text-muted-foreground">暂无内容</div>
+                <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.empty')}</div>
               ) : (
                 <>
                   {pair.request && (
                     <Node
                       label={
-                        <span>请求{pair.request.modified ? <span className="text-amber-600 dark:text-amber-400"> ·修改过</span> : null}</span>
+                        <span>{t('preview.request')}{pair.request.modified ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.modified')}</span> : null}</span>
                       }
                       actions={<CopyButton getText={() => stageNodeCopyText(pair.request!)} />}
                     >
-                      {renderStageBody(pair.request)}
+                      {renderStageBody(pair.request, t)}
                     </Node>
                   )}
                   {pair.responses.length > 0 && (
-                    <Node label={<span>响应</span>}>
+                    <Node label={<span>{t('preview.response')}</span>}>
                       {pair.responses.map((resp, i) => {
                         // Skip nodes that have neither before nor after; they
                         // come from a failover attempt that didn't log any
@@ -626,8 +633,8 @@ function PairDialog({ requestId, open, onClose }: {
                           key={i}
                           label={
                             <span>
-                              响应 {circledNumber(i + 1)}{resp.status ? ` · ${resp.status}` : ''}
-                              {resp.modified ? <span className="text-amber-600 dark:text-amber-400"> ·修改过</span> : null}
+                              {t('preview.response')} {circledNumber(i + 1)}{resp.status ? ` · ${resp.status}` : ''}
+                              {resp.modified ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.modified')}</span> : null}
                             </span>
                           }
                           actions={<CopyButton getText={() => stageNodeCopyText(resp)} />}
@@ -642,7 +649,7 @@ function PairDialog({ requestId, open, onClose }: {
               )}
             </div>
           ) : (
-            <div className="py-16 text-center text-xs text-muted-foreground">暂无内容</div>
+            <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.empty')}</div>
           )}
         </div>
         </DialogScrollBody>
@@ -654,14 +661,15 @@ function PairDialog({ requestId, open, onClose }: {
 // ResponseNodeBody: DiffView when modified, otherwise toggle on the
 // available stage row (after preferred, falls back to before).
 function ResponseNodeBody({ resp }: { readonly resp: import('@/lib/dashboard-api').LogCaptureResponseNode }) {
+  const { t } = useTranslation('logs')
   const headersEl = resp.modified
     ? renderHeaderDiff(resp.before?.headers ?? null, resp.after?.headers ?? null)
     : renderHeaders(resp.before?.headers ?? resp.after?.headers ?? null, false)
   if (resp.modified) {
     return (
       <div className="flex flex-col gap-1.5">
-        {headersEl !== null && <Node label="响应头">{headersEl}</Node>}
-        <Node label="响应体">
+        {headersEl !== null && <Node label={t('preview.responseHeaders')}>{headersEl}</Node>}
+        <Node label={t('preview.responseBody')}>
           <DiffView before={resp.before?.body} after={resp.after?.body} />
         </Node>
       </div>
@@ -679,6 +687,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
   readonly open: boolean
   readonly onClose: () => void
 }) {
+  const { t } = useTranslation('logs')
   const [row, setRow] = useState<LogCaptureRow | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -699,7 +708,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : '加载失败')
+          setError(err instanceof Error ? err.message : t('error.loadFailed'))
         }
       })
       .finally(() => {
@@ -716,17 +725,17 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="truncate">{fileName}</span>
-            {row && <Badge variant="outline">系统</Badge>}
+            {row && <Badge variant="outline">{t('capture.system')}</Badge>}
           </DialogTitle>
         </DialogHeader>
         <DialogScrollBody>
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
-            <div className="py-16 text-center text-xs text-muted-foreground">加载中...</div>
+            <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.loading')}</div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
               <span className="text-xs text-destructive">{error}</span>
-              <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>重试</Button>
+              <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>{t('common:action.retry')}</Button>
             </div>
           ) : row ? (
             <div className="flex flex-col gap-3">
@@ -737,7 +746,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
               )}
               {row.type === 'system' && row.system_log ? (
                 <div className="flex flex-col gap-1.5">
-                  <div className="font-mono text-xs font-medium text-foreground">系统日志</div>
+                  <div className="font-mono text-xs font-medium text-foreground">{t('preview.systemLog')}</div>
                   <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
                     {Array.isArray(row.system_log) ? row.system_log.join('\n') : String(row.system_log)}
                   </pre>
@@ -745,10 +754,10 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
               ) : (
                 <>
                   {renderHeaders(row.headers)}
-                  {renderBody('请求体', row.request_body)}
-                  {renderBody('响应体', row.response_body)}
+                  {renderBody(t('preview.requestBody'), row.request_body)}
+                  {renderBody(t('preview.responseBody'), row.response_body)}
                   {row.response_status > 0 && (
-                    <div className="text-xs text-muted-foreground">响应状态码: {row.response_status}</div>
+                    <div className="text-xs text-muted-foreground">{t('preview.responseStatus', { status: row.response_status })}</div>
                   )}
                 </>
               )}

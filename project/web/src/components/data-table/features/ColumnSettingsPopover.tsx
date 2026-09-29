@@ -3,6 +3,7 @@
 import * as React from "react"
 import type { JSX } from "react"
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import { AppIcon } from "@/components/AppIcon"
 import type { ColumnDef } from "../ColumnDef"
@@ -56,6 +57,7 @@ export function ColumnSettingsPopover<T>(
     onOpenChange,
     anchorRef,
   } = props
+  const { t } = useTranslation('ui')
 
   const [internalOpen, setInternalOpen] = React.useState(false)
   const isControlled = openProp !== undefined
@@ -88,7 +90,7 @@ export function ColumnSettingsPopover<T>(
           ref={anchorRef}
           variant="ghost"
           size="icon"
-          aria-label="列设置"
+          aria-label={t('columns.settings')}
         >
           <AppIcon name="auto_width" size={16} />
         </Button>
@@ -103,7 +105,7 @@ export function ColumnSettingsPopover<T>(
       >
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium">列设置</div>
+            <div className="text-xs font-medium">{t('columns.settings')}</div>
             {headerExtra}
           </div>
           {columns.map((col, i) => {
@@ -122,7 +124,7 @@ export function ColumnSettingsPopover<T>(
                   <Input
                     value={widthInput[i] ?? ""}
                     onChange={(e) => onWidthInputChange(i, e.target.value)}
-                    placeholder="如 200 px 或 30 %"
+                    placeholder={t('columns.widthPlaceholder')}
                     className="flex-1"
                     disabled={isLocked}
                   />
@@ -130,7 +132,7 @@ export function ColumnSettingsPopover<T>(
                     <Button
                       variant={cfg.align === "left" ? "secondary" : "ghost"}
                       size="icon-sm"
-                      aria-label="左对齐"
+                      aria-label={t('columns.alignLeft')}
                       onClick={() => onConfigChange(i, { ...cfg, align: "left" })}
                       disabled={isLocked}
                     >
@@ -139,7 +141,7 @@ export function ColumnSettingsPopover<T>(
                     <Button
                       variant={cfg.align === "right" ? "secondary" : "ghost"}
                       size="icon-sm"
-                      aria-label="右对齐"
+                      aria-label={t('columns.alignRight')}
                       onClick={() => onConfigChange(i, { ...cfg, align: "right" })}
                       disabled={isLocked}
                     >
@@ -152,8 +154,8 @@ export function ColumnSettingsPopover<T>(
                         cfg.overflow === "ellipsis" ? "secondary" : "ghost"
                       }
                       size="icon-sm"
-                      title="省略号"
-                      aria-label="省略号"
+                      title={t('columns.ellipsis')}
+                      aria-label={t('columns.ellipsis')}
                       onClick={() =>
                         onConfigChange(i, { ...cfg, overflow: "ellipsis" })
                       }
@@ -164,8 +166,8 @@ export function ColumnSettingsPopover<T>(
                     <Button
                       variant={cfg.overflow === "wrap" ? "secondary" : "ghost"}
                       size="icon-sm"
-                      title="换行"
-                      aria-label="换行"
+                      title={t('columns.wrap')}
+                      aria-label={t('columns.wrap')}
                       onClick={() =>
                         onConfigChange(i, { ...cfg, overflow: "wrap" })
                       }
@@ -178,8 +180,8 @@ export function ColumnSettingsPopover<T>(
                     <Button
                       variant={isLocked ? "secondary" : "ghost"}
                       size="icon-sm"
-                      title={isLocked ? "解锁" : "锁定"}
-                      aria-label={isLocked ? "解锁" : "锁定"}
+                      title={isLocked ? t('columns.unlock') : t('columns.lock')}
+                      aria-label={isLocked ? t('columns.unlock') : t('columns.lock')}
                       onClick={() => onLockToggle(i)}
                     >
                       <AppIcon name={LOCK_ICON} size={14} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { PageHeader } from '@/components/PageHeader'
 import { DateRangeFilter } from '@/components/DateRangeFilter'
 import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
@@ -51,6 +52,7 @@ function formatDateTimeCell(value: unknown): { date: string; time: string } | nu
 }
 
 export function LogCapturePage() {
+  const { t } = useTranslation('logs')
   const [pairs, setPairs] = useState<readonly LogCapturePairSummary[]>([])
   const [pairTotal, setPairTotal] = useState(0)
   const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
@@ -125,7 +127,7 @@ export function LogCapturePage() {
       if (r.status === 'rejected') {
         const reason = r.reason
         if (mountedRef.current) {
-          setError(reason instanceof Error ? reason.message : '加载失败')
+          setError(reason instanceof Error ? reason.message : t('error.loadFailed'))
         }
         break
       }
@@ -133,7 +135,7 @@ export function LogCapturePage() {
     if (mountedRef.current) {
       setInitialLoading(false)
     }
-    }, [prefixFilter, tokenFilter, providerFilter, modelFilter, sourceFilter, dateRange.from, dateRange.to, limit, offset])
+    }, [prefixFilter, tokenFilter, providerFilter, modelFilter, sourceFilter, dateRange.from, dateRange.to, limit, offset, t])
 
   useEffect(() => {
     mountedRef.current = true
@@ -208,7 +210,7 @@ export function LogCapturePage() {
         void fetchPage()
       } catch (err) {
         if (mountedRef.current) {
-          setError(err instanceof Error ? err.message : '清空失败')
+          setError(err instanceof Error ? err.message : t('error.clearFailed'))
         }
         setClearOpen(false)
       } finally {
@@ -216,7 +218,7 @@ export function LogCapturePage() {
       }
     },
 
-    [prefixFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage],
+    [prefixFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage, t],
   )
 
   const rows: readonly CaptureRow[] = useMemo(() => {
@@ -234,7 +236,7 @@ export function LogCapturePage() {
   const columns: ColumnDef<CaptureRow>[] = [
     {
       key: 'created_at',
-      label: '时间',
+      label: t('columns.time'),
       defaultWidth: { kind: 'pixel', value: 160 },
       defaultOverflow: 'wrap',
       slot: {
@@ -244,37 +246,37 @@ export function LogCapturePage() {
     },
     {
       key: 'prefix',
-      label: '文件夹路径',
+      label: t('columns.prefix'),
       defaultWidth: { kind: 'percent', value: 18 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.prefix : row.file.prefix),
     },
     {
       key: 'token_name',
-      label: '令牌',
+      label: t('columns.token'),
       defaultWidth: { kind: 'percent', value: 10 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.token_name : null),
     },
     {
       key: 'provider_name',
-      label: '供应商',
+      label: t('columns.provider'),
       defaultWidth: { kind: 'percent', value: 12 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.provider_name : null),
     },
     {
       key: 'model_name',
-      label: '模型',
+      label: t('columns.model'),
       defaultWidth: { kind: 'percent', value: 12 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.model_name : null),
     },
     {
       key: 'source',
-      label: '来源',
+      label: t('columns.source'),
       defaultWidth: { kind: 'pixel', value: 100 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
     },
     {
       key: 'type',
-      label: '类型',
+      label: t('columns.type'),
       defaultWidth: { kind: 'pixel', value: 120 },
       render: (_, row) =>
         row.kind === 'pair' ? (
@@ -282,15 +284,15 @@ export function LogCapturePage() {
           // 「·修改过」用 shrink-0 保证不参与截断，颜色跟随主文案。
           <Badge variant={row.pair.has_error ? 'destructive' : 'default'} className="max-w-full">
             <span className="min-w-0 truncate">{row.pair.type_label}</span>
-            {row.pair.has_rewrite ? <span className="shrink-0"> ·修改过</span> : null}
+            {row.pair.has_rewrite ? <span className="shrink-0"> {t('capture.modified')}</span> : null}
           </Badge>
         ) : (
-          <Badge variant="outline">系统</Badge>
+          <Badge variant="outline">{t('capture.system')}</Badge>
         ),
     },
     {
       key: 'is_stream',
-      label: '流式',
+      label: t('columns.stream'),
       defaultWidth: { kind: 'pixel', value: 80 },
       render: (_, row) => {
         const isStream = row.kind === 'pair' ? row.pair.is_stream : false
@@ -299,13 +301,13 @@ export function LogCapturePage() {
     },
     {
       key: 'name',
-      label: '文件名/请求ID',
+      label: t('columns.fileName'),
       defaultWidth: { kind: 'percent', value: 25 },
       accessor: (row) => (row.kind === 'pair' ? row.pair.request_id : row.file.name),
     },
     {
       key: 'size',
-      label: '大小',
+      label: t('columns.size'),
       defaultWidth: { kind: 'pixel', value: 100 },
       defaultAlign: 'right',
       render: (_, row) =>
@@ -320,9 +322,9 @@ export function LogCapturePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="日志抓取"
-        description="查看已抓取的请求/响应日志原文"
-        status={total > 0 ? `${total} 条记录` : undefined}
+        title={t('page.capture.title')}
+        description={t('page.capture.description')}
+        status={total > 0 ? t('page.recordCount', { count: total }) : undefined}
         actions={undefined}
       />
       <div className="p-6">
@@ -338,7 +340,7 @@ export function LogCapturePage() {
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
           onRowClick={setPreview}
-          emptyText="暂无抓取日志"
+          emptyText={t('capture.empty')}
           onRetry={() => void fetchPage()}
           rowBackgroundColor={(row) =>
             row.kind === 'pair' && row.pair.has_rewrite
@@ -360,11 +362,11 @@ export function LogCapturePage() {
               />
               <Select value={prefixFilter} onValueChange={setPrefixFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="文件夹" />
+                  <SelectValue placeholder={t('filters.folder')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部文件夹</SelectItem>
+                    <SelectItem value="all">{t('filters.allFolders')}</SelectItem>
                     {prefixOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
@@ -373,12 +375,12 @@ export function LogCapturePage() {
               </Select>
               <Select value={sourceFilter} onValueChange={setSourceFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="来源" />
+                  <SelectValue placeholder={t('filters.source')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部来源</SelectItem>
-                    <SelectItem value={LOG_SOURCE_UNMARKED}>未标注来源</SelectItem>
+                    <SelectItem value="all">{t('filters.allSources')}</SelectItem>
+                    <SelectItem value={LOG_SOURCE_UNMARKED}>{t('filters.unmarkedSource')}</SelectItem>
                     {sourceOptions.map((s) => (
                       <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
@@ -387,11 +389,11 @@ export function LogCapturePage() {
               </Select>
               <Select value={tokenFilter} onValueChange={setTokenFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="令牌" />
+                  <SelectValue placeholder={t('filters.token')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部令牌</SelectItem>
+                    <SelectItem value="all">{t('filters.allTokens')}</SelectItem>
                     {tokenOptions.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
@@ -400,11 +402,11 @@ export function LogCapturePage() {
               </Select>
               <Select value={providerFilter} onValueChange={setProviderFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="供应商" />
+                  <SelectValue placeholder={t('filters.provider')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部供应商</SelectItem>
+                    <SelectItem value="all">{t('filters.allProviders')}</SelectItem>
                     {providerOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
@@ -413,11 +415,11 @@ export function LogCapturePage() {
               </Select>
               <Select value={modelFilter} onValueChange={setModelFilter}>
                 <SelectTrigger className="w-40">
-                  <SelectValue placeholder="模型" />
+                  <SelectValue placeholder={t('filters.model')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    <SelectItem value="all">全部模型</SelectItem>
+                    <SelectItem value="all">{t('filters.allModels')}</SelectItem>
                     {modelOptions.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
@@ -429,7 +431,7 @@ export function LogCapturePage() {
                 size="sm"
                 onClick={handleResetFilters}
               >
-                重置筛选
+                {t('filters.reset')}
               </Button>
             </>
           }

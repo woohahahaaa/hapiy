@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -5,12 +7,12 @@ import type { DateRange } from '@/lib/dashboard-api'
 
 type QuickPreset = 'all' | 'month' | 'week' | 'day' | 'today'
 
-const QUICK_OPTIONS: readonly { value: QuickPreset; label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'month', label: '一个月' },
-  { value: 'week', label: '一周' },
-  { value: 'day', label: '一天' },
-  { value: 'today', label: '今天' },
+const QUICK_OPTIONS: readonly { value: QuickPreset; labelKey: string }[] = [
+  { value: 'all', labelKey: 'dateRange.all' },
+  { value: 'month', labelKey: 'dateRange.lastMonth' },
+  { value: 'week', labelKey: 'dateRange.lastWeek' },
+  { value: 'day', labelKey: 'dateRange.lastDay' },
+  { value: 'today', labelKey: 'dateRange.today' },
 ]
 
 function formatDate(date: Date): string {
@@ -43,6 +45,8 @@ export function DateRangeFilter({
   onChange: (range: DateRange) => void
   className?: string
 }) {
+  const { t } = useTranslation('logs')
+
   const handleQuick = (preset: QuickPreset) => {
     if (preset === 'all') {
       onChange({})
@@ -72,11 +76,11 @@ export function DateRangeFilter({
         />
         {!value.from && (
           <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            开始
+            {t('dateRange.start')}
           </span>
         )}
       </div>
-      <span className="text-xs text-muted-foreground">至</span>
+      <span className="text-xs text-muted-foreground">{t('dateRange.to')}</span>
       <div className="relative">
         <Input
           type="date"
@@ -86,7 +90,7 @@ export function DateRangeFilter({
         />
         {!value.to && (
           <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            结束
+            {t('dateRange.end')}
           </span>
         )}
       </div>
@@ -98,7 +102,7 @@ export function DateRangeFilter({
             size="sm"
             onClick={() => handleQuick(opt.value)}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </Button>
         ))}
       </div>

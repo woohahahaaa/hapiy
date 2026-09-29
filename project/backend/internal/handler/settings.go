@@ -32,7 +32,7 @@ func UpsertSetting(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		if setting.Key == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "key 不能为空"})
+			respondError(c, http.StatusBadRequest, "SETTING_KEY_REQUIRED", "key 不能为空")
 			return
 		}
 
@@ -81,9 +81,7 @@ func ReplaceBaseUrlPaths(db *gorm.DB) gin.HandlerFunc {
 				continue
 			}
 			if strings.ContainsAny(p, "/") || strings.Contains(p, "__") || len(p) > 32 {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"error": fmt.Sprintf("来源名 %q 无效：不能包含 / 或 __，且长度不超过 32", p),
-				})
+				respondErrorWithParams(c, http.StatusBadRequest, "BASE_URL_PATH_INVALID", fmt.Sprintf("来源名 %q 无效：不能包含 / 或 __，且长度不超过 32", p), gin.H{"name": p})
 				return
 			}
 			if seen[p] {

@@ -1,0 +1,17 @@
+{
+  "PROVIDER_NAME_EXISTS": "A provider with this name already exists",
+  "PROVIDER_WORKFLOW_ALREADY_ENABLED": "A workflow for a provider with this name is already enabled. Disable it first.",
+  "TOKEN_NAME_EXISTS": "A token with this name already exists",
+  "RULE_NAME_EXISTS": "A rewrite rule named {{name}} already exists",
+  "FAILOVER_RULE_NAME_EXISTS": "A failover rule named {{name}} already exists",
+  "RESPONSE_REWRITE_RULE_NAME_EXISTS": "A response rewrite rule named {{name}} already exists",
+  "REWRITE_RESULT_PARSE_FAILED": "Failed to parse the rewrite result",
+  "TOPOLOGY_VERSION_NOT_FOUND": "Version not found",
+  "ENGINE_NOT_READY": "The engine is not ready",
+  "EXCHANGE_URL_REQUIRED": "API URL is required",
+  "SETTING_KEY_REQUIRED": "key cannot be empty",
+  "BASE_URL_PATH_INVALID": "Source name {{name}} is invalid: it must not contain / or __ and must be at most 32 characters",
+  "RETENTION_MINUTES_OUT_OF_RANGE": "retention_minutes must be between 0 and 1440",
+  "ACTIVE_REQUEST_NOT_FOUND": "The request does not exist or has already finished",
+  "MODELS_DEV_FETCH_FAILED": "Failed to fetch models.dev data, please try again later"
+}

@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n/i18n'
+
 export type ModelsDevModel = {
   readonly id: string
   readonly name: string
@@ -42,7 +44,7 @@ function readStringArray(value: unknown): readonly string[] {
 
 function parseModel(value: unknown): ModelsDevModel {
   if (!isRecord(value)) {
-    throw new Error('models.dev 数据格式无效')
+    throw new Error(i18n.t('lib:modelsDev.invalidFormat'))
   }
   return {
     id: readString(value.id),
@@ -67,11 +69,11 @@ export async function loadModelsDevModels(): Promise<readonly ModelsDevModel[]> 
   if (!loadPromise) {
     loadPromise = fetch(API_URL)
       .then(async (response) => {
-        if (!response.ok) throw new Error(`models.dev 数据请求失败（${response.status}）`)
+        if (!response.ok) throw new Error(i18n.t('lib:modelsDev.requestFailed', { status: response.status }))
         const body = (await response.json()) as unknown
-        if (!isRecord(body)) throw new Error('models.dev 数据格式无效')
+        if (!isRecord(body)) throw new Error(i18n.t('lib:modelsDev.invalidFormat'))
         const data = body.data
-        if (!Array.isArray(data)) throw new Error('models.dev 数据格式无效')
+        if (!Array.isArray(data)) throw new Error(i18n.t('lib:modelsDev.invalidFormat'))
         return data.map(parseModel)
       })
       .then((models) => {

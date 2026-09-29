@@ -48,6 +48,8 @@ export function computeProviderAvailability(input: {
 
 // 摘要统一用分数形式展示各维度禁用情况，只列出存在禁用的维度：
 // 供应商 1/1、base URL 2/3、key 0/3。
+import { i18n } from '@/i18n/i18n'
+
 export function formatAutoDisableSummary(input: {
   readonly providerDisabled: boolean
   readonly baseUrlsDisabled: Readonly<Record<string, boolean>>
@@ -58,10 +60,10 @@ export function formatAutoDisableSummary(input: {
   const disabledBaseURLCount = Object.values(input.baseUrlsDisabled).filter(Boolean).length
   const disabledKeyCount = Object.values(input.keysDisabled).filter(Boolean).length
   const items = [
-    input.providerDisabled ? '供应商 1/1' : null,
-    disabledBaseURLCount > 0 ? `base URL ${disabledBaseURLCount}/${input.baseURLCount}` : null,
-    disabledKeyCount > 0 ? `key ${disabledKeyCount}/${input.keyCount}` : null,
+    input.providerDisabled ? i18n.t('lib:availability.providerItem', { count: 1, total: 1 }) : null,
+    disabledBaseURLCount > 0 ? i18n.t('lib:availability.baseUrlItem', { count: disabledBaseURLCount, total: input.baseURLCount }) : null,
+    disabledKeyCount > 0 ? i18n.t('lib:availability.keyItem', { count: disabledKeyCount, total: input.keyCount }) : null,
   ].filter((item): item is string => item !== null)
 
-  return items.length > 0 ? `故障转移：${items.join('、')}` : null
+  return items.length > 0 ? i18n.t('lib:availability.summary', { items: items.join(i18n.t('lib:availability.join')) }) : null
 }

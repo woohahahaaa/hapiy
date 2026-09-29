@@ -1,0 +1,44 @@
+{
+  "edge": {
+    "unitMustBeArray": "Edge unit {{position}} must be an array",
+    "unitNotEmpty": "Edge unit {{position}} must not be empty",
+    "childUnit": "sub-unit {{index}} of {{position}}",
+    "clusterNeedsParticipantTail": "Edge cluster {{position}} must contain at least one participant chain and a shared tail",
+    "clusterNeedsParticipantTailBare": "Edge clusters must contain at least one participant chain and a shared tail",
+    "documentMustBeArray": "The edge document must be an array",
+    "unitIndex": "unit {{index}}",
+    "tailNotEmpty": "The shared tail must not be empty",
+    "tailMustStartWithSlot": "The shared tail must start with a slot reference, got {{ref}}",
+    "tailExpansionEmpty": "The shared tail cluster expanded to nothing",
+    "chainNotEmpty": "A chain must not be empty",
+    "chainRefMustStart": "Chain {{chain}}: reference {{ref}} must start with pv- or slot-",
+    "unknownSlotRef": "Chain {{chain}}: unknown slot reference {{ref}}",
+    "unknownProviderRef": "Chain {{chain}}: unknown provider reference {{ref}}",
+    "providerDuplicated": "Provider {{key}} appears in multiple chains",
+    "providerFollowedByNonSlot": "Chain {{chain}}: a non-slot reference {{ref}} appears after a provider",
+    "slotRefDuplicated": "Chain {{chain}}: slot reference {{ref}} appears more than once"
+  },
+  "doc": {
+    "nonEmptyString": "{{field}} must be a non-empty string",
+    "boolean": "{{field}} must be a boolean",
+    "nonNegativeInteger": "{{field}} must be a non-negative integer",
+    "nodeMustBeObject": "A node must be an object",
+    "unknownNodeType": "Unknown node type: {{type}}",
+    "documentMustBeArray": "The topology document must be an array",
+    "workflowMustBeArray": "Workflow {{index}} must be an array",
+    "workflowNotEmpty": "Workflow {{index}} must not be empty",
+    "workflowFirstNode": "The first node of workflow {{index}} must be a provider",
+    "unknownNodeConversion": "Cannot convert node type: {{type}}"
+  },
+  "modelsDev": {
+    "invalidFormat": "Invalid models.dev data format",
+    "requestFailed": "models.dev request failed (HTTP {{status}})"
+  },
+  "availability": {
+    "providerItem": "provider {{count}}/{{total}}",
+    "baseUrlItem": "base URL {{count}}/{{total}}",
+    "keyItem": "key {{count}}/{{total}}",
+    "summary": "Failover: {{items}}",
+    "join": ", "
+  }
+}

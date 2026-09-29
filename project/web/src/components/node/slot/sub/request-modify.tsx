@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SlotContainer } from '@/components/node/slot/slot-container'
 import { slotNodeActive } from '@/components/node/effectiveness'
 import { topologyConfig } from '@/config/topology-config'
@@ -47,6 +48,7 @@ export function NodeSlotRequestModify({
   ruleStatus,
   onRefreshRules,
 }: NodeSlotRequestModifyProps) {
+  const { t } = useTranslation('node')
   const [testOpen, setTestOpen] = useState(false)
   const boundEntries = entries
     .filter((e): e is RequestModifySlotEntry => 'ruleId' in e)
@@ -63,7 +65,7 @@ export function NodeSlotRequestModify({
           className="nodrag nopan flex items-center gap-1 rounded-xs border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
           onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
         >
-          测试
+          {t('common:action.test')}
         </button>
         <SlotEnableControl
           variant="switch"

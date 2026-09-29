@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { DialogScrollBody } from '@/components/dialog'
@@ -25,6 +26,7 @@ interface RewriteResponseFormProps {
 }
 
 export function RewriteResponseForm({ rule, onSave, saving }: RewriteResponseFormProps) {
+  const { t } = useTranslation('rewrite')
   const [form, setForm] = useState<RuleForm>(() => parseRule(rule?.script ?? ''))
   const [name, setName] = useState(rule?.name ?? '')
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -77,30 +79,30 @@ export function RewriteResponseForm({ rule, onSave, saving }: RewriteResponseFor
     <DialogScrollBody footer={
       <>
         <Button disabled={disabled} onClick={handleSave}>
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('common:state.saving') : t('common:action.save')}
         </Button>
       </>
     }>
       <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="rr-name">名称</FieldLabel>
+        <FieldLabel htmlFor="rr-name">{t('form.name')}</FieldLabel>
         <Input
           id="rr-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="规则名称"
+          placeholder={t('form.namePlaceholder')}
         />
       </Field>
 
       <Field>
         <div className="flex items-center justify-between">
-          <FieldLabel>改写规则</FieldLabel>
+          <FieldLabel>{t('form.rewriteRules')}</FieldLabel>
           <GjsonPathHelp />
         </div>
         <div className="flex w-full flex-col gap-3">
           {form.blocks.length === 0 ? (
             <div className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-              暂无规则，点击下方「添加规则」开始配置
+              {t('rule.empty')}
             </div>
           ) : (
             form.blocks.map((b, i) => (
@@ -126,8 +128,8 @@ export function RewriteResponseForm({ rule, onSave, saving }: RewriteResponseFor
             type="button"
             onClick={addBlock}
             className="nodrag nopan inline-flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-            aria-label="添加规则"
-            title="添加规则"
+            aria-label={t('rule.addLabel')}
+            title={t('rule.addTitle')}
           >
             <AppIcon name="add" size={16} />
           </button>

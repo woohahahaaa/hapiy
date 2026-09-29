@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { SlotContainer } from '@/components/node/slot/slot-container'
 import { slotNodeActive } from '@/components/node/effectiveness'
 import { AppIcon } from '@/components/AppIcon'
@@ -56,10 +57,11 @@ export function NodeSlotProvider({
   onDragOver,
   onDrop,
 }: NodeSlotProviderProps) {
+  const { t } = useTranslation('node')
   const strategyLabel = {
-    sequential: '按顺序',
-    random: '随机',
-    roundRobin: '轮询',
+    sequential: t('slotProvider.strategySequential'),
+    random: t('slotProvider.strategyRandom'),
+    roundRobin: t('slotProvider.strategyRoundRobin'),
   } as const
   const titleBadge = (
     <div className="flex items-center justify-between">

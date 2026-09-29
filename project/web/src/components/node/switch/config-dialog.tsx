@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/AppIcon'
 import { Checkbox } from '@/components/checkbox'
@@ -47,6 +48,7 @@ type RwCondition = Condition
 // 条件开关节点配置弹窗（系统 Dialog 组件）：规则名称 + 筛选维度二选一
 // （供应商/模型）+ 多选下拉 + 请求头/请求体条件块（照搬请求改写编辑器）。
 export function SwitchConfigDialog({ open, onOpenChange, name, config, providers, onSave }: SwitchConfigDialogProps) {
+  const { t } = useTranslation('node')
   const [draftName, setDraftName] = useState(name ?? '')
   const [mode, setMode] = useState<SwitchFilterMode>(config.mode ?? 'provider')
   const [selectedProviders, setSelectedProviders] = useState<ReadonlySet<string>>(new Set(config.providers ?? []))
@@ -120,24 +122,24 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm" scrollFooter className="!w-[680px]">
         <DialogHeader>
-          <DialogTitle>满足以下供应商和请求头、请求体条件时，生效</DialogTitle>
+          <DialogTitle>{t('switch.dialogTitle')}</DialogTitle>
           <DialogDescription>
-            配置了供应商/模型筛选或判断条件时，命中其中任一即从「是」输出；全部未命中从「否」输出。未配置任何筛选和条件时，默认从「是」输出。
+            {t('switch.dialogDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <DialogScrollBody className="flex flex-col gap-4" footer={
           <>
-            <Button onClick={handleSave}>保存</Button>
+            <Button onClick={handleSave}>{t('common:action.save')}</Button>
           </>
         }>
           {/* ── 规则名称：留空则节点显示「条件开关」 ── */}
           <Field>
-            <FieldLabel>规则名称</FieldLabel>
+            <FieldLabel>{t('switch.ruleNameLabel')}</FieldLabel>
             <Input
               value={draftName}
               onChange={(e) => setDraftName(e.target.value)}
-              placeholder="条件开关"
+              placeholder={t('switch.ruleNamePlaceholder')}
             />
           </Field>
 
@@ -149,8 +151,8 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value="provider">对选中供应商生效</SelectItem>
-                  <SelectItem value="model">对选中模型生效</SelectItem>
+                  <SelectItem value="provider">{t('switch.modeProvider')}</SelectItem>
+                  <SelectItem value="model">{t('switch.modeModel')}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -164,7 +166,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                       {selectedOptions.length === 0 ? (
                         <span className="text-muted-foreground">
-                          {mode === 'provider' ? '选择供应商（不选时对全部生效）' : '选择模型（不选时对全部生效）'}
+                          {mode === 'provider' ? t('switch.selectProviderPlaceholder') : t('switch.selectModelPlaceholder')}
                         </span>
                       ) : (
                         selectedOptions.map((o) => (
@@ -172,7 +174,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                             key={o.id}
                             label={<span className="font-medium">{o.name}</span>}
                             onRemove={() => toggleOption(o.id)}
-                            removeTitle={`移除 ${o.name}`}
+                            removeTitle={t('switch.removeOption', { name: o.name })}
                           />
                         ))
                       )}
@@ -209,7 +211,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                     })}
                     {options.length === 0 && (
                       <li className="px-2.5 py-2 text-xs text-muted-foreground">
-                        {mode === 'provider' ? '暂无供应商' : '暂无模型'}
+                        {mode === 'provider' ? t('switch.noProviders') : t('switch.noModels')}
                       </li>
                     )}
                   </ul>
@@ -222,7 +224,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
-                条件
+                {t('switch.conditions')}
               </span>
               <div className="flex items-center gap-1.5">
                 <Select value={conditionLogic} onValueChange={(v) => setConditionLogic(v as 'AND' | 'OR')}>
@@ -231,8 +233,8 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                   </SelectTrigger>
                   <SelectContent>
                     <SelectGroup>
-                      <SelectItem value="AND">AND（都满足）</SelectItem>
-                      <SelectItem value="OR">OR（任一满足）</SelectItem>
+                      <SelectItem value="AND">{t('switch.logicAnd')}</SelectItem>
+                      <SelectItem value="OR">{t('switch.logicOr')}</SelectItem>
                     </SelectGroup>
                   </SelectContent>
                 </Select>
@@ -240,17 +242,17 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                   type="button"
                   onClick={addCondition}
                   className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
-                  aria-label="添加条件"
-                  title="添加条件"
+                  aria-label={t('switch.addCondition')}
+                  title={t('switch.addCondition')}
                 >
                   <AppIcon name="add" size={12} />
-                  添加条件
+                  {t('switch.addCondition')}
                 </button>
               </div>
             </div>
             {conditions.length === 0 ? (
               <div className="rounded border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
-                暂无条件，留空表示无条件执行
+                {t('switch.noConditions')}
               </div>
             ) : (
               <ConditionList conditions={conditions} onChange={setConditions} />

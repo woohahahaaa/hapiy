@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -20,11 +21,12 @@ function isEventLog(row: UsageLog): boolean {
 }
 
 export function UsageLogDetailDialog({ log, onOpenChange }: { readonly log: UsageLog | null; readonly onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation('logs')
   return (
     <Dialog open={log !== null} onOpenChange={onOpenChange}>
       <DialogContent width="sm">
         <DialogHeader>
-          <DialogTitle>记录详情 {log?.id ?? ''}</DialogTitle>
+          <DialogTitle>{t('detail.title', { id: log?.id ?? '' })}</DialogTitle>
         </DialogHeader>
         {log && <LogDetailFields log={log} />}
       </DialogContent>
@@ -56,6 +58,7 @@ function SecretValue({ value }: { value: string }) {
 }
 
 function LogDetailFields({ log }: { log: UsageLog }) {
+  const { t } = useTranslation('logs')
   const date = new Date(log.createdAt)
   const timeText = Number.isNaN(date.getTime())
     ? log.createdAt
@@ -63,51 +66,56 @@ function LogDetailFields({ log }: { log: UsageLog }) {
   return (
     <div className="space-y-4 text-xs">
       <FieldGroup>
-        <DetailRow className="col-span-2" label="请求 id" value={log.requestId || '-'} />
-        <DetailRow className="col-span-2" label="时间" value={timeText} />
-        <DetailRow className="col-span-2" label="令牌" value={log.tokenName || '-'} />
-        <DetailRow className="col-span-2" label="供应商" value={log.providerName || '-'} />
-        <DetailRow className="col-span-2" label="模型" value={log.modelName || '-'} />
-        <DetailRow className="col-span-2" label="来源" value={log.source || '-'} />
+        <DetailRow className="col-span-2" label={t('detail.requestId')} value={log.requestId || '-'} />
+        <DetailRow className="col-span-2" label={t('columns.time')} value={timeText} />
+        <DetailRow className="col-span-2" label={t('columns.token')} value={log.tokenName || '-'} />
+        <DetailRow className="col-span-2" label={t('columns.provider')} value={log.providerName || '-'} />
+        <DetailRow className="col-span-2" label={t('columns.model')} value={log.modelName || '-'} />
+        <DetailRow className="col-span-2" label={t('columns.source')} value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
-          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 Key</span>
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.providerKey')}</span>
           <SecretValue value={log.providerKey || '-'} />
         </div>
         <div className="col-span-2 flex items-baseline gap-2">
-          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">上游 URL</span>
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.upstreamUrl')}</span>
           <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
         </div>
       </FieldGroup>
       <FieldGroup>
         <DetailRow
           className="col-span-2"
-          label="Tokens"
+          label={t('columns.tokens')}
           value={
             isEventLog(log) ? '-' : (
               <span>
-                <span className="text-muted-foreground/60">输入</span> {log.promptTokens}（
-                <span className="text-muted-foreground/60">缓存写入</span> {log.promptCacheMissTokens} /{' '}
-                <span className="text-muted-foreground/60">缓存读取</span> {log.promptCacheHitTokens}）/{' '}
-                <span className="text-muted-foreground/60">输出</span> {log.completionTokens}
+                <span className="text-muted-foreground/60">{t('tokens.input')}</span> {log.promptTokens}{t('tokens.detailOpen')}
+                <span className="text-muted-foreground/60">{t('tokens.cacheWrite')}</span> {log.promptCacheMissTokens} /{' '}
+                <span className="text-muted-foreground/60">{t('tokens.cacheRead')}</span> {log.promptCacheHitTokens}{t('tokens.detailClose')}{' '}
+                <span className="text-muted-foreground/60">{t('tokens.output')}</span> {log.completionTokens}
               </span>
             )
           }
         />
-        <DetailRow className="col-span-2" label="流式" value={log.isStream ? 'SSE' : '-'} />
-        <DetailRow className="col-span-2" label="消耗" value={log.quota > 0 ? formatQuota(log) : '-'} />
+        <DetailRow className="col-span-2" label={t('columns.stream')} value={log.isStream ? 'SSE' : '-'} />
+        <DetailRow className="col-span-2" label={t('columns.quota')} value={log.quota > 0 ? formatQuota(log) : '-'} />
       </FieldGroup>
       <FieldGroup>
-        {isEventLog(log) ? <DetailRow className="col-span-2" label="耗时" value="-" /> : (
+        {isEventLog(log) ? <DetailRow className="col-span-2" label={t('columns.latency')} value="-" /> : (
           <DetailRow
             className="col-span-2"
-            label="耗时"
+            label={t('columns.latency')}
             value={
               <span className="space-y-1">
                 <span className="block">{`${(log.useTime / 1000).toFixed(1)}s`}</span>
                 <span className="block text-muted-foreground/60">
-                  排队 {fmtSeconds(log.queueWaitMs)} · 请求改写 {fmtSeconds(log.requestRewriteMs)} · 连接{' '}
-                  {fmtSeconds(log.connectMs)} · 首字 {fmtSeconds(log.firstByteMs)} · 响应改写{' '}
-                  {fmtSeconds(log.responseRewriteMs)} · 流式改写 {fmtSeconds(log.streamRewriteMs)}
+                  {t('detail.timing', {
+                    queue: fmtSeconds(log.queueWaitMs),
+                    requestRewrite: fmtSeconds(log.requestRewriteMs),
+                    connect: fmtSeconds(log.connectMs),
+                    firstByte: fmtSeconds(log.firstByteMs),
+                    responseRewrite: fmtSeconds(log.responseRewriteMs),
+                    streamRewrite: fmtSeconds(log.streamRewriteMs),
+                  })}
                 </span>
               </span>
             }
@@ -117,15 +125,15 @@ function LogDetailFields({ log }: { log: UsageLog }) {
       <FieldGroup>
         <DetailRow
           className="col-span-2"
-          label="渠道亲和性"
+          label={t('columns.affinity')}
           value={
             log.affinityReuse === ''
               ? '-'
               : (() => {
                   const labels: Record<string, string> = {
-                    none: '创建渠道',
-                    partial: '部分复用',
-                    full: '复用渠道',
+                    none: t('affinity.create'),
+                    partial: t('affinity.partial'),
+                    full: t('affinity.full'),
                   }
                   const state = labels[log.affinityReuse] ?? log.affinityReuse
                   const partLabels: Record<string, string> = {
@@ -133,25 +141,25 @@ function LogDetailFields({ log }: { log: UsageLog }) {
                     baseurl: 'Base URL',
                     key: 'Key',
                   }
-                  const parts = log.affinityReuseParts.map((p) => partLabels[p] ?? p).join('、')
-                  return parts ? `${state}（复用：${parts}）` : state
+                  const parts = log.affinityReuseParts.map((p) => partLabels[p] ?? p).join(t('affinity.partsSeparator'))
+                  return parts ? t('affinity.withParts', { state, parts }) : state
                 })()
           }
         />
         <DetailRow
           className="col-span-2"
-          label="状态"
-          value={log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : (log.source || '-')}
+          label={t('columns.status')}
+          value={log.status === 'success' ? t('status.success') : log.status === 'failed' ? t('status.failed') : (log.source || '-')}
         />
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">详细信息</span>
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
             <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
           </div>
         )}
         {log.eventDetail && (
           <div className="col-span-2 flex items-baseline gap-2">
-            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">详细信息</span>
+            <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
             <span className="break-words whitespace-pre-wrap text-foreground">{log.eventDetail}</span>
           </div>
         )}

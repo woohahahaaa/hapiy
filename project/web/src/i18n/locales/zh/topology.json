@@ -1,0 +1,120 @@
+{
+  "page": {
+    "description": "可视化编辑请求转发的拓扑结构",
+    "status": "请求入口：{{active}}/{{total}} · {{nodes}} 节点"
+  },
+  "state": {
+    "loadingTopology": "加载拓扑数据…"
+  },
+  "error": {
+    "loadData": "加载数据失败"
+  },
+  "toast": {
+    "saveRetry": "拓扑保存失败，稍后自动重试",
+    "layoutSaveFailed": "布局保存失败",
+    "topologyChangedElsewhere": "拓扑已在其他页面被修改，请刷新以加载最新数据",
+    "layoutChangedElsewhere": "布局已在其他页面被修改，请刷新以加载最新布局",
+    "layoutLoadFailed": "布局加载失败，使用默认位置",
+    "nothingToCopy": "没有可复制的选中节点",
+    "duplicateProvider": "同一个 Provider（{{name}}）不能在多个激活工作流中被启用"
+  },
+  "validation": {
+    "duplicateSlot": "一个工作流里面不能有多个{{slot}}",
+    "switchMaxOutgoing": "条件开关最多两条出边（是/否）",
+    "switchSameTarget": "条件开关的两个分支不能连向同一个节点",
+    "maxOneOutgoing": "每个节点最多一条出边",
+    "cycle": "不能形成环路"
+  },
+  "node": {
+    "entry": "请求入口",
+    "emergencyEntry": "应急请求入口",
+    "providerSlot": "供应商",
+    "switch": "条件开关",
+    "slotFallback": "插槽"
+  },
+  "slot": {
+    "requestModify": "请求改写",
+    "responseModify": "响应改写",
+    "concurrency": "并发控制",
+    "autoSwitch": "故障转移",
+    "logOutput": "日志抓取"
+  },
+  "toolbar": {
+    "undo": "撤销",
+    "undoTitle": "撤销 (Ctrl/Cmd+Z)",
+    "redo": "重做",
+    "redoTitle": "重做 (Ctrl/Cmd+Shift+Z)",
+    "versions": "历史版本",
+    "deleteSelected": "删除选中节点",
+    "deleteSelectedTitle": "删除选中节点 (Delete)",
+    "boxSelect": "框选模式",
+    "boxSelectOn": "框选模式已开启，点击拖拽框选节点",
+    "addNode": "添加节点",
+    "autoLayout": "自动布局",
+    "fitAll": "最大化显示全部节点"
+  },
+  "delete": {
+    "title": "确认删除",
+    "descriptionWithNodesAndEdges": "将删除 {{nodeCount}} 个节点和 {{edgeCount}} 条连线,删除后可通过撤销恢复。",
+    "descriptionWithNodes": "将删除 {{nodeCount}} 个节点,删除后可通过撤销恢复。",
+    "descriptionEdges": "将删除 {{edgeCount}} 条连线,删除后可通过撤销恢复。",
+    "confirm": "确认删除"
+  },
+  "menu": {
+    "addFullWorkflow": "添加完整工作流",
+    "addEntry": "添加请求入口",
+    "addProviderSlot": "添加供应商插槽",
+    "addSlot": "添加 {{slot}} 插槽",
+    "addSwitch": "添加 条件开关",
+    "addEmergencyWorkflow": "添加应急供应商"
+  },
+  "colors": {
+    "title": "模型节点色值",
+    "description": "为模型节点分配流光颜色，按顺序循环使用；未配置时使用主题色",
+    "empty": "未配置，使用主题色",
+    "removeAria": "删除色值",
+    "placeholder": "HEX 色值，空格分隔多个，如 #4ade80 #38bdf8",
+    "add": "添加"
+  },
+  "versions": {
+    "title": "历史版本",
+    "archived": "已存档",
+    "archive": "存档",
+    "archiveFailed": "存档失败",
+    "loadFailed": "加载历史版本失败",
+    "previewFailed": "加载版本失败",
+    "restoreFailed": "恢复失败",
+    "restored": "已恢复到该版本",
+    "current": "当前版本",
+    "workflowSummary": "工作流 {{active}}/{{total}} · {{nodes}} 节点",
+    "restore": "恢复",
+    "empty": "暂无历史版本",
+    "previewHint": "选择左侧条目以预览",
+    "restoreDialogTitle": "恢复版本",
+    "restoreConfirm": "确认恢复",
+    "restoreDialogBody": "恢复前会自动存档当前版本，确定恢复到该版本吗？"
+  },
+  "nodeMenu": {
+    "title": "从 provider 创建工作流",
+    "empty": "没有可选的供应商"
+  },
+  "jsonEdit": {
+    "title": "编辑 JSON",
+    "format": "格式化",
+    "formatFailed": "格式化失败：JSON 无效",
+    "saving": "保存中...",
+    "saveConfirmTitle": "保存 JSON",
+    "saveConfirmDescription": "你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。",
+    "reconsider": "我再想想",
+    "confirmSave": "确认保存",
+    "topLevelArray": "JSON 顶层必须是数组",
+    "invalidId": "每条记录的 ID 必须是大于 0 的整数",
+    "duplicateId": "ID {{id}} 重复"
+  },
+  "jsonEditor": {
+    "contentAria": "JSON 内容"
+  },
+  "diff": {
+    "empty": "（空）"
+  }
+}

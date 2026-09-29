@@ -1,0 +1,93 @@
+{
+  "preview": {
+    "noAction": "No actions",
+    "summary": "{{rules}} rules · {{actions}} actions"
+  },
+  "unknown": {
+    "title": "Unknown policy type",
+    "notExist": "This policy type does not exist",
+    "available": "Available policy types: {{types}}",
+    "back": "Back to Request Rewrite"
+  },
+  "name": "Name",
+  "columns": {
+    "preview": "Rule preview",
+    "actions": "Actions"
+  },
+  "statusCount_one": "{{count}} rule",
+  "statusCount_other": "{{count}} rules",
+  "dialog": {
+    "addRule": "Add rule",
+    "editRule": "Edit rule",
+    "deleteTitle": "Confirm deletion",
+    "deleteDescription": "Rule \"{{name}}\" will be deleted. This cannot be undone."
+  },
+  "actions": {
+    "saving": "Saving..."
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "createFailed": "Failed to create",
+    "updateFailed": "Failed to update",
+    "deleteFailed": "Failed to delete"
+  },
+  "form": {
+    "ruleName": "Rule name"
+  },
+  "rewrite": {
+    "description": "Modify request body fields with a JSON operation array",
+    "empty": "No request rewrite rules yet. Click \"Add rule\" to create the first one",
+    "rewriteRules": "Rewrite rules"
+  },
+  "failover": {
+    "description": "Automatically fail over to a fallback provider when the primary provider fails",
+    "recoveryTab": "Auto Recovery",
+    "empty": "No failover rules yet. Click \"Add rule\" to create the first one",
+    "notSet": "Not set",
+    "notEnabled": "Disabled",
+    "unlimitedWindow": "No limit",
+    "windowMinutes": "{{count}} min",
+    "thresholdValue": "{{count}} times / {{window}}",
+    "columns": {
+      "dimension": "Failover dimension",
+      "trigger": "Trigger fields",
+      "ttfb": "TTFB timeout",
+      "threshold": "Disable threshold"
+    },
+    "dimensions": {
+      "baseUrl": "Base URL",
+      "key": "Key",
+      "provider": "Provider",
+      "unselected": "Not selected"
+    },
+    "form": {
+      "dimension": "Failover dimension",
+      "selectDimension": "Select failover dimension",
+      "dimensionHint": "When a request fails, failover is performed along this dimension.",
+      "autoDisable": "Auto disable",
+      "autoDisablePlaceholder": "Auto disable?",
+      "yes": "Yes",
+      "no": "No",
+      "autoDisableYesHint": "Yes: after failover candidates are exhausted, the affected {{target}} is marked disabled (subject to the disable threshold below).",
+      "autoDisableNoHint": "No: each time it only moves to the next candidate and never auto-disables.",
+      "patternsLabel": "Auto-trigger when the upstream error field contains these keywords",
+      "patternsPlaceholder": "One keyword or error code per line\n429\nrate_limit_exceeded\ninsufficient_quota",
+      "patternsHint": "One per line; failover triggers when any line appears in the upstream error. Leave empty to trigger only by the conditions below.",
+      "speedLabel": "Speed limit (token/s)",
+      "speedHint": "0 means no limit. Greater than 0 means an average request speed (total tokens ÷ total time including connection) below N token/s also counts as a failure toward the disable threshold (OR with matching fields).",
+      "ttfbLabel": "TTFB timeout (seconds)",
+      "ttfbHint": "0 disables this condition. Greater than 0 means a first-byte response slower than N seconds also triggers failover (OR with matching fields).",
+      "thresholdLabel": "Disable threshold",
+      "thresholdEvery": "Every",
+      "thresholdWindowSuffix": "minute hits",
+      "thresholdTimesSuffix": "times, then disable",
+      "windowAria": "Hit time window (minutes)",
+      "thresholdAria": "Hits before disabling",
+      "thresholdHint": "Disable only after N consecutive hits within the window. Window 0 means no time limit; count 1 means \"disable on the first hit\"."
+    }
+  },
+  "response": {
+    "description": "Apply to response fields in order: rename / prefix / suffix / delete",
+    "empty": "No response rewrite rules yet. Click \"Add rule\" to create the first one"
+  }
+}

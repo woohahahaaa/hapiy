@@ -6,6 +6,7 @@ import {
   type SlotType,
 } from '@/components/node/slot/items/types'
 import type { Workflow, WorkflowNode } from '@/components/node/slot/defs/node-data'
+import { i18n } from '@/i18n/i18n'
 
 // ── Wire format types ──
 //
@@ -53,7 +54,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new TopologyDocumentError(`${field} 必须是非空字符串`)
+    throw new TopologyDocumentError(i18n.t('lib:doc.nonEmptyString', { field }))
   }
   return value
 }
@@ -61,19 +62,19 @@ function requiredString(value: unknown, field: string): string {
 function optionalString(value: unknown, field: string): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length === 0) {
-    throw new TopologyDocumentError(`${field} 必须是非空字符串`)
+    throw new TopologyDocumentError(i18n.t('lib:doc.nonEmptyString', { field }))
   }
   return value
 }
 
 function requiredBoolean(value: unknown, field: string): boolean {
-  if (typeof value !== 'boolean') throw new TopologyDocumentError(`${field} 必须是布尔值`)
+  if (typeof value !== 'boolean') throw new TopologyDocumentError(i18n.t('lib:doc.boolean', { field }))
   return value
 }
 
 function requiredInteger(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new TopologyDocumentError(`${field} 必须是非负整数`)
+    throw new TopologyDocumentError(i18n.t('lib:doc.nonNegativeInteger', { field }))
   }
   return value
 }
@@ -81,9 +82,9 @@ function requiredInteger(value: unknown, field: string): number {
 const VALID_NODE_TYPES = new Set(['provider', 'requestModify', 'responseModify', 'concurrency', 'autoSwitch', 'logOutput'])
 
 function parseNode(value: unknown): WorkflowNode {
-  if (!isRecord(value)) throw new TopologyDocumentError('节点必须是对象')
+  if (!isRecord(value)) throw new TopologyDocumentError(i18n.t('lib:doc.nodeMustBeObject'))
   const type = requiredString(value.type, 'type')
-  if (!VALID_NODE_TYPES.has(type)) throw new TopologyDocumentError(`未知的节点类型: ${type}`)
+  if (!VALID_NODE_TYPES.has(type)) throw new TopologyDocumentError(i18n.t('lib:doc.unknownNodeType', { type }))
   const name = requiredString(value.name, 'name')
 
   switch (type) {
@@ -123,13 +124,17 @@ function parseNode(value: unknown): WorkflowNode {
 
 // Parse a bare array of workflows (array of arrays of nodes).
 export function parseTopologyDocument(value: unknown): Workflow[] {
-  if (!Array.isArray(value)) throw new TopologyDocumentError('拓扑文档必须是数组')
+  if (!Array.isArray(value)) throw new TopologyDocumentError(i18n.t('lib:doc.documentMustBeArray'))
   return value.map((workflow, i) => {
-    if (!Array.isArray(workflow)) throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 必须是数组`)
-    if (workflow.length === 0) throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 不能为空`)
+    if (!Array.isArray(workflow)) {
+      throw new TopologyDocumentError(i18n.t('lib:doc.workflowMustBeArray', { index: i + 1 }))
+    }
+    if (workflow.length === 0) {
+      throw new TopologyDocumentError(i18n.t('lib:doc.workflowNotEmpty', { index: i + 1 }))
+    }
     const nodes = workflow.map(parseNode)
     if (nodes[0].type !== 'provider') {
-      throw new TopologyDocumentError(`第 ${i + 1} 条 workflow 的第一个节点必须是 provider`)
+      throw new TopologyDocumentError(i18n.t('lib:doc.workflowFirstNode', { index: i + 1 }))
     }
     return nodes
   })
@@ -158,7 +163,7 @@ function nodeToEntry(node: WorkflowNode, index: number): SlotEntry {
       } as SlotEntry
     }
     default:
-      throw new TopologyDocumentError(`无法转换节点类型: ${node.type}`)
+      throw new TopologyDocumentError(i18n.t('lib:doc.unknownNodeConversion', { type: node.type }))
   }
 }
 

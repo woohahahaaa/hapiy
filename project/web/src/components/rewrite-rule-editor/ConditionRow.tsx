@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/checkbox'
@@ -18,6 +19,7 @@ interface ConditionRowProps {
 const FIELDS_LEFT_OFFSET = 'pl-[24px]'
 
 export function ConditionRow({ index, condition, onChange, onRemove, canRemove }: ConditionRowProps) {
+  const { t } = useTranslation('rewrite')
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-background px-2 py-1.5">
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -42,7 +44,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
             className="h-7 min-w-0 flex-1 font-mono text-xs"
             value={condition.path}
             onChange={(e) => onChange({ ...condition, path: e.target.value })}
-            placeholder={condition.scope === 'header' ? 'header 名（不用写 header.）' : 'gjson 路径'}
+            placeholder={condition.scope === 'header' ? t('path.headerPlaceholder') : t('path.gjsonPlaceholder')}
           />
           <Select
             value={condition.op}
@@ -72,9 +74,9 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
               className="size-[18px] bg-background !opacity-100"
               checked={condition.invert}
               onCheckedChange={(v) => onChange({ ...condition, invert: v === true })}
-              aria-label="反向匹配"
+              aria-label={t('invert.ariaLabel')}
             />
-            反向匹配
+            {t('invert.label')}
           </label>
         </div>
       </div>
