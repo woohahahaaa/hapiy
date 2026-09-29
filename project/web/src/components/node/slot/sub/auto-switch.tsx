@@ -58,7 +58,7 @@ export function NodeSlotAutoSwitch({
           />
         </div>
       }
-      onAddNode={onAddEntry}
+      onAddNode={entries.length >= 1 ? undefined : onAddEntry}
       style={{ minWidth: topologyConfig.render.slot.shellMinWidth }}
       externallyDisabled={externallyDisabled}
       active={active}

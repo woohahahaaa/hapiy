@@ -6,6 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { AppIcon } from "@/components/AppIcon"
+import { i18n } from "@/i18n/i18n"
 
 function Sheet({
   ...props
@@ -78,7 +79,7 @@ function SheetContent({
               size="icon-sm"
             >
               <AppIcon name="close" size={16} />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{i18n.t('common:action.close')}</span>
             </Button>
           </DialogPrimitive.Close>
         )}

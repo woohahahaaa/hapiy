@@ -142,50 +142,54 @@ export function BaseUrlSettings() {
         )}
 
         {state.kind === 'ready' && (
-          <form className="flex max-w-2xl flex-col gap-5" onSubmit={handleSubmit}>
-            <div className="grid gap-1.5 text-sm">
-              <span>{t('baseUrl.originLabel')}</span>
-              <Input
-                value={origin}
-                onChange={(e) => setOrigin(e.target.value)}
-                placeholder="https://hapiying.hihy.me:6060"
-                className="w-96 font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('baseUrl.originHint')}
-              </p>
-            </div>
-            <div className="grid gap-1.5 text-sm">
-              <label htmlFor="base-url-suffix">
-                {t('baseUrl.suffixLabel')}
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            <div className="flex flex-wrap items-end gap-4">
+              <label className="grid gap-1.5 text-sm">
+                {t('baseUrl.originLabel')}
+                <Input
+                  value={origin}
+                  onChange={(e) => setOrigin(e.target.value)}
+                  placeholder="https://hapiying.hihy.me:6060"
+                  className="w-96 font-mono"
+                />
               </label>
-              <Input
-                id="base-url-suffix"
-                value={suffixValue}
-                onChange={(event) => setSuffixValue(event.target.value)}
-                disabled={saving}
-                placeholder="proxy"
-                className="w-48"
-              />
-            </div>
-            <div className="grid gap-1.5 text-sm">
-              <span>{t('baseUrl.finalUrlLabel')}</span>
-              <div className="flex items-center gap-2">
-                <code className="w-96 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
-                  {baseUrl}
-                </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyUrl(baseUrl)}
+              <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
+                {t('baseUrl.suffixLabel')}
+                <Input
+                  id="base-url-suffix"
+                  value={suffixValue}
+                  onChange={(event) => setSuffixValue(event.target.value)}
                   disabled={saving}
-                >
-                  <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
-                </Button>
+                  placeholder="proxy"
+                  className="w-40"
+                />
+              </label>
+              <div className="grid gap-1.5 text-sm">
+                <span>{t('baseUrl.finalUrlLabel')}</span>
+                <div className="flex items-center gap-2">
+                  <code
+                    className="w-96 cursor-pointer truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs"
+                    onClick={() => copyUrl(baseUrl)}
+                    title={t('common:action.copy')}
+                  >
+                    {baseUrl}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyUrl(baseUrl)}
+                    disabled={saving}
+                  >
+                    <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+                  </Button>
+                </div>
               </div>
             </div>
-            <div className="grid gap-1.5 text-sm">
+            <p className="max-w-2xl text-xs text-muted-foreground">
+              {t('baseUrl.originHint')}
+            </p>
+            <div className="grid max-w-2xl gap-1.5 text-sm">
               <span>{t('baseUrl.sourceMarkerLabel')}</span>
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
@@ -202,7 +206,13 @@ export function BaseUrlSettings() {
                         placeholder={t('baseUrl.sourceNamePlaceholder')}
                         className="w-36 shrink-0"
                       />
-                      <code className="flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+                      <code
+                        className="flex-1 cursor-pointer truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs"
+                        onClick={() => {
+                          if (name) void copyUrl(fullUrlFor(name))
+                        }}
+                        title={name ? fullUrlFor(name) : undefined}
+                      >
                         {name ? fullUrlFor(name) : `${baseUrl}/__…`}
                       </code>
                       <Button
@@ -240,7 +250,7 @@ export function BaseUrlSettings() {
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="max-w-2xl text-xs text-muted-foreground">
               {t('baseUrl.requestExamplePrefix')}<code>{`${baseUrl}/__${t('baseUrl.sourcePathSegment')}/v1/chat/completions`}</code>
             </p>
             <div className="flex items-center gap-3">
