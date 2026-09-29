@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hapiy/hapiy/internal/i18n"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
@@ -759,7 +760,7 @@ func TestAgentSshConnection() gin.HandlerFunc {
 			respondError(c, http.StatusBadRequest, "TARGET_OS_INVALID", "目标系统必须是 windows、mac 或 other")
 			return
 		}
-		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path), targetOS)
+		connect, read, write := service.TestSshConnection(cfg, strings.TrimSpace(req.Path), targetOS, i18n.Lang(c.Request))
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"connect": connect,
 			"read":    read,

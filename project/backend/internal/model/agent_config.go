@@ -755,8 +755,8 @@ var builtinAgentRules = []struct {
 		ModelInfoFields: AgentModelInfoFieldPaths{
 			MaxContext:     ModelInfoPath(`limit.context`),
 			MaxOutputToken: ModelInfoPath(`limit.output`),
-			InputTypes:     ModelInfoPath(`modalities.input`),
-			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
+			InputTypes:     ModelInfoPath(`capabilities.input`),
+			// V2 没有独立的 reasoning 布尔字段（思考能力由 variants 表达）。
 			ReasoningEffort: AgentModelInfoFieldSpec{
 				Path:         `variants`,
 				Op:           "variants",
@@ -1024,15 +1024,14 @@ var opencodeProtocols = []AgentProtocol{
 // options.*）。其余字段与 opencode-v1 相同。
 var opencodeV2Recommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
-	{Scope: "provider", Key: "package", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
+	{Scope: "provider", Key: "package", Description: "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类", Required: true},
 	{Scope: "provider", Key: "settings.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "settings.apiKey", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "settings.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
 	{Scope: "model", Key: "name", Description: "模型在界面里的显示名"},
 	{Scope: "model", Key: "limit.context", Description: "上下文 token 上限"},
-	{Scope: "model", Key: "reasoning", Description: "模型是否支持思考模式（思考程度统一值→bool）"},
-	{Scope: "model", Key: "tool_call", Description: "模型是否支持工具调用"},
-	{Scope: "model", Key: "attachment", Description: "模型是否支持文件/图片附件输入（输入格式）"},
+	{Scope: "model", Key: "capabilities.tools", Description: "模型是否支持工具调用"},
+	{Scope: "model", Key: "capabilities.input", Description: "支持的输入类型（text/image/video/audio/pdf）"},
 }
 
 var opencodeV2Protocols = []AgentProtocol{
@@ -1040,14 +1039,14 @@ var opencodeV2Protocols = []AgentProtocol{
 		Name:         "OpenAI Responses API",
 		EndpointTags: []string{"responses"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "package", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
+			{Scope: "provider", Key: "package", Description: "Responses API 使用 OpenAI SDK", Recommended: "@opencode/ai/providers/openai"},
 		},
 	},
 	{
 		Name:         "Anthropic Messages API",
 		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "package", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
+			{Scope: "provider", Key: "package", Description: "Messages API 使用 Anthropic SDK", Recommended: "@opencode/ai/providers/anthropic"},
 			{Scope: "model", Key: "limit.output", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
 		},
 	},
@@ -1055,7 +1054,7 @@ var opencodeV2Protocols = []AgentProtocol{
 		Name:         "OpenAI 兼容 Chat Completions",
 		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
 		Recommendations: []AgentRecommendation{
-			{Scope: "provider", Key: "package", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
+			{Scope: "provider", Key: "package", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@opencode/ai/providers/openai-compatible"},
 		},
 	},
 }

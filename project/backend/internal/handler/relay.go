@@ -14,12 +14,24 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/common"
+	"github.com/hapiy/hapiy/internal/i18n"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/publicFunction"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
+
+// i18nMessage localizes the "no usable provider" relay error by the client
+// language. The message is returned verbatim to the caller (the dashboard or
+// an external client) so it must match the active language.
+func i18nMessage(r *http.Request, modelName string) string {
+	return i18n.S(
+		i18n.Lang(r),
+		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", modelName),
+		fmt.Sprintf("No usable provider found for %s. Check: model name (case-sensitive), endpoint limits, provider/workflow switches, failover status, and topology wiring.", modelName),
+	)
+}
 
 // Relay handles OpenAI-compatible API requests
 func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
@@ -110,7 +122,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "", "", "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
-					"message": fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", relayReq.Model),
+					"message": i18nMessage(c.Request, relayReq.Model),
 					"type":    "service_unavailable",
 				},
 			})
