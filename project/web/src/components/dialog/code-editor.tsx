@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { JsonTokens } from '@/components/JsonHighlight'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
 import { splitJsonLines } from '@/lib/json-lines'
 import { cn } from '@/lib/utils'
 
@@ -30,14 +32,14 @@ function jsonWarning(text: string): string | null {
     JSON.parse(text)
     return null
   } catch (error) {
-    const message = error instanceof Error ? error.message : '无法解析 JSON'
+    const message = error instanceof Error ? error.message : i18n.t('agentConfig:codeEditor.cannotParseJson')
     const position = message.match(/position (\d+)/i)
-    if (!position) return `内容不是合法 JSON：${message}`
+    if (!position) return i18n.t('agentConfig:codeEditor.notValidJson', { message })
     const index = Number(position[1])
     const before = text.slice(0, index)
     const line = before.split('\n').length
     const column = index - before.lastIndexOf('\n')
-    return `第 ${line} 行第 ${column} 列附近可能存在 JSON 格式问题：${message}`
+    return i18n.t('agentConfig:codeEditor.jsonProblemNear', { line, column, message })
   }
 }
 
@@ -46,6 +48,7 @@ function CodeSurface({ value, onChange, readOnly }: {
   readonly onChange: (value: string) => void
   readonly readOnly: boolean
 }) {
+  const { t } = useTranslation('agentConfig')
   const gutterRef = useRef<HTMLDivElement>(null)
   const backdropRef = useRef<HTMLPreElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -95,7 +98,7 @@ function CodeSurface({ value, onChange, readOnly }: {
               spellCheck={false}
               wrap="soft"
               readOnly={readOnly}
-              aria-label="代码内容"
+              aria-label={t('codeEditor.codeAria')}
             />
           </>
         )}
@@ -105,6 +108,7 @@ function CodeSurface({ value, onChange, readOnly }: {
 }
 
 export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, loadContent, onSave, onSaved }: DialogCodeEditorProps) {
+  const { t } = useTranslation('agentConfig')
   const [content, setContent] = useState<string | null>(null)
   const [original, setOriginal] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -126,7 +130,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
         setOriginal(text)
       }
     }).catch((err) => {
-      if (!cancelled) setError(err instanceof Error ? err.message : '读取失败')
+      if (!cancelled) setError(err instanceof Error ? err.message : t('errors.readFailed'))
     }).finally(() => {
       if (!cancelled) setLoading(false)
     })
@@ -141,7 +145,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
     try {
       setContent(JSON.stringify(JSON.parse(content), null, 2) + '\n')
     } catch {
-      toast.error('内容不是合法 JSON，无法美化')
+      toast.error(t('errors.cannotPrettify'))
     }
   }
   const doSave = async () => {
@@ -153,7 +157,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
       onSaved?.()
       onOpenChange(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存失败')
+      setError(err instanceof Error ? err.message : t('errors.saveFailed'))
       setSaving(false)
     }
   }
@@ -169,34 +173,34 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
               variant="outline"
               size="sm"
               className="absolute top-2 right-11 z-10"
-              title="在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件"
+              title={t('codeEditor.prettifyTitle')}
               onClick={prettify}
               disabled={loading || saving}
             >
-              美化格式
+              {t('codeEditor.prettify')}
             </Button>
           )}
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {error && <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}
-          {loading ? <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">正在加载文件内容…</div> : content !== null && <CodeSurface value={content} onChange={setContent} readOnly={mode === 'preview' || saving} />}
+          {loading ? <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">{t('codeEditor.loadingContent')}</div> : content !== null && <CodeSurface value={content} onChange={setContent} readOnly={mode === 'preview' || saving} />}
         </div>
 <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
           {mode === 'editable' && (
-            <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? '保存中...' : '保存'}</Button>
+            <Button onClick={() => setConfirmSave(true)} disabled={loading || saving || !dirty}>{saving ? t('codeEditor.saving') : t('common:action.save')}</Button>
           )}
         </DialogFooter>
         {confirmSave && (
           <Dialog open={confirmSave} onOpenChange={(next) => !saving && setConfirmSave(next)}>
             <DialogContent width="sm" scrollFooter>
               <DialogHeader>
-                <DialogTitle>{warning ? 'JSON 格式可能有误' : '确认保存'}</DialogTitle>
-                <DialogDescription className={warning ? 'text-destructive' : undefined}>{warning ? `检测到 JSON 格式问题，是否仍要保存对「${subtitle}」的修改？` : `是否确认保存对「${subtitle}」的修改？`}</DialogDescription>
+                <DialogTitle>{warning ? t('codeEditor.jsonWarningTitle') : t('codeEditor.confirmSaveTitle')}</DialogTitle>
+                <DialogDescription className={warning ? 'text-destructive' : undefined}>{warning ? t('codeEditor.jsonWarningDescription', { name: subtitle }) : t('codeEditor.confirmSaveDescription', { name: subtitle })}</DialogDescription>
                 {warning && <p className="text-destructive">{warning}</p>}
               </DialogHeader>
               <DialogScrollBody footer={
                 <>
-                  <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>{saving ? '保存中...' : warning ? '仍然保存' : '确认保存'}</Button>
+                  <Button variant={warning ? 'destructive' : 'default'} onClick={() => void doSave()} disabled={saving}>{saving ? t('codeEditor.saving') : warning ? t('codeEditor.saveAnyway') : t('codeEditor.confirmSave')}</Button>
                 </>
               } />
             </DialogContent>

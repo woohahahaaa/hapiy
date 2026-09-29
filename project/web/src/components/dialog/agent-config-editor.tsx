@@ -2,6 +2,7 @@ import { DialogCodeEditor } from '@/components/dialog/code-editor'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { AgentConfigFile } from '@/lib/dashboard-api'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
 
 interface AgentConfigEditorDialogProps {
   readonly open: boolean
@@ -19,7 +20,7 @@ export function AgentConfigEditorDialog({ open, onOpenChange, record }: AgentCon
       subtitle={record.path}
       loadContent={() => dashboardApi.getAgentConfigFileContent(record.id)}
       onSave={(content) => dashboardApi.saveAgentConfigFileContent(record.id, content)}
-      onSaved={() => toast('已保存')}
+      onSaved={() => toast(i18n.t('agentConfig:toast.saved'))}
     />
   )
 }

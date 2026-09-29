@@ -1,0 +1,173 @@
+{
+  "page": {
+    "description": "Configure the location, modification and parsing rules for each Agent's default config file; the system defaults usually work, no manual setup needed"
+  },
+  "columns": {
+    "name": "Name",
+    "createdAt": "Created At",
+    "actions": "Actions"
+  },
+  "list": {
+    "empty": "No rules yet. Click \"Add rule\" to create the first one",
+    "add": "Add takeover rule"
+  },
+  "dialog": {
+    "addTitle": "Add rule",
+    "editTitle": "Edit rule",
+    "deleteTitle": "Confirm deletion",
+    "deleteDescription": "Rule \"{{name}}\" will be deleted. This cannot be undone.",
+    "templateConfirmTitle": "Use default recommendation template",
+    "templateApplyFor": "The system default recommendation template will be applied to rule \"{{name}}\":",
+    "templateApplyDetail": "Default paths, provider/model gjson paths, model info fields, common config and every Endpoint rule's field recommendations will all be replaced with the defaults. Continue?",
+    "confirmApply": "Apply"
+  },
+  "actions": {
+    "switchToJsonMode": "Switch to JSON edit mode",
+    "switchBackToTable": "Switch back to table editing",
+    "jsonModeForwardTitle": "Edit the whole dialog (name / paths / model info / common config / Endpoint rules) as a single JSON",
+    "jsonModeBackTitle": "Validate the JSON and restore it to table editing; switching back is blocked if invalid",
+    "useDefaultTemplate": "Use default recommendation template",
+    "templateResetTitle": "Reset all fields of this rule (paths / model info fields / common config / each Endpoint rule) to the system default recommendation template",
+    "saving": "Saving...",
+    "addRow": "Add row"
+  },
+  "form": {
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. opencode",
+    "defaultPathsGroup": "Default config file paths",
+    "windowsPathLabel": "Windows default path",
+    "windowsPathPlaceholder": "e.g. %USERPROFILE%\\.config\\opencode\\opencode.json",
+    "windowsPathHint": "Supports %APPDATA%, %USERPROFILE% environment variables",
+    "macPathLabel": "Mac default path",
+    "macPathPlaceholder": "e.g. ~/.config/opencode/opencode.json",
+    "macPathHint": "Supports ~ and $HOME",
+    "jsonPathsGroup": "Provider & model recommendation config",
+    "providerPathLabel": "provider gjson path",
+    "providerPathPlaceholder": "e.g. provider",
+    "modelPathLabel": "model gjson path",
+    "modelPathPlaceholder": "e.g. provider.{provider_id}.models",
+    "modelPathHint": "Full gjson path; use {provider_id} inside model as a placeholder for the current provider key",
+    "modelsContainerLabel": "Model list container format (models_container)",
+    "modelsContainerPlaceholder": "Select format",
+    "containerArray": "Array [{\"id\": ...}] (openclaw)",
+    "containerObject": "Object map {\"model id\": {...}} (opencode)",
+    "modelsContainerHint": "Determines how models are written into the config file during managed sync. Array items each carry an id; object keys are model names. Choosing wrong will make the agent fail startup validation",
+    "commonLabel": "Common config (common)",
+    "commonHint": "Field recommendations that are independent of the request protocol / SDK. Each row is one field: path / scope (provider|model) / recommended action (set / skip / delete) / recommended value / value shape (op / sep / allowed-values whitelist) / required / description. It uses the same \"value + shape\" rules as the rest of the page; fully blank rows are dropped on save. To edit the JSON directly, use \"Switch to JSON edit mode\" at the bottom left."
+  },
+  "jsonMode": {
+    "hint": "The whole dialog as JSONC (name / paths / model info fields / common config / Endpoint rules protocols). The top and every block carry // comment lines so another Agent can make sense of it; comments do not affect saving. Validation runs before saving and before switching back to the table; invalid JSONC can be neither saved nor restored to a table."
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "deleteFailed": "Failed to delete",
+    "parseExistingFailed": "Failed to parse the existing config: ",
+    "loadTemplateFailed": "Failed to load the default recommendation template",
+    "nameRequired": "Please fill in the name",
+    "commonParseFailed": "Failed to parse the common config JSON: ",
+    "jsonToTableFailed": "Could not restore the JSON to a table: ",
+    "commonInvalid": "The current common config is not valid data: {{message}}, fix it with \"Switch to JSON edit mode\" at the bottom left",
+    "privateInvalid": "The current private config is not valid data: {{message}}, fix it with \"Switch to JSON edit mode\" at the bottom left",
+    "updateFailed": "Failed to update",
+    "addFailed": "Failed to add",
+    "topMustBeObject": "The top level must be a { common, protocols } object",
+    "topMustBeJsonObject": "The top level must be a JSON object (name / os_paths / json_paths / model_info_fields / common / protocols)",
+    "fieldItemMustBeObject": "Each item must be an object",
+    "fieldMissingKey": "A field is missing its key (field path)",
+    "protocolItemMustBeObject": "Each item in protocols must be an object",
+    "protocolMissingName": "Protocol block is missing name",
+    "protocolMissingTags": "Protocol \"{{name}}\" is missing endpoint_tags (required; decided from the endpoint)",
+    "protocolConditionInvalid": "Protocol \"{{name}}\": a conditions item has an invalid format",
+    "fieldsMustBeArray": "Fields must be written as a JSON array, one recommendation field object per item",
+    "commonMustBeArray": "The common config must be a JSON array",
+    "endpointRuleMissingName": "Endpoint rule #{{n}}: missing rule name",
+    "endpointRuleTagsEmpty": "Endpoint rule \"{{name}}\": induction scope is empty (endpoint_tags required)",
+    "endpointRuleFieldsParseFailed": "Endpoint rule \"{{name}}\": failed to parse the field JSON: ",
+    "modelInfoPathRequired": "Please fill in a path for \"{{label}}\" first",
+    "dialogNameRequired": "Missing name (rule name)",
+    "modelInfoFieldsMustBeObject": "model_info_fields must be an object",
+    "modelInfoPathRequiredAt": "model_info_fields.{{key}}: please fill in path first (write location of {{label}})",
+    "commonMustBeJsonArray": "common must be a JSON array",
+    "protocolsMustBeJsonArray": "protocols must be a JSON array"
+  },
+  "toast": {
+    "deleted": "Deleted",
+    "templateApplied": "Default recommendation template applied; check and save for it to take effect",
+    "updated": "Updated",
+    "added": "Added"
+  },
+  "recAction": {
+    "set": "Set",
+    "skip": "Skip",
+    "delete": "Delete",
+    "setSuffix": " (recommended)",
+    "skipSuffix": " (recommended to skip)",
+    "deleteSuffix": " (delete field)"
+  },
+  "recTable": {
+    "path": "Path",
+    "scope": "Scope",
+    "action": "Action",
+    "recommended": "Recommended",
+    "allowedValues": "Allowed values",
+    "required": "Required",
+    "description": "Description",
+    "empty": "No fields yet. Click \"Add row\" at the bottom to start; fully blank rows are dropped on save.",
+    "valuesPlaceholder": "text, image, video (comma-separated)",
+    "descriptionPlaceholder": "Description",
+    "addRow": "Add row"
+  },
+  "modelInfoEditor": {
+    "title": "Common model info",
+    "hint": "How model info fields are written into each agent's config; \"Sync model info\" and managed generation write back using this. Each row is one field: path is the write location, op selects raw (as-is, default) / bool (non-empty → true, empty → false) / first (take the first element) / join (join array, sep optional, default comma); action can be set (default) / skip / delete field; allowed values is a whitelist (e.g. openclaw input only allows text/image/video/audio), comma-separated.",
+    "columns": {
+      "modelInfo": "Model info",
+      "op": "Op"
+    }
+  },
+  "endpointRules": {
+    "title": "Endpoint rules (per SDK, one rule per card)",
+    "add": "Add Endpoint rule",
+    "hint": "One rule per endpoint: put endpoint keywords in the induction scope (e.g. completions / responses / chat/message, comma-separated); a rule applies when any keyword matches a substring of the endpoint, and order is priority. Private config uses a \"value + shape\" table: each row is a recommended field (path / scope / recommended action / recommended value / op / sep / allowed-values whitelist), scope (provider|model) / required / recommended (null = recommend not filling). For example, to pick which SDK NPM uses, fill key=npm, recommended value={\"@ai-sdk/openai-compatible\"} and tick required. To edit the JSON directly, use \"Switch to JSON edit mode\" at the bottom left of the dialog.",
+    "empty": "No Endpoint rules yet. Click \"Add Endpoint rule\" at the top right to create one.",
+    "index": "Endpoint rule {{n}}",
+    "nameLabel": "Rule name",
+    "namePlaceholder": "e.g. OpenAI-compatible Chat Completions",
+    "tagsLabel": "Induction scope (endpoint keywords, comma-separated)",
+    "tagsPlaceholder": "e.g. completions, /v1/chat, responses, chat/message",
+    "privateLabel": "Private config (this endpoint's field recommendation table)"
+  },
+  "match": {
+    "title": "Use recommended config",
+    "emptyProviders": "No configurable providers under this config file",
+    "checkedCount": "{{checked}} / {{total}} selected",
+    "officialTitle": "Set all models to their official (lab) reference provider; models without an official source use the first candidate from their list",
+    "officialButton": "Bulk set reference providers",
+    "checkAllAria": "Select all",
+    "checkProviderAria": "Select provider {{name}}",
+    "checkModelAria": "Select model {{name}}",
+    "columns": {
+      "syncFromModelsDev": "Sync model config from models.dev",
+      "fieldDiff": "Field diff"
+    },
+    "providerLevel": "Provider-level recommendation",
+    "modelLevel": "Model-level recommendation",
+    "selectSupplier": "Select reference provider",
+    "dontSync": "Don't sync",
+    "officialSuffix": " (official)",
+    "modelNotFound": "No model info found on models.dev",
+    "selectSupplierFirst": "Select a reference provider first",
+    "alreadyCompliant": "— Already matches recommendation",
+    "moreItems": "…and {{count}} more",
+    "toast": {
+      "officialApplied": "All models set to their official reference provider (those without one use the first candidate)",
+      "officialAlready": "All models already use their best reference provider",
+      "saveSupplierFailed": "Failed to save reference provider selection",
+      "noChanges": "No applicable changes (selected items already match recommendations)"
+    },
+    "errors": {
+      "loadFailed": "Failed to load",
+      "applyFailed": "Apply failed"
+    }
+  }
+}
