@@ -96,8 +96,8 @@ const navigation: NavItem[] = [
     children: [
       { id: 'base-url', labelKey: 'nav.baseUrl', href: '/settings/base-url' },
       { id: 'general', labelKey: 'nav.general', href: '/settings/general' },
-      { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
       { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
+      { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
       { id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' },
     ],
   },

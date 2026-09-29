@@ -5,6 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { AppIcon } from "@/components/AppIcon"
+import { i18n } from "@/i18n/i18n"
 
 const WIDTH_MAP: Record<string, string> = {
   // 固定目标宽度，但 max-w 始终以视口为上限（留 2rem 边距），窄屏时收缩、永不超屏。
@@ -113,7 +114,7 @@ function DialogContent({
               size="icon-sm"
             >
               <AppIcon name="close" size={16} />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{i18n.t('common:action.close')}</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -206,7 +207,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{i18n.t('common:action.close')}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

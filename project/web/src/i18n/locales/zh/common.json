@@ -69,7 +69,7 @@
     "agentConfig": "配置文件",
     "settings": "系统设置",
     "baseUrl": "BaseURL",
-    "general": "查询Model",
+    "general": "查询 Model 列表",
     "billing": "币种汇率",
     "tokenUsage": "查询token用量",
     "debug": "Debug",
