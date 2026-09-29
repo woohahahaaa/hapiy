@@ -1,3 +1,22 @@
+// ───────────────────────────────────────────────────────────────
+// 默认推荐模板 JSONC —— openclaw
+// 本文件是「openclaw」这个 Agent 的默认模板，交给别的 Agent 处理时请先读说明：
+//
+// name            规则名称（对应一个 Agent 软件类型，唯一）
+// os_paths        该软件的配置文件默认路径（windows 支持 %USERPROFILE% 等；mac 支持 ~ / $HOME）
+// json_paths      在配置文件里定位 provider / model 的 gjson 路径
+//   provider      供应商列表路径
+//   model         model 路径（用 {provider_id} 占位当前供应商键名）
+//   models_container  object=以模型名做键；array=数组每项带 id
+// recommendations 公共配置：与请求协议 / SDK 无关的字段推荐值（弹窗里叫 common）
+//   每行：key=字段路径(必填) / scope=provider|model / action=set|skip|delete
+//         recommended=推荐值(null=推荐不填) / required=是否必填 / description=说明
+//         op/sep/values=值写法（raw/bool/first/join；values 为允许值白名单）
+// protocols       Endpoint 规则：按请求协议 / SDK 区分
+//   每块：name=规则名称(必填) / conditions=命中条件 / endpoint_tags=归纳范围关键词(必填，任一命中即应用)
+//         recommendations=该 endpoint 的字段推荐表（行说明同上）
+// model_info_fields  模型信息字段的写入方式（string 或 {path,op,sep,values,action}）
+// ───────────────────────────────────────────────────────────────
 {
   "name": "openclaw",
   "os_paths": {

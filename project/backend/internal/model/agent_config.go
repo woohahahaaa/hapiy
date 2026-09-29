@@ -845,10 +845,65 @@ func loadAgentTemplateFile(name string) (AgentTemplateConfig, bool) {
 	if err != nil {
 		return tmpl, false
 	}
-	if err := json.Unmarshal(data, &tmpl); err != nil {
+	// 模板文件是 JSONC（带 // /* */ 说明注释），先剥注释再解析。
+	cleaned := stripJSONCComments(string(data))
+	if err := json.Unmarshal([]byte(cleaned), &tmpl); err != nil {
 		return tmpl, false
 	}
 	return tmpl, true
+}
+
+// stripJSONCComments removes // and /* */ comments outside string literals
+// so encoding/json can parse JSONC documents (templates / config_jsonc).
+func stripJSONCComments(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	escape := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inString {
+			b.WriteByte(c)
+			if escape {
+				escape = false
+				continue
+			}
+			if c == '\\' {
+				escape = true
+				continue
+			}
+			if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '/' && i+1 < len(s) {
+			next := s[i+1]
+			if next == '/' {
+				end := strings.IndexByte(s[i:], '\n')
+				if end < 0 {
+					return b.String()
+				}
+				i += end
+				continue
+			}
+			if next == '*' {
+				end := strings.Index(s[i:], "*/")
+				if end < 0 {
+					return b.String()
+				}
+				i += end + 1
+				continue
+			}
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
 }
 
 // ListBuiltinTemplates returns every built-in agent's default template as

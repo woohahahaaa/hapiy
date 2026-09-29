@@ -611,6 +611,72 @@ function buildDialogDoc(state: {
   }
 }
 
+// reindentJson 把 JSON.stringify(x, null, 2) 产出的文本整体右移 extraIndent，
+// 用于把子对象嵌进外层对象时保持缩进正确（首行不缩）。
+function reindentJson(json: string, extraIndent: string): string {
+  return json.split('\n').map((line, i) => (i === 0 ? line : extraIndent + line)).join('\n')
+}
+
+// buildDialogDocJsonc 把整份文档序列化成带说明注释的 JSONC：顶部一段总览，
+// 每个顶层区块前一行短注释，方便把这份文档交给其他 Agent 时能读懂结构。
+// parseDialogDoc 会先剥掉 // 注释再解析，因此注释不影响校验 / 保存。
+function buildDialogDocJsonc(doc: RuleDialogDoc): string {
+  const header = [
+    '// ───────────────────────────────────────────────────────────────',
+    '// 接管规则 JSONC（支持 // 注释；交给别的 Agent 处理时请先读这段说明）',
+    '//',
+    '// name                    规则名称（唯一，对应一个 Agent 软件类型，如 opencode）',
+    '// os_paths                该软件的配置文件默认路径',
+    '//   windows              Windows 路径（支持 %USERPROFILE%、%APPDATA% 等环境变量）',
+    '//   mac                  macOS 路径（支持 ~、$HOME）',
+    '// json_paths              在配置文件里定位 provider / model 的 gjson 路径',
+    '//   provider             供应商列表路径',
+    '//   model                model 路径（用 {provider_id} 占位当前供应商键名）',
+    '//   models_container     object=以模型名做键（opencode）；array=数组每项带 id（openclaw）',
+    '// model_info_fields       模型信息字段在各 agent 配置里的写入方式（每项 string 或 {path, op, sep, values, action}）',
+    '//   path                写入位置（gjson 路径）',
+    '//   op                  raw(原样，默认)/bool(非空→true)/first(取第一个)/join(拼接)',
+    '//   sep                 join 的分隔符（默认逗号）',
+    '//   values              允许值白名单（如 openclaw input 只允许 text/image/video/audio）',
+    '//   action              set(填，默认)/skip(不填)/delete(删除字段)',
+    '// common                  公共配置：与请求协议 / SDK 无关的字段推荐值（数组，行说明见下）',
+    '// protocols               Endpoint 规则：按请求协议 / SDK 区分（数组）',
+    '//   每个协议块：',
+    '//     name              规则名称（必填）',
+    '//     conditions        命中条件（OR 关系；field + op + value）',
+    '//     endpoint_tags     归纳范围关键词（必填；任一关键词命中 endpoint 即应用本规则，顺序即优先级）',
+    '//     fields            该 endpoint 的字段推荐表（数组，行说明见下）',
+    '//',
+    '// 字段推荐表每行（common / protocols[].fields 通用）：',
+    '//   key           字段路径（必填）',
+    '//   scope         provider | model（字段落在供应商还是模型配置）',
+    '//   action        set(推荐填)/skip(推荐不填)/delete(删除字段)',
+    '//   recommended   推荐值（null = 推荐不填）',
+    '//   op/sep/values 值写法（同 model_info_fields）',
+    '//   required      是否必填',
+    '//   description   说明',
+    '// ───────────────────────────────────────────────────────────────',
+  ].join('\n')
+  const p = (json: string): string => reindentJson(json, '  ')
+  return [
+    header,
+    '{',
+    '  // 规则名称（对应一个 Agent 软件类型，唯一）',
+    `  "name": ${JSON.stringify(doc.name, null, 2)},`,
+    '  // 配置文件默认路径：windows 支持 %USERPROFILE% 等环境变量；mac 支持 ~ / $HOME',
+    `  "os_paths": ${p(JSON.stringify(doc.os_paths, null, 2))},`,
+    '  // provider/model 的 gjson 路径；models_container: object=模型名做键 / array=数组每项带 id',
+    `  "json_paths": ${p(JSON.stringify(doc.json_paths, null, 2))},`,
+    '  // 模型信息字段写入方式：path=写入位置；op=raw/bool/first/join；sep=join 分隔符；values=允许值白名单；action=填/不填/删除',
+    `  "model_info_fields": ${p(JSON.stringify(doc.model_info_fields, null, 2))},`,
+    '  // 公共配置（common）：与请求协议 / SDK 无关的字段推荐值，数组',
+    `  "common": ${p(JSON.stringify(doc.common, null, 2))},`,
+    '  // Endpoint 规则（protocols）：按请求协议 / SDK 区分；每块含 name / conditions / endpoint_tags / fields',
+    `  "protocols": ${p(JSON.stringify(doc.protocols, null, 2))}`,
+    '}',
+  ].join('\n')
+}
+
 // parseDialogDoc 校验整份弹窗 JSON：合法则还原为结构化数据，否则抛错
 // （不合法就无法还原成表格，保存 / 切回表格都会被阻止）。
 function parseDialogDoc(text: string): RuleDialogDoc {
@@ -827,7 +893,8 @@ function RuleDialog({
         modelInfoFields,
         common: doc.common,
         protocols: doc.protocols,
-        configJsonc: buildRuleConfigJsonc(doc.common, doc.protocols),
+        // 用户编辑后的 JSONC 原样落库（保留用户自己写的注释）。
+        configJsonc: docText,
       })
       return
     }
@@ -857,8 +924,20 @@ function RuleDialog({
       }
       protocols.push(converted)
     }
-    // 组装回 config_jsonc，保持与结构化编辑同步。
-    const configJsonc = buildRuleConfigJsonc(common, protocols)
+    // 表格模式保存：生成整份带注释的 JSONC（名称 / 路径 / 模型信息 /
+    // common / protocols），与 JSON 编辑模式看到的是同一份文档。
+    const fullDoc = buildDialogDoc({
+      name: trimmed,
+      windowsPath,
+      macPath,
+      providerPath,
+      modelPath,
+      modelsContainer,
+      modelInfoRows,
+      common,
+      protocols,
+    })
+    const configJsonc = buildDialogDocJsonc(fullDoc)
     const { fields: modelInfoFields, error: mifError } = buildModelInfoFieldsPayload(modelInfoRows)
     if (mifError) {
       setError(mifError)
@@ -989,7 +1068,7 @@ function RuleDialog({
         }
       }),
     })
-    setDocText(JSON.stringify(doc, null, 2))
+    setDocText(buildDialogDocJsonc(doc))
     setDocError(null)
     setError(null)
     setJsonMode(true)
@@ -1031,8 +1110,9 @@ function RuleDialog({
           {jsonMode ? (
             <Field>
               <p className="text-xs text-muted-foreground">
-                整个弹窗的 JSON（含名称 / 路径 / 模型信息字段 / 公共配置 common / 各 Endpoint 规则 protocols）。
-                保存与切回表格前都会校验；JSON 不合法将无法保存，也无法还原成表格。
+                整个弹窗的 JSONC（含名称 / 路径 / 模型信息字段 / 公共配置 common / 各 Endpoint 规则 protocols）。
+                顶部与每个区块都带 // 说明注释，方便交给其他 Agent 处理；注释不影响保存。
+                保存与切回表格前都会校验；JSONC 不合法将无法保存，也无法还原成表格。
               </p>
               <Textarea
                 value={docText}
@@ -1543,12 +1623,6 @@ function EndpointRulesEditor({
       ) : (
         <div className="space-y-3">
           {value.map((rule, ruleIndex) => {
-            let fieldsError: string | null = null
-            try {
-              fieldsJsonToRecs(rule.fieldsJson)
-            } catch (err) {
-              fieldsError = err instanceof Error ? err.message : String(err)
-            }
             return (
               <div key={ruleIndex} className="rounded-md border border-border p-3">
                 <div className="flex items-center justify-between">

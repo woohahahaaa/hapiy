@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
+import { filterValues } from '@/lib/agent-model-info'
 import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
@@ -84,7 +85,7 @@ function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
       const filtered = filterValues(spec.values, raw)
       if (filtered.length === 0) return undefined
       const out: Record<string, unknown> = {}
-      for (const lvl of filtered) out[lvl] = { options: { reasoningEffort: lvl } }
+      for (const lvl of filtered) out[String(lvl)] = { options: { reasoningEffort: lvl } }
       return out
     }
     default:

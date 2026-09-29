@@ -29,7 +29,7 @@ export function fieldValueAt(obj: unknown, path: string): unknown {
   return cur
 }
 
-function filterValues(values: readonly string[] | undefined, raw: readonly unknown[]): readonly unknown[] {
+export function filterValues(values: readonly string[] | undefined, raw: readonly unknown[]): readonly unknown[] {
   if (!values || values.length === 0) return raw
   const allowed = new Set(values.map((v) => v.trim().toLowerCase()))
   return raw.filter((item) => allowed.has(String(item).trim().toLowerCase()))
@@ -63,7 +63,7 @@ function applySpecOp(raw: unknown, spec: AgentModelInfoFieldSpec): unknown {
       const filtered = filterValues(spec.values, raw)
       if (filtered.length === 0) return undefined
       const out: Record<string, unknown> = {}
-      for (const lvl of filtered) out[lvl] = { options: { reasoningEffort: lvl } }
+      for (const lvl of filtered) out[String(lvl)] = { options: { reasoningEffort: lvl } }
       return out
     }
     default: {

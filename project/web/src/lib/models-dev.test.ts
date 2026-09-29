@@ -21,6 +21,7 @@ function makeModel(partial: Partial<ModelsDevModel> & { id: string }): ModelsDev
     inputTypes: [],
     outputTypes: [],
     reasoning: false,
+    effortLevels: [],
     ...partial,
   }
 }
