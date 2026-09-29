@@ -185,7 +185,7 @@ function formatTime(iso: string): string {
 export function AgentConfigPage() {
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="配置文件" />
+      <PageHeader title="配置文件" description="管理被接管 Agent 的配置文件：路径检测、内容修改与解析方法" />
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentConfigFilesTab />
       </div>

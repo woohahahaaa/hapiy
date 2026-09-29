@@ -72,7 +72,7 @@ export function TokenUsageSettingsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Token 用量字段"
-        description="配置从上游响应体读取 token 用量的字段路径（gjson 路径），每个字段按顺序尝试，命中第一个存在的字段即停止"
+        description="配置从上游响应体读取 token 用量的字段路径（gjson），按顺序尝试，命中即停"
       />
       <div className="p-6">
         <Card>
