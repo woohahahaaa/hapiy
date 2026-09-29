@@ -35,7 +35,7 @@ export function UsageLogDetailDialog({ log, onOpenChange }: { readonly log: Usag
 // 上游 Key 默认模糊，hover 或点击（含触屏）后显示明文，点击后 5 秒恢复模糊。
 function SecretValue({ value }: { value: string }) {
   const [revealed, setRevealed] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
