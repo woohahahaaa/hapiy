@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
@@ -7,6 +8,11 @@ import { flowLogMiddleware } from "./flow-log-middleware"
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [flowLogMiddleware(), react(), tailwindcss()],
+  test: {
+    // Component snapshot tests render translated UI; load the i18n singleton
+    // (defaults to Chinese) before each test file.
+    setupFiles: ["./src/test/setup.ts"],
+  },
   server: {
     host: "0.0.0.0",
     port: 18009,

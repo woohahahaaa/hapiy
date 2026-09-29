@@ -19,6 +19,7 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { AgentConfigPage } from '@/pages/AgentConfigPage'
 import { AgentRulesPage } from '@/pages/AgentRulesPage'
 import { AuthGate } from '@/components/AuthGate'
+import { LanguageProvider } from '@/i18n/language-context'
 import { Toaster } from '@/components/ui/toast'
 
 function App() {
@@ -30,29 +31,31 @@ function App() {
           path="/*"
           element={
             <AuthGate>
-              <AppShell>
-                <Routes>
-                  <Route path="/" element={<TopologyPage />} />
-                  <Route path="/monitor" element={<MonitorPage />} />
-                  <Route path="/logs" element={<LogsPage />} />
-                  <Route path="/logs/capture" element={<LogCapturePage />} />
-                  <Route path="/provider" element={<ProviderPage />} />
-                  <Route path="/token" element={<TokenPage />} />
-                  <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
-                  <Route path="/policy/:type" element={<PolicyPage />} />
-                  <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-                  <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
-                  <Route path="/settings/general" element={<GeneralSettingsPage />} />
-                  <Route path="/settings/billing" element={<BillingSettingsPage />} />
-                  <Route path="/settings/debug" element={<DebugSettingsPage />} />
-                  <Route path="/settings/other" element={<OtherSettingsPage />} />
-                  <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
-                  <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/agent" element={<AgentRulesPage />} />
-                  <Route path="/agent/config" element={<AgentConfigPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </AppShell>
+              <LanguageProvider>
+                <AppShell>
+                  <Routes>
+                    <Route path="/" element={<TopologyPage />} />
+                    <Route path="/monitor" element={<MonitorPage />} />
+                    <Route path="/logs" element={<LogsPage />} />
+                    <Route path="/logs/capture" element={<LogCapturePage />} />
+                    <Route path="/provider" element={<ProviderPage />} />
+                    <Route path="/token" element={<TokenPage />} />
+                    <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
+                    <Route path="/policy/:type" element={<PolicyPage />} />
+                    <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                    <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
+                    <Route path="/settings/general" element={<GeneralSettingsPage />} />
+                    <Route path="/settings/billing" element={<BillingSettingsPage />} />
+                    <Route path="/settings/debug" element={<DebugSettingsPage />} />
+                    <Route path="/settings/other" element={<OtherSettingsPage />} />
+                    <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
+                    <Route path="/profile" element={<ProfilePage />} />
+                    <Route path="/agent" element={<AgentRulesPage />} />
+                    <Route path="/agent/config" element={<AgentConfigPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </AppShell>
+              </LanguageProvider>
             </AuthGate>
           }
         />

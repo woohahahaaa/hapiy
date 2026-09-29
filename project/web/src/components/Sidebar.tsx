@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import * as HoverCard from '@radix-ui/react-hover-card'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
@@ -30,7 +31,7 @@ import {
 
 interface NavItem {
   id: string
-  label: string
+  labelKey: string
   icon: React.ReactNode
   href?: string
   children?: NavSubItem[]
@@ -38,71 +39,71 @@ interface NavItem {
 
 interface NavSubItem {
   id: string
-  label: string
+  labelKey: string
   href: string
 }
 
 const navigation: NavItem[] = [
   {
     id: 'topology',
-    label: '转发拓扑',
+    labelKey: 'nav.topology',
     icon: <AppIcon name="grid_view" />,
     href: '/',
   },
   {
     id: 'monitor',
-    label: '监控',
+    labelKey: 'nav.monitor',
     icon: <AppIcon name="monitoring" />,
     children: [
-      { id: 'activity', label: '活动监视', href: '/monitor' },
-      { id: 'logs', label: '使用记录', href: '/logs' },
-      { id: 'capture', label: '日志抓取', href: '/logs/capture' },
+      { id: 'activity', labelKey: 'nav.activity', href: '/monitor' },
+      { id: 'logs', labelKey: 'nav.logs', href: '/logs' },
+      { id: 'capture', labelKey: 'nav.capture', href: '/logs/capture' },
     ],
   },
   {
     id: 'llm-config',
-    label: '模型接入',
+    labelKey: 'nav.llmConfig',
     icon: <AppIcon name="layers" />,
     children: [
-      { id: 'token', label: '令牌', href: '/token' },
-      { id: 'provider', label: '供应商', href: '/provider' },
+      { id: 'token', labelKey: 'nav.token', href: '/token' },
+      { id: 'provider', labelKey: 'nav.provider', href: '/provider' },
     ],
   },
   {
     id: 'policy',
-    label: '请求处理',
+    labelKey: 'nav.policy',
     icon: <AppIcon name="description" />,
     children: [
-      { id: 'rewrite', label: '请求改写', href: '/policy/rewrite' },
-      { id: 'rewrite-response', label: '响应改写', href: '/policy/rewrite-response' },
-      { id: 'channel-affinity', label: '渠道亲和性', href: '/channel-affinity' },
-      { id: 'failover', label: '故障转移', href: '/policy/failover' },
+      { id: 'rewrite', labelKey: 'nav.rewrite', href: '/policy/rewrite' },
+      { id: 'rewrite-response', labelKey: 'nav.rewriteResponse', href: '/policy/rewrite-response' },
+      { id: 'channel-affinity', labelKey: 'nav.channelAffinity', href: '/channel-affinity' },
+      { id: 'failover', labelKey: 'nav.failover', href: '/policy/failover' },
     ],
   },
   {
     id: 'agent',
-    label: '接管Agent',
+    labelKey: 'nav.agent',
     icon: <AppIcon name="robot" />,
     href: '/agent',
     children: [
-      { id: 'agent-config', label: '配置文件', href: '/agent/config' },
+      { id: 'agent-config', labelKey: 'nav.agentConfig', href: '/agent/config' },
     ],
   },
   {
     id: 'settings',
-    label: '系统设置',
+    labelKey: 'nav.settings',
     icon: <AppIcon name="settings" />,
     children: [
-      { id: 'base-url', label: 'BaseURL', href: '/settings/base-url' },
-      { id: 'general', label: '查询Model', href: '/settings/general' },
-      { id: 'billing', label: '币种汇率', href: '/settings/billing' },
-      { id: 'token-usage', label: '查询token用量', href: '/settings/token-usage' },
-      { id: 'debug', label: 'Debug', href: '/settings/debug' },
+      { id: 'base-url', labelKey: 'nav.baseUrl', href: '/settings/base-url' },
+      { id: 'general', labelKey: 'nav.general', href: '/settings/general' },
+      { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
+      { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
+      { id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' },
     ],
   },
   {
     id: 'profile',
-    label: '个人资料',
+    labelKey: 'nav.profile',
     icon: <AppIcon name="person" />,
     href: '/profile',
   },
@@ -125,6 +126,7 @@ function NavLink({
   onExpand: () => void
 }) {
   const { state } = useSidebar()
+  const { t } = useTranslation('common')
   const location = useLocation()
   const hasActiveChild =
     item.children?.some((child) => isPathActive(location.pathname, child.href)) ?? false
@@ -150,7 +152,7 @@ function NavLink({
               isActive={isPathActive(location.pathname, child.href)}
             >
               <Link to={child.href}>
-                <span>{child.label}</span>
+                <span>{t(child.labelKey)}</span>
               </Link>
             </SidebarMenuSubButton>
           </SidebarMenuSubItem>
@@ -163,13 +165,13 @@ function NavLink({
         <SidebarMenuButton asChild isActive={selfActive || hasActiveChild}>
           <Link to={item.href!}>
             {item.icon}
-            <span>{showLabel ? item.label : ''}</span>
+            <span>{showLabel ? t(item.labelKey) : ''}</span>
           </Link>
         </SidebarMenuButton>
       ) : (
         <SidebarMenuButton>
           {item.icon}
-          <span>{showLabel ? item.label : ''}</span>
+          <span>{showLabel ? t(item.labelKey) : ''}</span>
         </SidebarMenuButton>
       )
 
@@ -189,11 +191,11 @@ function NavLink({
                 onClick={closeFlyout}
                 className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
               >
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </Link>
             ) : (
               <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-                {item.label}
+                {t(item.labelKey)}
               </div>
             )}
             {item.children!.map((child) => {
@@ -210,7 +212,7 @@ function NavLink({
                       : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
                   )}
                 >
-                  <span>{child.label}</span>
+                  <span>{t(child.labelKey)}</span>
                 </Link>
               )
             })}
@@ -236,12 +238,16 @@ function NavLink({
             >
               <Link to={item.href!} onClick={onExpand}>
                 {item.icon}
-                <span>{item.label}</span>
+                <span>{t(item.labelKey)}</span>
               </Link>
             </SidebarMenuButton>
             <button
               type="button"
-              aria-label={isOpen ? `折叠 ${item.label}` : `展开 ${item.label}`}
+              aria-label={
+                isOpen
+                  ? t('nav.collapseSection', { name: t(item.labelKey) })
+                  : t('nav.expandSection', { name: t(item.labelKey) })
+              }
               onClick={onToggle}
               className={cn(
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
@@ -262,7 +268,7 @@ function NavLink({
     const trigger = (
       <SidebarMenuButton onClick={onToggle}>
         {item.icon}
-        <span>{item.label}</span>
+        <span>{t(item.labelKey)}</span>
         <AppIcon
           name="chevron_right"
           className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
@@ -282,7 +288,7 @@ function NavLink({
     <SidebarMenuButton asChild isActive={selfActive}>
       <Link to={item.href ?? '/'}>
         {item.icon}
-        <span>{showLabel ? item.label : ''}</span>
+        <span>{showLabel ? t(item.labelKey) : ''}</span>
       </Link>
     </SidebarMenuButton>
   )
@@ -307,7 +313,7 @@ function NavLink({
         className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
       >
         <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-          {item.label}
+          {t(item.labelKey)}
         </div>
       </Tooltip.Content>
     </Tooltip.Portal>
@@ -362,6 +368,7 @@ function readOpenSections(): Set<string> {
 
 export function AppSidebar() {
   const { state } = useSidebar()
+  const { t } = useTranslation('common')
   const [openSections, setOpenSections] = useState(readOpenSections)
   const [agentEnabled, setAgentEnabled] = useState(false)
   const collapsed = state === 'collapsed'
@@ -424,7 +431,7 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          {showLabel && <SidebarGroupLabel>导航</SidebarGroupLabel>}
+          {showLabel && <SidebarGroupLabel>{t('nav.section')}</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
               {visibleNavigation.map((item) => (
