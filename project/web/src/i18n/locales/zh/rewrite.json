@@ -19,6 +19,7 @@
     "addCondition": "添加条件",
     "addAction": "添加执行",
     "deleteAction": "删除执行 {{count}}",
+    "deleteCondition": "删除条件 {{count}}",
     "noConditions": "暂无条件，留空表示无条件执行",
     "atLeastOneAction": "至少需要一条执行"
   },

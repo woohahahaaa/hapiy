@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/checkbox'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
+import { useTranslation } from 'react-i18next'
 import type { LogOutputSlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
 import { createDebouncedCommit, shouldNotifyOnDisable, type DebouncedCommit } from './debounce'
 
@@ -28,6 +29,7 @@ export function NodeExecutorLogOutputItem({
   onPickToken,
   ...drag
 }: NodeExecutorLogOutputItemProps) {
+  const { t } = useTranslation('node')
   const [localPrefix, setLocalPrefix] = useState(entry.prefix)
 
   const onChangeRef = useRef(onChange)
@@ -75,7 +77,7 @@ export function NodeExecutorLogOutputItem({
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px]">日志前缀</span>
+          <span className="text-[10px]">{t('logOutput.prefixLabel')}</span>
           <Input
             size="sm"
             className="text-[10px]"
@@ -85,17 +87,17 @@ export function NodeExecutorLogOutputItem({
               prefixDebouncerRef.current?.schedule(e.target.value)
             }}
             onBlur={() => prefixDebouncerRef.current?.flush()}
-            placeholder="请输入日志前缀"
+            placeholder={t('logOutput.prefixPlaceholder')}
           />
         </div>
         <div className="flex flex-col gap-1">
           <CheckField
-            label="记录请求"
+            label={t('logOutput.recordRequest')}
             checked={entry.recordRequest}
             onChange={(v) => onChange({ ...entry, recordRequest: v })}
           />
           <CheckField
-            label="记录响应"
+            label={t('logOutput.recordResponse')}
             checked={entry.recordResponse}
             onChange={(v) => onChange({ ...entry, recordResponse: v })}
           />

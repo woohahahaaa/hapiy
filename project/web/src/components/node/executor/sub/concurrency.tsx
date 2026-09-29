@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
+import { useTranslation } from 'react-i18next'
 import { createDebouncedCommit, type DebouncedCommit } from './debounce'
 import { useConcurrencyWindowCount } from '@/lib/concurrency-windows'
 import type { ConcurrencySlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
@@ -79,6 +80,7 @@ function ConcurrencyNumber({ value, onCommit, ...rest }: ConcurrencyNumberProps)
 // （「每 X 分钟内最多 N 条」的数字内嵌为输入框），不区分供应商，不再弹窗。
 // 下方动态显示当前滑动窗口内已占用的条数（无数据时不渲染）。
 export function NodeExecutorConcurrency({ entry, nodeId, onChange, onDelete, token, picked, onPickToken, ...drag }: NodeExecutorConcurrencyProps) {
+  const { t } = useTranslation('node')
   const config = parseConcurrencyNodeConfig(entry.config)
   const windowActive = useConcurrencyWindowCount(entry.enabled ? nodeId : undefined)
 
@@ -98,11 +100,11 @@ export function NodeExecutorConcurrency({ entry, nodeId, onChange, onDelete, tok
     >
       <div className="min-w-0 flex flex-col gap-1.5 text-xs">
         <div className="flex flex-wrap items-center gap-1">
-          <span>每</span>
-          <ConcurrencyNumber aria-label="时间窗口（分钟）" value={config.windowMinutes} onCommit={(v) => commit({ windowMinutes: v })} />
-          <span>分钟内最多</span>
-          <ConcurrencyNumber aria-label="并发上限（条）" value={config.maxCount} onCommit={(v) => commit({ maxCount: v })} />
-          <span>条</span>
+          <span>{t('concurrency.every')}</span>
+          <ConcurrencyNumber aria-label={t('concurrency.windowAria')} value={config.windowMinutes} onCommit={(v) => commit({ windowMinutes: v })} />
+          <span>{t('concurrency.minutesAtMost')}</span>
+          <ConcurrencyNumber aria-label={t('concurrency.limitAria')} value={config.maxCount} onCommit={(v) => commit({ maxCount: v })} />
+          <span>{t('concurrency.items')}</span>
         </div>
         {nodeId && (
           <div
@@ -112,7 +114,7 @@ export function NodeExecutorConcurrency({ entry, nodeId, onChange, onDelete, tok
               (windowActive?.windowCount ?? 0) >= config.maxCount && 'font-medium text-amber-600 dark:text-amber-400',
             )}
           >
-            窗口内 {windowActive?.windowCount ?? 0}/{config.maxCount}
+            {t('concurrency.windowCount', { count: windowActive?.windowCount ?? 0, max: config.maxCount })}
           </div>
         )}
       </div>

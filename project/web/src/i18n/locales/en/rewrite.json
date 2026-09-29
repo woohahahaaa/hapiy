@@ -22,6 +22,8 @@
     "addAction": "Add action",
     "deleteAction_one": "Delete action {{count}}",
     "deleteAction_other": "Delete actions {{count}}",
+    "deleteCondition_one": "Delete condition {{count}}",
+    "deleteCondition_other": "Delete conditions {{count}}",
     "noConditions": "No conditions — empty means unconditional",
     "atLeastOneAction": "At least one action is required"
   },

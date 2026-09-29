@@ -1,6 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import { cn } from '@/lib/utils'
+import { useTranslation } from 'react-i18next'
 import { providerCardActive } from '@/components/node/effectiveness'
 import { computeProviderAvailability, formatAutoDisableSummary } from '@/lib/provider-availability'
 import type { ProviderDisableStatus } from '@/lib/dashboard-api'
@@ -51,6 +52,7 @@ export interface NodeExecutorProviderProps {
 // 供应商业务节点：单张供应商卡片（按 ID 选择、逐维度禁用详情、base URL/Key/模型计数）。
 // 所有插槽条目中唯一"个体级点亮"（flash 层按 child.id 独立查询）的业务。
 export function NodeExecutorProvider({ index, child, providers, takenLabels, flashLayers, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onToggle, onSelect, onDelete, token, picked, onPickToken }: NodeExecutorProviderProps) {
+  const { t } = useTranslation('node')
   // 下拉值 = 真实供应商 ID。旧数据缺失 providerId 时只读地按名称解析到同一 ID，
   // 不新增任何按名字写入的逻辑。
   const selectedId = child.providerId !== ''
@@ -97,7 +99,7 @@ export function NodeExecutorProvider({ index, child, providers, takenLabels, fla
       <div className="space-y-1.5">
         <Select value={selectedId} onValueChange={(value) => value && onSelect(value)}>
           <SelectTrigger size="sm" className="w-full">
-            <SelectValue placeholder="选择供应商" />
+            <SelectValue placeholder={t('provider.selectPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
             {filteredProviders.map((opt) => (
@@ -110,11 +112,11 @@ export function NodeExecutorProvider({ index, child, providers, takenLabels, fla
         {bound && (
           <div className="space-y-1 pl-2.5 text-xs">
             <div className="space-y-1">
-              <div>模型 {child.modelCount} · key {child.keyCount}</div>
-              <div>baseURL {child.baseURLCount} · endpoint {child.endpointCount}</div>
+              <div>{t('provider.modelKeyCounts', { modelCount: child.modelCount, keyCount: child.keyCount })}</div>
+              <div>{t('provider.baseUrlEndpointCounts', { baseURLCount: child.baseURLCount, endpointCount: child.endpointCount })}</div>
             </div>
             {state === 'disabled' && (
-              <p className="font-medium text-destructive">禁用</p>
+              <p className="font-medium text-destructive">{t('provider.disabled')}</p>
             )}
             {autoDisableSummary && <p className="font-medium text-warning">{autoDisableSummary}</p>}
           </div>

@@ -8,8 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "test": "vitest run && node scripts/check-i18n-keys.mjs",
+    "typecheck": "tsc -b",
+    "check:i18n": "node scripts/check-i18n-keys.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

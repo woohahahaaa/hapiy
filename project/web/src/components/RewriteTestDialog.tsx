@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +59,7 @@ export function RewriteTestDialog({
   width = 'full',
   height = 'full',
 }: RewriteTestDialogProps) {
+  const { t } = useTranslation('rewrite')
   const [selectedRuleId, setSelectedRuleId] = useState<string>(
     preselectedRuleId ?? rules[0]?.id ?? '',
   )
@@ -77,19 +79,19 @@ export function RewriteTestDialog({
       try {
         parsed = JSON.parse(inputBody)
       } catch {
-        setError('JSON 格式无效，请检查输入')
+        setError(t('testDialog.invalidJson'))
         setLoading(false)
         return
       }
       let currentBody = parsed
       for (let i = 0; i < rules.length; i++) {
         const rule = rules[i]
-        setProgress(`正在执行第 ${i + 1}/${rules.length} 条规则：${rule.name}`)
+        setProgress(t('testDialog.progress', { current: i + 1, total: rules.length, name: rule.name }))
         try {
           const res = await dashboardApi.testRewriteRule(type, rule.id, currentBody)
           currentBody = res.modified
         } catch (err) {
-          setError(`第 ${i + 1} 条规则「${rule.name}」执行失败：${err instanceof Error ? err.message : '未知错误'}`)
+          setError(t('testDialog.ruleFailed', { index: i + 1, name: rule.name, error: err instanceof Error ? err.message : t('testDialog.unknownError') }))
           setLoading(false)
           setProgress(null)
           return
@@ -111,14 +113,14 @@ export function RewriteTestDialog({
       try {
         parsed = JSON.parse(inputBody)
       } catch {
-        setError('JSON 格式无效，请检查输入')
+        setError(t('testDialog.invalidJson'))
         setLoading(false)
         return
       }
       const res = await dashboardApi.testRewriteRule(type, selectedRuleId, parsed)
       setResult(res)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '测试失败')
+      setError(err instanceof Error ? err.message : t('testDialog.testFailed'))
     } finally {
       setLoading(false)
     }
@@ -129,19 +131,19 @@ export function RewriteTestDialog({
       <DialogContent width={width} height={height} bare className="flex flex-col !gap-0 overflow-hidden">
         <DialogHeader className="flex shrink-0 flex-row items-center border-b border-border px-6 py-4">
           <DialogTitle className="text-base">
-            {readonlyRule ? '规则测试（插槽）' : '规则测试'}
+            {readonlyRule ? t('testDialog.titleSlot') : t('testDialog.title')}
           </DialogTitle>
         </DialogHeader>
 
         {showSelector && (<>
           <div className="flex shrink-0 items-center gap-3 px-6 py-3">
-            <span className="text-sm font-medium text-nowrap">选择规则:</span>
+            <span className="text-sm font-medium text-nowrap">{t('testDialog.selectRule')}</span>
             <Select
               value={selectedRuleId}
               onValueChange={readonlyRule ? undefined : setSelectedRuleId}
             >
               <SelectTrigger className="flex-1" disabled={readonlyRule}>
-                <SelectValue placeholder="选择一条规则" />
+                <SelectValue placeholder={t('testDialog.selectPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -155,7 +157,7 @@ export function RewriteTestDialog({
             </Select>
             {readonlyRule && rules.length > 1 && (
               <span className="text-xs text-muted-foreground">
-                将按顺序执行 {rules.length} 条规则
+                {t('testDialog.sequentialHint', { count: rules.length })}
               </span>
             )}
           </div>
@@ -164,7 +166,7 @@ export function RewriteTestDialog({
         {readonlyRule && rules.length > 0 && (
           <div className="shrink-0 px-6 pb-2">
             <div className="rounded-md border border-border bg-muted/30 p-2">
-              <span className="text-xs font-medium text-muted-foreground">执行顺序：</span>
+              <span className="text-xs font-medium text-muted-foreground">{t('testDialog.executionOrder')}</span>
               <div className="mt-1 flex flex-wrap gap-2">
                 {rules.map((rule, i) => (
                   <span key={rule.id} className="inline-flex items-center gap-1 rounded-md bg-background px-2 py-0.5 font-mono text-xs text-foreground">
@@ -178,7 +180,7 @@ export function RewriteTestDialog({
 
         <div className="flex min-h-0 flex-1 gap-4 px-6 pb-4">
           <div className="flex flex-1 flex-col overflow-hidden">
-            <span className="mb-1 text-xs font-medium text-muted-foreground">输入</span>
+            <span className="mb-1 text-xs font-medium text-muted-foreground">{t('testDialog.input')}</span>
             <textarea
               className="flex-1 resize-none rounded-md border border-border bg-background p-3 font-mono text-xs whitespace-pre"
               value={inputBody}
@@ -186,7 +188,7 @@ export function RewriteTestDialog({
             />
           </div>
           <div className="flex flex-1 flex-col overflow-hidden">
-            <span className="mb-1 text-xs font-medium text-muted-foreground">结果</span>
+            <span className="mb-1 text-xs font-medium text-muted-foreground">{t('testDialog.result')}</span>
             {progress ? (
               <div className="flex flex-1 items-center justify-center rounded-md border border-border text-xs text-muted-foreground">
                 {progress}
@@ -199,7 +201,7 @@ export function RewriteTestDialog({
               <JsonHighlight value={result.modified} className="flex-1 whitespace-pre-wrap break-all" />
             ) : (
               <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-                点击「运行测试」查看结果
+                {t('testDialog.emptyResult')}
               </div>
             )}
           </div>
@@ -207,7 +209,7 @@ export function RewriteTestDialog({
 
         <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
           <Button disabled={loading || (readonlyRule ? rules.length === 0 : !selectedRuleId)} onClick={handleRunTest}>
-            {loading ? '测试中...' : '运行测试'}
+            {loading ? t('testDialog.running') : t('testDialog.runTest')}
           </Button>
         </DialogFooter>
       </DialogContent>

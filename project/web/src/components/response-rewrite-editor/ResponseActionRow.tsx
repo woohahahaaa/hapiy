@@ -1,4 +1,5 @@
-import { useTranslation, type TFunction } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AppIcon } from '@/components/AppIcon'
@@ -33,14 +34,14 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
             className="h-7 min-w-0 flex-1 font-mono text-xs"
             value={action.path}
             onChange={(e) => onChange({ ...action, path: e.target.value })}
-            placeholder="gjson 路径"
+            placeholder={t('path.gjsonPlaceholder')}
           />
           <Select
             value={typedMode}
             onValueChange={(v) => onChange({ ...action, mode: v as ModeName })}
           >
             <SelectTrigger className="h-7 w-[180px] shrink-0" size="sm">
-              <SelectValue placeholder="选择操作" />
+              <SelectValue placeholder={t('selectModePlaceholder')} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
@@ -57,7 +58,7 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
               className="h-7 min-w-0 flex-1 font-mono text-xs"
               value={action.value}
               onChange={(e) => onChange({ ...action, value: e.target.value })}
-              placeholder={valuePlaceholder(typedMode)}
+              placeholder={valuePlaceholder(t, typedMode)}
             />
           </div>
         )}
@@ -67,7 +68,7 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
         onClick={onRemove}
         disabled={!canRemove}
         className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-        aria-label={`删除执行 ${index + 1}`}
+        aria-label={t('section.deleteAction', { count: index + 1 })}
       >
         <AppIcon name="close" size={14} />
       </button>
@@ -75,11 +76,11 @@ export function ResponseActionRow({ index, action, onChange, onRemove, canRemove
   )
 }
 
-function valuePlaceholder(mode: ModeName | ''): string {
+function valuePlaceholder(t: TFunction, mode: ModeName | ''): string {
   switch (mode) {
-    case 'move': return '新字段路径（如 messages.0.text）'
-    case 'first_prepend': return '要加的前缀（如 \n<think>）'
-    case 'last_append': return '要加的后缀（如 \n</think>）'
+    case 'move': return t('respValue.movePlaceholder')
+    case 'first_prepend': return t('respValue.firstPrependPlaceholder')
+    case 'last_append': return t('respValue.lastAppendPlaceholder')
     default: return 'value'
   }
 }
