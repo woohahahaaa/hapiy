@@ -545,7 +545,7 @@ function buildModelInfoFieldsPayload(
     if (path === '') {
       const hasOther = row.op !== 'raw' || row.action !== 'set' || row.sep.trim() !== '' || row.valuesText.trim() !== ''
       if (hasOther && error === null) {
-        error = i18n.t('agentRules:errors.modelInfoPathRequired', { label: MODEL_INFO_FIELD_LABELS[key] })
+        error = i18n.t('agentRules:errors.modelInfoPathRequired', { label: i18n.t('agentRules:modelInfoFields.' + MODEL_INFO_FIELD_LABELS[key]) })
       }
       continue
     }
@@ -718,7 +718,7 @@ function parseDialogDoc(text: string): RuleDialogDoc {
       if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
         const spec = raw as Record<string, unknown>
         if (typeof spec.path !== 'string' || spec.path.trim() === '') {
-          throw new Error(i18n.t('agentRules:errors.modelInfoPathRequiredAt', { key, label: MODEL_INFO_FIELD_LABELS[key] }))
+          throw new Error(i18n.t('agentRules:errors.modelInfoPathRequiredAt', { key, label: i18n.t('agentRules:modelInfoFields.' + MODEL_INFO_FIELD_LABELS[key]) }))
         }
       }
       mif[key] = parseAgentModelInfoSpec(raw)
@@ -1494,7 +1494,7 @@ function ModelInfoFieldsEditor({
           <tbody className="divide-y divide-border">
             {MODEL_INFO_FIELD_KEYS.map((key) => (
               <tr key={key}>
-                <td className="px-2 py-1.5">{MODEL_INFO_FIELD_LABELS[key]}</td>
+                <td className="px-2 py-1.5">{t('modelInfoFields.' + MODEL_INFO_FIELD_LABELS[key])}</td>
                 <td className="px-2 py-1">
                   <Input
                     value={value[key].path}

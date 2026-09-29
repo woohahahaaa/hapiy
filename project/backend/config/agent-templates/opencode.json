@@ -24,8 +24,8 @@
     "mac": "~/.config/opencode/opencode.json"
   },
   "json_paths": {
-    "provider": "provider",
-    "model": "provider.{provider_id}.models",
+    "provider": "providers",
+    "model": "providers.{provider_id}.models",
     "models_container": "object"
   },
   "recommendations": [

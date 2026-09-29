@@ -668,13 +668,14 @@ export type ModelInfoFieldKey = typeof MODEL_INFO_FIELD_KEYS[number]
 
 // Unified shared vocabulary for the four model-info fields. Every
 // surface (rule table, sync dialog, model info editor) uses these
-// labels so naming stays consistent.
+// labels so naming stays consistent. The values are i18n key suffixes
+// (render sites wrap them with t('agentRules:modelInfoFields.' + v)).
 export const MODEL_INFO_FIELD_LABELS: Record<ModelInfoFieldKey, string> = {
-  max_context: '最大上下文',
-  max_output_token: '最大输出token',
-  input_types: '支持的输入类型',
-  thinking_levels: '支持的思考程度',
-  reasoning_effort: '思考档位',
+  max_context: 'maxContext',
+  max_output_token: 'maxOutputToken',
+  input_types: 'inputTypes',
+  thinking_levels: 'thinkingLevels',
+  reasoning_effort: 'reasoningEffort',
 }
 
 // AgentModelInfoFieldSpec — 显式的「值写法」对象：path 是模型配置对象内
