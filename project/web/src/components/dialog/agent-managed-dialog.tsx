@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Checkbox } from '@/components/checkbox'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,7 @@ export function ManagedProviderDialog({
   editing,
   onSaved,
 }: ManagedProviderDialogProps) {
+  const { t } = useTranslation('agentConfig')
   const [options, setOptions] = useState<readonly ManagedProviderOption[]>([])
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [tokens, setTokens] = useState<readonly Token[]>([])
@@ -173,7 +175,7 @@ export function ManagedProviderDialog({
           setBaseUrl(auto)
         }
       })
-      .catch((err) => toast.error(err instanceof Error ? err.message : '加载失败'))
+      .catch((err) => toast.error(err instanceof Error ? err.message : t('errors.loadFailed')))
       .finally(() => setLoading(false))
   }, [open, record, editing])
 
@@ -249,9 +251,12 @@ export function ManagedProviderDialog({
     : undefined
   // 命中已有分组时，显示在命名后缀输入框下方的合并提示。
   const noneMergeHint = noneMergeTarget
-    ? `已匹配到同名分组「${noneMergeTarget.endpoint}」${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()
-        ? `（命名后缀 ${(suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()}）`
-        : ''}，此处留空保存将自动合并`
+    ? t('managedDialog.noneMergeHint', {
+        endpoint: noneMergeTarget.endpoint,
+        suffixHint: (suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim()
+          ? t('managedDialog.noneMergeSuffixPart', { suffix: (suffixByEndpoint[noneMergeTarget.endpoint] ?? '').trim() })
+          : '',
+      })
     : undefined
 
   // 命中已有分组时，后缀输入框的占位符直接显示命中分组的后缀
@@ -304,7 +309,7 @@ export function ManagedProviderDialog({
       }
       return changed ? next : prev
     })
-    toast('已把全部模型设为官方参考厂商（无官方的取候选第一个）')
+    toast(t('toast.officialAll'))
   }
 
   const toggleProvider = (id: string) => {
@@ -320,15 +325,15 @@ export function ManagedProviderDialog({
     if (!record) return
     const trimmed = name.trim()
     if (!trimmed) {
-      toast.error('请填写供应商名字')
+      toast.error(t('toast.nameRequired'))
       return
     }
     if (groups.length === 0) {
-      toast.error('请至少勾选一个有 endpoint 的供应商')
+      toast.error(t('toast.noEndpointProvider'))
       return
     }
     if (apiKey.trim() === '') {
-      toast.error('请选择接入用的令牌 Key（必填）')
+      toast.error(t('toast.apiKeyRequired'))
       return
     }
     // 未配置 endpoint 组：手填 endpoint 的提交语义 ——
@@ -358,7 +363,7 @@ export function ManagedProviderDialog({
     for (const g of groups) {
       if (g.endpoint === '__none__') {
         if (!manualNoneEp) {
-          toast.error('有未配置 endpoint 的供应商：请手动填写 endpoint，或取消勾选它们')
+          toast.error(t('toast.manualEndpointRequired'))
           return
         }
         const entry: ManagedAgentGroup = {
@@ -370,7 +375,7 @@ export function ManagedProviderDialog({
         const existing = payload.find((p) => p.endpoint === manualNoneEp)
         if (existing && noneSuffix === '') {
           mergeInto(existing, entry)
-          toast(`未配置 endpoint 的供应商已并入分组「${existing.endpoint}」`)
+          toast(t('toast.mergedIntoGroup', { endpoint: existing.endpoint }))
           continue
         }
         payload.push(entry)
@@ -391,7 +396,7 @@ export function ManagedProviderDialog({
     if (payload.length > 1) {
       for (const p of payload) {
         if (!p.suffix) {
-          toast.error(`有多个 endpoint 分组，必须为 ${p.endpoint} 填写后缀`)
+          toast.error(t('toast.suffixRequired', { endpoint: p.endpoint }))
           return
         }
       }
@@ -434,7 +439,7 @@ export function ManagedProviderDialog({
           groups: payload,
           ...authFields,
         })
-        toast('已保存托管 provider')
+        toast(t('toast.savedProvider'))
       } else {
         await dashboardApi.createManagedProvider(record.id, {
           name: trimmed,
@@ -442,12 +447,12 @@ export function ManagedProviderDialog({
           groups: payload,
           ...authFields,
         })
-        toast('已创建托管 provider')
+        toast(t('toast.createdProvider'))
       }
       onSaved()
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '保存失败')
+      toast.error(err instanceof Error ? err.message : t('errors.saveFailed'))
     }
   }
 
@@ -457,12 +462,12 @@ export function ManagedProviderDialog({
     setDeleting(true)
     try {
       await dashboardApi.deleteManagedProvider(record.id, editing.id)
-      toast('已删除托管 provider')
+      toast(t('toast.deletedProvider'))
       setConfirmDelete(false)
       onSaved()
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('errors.deleteFailed'))
     } finally {
       setDeleting(false)
     }
@@ -477,7 +482,7 @@ export function ManagedProviderDialog({
         scrollFooter
       >
         <DialogHeader>
-          <DialogTitle>{editing ? '修改托管 provider' : '添加托管 provider'}</DialogTitle>
+          <DialogTitle>{editing ? t('managedDialog.titleEdit') : t('managedDialog.titleCreate')}</DialogTitle>
         </DialogHeader>
 
         <DialogScrollBody className="space-y-4" footer={
@@ -490,53 +495,53 @@ export function ManagedProviderDialog({
                 disabled={deleting}
               >
                 <AppIcon name="delete" size={14} data-icon="inline-start" />
-                删除
+                {t('common:action.delete')}
               </Button>
             )}
-            <Button onClick={() => void submit()}>保存</Button>
+            <Button onClick={() => void submit()}>{t('common:action.save')}</Button>
           </>
         }>
           {loading ? (
-            <p className="text-xs text-muted-foreground">加载供应商列表…</p>
+            <p className="text-xs text-muted-foreground">{t('managedDialog.loadingProviders')}</p>
           ) : (
             <>
               <div className="grid grid-cols-2 items-start gap-4">
                 <Field>
-                  <FieldLabel>规则名称</FieldLabel>
+                  <FieldLabel>{t('managedDialog.ruleNameLabel')}</FieldLabel>
                   <Input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="例如：HAPIY"
+                    placeholder={t('managedDialog.ruleNamePlaceholder')}
                   />
                   <p className="text-xs text-muted-foreground">
-                    各组最终 provider 名 = 规则名称 + 后缀（只有一个分组时后缀可选）
+                    {t('managedDialog.ruleNameHint')}
                   </p>
                 </Field>
 
                 <Field>
                   <FieldLabel>
-                    接入 Key
-                    <span className="ml-1 font-normal text-muted-foreground">（令牌页创建的 Key，必填）</span>
+                    {t('managedDialog.apiKeyLabel')}
+                    <span className="ml-1 font-normal text-muted-foreground">{t('managedDialog.apiKeyRequiredSuffix')}</span>
                   </FieldLabel>
                   <Select value={apiKey} onValueChange={setApiKey}>
                     <SelectTrigger className="h-9 w-full text-xs">
-                      <SelectValue placeholder="选择接入用的令牌 Key" />
+                      <SelectValue placeholder={t('managedDialog.apiKeyPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {tokens.length === 0 ? (
-                        <SelectItem value="__none__" disabled>暂无令牌，请先到令牌页创建</SelectItem>
+                        <SelectItem value="__none__" disabled>{t('managedDialog.noTokens')}</SelectItem>
                       ) : (
-                        tokens.map((t) => (
-                          <SelectItem key={t.id} value={t.key}>
-                            {t.name}
-                            {!t.status && '（已禁用）'}
+                        tokens.map((token) => (
+                          <SelectItem key={token.id} value={token.key}>
+                            {token.name}
+                            {!token.status && t('managedDialog.tokenDisabled')}
                           </SelectItem>
                         ))
                       )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 key
+                    {t('managedDialog.apiKeyHint')}
                   </p>
                 </Field>
               </div>
@@ -551,27 +556,27 @@ export function ManagedProviderDialog({
                     className="font-mono"
                   />
                   <p className="text-xs text-muted-foreground">
-                    默认填入系统识别的 BaseURL，可直接编辑；清空则恢复系统默认
+                    {t('managedDialog.baseUrlHint')}
                   </p>
                 </Field>
 
                 <Field>
-                  <FieldLabel>标记来源</FieldLabel>
+                  <FieldLabel>{t('managedDialog.sourceLabel')}</FieldLabel>
                   <Input
                     value={sourceName}
                     onChange={(e) => setSourceName(e.target.value)}
-                    placeholder="可留空"
+                    placeholder={t('managedDialog.sourcePlaceholder')}
                   />
                   <p className="text-xs text-muted-foreground">
-                    填写后在 BaseURL 后追加 __来源 段；可留空
+                    {t('managedDialog.sourceHint')}
                   </p>
                 </Field>
               </div>
 
               <Field>
                 <FieldLabel>
-从系统配置的供应商中选择
-                  <span className="ml-1 font-normal text-muted-foreground">（显示名称 / 模型数 / endpoint 数）</span>
+                  {t('managedDialog.selectProvidersLabel')}
+                  <span className="ml-1 font-normal text-muted-foreground">{t('managedDialog.selectProvidersSuffix')}</span>
                 </FieldLabel>
                 <ProviderMultiSelect
                   loading={loading}
@@ -584,29 +589,29 @@ export function ManagedProviderDialog({
               {deferredGroups.length > 0 && (
                 <Field>
                   <FieldLabel>
-                    根据 Endpoint 自动生成多组 provider 配置
+                    {t('managedDialog.groupsLabel')}
                     <span className="ml-1 font-normal text-muted-foreground">
-                      （一个 provider 只允许一种 Endpoint）
+                      {t('managedDialog.groupsSuffix')}
                     </span>
                   </FieldLabel>
                   <div className="space-y-2">
                     <div className="overflow-hidden rounded-md border border-border">
                       <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
                         <div className="w-[24%]">Endpoint</div>
-                        <div className="w-[14%] border-l border-border pl-2">命名后缀</div>
-                        <div className="w-[26%] border-l border-border pl-2">模型</div>
+                        <div className="w-[14%] border-l border-border pl-2">{t('managedDialog.suffixColumn')}</div>
+                        <div className="w-[26%] border-l border-border pl-2">{t('managedDialog.modelsColumn')}</div>
                         <div className="flex w-[36%] items-center justify-between gap-1 border-l border-border pl-2">
-                          <span>从 models.dev 同步模型配置</span>
+                          <span>{t('columns.syncFromModelsDev')}</span>
                           <Button
                             type="button"
                             variant="ghost"
                             size="xs"
-                            title="把全部模型设为官方（lab）参考厂商；没有官方来源的模型取其候选列表第一个"
+                            title={t('managedDialog.bulkSetTitle')}
                             onClick={applyOfficialToAll}
                             disabled={snapshot === null}
                           >
                             <AppIcon name="auto_fix_high" data-icon="inline-start" />
-                            批量设置参考厂商
+                            {t('managedDialog.bulkSet')}
                           </Button>
                         </div>
                       </div>
@@ -627,7 +632,7 @@ export function ManagedProviderDialog({
                                             onChange={(e) =>
                                               setManualEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
                                             }
-                                            placeholder="手动输入，例如 /v1/chat/completions"
+                                            placeholder={t('managedDialog.manualEndpointPlaceholder')}
                                             className="h-7 w-full text-xs font-mono"
                                           />
                                         ) : (
@@ -646,7 +651,7 @@ export function ManagedProviderDialog({
                                           onChange={(e) =>
                                             setSuffixByEndpoint((prev) => ({ ...prev, [g.endpoint]: e.target.value }))
                                           }
-                                          placeholder={isNone && noneSuffixPlaceholder ? noneSuffixPlaceholder : '填写命名后缀'}
+                                          placeholder={isNone && noneSuffixPlaceholder ? noneSuffixPlaceholder : t('managedDialog.suffixPlaceholder')}
                                           className="h-7 w-full text-xs font-mono"
                                         />
                                         {isNone && noneMergeHint && (
@@ -671,12 +676,12 @@ export function ManagedProviderDialog({
                                             disabled={snapshot === null}
                                           >
                                             <SelectTrigger className="h-7 w-full text-xs">
-                                              <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
+                                              <SelectValue placeholder={snapshot === null ? t('common:state.loading') : t('managedDialog.referencePlaceholder')} />
                                             </SelectTrigger>
                                             <SelectContent>
                                               {snapshot !== null && (
                                                 <>
-                                                  <SelectItem value="">不同步</SelectItem>
+                                                  <SelectItem value="">{t('managedDialog.noSync')}</SelectItem>
                                                   {(() => {
                                                     const stored = sourceByEndpoint[g.endpoint]?.[m] ?? ''
                                                     const candidates = providersForModel(snapshot, m)
@@ -686,13 +691,13 @@ export function ManagedProviderDialog({
                                                     const raw = resolved ?? stored
                                                     return (
                                                       <SelectItem value={stored}>
-                                                        {raw.length > 14 ? `${raw.slice(0, 8)}…（已失效）` : `${raw}（已失效）`}
+                                                        {raw.length > 14 ? `${raw.slice(0, 8)}…${t('managedDialog.staleSuffix')}` : `${raw}${t('managedDialog.staleSuffix')}`}
                                                       </SelectItem>
                                                     )
                                                   })()}
                                                   {providersForModel(snapshot, m).map((p) => (
                                                     <SelectItem key={p.providerId} value={p.providerName}>
-                                                      {p.providerName}{isModelsDevLab(m, p.providerId) ? '（官方）' : ''}
+                                                      {p.providerName}{isModelsDevLab(m, p.providerId) ? t('managedDialog.officialSuffix') : ''}
                                                     </SelectItem>
                                                   ))}
                                                 </>
@@ -702,7 +707,7 @@ export function ManagedProviderDialog({
                                         </td>
                                       </>
                                     ) : (
-                                      <td colSpan={2} className="px-2 py-1.5 text-muted-foreground">（无模型）</td>
+                                      <td colSpan={2} className="px-2 py-1.5 text-muted-foreground">{t('managedDialog.noModelsCell')}</td>
                                     )}
                                   </tr>
                                 ))}
@@ -723,17 +728,17 @@ export function ManagedProviderDialog({
       <Dialog open={confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(false)}>
         <DialogContent width="sm" scrollFooter>
           <DialogHeader>
-            <DialogTitle>删除托管 provider</DialogTitle>
+            <DialogTitle>{t('managedDialog.confirmDeleteTitle')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
               <Button variant="destructive" onClick={() => void handleDelete()} disabled={deleting}>
-                {deleting ? '删除中…' : '确认删除'}
+                {deleting ? t('managedDialog.confirmDeleteBusy') : t('confirmDelete.confirm')}
               </Button>
             </>
           }>
             <p className="text-xs text-muted-foreground">
-              确认删除托管 provider「{editing?.name ?? ''}」？删除会立即生效，已生成的 provider 配置仍会保留。
+              {t('managedDialog.confirmDeleteDescription', { name: editing?.name ?? '' })}
             </p>
           </DialogScrollBody>
         </DialogContent>
@@ -753,6 +758,7 @@ function ProviderMultiSelect({
   checked: ReadonlySet<string>
   onToggle: (id: string) => void
 }) {
+  const { t } = useTranslation('agentConfig')
   const checkedOptions = options.filter((o) => checked.has(o.id))
 
   return (
@@ -764,7 +770,7 @@ function ProviderMultiSelect({
         >
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {checkedOptions.length === 0 ? (
-              <span className="text-muted-foreground">点击展开，勾选系统配置的供应商</span>
+              <span className="text-muted-foreground">{t('managedDialog.emptyMultiSelect')}</span>
             ) : (
               <>
                 {checkedOptions.map((o) => (
@@ -772,7 +778,7 @@ function ProviderMultiSelect({
                     key={o.id}
                     label={<span className="font-medium">{o.name}</span>}
                     onRemove={() => onToggle(o.id)}
-                    removeTitle={`移除 ${o.name}`}
+                    removeTitle={t('managedDialog.removeTitle', { name: o.name })}
                   />
                 ))}
               </>
@@ -790,7 +796,7 @@ function ProviderMultiSelect({
         className="max-h-[55vh] w-[--radix-popover-trigger-width] overflow-auto p-0"
       >
         {loading ? (
-          <p className="px-2.5 py-2 text-xs text-muted-foreground">加载供应商列表…</p>
+          <p className="px-2.5 py-2 text-xs text-muted-foreground">{t('managedDialog.loadingProviders')}</p>
         ) : (
           <ul role="listbox" aria-multiselectable="true">
             {options.map((opt) => {
@@ -821,10 +827,10 @@ function ProviderMultiSelect({
                     />
                     <span className="min-w-0 flex-1">
                       <span className={'truncate ' + (selected ? 'font-medium' : '')}>{opt.name}</span>
-                      {disabled && <span className="ml-1 text-muted-foreground">（禁用）</span>}
+                      {disabled && <span className="ml-1 text-muted-foreground">{t('managedDialog.providerDisabled')}</span>}
                     </span>
                     <span className="shrink-0 text-muted-foreground">
-                      {opt.modelCount} 模型 · {opt.endpointCount} endpoint
+                      {t('managedDialog.providerMeta', { models: opt.modelCount, endpoints: opt.endpointCount })}
                     </span>
                   </button>
                 </li>

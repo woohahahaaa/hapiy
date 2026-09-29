@@ -139,6 +139,8 @@
     "pathAutoCheckHint": "The file is checked automatically once a path is entered",
     "hostLabel": "Host (with port)",
     "portPlaceholder": "Port",
+    "hostPlaceholder": "e.g. 192.168.1.100",
+    "usernamePlaceholder": "e.g. root",
     "userAuthLabel": "Username / auth method",
     "authPassword": "Password",
     "authKey": "Private key",

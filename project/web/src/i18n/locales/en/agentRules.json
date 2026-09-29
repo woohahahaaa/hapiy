@@ -163,7 +163,8 @@
       "officialApplied": "All models set to their official reference provider (those without one use the first candidate)",
       "officialAlready": "All models already use their best reference provider",
       "saveSupplierFailed": "Failed to save reference provider selection",
-      "noChanges": "No applicable changes (selected items already match recommendations)"
+      "noChanges": "No applicable changes (selected items already match recommendations)",
+      "noSelection": "Please check at least one provider or model"
     },
     "errors": {
       "loadFailed": "Failed to load",

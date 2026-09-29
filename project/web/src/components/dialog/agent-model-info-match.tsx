@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/checkbox'
@@ -141,6 +142,7 @@ export function AgentModelInfoMatchDialog({
   protocols,
   onPreview,
 }: AgentModelInfoMatchDialogProps) {
+  const { t } = useTranslation('agentRules')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
@@ -172,7 +174,7 @@ export function AgentModelInfoMatchDialog({
         if (!cancelled) setSnapshot(models)
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : '加载失败')
+        if (!cancelled) setError(err instanceof Error ? err.message : t('match.errors.loadFailed'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -367,7 +369,7 @@ export function AgentModelInfoMatchDialog({
     }
     setSupplierByModelId(next)
     void persistSources(next)
-    toast(changed ? '已把全部模型设为官方参考厂商（无官方的取候选第一个）' : '模型均已是最佳参考厂商')
+    toast(changed ? t('match.toast.officialApplied') : t('match.toast.officialAlready'))
   }
 
   // persistSources 把当前每个模型的参考厂商选择按「配置文件 + provider + model」
@@ -395,7 +397,7 @@ export function AgentModelInfoMatchDialog({
       }
       await dashboardApi.saveAgentModelConfigSources(record.id, sources)
     } catch {
-      toast.error('保存参考厂商选择失败')
+      toast.error(t('match.toast.saveSupplierFailed'))
     } finally {
       setSavingSources(false)
     }
@@ -404,7 +406,7 @@ export function AgentModelInfoMatchDialog({
   const handleApply = async () => {
     if (!record) return
     if (providerCheckedCount === 0 && modelCheckedCount === 0) {
-      toast('请至少勾选一个供应商或模型')
+      toast(t('match.toast.noSelection'))
       return
     }
     setApplying(true)
@@ -446,14 +448,14 @@ export function AgentModelInfoMatchDialog({
       }
       const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
       if (res.applied === 0) {
-        toast('没有可应用的变更（勾选项均已符合推荐）')
+        toast(t('match.toast.noChanges'))
         onOpenChange(false)
         return
       }
       onPreview({ content: res.content, applied: res.applied })
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '应用失败')
+      toast.error(err instanceof Error ? err.message : t('match.errors.applyFailed'))
     } finally {
       setApplying(false)
     }
@@ -466,7 +468,7 @@ export function AgentModelInfoMatchDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="lg" height="auto" scrollFooter className="flex max-h-[70vh] flex-col">
         <DialogHeader>
-          <DialogTitle>使用推荐配置</DialogTitle>
+          <DialogTitle>{t('match.title')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
@@ -475,31 +477,34 @@ export function AgentModelInfoMatchDialog({
               disabled={applying || loading || (providerCheckedCount === 0 && modelCheckedCount === 0)}
               onClick={() => void handleApply()}
             >
-              {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '使用推荐配置'}
+              {applying ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : t('match.title')}
             </Button>
           </>
         }>
         <div className="flex min-h-0 flex-1 flex-col">
-          {loading && <Placeholder>加载中…</Placeholder>}
+          {loading && <Placeholder>{t('common:state.loading')}</Placeholder>}
           {error && <Placeholder tone="error">{error}</Placeholder>}
           {!loading && !error && providers.length === 0 && (
-            <Placeholder>该配置文件下没有可配置的供应商</Placeholder>
+            <Placeholder>{t('match.emptyProviders')}</Placeholder>
           )}
           {!loading && !error && providers.length > 0 && (
             <>
               <div className="mb-2 flex items-center justify-end gap-3">
                 <div className="text-xs text-muted-foreground">
-                  已勾选 {providerCheckedCount + modelCheckedCount} / {providers.reduce((n, p) => n + 1 + p.models.length, 0)} 项
+                  {t('match.checkedCount', {
+                    checked: providerCheckedCount + modelCheckedCount,
+                    total: providers.reduce((n, p) => n + 1 + p.models.length, 0),
+                  })}
                 </div>
                 <Button
                   variant="outline"
                   size="xs"
                   disabled={snapshot === null}
                   onClick={applyOfficialToAll}
-                  title="把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个"
+                  title={t('match.officialTitle')}
                 >
                   <AppIcon name="auto_fix_high" size={12} data-icon="inline-start" />
-                  批量设置参考厂商
+                  {t('match.officialButton')}
                 </Button>
               </div>
 
@@ -521,12 +526,12 @@ export function AgentModelInfoMatchDialog({
                             setCheckedProviders(cp)
                             setCheckedModels(cm)
                           }}
-                          aria-label="全选"
+                          aria-label={t('match.checkAllAria')}
                         />
                       </th>
-                      <th className="w-[26%] border-l border-border px-3 py-2 text-left font-medium">名称</th>
-                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">从 models.dev 同步模型配置</th>
-                      <th className="border-l border-border px-3 py-2 text-left font-medium">字段对比</th>
+                      <th className="w-[26%] border-l border-border px-3 py-2 text-left font-medium">{t('columns.name')}</th>
+                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">{t('match.columns.syncFromModelsDev')}</th>
+                      <th className="border-l border-border px-3 py-2 text-left font-medium">{t('match.columns.fieldDiff')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -548,12 +553,12 @@ export function AgentModelInfoMatchDialog({
                                 onCheckedChange={(v) =>
                                   setCheckedProviders((prev) => ({ ...prev, [p.provider_id]: v === true }))
                                 }
-                                aria-label={`勾选供应商 ${p.provider_id}`}
+                                aria-label={t('match.checkProviderAria', { name: p.provider_id })}
                               />
                             </td>
                             <td className="border-l border-border px-3 py-2 align-top">
                               <div className="truncate font-medium">{p.provider_id}</div>
-                              <div className="text-[10px] text-muted-foreground">供应商级推荐</div>
+                              <div className="text-[10px] text-muted-foreground">{t('match.providerLevel')}</div>
                             </td>
                             <td className="border-l border-border px-3 py-2 align-top font-mono text-muted-foreground">--</td>
                             <td className="border-l border-border px-3 py-2 align-top">
@@ -570,7 +575,7 @@ export function AgentModelInfoMatchDialog({
                                     </li>
                                   ))}
                                   {pChanges.length > 4 && (
-                                    <li className="text-[11px] text-muted-foreground">…等 {pChanges.length} 项</li>
+                                    <li className="text-[11px] text-muted-foreground">{t('match.moreItems', { count: pChanges.length })}</li>
                                   )}
                                 </ul>
                               )}
@@ -601,12 +606,12 @@ export function AgentModelInfoMatchDialog({
                                     onCheckedChange={(v) =>
                                       setCheckedModels((prev) => ({ ...prev, [key]: v === true }))
                                     }
-                                    aria-label={`勾选模型 ${m.id}`}
+                                    aria-label={t('match.checkModelAria', { name: m.id })}
                                   />
                                 </td>
                                 <td className="border-l border-border px-3 py-2 align-top">
                                   <div className="break-all pl-2 font-mono">{m.id}</div>
-                                  <div className="pl-2 text-[10px] text-muted-foreground">模型级推荐</div>
+                                  <div className="pl-2 text-[10px] text-muted-foreground">{t('match.modelLevel')}</div>
                                 </td>
                                 <td className="border-l border-border px-3 py-2 align-top">
                                   <Select
@@ -619,15 +624,15 @@ export function AgentModelInfoMatchDialog({
                                     disabled={snapshot === null}
                                   >
                                     <SelectTrigger className="h-7 w-full text-xs">
-                                      <SelectValue placeholder={snapshot === null ? '加载中…' : '选择参考厂商'} />
+                                      <SelectValue placeholder={snapshot === null ? t('common:state.loading') : t('match.selectSupplier')} />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {snapshot !== null && (
                                         <>
-                                          <SelectItem value="">不同步</SelectItem>
+                                          <SelectItem value="">{t('match.dontSync')}</SelectItem>
                                           {providersForModel(snapshot, m.id).map((x) => (
                                             <SelectItem key={x.providerId} value={x.providerName}>
-                                              {x.providerName}{isModelsDevLab(m.id, x.providerId) ? '（官方）' : ''}
+                                              {x.providerName}{isModelsDevLab(m.id, x.providerId) ? t('match.officialSuffix') : ''}
                                             </SelectItem>
                                           ))}
                                         </>
@@ -638,10 +643,10 @@ export function AgentModelInfoMatchDialog({
                                 <td className="border-l border-border px-3 py-2 align-top">
                                   {!source ? (
                                     <div className="break-all text-[11px] text-muted-foreground">
-                                      {supplier ? '未在 models.dev 查到该模型信息' : '请先选择参考厂商'}
+                                      {supplier ? t('match.modelNotFound') : t('match.selectSupplierFirst')}
                                     </div>
                                   ) : changes.length === 0 ? (
-                                    <div className="text-[11px] text-muted-foreground">— 已符合推荐</div>
+                                    <div className="text-[11px] text-muted-foreground">{t('match.alreadyCompliant')}</div>
                                   ) : (
                                     <ul className="space-y-1">
                                       {changes.slice(0, 3).map((c, i) => (
@@ -653,7 +658,7 @@ export function AgentModelInfoMatchDialog({
                                         </li>
                                       ))}
                                       {changes.length > 3 && (
-                                        <li className="text-[11px] text-muted-foreground">…等 {changes.length} 项</li>
+                                        <li className="text-[11px] text-muted-foreground">{t('match.moreItems', { count: changes.length })}</li>
                                       )}
                                     </ul>
                                   )}

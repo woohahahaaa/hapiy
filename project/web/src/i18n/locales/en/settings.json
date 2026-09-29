@@ -226,5 +226,8 @@
     "confirmDeleteDescription": "Rule \"{{name}}\" will be deleted and cannot be recovered.",
     "loadFailed": "Failed to load channel affinity configuration",
     "saveFailed": "Failed to save channel affinity configuration"
+  },
+  "page": {
+    "baseUrlDescription": "Append a source mark after the BaseURL to distinguish request origins; the system detects it automatically"
   }
 }

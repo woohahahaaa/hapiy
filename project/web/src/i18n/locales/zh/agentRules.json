@@ -163,7 +163,8 @@
       "officialApplied": "已把全部模型设为官方参考厂商（无官方的取候选第一个）",
       "officialAlready": "模型均已是最佳参考厂商",
       "saveSupplierFailed": "保存参考厂商选择失败",
-      "noChanges": "没有可应用的变更（勾选项均已符合推荐）"
+      "noChanges": "没有可应用的变更（勾选项均已符合推荐）",
+      "noSelection": "请至少勾选一个供应商或模型"
     },
     "errors": {
       "loadFailed": "加载失败",

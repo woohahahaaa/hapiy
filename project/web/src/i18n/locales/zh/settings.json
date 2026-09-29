@@ -226,5 +226,8 @@
     "confirmDeleteDescription": "将删除渠道亲和性规则「{{name}}」，删除后不可恢复。",
     "loadFailed": "加载渠道亲和性配置失败",
     "saveFailed": "保存渠道亲和性配置失败"
+  },
+  "page": {
+    "baseUrlDescription": "在 BaseURL 后追加来源标记即可区分请求来源，系统自动识别"
   }
 }

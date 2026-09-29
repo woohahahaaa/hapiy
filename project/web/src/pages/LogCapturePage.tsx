@@ -441,7 +441,7 @@ export function LogCapturePage() {
               size="sm"
               onClick={() => setClearOpen(true)}
             >
-              清空
+              {t('common:action.clear')}
             </Button>
           }
         />
@@ -468,7 +468,7 @@ export function LogCapturePage() {
       <Dialog open={clearOpen} onOpenChange={setClearOpen}>
         <DialogContent scrollFooter>
           <DialogHeader>
-            <DialogTitle>清空当前筛选条件下的所有内容，确认吗？</DialogTitle>
+            <DialogTitle>{t('clear.confirmTitle')}</DialogTitle>
           </DialogHeader>
           <DialogScrollBody footer={
             <>
@@ -477,14 +477,14 @@ export function LogCapturePage() {
                 disabled={clearing}
                 onClick={() => void handleClear('filtered')}
               >
-                清空当前页面的
+                {t('clear.filtered')}
               </Button>
               <Button
                 variant="destructive"
                 disabled={clearing}
                 onClick={() => void handleClear('all')}
               >
-                清空所有页面的
+                {t('clear.all')}
               </Button>
             </>
           }>

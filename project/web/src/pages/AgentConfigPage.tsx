@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { DialogCodeEditor } from '@/components/dialog/code-editor'
 import { PageHeader } from '@/components/PageHeader'
@@ -26,6 +27,7 @@ import {
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
 import {
   dashboardApi,
   DashboardApiError,
@@ -46,7 +48,7 @@ export type AgentTargetOs = 'windows' | 'mac' | 'other'
 export const TARGET_OS_LABELS: Record<AgentTargetOs, string> = {
   windows: 'Windows',
   mac: 'Mac',
-  other: '其他',
+  other: i18n.t('agentConfig:os.other'),
 }
 
 export function formatFileSize(size: number): string {
@@ -108,12 +110,13 @@ function SshTestResultPanel({
 }: {
   readonly result: { readonly connect: AgentSshProbeResult; readonly read: AgentSshProbeResult; readonly write: AgentSshProbeResult }
 }) {
+  const { t } = useTranslation('agentConfig')
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
       <div className="flex flex-col gap-1.5">
-        <SshProbeRow label="连接" result={result.connect} />
-        <SshProbeRow label="读取远程路径" result={result.read} />
-        <SshProbeRow label="写入（临时文件 mktemp → 写 → 删除）" result={result.write} />
+        <SshProbeRow label={t('sshProbe.connect')} result={result.connect} />
+        <SshProbeRow label={t('sshProbe.readPath')} result={result.read} />
+        <SshProbeRow label={t('sshProbe.writeProbe')} result={result.write} />
       </div>
     </div>
   )
@@ -131,6 +134,7 @@ function PathCheckHint({
   onPreview: () => void
 }) {
   const { exists, size, current_os, expandedPath } = result
+  const { t } = useTranslation('agentConfig')
   const osMismatch =
     (targetOs === 'windows' && current_os !== 'windows') ||
     (targetOs === 'mac' && current_os !== 'darwin')
@@ -139,8 +143,8 @@ function PathCheckHint({
     return (
       <span className="flex min-w-0 items-center gap-2 text-destructive">
         <span className="truncate">
-          文件不存在（已检查：{expandedPath}）
-          {osMismatch && ` · 目标系统 ${TARGET_OS_LABELS[targetOs]}，当前系统 ${osNameFromCode(current_os)}，路径可能不适用`}
+          {t('pathCheck.notExists', { path: expandedPath })}
+          {osMismatch && t('pathCheck.osMismatch', { target: TARGET_OS_LABELS[targetOs], current: osNameFromCode(current_os) })}
         </span>
       </span>
     )
@@ -149,16 +153,16 @@ function PathCheckHint({
   if (size === 0) {
     return (
       <span className="flex min-w-0 items-center gap-2 text-warning">
-        <span className="truncate">文件存在，大小 0（{expandedPath}）</span>
-        <Button type="button" variant="outline" size="sm" onClick={onPreview}>预览</Button>
+        <span className="truncate">{t('pathCheck.existsZero', { path: expandedPath })}</span>
+        <Button type="button" variant="outline" size="sm" onClick={onPreview}>{t('pathCheck.preview')}</Button>
       </span>
     )
   }
 
   return (
     <span className="flex min-w-0 items-center gap-2 text-green-600">
-      <span className="truncate">文件存在，大小 {formatFileSize(size)}（{expandedPath}）</span>
-      <Button type="button" variant="outline" size="sm" onClick={onPreview}>预览</Button>
+      <span className="truncate">{t('pathCheck.existsSize', { size: formatFileSize(size), path: expandedPath })}</span>
+      <Button type="button" variant="outline" size="sm" onClick={onPreview}>{t('pathCheck.preview')}</Button>
     </span>
   )
 }
@@ -183,9 +187,10 @@ function formatTime(iso: string): string {
 }
 
 export function AgentConfigPage() {
+  const { t } = useTranslation('agentConfig')
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="配置文件" description="管理被接管 Agent 的配置文件：路径检测、内容修改与解析方法" />
+      <PageHeader title={t('page.title')} description={t('page.description')} />
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentConfigFilesTab />
       </div>
@@ -196,6 +201,7 @@ export function AgentConfigPage() {
 // ── Tab 1: 接管配置文件 ──
 
 function AgentConfigFilesTab() {
+  const { t } = useTranslation('agentConfig')
   const [files, setFiles] = useState<readonly AgentConfigFile[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -217,11 +223,11 @@ function AgentConfigFilesTab() {
       setFiles(result.files)
       setTotal(result.total)
     } catch (err) {
-      setError(toErrorMessage(err, '加载失败'))
+      setError(toErrorMessage(err, t('errors.loadFailed')))
     } finally {
       setLoading(false)
     }
-  }, [limit, offset])
+  }, [limit, offset, t])
 
   useEffect(() => {
     void fetch()
@@ -232,10 +238,10 @@ function AgentConfigFilesTab() {
     setConfirmDelete(null)
     try {
       await dashboardApi.deleteAgentConfigFile(row.id)
-      toast('已删除')
+      toast(t('toast.deleted'))
       void fetch()
     } catch (err) {
-      toast.error(toErrorMessage(err, '删除失败'))
+      toast.error(toErrorMessage(err, t('errors.deleteFailed')))
     } finally {
       setMutating(false)
     }
@@ -244,25 +250,25 @@ function AgentConfigFilesTab() {
   const columns: ColumnDef<AgentConfigFile>[] = useMemo(() => [
     {
       key: 'recordName',
-      label: '记录名称',
+      label: t('columns.recordName'),
       defaultWidth: { kind: 'percent', value: 20 },
       defaultOverflow: 'ellipsis',
       accessor: (row) => row.record_name,
     },
     {
       key: 'agentType',
-      label: '软件类型',
+      label: t('columns.agentType'),
       defaultWidth: { kind: 'pixel', value: 160 },
       accessor: (row) => row.agent_type,
     },
     {
       key: 'mode',
-      label: '模式',
+      label: t('columns.mode'),
       defaultWidth: { kind: 'pixel', value: 100 },
       render: (_value, row) => {
         const isLocal = (row as { mode?: string }).mode === 'local'
         return isLocal ? (
-          <Badge variant="outline">本机</Badge>
+          <Badge variant="outline">{t('badge.local')}</Badge>
         ) : (
           <Badge variant="default">SSH</Badge>
         )
@@ -270,14 +276,14 @@ function AgentConfigFilesTab() {
     },
     {
       key: 'path',
-      label: '路径',
+      label: t('columns.path'),
       defaultWidth: { kind: 'percent', value: 30 },
       defaultOverflow: 'wrap',
       accessor: (row) => row.path,
     },
     {
       key: 'updatedAt',
-      label: '更新时间',
+      label: t('columns.updatedAt'),
       defaultWidth: { kind: 'pixel', value: 180 },
       slot: {
         line1: (row) => formatDate(row.updated_at),
@@ -286,14 +292,14 @@ function AgentConfigFilesTab() {
     },
     {
       key: 'actions',
-      label: '操作',
+      label: t('columns.actions'),
       defaultWidth: { kind: 'pixel', value: 320 },
       defaultAlign: 'right',
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={mutating} onClick={() => setEditing(row)}>
-            编辑配置文件
+            {t('actions.editConfigFile')}
           </Button>
           <Button
             variant="outline"
@@ -301,13 +307,13 @@ function AgentConfigFilesTab() {
             disabled={mutating}
             onClick={() => setManagingModels(row)}
           >
-            管理模型
+            {t('actions.manageModels')}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             disabled={mutating}
-            title="编辑记录"
+            title={t('actions.editRecord')}
             onClick={() => setEditingRecord(row)}
           >
             <AppIcon name="edit" />
@@ -316,7 +322,7 @@ function AgentConfigFilesTab() {
             variant="ghost"
             size="icon"
             disabled={mutating}
-            title="删除"
+            title={t('common:action.delete')}
             onClick={() => setConfirmDelete(row)}
           >
             <AppIcon name="delete" />
@@ -324,7 +330,7 @@ function AgentConfigFilesTab() {
         </div>
       ),
     },
-  ], [mutating])
+  ], [mutating, t])
 
   return (
     <>
@@ -339,12 +345,12 @@ function AgentConfigFilesTab() {
         limit={limit}
         onOffsetChange={setOffset}
         onLimitChange={setLimit}
-        emptyText="暂无接管配置，点击「接管新的配置文件」添加"
+        emptyText={t('empty.files')}
         onRetry={() => void fetch()}
         actions={
           <Button variant="outline" size="sm" onClick={() => setTakeoverOpen(true)}>
             <AppIcon name="add" data-icon="inline-start" />
-            接管新的配置文件
+            {t('takeover.add')}
           </Button>
         }
       />
@@ -381,8 +387,8 @@ function AgentConfigFilesTab() {
         onOpenChange={(open) => {
           if (!open) setConfirmDelete(null)
         }}
-        title="确认删除"
-        description={`将删除接管配置「${confirmDelete?.record_name ?? ''}」，删除后不可恢复。`}
+        title={t('confirmDelete.title')}
+        description={t('confirmDelete.description', { name: confirmDelete?.record_name ?? '' })}
         busy={mutating}
         onConfirm={() => {
           if (confirmDelete) void handleDelete(confirmDelete)
@@ -416,6 +422,7 @@ function AgentConfigFormDialog({
   onSaved?: () => void
   record?: AgentConfigFile
 }) {
+  const { t } = useTranslation('agentConfig')
   const [recordName, setRecordName] = useState('')
   const [mode, setMode] = useState<'local' | 'ssh'>('local')
   const [agentType, setAgentType] = useState('')
@@ -488,7 +495,7 @@ function AgentConfigFormDialog({
         if (!cancelled) setRules(result.rules)
       })
       .catch((err) => {
-        if (!cancelled) setError(toErrorMessage(err, '获取软件类型失败'))
+        if (!cancelled) setError(toErrorMessage(err, t('errors.fetchTypesFailed')))
       })
       .finally(() => {
         if (!cancelled) setLoadingTypes(false)
@@ -496,7 +503,7 @@ function AgentConfigFormDialog({
     return () => {
       cancelled = true
     }
-  }, [open, record])
+  }, [open, record, t])
 
   const ruleForType = useMemo(
     () => rules.find((rule) => rule.name === agentType) ?? null,
@@ -539,13 +546,13 @@ function AgentConfigFormDialog({
   const syncPresetPath = () => {
     if (targetOs === 'other') return
     if (!ruleForType) {
-      toast.error('请先选择软件类型')
+      toast.error(t('toast.selectAgentTypeFirst'))
       return
     }
     const preset = ruleForType.os_paths
     const template = targetOs === 'windows' ? preset.windows : preset.mac
     if (template.trim() === '') {
-      toast.error(`当前软件类型「${ruleForType.name}」未配置 ${TARGET_OS_LABELS[targetOs]} 默认路径`)
+      toast.error(t('toast.noDefaultPath', { type: ruleForType.name, os: TARGET_OS_LABELS[targetOs] }))
       return
     }
     setCheckResult(null)
@@ -600,60 +607,60 @@ function AgentConfigFormDialog({
     const trimmedName = recordName.trim()
     const trimmedPath = path.trim()
     if (!trimmedName) {
-      setError('请填写记录名称')
+      setError(t('validation.recordNameRequired'))
       return
     }
     if (!agentType) {
-      setError('请选择软件类型')
+      setError(t('validation.agentTypeRequired'))
       return
     }
     if (!trimmedPath) {
-      setError(mode === 'local' ? '请填写本机路径' : '请填写远程路径')
+      setError(mode === 'local' ? t('validation.localPathRequired') : t('validation.remotePathRequired'))
       return
     }
     let sshConfig: AgentSshConfig | null = null
     if (mode === 'ssh') {
       if (!host.trim()) {
-        setError('请填写主机地址')
+        setError(t('validation.hostRequired'))
         return
       }
       const portNum = Number(port)
       if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-        setError('端口必须是 1-65535 之间的整数')
+        setError(t('validation.portRange'))
         return
       }
       if (!username.trim()) {
-        setError('请填写用户名')
+        setError(t('validation.usernameRequired'))
         return
       }
       if (!record && authType === 'password' && password === '') {
-        setError('请填写密码')
+        setError(t('validation.passwordRequired'))
         return
       }
       if (!record && authType === 'key' && privateKey.trim() === '') {
-        setError('请填写私钥内容')
+        setError(t('validation.privateKeyRequired'))
         return
       }
       if (jumpEnabled) {
         if (!jumpHost.trim()) {
-          setError('请填写跳板机主机地址')
+          setError(t('validation.jumpHostRequired'))
           return
         }
         const jumpPortNum = Number(jumpPort)
         if (!Number.isInteger(jumpPortNum) || jumpPortNum < 1 || jumpPortNum > 65535) {
-          setError('跳板机端口必须是 1-65535 之间的整数')
+          setError(t('validation.jumpPortRange'))
           return
         }
         if (!jumpUsername.trim()) {
-          setError('请填写跳板机用户名')
+          setError(t('validation.jumpUsernameRequired'))
           return
         }
         if (!record && jumpAuthType === 'password' && jumpPassword === '') {
-          setError('请填写跳板机密码')
+          setError(t('validation.jumpPasswordRequired'))
           return
         }
         if (!record && jumpAuthType === 'key' && jumpPrivateKey.trim() === '') {
-          setError('请填写跳板机私钥内容')
+          setError(t('validation.jumpPrivateKeyRequired'))
           return
         }
       }
@@ -689,12 +696,12 @@ function AgentConfigFormDialog({
       } else {
         await dashboardApi.createAgentConfigFile(input)
       }
-      toast(record ? '已更新接管记录' : '已接管配置')
+      toast(record ? t('toast.updatedRecord') : t('toast.takenOver'))
       onOpenChange(false)
       if (record) onSaved?.()
       else onCreated?.()
     } catch (err) {
-      setError(toErrorMessage(err, record ? '更新失败' : '接管失败'))
+      setError(toErrorMessage(err, record ? t('errors.updateFailed') : t('errors.takeoverFailed')))
     } finally {
       setSaving(false)
     }
@@ -705,30 +712,30 @@ function AgentConfigFormDialog({
   // partial cfg alongside the message keeps callers simple — they just
   // look at error first.
   const buildSshConfigForProbe = useCallback((): { readonly cfg: AgentSshConfig; readonly error: string | null } => {
-    if (!host.trim()) return { cfg: blankSshConfig(), error: '请填写主机地址' }
+    if (!host.trim()) return { cfg: blankSshConfig(), error: t('validation.hostRequired') }
     const portNum = Number(port)
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      return { cfg: blankSshConfig(), error: '端口必须是 1-65535 之间的整数' }
+      return { cfg: blankSshConfig(), error: t('validation.portRange') }
     }
-    if (!username.trim()) return { cfg: blankSshConfig(), error: '请填写用户名' }
+    if (!username.trim()) return { cfg: blankSshConfig(), error: t('validation.usernameRequired') }
     if (authType === 'password' && password === '') {
-      return { cfg: blankSshConfig(), error: '请填写密码' }
+      return { cfg: blankSshConfig(), error: t('validation.passwordRequired') }
     }
     if (authType === 'key' && privateKey.trim() === '') {
-      return { cfg: blankSshConfig(), error: '请填写私钥内容' }
+      return { cfg: blankSshConfig(), error: t('validation.privateKeyRequired') }
     }
     if (jumpEnabled) {
-      if (!jumpHost.trim()) return { cfg: blankSshConfig(), error: '请填写跳板机主机地址' }
+      if (!jumpHost.trim()) return { cfg: blankSshConfig(), error: t('validation.jumpHostRequired') }
       const jumpPortNum = Number(jumpPort)
       if (!Number.isInteger(jumpPortNum) || jumpPortNum < 1 || jumpPortNum > 65535) {
-        return { cfg: blankSshConfig(), error: '跳板机端口必须是 1-65535 之间的整数' }
+        return { cfg: blankSshConfig(), error: t('validation.jumpPortRange') }
       }
-      if (!jumpUsername.trim()) return { cfg: blankSshConfig(), error: '请填写跳板机用户名' }
+      if (!jumpUsername.trim()) return { cfg: blankSshConfig(), error: t('validation.jumpUsernameRequired') }
       if (jumpAuthType === 'password' && jumpPassword === '') {
-        return { cfg: blankSshConfig(), error: '请填写跳板机密码' }
+        return { cfg: blankSshConfig(), error: t('validation.jumpPasswordRequired') }
       }
       if (jumpAuthType === 'key' && jumpPrivateKey.trim() === '') {
-        return { cfg: blankSshConfig(), error: '请填写跳板机私钥内容' }
+        return { cfg: blankSshConfig(), error: t('validation.jumpPrivateKeyRequired') }
       }
     }
     return {
@@ -749,7 +756,7 @@ function AgentConfigFormDialog({
       },
       error: null,
     }
-  }, [host, port, username, authType, password, privateKey, jumpEnabled, jumpHost, jumpPort, jumpUsername, jumpAuthType, jumpPassword, jumpPrivateKey])
+  }, [host, port, username, authType, password, privateKey, jumpEnabled, jumpHost, jumpPort, jumpUsername, jumpAuthType, jumpPassword, jumpPrivateKey, t])
 
   const runSshTest = useCallback(async () => {
     const { cfg, error } = buildSshConfigForProbe()
@@ -768,12 +775,12 @@ function AgentConfigFormDialog({
       })
       setSshTestResult(result)
     } catch (err) {
-      const failed: AgentSshProbeResult = { ok: false, error: toErrorMessage(err, '测试失败') }
+      const failed: AgentSshProbeResult = { ok: false, error: toErrorMessage(err, t('errors.testFailed')) }
       setSshTestResult({ connect: failed, read: failed, write: failed })
     } finally {
       setSshTesting(false)
     }
-  }, [buildSshConfigForProbe, path, targetOs])
+  }, [buildSshConfigForProbe, path, targetOs, t])
 
   // Shared "目标系统 + 同步预设Agent信息" row. Rendered immediately above
   // the path field in both local and SSH modes so the operator can sync a
@@ -785,7 +792,7 @@ function AgentConfigFormDialog({
   // hint highlights the choice so the operator doesn't leave it on "other".
   const targetOsField = (
     <Field>
-      <FieldLabel>系统</FieldLabel>
+      <FieldLabel>{t('form.osLabel')}</FieldLabel>
       <div className="flex items-center gap-2">
         {(Object.keys(TARGET_OS_LABELS) as AgentTargetOs[]).map((os) => (
           <Button
@@ -808,17 +815,17 @@ function AgentConfigFormDialog({
               className={presetSyncSuggested ? '!border-primary !text-primary' : undefined}
               onClick={syncPresetPath}
             >
-              同步预设Agent信息
+              {t('form.syncPresetButton')}
             </Button>
           </>
         )}
       </div>
       {mode === 'ssh' && targetOs === 'other' && (
-        <p className="text-xs text-warning">请选择目标机器的真实系统：选 Windows 走 cmd 命令，选 Mac/其他 走 POSIX 命令，否则测试会失败</p>
+        <p className="text-xs text-warning">{t('form.osWarning')}</p>
       )}
       {(targetOs === 'windows' || targetOs === 'mac') && (
         <p className="text-xs text-muted-foreground">
-          点击「同步预设Agent信息」可将 {TARGET_OS_LABELS[targetOs]} 默认路径填入下方
+          {t('form.syncPresetHint', { os: TARGET_OS_LABELS[targetOs] })}
         </p>
       )}
     </Field>
@@ -838,26 +845,26 @@ function AgentConfigFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="md" scrollFooter>
         <DialogHeader>
-          <DialogTitle>{record ? '编辑接管记录' : '接管新的配置文件'}</DialogTitle>
+          <DialogTitle>{record ? t('form.titleEdit') : t('form.titleCreate')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button onClick={() => void handleSave()} disabled={saving}>
-              {saving ? '保存中...' : record ? '保存修改' : '保存'}
+              {saving ? t('form.saving') : record ? t('form.saveEdit') : t('common:action.save')}
             </Button>
           </>
         }>
           <FieldGroup>
           <Field>
-            <FieldLabel>记录名称</FieldLabel>
-            <Input value={recordName} onChange={(e) => setRecordName(e.target.value)} placeholder="例如：OpenCode 配置" />
+            <FieldLabel>{t('form.recordNameLabel')}</FieldLabel>
+            <Input value={recordName} onChange={(e) => setRecordName(e.target.value)} placeholder={t('form.recordNamePlaceholder')} />
           </Field>
 
           <Field>
-            <FieldLabel>软件类型</FieldLabel>
+            <FieldLabel>{t('form.agentTypeLabel')}</FieldLabel>
             <Select value={agentType} onValueChange={handleAgentTypeChange} disabled={loadingTypes}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={loadingTypes ? '加载中…' : '选择软件类型'} />
+                <SelectValue placeholder={loadingTypes ? t('common:state.loading') : t('form.agentTypePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -868,15 +875,15 @@ function AgentConfigFormDialog({
               </SelectContent>
             </Select>
             {!loadingTypes && rules.length === 0 && (
-              <p className="text-xs text-muted-foreground">暂无可用软件类型，请先在「管理规则」中添加</p>
+              <p className="text-xs text-muted-foreground">{t('form.noAgentTypes')}</p>
             )}
           </Field>
 
           <Field>
-            <FieldLabel>连接方式</FieldLabel>
+            <FieldLabel>{t('form.modeLabel')}</FieldLabel>
             <div className="flex items-center gap-2">
               <Button type="button" variant={mode === 'local' ? 'default' : 'outline'} size="sm" onClick={() => setMode('local')}>
-                本机
+                {t('form.modeLocal')}
               </Button>
               <Button type="button" variant={mode === 'ssh' ? 'default' : 'outline'} size="sm" onClick={() => setMode('ssh')}>
                 SSH
@@ -888,7 +895,7 @@ function AgentConfigFormDialog({
             <>
               {targetOsField}
               <Field>
-                <FieldLabel>路径</FieldLabel>
+                <FieldLabel>{t('form.pathLabel')}</FieldLabel>
                 <div className="flex gap-2">
                   <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
                   <Button
@@ -898,19 +905,19 @@ function AgentConfigFormDialog({
                     disabled={path.trim() === '' || detecting}
                     onClick={() => void runPathCheck()}
                   >
-                    {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '检测路径是否有效'}
+                    {detecting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : t('form.detectPath')}
                   </Button>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   {detecting ? (
                     <>
                       <AppIcon name="progress_activity" size={14} className="animate-spin" />
-                      <span className="text-muted-foreground">正在检测文件…</span>
+                      <span className="text-muted-foreground">{t('form.detectingFile')}</span>
                     </>
                   ) : checkResult ? (
                     <PathCheckHint result={checkResult} targetOs={targetOs} onPreview={() => setPreviewOpen(true)} />
                   ) : (
-                    <span className="text-muted-foreground">输入路径后自动检测文件是否存在</span>
+                    <span className="text-muted-foreground">{t('form.pathAutoCheckHint')}</span>
                   )}
                 </div>
               </Field>
@@ -920,24 +927,24 @@ function AgentConfigFormDialog({
           {mode === 'ssh' && (
             <>
               <Field>
-                <FieldLabel>主机（含端口）</FieldLabel>
+                <FieldLabel>{t('form.hostLabel')}</FieldLabel>
                 <div className="flex gap-2">
-                  <Input className="flex-1" value={host} onChange={(e) => setHost(e.target.value)} placeholder="例如：192.168.1.100" />
-                  <Input className="w-24" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder="端口" />
+                  <Input className="flex-1" value={host} onChange={(e) => setHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
+                  <Input className="w-24" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder={t('form.portPlaceholder')} />
                 </div>
               </Field>
               <Field>
-                <FieldLabel>用户名 / 认证方式</FieldLabel>
+                <FieldLabel>{t('form.userAuthLabel')}</FieldLabel>
                 <div className="flex gap-2">
-                  <Input className="flex-1" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="例如：root" />
+                  <Input className="flex-1" value={username} onChange={(e) => setUsername(e.target.value)} placeholder={t('form.usernamePlaceholder')} />
                   <Select value={authType} onValueChange={(v) => setAuthType(v as 'password' | 'key')}>
                     <SelectTrigger className="w-32">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="password">密码</SelectItem>
-                        <SelectItem value="key">私钥</SelectItem>
+                        <SelectItem value="password">{t('form.authPassword')}</SelectItem>
+                        <SelectItem value="key">{t('form.authKey')}</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
@@ -945,42 +952,42 @@ function AgentConfigFormDialog({
               </Field>
               {authType === 'password' ? (
                 <Field>
-                  <FieldLabel>密码</FieldLabel>
-                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={record ? '如需修改请填入新的值，否则就不动' : 'SSH 密码'} />
+                  <FieldLabel>{t('form.passwordLabel')}</FieldLabel>
+                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={record ? t('form.passwordUnchangedPlaceholder') : t('form.sshPasswordPlaceholder')} />
                 </Field>
               ) : (
                 <Field>
-                  <FieldLabel>私钥内容</FieldLabel>
-                  <Textarea value={privateKey} onChange={(e) => setPrivateKey(e.target.value)} rows={6} placeholder={record ? '如需修改请填入新的值，否则就不动' : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
+                  <FieldLabel>{t('form.privateKeyLabel')}</FieldLabel>
+                  <Textarea value={privateKey} onChange={(e) => setPrivateKey(e.target.value)} rows={6} placeholder={record ? t('form.passwordUnchangedPlaceholder') : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
                 </Field>
               )}
 
               <div className="flex items-center gap-2">
                 <Switch checked={jumpEnabled} onCheckedChange={setJumpEnabled} />
-                <span className="text-sm font-medium">跳板模式</span>
+                <span className="text-sm font-medium">{t('form.jumpMode')}</span>
               </div>
 
               {jumpEnabled && (
                 <>
                   <Field>
-                    <FieldLabel>跳板机主机（含端口）</FieldLabel>
+                    <FieldLabel>{t('form.jumpHostLabel')}</FieldLabel>
                     <div className="flex gap-2">
-                      <Input className="flex-1" value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder="例如：192.168.1.100" />
-                      <Input className="w-24" type="number" min={1} max={65535} value={jumpPort} onChange={(e) => setJumpPort(e.target.value)} placeholder="端口" />
+                      <Input className="flex-1" value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
+                      <Input className="w-24" type="number" min={1} max={65535} value={jumpPort} onChange={(e) => setJumpPort(e.target.value)} placeholder={t('form.portPlaceholder')} />
                     </div>
                   </Field>
                   <Field>
-                    <FieldLabel>跳板机用户名 / 认证方式</FieldLabel>
+                    <FieldLabel>{t('form.jumpUserAuthLabel')}</FieldLabel>
                     <div className="flex gap-2">
-                      <Input className="flex-1" value={jumpUsername} onChange={(e) => setJumpUsername(e.target.value)} placeholder="例如：root" />
+                      <Input className="flex-1" value={jumpUsername} onChange={(e) => setJumpUsername(e.target.value)} placeholder={t('form.usernamePlaceholder')} />
                       <Select value={jumpAuthType} onValueChange={(v) => setJumpAuthType(v as 'password' | 'key')}>
                         <SelectTrigger className="w-32">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectGroup>
-                            <SelectItem value="password">密码</SelectItem>
-                            <SelectItem value="key">私钥</SelectItem>
+                            <SelectItem value="password">{t('form.authPassword')}</SelectItem>
+                            <SelectItem value="key">{t('form.authKey')}</SelectItem>
                           </SelectGroup>
                         </SelectContent>
                       </Select>
@@ -988,13 +995,13 @@ function AgentConfigFormDialog({
                   </Field>
                   {jumpAuthType === 'password' ? (
                     <Field>
-                      <FieldLabel>跳板机密码</FieldLabel>
-                      <Input type="password" value={jumpPassword} onChange={(e) => setJumpPassword(e.target.value)} placeholder={record ? '如需修改请填入新的值，否则就不动' : '跳板机 SSH 密码'} />
+                      <FieldLabel>{t('form.jumpPasswordLabel')}</FieldLabel>
+                      <Input type="password" value={jumpPassword} onChange={(e) => setJumpPassword(e.target.value)} placeholder={record ? t('form.passwordUnchangedPlaceholder') : t('form.jumpSshPasswordPlaceholder')} />
                     </Field>
                   ) : (
                     <Field>
-                      <FieldLabel>跳板机私钥内容</FieldLabel>
-                      <Textarea value={jumpPrivateKey} onChange={(e) => setJumpPrivateKey(e.target.value)} rows={6} placeholder={record ? '如需修改请填入新的值，否则就不动' : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
+                      <FieldLabel>{t('form.jumpPrivateKeyLabel')}</FieldLabel>
+                      <Textarea value={jumpPrivateKey} onChange={(e) => setJumpPrivateKey(e.target.value)} rows={6} placeholder={record ? t('form.passwordUnchangedPlaceholder') : '-----BEGIN OPENSSH PRIVATE KEY-----'} />
                     </Field>
                   )}
                 </>
@@ -1003,7 +1010,7 @@ function AgentConfigFormDialog({
               {targetOsField}
 
               <Field>
-                <FieldLabel>远程路径</FieldLabel>
+                <FieldLabel>{t('form.remotePathLabel')}</FieldLabel>
                 <div className="flex gap-2">
                   <Input className="flex-1" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
                   <Button
@@ -1011,13 +1018,13 @@ function AgentConfigFormDialog({
                     variant="outline"
                     size="sm"
                     disabled={sshTesting || targetOs === 'other'}
-                    title={targetOs === 'other' ? '请先在上方选择目标系统' : undefined}
+                    title={targetOs === 'other' ? t('form.sshTestTitle') : undefined}
                     onClick={() => void runSshTest()}
                   >
-                    {sshTesting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : '测试 SSH 读写能力'}
+                    {sshTesting ? <AppIcon name="progress_activity" size={14} className="animate-spin" /> : t('form.sshTestButton')}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">仅支持 .json 文件</p>
+                <p className="text-xs text-muted-foreground">{t('form.sshJsonOnlyHint')}</p>
                 {sshTestResult && <SshTestResultPanel result={sshTestResult} />}
                 {sshAllOk && (
                   <Button
@@ -1027,7 +1034,7 @@ function AgentConfigFormDialog({
                     className="!border-primary !text-primary w-fit"
                     onClick={() => setPreviewOpen(true)}
                   >
-                    预览远程文件
+                    {t('actions.previewRemoteFile')}
                   </Button>
                 )}
               </Field>
@@ -1082,6 +1089,7 @@ export function ConfirmDeleteDialog({
   busy?: boolean
   onConfirm: () => void
 }) {
+  const { t } = useTranslation('agentConfig')
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm" scrollFooter>
@@ -1092,7 +1100,7 @@ export function ConfirmDeleteDialog({
         <DialogScrollBody footer={
           <>
             <Button variant="destructive" onClick={onConfirm} disabled={busy}>
-              {busy ? '删除中...' : '确认删除'}
+              {busy ? t('confirmDelete.busy') : t('confirmDelete.confirm')}
             </Button>
           </>
         } />

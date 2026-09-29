@@ -1459,7 +1459,6 @@ function RecommendationTable({
   )
 }
 
-&&#1111;
 function ModelInfoFieldsEditor({
   value,
   onChange,
@@ -1467,6 +1466,7 @@ function ModelInfoFieldsEditor({
   value: Record<ModelInfoFieldKey, ModelInfoFieldRow>
   onChange: (v: Record<ModelInfoFieldKey, ModelInfoFieldRow>) => void
 }) {
+  const { t } = useTranslation('agentRules')
   const update = (key: ModelInfoFieldKey, patch: Partial<ModelInfoFieldRow>) => {
     onChange({ ...value, [key]: { ...value[key], ...patch } })
   }
@@ -1474,24 +1474,21 @@ function ModelInfoFieldsEditor({
   return (
     <Field>
       <div className="flex items-center justify-between">
-        <FieldLabel>模型通用信息</FieldLabel>
+        <FieldLabel>{t('modelInfoEditor.title')}</FieldLabel>
       </div>
       <p className="text-xs text-muted-foreground">
-        模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：
-        路径为写入位置，写法（op）可选 raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/
-        join（数组拼接，可填 sep，默认逗号）；操作可选 填（默认）/ 不填 / 删除字段；允许值为白名单（如 openclaw input
-        只允许 text/image/video/audio），逗号分隔。
+        {t('modelInfoEditor.hint')}
       </p>
       <div className="overflow-hidden rounded-md border border-border">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
-              <th className="w-[8.5rem] px-2 py-1.5 text-left font-medium">模型信息</th>
-              <th className="w-40 px-2 py-1.5 text-left font-medium">路径</th>
-              <th className="w-[5rem] px-2 py-1.5 text-left font-medium">写法</th>
+              <th className="w-[8.5rem] px-2 py-1.5 text-left font-medium">{t('modelInfoEditor.columns.modelInfo')}</th>
+              <th className="w-40 px-2 py-1.5 text-left font-medium">{t('recTable.path')}</th>
+              <th className="w-[5rem] px-2 py-1.5 text-left font-medium">{t('modelInfoEditor.columns.op')}</th>
               <th className="w-[3.5rem] px-2 py-1.5 text-left font-medium">sep</th>
-              <th className="px-2 py-1.5 text-left font-medium">允许值</th>
-              <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">操作</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('recTable.allowedValues')}</th>
+              <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">{t('recTable.action')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -1547,7 +1544,7 @@ function ModelInfoFieldsEditor({
                     <SelectContent>
                       {REC_ACTIONS.map((a) => (
                         <SelectItem key={a} value={a}>
-                          {REC_ACTION_LABEL[a]}
+                          {t('recAction.' + a)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1583,6 +1580,7 @@ function EndpointRulesEditor({
   value: readonly EndpointRuleEdit[]
   onChange: (v: readonly EndpointRuleEdit[]) => void
 }) {
+  const { t } = useTranslation('agentRules')
   const update = (index: number, patch: (rule: EndpointRuleEdit) => EndpointRuleEdit) => {
     onChange(value.map((rule, i) => (i === index ? patch(rule) : rule)))
   }
@@ -1590,29 +1588,23 @@ function EndpointRulesEditor({
   return (
     <Field>
       <div className="flex items-center justify-between">
-        <FieldLabel>Endpoint 规则（按 SDK 区分，一个规则一张卡片）</FieldLabel>
+        <FieldLabel>{t('endpointRules.title')}</FieldLabel>
         <Button
           type="button"
           variant="outline"
           size="xs"
           onClick={() => onChange([...value, emptyEndpointRule()])}
         >
-          添加 Endpoint 规则
+          {t('endpointRules.add')}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        每个 endpoint 一条规则：归纳范围填 endpoint 关键词（如
-        completions / responses / chat/message，逗号分隔），任一关键词命中该
-        endpoint 的子串即应用本规则，顺序即优先级。私有配置用「值 + 写法」表格：
-        每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），
-        scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）
-        —— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={'{"@ai-sdk/openai-compatible"'}+、必填勾上。
-        需要直接改 JSON 时，用弹窗左下角「切换到 JSON 编辑模式」。
+        {t('endpointRules.hint')}
       </p>
 
       {value.length === 0 ? (
         <div className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
-          尚未添加任何 Endpoint 规则；点击右上「添加 Endpoint 规则」新建。
+          {t('endpointRules.empty')}
         </div>
       ) : (
         <div className="space-y-3">
@@ -1621,7 +1613,7 @@ function EndpointRulesEditor({
               <div key={ruleIndex} className="rounded-md border border-border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
-                    Endpoint 规则 {ruleIndex + 1}
+                    {t('endpointRules.index', { n: ruleIndex + 1 })}
                   </span>
                   <Button
                     type="button"
@@ -1630,25 +1622,25 @@ function EndpointRulesEditor({
                     className="text-destructive"
                     onClick={() => onChange(value.filter((_, i) => i !== ruleIndex))}
                   >
-                    删除
+                    {t('common:action.delete')}
                   </Button>
                 </div>
 
                 <div className="mt-2 grid grid-cols-2 items-start gap-3">
                   <Field>
-                    <FieldLabel>规则名称</FieldLabel>
+                    <FieldLabel>{t('endpointRules.nameLabel')}</FieldLabel>
                     <Input
                       value={rule.name}
                       onChange={(e) => update(ruleIndex, (r) => ({ ...r, name: e.target.value }))}
-                      placeholder="例如：OpenAI 兼容 Chat Completions"
+                      placeholder={t('endpointRules.namePlaceholder')}
                     />
                   </Field>
                   <Field>
-                    <FieldLabel>归纳范围（endpoint 关键词，逗号分隔）</FieldLabel>
+                    <FieldLabel>{t('endpointRules.tagsLabel')}</FieldLabel>
                     <Input
                       value={rule.tagsText}
                       onChange={(e) => update(ruleIndex, (r) => ({ ...r, tagsText: e.target.value }))}
-                      placeholder="例如：completions, /v1/chat, responses, chat/message"
+                      placeholder={t('endpointRules.tagsPlaceholder')}
                       className="font-mono"
                     />
                   </Field>
@@ -1656,7 +1648,7 @@ function EndpointRulesEditor({
 
                 <Field>
                   <div className="flex items-center justify-between">
-                    <FieldLabel>私有配置（该 endpoint 的字段推荐表）</FieldLabel>
+                    <FieldLabel>{t('endpointRules.privateLabel')}</FieldLabel>
                   </div>
                   {(() => {
                     try {
@@ -1671,8 +1663,7 @@ function EndpointRulesEditor({
                     } catch (err) {
                       return (
                         <p className="pb-1 text-[11px] text-destructive">
-                          当前私有配置不是合法数据：{(err instanceof Error ? err.message : String(err))}，
-                          可用左下角「切换到 JSON 编辑模式」修正
+                          {t('errors.privateInvalid', { message: err instanceof Error ? err.message : String(err) })}
                         </p>
                       )
                     }

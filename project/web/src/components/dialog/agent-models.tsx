@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type {
   AgentConfigFile,
@@ -60,6 +62,7 @@ export function AgentModelsDialog({
   record,
   fetchModels,
 }: AgentModelsDialogProps) {
+  const { t } = useTranslation('agentConfig')
   const [summary, setSummary] = useState<AgentModelSummary | null>(null)
   const [loading, setLoading] = useState(false)
 const [error, setError] = useState<string | null>(null)
@@ -141,7 +144,7 @@ const [error, setError] = useState<string | null>(null)
         setManaged(managedRes)
         setRawContent(raw)
       })
-      .catch((err) => setError(err instanceof Error ? err.message : '加载失败'))
+      .catch((err) => setError(err instanceof Error ? err.message : t('errors.loadFailed')))
       .finally(() => setLoading(false))
   }
 
@@ -460,13 +463,13 @@ for (const p of summary?.providers ?? []) {
         // keep as-is
       }
       await dashboardApi.saveAgentConfigFileContent(record.id, pretty)
-      toast('已保存预览中的变更')
+      toast(t('toast.savedPreviewChanges'))
       setLiveContent(null)
       setTemplateTally(new Map()); setTemplateApplied(0)
       setSavedOk(true)
       reload()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '保存失败')
+      toast.error(err instanceof Error ? err.message : t('errors.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -478,7 +481,7 @@ for (const p of summary?.providers ?? []) {
     setSaving(true)
     try {
       await persistContent(diffApplyContent)
-      toast('已应用差异并保存')
+      toast(t('toast.appliedDiffAndSaved'))
       setSavedOk(true)
       setDiffPreviewing(false)
       setDiffBefore(null)
@@ -487,7 +490,7 @@ for (const p of summary?.providers ?? []) {
       setDiffUnsetModels([])
       setDiffJumpLine(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '保存失败')
+      toast.error(err instanceof Error ? err.message : t('errors.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -533,9 +536,9 @@ for (const p of summary?.providers ?? []) {
     try {
       exitDiffPreview()
       setLiveContent(renameProviderInContent(base, oldId, target, summary))
-      toast('已生成预览：provider 改名待保存')
+      toast(t('toast.renamePreviewProvider'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '改名失败')
+      toast.error(err instanceof Error ? err.message : t('errors.renameFailed'))
     }
   }
 
@@ -544,9 +547,9 @@ for (const p of summary?.providers ?? []) {
     try {
       exitDiffPreview()
       setLiveContent(deleteProviderFromContent(base, id, summary))
-      toast('已生成预览：删除 provider 待保存')
+      toast(t('toast.deletePreviewProvider'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('errors.deleteFailed'))
     }
   }
 
@@ -608,7 +611,7 @@ for (const p of summary?.providers ?? []) {
     if (!record) return
     const pending = managed.filter((m) => m.pending_sync)
     if (pending.length === 0) {
-      toast('没有需要同步的托管供应商')
+      toast(t('toast.noManagedToSync'))
       return
     }
     setSyncingAllManaged(true)
@@ -618,11 +621,11 @@ for (const p of summary?.providers ?? []) {
         const res = await dashboardApi.syncManagedProvider(record.id, view.id)
         total += res.synced
       }
-      toast(`已同步全部 ${pending.length} 个托管供应商，共 ${total} 处字段写入配置文件`)
+      toast(t('toast.syncedAll', { count: pending.length, fields: total }))
       setSyncOk(true)
       reload()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '同步失败')
+      toast.error(err instanceof Error ? err.message : t('errors.syncFailed'))
     } finally {
       setSyncingAllManaged(false)
     }
@@ -632,13 +635,13 @@ for (const p of summary?.providers ?? []) {
     if (!record) return
     try {
       await dashboardApi.deleteManagedProvider(record.id, view.id)
-      toast('已删除托管 provider')
+      toast(t('toast.deletedManaged'))
       setConfirmingDeleteManaged(null)
       setManagedDialogOpen(false)
       setSelectedManaged(null)
       reload()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('errors.deleteFailed'))
     }
   }
 
@@ -653,7 +656,7 @@ for (const p of summary?.providers ?? []) {
       // 0 差异：不进入预览/写盘，避免残留「已修改 0 项」的提示。
       if (res.applied === 0) {
         setTemplateTally(new Map()); setTemplateApplied(0); setLiveContent(null)
-        toast('没有需要应用的变更（均已符合推荐）')
+        toast(t('toast.noChangesToApply'))
         onOpenChange(false)
         return
       }
@@ -666,10 +669,10 @@ for (const p of summary?.providers ?? []) {
       setLiveContent(res.content)
       // 二次确认后立即生效：直接写盘并关闭。
       await persistContent(res.content)
-      toast(`已应用推荐模板：${res.applied} 处变更已写入文件`)
+      toast(t('toast.appliedTemplate', { count: res.applied }))
       onOpenChange(false)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '套用失败')
+      toast.error(err instanceof Error ? err.message : t('errors.applyFailed'))
     } finally {
       setApplying(false)
     }
@@ -739,7 +742,7 @@ for (const p of summary?.providers ?? []) {
         if (perModel) modelFields[p.provider_id] = perModel
       }
       if (Object.keys(checked).length === 0) {
-        toast('没有可预览的非托管供应商')
+        toast(t('toast.noPreviewProviders'))
         return
       }
       const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
@@ -754,7 +757,7 @@ for (const p of summary?.providers ?? []) {
       setDiffUnsetModels(unset)
       setDiffPreviewing(true)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '预览差异失败')
+      toast.error(err instanceof Error ? err.message : t('errors.previewFailed'))
     } finally {
       setDiffLoading(false)
     }
@@ -797,9 +800,9 @@ for (const p of summary?.providers ?? []) {
     try {
       exitDiffPreview()
       setLiveContent(renameModelInContent(base, providerId, oldId, target))
-      toast('已生成预览：模型改名待保存')
+      toast(t('toast.renamePreviewModel'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '改名失败')
+      toast.error(err instanceof Error ? err.message : t('errors.renameFailed'))
     }
   }
 
@@ -808,9 +811,9 @@ for (const p of summary?.providers ?? []) {
     try {
       exitDiffPreview()
       setLiveContent(deleteModelFromContent(base, providerId, modelId))
-      toast('已生成预览：删除模型待保存')
+      toast(t('toast.deletePreviewModel'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : '删除失败')
+      toast.error(err instanceof Error ? err.message : t('errors.deleteFailed'))
     }
   }
 
@@ -824,7 +827,7 @@ for (const p of summary?.providers ?? []) {
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <div className="flex flex-col gap-0.5">
-            <DialogTitle>管理模型 · {record?.record_name ?? ''}</DialogTitle>
+            <DialogTitle>{t('modelsDialog.title', { name: record?.record_name ?? '' })}</DialogTitle>
             <p className="text-xs text-muted-foreground">
               {record?.agent_type ?? ''} · {record?.path ?? ''}
             </p>
@@ -854,7 +857,7 @@ for (const p of summary?.providers ?? []) {
                     : 'border-transparent text-muted-foreground hover:text-foreground')
               }
             >
-              {key === 'normal' ? '非托管供应商' : '托管供应商'}
+              {key === 'normal' ? t('tabs.normal') : t('tabs.managed')}
             </button>
           ))}
         </div>
@@ -868,18 +871,18 @@ for (const p of summary?.providers ?? []) {
         <div className="flex min-h-0 flex-col">
           {activePanel === 'normal' ? (
             <>
-              <ColumnHeader>供应商</ColumnHeader>
+              <ColumnHeader>{t('columns.providers')}</ColumnHeader>
               {/* 非托管面板工具行：与托管面板样式一致 */}
               <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
                   size="xs"
-                  title="选择参考供应商，按官方推荐配置对勾选的供应商与模型套用推荐配置"
+                  title={t('toolbar.applyRecommendedTitle')}
                   disabled={!summary || !record}
                   onClick={() => setSyncingFromInfo(true)}
                 >
-                使用推荐配置
+                 {t('actions.applyRecommended')}
                 </Button>
                 <Button
                   type="button"
@@ -888,8 +891,8 @@ for (const p of summary?.providers ?? []) {
                   className="ml-2"
                   title={
                     diffPreviewing
-                      ? '退出预览差异，返回编辑视图'
-                      : '假设全部套用推荐模板（含每个模型持久化的参考供应商基础字段）后，与当前内容对比差异'
+                      ? t('toolbar.exitDiffTitle')
+                      : t('toolbar.previewDiffTitle')
                   }
                   disabled={!summary || !record || diffLoading}
                   onClick={() => void handlePreviewDiff()}
@@ -899,15 +902,15 @@ for (const p of summary?.providers ?? []) {
                   ) : (
                     <AppIcon name={diffPreviewing ? 'close' : 'call_split'} size={12} data-icon="inline-start" />
                   )}
-                  {diffLoading ? '计算中…' : diffPreviewing ? '取消预览' : '预览差异'}
+                  {diffLoading ? t('toolbar.calculating') : diffPreviewing ? t('toolbar.cancelPreview') : t('toolbar.previewDiff')}
                 </Button>
               </div>
               {/* 非托管供应商区域：高度至少 3 行，超出内部滚动 */}
               <div className="max-h-[40%] flex-1 overflow-y-auto p-0">
-                {loading && <Placeholder>加载中…</Placeholder>}
+                {loading && <Placeholder>{t('common:state.loading')}</Placeholder>}
                 {error && <Placeholder tone="error">{error}</Placeholder>}
                 {!loading && !error && summary && summary.providers.length === 0 && (
-                  <Placeholder>未解析到任何 provider</Placeholder>
+                  <Placeholder>{t('placeholder.noProviders')}</Placeholder>
                 )}
                 {(normalProviders.map((p) => {
                   const tally = templateTally.get(p.provider_id)
@@ -918,18 +921,18 @@ for (const p of summary?.providers ?? []) {
                       name={p.provider_id}
                       info={
                         tally && tally.count > 0
-                          ? { text: `${tally.count} 处修改`, green: true }
+                          ? { text: t('row.changesCount', { count: tally.count }), green: true }
                           : conflicts > 0
-                            ? { text: `${conflicts} 个字段与推荐不一致`, green: false }
-                            : { text: `${p.models.length}模型`, green: false }
+                            ? { text: t('row.conflictCount', { count: conflicts }), green: false }
+                            : { text: t('row.modelCount', { count: p.models.length }), green: false }
                       }
                       selected={selectedProviderId === p.provider_id}
                       onClick={() => handleSelectProvider(p.provider_id)}
                       actions={
                         <RowMenu
                           items={[
-                            { key: 'rename', label: '修改名字', icon: 'edit' },
-                            { key: 'delete', label: '删除', icon: 'delete', destructive: true },
+                            { key: 'rename', label: t('menu.rename'), icon: 'edit' },
+                            { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
                           ]}
                           light={selectedProviderId === p.provider_id}
                           onSelect={(k) => {
@@ -946,14 +949,14 @@ for (const p of summary?.providers ?? []) {
           ) : (
             <>
               <ColumnHeader>
-                <span className="font-medium text-primary">托管供应商</span>
+                <span className="font-medium text-primary">{t('tabs.managed')}</span>
               </ColumnHeader>
               <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
                   size="xs"
-                  title="把我们系统里录入的供应商按 endpoint 分组后生成托管 provider"
+                  title={t('toolbar.addManagedTitle')}
                   onClick={() => {
                     setManagedEditing(null)
                     setManagedDialogOpen(true)
@@ -961,12 +964,12 @@ for (const p of summary?.providers ?? []) {
                   }}
                 >
                   <AppIcon name="add" size={12} data-icon="inline-start" />
-                  添加托管供应商
+                  {t('actions.addManaged')}
                 </Button>
               </div>
               <div className="flex-1 overflow-y-auto p-0">
                 {managed.length === 0 && (
-                  <Placeholder>暂无托管供应商</Placeholder>
+                  <Placeholder>{t('placeholder.noManagedProviders')}</Placeholder>
                 )}
                 {managed.map((mv) => {
                   const expandable = mv.groups.length > 1
@@ -978,10 +981,10 @@ for (const p of summary?.providers ?? []) {
                           <ProviderRow
                             name={<span className="truncate font-medium">{mv.name}</span>}
                             info={mv.pending_sync
-                              ? { text: `${mv.pending_fields} 字段待同步`, green: false }
-                              : { text: `${mv.groups.length} 分组`, green: false }}
+                              ? { text: t('row.fieldsPendingSync', { count: mv.pending_fields }), green: false }
+                              : { text: t('row.groupCount', { count: mv.groups.length }), green: false }}
                             badge={mv.pending_sync ? (
-                              <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
+                              <span className="shrink-0 font-mono font-medium text-warning">{t('row.pendingBadge')}</span>
                             ) : null}
                             selected={false}
                             onClick={() => {
@@ -1000,7 +1003,7 @@ for (const p of summary?.providers ?? []) {
                             actions={
                               <>
                                 <IconHoverButton
-                                  title="设置"
+                                  title={t('toolbar.settings')}
                                   icon="settings"
                                   tone="default"
                                   disabled={false}
@@ -1028,8 +1031,8 @@ for (const p of summary?.providers ?? []) {
                                   indent
                                   name={mv.name + g.suffix}
                                   info={g.pending
-                                  ? { text: `${g.pending_fields} 字段待同步`, green: false }
-                                  : { text: `${g.model_count}模型`, green: false }}
+                                  ? { text: t('row.fieldsPendingSync', { count: g.pending_fields }), green: false }
+                                  : { text: t('row.modelCount', { count: g.model_count }), green: false }}
                                   selected={
                                     selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                   }
@@ -1047,10 +1050,10 @@ for (const p of summary?.providers ?? []) {
                             key={g.endpoint}
                             name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
                             info={g.pending
-                              ? { text: `${g.pending_fields} 字段待同步`, green: false }
-                              : { text: `${g.model_count}模型`, green: false }}
+                              ? { text: t('row.fieldsPendingSync', { count: g.pending_fields }), green: false }
+                              : { text: t('row.modelCount', { count: g.model_count }), green: false }}
                             badge={mv.pending_sync ? (
-                              <span className="shrink-0 font-mono font-medium text-warning">[待同步]</span>
+                              <span className="shrink-0 font-mono font-medium text-warning">{t('row.pendingBadge')}</span>
                             ) : null}
                             selected={
                               selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
@@ -1059,7 +1062,7 @@ for (const p of summary?.providers ?? []) {
                             actions={
                               <>
                                 <IconHoverButton
-                                  title="设置"
+                                  title={t('toolbar.settings')}
                                   icon="settings"
                                   tone="default"
                                   disabled={false}
@@ -1085,14 +1088,14 @@ for (const p of summary?.providers ?? []) {
 
           {/* Middle: models list only */}
           <div className="flex min-h-0 flex-col">
-            <ColumnHeader>模型列表</ColumnHeader>
+            <ColumnHeader>{t('columns.models')}</ColumnHeader>
             <div className="flex-1 overflow-y-auto p-0">
               {activePanel === 'managed' && !selectedManagedGroup ? (
-                <Placeholder>未选择托管供应商</Placeholder>
+                <Placeholder>{t('placeholder.noManagedSelected')}</Placeholder>
               ) : selectedManagedGroup ? (
                 <>
                   {selectedManagedGroup.group.model_names.length === 0 && (
-                    <Placeholder>该分组没有可同步的模型</Placeholder>
+                    <Placeholder>{t('placeholder.noSyncableModels')}</Placeholder>
                   )}
                   {selectedManagedGroup.group.model_names.map((mid) => (
                     <ModelRow
@@ -1106,7 +1109,7 @@ for (const p of summary?.providers ?? []) {
                   ))}
                 </>
               ) : selectedProvider && selectedProvider.models.length === 0 ? (
-                <Placeholder>该供应商下没有模型</Placeholder>
+                <Placeholder>{t('placeholder.noModelsInProvider')}</Placeholder>
               ) : (
                 selectedProvider?.models.map((m) => {
                   const tally = templateTally.get(selectedProviderId ?? '')
@@ -1115,14 +1118,14 @@ for (const p of summary?.providers ?? []) {
                     <ModelRow
                       key={m.id}
                       name={m.id}
-                      info={modelCount > 0 ? { text: `${modelCount} 处修改`, green: true } : null}
+                      info={modelCount > 0 ? { text: t('row.changesCount', { count: modelCount }), green: true } : null}
                       selected={selectedModelId === m.id}
                       onClick={() => setSelectedModelId(m.id)}
                       actions={
                         <RowMenu
                           items={[
-                            { key: 'rename', label: '修改名字', icon: 'edit' },
-                            { key: 'delete', label: '删除', icon: 'delete', destructive: true },
+                            { key: 'rename', label: t('menu.rename'), icon: 'edit' },
+                            { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
                           ]}
                           light={selectedModelId === m.id}
                           onSelect={(k) => {
@@ -1142,7 +1145,7 @@ for (const p of summary?.providers ?? []) {
           {/* Right: single syntax-highlighted JSON editor */}
         <div className="flex min-h-0 flex-1 flex-col">
             <ColumnHeader>
-              <span>{diffPreviewing ? '预览差异' : '供应商 JSON 片段'}</span>
+              <span>{diffPreviewing ? t('toolbar.previewDiff') : t('columns.providerJson')}</span>
             </ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
               {diffPreviewing && diffBefore !== null && diffAfter !== null ? (
@@ -1186,7 +1189,7 @@ for (const p of summary?.providers ?? []) {
                   }}
                 />
               ) : (
-                <Placeholder>未选择供应商</Placeholder>
+                <Placeholder>{t('placeholder.noProviderSelected')}</Placeholder>
               )}
             </div>
           </div>
@@ -1198,7 +1201,7 @@ for (const p of summary?.providers ?? []) {
               <div className="flex flex-1 items-center">
                 {hasPendingPreview && (
                   <span className="text-xs text-warning">
-                    已修改 {pendingChangeCount} 项
+                    {t('footer.pendingChanges', { count: pendingChangeCount })}
                   </span>
                 )}
               </div>
@@ -1212,7 +1215,7 @@ for (const p of summary?.providers ?? []) {
                 ) : savedOk ? (
                   <AppIcon name="check" size={14} data-icon="inline-start" />
                 ) : null}
-                {savedOk ? '保存成功' : diffPreviewing ? '应用差异' : '保存'}
+                {savedOk ? t('footer.saveSuccess') : diffPreviewing ? t('footer.applyDiff') : t('common:action.save')}
               </Button>
             </>
           ) : (
@@ -1220,7 +1223,7 @@ for (const p of summary?.providers ?? []) {
               <div className="flex flex-1 items-center">
                 {managed.some((m) => m.pending_sync) && (
                   <span className="text-xs text-warning">
-                    {managed.filter((m) => m.pending_sync).length} 个供应商待同步
+                    {t('row.providersPendingSync', { count: managed.filter((m) => m.pending_sync).length })}
                   </span>
                 )}
               </div>
@@ -1236,7 +1239,7 @@ for (const p of summary?.providers ?? []) {
                 ) : (
                   <AppIcon name="auto_fix_high" size={14} data-icon="inline-start" />
                 )}
-                {syncOk ? '同步成功' : '同步到配置文件'}
+                {syncOk ? t('footer.syncSuccess') : t('footer.syncToConfig')}
               </Button>
             </>
           )}
@@ -1259,7 +1262,7 @@ for (const p of summary?.providers ?? []) {
           onPreview={({ content, applied }) => {
             exitDiffPreview()
             setLiveContent(content)
-            toast(`已应用推荐配置：${applied} 处变更待保存`)
+            toast(t('toast.appliedRecommendation', { count: applied }))
           }}
         />
 
@@ -1311,8 +1314,8 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={(open) => {
             if (!open) setConfirmingDeleteProvider(null)
           }}
-          title="删除 provider"
-          description={`确认删除配置文件中的 provider「${confirmingDeleteProvider ?? ''}」？删除会随预览一起提交，点底部「保存」后生效。`}
+          title={t('confirm.deleteProviderTitle')}
+          description={t('confirm.deleteProviderDescription', { name: confirmingDeleteProvider ?? '' })}
           onConfirm={() => {
             if (confirmingDeleteProvider) handleDeleteProvider(confirmingDeleteProvider)
             setConfirmingDeleteProvider(null)
@@ -1325,8 +1328,8 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={(open) => {
             if (!open) setConfirmingDeleteManaged(null)
           }}
-          title="删除托管 provider"
-          description={`确认删除托管 provider「${confirmingDeleteManaged?.name ?? ''}」？删除会立即生效。`}
+          title={t('confirm.deleteManagedTitle')}
+          description={t('confirm.deleteManagedDescription', { name: confirmingDeleteManaged?.name ?? '' })}
           onConfirm={() => confirmingDeleteManaged && void handleDeleteManaged(confirmingDeleteManaged)}
         />
 
@@ -1334,18 +1337,17 @@ for (const p of summary?.providers ?? []) {
         <Dialog open={confirmingTemplate} onOpenChange={setConfirmingTemplate}>
           <DialogContent width="sm" scrollFooter>
             <DialogHeader>
-              <DialogTitle>使用推荐模板</DialogTitle>
+              <DialogTitle>{t('confirm.applyTemplateTitle')}</DialogTitle>
             </DialogHeader>
             <DialogScrollBody footer={
               <>
                 <Button onClick={() => void handleApplyTemplate()} disabled={applying}>
-                  {applying ? '应用中...' : '确认并生效'}
+                  {applying ? t('confirm.applyTemplateApplying') : t('confirm.applyTemplateConfirm')}
                 </Button>
               </>
             }>
               <p className="text-xs text-muted-foreground">
-                将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）
-                及其模型的字段进行调整，并把结果直接写入文件生效。确认？
+                {t('confirm.applyTemplateBody')}
               </p>
             </DialogScrollBody>
           </DialogContent>
@@ -1358,7 +1360,7 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={(open) => {
             if (!open) setRenamingModel(null)
           }}
-          title="修改模型名称"
+          title={t('confirm.renameModelTitle')}
           onConfirm={(newName) => {
             if (renamingModel) handleRenameModel(renamingModel.providerId, renamingModel.modelId, newName)
             setRenamingModel(null)
@@ -1371,8 +1373,8 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={(open) => {
             if (!open) setConfirmingDeleteModel(null)
           }}
-          title="删除模型"
-          description={`确认删除配置文件中的模型「${confirmingDeleteModel?.modelId ?? ''}」？删除会随预览一起提交，点底部「保存」后生效。`}
+          title={t('confirm.deleteModelTitle')}
+          description={t('confirm.deleteModelDescription', { name: confirmingDeleteModel?.modelId ?? '' })}
           onConfirm={() => {
             if (confirmingDeleteModel) handleDeleteModel(confirmingDeleteModel.providerId, confirmingDeleteModel.modelId)
             setConfirmingDeleteModel(null)
@@ -1388,7 +1390,7 @@ function RenameProviderDialog({
   currentName,
   onOpenChange,
   onConfirm,
-  title = '修改 provider 名称',
+  title,
 }: {
   open: boolean
   currentName: string
@@ -1396,6 +1398,7 @@ function RenameProviderDialog({
   onConfirm: (newName: string) => void
   title?: string
 }) {
+  const { t } = useTranslation('agentConfig')
   const [value, setValue] = useState(currentName)
   useEffect(() => {
     if (open) setValue(currentName)
@@ -1404,7 +1407,7 @@ function RenameProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent width="sm" scrollFooter>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle>{title ?? t('rename.titleDefault')}</DialogTitle>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
@@ -1412,7 +1415,7 @@ function RenameProviderDialog({
               disabled={!value.trim() || value.trim() === currentName}
               onClick={() => onConfirm(value.trim())}
             >
-              确认
+              {t('common:action.confirm')}
             </Button>
           </>
         }>
@@ -1428,7 +1431,7 @@ function RenameProviderDialog({
               }}
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              修改会作为预览的一部分，点右上角「保存」后才会写入配置文件。
+              {t('rename.hint')}
             </p>
           </div>
         </DialogScrollBody>
@@ -1864,16 +1867,16 @@ function renameProviderInContent(
   void summary
   const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const root = providerRootOfContent(parsed)
-  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  if (!root) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootUnrecognized'))
   let cur: Record<string, unknown> = parsed
   for (const seg of root) {
     const next = cur[seg]
-    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootInvalid', { segment: seg }))
     cur = next as Record<string, unknown>
   }
   const map = cur as Record<string, unknown>
-  if (!(oldId in map)) throw new Error(`provider ${oldId} 不存在`)
-  if (newId in map) throw new Error(`provider ${newId} 已存在`)
+  if (!(oldId in map)) throw new Error(i18n.t('agentConfig:jsonErrors.providerMissing', { id: oldId }))
+  if (newId in map) throw new Error(i18n.t('agentConfig:jsonErrors.providerExists', { id: newId }))
   map[newId] = map[oldId]
   delete map[oldId]
   return JSON.stringify(parsed)
@@ -1888,15 +1891,15 @@ function deleteProviderFromContent(
   void summary
   const parsed = JSON.parse(stripJsoncComments(content)) as Record<string, unknown>
   const root = providerRootOfContent(parsed)
-  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  if (!root) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootUnrecognized'))
   let cur: Record<string, unknown> = parsed
   for (const seg of root) {
     const next = cur[seg]
-    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootInvalid', { segment: seg }))
     cur = next as Record<string, unknown>
   }
   const map = cur as Record<string, unknown>
-  if (!(id in map)) throw new Error(`provider ${id} 不存在`)
+  if (!(id in map)) throw new Error(i18n.t('agentConfig:jsonErrors.providerMissing', { id }))
   delete map[id]
   return JSON.stringify(parsed)
 }
@@ -1910,19 +1913,19 @@ function modelsContainerOf(
   providerId: string,
 ): { container: unknown; provider: Record<string, unknown> } {
   const root = providerRootOfContent(parsed)
-  if (!root) throw new Error('无法识别配置文件里的 provider 根路径')
+  if (!root) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootUnrecognized'))
   let cur: Record<string, unknown> = parsed
   for (const seg of root) {
     const next = cur[seg]
-    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(`provider 根路径 ${seg} 无效`)
+    if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error(i18n.t('agentConfig:jsonErrors.providerRootInvalid', { segment: seg }))
     cur = next as Record<string, unknown>
   }
   const provider = cur[providerId] as Record<string, unknown> | undefined
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
-    throw new Error(`provider ${providerId} 不存在`)
+    throw new Error(i18n.t('agentConfig:jsonErrors.providerMissing', { id: providerId }))
   }
   const models = provider.models
-  if (models === undefined || models === null) throw new Error(`provider ${providerId} 下没有 models`)
+  if (models === undefined || models === null) throw new Error(i18n.t('agentConfig:jsonErrors.providerNoModels', { id: providerId }))
   return { container: models, provider }
 }
 
@@ -1937,14 +1940,14 @@ function renameModelInContent(content: string, providerId: string, oldId: string
       const mr = m as Record<string, unknown>
       return mr.id === oldId || mr.name === oldId
     }) as Record<string, unknown> | undefined
-    if (!target) throw new Error(`模型 ${oldId} 不存在`)
+    if (!target) throw new Error(i18n.t('agentConfig:jsonErrors.modelMissing', { id: oldId }))
     if (target.id === oldId) target.id = newId
     else if (target.name === oldId) target.name = newId
     return JSON.stringify(parsed)
   }
   const map = container as Record<string, unknown>
-  if (!(oldId in map)) throw new Error(`模型 ${oldId} 不存在`)
-  if (newId in map) throw new Error(`模型 ${newId} 已存在`)
+  if (!(oldId in map)) throw new Error(i18n.t('agentConfig:jsonErrors.modelMissing', { id: oldId }))
+  if (newId in map) throw new Error(i18n.t('agentConfig:jsonErrors.modelExists', { id: newId }))
   map[newId] = map[oldId]
   delete map[oldId]
   return JSON.stringify(parsed)
@@ -1960,12 +1963,12 @@ function deleteModelFromContent(content: string, providerId: string, modelId: st
       const mr = m as Record<string, unknown>
       return mr.id === modelId || mr.name === modelId
     })
-    if (idx < 0) throw new Error(`模型 ${modelId} 不存在`)
+    if (idx < 0) throw new Error(i18n.t('agentConfig:jsonErrors.modelMissing', { id: modelId }))
     container.splice(idx, 1)
     return JSON.stringify(parsed)
   }
   const map = container as Record<string, unknown>
-  if (!(modelId in map)) throw new Error(`模型 ${modelId} 不存在`)
+  if (!(modelId in map)) throw new Error(i18n.t('agentConfig:jsonErrors.modelMissing', { id: modelId }))
   delete map[modelId]
   return JSON.stringify(parsed)
 }
@@ -2219,6 +2222,7 @@ function JsonEditor({
   readonly?: boolean
   focusLine?: number | null
 }) {
+  const { t } = useTranslation('agentConfig')
   const initial = useMemo(() => {
     if (value === null || value === undefined) return ''
     if (typeof value === 'string') return value
@@ -2314,7 +2318,7 @@ function JsonEditor({
               setError(null)
               onChange?.(v)
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'JSON 解析失败')
+              setError(err instanceof Error ? err.message : t('errors.parseJson'))
             }
           }}
           onFocus={() => { if (!readonly) setDimmed(true) }}
@@ -2360,6 +2364,7 @@ function DiffView({
   /** 用户在 diff 中点击任一行（尝试编辑）时回调；oldNo 是 before 侧行号（1-based，可为 null）。 */
   onInteract?: (oldNo: number | null) => void
 }) {
+  const { t } = useTranslation('agentConfig')
   const pretty = (text: string): string => {
     try {
       return JSON.stringify(JSON.parse(text), null, 2)
@@ -2423,23 +2428,23 @@ function DiffView({
     <div className="flex h-full min-h-0 flex-col">
       {unsetModels && unsetModels.length > 0 && (
         <div className="max-h-[30%] overflow-auto border-b border-border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
-          <div className="mb-1 font-medium text-foreground/70">从 models.dev 同步模型配置</div>
+          <div className="mb-1 font-medium text-foreground/70">{t('columns.syncFromModelsDev')}</div>
           <ul className="space-y-0.5">
             {unsetModels.slice(0, 20).map((u, i) => (
               <li key={i}>
                 <span className="font-mono">{u.provider}/{u.model}</span>
                 <span className="mx-1">·</span>
-                <span>{u.stale ? '已失效（上次选择的参考厂商已不在候选，未套用）' : '未设置参考厂商（未套用该模型基础字段）'}</span>
+                <span>{u.stale ? t('diffView.staleSupplier') : t('diffView.unsetSupplier')}</span>
               </li>
             ))}
             {unsetModels.length > 20 && (
-              <li className="text-muted-foreground/70">…等 {unsetModels.length} 个模型</li>
+              <li className="text-muted-foreground/70">{t('diffView.andMoreModels', { count: unsetModels.length })}</li>
             )}
           </ul>
         </div>
       )}
       <div className="flex items-center border-b border-border bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
-        <span>当前内容 → 套用推荐后（{rows.filter((r) => r.kind !== 'same').length} 处变更）</span>
+        <span>{t('diffView.beforeAfter', { count: rows.filter((r) => r.kind !== 'same').length })}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {rows.map((r, i) => (
@@ -2588,12 +2593,13 @@ function ColumnHeader({
 }
 
 function PreviewBanner({ applied }: { applied: number }) {
+  const { t } = useTranslation('agentConfig')
   return (
     <div className="flex items-center justify-between gap-2 border-b border-warning/30 bg-warning/10 px-4 py-2 text-xs">
       <div className="flex items-center gap-2 text-warning">
         <AppIcon name="auto_fix_high" size={14} />
         <span>
-          预览：当前编辑与文件实际值相比，共 <strong className="font-semibold">{applied}</strong> 处差异待保存
+          {t('previewBanner.changesPrefix')}<strong className="font-semibold">{applied}</strong>{t('previewBanner.changesSuffix', { count: applied })}
         </span>
       </div>
     </div>
@@ -2614,20 +2620,21 @@ function ConfirmDiscardDialog({
   onCancel: () => void
   onDiscard: () => void
 }) {
+  const { t } = useTranslation('agentConfig')
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
       <DialogContent width="xs" scrollFooter>
         <DialogHeader>
-          <DialogTitle>退出编辑？</DialogTitle>
-          <DialogDescription>退出后编辑的内容不会被保存，确认退出？</DialogDescription>
+          <DialogTitle>{t('discard.title')}</DialogTitle>
+          <DialogDescription>{t('discard.description')}</DialogDescription>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button variant="outline" size="sm" onClick={onCancel} disabled={saving}>
-              继续编辑
+              {t('discard.continueEditing')}
             </Button>
             <Button variant="destructive" size="sm" onClick={onDiscard} disabled={saving}>
-              确认退出
+              {t('discard.confirmExit')}
             </Button>
           </>
         } />
@@ -2650,20 +2657,22 @@ function ConfirmSyncManagedDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const { t } = useTranslation('agentConfig')
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onCancel() }}>
       <DialogContent width="xs" scrollFooter>
         <DialogHeader>
-          <DialogTitle>同步到配置文件</DialogTitle>
+          <DialogTitle>{t('syncManaged.title')}</DialogTitle>
           <DialogDescription>
-            将把所有「待同步」的托管供应商分组写入配置文件
-            {pendingCount > 0 && <>（共 {pendingCount} 个供应商）</>}，确认同步？
+            {t('syncManaged.description')}
+            {pendingCount > 0 && t('syncManaged.descriptionCount', { count: pendingCount })}
+            {t('syncManaged.descriptionSuffix')}
           </DialogDescription>
         </DialogHeader>
         <DialogScrollBody footer={
           <>
             <Button variant="default" size="sm" onClick={onConfirm} disabled={syncing}>
-              {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : '确认同步'}
+              {syncing ? <AppIcon name="progress_activity" size={12} className="animate-spin" /> : t('syncManaged.confirm')}
             </Button>
           </>
         } />
