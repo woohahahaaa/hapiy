@@ -136,6 +136,8 @@
     "pathAutoCheckHint": "输入路径后自动检测文件是否存在",
     "hostLabel": "主机（含端口）",
     "portPlaceholder": "端口",
+    "hostPlaceholder": "例如：192.168.1.100",
+    "usernamePlaceholder": "例如：root",
     "userAuthLabel": "用户名 / 认证方式",
     "authPassword": "密码",
     "authKey": "私钥",
