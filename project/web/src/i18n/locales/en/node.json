@@ -27,7 +27,8 @@
   },
   "ruleSelect": {
     "emptyHint": "No rules available",
-    "loadFailed": "Failed to load"
+    "loadFailed": "Failed to load",
+    "placeholder": "Please select"
   },
   "modelHub": {
     "title": "Model Hub",
@@ -77,5 +78,31 @@
     "placeholderResponseModify": "Select response rewrite rule",
     "placeholderConcurrency": "Select concurrency rule",
     "placeholderAutoSwitch": "Select failover rule"
+  },
+  "provider": {
+    "selectPlaceholder": "Select provider",
+    "modelKeyCounts": "{{modelCount}} models · {{keyCount}} keys",
+    "baseUrlEndpointCounts": "{{baseURLCount}} base URLs · {{endpointCount}} endpoints",
+    "disabled": "Disabled"
+  },
+  "concurrency": {
+    "every": "Every",
+    "minutesAtMost": "minute(s), at most",
+    "items": "requests",
+    "windowAria": "Time window (minutes)",
+    "limitAria": "Concurrency limit (requests)",
+    "windowCount": "In window: {{count}}/{{max}}"
+  },
+  "logOutput": {
+    "prefixLabel": "Log prefix",
+    "prefixPlaceholder": "Enter log prefix",
+    "recordRequest": "Record requests",
+    "recordResponse": "Record responses"
+  },
+  "entry": {
+    "requestEntryFallback": "Request entry",
+    "enabledAria": "{{label}} enabled, click to disable",
+    "disabledAria": "{{label}} disabled, click to enable",
+    "weightLabel": "Weight"
   }
 }

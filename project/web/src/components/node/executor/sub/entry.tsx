@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { FlashLayer, nodeFlashKeyframeName } from '@/components/node/flash-layer'
 import { HandlesRail } from '@/components/node/handles-rail'
+import { useTranslation } from 'react-i18next'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { createDebouncedCommit, type DebouncedCommit } from './debounce'
 import { WEIGHT_DEBOUNCE_MS, clampWeight } from './weight'
@@ -30,6 +31,7 @@ interface NodeExecutorEntryProps {
 }
 
 export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
+  const { t } = useTranslation('node')
   const { label, enabled, weight, onChangeEnabled, onChangeWeight, models = [] } = data
   const flashLayers = data.flashLayers ?? []
   const updateNodeInternals = useUpdateNodeInternals()
@@ -142,12 +144,12 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
               aria-hidden="true"
               className={cn('size-2 shrink-0 rounded-full', enabled ? 'bg-[var(--node-accent,var(--color-primary))]' : 'bg-muted-foreground/50')}
             />
-            <span className={cn('truncate text-sm font-medium', data.accentColor && 'text-[var(--node-accent)]')}>{label || '请求入口'}</span>
+            <span className={cn('truncate text-sm font-medium', data.accentColor && 'text-[var(--node-accent)]')}>{label || t('entry.requestEntryFallback')}</span>
           </span>
           <Switch
             checked={enabled}
             onCheckedChange={() => onChangeEnabled(!enabled)}
-            aria-label={enabled ? `${label} 已启用，点击关闭` : `${label} 已停用，点击启用`}
+            aria-label={enabled ? t('entry.enabledAria', { label }) : t('entry.disabledAria', { label })}
             className="nodrag nopan"
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
@@ -156,7 +158,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
 
         <div className={cn('flex flex-col gap-1 p-3')}>
           <div className="flex flex-col gap-0.5">
-            <span className="text-[10px]">权重</span>
+            <span className="text-[10px]">{t('entry.weightLabel')}</span>
             <Input
               type="number"
               size="sm"

@@ -85,7 +85,7 @@ export function ConditionRow({ index, condition, onChange, onRemove, canRemove }
         onClick={onRemove}
         disabled={!canRemove}
         className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
-        aria-label={`删除条件 ${index + 1}`}
+        aria-label={t('section.deleteCondition', { count: index + 1 })}
       >
         <AppIcon name="close" size={14} />
       </button>

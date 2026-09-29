@@ -1,5 +1,6 @@
 import { SlotItemCard } from '@/components/node/slot/items/SlotItemCard'
 import { RuleSelect } from '../rule-select'
+import { useTranslation } from 'react-i18next'
 import type { RuleTypeStatus } from '../use-slot-rules'
 import type { RequestModifySlotEntry, SlotItemDragProps } from '@/components/node/slot/items'
 import type { RewriteRule } from '@/lib/dashboard-api'
@@ -19,6 +20,7 @@ export interface NodeExecutorRequestModifyProps extends SlotItemDragProps {
 
 // 请求改写业务节点：槽位内的一条请求改写条目（绑定改写规则）。
 export function NodeExecutorRequestModify({ entry, rules, onChange, onDelete, token, picked, onPickToken, ruleStatus, onRefreshRules, ...drag }: NodeExecutorRequestModifyProps) {
+  const { t } = useTranslation('node')
   return (
     <SlotItemCard
       index={entry.index}
@@ -33,7 +35,7 @@ export function NodeExecutorRequestModify({ entry, rules, onChange, onDelete, to
       <RuleSelect
         value={entry.ruleId}
         options={rules.map((r) => ({ id: r.id, label: r.name }))}
-        placeholder="请选择"
+        placeholder={t('ruleSelect.placeholder')}
         loading={ruleStatus?.loading}
         error={ruleStatus?.error ?? null}
         onOpenRefresh={onRefreshRules}

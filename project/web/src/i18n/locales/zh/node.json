@@ -27,7 +27,8 @@
   },
   "ruleSelect": {
     "emptyHint": "暂无可用规则",
-    "loadFailed": "加载失败"
+    "loadFailed": "加载失败",
+    "placeholder": "请选择"
   },
   "modelHub": {
     "title": "模型中心",
@@ -76,5 +77,31 @@
     "placeholderResponseModify": "选择响应改写规则",
     "placeholderConcurrency": "选择并发规则",
     "placeholderAutoSwitch": "选择故障转移规则"
+  },
+  "provider": {
+    "selectPlaceholder": "选择供应商",
+    "modelKeyCounts": "模型 {{modelCount}} · key {{keyCount}}",
+    "baseUrlEndpointCounts": "baseURL {{baseURLCount}} · endpoint {{endpointCount}}",
+    "disabled": "禁用"
+  },
+  "concurrency": {
+    "every": "每",
+    "minutesAtMost": "分钟内最多",
+    "items": "条",
+    "windowAria": "时间窗口（分钟）",
+    "limitAria": "并发上限（条）",
+    "windowCount": "窗口内 {{count}}/{{max}}"
+  },
+  "logOutput": {
+    "prefixLabel": "日志前缀",
+    "prefixPlaceholder": "请输入日志前缀",
+    "recordRequest": "记录请求",
+    "recordResponse": "记录响应"
+  },
+  "entry": {
+    "requestEntryFallback": "请求入口",
+    "enabledAria": "{{label}} 已启用，点击关闭",
+    "disabledAria": "{{label}} 已停用，点击启用",
+    "weightLabel": "权重"
   }
 }
