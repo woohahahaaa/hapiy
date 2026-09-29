@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/i18n"
 	"github.com/hapiy/hapiy/internal/model"
 	"gorm.io/gorm"
 )
@@ -121,7 +122,7 @@ func filterSystemFromTypes(types []string) []string {
 // step 2 fetches ALL rows for a qualified request_id (including rows that
 // individually would not match the filter — which is exactly the "pair
 // contains a matching row" semantic the dashboard wants).
-func (w *LogCaptureWriter) ListPairs(params LogListParams) ([]LogCapturePairSummary, int, error) {
+func (w *LogCaptureWriter) ListPairs(lang string, params LogListParams) ([]LogCapturePairSummary, int, error) {
 	if w == nil {
 		return nil, 0, nil
 	}
@@ -188,7 +189,7 @@ func (w *LogCaptureWriter) ListPairs(params LogListParams) ([]LogCapturePairSumm
 			// one row exists. Defensive: skip rather than emit an empty entry.
 			continue
 		}
-		summaries = append(summaries, assembleSummary(rid, rows))
+		summaries = append(summaries, assembleSummary(lang, rid, rows))
 	}
 	return summaries, int(total), nil
 }
@@ -262,7 +263,7 @@ func applyPairFilters(q *gorm.DB, params LogListParams, filteredTypes []string) 
 // first so "earliest row" and the stage split are deterministic. System rows
 // are ignored here (they were filtered out of the SQL already, but defensively
 // skip them too in case a future caller passes unfiltered rows).
-func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary {
+func assembleSummary(lang, rid string, rows []model.LogCapture) LogCapturePairSummary {
 	sort.SliceStable(rows, func(i, j int) bool {
 		return rows[i].CreatedAt.Before(rows[j].CreatedAt)
 	})
@@ -317,7 +318,7 @@ func assembleSummary(rid string, rows []model.LogCapture) LogCapturePairSummary 
 	// captured (no response rows at all, or response_before without after).
 	s.IsIncomplete = pairIsIncomplete(hasRequest, rspBefore, rspAfter)
 
-	s.TypeLabel = typeLabel(hasRequest, hasResponse, responseCount, s.HasError, s.IsIncomplete)
+	s.TypeLabel = typeLabel(lang, hasRequest, hasResponse, responseCount, s.HasError, s.IsIncomplete)
 	return s
 }
 
@@ -540,30 +541,30 @@ func jsonMapEqual(a, b model.JSONMap) bool {
 	return bytes.Equal(ab, bb)
 }
 
-// typeLabel renders the Chinese label for a pair's shape:
-//   - response-only               → "响应"
-//   - request-only (0 responses)  → "请求"
-//   - request + 1 response        → "请求+响应"
-//   - request + N>1 responses     → "请求+响应×N"
-// hasError / isIncomplete append suffixes (+报错, +不完整) so a glance at the
+// typeLabel renders the label for a pair's shape in the active language:
+//   - response-only               → "响应"/"Response"
+//   - request-only (0 responses)  → "请求"/"Request"
+//   - request + 1 response        → "请求+响应"/"Request+Response"
+//   - request + N>1 responses     → "请求+响应×N"/"Request+Response×N"
+// hasError / isIncomplete append suffixes (+报错/+不完整) so a glance at the
 // list flags broken captures without opening the detail.
-func typeLabel(hasRequest, hasResponse bool, responseCount int, hasError, isIncomplete bool) string {
+func typeLabel(lang string, hasRequest, hasResponse bool, responseCount int, hasError, isIncomplete bool) string {
 	var base string
 	switch {
 	case !hasRequest && hasResponse:
-		base = "响应"
+		base = i18n.S(lang, "响应", "Response")
 	case hasRequest && responseCount == 0:
-		base = "请求"
+		base = i18n.S(lang, "请求", "Request")
 	case responseCount == 1:
-		base = "请求+响应"
+		base = i18n.S(lang, "请求+响应", "Request+Response")
 	default:
-		base = "请求+响应×" + strconv.Itoa(responseCount)
+		base = i18n.S(lang, "请求+响应×", "Request+Response×") + strconv.Itoa(responseCount)
 	}
 	if hasError {
-		base += "+报错"
+		base += i18n.S(lang, "+报错", "+error")
 	}
 	if isIncomplete {
-		base += "+不完整"
+		base += i18n.S(lang, "+不完整", "+incomplete")
 	}
 	return base
 }
