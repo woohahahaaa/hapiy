@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cookie&display=swap');
+@import "@fontsource/cookie";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

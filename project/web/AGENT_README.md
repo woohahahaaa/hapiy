@@ -40,9 +40,9 @@ agent 会执行 `scripts/dev.sh`，把 Vite 放到后台 detach 运行，写入 
 
 > **帮我按 AGENT_README.md 启动后端**
 
-agent 会执行 `project/backend/scripts/backend.sh`，把 Go 后端 detach 启动到 `:8080`，并写入 pid 与日志。
+agent 会执行 `./alive.sh dev`（在仓库根目录），它会 `go build` 当前源码、拉起 Vite，再用 `hapiy up` 把 Go 后端 detach 启动到 `:8080`。
 
-> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port. For the backend, say "Start backend per AGENT_README.md" and the agent runs `project/backend/scripts/backend.sh` to launch the Go binary detached on `:8080`.*
+> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port. For the backend, say "Start backend per AGENT_README.md" and the agent runs `./alive.sh dev` from the repo root: rebuild the Go binary, ensure Vite, then `hapiy up` to launch the backend detached on `:8080`.*
 
 ### 🌍 打开浏览器
 
@@ -57,24 +57,25 @@ http://<lan-ip>:18009         # 反代后的局域网地址
 
 ### 🛰️ 后端服务
 
-dev server 必须配合后端才能跑完整链路。后端默认监听 `0.0.0.0:8080`：
+dev server 必须配合后端才能跑完整链路。后端默认监听 `0.0.0.0:8080`。启动/守护逻辑在 `hapiy` 二进制里（`up` / `down` / `status`），不再由 shell 脚本负责：
 
 ```bash
 cd project/backend
-./scripts/backend.sh             # 后台启动（缺产物时自动 build）
-./scripts/backend.sh --status    # 查看 pid / 端口 / 日志
-./scripts/backend.sh --stop      # 停止
+go build -o hapiy ./cmd/hapiy && ./hapiy up   # 重编译 + 幂等拉起
+./hapiy status                                 # pid / 端口 / 健康 / 日志
+./hapiy down                                   # 先停守护再停后端
 ```
 
 | 命令 | 作用 |
 |---|---|
-| `scripts/backend.sh` 或 `scripts/backend.sh start` | 缺 `hapiy` 二进制时跑 `go build`；`nohup hapiy` 后台启动；记录 pid 与日志 |
-| `scripts/backend.sh --status` | 显示 pid 文件、监听状态、最近 20 行日志 |
-| `scripts/backend.sh --stop` | 按 pid 优雅终止，超时则 `kill -9` |
+| `hapiy up` | 幂等：`/health` 已健康就直接返回；否则 detach 一个 `up --supervise` 守护并等健康（≤60s） |
+| `hapiy up --supervise` | 内部守护循环：跑 `hapiy serve`，panic 也写进 `~/.hapiy/log/hapiy.log`，退出 1s 后重拉 |
+| `hapiy down` | 先杀守护再杀后端，保证没有进程残留 |
+| `hapiy status` | 打印二进制路径、state 目录、端口、守护/后端 pid、健康、日志尾 |
 
-环境变量可覆盖默认行为：`PORT=8080 LOG_FILE=/var/log/hapiy-backend.log PID_FILE=/var/run/hapiy-backend.pid ./scripts/backend.sh`。
+状态目录 `~/.hapiy`（`up.pid` / `serve.pid` / `log/hapiy.log`），端口取 `HAPIY_PORT`（默认 8080）。
 
-> *Backend dev server mirrors `scripts/dev.sh`'s design: detached `nohup` launch of the Go binary, with `--status` / `--stop` subcommands and the same `PORT` / `LOG_FILE` / `PID_FILE` overrides. Listen address defaults to `0.0.0.0:8080`.*
+> *Backend lifecycle (idempotent `up`, detached `up --supervise` respawn loop with panic capture into `~/.hapiy/log/hapiy.log`, `down`, `status`) lives in the Go binary. State under `~/.hapiy`; port from `HAPIY_PORT` (default 8080).*
 
 ### 🛟 兜底：手动启动
 
@@ -86,13 +87,12 @@ cd project/web
 ```
 
 ```bash
-cd project/backend
-./scripts/backend.sh         # 后台启动
-./scripts/backend.sh --status # 查看 pid / 端口 / 日志
-./scripts/backend.sh --stop   # 停止
+# 后端：见上面的 hapiy up / down / status；或从仓库根一键
+cd <repo-root>
+./alive.sh dev               # 重编译后端 + 拉起前端与后端
 ```
 
-> *Manual fallback: run `scripts/dev.sh` for the frontend and `scripts/backend.sh` for the backend in the background, then `--status` to inspect or `--stop` to terminate.*
+> *Manual fallback: `scripts/dev.sh` for the frontend; `hapiy up`/`down`/`status` for the backend, or `./alive.sh dev` from the repo root.*
 
 ---
 
@@ -130,13 +130,12 @@ project/web
 │   ├── lib/               # 工具与 API 封装
 │   └── index.css          # Tailwind v4 + 主题变量
 ├── scripts/dev.sh         # detached 启动脚本
-├── start.sh               # 旧版前台启动入口
 ├── components.json        # shadcn 配置（base-lyra）
 ├── vite.config.ts         # Vite + Tailwind v4 配置
 └── package.json
 ```
 
-> *Project tree (web/): sources, generated shadcn UI, pages, layouts, lib, theme CSS, dev script, and the legacy `start.sh` for foreground launches.*
+> *Project tree (web/): sources, generated shadcn UI, pages, layouts, lib, theme CSS, and the detached dev script. The launcher lives at the repo root as `alive.sh`.*
 
 ---
 
