@@ -781,7 +781,36 @@ func buildOneModelCfg(name string, modelRecs []model.AgentRecommendation, group 
 			}
 		}
 	}
+	ensureCapabilitiesComplete(cfg, mif.InputTypes.Path)
 	return cfg
+}
+
+// ensureCapabilitiesComplete fills the required sibling keys of an OpenCode-V2
+// `capabilities` object. V2 validates capabilities as a complete struct —
+// tools (bool) + input (array) + output (array) — and treats a provider whose
+// model carries a partial object (e.g. only the input types written from
+// models.dev) as malformed, skipping the whole provider. This runs only when
+// the rule writes model input types under capabilities.* (the opencode-v2
+// template), so other agents are untouched. Defaults mirror OpenCode's own
+// fallback for a model it does not know: tools on, text+image in, text out.
+func ensureCapabilitiesComplete(cfg map[string]any, inputPath string) {
+	if !strings.HasPrefix(strings.TrimSpace(inputPath), "capabilities.") {
+		return
+	}
+	caps, _ := cfg["capabilities"].(map[string]any)
+	if caps == nil {
+		caps = map[string]any{}
+		cfg["capabilities"] = caps
+	}
+	if _, ok := caps["tools"]; !ok {
+		caps["tools"] = true
+	}
+	if _, ok := caps["input"]; !ok {
+		caps["input"] = []any{"text", "image"}
+	}
+	if _, ok := caps["output"]; !ok {
+		caps["output"] = []any{"text"}
+	}
 }
 
 // applyRecToMap writes a batch of recommendations into a config map in

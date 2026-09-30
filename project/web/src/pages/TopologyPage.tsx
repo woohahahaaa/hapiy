@@ -856,16 +856,16 @@ export function TopologyPage() {
         onEntryChangeWeight: (id, weight) => {
           updateTopologyNodes((list) => list.map((n) => (n.id === id ? { ...n, weight } : n)))
         },
-        onAddProvider: handleAddProvider,
-        onSelectProvider: handleSelectProvider,
+        onAddProvider: (id) => handleAddProvider(id),
+        onSelectProvider: (id, providerId) => handleSelectProvider(id, providerId),
         onToggleProvider: (providerId, enabled) => {
           updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n)))
         },
-        onDeleteProvider: handleDeleteNode,
-        onReorderProvider: handleReorderProvider,
+        onDeleteProvider: (id) => handleDeleteNode(id),
+        onReorderProvider: (id, from, to) => handleReorderProvider(id, from, to),
         onCycleStrategy: (id, strategy) => handleCycleProviderStrategy(id, strategy as ProviderStrategy),
-        onToggleSlotEnabled: handleToggleSlotEnabled,
-        onSelectExecutor: handleSelectExecutor,
+        onToggleSlotEnabled: (id, enabled) => handleToggleSlotEnabled(id, enabled),
+        onSelectExecutor: (id, token) => handleSelectExecutor(id, token),
         onSaveSwitchConfig: (id, name, config) => {
           updateTopologyNodes((list) =>
             list.map((n) => (n.id === id ? { ...n, name: name !== '' ? name : undefined, config } : n)),
@@ -874,8 +874,8 @@ export function TopologyPage() {
         onChangeSlotEntry: (id, slotType, next) => handleChangeSlotEntry(id, slotType as SlotType, next),
         onDeleteSlotEntry: (id, slotType, index) => handleDeleteSlotEntry(id, slotType as SlotType, index),
         onReorderSlotEntries: (id, slotType, from, to) => handleReorderSlotEntries(id, slotType as SlotType, from, to),
-        onSetSlotDeadline: handleSetSlotDeadline,
-        onStartSlotCapture: handleStartSlotCapture,
+        onSetSlotDeadline: (id, deadlineAt) => handleSetSlotDeadline(id, deadlineAt),
+        onStartSlotCapture: (id, deadlineAt) => handleStartSlotCapture(id, deadlineAt),
         onAutoCloseEntry: () => {
           void persistTopology()
         },

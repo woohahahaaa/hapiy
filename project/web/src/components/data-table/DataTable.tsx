@@ -628,7 +628,7 @@ export function DataTable<T extends Record<string, unknown>>({
               })}
             </tr>
           </thead>
-          <tbody data-slot="table-body">
+          <tbody data-slot="table-body" className="[&>tr:last-child]:border-0">
             {loading && (
               <tr data-slot="table-row">
                 <td colSpan={colCount} className="p-2 text-center text-xs text-muted-foreground py-8">
