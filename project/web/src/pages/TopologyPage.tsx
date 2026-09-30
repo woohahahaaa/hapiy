@@ -35,7 +35,7 @@ import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
 import { ExecutorDebug } from '@/components/node/executor-debug'
 import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/DebugSettings'
-import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy, type SwitchNodeConfig } from '@/lib/dashboard-api'
+import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy } from '@/lib/dashboard-api'
 import { NodeEdge } from '@/components/node/edge'
 import { NodeSwitch } from '@/components/node/switch'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
@@ -61,13 +61,13 @@ import {
   isProviderSlot,
   isRequestEntry,
   isProvider,
-  isSwitchNode,
   PROVIDER_SLOT_TYPE,
   ALL_SLOT_TYPES,
   rerouteWiresAroundRemoved,
   type RewriteSlotType,
   type FlatCanvas,
 } from '@/lib/flat-topology'
+import { buildCanvasNodes } from '@/lib/canvas-nodes'
 
 const nodeTypes = {
   modelHub: NodeModel,
@@ -193,15 +193,8 @@ function slotLabel(slotType: string): string {
 
 // Entry nodes are system nodes whose name is not user-editable, but older
 // topologies persisted the translated default at creation time (a topology
-// built in Chinese kept "请求入口" in the English UI). These are the known
-// default strings in both languages; rendering swaps any of them back to the
-// active language, other names are left untouched.
-const ENTRY_DEFAULT_NAMES = new Set<string>([
-  i18n.t('topology:node.entry', { lng: 'zh' }),
-  i18n.t('topology:node.entry', { lng: 'en' }),
-  i18n.t('topology:node.emergencyEntry', { lng: 'zh' }),
-  i18n.t('topology:node.emergencyEntry', { lng: 'en' }),
-])
+// built in Chinese kept "请求入口" in the English UI). Rendering normalises
+// them in `buildCanvasNodes`.
 
 /**
  * Walk the chain that the prospective new wire (source→target) would join,
@@ -466,22 +459,6 @@ export function TopologyPage() {
     if (!emergencyNodeIds.has(nodeId)) return undefined
     return { '--node-accent': 'var(--warning)' } as CSSProperties
   }
-
-  // 每个 slot 连进来的线数（驱动左侧 handlebar 长度）：只数 canvas 上
-  // 真正连进 slot 节点的 top-level 线，避免把 provider slot 内部展开出来的
-  // `slot → primary → 下一 slot` 等 flat wire 也算进 slot 入线，导致 handle
-  // bar 被撑高。
-  const slotConnectionCount = useMemo(() => {
-    const counts = new Map<string, number>()
-    if (!canvas) return counts
-    for (const w of canvas.canvasWires) {
-      const targetIsRailNode = canvas.topLevel.some(
-        (n) => n.id === w.target && (n.kind === 'slot' || n.kind === 'switch'),
-      )
-      if (targetIsRailNode) counts.set(w.target, (counts.get(w.target) ?? 0) + 1)
-    }
-    return counts
-  }, [canvas])
 
   const providerByName = useMemo(() => {
     const map = new Map<string, Provider>()
@@ -842,157 +819,70 @@ export function TopologyPage() {
 
   const topLevelNodes = useMemo(() => {
     if (!canvas) return [] as Node[]
-    const nodes: Node[] = []
-    for (const node of canvas.topLevel) {
-      if (isRequestEntry(node)) {
-        nodes.push({
-          id: node.id,
-          type: 'requestEntry',
-          position: layoutSnapshot[node.id] ?? { x: 300, y: 20 },
-          style: accentStyleOf(node.id),
-          data: {
-            label: !node.name || ENTRY_DEFAULT_NAMES.has(node.name)
-              ? (isEmergencyEntry(node) ? t('node.emergencyEntry') : t('node.entry'))
-              : node.name,
-            enabled: node.enabled,
-            weight: node.weight ?? 1,
-            accentColor: isEmergencyEntry(node) ? 'var(--warning)' : undefined,
-            models: modelNodes.entryModels.get(node.id) ?? [],
-            onChangeEnabled: (enabled: boolean) => {
-              updateTopologyNodes((list) => {
-                const next = list.map((n) => (n.id === node.id ? { ...n, enabled } : n))
-                if (!enabled) return next
-                const nextCollapsed = canvasFromFlat(next, tpRef.current?.wires ?? [])
-                const entryReaches = new Set<string>()
-                let cur = nextCollapsed.canvasWires.find((w) => w.source === node.id)?.target
-                const guard = new Set<string>([node.id])
-                while (cur && !guard.has(cur)) {
-                  guard.add(cur)
-                  entryReaches.add(cur)
-                  cur = nextCollapsed.canvasWires.find((w) => w.source === cur)?.target
-                }
-                const dup = new Set(findDuplicateActivations(next, tpRef.current?.wires ?? []))
-                return next.map((n) => {
-                  if (n.kind === 'provider' && entryReaches.has(n.id) && dup.has(n.providerId ?? n.name ?? '')) {
-                    return { ...n, enabled: false }
-                  }
-                  return n
-                })
-              })
-            },
-            onChangeWeight: (weight: number) => {
-              updateTopologyNodes((list) => list.map((n) => (n.id === node.id ? { ...n, weight } : n)))
-            },
-          },
-        })
-      } else if (isProviderSlot(node)) {
-        const children = canvas.providers
-          .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
-          .map((p) => {
-            // ID 优先解析供应商；旧数据缺 providerId 时按名称兜底
-            const provider = p.providerId ? providerById.get(p.providerId) : p.name ? providerByName.get(p.name) : undefined
-            return {
-              id: p.id,
-              providerId: p.providerId ?? '',
-              label: provider?.name ?? p.name ?? '',
-              baseURLCount: provider?.baseUrls.length ?? 0,
-              keyCount: provider?.keys.length ?? 0,
-              modelCount: provider?.models.length ?? 0,
-              endpointCount: provider?.endpoints.length ?? 0,
-              enabled: p.enabled,
-              providerStatus: provider?.status ?? false,
-              autoDisabled: provider?.autoDisabled ?? false,
-              disableStatus: p.providerId ? disableStatuses.get(p.providerId) ?? null : null,
+    return buildCanvasNodes(canvas, {
+      providers: providers ?? [],
+      positionOf: (id) => layoutSnapshot[id],
+      accentStyleOf,
+      entryModels: modelNodes.entryModels,
+      externallyDisabledIds: externallyDisabledSet,
+      disableStatuses,
+      slotRules,
+      slotRuleStatus,
+      refreshRuleType,
+      litNodeLayers,
+      handlers: {
+        onEntryChangeEnabled: (id, enabled) => {
+          updateTopologyNodes((list) => {
+            const next = list.map((n) => (n.id === id ? { ...n, enabled } : n))
+            if (!enabled) return next
+            const nextCollapsed = canvasFromFlat(next, tpRef.current?.wires ?? [])
+            const entryReaches = new Set<string>()
+            let cur = nextCollapsed.canvasWires.find((w) => w.source === id)?.target
+            const guard = new Set<string>([id])
+            while (cur && !guard.has(cur)) {
+              guard.add(cur)
+              entryReaches.add(cur)
+              cur = nextCollapsed.canvasWires.find((w) => w.source === cur)?.target
             }
+            const dup = new Set(findDuplicateActivations(next, tpRef.current?.wires ?? []))
+            return next.map((n) => {
+              if (n.kind === 'provider' && entryReaches.has(n.id) && dup.has(n.providerId ?? n.name ?? '')) {
+                return { ...n, enabled: false }
+              }
+              return n
+            })
           })
-        nodes.push({
-          id: node.id,
-          type: 'slot',
-          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
-          style: accentStyleOf(node.id),
-          data: {
-            title: t('node.providerSlot'),
-            slotType: PROVIDER_SLOT_TYPE,
-            isProviderSlot: true,
-            connectionCount: slotConnectionCount.get(node.id) ?? 1,
-            externallyDisabled: externallyDisabledSet.has(node.id),
-            children,
-            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
-            onAddProvider: () => handleAddProvider(node.id),
-            onSelectProvider: (nodeId: string, providerId: string) => handleSelectProvider(nodeId, providerId),
-            onToggleProvider: (providerId: string, enabled: boolean) =>
-              updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n))),
-            onDeleteProvider: (providerId: string) => handleDeleteNode(providerId),
-            onReorderProvider: (from: number, to: number) => handleReorderProvider(node.id, from, to),
-            strategy: node.strategy ?? 'sequential',
-            onCycleStrategy: () => handleCycleProviderStrategy(node.id, node.strategy ?? 'sequential'),
-            enabled: node.enabled,
-            onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
-            onSelectExecutor: (token: string | null) => handleSelectExecutor(node.id, token),
-          },
-        })
-      } else if (isSwitchNode(node)) {
-        nodes.push({
-          id: node.id,
-          type: 'switch',
-          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
-          style: accentStyleOf(node.id),
-          data: {
-            title: t('node.switch'),
-            name: node.name,
-            connectionCount: slotConnectionCount.get(node.id) ?? 1,
-            externallyDisabled: false,
-            config: node.config ?? { providers: [], conditions: [] },
-            providers: (providers ?? []).map((p) => ({
-              id: p.id,
-              name: p.name,
-              models: p.models.map((m) => m.model),
-            })),
-            flashLayers: litNodeLayers.get(node.id),
-            onSaveConfig: (name: string, config: SwitchNodeConfig) => {
-              updateTopologyNodes((list) =>
-                list.map((n) => (n.id === node.id ? { ...n, name: name !== '' ? name : undefined, config } : n)),
-              )
-            },
-          },
-        })
-      } else {
-        const slotType = node.slotType as SlotType
-        nodes.push({
-          id: node.id,
-          type: 'slot',
-          position: layoutSnapshot[node.id] ?? { x: 560, y: 20 },
-          style: accentStyleOf(node.id),
-          data: {
-            title: SLOT_LABELS[slotType] ?? node.slotType ?? t('node.slotFallback'),
-            slotType: node.slotType ?? '',
-            enabled: node.enabled,
-            isProviderSlot: false,
-            connectionCount: slotConnectionCount.get(node.id) ?? 1,
-            externallyDisabled: externallyDisabledSet.has(node.id),
-            entries: [...(node.entries ?? [])],
-            rules: slotRules,
-            providers: (providers ?? []).map((p) => ({ id: p.id, name: p.name })),
-            ruleStatus: slotRuleStatus,
-            refreshRuleType,
-            onChangeEntry: (next: SlotEntry) => handleChangeSlotEntry(node.id, slotType, next),
-            onDeleteEntry: (index: number) => handleDeleteSlotEntry(node.id, slotType, index),
-            onReorderEntries: (from: number, to: number) => handleReorderSlotEntries(node.id, slotType, from, to),
-            deadlineAt: node.deadlineAt ?? null,
-            onToggleEnabled: (nextEnabled: boolean) => handleToggleSlotEnabled(node.id, nextEnabled),
-            onSetDeadline: (deadlineAt: number | null) => handleSetSlotDeadline(node.id, deadlineAt),
-            onStartCapture: (deadlineAt: number) => handleStartSlotCapture(node.id, deadlineAt),
-            onSelectExecutor: (token: string | null) => handleSelectExecutor(node.id, token),
-            onAutoCloseEntry: () => {
-              void persistTopology()
-            },
-          },
-        })
-      }
-    }
-    return nodes
+        },
+        onEntryChangeWeight: (id, weight) => {
+          updateTopologyNodes((list) => list.map((n) => (n.id === id ? { ...n, weight } : n)))
+        },
+        onAddProvider: handleAddProvider,
+        onSelectProvider: handleSelectProvider,
+        onToggleProvider: (providerId, enabled) => {
+          updateTopologyNodes((list) => list.map((n) => (n.id === providerId ? { ...n, enabled } : n)))
+        },
+        onDeleteProvider: handleDeleteNode,
+        onReorderProvider: handleReorderProvider,
+        onCycleStrategy: (id, strategy) => handleCycleProviderStrategy(id, strategy as ProviderStrategy),
+        onToggleSlotEnabled: handleToggleSlotEnabled,
+        onSelectExecutor: handleSelectExecutor,
+        onSaveSwitchConfig: (id, name, config) => {
+          updateTopologyNodes((list) =>
+            list.map((n) => (n.id === id ? { ...n, name: name !== '' ? name : undefined, config } : n)),
+          )
+        },
+        onChangeSlotEntry: (id, slotType, next) => handleChangeSlotEntry(id, slotType as SlotType, next),
+        onDeleteSlotEntry: (id, slotType, index) => handleDeleteSlotEntry(id, slotType as SlotType, index),
+        onReorderSlotEntries: (id, slotType, from, to) => handleReorderSlotEntries(id, slotType as SlotType, from, to),
+        onSetSlotDeadline: handleSetSlotDeadline,
+        onStartSlotCapture: handleStartSlotCapture,
+        onAutoCloseEntry: () => {
+          void persistTopology()
+        },
+      },
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerById, providerByName, slotRules, slotRuleStatus, refreshRuleType, modelNodes, externallyDisabledSet, disableStatuses, i18n.language])
+  }, [canvas, layoutSnapshot, slotRules, slotRuleStatus, refreshRuleType, modelNodes, externallyDisabledSet, disableStatuses, i18n.language])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 

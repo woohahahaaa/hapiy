@@ -42,6 +42,12 @@ import {
   type AgentTypeRule,
   type ModelInfoFieldKey,
 } from '@/lib/dashboard-api'
+import {
+  EMPTY_MODEL_INFO_ROWS,
+  buildModelInfoFieldsPayload,
+  modelInfoRowsFromSpecs,
+  type ModelInfoFieldRow,
+} from '@/pages/agentRulesModelInfo'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 
 function toErrorMessage(err: unknown, fallback: string): string {
@@ -477,96 +483,8 @@ function AgentTypeRulesTab() {
 
 // ── 添加 / 编辑规则 ──
 
-// ModelInfoFieldRow — 模型信息字段的结构化编辑状态：不再用 JSON 文本，
-// 而是拆成 路径 / 写法(op) / sep / 允许值 / 操作 五列（与下方推荐字段表格
-// 同一套「值 + 写法」规则）。
-type ModelInfoFieldRow = {
-  path: string
-  action: 'set' | 'skip' | 'delete'
-  op: AgentModelInfoFieldOp
-  sep: string
-  valuesText: string
-}
-
-const EMPTY_MODEL_INFO_ROW: ModelInfoFieldRow = {
-  path: '',
-  action: 'set',
-  op: 'raw',
-  sep: '',
-  valuesText: '',
-}
-
-// modelInfoRowsFromSpecs 把持久化的字段值（纯路径字符串或「值&写法」对象）
-// 归一为编辑器行。
-function modelInfoRowsFromSpecs(
-  mif: AgentModelInfoFieldPaths | undefined,
-): Record<ModelInfoFieldKey, ModelInfoFieldRow> {
-  const rows: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
-    max_context: { ...EMPTY_MODEL_INFO_ROW },
-    max_output_token: { ...EMPTY_MODEL_INFO_ROW },
-    input_types: { ...EMPTY_MODEL_INFO_ROW },
-    thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
-    reasoning_effort: { ...EMPTY_MODEL_INFO_ROW },
-  }
-  for (const key of MODEL_INFO_FIELD_KEYS) {
-    const v = mif?.[key]
-    if (typeof v === 'string') {
-      if (v.trim() !== '') rows[key].path = v.trim()
-      continue
-    }
-    if (v && typeof v.path === 'string') {
-      rows[key].path = v.path.trim()
-      rows[key].action = v.action ?? 'set'
-      rows[key].op = v.op ?? 'raw'
-      rows[key].sep = v.sep ?? ''
-      rows[key].valuesText = (v.values ?? []).join(', ')
-    }
-  }
-  return rows
-}
-
-// buildModelInfoFieldsPayload 把编辑器行组装回 API payload。空路径的行：
-// 只填了写法（op/sep/允许值/操作）等内容时报错，否则跳过（不写该字段）；
-// 出错不提前返回，其余字段照常组装（整弹窗 JSON 序列化依赖完整结果）。
-function buildModelInfoFieldsPayload(
-  rows: Record<ModelInfoFieldKey, ModelInfoFieldRow>,
-): { fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue>; error: string | null } {
-  const fields: Record<ModelInfoFieldKey, AgentModelInfoFieldSpecValue> = {
-    max_context: '',
-    max_output_token: '',
-    input_types: '',
-    thinking_levels: '',
-    reasoning_effort: '',
-  }
-  let error: string | null = null
-  for (const key of MODEL_INFO_FIELD_KEYS) {
-    const row = rows[key]
-    const path = row.path.trim()
-    if (path === '') {
-      const hasOther = row.op !== 'raw' || row.action !== 'set' || row.sep.trim() !== '' || row.valuesText.trim() !== ''
-      if (hasOther && error === null) {
-        error = i18n.t('agentRules:errors.modelInfoPathRequired', { label: i18n.t('agentRules:modelInfoFields.' + MODEL_INFO_FIELD_LABELS[key]) })
-      }
-      continue
-    }
-    const spec: { path: string; action?: 'set' | 'skip' | 'delete'; op?: AgentModelInfoFieldOp; sep?: string; values?: string[] } = { path }
-    if (row.action !== 'set') spec.action = row.action
-    if (row.op !== 'raw') spec.op = row.op
-    if (row.sep.trim() !== '') spec.sep = row.sep.trim()
-    const values = row.valuesText.split(',').map((s) => s.trim()).filter((s) => s !== '')
-    if (values.length > 0) spec.values = values
-    fields[key] = spec
-  }
-  return { fields, error }
-}
-
-const EMPTY_MODEL_INFO_ROWS: Record<ModelInfoFieldKey, ModelInfoFieldRow> = {
-  max_context: { ...EMPTY_MODEL_INFO_ROW },
-  max_output_token: { ...EMPTY_MODEL_INFO_ROW },
-  input_types: { ...EMPTY_MODEL_INFO_ROW },
-  thinking_levels: { ...EMPTY_MODEL_INFO_ROW },
-  reasoning_effort: { ...EMPTY_MODEL_INFO_ROW },
-}
+// 模型信息字段的行状态与 payload 组装在 agentRulesModelInfo.ts（含
+// variantShape 往返，避免编辑一次规则就丢掉 V2 的数组形状）。
 
 // ── 整弹窗 JSON 编辑模式 ──────────────────────────────────────────────
 
@@ -1486,6 +1404,7 @@ function ModelInfoFieldsEditor({
               <th className="w-[8.5rem] px-2 py-1.5 text-left font-medium">{t('modelInfoEditor.columns.modelInfo')}</th>
               <th className="w-40 px-2 py-1.5 text-left font-medium">{t('recTable.path')}</th>
               <th className="w-[5rem] px-2 py-1.5 text-left font-medium">{t('modelInfoEditor.columns.op')}</th>
+              <th className="w-[6rem] px-2 py-1.5 text-left font-medium">{t('modelInfoEditor.columns.variantShape')}</th>
               <th className="w-[3.5rem] px-2 py-1.5 text-left font-medium">sep</th>
               <th className="px-2 py-1.5 text-left font-medium">{t('recTable.allowedValues')}</th>
               <th className="w-[5.5rem] px-2 py-1.5 text-left font-medium">{t('recTable.action')}</th>
@@ -1514,6 +1433,24 @@ function ModelInfoFieldsEditor({
                           {op}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-2 py-1">
+                  {/* variant_shape：仅 op=variants 时有效。对象=旧版 map（V1），
+                      数组=opencode V2（[{id,settings}]）。丢掉会写出 V1 形状，
+                      被 opencode V2 判为 malformed 整块跳过。 */}
+                  <Select
+                    value={value[key].variantShape === 'array' ? 'array' : 'legacy'}
+                    onValueChange={(v) => update(key, { variantShape: v === 'array' ? 'array' : '' })}
+                    disabled={value[key].op !== 'variants'}
+                  >
+                    <SelectTrigger className="h-6 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="legacy">{t('modelInfoEditor.variantShape.legacy')}</SelectItem>
+                      <SelectItem value="array">{t('modelInfoEditor.variantShape.array')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </td>

@@ -318,8 +318,9 @@
   "versions": {
     "entry": "History",
     "title": "Version history",
-    "description": "History of “{{name}}”. “Current” always reflects the live file on disk.",
     "empty": "No version history yet",
+    "previewHint": "Select a version on the left to preview it, or click “Compare with current” to diff it against the live file",
+    "compareCurrent": "Compare with current",
     "current": "Current",
     "archived": "Archived",
     "archivedToast": "Archived",
