@@ -19,12 +19,20 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 TARGET="${1:-mac}"
 STAMP="$(date +%Y%m%d-%H%M)"
-VERSION="$(grep -o '"version": *"[^"]*"' project/web/package.json | head -1 | sed 's/"version": *"//;s/"//')"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "[pack] 缺少工具: $1" >&2; exit 1; }; }
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 
 need node; need go; need pnpm; need swiftc; need rsync
+
+# 版本号自动升级：每次打包把 package.json 的 minor +1（约定参考隔壁 wogo）。
+# `./pack.sh all` 会递归调用本脚本，父进程 bump 一次后导出标记，子进程跳过，
+# 保证 mac / win 两个平台用同一个版本号。
+if [ "${HAPIY_VERSION_BUMPED:-}" != "1" ]; then
+  node project/web/scripts/bump-version.mjs
+  export HAPIY_VERSION_BUMPED=1
+fi
+VERSION="$(grep -o '"version": *"[^"]*"' project/web/package.json | head -1 | sed 's/"version": *"//;s/"//')"
 
 # ---------------------------------------------------------------------------
 # 1. 构建前端

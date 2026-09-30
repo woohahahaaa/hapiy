@@ -1,16 +1,21 @@
 #!/usr/bin/env sh
 # alive.sh — keep the hapiy stack alive, restarting the SAME mode
-# (production "start.sh" or dev "start-dev.sh") that was originally launched.
+# (production or dev) that was originally launched.
 #
 # Usage:
-#   ./alive.sh                      supervise PROD stack (start.sh) — default
-#   ./alive.sh dev [--foreground]   supervise DEV stack (start-dev.sh)
+#   ./alive.sh                      supervise PROD stack — default
+#   ./alive.sh dev [--foreground]   supervise DEV stack
 #   ./alive.sh --status             show supervisor state + last log
 #   ./alive.sh --stop               stop the supervisor (stack stays up)
 #
+# Starting/restarting is self-contained: it drives project/web/scripts/dev.sh
+# and project/backend/scripts/backend{,-prod}.sh directly, so every start
+# rebuilds the backend from current source (dev forces FORCE_REBUILD=1, prod
+# always `go build`s). No separate start.sh / start-dev.sh is involved.
+#
 # The chosen mode is recorded in /tmp/alive.mode. When a health check
-# fails repeatedly, it kills stale processes (HAPIY_AUTO_KILL=1) and re-runs the
-# same start script. Runs detached by default (nohup + pidfile + disown).
+# fails repeatedly, it kills stale processes (HAPIY_AUTO_KILL=1) and restarts.
+# Runs detached by default (nohup + pidfile + disown).
 
 set -eu
 
@@ -25,6 +30,8 @@ MAX_FAIL="${HAPIY_KEEPALIVE_MAX_FAIL:-3}"
 BOOT_WAIT="${HAPIY_KEEPALIVE_BOOT_WAIT:-15}"
 API_PORT="${API_PORT:-8080}"
 WEB_PORT="${WEB_PORT:-18009}"
+WEB_DIR="$ROOT_DIR/project/web"
+BACKEND_DIR="$ROOT_DIR/project/backend"
 
 log() { printf '%s  %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE"; }
 
@@ -52,13 +59,25 @@ stack_up() {
   esac
 }
 
+# start_stack: bring the stack up (rebuilding the backend from source) for the
+# given mode. Output is appended to the keepalive log; HAPIY_AUTO_KILL lets the
+# backend scripts evict a stale listener instead of prompting.
 start_stack() {
-  log "mode=$1 not healthy after ${MAX_FAIL}x, restarting with HAPIY_AUTO_KILL=1..."
+  log "mode=$1 starting (rebuild from source, HAPIY_AUTO_KILL=1)..."
   if [ "$1" = "prod" ]; then
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start.sh" >>"$LOG_FILE" 2>&1
+    HAPIY_AUTO_KILL=1 sh -c "cd '$WEB_DIR' && pnpm build" >>"$LOG_FILE" 2>&1 || true
+    HAPIY_AUTO_KILL=1 sh -c "cd '$BACKEND_DIR' && PORT='$WEB_PORT' ./scripts/backend-prod.sh" >>"$LOG_FILE" 2>&1
   else
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh" >>"$LOG_FILE" 2>&1
+    HAPIY_AUTO_KILL=1 sh -c "cd '$WEB_DIR' && ./scripts/dev.sh" >>"$LOG_FILE" 2>&1 || true
+    HAPIY_AUTO_KILL=1 sh -c "cd '$BACKEND_DIR' && FORCE_REBUILD=1 ./scripts/backend.sh" >>"$LOG_FILE" 2>&1
   fi
+}
+
+# stop_stack: tear down both the web and backend servers (both modes).
+stop_stack() {
+  sh -c "cd '$WEB_DIR' && ./scripts/dev.sh --stop" >>"$LOG_FILE" 2>&1 || true
+  sh -c "cd '$BACKEND_DIR' && ./scripts/backend.sh --stop" >>"$LOG_FILE" 2>&1 || true
+  sh -c "cd '$BACKEND_DIR' && ./scripts/backend-prod.sh --stop" >>"$LOG_FILE" 2>&1 || true
 }
 
 supervise() {
@@ -121,30 +140,17 @@ start_supervised() {
     stop_supervisor >/dev/null 2>&1 || true
     if [ "$old_mode" != "$mode" ]; then
       echo "[keepalive] mode switch: stopping old stack ($old_mode)..."
-      if [ "$old_mode" = "dev" ]; then
-        HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh" --stop >>"$LOG_FILE" 2>&1 || true
-      else
-        HAPIY_AUTO_KILL=1 "$ROOT_DIR/start.sh" --stop >>"$LOG_FILE" 2>&1 || true
-      fi
+      stop_stack
       sleep 2
     fi
   fi
 
-  # Fresh start: stop whatever is running in the target mode, then bring the
-  # stack up in the FOREGROUND so build/start output streams to the terminal
-  # and we only hand off to the background supervisor once /health is good.
-  if [ "$mode" = "dev" ]; then
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh" --stop >>"$LOG_FILE" 2>&1 || true
-  else
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start.sh" --stop >>"$LOG_FILE" 2>&1 || true
-  fi
+  # Fresh start: stop whatever is running, then rebuild + bring the stack up,
+  # so source changes are always compiled in.
+  stop_stack
   sleep 1
 
-  if [ "$mode" = "dev" ]; then
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start-dev.sh"
-  else
-    HAPIY_AUTO_KILL=1 "$ROOT_DIR/start.sh"
-  fi
+  start_stack "$mode"
 
   # Wait for the stack to actually pass health before handing off to the
   # background supervisor, so the user sees it come up to ready.
