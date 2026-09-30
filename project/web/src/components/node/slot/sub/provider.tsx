@@ -70,7 +70,7 @@ export function NodeSlotProvider({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onCycleStrategy?.() }}
-          className="nodrag nopan flex items-center gap-1 rounded-sm border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="nodrag nopan flex items-center gap-1 rounded-sm border border-border-subtle px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
         >
           {strategyLabel[strategy]}
           <AppIcon name="refresh" size={10} />

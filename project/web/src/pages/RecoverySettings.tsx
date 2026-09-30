@@ -807,12 +807,12 @@ function RecoveryHandlerDialog({
               {t('recovery.handlerDescription')}
             </p>
             {draft.ops.length === 0 ? (
-              <div className="rounded-xs border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+              <div className="rounded-xs border border-dashed border-border-subtle px-3 py-6 text-center text-xs text-muted-foreground">
                 {t('recovery.noRules')}
               </div>
             ) : (
               draft.ops.map((op, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-xs border border-border bg-background px-2 py-2">
+                <div key={i} className="flex items-start gap-2 rounded-xs border border-border-subtle bg-background px-2 py-2">
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex items-center gap-2">
                       <span className="mr-2 inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">
@@ -882,7 +882,7 @@ function RecoveryHandlerDialog({
               </Button>
             </div>
 
-            <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+            <div className="flex flex-col gap-1.5 border-t border-border-subtle pt-3">
               <label className="grid gap-1.5 text-sm">
                 {t('recovery.timeoutHoursLabel')}
                 <Input
@@ -996,13 +996,13 @@ function RequestPreviewDialog({
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestHeaders')}</div>
-              <pre className="max-h-48 overflow-auto rounded-xs border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-48 overflow-auto rounded-xs border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestHeaders ? formatJson(record.requestHeaders) : '-'}
               </pre>
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestBodyPreview')}</div>
-              <pre className="max-h-96 overflow-auto rounded-xs border border-input bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-96 overflow-auto rounded-xs border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestBody ? formatJson(record.requestBody) : '-'}
               </pre>
             </div>

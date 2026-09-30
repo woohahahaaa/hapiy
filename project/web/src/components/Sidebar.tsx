@@ -12,7 +12,6 @@ import { dashboardApi } from '@/lib/dashboard-api'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -408,6 +407,7 @@ export function AppSidebar() {
           }
         >
           <span
+            title="hapiy v0.1.0"
             className={
               showLabel
                 ? 'font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
@@ -461,11 +461,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
-        {showLabel && (
-          <p className="text-xs text-muted-foreground">hapiy v0.1.0</p>
-        )}
-      </SidebarFooter>
       <SidebarRail />
     </SidebarRoot>
   )

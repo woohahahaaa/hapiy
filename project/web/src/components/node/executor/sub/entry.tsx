@@ -138,7 +138,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
           }}
         />
 
-        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
           <span className={cn('flex min-w-0 items-center gap-1.5')}>
             <span
               aria-hidden="true"

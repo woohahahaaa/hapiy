@@ -171,7 +171,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
 function FieldGroup({ children }: { children: ReactNode }) {
   return (
     <section>
-      <div className="mb-3 h-px bg-border" />
+      <div className="mb-3 h-px bg-border-subtle" />
       <div className="grid grid-cols-2 gap-x-6 gap-y-2">{children}</div>
     </section>
   )

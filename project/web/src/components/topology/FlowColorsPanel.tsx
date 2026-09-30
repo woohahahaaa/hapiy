@@ -88,7 +88,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
                 if (e.key === 'Enter') add()
               }}
               placeholder={t('colors.placeholder')}
-              className="min-w-0 flex-1 rounded-xs border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
+              className="min-w-0 flex-1 rounded-xs border border-border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
             />
             <Button variant="outline" size="sm" onClick={add}>
               {t('colors.add')}

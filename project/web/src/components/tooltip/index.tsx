@@ -24,7 +24,7 @@ export function TooltipContent({ className, ...props }: ComponentProps<typeof UI
   return (
     <UITooltipContent
       className={cn(
-        'border border-foreground/15 bg-background text-foreground',
+        'border border-border-subtle bg-background text-foreground',
         className,
       )}
       {...props}

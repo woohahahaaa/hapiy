@@ -47,7 +47,7 @@ export function JsonLineEditor({
   return (
     <div
       className={cn(
-        'relative flex w-full overflow-hidden rounded-xs border border-border bg-muted/30',
+        'relative flex w-full overflow-hidden rounded-xs border border-border-subtle bg-muted/30',
         FONT_CLASSES,
         className,
       )}
@@ -56,7 +56,7 @@ export function JsonLineEditor({
         ref={gutterRef}
         aria-hidden
         className={cn(
-          'w-14 shrink-0 select-none overflow-hidden border-r border-border bg-muted/40 py-3 text-right text-muted-foreground/70',
+          'w-14 shrink-0 select-none overflow-hidden border-r border-border-subtle bg-muted/40 py-3 text-right text-muted-foreground/70',
         )}
       >
         {lines.map((_, index) => (

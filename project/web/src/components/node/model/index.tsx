@@ -49,7 +49,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
         <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
       ))}      {!simplified && (
         <div
-          className="border-b border-border"
+          className="border-b border-border-subtle"
           style={{ padding: `${pad.paddingY + 2}px ${pad.paddingX}px` }}
         >
           <span className="text-sm font-medium">{t('modelHub.title')}</span>
@@ -96,7 +96,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
 
       {!simplified && (
         <div
-          className="border-t border-border text-[10px]"
+          className="border-t border-border-subtle text-[10px]"
           style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
         >
           {t('modelHub.count', { count: models.length })}

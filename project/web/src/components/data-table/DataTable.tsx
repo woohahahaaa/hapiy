@@ -606,7 +606,7 @@ export function DataTable<T extends Record<string, unknown>>({
       >
         <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
           <thead data-slot="table-header" className="[&_tr]:border-b">
-            <tr data-slot="table-row" className="border-b transition-colors">
+            <tr data-slot="table-row" className="border-b border-border-subtle transition-colors">
               {columns.map((col, i) => {
                 const cfg = configs[i] ?? defaultConfigForColumn(col as ColumnDef<unknown>)
                 const widthPx = resolvedWidths[i]
@@ -679,7 +679,7 @@ export function DataTable<T extends Record<string, unknown>>({
                           : undefined
                     }
                     className={cn(
-                      "border-b transition-colors data-[state=selected]:bg-muted",
+                      "border-b border-border-subtle transition-colors data-[state=selected]:bg-muted",
                       rowHoverBg
                         ? "hover:bg-(--dt-row-hover-bg)"
                         : (hoverClassName ?? "hover:bg-muted/50"),

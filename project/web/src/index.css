@@ -70,6 +70,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive: var(--destructive);
   --color-success-foreground: var(--success-foreground);
@@ -125,7 +126,8 @@
   --warning: oklch(0.769 0.188 70.08);
   --warning-foreground: oklch(0.205 0 0);
   --border: oklch(0.786 0.001 0);
-  --input: oklch(0.8 0.001 0);
+  --border-subtle: oklch(0.83 0.001 0);
+  --input: var(--border);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -139,7 +141,7 @@
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-border: var(--border-subtle);
   --sidebar-ring: oklch(0.708 0 0);
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -184,8 +186,9 @@
   --success-foreground: oklch(0.393 0.095 152.535);
   --warning: oklch(0.769 0.188 70.08);
   --warning-foreground: oklch(0.205 0 0);
-  --border: oklch(0.321 0.001 0);
-  --input: oklch(0.273 0.001 0);
+  --border: oklch(0.273 0.001 0);
+  --border-subtle: oklch(0.321 0.001 0);
+  --input: var(--border);
   --ring: oklch(0.909 0.24 130.988);
   --chart-1: oklch(0.909 0.24 130.988);
   --chart-2: oklch(0.803 0.191 156.977);
@@ -199,7 +202,7 @@
   --sidebar-primary-foreground: oklch(0.000 0.000 0.000);
   --sidebar-accent: oklch(1.000 0.000 263.283 / 6%);
   --sidebar-accent-foreground: oklch(1.000 0.000 263.283);
-  --sidebar-border: oklch(0.5 0 0);
+  --sidebar-border: var(--border-subtle);
   --sidebar-ring: oklch(0.909 0.24 130.988);
   --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
