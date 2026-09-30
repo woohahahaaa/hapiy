@@ -37,7 +37,7 @@ hapiy 项目的一站式运行说明：前端 Vite + 后端 Go + 反向代理 + 
 agent 会：
 
 1. 用 `project/web/scripts/dev.sh` 把前端 detach 到后台，监听 `0.0.0.0:18009`。
-2. 用 `project/backend/scripts/backend.sh` 把后端 detach 到后台，监听 `0.0.0.0:8080`。
+2. 用 `./alive.sh dev`（内部 `go build` + `hapiy up`）把后端 detach 到后台，监听 `0.0.0.0:8080`。
 3. 提示你确认前端 dev 端口与后端 API 端口，并在反代里同时转发 `18009 → 18009` 与 `/v1/ → 8080`。
 
 > *Hand the project directory to the agent and say "Prepare frontend, backend, and reverse proxy per AGENT_README.md". It launches both servers detached, then asks for proxy routing on `18009` and `/v1/`.*
@@ -45,20 +45,24 @@ agent 会：
 ### 🛟 兜底：手动启动
 
 ```bash
-# 前端
-cd project/web
-./scripts/dev.sh             # 后台启动
-./scripts/dev.sh --status    # 查看 pid / 端口 / 日志
-./scripts/dev.sh --stop      # 停止
+# 一键：前端 + 后端（每次重编译后端）
+./alive.sh dev                # 启动 dev 栈
+./alive.sh --status           # 查看后端状态 + 日志
+./alive.sh --stop             # 停止守护 + 后端
 
-# 后端
+# 只操作后端（二进制自带守护）
 cd project/backend
-./scripts/backend.sh         # 必要时自动 go build
-./scripts/backend.sh --status
-./scripts/backend.sh --stop
+go build -o hapiy ./cmd/hapiy && ./hapiy up   # 重编译 + 幂等拉起
+./hapiy status                                 # pid / 端口 / 健康 / 日志
+./hapiy down                                   # 先停守护再停后端
+
+# 只操作前端
+cd project/web
+./scripts/dev.sh --status
+./scripts/dev.sh --stop
 ```
 
-> *Manual fallback: each script writes pid + log to `/tmp`, supports `--status` and `--stop`, and rebuilds the backend automatically if the binary is missing.*
+> *Backend lifecycle (startup + crash respawn + logging) now lives in the `hapiy` binary via `up` / `down` / `status`; `./alive.sh dev` wraps "rebuild backend + ensure frontend + `hapiy up`". The shell scripts no longer supervise the backend.*
 
 ---
 
@@ -103,14 +107,12 @@ lsof -nP -iTCP:8080  -sTCP:LISTEN
 原因通常是后端路由 404，gin 返回纯文本 `404 page not found`，前端 `JSON.parse` 失败。后端日志会看到 `PUT /v1/dashboard/... | 404`。修法：
 
 ```bash
-cd project/backend
-./scripts/backend.sh --stop
-FORCE_REBUILD=1 ./scripts/backend.sh
+./alive.sh dev                # 重编译后端 + 拉起 dev 栈
 ```
 
-`FORCE_REBUILD=1` 强制 `go build`，确保运行的二进制是当前源码。
+`alive.sh` 每次都会 `go build` 当前源码再 `hapiy up`，所以运行的二进制一定是最新代码。
 
-> *Frontend JSON errors usually mean the backend returned a non-JSON 404 body. Rebuild with `FORCE_REBUILD=1`.*
+> *Frontend JSON errors usually mean the backend returned a non-JSON 404 body. `./alive.sh dev` rebuilds the backend from source on every run.*
 
 ### 登录 `invalid credentials`
 
@@ -141,6 +143,7 @@ FORCE_REBUILD=1 ./scripts/backend.sh
 
 ```text
 hapiy/
+├── alive.sh                      # 一键：重编译后端 + 拉起前后端
 ├── project/
 │   ├── web/
 │   │   ├── src/                  # Vite + React + TS + shadcn/ui
@@ -149,9 +152,9 @@ hapiy/
 │   │   ├── components.json
 │   │   └── vite.config.ts
 │   └── backend/
-│       ├── cmd/hapiy/main.go
+│       ├── cmd/hapiy/main.go     # 子命令：serve / up / down / status
+│       ├── internal/daemon/      # 后端守护（up --supervise 重拉循环）
 │       ├── internal/             # handler / middleware / relay
-│       ├── scripts/backend.sh    # detached 后端启动
 │       ├── go.mod / go.sum
 │       └── hapiy.db              # SQLite 库
 └── AGENT_README.md               # 本文件
@@ -164,23 +167,26 @@ hapiy/
 ## ✨ 一键命令速查
 
 ```bash
-# 启动
-cd project/web     && ./scripts/dev.sh
-cd project/backend && ./scripts/backend.sh
+# 启动 / 重启（每次重编译后端）
+./alive.sh              # prod 栈
+./alive.sh dev          # dev 栈
 
-# 状态
+# 状态 / 停止
+./alive.sh --status
+./alive.sh --stop
+
+# 只用后端二进制
+cd project/backend
+go build -o hapiy ./cmd/hapiy && ./hapiy up
+./hapiy status
+./hapiy down
+
+# 只用前端
 cd project/web     && ./scripts/dev.sh --status
-cd project/backend && ./scripts/backend.sh --status
-
-# 停止
 cd project/web     && ./scripts/dev.sh --stop
-cd project/backend && ./scripts/backend.sh --stop
-
-# 重建后端
-cd project/backend && FORCE_REBUILD=1 ./scripts/backend.sh
 ```
 
-> *Quick command reference for the lifecycle and recovery operations.*
+> *Quick command reference. The backend daemon lives in the `hapiy` binary (`up` / `down` / `status`); `alive.sh` wraps rebuild + `up`.*
 
 ---
 
