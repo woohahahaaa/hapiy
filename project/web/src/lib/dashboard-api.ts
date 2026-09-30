@@ -3151,6 +3151,13 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       await request(`/agent-config-files/${encodeURIComponent(id)}/versions/archive`, { method: 'POST' }),
     )
   },
+  async getAgentConfigFileVersion(id: string, versionId: string): Promise<string> {
+    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`)
+    if (!isRecord(data) || typeof data.content !== 'string') {
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
+    }
+    return data.content
+  },
   async restoreAgentConfigFileVersion(id: string, versionId: string): Promise<AgentConfigVersionList> {
     return parseAgentConfigVersionList(
       await request(

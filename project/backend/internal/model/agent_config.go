@@ -1402,6 +1402,74 @@ func (m *ManagedAgentProvider) SetGroups(groups []ManagedAgentGroup) error {
 	return nil
 }
 
+// repairLostShapeFields backfills shape descriptors that an earlier rule
+// editor failed to round-trip: the native-V2 `variant_shape:"array"` on a
+// variants spec, and a non-empty `models_container`.
+//
+// Both are properties of the agent type (declared by the matching default
+// template), not user preferences. When the editor dropped variant_shape,
+// the agent wrote the legacy object-map variants
+// ({level:{options:{...}}}) while the top-level key was already the native-V2
+// `providers`; OpenCode V2 validates native providers strictly, so the
+// object-shaped variant makes it skip the whole provider as malformed and no
+// model is available. Only defaults the template actually declares are
+// filled, and only when the stored spec still points at the template's field
+// (same path/op) — a user's own path/op is never overwritten.
+//
+// Returns whether anything changed.
+func repairLostShapeFields(r *AgentTypeRule, tmpl AgentTemplateConfig) bool {
+	changed := false
+	if jp, err := r.GetJsonPaths(); err == nil {
+		if jp.ModelsContainer == "" && tmpl.JsonPaths.ModelsContainer != "" {
+			jp.ModelsContainer = tmpl.JsonPaths.ModelsContainer
+			if err := r.SetJsonPaths(jp); err == nil {
+				changed = true
+			}
+		}
+	}
+	mif, err := r.GetModelInfoFields()
+	if err != nil {
+		return changed
+	}
+	pairs := []struct {
+		stored *AgentModelInfoFieldSpec
+		tmpl   AgentModelInfoFieldSpec
+	}{
+		{&mif.MaxContext, tmpl.ModelInfoFields.MaxContext},
+		{&mif.MaxOutputToken, tmpl.ModelInfoFields.MaxOutputToken},
+		{&mif.InputTypes, tmpl.ModelInfoFields.InputTypes},
+		{&mif.ThinkingLevels, tmpl.ModelInfoFields.ThinkingLevels},
+		{&mif.ReasoningEffort, tmpl.ModelInfoFields.ReasoningEffort},
+	}
+	shapeChanged := false
+	for _, p := range pairs {
+		if v, ok := repairVariantShape(*p.stored, p.tmpl); ok {
+			*p.stored = v
+			shapeChanged = true
+		}
+	}
+	if shapeChanged {
+		if err := r.SetModelInfoFields(mif); err == nil {
+			changed = true
+		}
+	}
+	return changed
+}
+
+// repairVariantShape copies the template's variant shape onto a stored spec
+// when the template declares one and the stored spec lost it. It refuses to
+// touch a spec whose path/op differ from the template (a real user edit).
+func repairVariantShape(stored, tmpl AgentModelInfoFieldSpec) (AgentModelInfoFieldSpec, bool) {
+	if tmpl.VariantShape == "" || stored.VariantShape != "" {
+		return stored, false
+	}
+	if strings.TrimSpace(stored.Path) != strings.TrimSpace(tmpl.Path) || stored.Op != tmpl.Op {
+		return stored, false
+	}
+	stored.VariantShape = tmpl.VariantShape
+	return stored, true
+}
+
 // EnsureDefaultAgentTypes keeps the built-in agent rules in step with
 // their default templates. Called right after AutoMigrate on startup:
 //
@@ -1424,6 +1492,17 @@ func EnsureDefaultAgentTypes(db *gorm.DB) error {
 		err := db.Where("name = ?", builtin.Name).First(&rule).Error
 		switch {
 		case err == nil:
+			// 修复历史行丢失的形状字段（见 repairLostShapeFields）：即使
+			// 行被标记为 customized 也补，因为形状是 agent 类型的属性、
+			// 不是用户偏好，丢失后写出的 V2 配置会被 opencode 判为 malformed。
+			if repairLostShapeFields(&rule, tmpl) {
+				if err := db.Model(&rule).Updates(map[string]any{
+					"json_paths":        rule.JsonPaths,
+					"model_info_fields": rule.ModelInfoFields,
+				}).Error; err != nil {
+					return err
+				}
+			}
 			if rule.Customized || rule.MatchesTemplate(tmpl) {
 				continue
 			}

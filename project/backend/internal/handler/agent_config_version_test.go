@@ -30,7 +30,7 @@ func newAgentConfigVersionTestDB(t *testing.T) *gorm.DB {
 func seedAgentConfigFile(t *testing.T, db *gorm.DB, path, content string) model.AgentConfigFile {
 	t.Helper()
 	row := model.AgentConfigFile{
-		RecordName: "test-config",
+		RecordName: "test-" + filepath.Base(filepath.Dir(path)) + "-" + filepath.Base(path),
 		AgentType:  "opencode-v1",
 		Mode:       "local",
 		TargetOS:   "other",
@@ -185,8 +185,7 @@ func TestArchiveAgentConfigVersionHandler_snapshots_live_file(t *testing.T) {
 	}
 }
 
-func TestRestoreAgentConfigVersion_archives_current_then_writes(t *testing.T) {
-	db := newAgentConfigVersionTestDB(t)
+func TestRestoreAgentConfigVersion_archives_current_then_writes(t *testing.T) {	db := newAgentConfigVersionTestDB(t)
 	path := filepath.Join(t.TempDir(), "config.json")
 	target := "{\"v\":1}\n"
 	current := "{\"v\":2}\n"
@@ -218,5 +217,40 @@ func TestRestoreAgentConfigVersion_archives_current_then_writes(t *testing.T) {
 	}
 	if got := countAgentConfigVersions(t, db, row.ID); got != 2 {
 		t.Fatalf("restore must not add a snapshot for the restored state, got %d", got)
+	}
+}
+
+func TestGetAgentConfigVersion_returns_content(t *testing.T) {
+	db := newAgentConfigVersionTestDB(t)
+	row := seedAgentConfigFile(t, db, filepath.Join(t.TempDir(), "config.json"), "")
+	version, err := archiveAgentConfigVersion(db, row.ID, "{\"v\":1}\n")
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+
+	rec := versionRouter(t, http.MethodGet, "/api/:id/versions/:vid",
+		GetAgentConfigVersion(db), "/api/"+row.ID+"/versions/"+version.ID)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var envelope struct {
+		Data struct {
+			ID      string `json:"id"`
+			Content string `json:"content"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if envelope.Data.ID != version.ID || envelope.Data.Content != "{\"v\":1}\n" {
+		t.Fatalf("unexpected payload: %+v", envelope.Data)
+	}
+
+	// A version id from another config must not resolve.
+	other := seedAgentConfigFile(t, db, filepath.Join(t.TempDir(), "other.json"), "")
+	rec = versionRouter(t, http.MethodGet, "/api/:id/versions/:vid",
+		GetAgentConfigVersion(db), "/api/"+other.ID+"/versions/"+version.ID)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-config lookup: want 404, got %d", rec.Code)
 	}
 }

@@ -122,7 +122,12 @@
     "hint": "模型信息字段在各 agent 配置里的写入方式；「同步模型信息」与托管生成按此写回。每行一个字段：路径为写入位置，写法（op）可选 raw（原样，默认）/ bool（非空→true，空→false）/ first（取第一个元素）/ join（数组拼接，可填 sep，默认逗号）；操作可选 填（默认）/ 不填 / 删除字段；允许值为白名单（如 openclaw input 只允许 text/image/video/audio），逗号分隔。",
     "columns": {
       "modelInfo": "模型信息",
-      "op": "写法"
+      "op": "写法",
+      "variantShape": "形状"
+    },
+    "variantShape": {
+      "legacy": "对象（旧版）",
+      "array": "数组（V2）"
     }
   },
   "endpointRules": {

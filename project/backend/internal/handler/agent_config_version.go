@@ -155,6 +155,29 @@ func ListAgentConfigVersions(db *gorm.DB, key []byte) gin.HandlerFunc {
 	}
 }
 
+// GetAgentConfigVersion returns one archived snapshot's full content so the
+// history dialog can preview it and diff it against the live file.
+func GetAgentConfigVersion(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var version model.AgentConfigVersion
+		if err := db.Where("id = ? AND config_id = ?", c.Param("vid"), c.Param("id")).First(&version).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				respondError(c, http.StatusNotFound, "AGENT_CONFIG_VERSION_NOT_FOUND", "历史版本不存在")
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{
+			"id":         version.ID,
+			"created_at": version.CreatedAt,
+			"lines":      countAgentConfigLines(version.Content),
+			"size":       len(version.Content),
+			"content":    version.Content,
+		}})
+	}
+}
+
 // ArchiveAgentConfigVersion snapshots the live file on demand (used by the
 // "存档" button when the current state has not been captured yet).
 func ArchiveAgentConfigVersion(db *gorm.DB, key []byte) gin.HandlerFunc {

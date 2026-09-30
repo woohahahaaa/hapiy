@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlow, Background, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import { i18n } from '@/i18n/i18n'
 import { AppIcon } from '@/components/AppIcon'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -14,8 +15,8 @@ import { NodeExecutor } from '@/components/node/executor'
 import { dashboardApi, type Provider, type FlatTopology } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
-import { canvasFromFlat, canvasWireHandles, isProviderSlot, isRequestEntry, isSwitchNode, PROVIDER_SLOT_TYPE, ALL_SLOT_TYPES } from '@/lib/flat-topology'
-import { SLOT_LABELS } from '@/components/node/slot/items'
+import { canvasFromFlat, canvasWireHandles, ALL_SLOT_TYPES } from '@/lib/flat-topology'
+import { buildCanvasNodes } from '@/lib/canvas-nodes'
 import { useSlotRules } from '@/components/node/executor/use-slot-rules'
 import { cn } from '@/lib/utils'
 
@@ -156,112 +157,11 @@ export function TopologyVersionsModal({
 
   const previewNodes = useMemo<Node[]>(() => {
     if (!previewFlat) return []
-    const canvas = previewFlat
-    // 每个 slot/switch 连进来的线数，驱动左侧 handlebar 段数（与画布一致）。
-    const connectionCount = new Map<string, number>()
-    for (const w of canvas.canvasWires) {
-      const target = canvas.topLevel.find((n) => n.id === w.target)
-      if (target?.kind === 'slot' || target?.kind === 'switch') {
-        connectionCount.set(w.target, (connectionCount.get(w.target) ?? 0) + 1)
-      }
-    }
-    const providerOptions = providers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      models: p.models.map((m) => m.model),
-    }))
-    const nodes: Node[] = []
-    for (const node of canvas.topLevel) {
-      if (isRequestEntry(node)) {
-        nodes.push({
-          id: node.id,
-          type: 'requestEntry',
-          position: { x: 300, y: 20 },
-          data: {
-            label: node.name ?? t('node.entry'),
-            enabled: node.enabled,
-            weight: node.weight ?? 1,
-            models: [],
-            onChangeEnabled: () => {},
-            onChangeWeight: () => {},
-          },
-        })
-      } else if (isProviderSlot(node)) {
-        const children = canvas.providers
-          .filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
-          .map((p) => {
-            // ID 优先解析供应商；旧数据缺 providerId 时按名称兜底
-            const provider = p.providerId
-              ? providers.find((x) => x.id === p.providerId)
-              : p.name
-                ? providers.find((x) => x.name === p.name)
-                : undefined
-            return {
-              id: p.id,
-              providerId: p.providerId ?? '',
-              label: provider?.name ?? p.name ?? '',
-              baseURLCount: provider?.baseUrls.length ?? 0,
-              keyCount: provider?.keys.length ?? 0,
-              modelCount: provider?.models.length ?? 0,
-              endpointCount: provider?.endpoints.length ?? 0,
-              enabled: p.enabled,
-              providerStatus: provider?.status ?? false,
-              autoDisabled: provider?.autoDisabled ?? false,
-            }
-          })
-        nodes.push({
-          id: node.id,
-          type: 'slot',
-          position: { x: 560, y: 20 },
-          data: {
-            title: t('node.providerSlot'),
-            slotType: PROVIDER_SLOT_TYPE,
-            isProviderSlot: true,
-            connectionCount: connectionCount.get(node.id) ?? 1,
-            children,
-            onAddProvider: () => {},
-            onToggleProvider: () => {},
-            onReorderProvider: () => {},
-          },
-        })
-      } else if (isSwitchNode(node)) {
-        nodes.push({
-          id: node.id,
-          type: 'switch',
-          position: { x: 560, y: 20 },
-          data: {
-            title: t('node.switch'),
-            name: node.name,
-            connectionCount: connectionCount.get(node.id) ?? 1,
-            externallyDisabled: false,
-            config: node.config ?? { providers: [], conditions: [] },
-            providers: providerOptions,
-            onSaveConfig: () => {},
-          },
-        })
-      } else {
-        const slotType = node.slotType ?? ''
-        nodes.push({
-          id: node.id,
-          type: 'slot',
-          position: { x: 560, y: 20 },
-          data: {
-            title: SLOT_LABELS[slotType as keyof typeof SLOT_LABELS] ?? slotType ?? t('node.slotFallback'),
-            slotType,
-            isProviderSlot: false,
-            connectionCount: connectionCount.get(node.id) ?? 1,
-            entries: [...(node.entries ?? [])],
-            rules,
-            providers: providerOptions,
-            onChangeEntry: () => {},
-            onDeleteEntry: () => {},
-            onReorderEntries: () => {},
-          },
-        })
-      }
-    }
-    return nodes
-  }, [previewFlat, providers, rules, t])
+    // Same builder as the live canvas; the preview omits handlers so every node
+    // renders read-only with the exact shape (handles, labels) of the canvas.
+    return buildCanvasNodes(previewFlat, { providers, slotRules: rules })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewFlat, providers, rules, i18n.language])
 
   const previewEdges = useMemo(() => {
     if (!previewFlat) return []
