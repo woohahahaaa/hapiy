@@ -115,13 +115,13 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
       <div
         ref={cardRef}
         className={cn(
-          'relative w-fit rounded-xs border-2 border-border bg-card text-card-foreground',
+          'relative w-fit rounded-sm border-2 border-border bg-card text-card-foreground',
           externallyDisabled && 'pointer-events-none',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >
         {flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-xs" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
         ))}
 
         {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
@@ -129,7 +129,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
           <span className="min-w-0 truncate text-sm font-medium">{displayTitle}</span>
           <button
             type="button"
-            className="nodrag nopan flex items-center gap-1 rounded-xs border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="nodrag nopan flex items-center gap-1 rounded-sm border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
               setConfigOpen(true)
@@ -155,7 +155,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="yes"
-                className="!rounded-xs"
+                className="!rounded-sm"
                 style={pillStyle()}
               />
             </div>
@@ -165,7 +165,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="no"
-                className="!rounded-xs"
+                className="!rounded-sm"
                 style={pillStyle()}
               />
             </div>
