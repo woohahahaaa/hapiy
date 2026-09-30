@@ -9,11 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { NodeModel } from '@/components/node/model'
 import { NodeSlot } from '@/components/node/slot'
+import { NodeSwitch } from '@/components/node/switch'
 import { NodeExecutor } from '@/components/node/executor'
 import { dashboardApi, type Provider, type FlatTopology } from '@/lib/dashboard-api'
 import { topologyConfig } from '@/config/topology-config'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
-import { canvasFromFlat, isProviderSlot, isRequestEntry, PROVIDER_SLOT_TYPE, ALL_SLOT_TYPES } from '@/lib/flat-topology'
+import { canvasFromFlat, canvasWireHandles, isProviderSlot, isRequestEntry, isSwitchNode, PROVIDER_SLOT_TYPE, ALL_SLOT_TYPES } from '@/lib/flat-topology'
 import { SLOT_LABELS } from '@/components/node/slot/items'
 import { useSlotRules } from '@/components/node/executor/use-slot-rules'
 import { cn } from '@/lib/utils'
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils'
 const nodeTypes = {
   modelHub: NodeModel,
   slot: NodeSlot,
+  switch: NodeSwitch,
   requestEntry: NodeExecutor,
 }
 
@@ -155,6 +157,19 @@ export function TopologyVersionsModal({
   const previewNodes = useMemo<Node[]>(() => {
     if (!previewFlat) return []
     const canvas = previewFlat
+    // 每个 slot/switch 连进来的线数，驱动左侧 handlebar 段数（与画布一致）。
+    const connectionCount = new Map<string, number>()
+    for (const w of canvas.canvasWires) {
+      const target = canvas.topLevel.find((n) => n.id === w.target)
+      if (target?.kind === 'slot' || target?.kind === 'switch') {
+        connectionCount.set(w.target, (connectionCount.get(w.target) ?? 0) + 1)
+      }
+    }
+    const providerOptions = providers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      models: p.models.map((m) => m.model),
+    }))
     const nodes: Node[] = []
     for (const node of canvas.topLevel) {
       if (isRequestEntry(node)) {
@@ -202,10 +217,26 @@ export function TopologyVersionsModal({
             title: t('node.providerSlot'),
             slotType: PROVIDER_SLOT_TYPE,
             isProviderSlot: true,
+            connectionCount: connectionCount.get(node.id) ?? 1,
             children,
             onAddProvider: () => {},
             onToggleProvider: () => {},
             onReorderProvider: () => {},
+          },
+        })
+      } else if (isSwitchNode(node)) {
+        nodes.push({
+          id: node.id,
+          type: 'switch',
+          position: { x: 560, y: 20 },
+          data: {
+            title: t('node.switch'),
+            name: node.name,
+            connectionCount: connectionCount.get(node.id) ?? 1,
+            externallyDisabled: false,
+            config: node.config ?? { providers: [], conditions: [] },
+            providers: providerOptions,
+            onSaveConfig: () => {},
           },
         })
       } else {
@@ -218,8 +249,10 @@ export function TopologyVersionsModal({
             title: SLOT_LABELS[slotType as keyof typeof SLOT_LABELS] ?? slotType ?? t('node.slotFallback'),
             slotType,
             isProviderSlot: false,
+            connectionCount: connectionCount.get(node.id) ?? 1,
             entries: [...(node.entries ?? [])],
             rules,
+            providers: providerOptions,
             onChangeEntry: () => {},
             onDeleteEntry: () => {},
             onReorderEntries: () => {},
@@ -232,10 +265,15 @@ export function TopologyVersionsModal({
 
   const previewEdges = useMemo(() => {
     if (!previewFlat) return []
-    return previewFlat.canvasWires.map((w) => ({
+    // Handles must match the live canvas (switch yes/no, slot seg-i) or the
+    // branch / multi-incoming wires render as disconnected.
+    const handles = canvasWireHandles(previewFlat.canvasWires, previewFlat.topLevel)
+    return previewFlat.canvasWires.map((w, i) => ({
       id: `${w.source}→${w.target}`,
       source: w.source,
       target: w.target,
+      sourceHandle: handles[i].sourceHandle,
+      targetHandle: handles[i].targetHandle,
       animated: topologyConfig.edge.animated,
       style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: 1 },
     }))

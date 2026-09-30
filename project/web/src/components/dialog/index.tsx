@@ -163,7 +163,17 @@ function DialogScrollBody({
           {children}
         </div>
       )}
-      {footer && <DialogFooter scrollRef={scrollRef} bleed>{footer}</DialogFooter>}
+      {footer && (
+        <DialogFooter
+          scrollRef={scrollRef}
+          bleed
+          // 无内容区时没有滚动可检测，footer 会走兜底显示分隔线；
+          // 此时本就没有内容要分隔，显式隐藏以保持按钮悬浮的观感。
+          className={hasBody ? undefined : 'border-transparent'}
+        >
+          {footer}
+        </DialogFooter>
+      )}
     </>
   )
 }
