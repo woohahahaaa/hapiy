@@ -45,6 +45,22 @@ function DialogClose({
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
+/** Shared X button. Use standalone inside a flex row header so it centers on
+ *  the row; DialogContent already renders it top-right for plain headers. */
+function DialogCloseButton({
+  className,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  return (
+    <DialogPrimitive.Close data-slot="dialog-close" asChild>
+      <Button variant="ghost" size="icon-sm" className={className} {...props}>
+        <AppIcon name="close" size={16} />
+        <span className="sr-only">{i18n.t('common:action.close')}</span>
+      </Button>
+    </DialogPrimitive.Close>
+  )
+}
+
 function DialogOverlay({
   className,
   ...props
@@ -99,7 +115,7 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           sizeClass,
           bare && 'rounded-none border-0 p-0 !gap-0',
-          scrollFooter && 'flex max-h-[85vh] flex-col gap-0 overflow-hidden',
+          scrollFooter && 'flex max-h-[85vh] flex-col overflow-hidden',
           className,
         )}
         style={{ minHeight, ...style }}
@@ -107,16 +123,7 @@ function DialogContent({
       >
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="ghost"
-              className="absolute top-3 right-2"
-              size="icon-sm"
-            >
-              <AppIcon name="close" size={16} />
-              <span className="sr-only">{i18n.t('common:action.close')}</span>
-            </Button>
-          </DialogPrimitive.Close>
+          <DialogCloseButton className="absolute top-3 right-2" />
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
@@ -127,7 +134,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1 pb-4 text-left", className)}
+      className={cn("flex flex-col gap-1 text-left", className)}
       {...props}
     />
   )
@@ -147,11 +154,15 @@ function DialogScrollBody({
   footer?: React.ReactNode
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  // 无内容时不渲染滚动区：否则一个空的 p 区块会在标题和按钮之间撑出一段空白。
+  const hasBody = React.Children.toArray(children).length > 0
   return (
     <>
-      <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto p-4", className)}>
-        {children}
-      </div>
+      {hasBody && (
+        <div ref={scrollRef} className={cn("min-h-0 flex-1 overflow-y-auto", className)}>
+          {children}
+        </div>
+      )}
       {footer && <DialogFooter scrollRef={scrollRef} bleed>{footer}</DialogFooter>}
     </>
   )
@@ -246,6 +257,7 @@ function DialogDescription({
 export {
   Dialog,
   DialogClose,
+  DialogCloseButton,
   DialogContent,
   DialogDescription,
   DialogFooter,

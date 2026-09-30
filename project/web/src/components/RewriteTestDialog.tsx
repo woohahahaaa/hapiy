@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Dialog,
+  DialogCloseButton,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -128,11 +129,12 @@ export function RewriteTestDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
-      <DialogContent width={width} height={height} bare className="flex flex-col !gap-0 overflow-hidden">
+      <DialogContent width={width} height={height} bare showCloseButton={false} className="flex flex-col !gap-0 overflow-hidden">
         <DialogHeader className="flex shrink-0 flex-row items-center border-b border-border px-6 py-4">
           <DialogTitle className="text-base">
             {readonlyRule ? t('testDialog.titleSlot') : t('testDialog.title')}
           </DialogTitle>
+          <DialogCloseButton className="ml-auto -mr-2" />
         </DialogHeader>
 
         {showSelector && (<>

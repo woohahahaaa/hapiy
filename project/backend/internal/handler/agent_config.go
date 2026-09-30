@@ -52,8 +52,14 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		out := make([]map[string]any, 0, len(rules))
+		lang := i18n.Lang(c.Request)
 		for _, r := range rules {
-			marshaled, err := r.MarshalJSON()
+			localized, err := model.LocalizeRule(&r, lang)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			marshaled, err := localized.MarshalJSON()
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -81,7 +87,7 @@ func GetAgentTypeRuleTemplate() gin.HandlerFunc {
 			respondError(c, http.StatusNotFound, "AGENT_TYPE_TEMPLATE_NOT_FOUND", "该软件类型没有默认推荐模版")
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": tmpl})
+		c.JSON(http.StatusOK, gin.H{"data": model.LocalizeTemplate(tmpl, i18n.Lang(c.Request))})
 	}
 }
 
@@ -172,7 +178,7 @@ func UpdateAgentTypeRule(db *gorm.DB) gin.HandlerFunc {
 		// 默认模板的自建类型）标记为用户自定义，种子永不再覆盖。
 		rule.Customized = true
 		if tmpl, ok := model.TemplateForRuleName(rule.Name); ok {
-			rule.Customized = !rule.MatchesTemplate(tmpl)
+			rule.Customized = !rule.MatchesTemplate(model.LocalizeTemplate(tmpl, i18n.Lang(c.Request)))
 		}
 		if err := db.Save(&rule).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
