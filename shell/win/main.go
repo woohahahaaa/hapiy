@@ -31,12 +31,16 @@ func backendReady(port string) bool {
 	return resp.StatusCode < 500
 }
 
-func startBackend(dir string) bool {
+// runUp asks the backend binary to ensure a supervised backend is running
+// (`hapiy-server up`): idempotent, detaches a supervisor, and blocks until
+// healthy (60s cap). The bespoke spawn + retry loop moved into the binary so
+// this shell, the macOS shell and alive.sh share one implementation.
+func runUp(dir string) bool {
 	home, err := os.UserHomeDir()
 	if err == nil {
 		os.MkdirAll(filepath.Join(home, ".hapiy", "logs"), 0o755)
 	}
-	cmd := exec.Command(filepath.Join(dir, "hapiy-server.exe"))
+	cmd := exec.Command(filepath.Join(dir, "hapiy-server.exe"), "up")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"HAPIY_ENV=production",
@@ -50,7 +54,7 @@ func startBackend(dir string) bool {
 	)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	if err := cmd.Start(); err != nil {
+	if err := cmd.Run(); err != nil {
 		messageBox("Hapiy", "启动后端失败: "+err.Error())
 		return false
 	}
@@ -74,7 +78,7 @@ func main() {
 	dir = filepath.Dir(dir)
 
 	if !backendReady(defaultPort) {
-		if !startBackend(dir) {
+		if !runUp(dir) {
 			return
 		}
 		ok := false

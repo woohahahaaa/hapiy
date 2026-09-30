@@ -21,11 +21,14 @@ $RECYCLE.BIN/
 logs/
 .opencode/
 *.db
+!project/backend/hapiy.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite-journal
 encryption.key
+# The live database is encrypted with this key (SSH creds), so it ships too.
+!project/backend/encryption.key
 
 # Database backups
 .backup/

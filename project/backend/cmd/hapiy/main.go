@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/config"
+	"github.com/hapiy/hapiy/internal/daemon"
 	"github.com/hapiy/hapiy/internal/handler"
 	"github.com/hapiy/hapiy/internal/middleware"
 	"github.com/hapiy/hapiy/internal/model"
@@ -22,6 +24,35 @@ import (
 )
 
 func main() {
+	// Subcommands: "up" / "down" / "status" manage the backend lifecycle (see
+	// internal/daemon); "serve" (or no argument) runs the server itself, which
+	// is also what the daemon supervisor re-execs.
+	args := os.Args[1:]
+	cmd := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		cmd = args[0]
+		args = args[1:]
+	}
+	switch cmd {
+	case "up":
+		daemon.HandleUp(args)
+		return
+	case "down":
+		daemon.HandleDown(args)
+		return
+	case "status":
+		daemon.HandleStatus(args)
+		return
+	case "", "serve":
+		runServe()
+	default:
+		fmt.Fprintf(os.Stderr, "hapiy: unknown command %q\n", cmd)
+		fmt.Fprintln(os.Stderr, "usage: hapiy [serve|up [--supervise]|down|status]")
+		os.Exit(2)
+	}
+}
+
+func runServe() {
 	// Load configuration
 	cfg := config.Load()
 

@@ -20,7 +20,11 @@ func backendReady(_ port: String) -> Bool {
     return ok
 }
 
-func startBackend() {
+// runUp asks the backend binary to ensure a supervised backend is running
+// (`hapiy up`): idempotent, detaches a supervisor, and blocks until healthy
+// (60s cap). The bespoke Process spawn + retry loop moved into the binary so
+// the macOS shell, the Windows shell and alive.sh share one implementation.
+func runUp() {
     guard let res = Bundle.main.resourcePath else { return }
     let home = NSHomeDirectory()
     let stateDir = home + "/.hapiy"
@@ -28,6 +32,7 @@ func startBackend() {
 
     let proc = Process()
     proc.executableURL = URL(fileURLWithPath: res + "/hapiy-server")
+    proc.arguments = ["up"]
     proc.standardOutput = FileHandle.nullDevice
     proc.standardError = FileHandle.nullDevice
     var env = ProcessInfo.processInfo.environment
@@ -41,11 +46,12 @@ func startBackend() {
     env["HAPIY_ADMIN_PASSWORD"] = "admin"
     proc.environment = env
     try? proc.run()
+    proc.waitUntilExit()
 }
 
 func ensureBackend() -> String {
     if backendReady(defaultPort) { return defaultPort }
-    startBackend()
+    runUp()
     for _ in 0..<40 {
         Thread.sleep(forTimeInterval: 0.5)
         if backendReady(defaultPort) { return defaultPort }
