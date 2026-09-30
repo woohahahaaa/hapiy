@@ -886,16 +886,23 @@ export type AgentConfigFileInput = {
   readonly ssh_config: AgentSshConfig | null
 }
 
-export type AgentConfigVersionRef = {
-  readonly id: string
-  readonly createdAt: string
-}
-
 export type AgentConfigVersion = {
   readonly id: string
   readonly createdAt: string
-  readonly current: boolean
-  readonly restoredFrom: AgentConfigVersionRef | null
+  readonly lines: number
+  readonly size: number
+}
+
+export type AgentConfigCurrentVersion = {
+  readonly archived: boolean
+  readonly lines: number
+  readonly size: number
+  readonly updatedAt: string | null
+}
+
+export type AgentConfigVersionList = {
+  readonly current: AgentConfigCurrentVersion | null
+  readonly versions: readonly AgentConfigVersion[]
 }
 
 export type AgentConfigListParams = {
@@ -1689,7 +1696,11 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
     response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': i18n.language,
+        ...init?.headers,
+      },
     })
   } catch (error) {
     if (error instanceof Error) {
@@ -1715,7 +1726,11 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
     response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': i18n.language,
+        ...init?.headers,
+      },
     })
   } catch (error) {
     if (error instanceof Error) {
@@ -1746,7 +1761,11 @@ async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
     response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept-Language': i18n.language,
+        ...init?.headers,
+      },
     })
   } catch (error) {
     if (error instanceof Error) {
@@ -2310,17 +2329,6 @@ function parseAgentConfigFile(value: unknown): AgentConfigFile {
   }
 }
 
-function parseAgentConfigVersionRef(value: unknown): AgentConfigVersionRef | null {
-  if (value === null || value === undefined) return null
-  if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('version') }), null)
-  }
-  return {
-    id: readString(value.id, 'version.id'),
-    createdAt: readString(value.created_at, 'version.created_at'),
-  }
-}
-
 function parseAgentConfigVersion(value: unknown): AgentConfigVersion {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('version') }), null)
@@ -2328,16 +2336,32 @@ function parseAgentConfigVersion(value: unknown): AgentConfigVersion {
   return {
     id: readString(value.id, 'version.id'),
     createdAt: readString(value.created_at, 'version.created_at'),
-    current: readBoolean(value.current, 'version.current'),
-    restoredFrom: parseAgentConfigVersionRef(value.restored_from),
+    lines: readNumber(value.lines, 'version.lines', 0),
+    size: readNumber(value.size, 'version.size', 0),
   }
 }
 
-function parseAgentConfigVersionList(value: unknown): readonly AgentConfigVersion[] {
+function parseAgentConfigCurrentVersion(value: unknown): AgentConfigCurrentVersion {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('currentVersion') }), null)
+  }
+  const updatedAt = value.updated_at
+  return {
+    archived: readBoolean(value.archived, 'version.archived'),
+    lines: readNumber(value.lines, 'version.lines', 0),
+    size: readNumber(value.size, 'version.size', 0),
+    updatedAt: typeof updatedAt === 'string' ? updatedAt : null,
+  }
+}
+
+function parseAgentConfigVersionList(value: unknown): AgentConfigVersionList {
   if (!isRecord(value) || !Array.isArray(value.versions)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('versionList') }), null)
   }
-  return value.versions.map(parseAgentConfigVersion)
+  return {
+    current: value.current === null || value.current === undefined ? null : parseAgentConfigCurrentVersion(value.current),
+    versions: value.versions.map(parseAgentConfigVersion),
+  }
 }
 
 function parseAgentModelSummary(value: unknown): AgentModelSummary {
@@ -3119,16 +3143,21 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ content }),
     })
   },
-  async listAgentConfigFileVersions(id: string): Promise<readonly AgentConfigVersion[]> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/versions`)
-    return parseAgentConfigVersionList(data)
+  async listAgentConfigFileVersions(id: string): Promise<AgentConfigVersionList> {
+    return parseAgentConfigVersionList(await request(`/agent-config-files/${encodeURIComponent(id)}/versions`))
   },
-  async restoreAgentConfigFileVersion(id: string, versionId: string): Promise<readonly AgentConfigVersion[]> {
-    const data = await request(
-      `/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
-      { method: 'POST' },
+  async archiveAgentConfigFileVersion(id: string): Promise<AgentConfigVersionList> {
+    return parseAgentConfigVersionList(
+      await request(`/agent-config-files/${encodeURIComponent(id)}/versions/archive`, { method: 'POST' }),
     )
-    return parseAgentConfigVersionList(data)
+  },
+  async restoreAgentConfigFileVersion(id: string, versionId: string): Promise<AgentConfigVersionList> {
+    return parseAgentConfigVersionList(
+      await request(
+        `/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
+        { method: 'POST' },
+      ),
+    )
   },
   async updateAgentConfigFile(id: string, input: AgentConfigFileInput): Promise<AgentConfigFile> {
     return parseAgentConfigFile(await request(`/agent-config-files/${encodeURIComponent(id)}`, {

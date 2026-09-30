@@ -109,11 +109,11 @@ func (r AgentRecommendation) ShapeValue(v any) (any, bool) {
 // unified value, "delete" removes the field from the model config
 // entirely, and "skip" leaves any existing value untouched.
 type AgentModelInfoFieldSpec struct {
-	Path         string   `json:"path"`
-	Action       string   `json:"action,omitempty"` // "set" | "skip" | "delete"（缺省 "set"）
-	Op           string   `json:"op,omitempty"`
-	Sep          string   `json:"sep,omitempty"`
-	Values       []string `json:"values,omitempty"`
+	Path   string   `json:"path"`
+	Action string   `json:"action,omitempty"` // "set" | "skip" | "delete"（缺省 "set"）
+	Op     string   `json:"op,omitempty"`
+	Sep    string   `json:"sep,omitempty"`
+	Values []string `json:"values,omitempty"`
 	// VariantShape 仅对 op="variants" 生效："" = 旧版对象 map
 	// ({level:{options:{reasoningEffort}}})，openclaw/opencode-v1 用；
 	// "array" = opencode-v2 数组形状 ([{id,settings:{reasoningEffort}}])。
@@ -394,6 +394,115 @@ var ModelInfoFieldLabels = map[string]string{
 	ModelInfoFieldInputTypes:      "支持的输入类型",
 	ModelInfoFieldThinkingLevels:  "支持的思考程度",
 	ModelInfoFieldReasoningEffort: "思考档位",
+}
+
+// agentRecommendationDescriptionEn translates the canonical Chinese
+// description of a built-in recommendation field into English for the
+// follow-default view. A description absent from the map keeps its Chinese
+// text — TestLocalizationCoversTemplates guards against gaps.
+var agentRecommendationDescriptionEn = map[string]string{
+	"模型唯一标识（官方必填）": "Model ID (required)",
+	"模型唯一标识":       "Model ID",
+	"模型显示名称":       "Model display name",
+	"模型显示名":        "Model display name",
+	"模型在界面里的显示名":   "Model display name in the UI",
+	"认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）": "API key (the actual key value, not an env-var name; for local Ollama use the placeholder ollama)",
+	"认证密钥": "API key",
+	"认证密钥。规范位置在 auth.profiles 段（用环境变量引用如 ${ZAI_API_KEY}），不在 models.providers 下内联": "API key. The canonical location is the auth.profiles section (reference an env var such as ${ZAI_API_KEY}); do not inline it under models.providers",
+	"API 端点，必须是完整路径且一般以 /chat/completions 结尾":                                     "API endpoint; must be a full path and usually ends with /chat/completions",
+	"API 端点（不填则走适配器默认）":                                                           "API endpoint (leave empty to use the adapter default)",
+	"服务商 API 端点（按官方格式，注意不要多写不该有的 /v1）":                                            "Provider API endpoint (follow the official format; do not add an extra /v1)",
+	"最大输入 token 数": "Max input tokens",
+	"最大输出 token 数": "Max output tokens",
+	"上下文 token 上限": "Context window token limit",
+	"输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）": "Output token limit (required by the anthropic-messages protocol; Anthropic requires max_tokens on every request)",
+	"是否支持工具调用":                            "Whether tool calling is supported",
+	"模型是否支持工具调用":                          "Whether the model supports tool calling",
+	"是否支持图片输入（图片/视频等输入格式）":                "Whether image input is supported (image/video input formats)",
+	"模型是否支持文件/图片附件输入":                     "Whether the model supports file/image attachment input",
+	"模型是否支持文件/图片附件输入（输入格式）":               "Whether the model supports file/image attachment input (input formats)",
+	"是否支持推理模式":                            "Whether reasoning mode is supported",
+	"是否支持思考模式（官方 schema 校验，未配按 false 处理）": "Whether thinking mode is supported (validated by the official schema; defaults to false when unset)",
+	"模型是否支持思考模式（思考程度统一值→bool）":            "Whether the model supports thinking mode (unified thinking level → bool)",
+	"支持的输入类型（text/image/video/audio）":     "Supported input types (text/image/video/audio)",
+	"支持的输入类型（text/image/video/audio/pdf）": "Supported input types (text/image/video/audio/pdf)",
+	"接口协议类型（openai-completions / anthropic-messages / ollama / lmstudio ...），一般由 endpoint 关键词自动归类":      "API protocol type (openai-completions / anthropic-messages / ollama / lmstudio ...), usually auto-classified by endpoint keywords",
+	"接口协议（2026.02 起 Codex 强制 responses，不再支持 Chat Completions）":                                          "API protocol (since 2026.02 Codex enforces responses and no longer supports Chat Completions)",
+	"Messages API 使用 anthropic-messages 协议":                                                             "Messages API uses the anthropic-messages protocol",
+	"Chat Completions API 使用 openai-completions 协议":                                                     "Chat Completions API uses the openai-completions protocol",
+	"Ollama 本地推理使用 ollama 协议":                                                                           "Local Ollama inference uses the ollama protocol",
+	"LM Studio 本地推理使用 lmstudio 协议":                                                                      "Local LM Studio inference uses the lmstudio protocol",
+	"在 opencode 界面里的显示名（provider 名称）":                                                                   "Display name in the opencode UI (provider name)",
+	"AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类": "AI SDK adapter package name (@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic), usually auto-classified by endpoint keywords",
+	"运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类":       "Runtime adapter package (@opencode/ai/providers/openai-compatible / openai / anthropic), usually auto-classified by endpoint keywords",
+	"启用 promptCacheKey 缓存优化（官方默认 false，建议开启）":                                                           "Enable promptCacheKey caching (official default is false; recommended to turn on)",
+	"Responses API 使用 OpenAI SDK":                                                                       "Responses API uses the OpenAI SDK",
+	"Messages API 使用 Anthropic SDK":                                                                     "Messages API uses the Anthropic SDK",
+	"Chat Completions API 使用 OpenAI 兼容 SDK":                                                             "Chat Completions API uses the OpenAI-compatible SDK",
+	"顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）":                                             "Top-level default provider id, taken from the [model_providers] keys (official default: openai)",
+	"自定义 provider 的显示名":                                                                                 "Display name of the custom provider",
+	"该 provider 的 API base URL（如 https://api.example.com/v1）":                                           "The provider's API base URL (e.g. https://api.example.com/v1)",
+	"提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）":                                                             "Environment variable name holding the API key (using an env var is preferred over a plaintext key)",
+}
+
+// agentProtocolNameEn translates the Chinese protocol display names.
+var agentProtocolNameEn = map[string]string{
+	"OpenAI 兼容 Chat Completions": "OpenAI-compatible Chat Completions",
+}
+
+func localizeRecs(recs []AgentRecommendation) []AgentRecommendation {
+	if len(recs) == 0 {
+		return recs
+	}
+	out := make([]AgentRecommendation, len(recs))
+	copy(out, recs)
+	for i := range out {
+		if en, ok := agentRecommendationDescriptionEn[out[i].Description]; ok {
+			out[i].Description = en
+		}
+	}
+	return out
+}
+
+// LocalizeTemplate returns a copy of tmpl whose user-visible text
+// (recommendation descriptions and protocol names) is in lang. Only "en"
+// differs from the canonical Chinese; every other language is returned
+// unchanged.
+func LocalizeTemplate(tmpl AgentTemplateConfig, lang string) AgentTemplateConfig {
+	if lang != "en" {
+		return tmpl
+	}
+	out := tmpl
+	out.Recommendations = localizeRecs(tmpl.Recommendations)
+	out.Protocols = make([]AgentProtocol, len(tmpl.Protocols))
+	for i, p := range tmpl.Protocols {
+		if en, ok := agentProtocolNameEn[p.Name]; ok {
+			p.Name = en
+		}
+		p.Recommendations = localizeRecs(p.Recommendations)
+		out.Protocols[i] = p
+	}
+	return out
+}
+
+// LocalizeRule returns the rule as it should be served in lang. A rule the
+// user customized (Customized=true) is returned verbatim: its content never
+// follows language switching. A default-following rule is always re-rendered
+// from the localized default template — the stored blobs are ignored so the
+// view is correct regardless of the language it was last saved in.
+func LocalizeRule(r *AgentTypeRule, lang string) (AgentTypeRule, error) {
+	if r.Customized {
+		return *r, nil
+	}
+	tmpl, ok := TemplateForRuleName(r.Name)
+	if !ok {
+		return *r, nil
+	}
+	out := *r
+	if err := ApplyTemplateToRule(&out, LocalizeTemplate(tmpl, lang)); err != nil {
+		return *r, err
+	}
+	return out, nil
 }
 
 // AgentTypeRule — an agent software type (e.g. "opencode") that owns

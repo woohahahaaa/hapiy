@@ -333,7 +333,7 @@ export function AgentRulesPage() {
 }
 
 function AgentTypeRulesTab() {
-  const { t } = useTranslation('agentRules')
+  const { t, i18n } = useTranslation('agentRules')
   const [rules, setRules] = useState<readonly AgentTypeRule[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -357,7 +357,7 @@ function AgentTypeRulesTab() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t, i18n.language])
 
   useEffect(() => {
     void fetch()
