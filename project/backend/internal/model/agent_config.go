@@ -1133,7 +1133,7 @@ var opencodeProtocols = []AgentProtocol{
 // options.*）。其余字段与 opencode-v1 相同。
 var opencodeV2Recommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（provider 名称）", Required: true},
-	{Scope: "provider", Key: "package", Description: "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类", Required: true},
+	{Scope: "provider", Key: "package", Description: "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类", Recommended: "@opencode/ai/providers/openai-compatible", Required: true},
 	{Scope: "provider", Key: "settings.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "settings.apiKey", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "settings.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},

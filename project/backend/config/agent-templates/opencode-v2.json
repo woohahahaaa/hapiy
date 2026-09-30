@@ -49,7 +49,7 @@
       "scope": "provider",
       "key": "package",
       "description": "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类",
-      "recommended": null,
+      "recommended": "@opencode/ai/providers/openai-compatible",
       "required": true
     },
     {
