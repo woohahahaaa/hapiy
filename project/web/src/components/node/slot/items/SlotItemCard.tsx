@@ -65,7 +65,7 @@ export function SlotItemCard({
         onDrop()
       }}
       className={cn(
-        'relative rounded-md border-2 border-border bg-card text-card-foreground transition-opacity',
+        'relative rounded-xs border-2 border-border bg-card text-card-foreground transition-opacity',
         !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
         isDragOver && 'border-dashed border-[var(--node-accent,var(--color-primary))]',

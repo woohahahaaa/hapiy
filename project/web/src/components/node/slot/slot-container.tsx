@@ -39,7 +39,7 @@ export function SlotContainer({
         }
       }}
       className={cn(
-        'border-2 border-dashed border-border rounded-lg p-4 relative bg-background',
+        'border-2 border-dashed border-border rounded-xs p-4 relative bg-background',
         !active && 'opacity-60',
         externallyDisabled && 'pointer-events-none',
         className,

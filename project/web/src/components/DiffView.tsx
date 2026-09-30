@@ -23,7 +23,7 @@ export function DiffView({ before, after }: DiffViewProps) {
 
   if (!beforeText || !afterText) {
     return (
-      <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre">
+      <pre className="overflow-auto rounded-xs border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre">
         <JsonTokens text={beforeText || afterText} />
       </pre>
     )
@@ -31,7 +31,7 @@ export function DiffView({ before, after }: DiffViewProps) {
 
   const parts = diffLines(beforeText, afterText)
   return (
-    <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre relative">
+    <pre className="overflow-auto rounded-xs border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre relative">
       {parts.map((part, i) => {
         const lines = part.value.split('\n')
         const lastIndex = lines.length - 1

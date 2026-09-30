@@ -180,17 +180,17 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
         autoComplete="off"
       />
       {searchable && open && loading && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xs border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
           {t('autocomplete.loading')}
         </div>
       )}
       {searchable && open && !loading && !loadError && suggestions.length === 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xs border border-border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
           {t('autocomplete.noMatch')}
         </div>
       )}
       {searchable && open && loadError && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover px-3 py-2 shadow-md">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xs border border-border bg-popover px-3 py-2 shadow-md">
           <p role="alert" className="text-xs text-destructive">{t('errors.modelsDevLoad')}</p>
           <Button type="button" variant="outline" size="sm" className="mt-2" onClick={retry}>
             {t('common:action.retry')}
@@ -198,7 +198,7 @@ export function ModelAutocomplete({ value, onChange, searchable = false, onPickP
         </div>
       )}
       {searchable && open && !loadError && suggestions.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-md">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xs border border-border bg-popover shadow-md">
           <ScrollArea className="h-72">
             <ul className="py-1">
               <li>

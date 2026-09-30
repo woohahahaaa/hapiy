@@ -21,7 +21,7 @@ interface FlashLayerProps {
 
 // 节点类动画的统一播放层：发光边框 span + 一次性 keyframe。
 // 各节点组件在自身体内调用（内化），实现与命名只有这一份。
-export function FlashLayer({ layer, className = 'rounded-md' }: FlashLayerProps) {
+export function FlashLayer({ layer, className = 'rounded-xs' }: FlashLayerProps) {
   const kfName = nodeFlashKeyframeName(layer)
   return (
     <span

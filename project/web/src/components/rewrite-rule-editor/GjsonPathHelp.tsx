@@ -18,7 +18,7 @@ export function GjsonPathHelp() {
         <TooltipTrigger asChild>
           <button
             type="button"
-            className="nodrag nopan inline-flex items-center gap-1 rounded text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="nodrag nopan inline-flex items-center gap-1 rounded-xs text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             aria-label={t('gjson.triggerAria')}
           >
             <AppIcon name="help" size={14} />
@@ -35,7 +35,7 @@ export function GjsonPathHelp() {
             <ul className="space-y-1">
               {EXAMPLES.map((ex) => (
                 <li key={ex.path} className="flex items-start gap-2 text-[11px]">
-                  <code className="shrink-0 rounded bg-white/15 px-1 py-px font-mono">{ex.path}</code>
+                  <code className="shrink-0 rounded-xs bg-white/15 px-1 py-px font-mono">{ex.path}</code>
                   <span className="text-zinc-300">{t(ex.descKey)}</span>
                 </li>
               ))}

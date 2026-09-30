@@ -206,7 +206,7 @@ function MetricCard({ icon, label, value, sub, className }: MetricCardProps) {
             <p className="mt-1 text-2xl font-bold tabular-nums break-words">{value}</p>
             {sub && <p className="mt-0.5 text-xs text-muted-foreground truncate">{sub}</p>}
           </div>
-          <div className="ml-2 shrink-0 rounded-lg bg-muted p-2 text-muted-foreground [&>svg]:size-4">
+          <div className="ml-2 shrink-0 rounded-xs bg-muted p-2 text-muted-foreground [&>svg]:size-4">
             {icon}
           </div>
         </div>
@@ -393,7 +393,7 @@ function StatsSection() {
 
       {/* Error banner (with existing data) */}
       {error && stats && (
-        <div className="mt-4 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+        <div className="mt-4 rounded-xs border border-destructive/30 bg-destructive/5 px-3 py-2">
           <span className="text-xs text-destructive">{error}</span>
         </div>
       )}

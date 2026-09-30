@@ -189,7 +189,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
           <DialogCloseButton />
         </DialogHeader>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {error && <div className="m-3 shrink-0 rounded-md border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}
+          {error && <div className="m-3 shrink-0 rounded-xs border border-destructive/30 bg-destructive/5 p-3 font-mono text-xs text-destructive">{error}</div>}
           {loading ? <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">{t('codeEditor.loadingContent')}</div> : content !== null && <CodeSurface value={content} onChange={setContent} readOnly={mode === 'preview' || saving} />}
         </div>
 <DialogFooter className="shrink-0 border-t border-border px-6 py-3">

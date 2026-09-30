@@ -66,7 +66,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
           )}
           <div className="flex max-h-56 flex-col gap-1 overflow-y-auto">
             {colors.map((c, i) => (
-              <div key={`${i}-${c}`} className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted">
+              <div key={`${i}-${c}`} className="flex items-center gap-2 rounded-xs px-1.5 py-1 hover:bg-muted">
                 <span className="size-3.5 shrink-0 rounded-full border border-border" style={{ backgroundColor: c }} />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-card-foreground">{c}</span>
                 <button
@@ -88,7 +88,7 @@ export function FlowColorsPanel({ colors, onChange }: FlowColorsPanelProps) {
                 if (e.key === 'Enter') add()
               }}
               placeholder={t('colors.placeholder')}
-              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
+              className="min-w-0 flex-1 rounded-xs border border-input bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-ring"
             />
             <Button variant="outline" size="sm" onClick={add}>
               {t('colors.add')}

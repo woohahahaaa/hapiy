@@ -21,7 +21,7 @@ export function RemovableTag({
   return (
     <span
       className={cn(
-        'inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-muted/40 px-1.5 py-0.5',
+        'inline-flex max-w-full items-center gap-1 rounded-xs border border-border bg-muted/40 px-1.5 py-0.5',
         className,
       )}
     >

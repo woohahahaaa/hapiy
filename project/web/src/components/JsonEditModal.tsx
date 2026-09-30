@@ -92,7 +92,7 @@ export function JsonEditModal<T extends { readonly id: string }>({ data, onSave,
             </>
           }>
             {error && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+              <div className="rounded-xs border border-destructive/50 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
                 {error}
               </div>
             )}

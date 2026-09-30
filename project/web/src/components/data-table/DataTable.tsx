@@ -598,7 +598,7 @@ export function DataTable<T extends Record<string, unknown>>({
       {/* Table */}
       <div
         ref={tableRef}
-        className="relative w-full overflow-x-hidden rounded-md border border-border"
+        className="relative w-full overflow-x-hidden rounded-xs border border-border"
         onMouseMove={(e) => {
           if (!magicActive) return
           setCursorPos({ x: e.clientX, y: e.clientY })

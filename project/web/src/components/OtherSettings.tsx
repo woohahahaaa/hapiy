@@ -61,7 +61,7 @@ export function OtherSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-lg border border-border bg-card p-4">
+      <div className="rounded-xs border border-border bg-card p-4">
         <OtherToggle
           title={t('other.title')}
           description={t('other.toggleDescription')}
