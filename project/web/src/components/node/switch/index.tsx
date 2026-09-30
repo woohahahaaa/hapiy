@@ -115,13 +115,13 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
       <div
         ref={cardRef}
         className={cn(
-          'relative w-fit rounded-lg border-2 border-border bg-card text-card-foreground',
+          'relative w-fit rounded-xs border-2 border-border bg-card text-card-foreground',
           externallyDisabled && 'pointer-events-none',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >
         {flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-xs" />
         ))}
 
         {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
@@ -155,7 +155,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="yes"
-                className="!rounded-[4px]"
+                className="!rounded-xs"
                 style={pillStyle()}
               />
             </div>
@@ -165,7 +165,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="no"
-                className="!rounded-[4px]"
+                className="!rounded-xs"
                 style={pillStyle()}
               />
             </div>

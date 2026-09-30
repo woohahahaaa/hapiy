@@ -307,7 +307,7 @@ export function NodeSlot({ data }: NodeSlotProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!rounded-[4px] !border-border !bg-card"
+        className="!rounded-xs !border-border !bg-card"
         style={{
           width: topologyConfig.handles.slot.source.width,
           height: topologyConfig.handles.slot.source.height,

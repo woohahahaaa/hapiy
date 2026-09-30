@@ -181,7 +181,7 @@ export function MagicWandPicker(props: MagicWandPickerProps): JSX.Element {
           aria-hidden
           className={cn(
             "pointer-events-none fixed z-50",
-            "rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md",
+            "rounded-xs border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md",
             "whitespace-nowrap",
           )}
           style={{

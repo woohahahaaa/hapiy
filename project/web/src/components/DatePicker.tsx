@@ -225,7 +225,7 @@ export function DatePicker({
           aria-label={ariaLabel}
           disabled={disabled}
           className={cn(
-            'flex w-36 items-center gap-1.5 rounded-md border border-input bg-input/30 px-2.5 text-xs transition-colors outline-none',
+            'flex w-36 items-center gap-1.5 rounded-xs border border-input bg-input/30 px-2.5 text-xs transition-colors outline-none',
             size === 'sm' ? 'h-7' : 'h-8',
             'hover:bg-input/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
             'disabled:pointer-events-none disabled:opacity-50',
@@ -276,7 +276,7 @@ export function DatePicker({
                   disabled={isOutOfRange(cellDate)}
                   onClick={() => commit({ year }, true)}
                   className={cn(
-                    'flex size-10 items-center justify-center rounded-md text-xs transition-colors outline-none',
+                    'flex size-10 items-center justify-center rounded-xs text-xs transition-colors outline-none',
                     'hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50',
                     'disabled:pointer-events-none disabled:opacity-30',
                     isSelected &&
@@ -303,7 +303,7 @@ export function DatePicker({
                   disabled={isOutOfRange(cellDate)}
                   onClick={() => commit({ year: viewYear, month }, true)}
                   className={cn(
-                    'flex size-10 items-center justify-center rounded-md text-xs transition-colors outline-none',
+                    'flex size-10 items-center justify-center rounded-xs text-xs transition-colors outline-none',
                     'hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50',
                     'disabled:pointer-events-none disabled:opacity-30',
                     isSelected &&
@@ -348,7 +348,7 @@ export function DatePicker({
                       )
                     }
                     className={cn(
-                      'flex size-8 items-center justify-center rounded-md text-xs transition-colors outline-none',
+                      'flex size-8 items-center justify-center rounded-xs text-xs transition-colors outline-none',
                       'hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50',
                       'disabled:pointer-events-none disabled:opacity-30',
                       isSelected &&

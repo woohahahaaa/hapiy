@@ -100,7 +100,7 @@ export function TokenPage() {
       defaultWidth: { kind: 'pixel', value: 220 },
       render: (_, row) => (
         <div className="flex items-center gap-2">
-          <code className="rounded bg-muted px-2 py-1 text-xs font-mono">{row.key.slice(0, 12)}...</code>
+          <code className="rounded-xs bg-muted px-2 py-1 text-xs font-mono">{row.key.slice(0, 12)}...</code>
           <Button variant="ghost" size="icon" onClick={() => void copyToClipboard(row.key)}>
             <AppIcon name="content_copy" />
           </Button>
@@ -267,7 +267,7 @@ function TokenForm({ token, onSave, isSaving }: TokenFormProps) {
       {token ? (
         <Field>
           <FieldLabel>Token</FieldLabel>
-          <code className="block rounded bg-muted px-2 py-2 text-xs font-mono">{token.key}</code>
+          <code className="block rounded-xs bg-muted px-2 py-2 text-xs font-mono">{token.key}</code>
         </Field>
       ) : (
         <p className="text-sm text-muted-foreground">{t('form.serverGenerates')}</p>

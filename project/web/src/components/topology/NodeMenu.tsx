@@ -28,7 +28,7 @@ export function NodeMenu({ x, y, mode, providers, onSelect, onClose }: NodeMenuP
       />
       <div
         className={cn(
-          'fixed z-50 w-56 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg',
+          'fixed z-50 w-56 rounded-xs border border-border bg-popover p-2 text-popover-foreground shadow-lg',
         )}
         style={positionStyle}
         role="menu"
@@ -41,7 +41,7 @@ export function NodeMenu({ x, y, mode, providers, onSelect, onClose }: NodeMenuP
             key={p.id}
             type="button"
             onClick={() => onSelect(p.id)}
-            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center rounded-xs px-2 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground"
           >
             <span>{p.name}</span>
           </button>

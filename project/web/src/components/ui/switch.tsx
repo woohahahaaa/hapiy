@@ -31,8 +31,8 @@ function Switch({
   const w = basePx * 1.75
   const thumbSize = basePx - 4
   const translateVal = w - thumbSize - 2
-  const rootRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "var(--radius)"
-  const thumbRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "calc(var(--radius) - 2px)"
+  const rootRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "var(--radius-xs)"
+  const thumbRadius = rounded === "full" ? "9999px" : rounded === "square" ? "0px" : "var(--radius-xs)"
   const checked = props.checked ?? props.defaultChecked ?? false
 
   return (

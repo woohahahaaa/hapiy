@@ -595,7 +595,7 @@ export function ManagedProviderDialog({
                     </span>
                   </FieldLabel>
                   <div className="space-y-2">
-                    <div className="overflow-hidden rounded-md border border-border">
+                    <div className="overflow-hidden rounded-xs border border-border">
                       <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
                         <div className="w-[24%]">Endpoint</div>
                         <div className="w-[14%] border-l border-border pl-2">{t('managedDialog.suffixColumn')}</div>
@@ -766,7 +766,7 @@ function ProviderMultiSelect({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
+          className="flex min-h-8 w-full items-center gap-1.5 rounded-xs border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
         >
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             {checkedOptions.length === 0 ? (

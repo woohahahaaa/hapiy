@@ -727,7 +727,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         ].filter((row) => row.count > 0)
         if (rows.length === 0) return null
         return (
-          <div className="rounded-none border border-border bg-muted p-3">
+          <div className="rounded-xs border border-border bg-muted p-3">
             <div className="mb-2 text-xs font-medium">{t('columns.failover')}</div>
             <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
               {rows.map((row) => (
@@ -795,7 +795,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         <div className="flex flex-col gap-2">
           <div ref={listRef} className="relative flex flex-col gap-2">
             {priceError && (
-              <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
+              <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-xs border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
                 style={priceErrorPos ? { left: priceErrorPos.left + 4, top: priceErrorPos.top - 8 } : undefined}>
                 {t('price.errorPrefix')}
               </div>

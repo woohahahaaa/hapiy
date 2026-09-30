@@ -181,7 +181,7 @@ function NavLink({
             side="right"
             align="start"
             sideOffset={20}
-            className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+            className="z-[100] min-w-40 rounded-xs border border-border bg-popover p-1 shadow-md outline-none"
             onMouseEnter={(event) => event.stopPropagation()}
             onMouseLeave={(event) => event.stopPropagation()}
           >
@@ -206,7 +206,7 @@ function NavLink({
                   to={child.href}
                   onClick={closeFlyout}
                   className={cn(
-                    'flex h-8 items-center rounded-sm pl-3 pr-2 text-xs outline-none transition-colors',
+                    'flex h-8 items-center rounded-xs pl-3 pr-2 text-xs outline-none transition-colors',
                     childActive
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
                       : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
@@ -250,7 +250,7 @@ function NavLink({
               }
               onClick={onToggle}
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-xs text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
                 selfActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
               )}
             >
@@ -310,7 +310,7 @@ function NavLink({
         side="right"
         align="start"
         sideOffset={20}
-        className="z-[100] min-w-40 rounded-md border border-border bg-popover p-1 shadow-md outline-none"
+        className="z-[100] min-w-40 rounded-xs border border-border bg-popover p-1 shadow-md outline-none"
       >
         <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
           {t(item.labelKey)}

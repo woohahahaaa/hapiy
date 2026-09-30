@@ -161,7 +161,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex min-h-8 w-full items-center gap-1.5 rounded-md border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
+                    className="flex min-h-8 w-full items-center gap-1.5 rounded-xs border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
                   >
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                       {selectedOptions.length === 0 ? (
@@ -223,7 +223,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
           {/* ── 条件块：照搬请求改写编辑器的条件区（amber 徽标 + AND/OR + ConditionList） ── */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+              <span className="inline-flex items-center rounded-xs bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
                 {t('switch.conditions')}
               </span>
               <div className="flex items-center gap-1.5">
@@ -251,7 +251,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
               </div>
             </div>
             {conditions.length === 0 ? (
-              <div className="rounded border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
+              <div className="rounded-xs border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
                 {t('switch.noConditions')}
               </div>
             ) : (

@@ -85,7 +85,7 @@ export function RuleSelect({
                 e.stopPropagation()
                 onOpenRefresh?.()
               }}
-              className="rounded-sm border border-border/60 px-1.5 py-0.5 transition-colors hover:bg-muted/60"
+              className="rounded-xs border border-border/60 px-1.5 py-0.5 transition-colors hover:bg-muted/60"
             >
               {t('common:action.retry')}
             </button>

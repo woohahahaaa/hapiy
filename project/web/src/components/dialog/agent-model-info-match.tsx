@@ -508,7 +508,7 @@ export function AgentModelInfoMatchDialog({
                 </Button>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-md border border-border">
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-xs border border-border">
                 <table className="w-full table-fixed border-collapse">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
@@ -691,7 +691,7 @@ function Placeholder({
   return (
     <div
       className={
-        'rounded-md border border-dashed border-border p-3 text-xs ' +
+        'rounded-xs border border-dashed border-border p-3 text-xs ' +
         (tone === 'error' ? 'text-destructive' : 'text-muted-foreground')
       }
     >
