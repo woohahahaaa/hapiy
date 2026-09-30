@@ -53,10 +53,6 @@ func TestBuildOneModelCfgOpencodeV2Shape(t *testing.T) {
 		t.Fatalf("capabilities.input = %s, want models.dev types", in)
 	}
 
-	variants, ok := cfg["variants"].([]any)
-	if !ok || len(variants) != 2 {
-		t.Fatalf("variants = %#v, want a 2-entry array", cfg["variants"])
-	}
 	raw, _ := json.Marshal(cfg["variants"])
 	want := `[{"id":"low","settings":{"reasoningEffort":"low"}},{"id":"high","settings":{"reasoningEffort":"high"}}]`
 	if string(raw) != want {
