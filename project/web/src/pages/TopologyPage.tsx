@@ -54,6 +54,7 @@ import {
 } from '@/lib/topology-clipboard'
 import {
   canvasFromFlat,
+  canvasWireHandles,
   flatWiresFromCanvas,
   findDuplicateActivations,
   isEmergencyEntry,
@@ -189,6 +190,18 @@ function slotLabel(slotType: string): string {
   if (slotType in SLOT_LABELS) return i18n.t(`topology:slot.${slotType}`)
   return slotType || i18n.t('topology:node.slotFallback')
 }
+
+// Entry nodes are system nodes whose name is not user-editable, but older
+// topologies persisted the translated default at creation time (a topology
+// built in Chinese kept "请求入口" in the English UI). These are the known
+// default strings in both languages; rendering swaps any of them back to the
+// active language, other names are left untouched.
+const ENTRY_DEFAULT_NAMES = new Set<string>([
+  i18n.t('topology:node.entry', { lng: 'zh' }),
+  i18n.t('topology:node.entry', { lng: 'en' }),
+  i18n.t('topology:node.emergencyEntry', { lng: 'zh' }),
+  i18n.t('topology:node.emergencyEntry', { lng: 'en' }),
+])
 
 /**
  * Walk the chain that the prospective new wire (source→target) would join,
@@ -838,7 +851,9 @@ export function TopologyPage() {
           position: layoutSnapshot[node.id] ?? { x: 300, y: 20 },
           style: accentStyleOf(node.id),
           data: {
-            label: node.name ?? t('node.entry'),
+            label: !node.name || ENTRY_DEFAULT_NAMES.has(node.name)
+              ? (isEmergencyEntry(node) ? t('node.emergencyEntry') : t('node.entry'))
+              : node.name,
             enabled: node.enabled,
             weight: node.weight ?? 1,
             accentColor: isEmergencyEntry(node) ? 'var(--warning)' : undefined,
@@ -977,7 +992,7 @@ export function TopologyPage() {
     }
     return nodes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvas, layoutSnapshot, providerById, providerByName, slotRules, slotRuleStatus, refreshRuleType, modelNodes, externallyDisabledSet, disableStatuses])
+  }, [canvas, layoutSnapshot, providerById, providerByName, slotRules, slotRuleStatus, refreshRuleType, modelNodes, externallyDisabledSet, disableStatuses, i18n.language])
 
   const baseNodes = useMemo(() => [...modelNodes.nodes, ...topLevelNodes], [modelNodes, topLevelNodes])
 
@@ -1026,20 +1041,18 @@ export function TopologyPage() {
     // slot 入线按 canvasWires 顺序分配 targetHandle（= HandlesRail 匿名段的
     // `seg-i` id）：无 targetHandle 的 edge 会被 React Flow 锚到第一个 handle，
     // 导致多线入同一个 slot 时全部挤在第一个点上。
-    const slotIds = new Set(
-      canvas.topLevel.filter((n) => n.kind === 'slot' || n.kind === 'switch').map((n) => n.id),
-    )
-    const segIndexOf = new Map<string, number>()
-    for (const w of canvas.canvasWires) {
-      const segIndex = segIndexOf.get(w.target) ?? 0
-      segIndexOf.set(w.target, segIndex + 1)
+    // 与版本预览共用 canvasWireHandles，避免两处再次跑偏（条件开关分支、
+    // slot 多入线曾因此在预览里断线）。
+    const handles = canvasWireHandles(canvas.canvasWires, canvas.topLevel)
+    for (let i = 0; i < canvas.canvasWires.length; i++) {
+      const w = canvas.canvasWires[i]
       edges.push({
         id: wiringEdgeId(w.source, w.target),
         source: w.source,
         target: w.target,
         type: 'flowLight',
-        sourceHandle: w.branch,
-        targetHandle: slotIds.has(w.target) ? `seg-${segIndex}` : undefined,
+        sourceHandle: handles[i].sourceHandle,
+        targetHandle: handles[i].targetHandle,
         animated: topologyConfig.edge.animated,
         style: { strokeWidth: topologyConfig.edge.strokeWidth, opacity: WIRE_OPACITY_ACTIVE },
       })

@@ -942,7 +942,7 @@ type ProviderValueListProps = {
   readonly notesPlaceholder?: string
 }
 
-function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder = '备注' }: ProviderValueListProps) {
+function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder }: ProviderValueListProps) {
   const { t } = useTranslation('provider')
   const rows = values.length === 0 ? [''] : [...values]
   const withNotes = onNotesChange !== undefined
@@ -982,7 +982,7 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
                 <Input
                   value={notes?.[index] ?? ''}
                   onChange={(event) => applyNote(index, event.target.value)}
-                  placeholder={notesPlaceholder}
+                  placeholder={notesPlaceholder ?? t('form.note')}
                   aria-label={t('form.noteAria', { label })}
                   className="w-40 shrink-0"
                 />

@@ -89,12 +89,16 @@ export const SLOT_ORDER: readonly SlotType[] = [
   'logOutput',
 ] as const
 
+// Slot titles resolve lazily: a plain object (or the old eager i18n.t record)
+// would freeze on whichever language was active at module import, so node
+// titles stayed Chinese after switching to English. Getters re-read i18n on
+// every access so the titles follow the active language.
 export const SLOT_LABELS: Record<SlotType, string> = {
-  requestModify: i18n.t('node:slotLabels.requestModify'),
-  responseModify: i18n.t('node:slotLabels.responseModify'),
-  concurrency: i18n.t('node:slotLabels.concurrency'),
-  autoSwitch: i18n.t('node:slotLabels.autoSwitch'),
-  logOutput: i18n.t('node:slotLabels.logOutput'),
+  get requestModify() { return i18n.t('node:slotLabels.requestModify') },
+  get responseModify() { return i18n.t('node:slotLabels.responseModify') },
+  get concurrency() { return i18n.t('node:slotLabels.concurrency') },
+  get autoSwitch() { return i18n.t('node:slotLabels.autoSwitch') },
+  get logOutput() { return i18n.t('node:slotLabels.logOutput') },
 }
 
 import type { FlowLayerOverlay } from '@/modules/flow-hub'

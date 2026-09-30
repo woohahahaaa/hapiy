@@ -139,6 +139,37 @@ function isProviderSlotByNode(nodes: readonly FlatNode[], id: string): boolean {
   return nodes.some((n) => n.id === id && isProviderSlot(n))
 }
 
+export interface CanvasWireHandles {
+  readonly sourceHandle?: string
+  readonly targetHandle?: string
+}
+
+/**
+ * React Flow handles for the top-level canvas wires, matching the handles each
+ * node actually renders: a switch keeps its yes/no branch as the source handle,
+ * and slot/switch targets receive the `seg-i` target handle exposed by
+ * HandlesRail (assigned by incoming-wire order). Wiring without these anchors to
+ * the default handle, so branch wires and multiple wires into one slot render as
+ * disconnected. The live canvas and the version preview must share this.
+ */
+export function canvasWireHandles(
+  canvasWires: readonly FlatWire[],
+  topLevel: readonly FlatNode[],
+): CanvasWireHandles[] {
+  const railIds = new Set(
+    topLevel.filter((n) => n.kind === 'slot' || n.kind === 'switch').map((n) => n.id),
+  )
+  const segIndexOf = new Map<string, number>()
+  return canvasWires.map((w) => {
+    const segIndex = segIndexOf.get(w.target) ?? 0
+    segIndexOf.set(w.target, segIndex + 1)
+    return {
+      sourceHandle: w.branch,
+      targetHandle: railIds.has(w.target) ? `seg-${segIndex}` : undefined,
+    }
+  })
+}
+
 function isProviderNode(nodes: readonly FlatNode[], id: string): boolean {
   return nodes.some((n) => n.id === id && isProvider(n))
 }

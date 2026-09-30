@@ -19,10 +19,10 @@ export type ModeSpec = {
 }
 
 export const MODES: readonly ModeSpec[] = [
-  { value: 'move', label: i18n.t('rewrite:respMode.move'), needs: ['value'] },
-  { value: 'first_prepend', label: i18n.t('rewrite:respMode.firstPrepend'), needs: ['value'] },
-  { value: 'last_append', label: i18n.t('rewrite:respMode.lastAppend'), needs: ['value'] },
-  { value: 'delete', label: i18n.t('rewrite:respMode.delete'), needs: [] },
+  { value: 'move', get label() { return i18n.t('rewrite:respMode.move') }, needs: ['value'] },
+  { value: 'first_prepend', get label() { return i18n.t('rewrite:respMode.firstPrepend') }, needs: ['value'] },
+  { value: 'last_append', get label() { return i18n.t('rewrite:respMode.lastAppend') }, needs: ['value'] },
+  { value: 'delete', get label() { return i18n.t('rewrite:respMode.delete') }, needs: [] },
 ]
 
 export const MODE_BY_VALUE: ReadonlyMap<ModeName, ModeSpec> = new Map(
