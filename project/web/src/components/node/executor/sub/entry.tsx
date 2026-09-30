@@ -119,18 +119,18 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
       <div
         ref={rootRef}
         className={cn(
-          'relative rounded-xs border-2 bg-card text-card-foreground',
+          'relative rounded-sm border-2 bg-card text-card-foreground',
           data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
           !enabled && 'opacity-60',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >{flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-xs" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
         ))}
         <Handle
           type="source"
           position={Position.Right}
-          className="!rounded-xs !border-border !bg-card"
+          className="!rounded-sm !border-border !bg-card"
           style={{
             width: sourceHandle.width,
             height: sourceHandle.height,

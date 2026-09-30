@@ -39,14 +39,14 @@ export function NodeModel({ data, id }: NodeModelProps) {
   return (
     <div
       className={cn(
-        'relative rounded-xs border-2 border-border bg-card text-card-foreground',
+        'relative rounded-sm border-2 border-border bg-card text-card-foreground',
         allDisabled && 'opacity-60',
       )}
       style={{
         width: 'fit-content',
       }}
     >{flashLayers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-xs" />
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
       ))}      {!simplified && (
         <div
           className="border-b border-border"
@@ -66,7 +66,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
             )}
             style={{ padding: `${pad.paddingY}px ${pad.paddingX}px` }}
           >
-            <span className="size-3 rounded-xs" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
+            <span className="size-3 rounded-sm" style={{ backgroundColor: m.color ?? 'var(--primary)' }} />
             <button
               type="button"
               title={t('modelHub.copyTitle')}
@@ -83,7 +83,7 @@ export function NodeModel({ data, id }: NodeModelProps) {
               type="source"
               position={Position.Right}
               id={m.id}
-              className="!rounded-xs !border-border !bg-card"
+              className="!rounded-sm !border-border !bg-card"
               style={{
                 width: topologyConfig.handles.modelHub.source.width,
                 height: topologyConfig.handles.modelHub.source.height,

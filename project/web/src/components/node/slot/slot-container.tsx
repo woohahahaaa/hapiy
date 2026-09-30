@@ -39,7 +39,7 @@ export function SlotContainer({
         }
       }}
       className={cn(
-        'border-2 border-dashed border-border rounded-xs p-4 relative bg-background',
+        'border-2 border-dashed border-border rounded-sm p-4 relative bg-background',
         !active && 'opacity-60',
         externallyDisabled && 'pointer-events-none',
         className,
@@ -57,7 +57,7 @@ export function SlotContainer({
             <button
               type="button"
               onClick={onAddNode}
-              className="mt-2 flex w-full items-center justify-center rounded-xs border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
+              className="mt-2 flex w-full items-center justify-center rounded-sm border border-dashed border-border py-1 text-xs hover:bg-muted/50 transition-colors"
             >
               <AppIcon name="add" size={12} className="mr-1" />
               {t('slotContainer.add')}
