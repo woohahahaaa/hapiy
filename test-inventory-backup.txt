@@ -1,2 +1,0 @@
-test-hello.txt: 两行文本 "hello from subagent" 和 "second run"
-test-timestamp.sh: 一行脚本 echo "run at $(date)"

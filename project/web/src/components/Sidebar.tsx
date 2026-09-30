@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import * as HoverCard from '@radix-ui/react-hover-card'
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
+import { version as appVersion } from '../../package.json'
 import { ModeToggle } from '@/components/ModeToggle'
 import { LanguageToggle } from '@/components/LanguageToggle'
 import { AppIcon } from '@/components/AppIcon'
@@ -407,7 +408,7 @@ export function AppSidebar() {
           }
         >
           <span
-            title="hapiy v0.1.0"
+            title={`hapiy v${appVersion}`}
             className={
               showLabel
                 ? 'font-hapiy-logo text-2xl leading-none text-sidebar-foreground'

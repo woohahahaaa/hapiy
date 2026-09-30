@@ -62,7 +62,7 @@ export function NodeSlotRequestModify({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="nodrag nopan flex items-center gap-1 rounded-sm border border-border-subtle px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="nodrag nopan flex items-center gap-1 rounded-sm border border-border-subtle px-1.5 py-0.5 text-[13px] transition-colors hover:bg-muted/50 hover:text-foreground"
           onClick={(e) => { e.stopPropagation(); setTestOpen(true); }}
         >
           {t('common:action.test')}

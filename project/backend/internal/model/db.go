@@ -20,6 +20,27 @@ func InitDB(path string) (*gorm.DB, error) {
 	return db, nil
 }
 
+// ShrinkDatabase returns pages stranded by large deletes (such as clearing
+// log_captures) to the filesystem. SQLite never shrinks its file on its own,
+// and the incremental auto-vacuum path is unusable through the Go driver (it
+// releases a single page per PRAGMA call), so a full VACUUM is used. It is a
+// no-op when there is nothing to reclaim. VACUUM rewrites the whole file, so
+// once the database has been trimmed it is cheap; a large legacy file pays the
+// cost once.
+func ShrinkDatabase(db *gorm.DB) error {
+	var free int64
+	if err := db.Raw("PRAGMA freelist_count").Scan(&free).Error; err != nil {
+		return fmt.Errorf("read freelist_count: %w", err)
+	}
+	if free == 0 {
+		return nil
+	}
+	if err := db.Exec("VACUUM").Error; err != nil {
+		return fmt.Errorf("vacuum: %w", err)
+	}
+	return nil
+}
+
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&User{},

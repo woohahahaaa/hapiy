@@ -41,6 +41,13 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// Return space stranded by earlier deletes (e.g. cleared log captures) to
+	// the filesystem. Non-fatal: a locked or read-only database should still
+	// serve.
+	if err := model.ShrinkDatabase(db); err != nil {
+		log.Printf("Warning: failed to shrink database: %v", err)
+	}
+
 	// Auto-migrate models
 	if err := model.DeduplicateAgentConfigRecordNames(db); err != nil {
 		log.Fatalf("Failed to deduplicate agent config records: %v", err)

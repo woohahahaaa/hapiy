@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -331,6 +332,14 @@ func (w *LogCaptureWriter) DeleteFiles(params LogDeleteParams) (int, error) {
 	result := query.Delete(&model.LogCapture{})
 	if result.Error != nil {
 		return 0, result.Error
+	}
+	// Reclaim the pages the delete just freed so the file does not stay at its
+	// historical high-water mark. Best effort: a failure here must not hide
+	// the successful delete.
+	if result.RowsAffected > 0 {
+		if err := model.ShrinkDatabase(w.db); err != nil {
+			log.Printf("Warning: shrink database after log capture delete: %v", err)
+		}
 	}
 	return int(result.RowsAffected), nil
 }
