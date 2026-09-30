@@ -161,7 +161,7 @@ export function SwitchConfigDialog({ open, onOpenChange, name, config, providers
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="flex min-h-8 w-full items-center gap-1.5 rounded-sm border border-input bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
+                    className="flex min-h-8 w-full items-center gap-1.5 rounded-sm border border-border bg-transparent px-2.5 py-2 text-xs outline-none select-none transition-colors focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 hover:bg-muted/40"
                   >
                     <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                       {selectedOptions.length === 0 ? (

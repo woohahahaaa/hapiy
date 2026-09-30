@@ -41,7 +41,7 @@ export function RateRulesEditor({ rate, onChange, providerNames }: RateRulesEdit
       <p className="text-xs text-muted-foreground">{t('rateRules.hint')}</p>
 
       {rate.length === 0 && (
-        <p className="border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+        <p className="border border-dashed border-border-subtle px-3 py-4 text-center text-xs text-muted-foreground">
           {t('rateRules.empty')}
         </p>
       )}

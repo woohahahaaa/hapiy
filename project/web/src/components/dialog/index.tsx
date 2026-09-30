@@ -112,7 +112,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xs bg-popover p-4 text-xs/relaxed text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xs bg-popover p-4 text-xs/relaxed text-popover-foreground border border-border duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           sizeClass,
           bare && 'rounded-xs border-0 p-0 !gap-0',
           scrollFooter && 'flex max-h-[85vh] flex-col overflow-hidden',
@@ -212,8 +212,8 @@ function DialogFooter({
     }
   }, [scrollRef])
   const borderClass = scrollRef
-    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border')
-    : 'border-t border-border'
+    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border-subtle')
+    : 'border-t border-border-subtle'
   return (
     <div
       data-slot="dialog-footer"

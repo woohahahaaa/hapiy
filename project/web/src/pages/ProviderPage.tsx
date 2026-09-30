@@ -727,7 +727,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         ].filter((row) => row.count > 0)
         if (rows.length === 0) return null
         return (
-          <div className="rounded-xs border border-border bg-muted p-3">
+          <div className="rounded-xs border border-border-subtle bg-muted p-3">
             <div className="mb-2 text-xs font-medium">{t('columns.failover')}</div>
             <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
               {rows.map((row) => (

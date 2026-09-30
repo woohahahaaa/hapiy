@@ -1368,7 +1368,7 @@ function RecommendationTable({
           )}
         </tbody>
       </table>
-      <div className="flex items-center justify-end border-t border-border bg-muted/40 px-2 py-1">
+      <div className="flex items-center justify-end border-t border-border-subtle bg-muted/40 px-2 py-1">
         <Button type="button" variant="outline" size="xs" onClick={addRow}>
           {t('recTable.addRow')}
         </Button>
@@ -1397,7 +1397,7 @@ function ModelInfoFieldsEditor({
       <p className="text-xs text-muted-foreground">
         {t('modelInfoEditor.hint')}
       </p>
-      <div className="overflow-hidden rounded-xs border border-border">
+      <div className="overflow-hidden rounded-xs border border-border-subtle">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
@@ -1499,7 +1499,7 @@ function ModelInfoFieldsEditor({
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-3 rounded-xs border border-border p-3">
+    <fieldset className="flex flex-col gap-3 rounded-xs border border-border-subtle p-3">
       <legend className="px-1 text-xs font-medium text-muted-foreground">{label}</legend>
       {children}
     </fieldset>
@@ -1540,14 +1540,14 @@ function EndpointRulesEditor({
       </p>
 
       {value.length === 0 ? (
-        <div className="rounded-xs border border-dashed border-border p-3 text-xs text-muted-foreground">
+        <div className="rounded-xs border border-dashed border-border-subtle p-3 text-xs text-muted-foreground">
           {t('endpointRules.empty')}
         </div>
       ) : (
         <div className="space-y-3">
           {value.map((rule, ruleIndex) => {
             return (
-              <div key={ruleIndex} className="rounded-xs border border-border p-3">
+              <div key={ruleIndex} className="rounded-xs border border-border-subtle p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t('endpointRules.index', { n: ruleIndex + 1 })}

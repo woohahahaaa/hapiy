@@ -511,7 +511,7 @@ export function AgentModelInfoMatchDialog({
               <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-xs border border-border">
                 <table className="w-full table-fixed border-collapse">
                   <thead>
-                    <tr className="border-b border-border bg-muted/40 text-xs font-medium text-muted-foreground">
+                    <tr className="border-b border-border-subtle bg-muted/40 text-xs font-medium text-muted-foreground">
                       <th className="w-10 py-2 pr-1 pl-2 align-middle text-left">
                         <Checkbox
                           checked={allChecked ? true : providerCheckedCount + modelCheckedCount > 0 ? 'indeterminate' : false}
@@ -529,9 +529,9 @@ export function AgentModelInfoMatchDialog({
                           aria-label={t('match.checkAllAria')}
                         />
                       </th>
-                      <th className="w-[26%] border-l border-border px-3 py-2 text-left font-medium">{t('columns.name')}</th>
-                      <th className="w-[24%] border-l border-border px-3 py-2 text-left font-medium">{t('match.columns.syncFromModelsDev')}</th>
-                      <th className="border-l border-border px-3 py-2 text-left font-medium">{t('match.columns.fieldDiff')}</th>
+                      <th className="w-[26%] border-l border-border-subtle px-3 py-2 text-left font-medium">{t('columns.name')}</th>
+                      <th className="w-[24%] border-l border-border-subtle px-3 py-2 text-left font-medium">{t('match.columns.syncFromModelsDev')}</th>
+                      <th className="border-l border-border-subtle px-3 py-2 text-left font-medium">{t('match.columns.fieldDiff')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -543,7 +543,7 @@ export function AgentModelInfoMatchDialog({
                           {/* 供应商行：勾选即套整供应商默认推荐；参考在供应商级直接画两个杠表示不需要 */}
                           <tr
                             className={
-                              'border-b border-border text-xs hover:bg-muted/40 transition-colors ' +
+                              'border-b border-border-subtle text-xs hover:bg-muted/40 transition-colors ' +
                               (providerChecked ? 'bg-primary/5' : '')
                             }
                           >
@@ -556,12 +556,12 @@ export function AgentModelInfoMatchDialog({
                                 aria-label={t('match.checkProviderAria', { name: p.provider_id })}
                               />
                             </td>
-                            <td className="border-l border-border px-3 py-2 align-top">
+                            <td className="border-l border-border-subtle px-3 py-2 align-top">
                               <div className="truncate font-medium">{p.provider_id}</div>
                               <div className="text-[10px] text-muted-foreground">{t('match.providerLevel')}</div>
                             </td>
-                            <td className="border-l border-border px-3 py-2 align-top font-mono text-muted-foreground">--</td>
-                            <td className="border-l border-border px-3 py-2 align-top">
+                            <td className="border-l border-border-subtle px-3 py-2 align-top font-mono text-muted-foreground">--</td>
+                            <td className="border-l border-border-subtle px-3 py-2 align-top">
                               {pChanges.length === 0 ? (
                                 <span className="text-muted-foreground">—</span>
                               ) : (
@@ -596,7 +596,7 @@ export function AgentModelInfoMatchDialog({
                               <tr
                                 key={m.id}
                                 className={
-                                  'border-b border-border text-xs hover:bg-muted/40 transition-colors ' +
+                                  'border-b border-border-subtle text-xs hover:bg-muted/40 transition-colors ' +
                                   (checked ? 'bg-primary/5' : '')
                                 }
                               >
@@ -609,11 +609,11 @@ export function AgentModelInfoMatchDialog({
                                     aria-label={t('match.checkModelAria', { name: m.id })}
                                   />
                                 </td>
-                                <td className="border-l border-border px-3 py-2 align-top">
+                                <td className="border-l border-border-subtle px-3 py-2 align-top">
                                   <div className="break-all pl-2 font-mono">{m.id}</div>
                                   <div className="pl-2 text-[10px] text-muted-foreground">{t('match.modelLevel')}</div>
                                 </td>
-                                <td className="border-l border-border px-3 py-2 align-top">
+                                <td className="border-l border-border-subtle px-3 py-2 align-top">
                                   <Select
                                     value={supplier}
                                     onValueChange={(v) => {
@@ -640,7 +640,7 @@ export function AgentModelInfoMatchDialog({
                                     </SelectContent>
                                   </Select>
                                 </td>
-                                <td className="border-l border-border px-3 py-2 align-top">
+                                <td className="border-l border-border-subtle px-3 py-2 align-top">
                                   {!source ? (
                                     <div className="break-all text-[11px] text-muted-foreground">
                                       {supplier ? t('match.modelNotFound') : t('match.selectSupplierFirst')}
@@ -691,7 +691,7 @@ function Placeholder({
   return (
     <div
       className={
-        'rounded-xs border border-dashed border-border p-3 text-xs ' +
+        'rounded-xs border border-dashed border-border-subtle p-3 text-xs ' +
         (tone === 'error' ? 'text-destructive' : 'text-muted-foreground')
       }
     >

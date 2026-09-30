@@ -53,7 +53,7 @@ function renderHeaders(headers: Record<string, string> | null, showTitle = true,
   return (
     <div className="flex flex-col gap-1.5">
       {showTitle && <div className="font-mono text-xs font-medium text-foreground">{title}</div>}
-      <div className="overflow-auto rounded-xs border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+      <div className="overflow-auto rounded-xs border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
         {Object.entries(headers).map(([k, v]) => (
           <div key={k}>
             <span className="text-muted-foreground">{k}: </span>{v}
@@ -142,7 +142,7 @@ function Node({ label, defaultOpen = true, actions, children }: {
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
       </div>
       {open && children && (
-        <div className="ml-4 flex flex-col gap-1.5 border-l border-border pl-3">{children}</div>
+        <div className="ml-4 flex flex-col gap-1.5 border-l border-border-subtle pl-3">{children}</div>
       )}
     </div>
   )
@@ -273,7 +273,7 @@ function RawSseView({ text }: { readonly text: string }) {
 
   if (blocks === null) {
     return (
-      <pre className="overflow-auto rounded-xs border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+      <pre className="overflow-auto rounded-xs border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
         {text}
       </pre>
     )
@@ -315,11 +315,11 @@ function SseBlock({ index, block }: { readonly index: number; readonly block: st
   }, [data, eventType, isDone])
 
   return (
-    <div className="overflow-hidden rounded-xs border border-border bg-muted/20">
+    <div className="overflow-hidden rounded-xs border border-border-subtle bg-muted/20">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 border-b border-border/60 bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted/50"
+        className="flex w-full items-center gap-2 border-b border-border-subtle bg-muted/30 px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-muted/50"
       >
         <span className="shrink-0">{open ? '▾' : '▸'}</span>
         <span className="shrink-0">#{index + 1}</span>
@@ -453,7 +453,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
               {mergeError}
             </div>
           ) : merged === undefined ? (
-            <div className="rounded-xs border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="rounded-xs border border-border-subtle bg-muted/30 p-3 text-xs text-muted-foreground">
               {t('preview.merging')}
             </div>
           ) : (
@@ -503,8 +503,8 @@ function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
     [t('preview.timing.streamRewrite'), timing.streamRewriteMs],
   ]
   return (
-    <div className="rounded-xs border border-border bg-muted/30 p-3">
-      <div className="mb-2 h-px bg-border" />
+    <div className="rounded-xs border border-border-subtle bg-muted/30 p-3">
+      <div className="mb-2 h-px bg-border-subtle" />
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         {rows.map(([label, val]) => (
           <div key={label} className="flex items-baseline gap-2">
@@ -747,7 +747,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
               {row.type === 'system' && row.system_log ? (
                 <div className="flex flex-col gap-1.5">
                   <div className="font-mono text-xs font-medium text-foreground">{t('preview.systemLog')}</div>
-                  <pre className="overflow-auto rounded-xs border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+                  <pre className="overflow-auto rounded-xs border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
                     {Array.isArray(row.system_log) ? row.system_log.join('\n') : String(row.system_log)}
                   </pre>
                 </div>

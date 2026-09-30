@@ -30,7 +30,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </div>
       </div>
-      <Separator className="bg-border/80" />
+      <Separator className="bg-border-subtle" />
     </div>
   )
 }

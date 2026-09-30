@@ -146,7 +146,7 @@ export function AgentConfigVersionsDialog({ open, onOpenChange, record, onRestor
             <DialogTitle>{t('versions.title')}</DialogTitle>
           </DialogHeader>
           <div className="flex min-h-0 gap-4">
-            <div className="w-72 shrink-0 overflow-y-auto rounded-xs border border-border/60 bg-muted p-2">
+            <div className="w-72 shrink-0 overflow-y-auto rounded-xs border border-border-subtle bg-muted p-2">
               {list === null && !error && (
                 <div className="flex items-center gap-2 p-4 text-muted-foreground">
                   <AppIcon name="progress_activity" size={16} className="animate-spin" />
@@ -167,7 +167,7 @@ export function AgentConfigVersionsDialog({ open, onOpenChange, record, onRestor
                   }}
                   className={cn(
                     'mb-1 cursor-pointer rounded-xs border p-3 outline-none transition-colors hover:bg-muted/60 focus-visible:ring-1 focus-visible:ring-ring/50',
-                    preview?.kind === 'current' ? 'border-primary bg-primary/5' : 'border-border/50',
+                    preview?.kind === 'current' ? 'border-primary bg-primary/5' : 'border-border-subtle',
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -208,7 +208,7 @@ export function AgentConfigVersionsDialog({ open, onOpenChange, record, onRestor
                   }}
                   className={cn(
                     'mb-1 cursor-pointer rounded-xs border p-3 outline-none transition-colors hover:bg-muted/60 focus-visible:ring-1 focus-visible:ring-ring/50',
-                    preview?.kind === 'version' && preview.id === version.id ? 'border-primary bg-primary/5' : 'border-border/50',
+                    preview?.kind === 'version' && preview.id === version.id ? 'border-primary bg-primary/5' : 'border-border-subtle',
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -233,7 +233,7 @@ export function AgentConfigVersionsDialog({ open, onOpenChange, record, onRestor
               )}
             </div>
 
-            <div className="relative min-w-0 flex-1 overflow-hidden rounded-xs border border-border/60">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-xs border border-border-subtle">
               {preview?.kind === 'version' && (
                 <Button
                   variant={compare ? 'default' : 'outline'}

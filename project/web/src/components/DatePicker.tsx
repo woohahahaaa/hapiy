@@ -225,7 +225,7 @@ export function DatePicker({
           aria-label={ariaLabel}
           disabled={disabled}
           className={cn(
-            'flex w-36 items-center gap-1.5 rounded-xs border border-input bg-input/30 px-2.5 text-xs transition-colors outline-none',
+            'flex w-36 items-center gap-1.5 rounded-xs border border-border bg-input/30 px-2.5 text-xs transition-colors outline-none',
             size === 'sm' ? 'h-7' : 'h-8',
             'hover:bg-input/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
             'disabled:pointer-events-none disabled:opacity-50',
@@ -361,7 +361,7 @@ export function DatePicker({
                 )
               })}
             </div>
-            {hasTime && <div className="mt-2 border-t border-border" />}
+            {hasTime && <div className="mt-2 border-t border-border-subtle" />}
           </>
         )}
 
@@ -389,7 +389,7 @@ export function DatePicker({
           </div>
         )}
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border-subtle pt-2">
           {clearable ? (
             <Button
               type="button"

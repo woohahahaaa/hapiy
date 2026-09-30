@@ -130,7 +130,7 @@ export function RewriteTestDialog({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}>
       <DialogContent width={width} height={height} bare showCloseButton={false} className="flex flex-col !gap-0 overflow-hidden">
-        <DialogHeader className="flex shrink-0 flex-row items-center border-b border-border px-6 py-4">
+        <DialogHeader className="flex shrink-0 flex-row items-center border-b border-border-subtle px-6 py-4">
           <DialogTitle className="text-base">
             {readonlyRule ? t('testDialog.titleSlot') : t('testDialog.title')}
           </DialogTitle>
@@ -167,7 +167,7 @@ export function RewriteTestDialog({
 
         {readonlyRule && rules.length > 0 && (
           <div className="shrink-0 px-6 pb-2">
-            <div className="rounded-xs border border-border bg-muted/30 p-2">
+            <div className="rounded-xs border border-border-subtle bg-muted/30 p-2">
               <span className="text-xs font-medium text-muted-foreground">{t('testDialog.executionOrder')}</span>
               <div className="mt-1 flex flex-wrap gap-2">
                 {rules.map((rule, i) => (
@@ -192,7 +192,7 @@ export function RewriteTestDialog({
           <div className="flex flex-1 flex-col overflow-hidden">
             <span className="mb-1 text-xs font-medium text-muted-foreground">{t('testDialog.result')}</span>
             {progress ? (
-              <div className="flex flex-1 items-center justify-center rounded-xs border border-border text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center rounded-xs border border-border-subtle text-xs text-muted-foreground">
                 {progress}
               </div>
             ) : error ? (
@@ -202,14 +202,14 @@ export function RewriteTestDialog({
             ) : result ? (
               <JsonHighlight value={result.modified} className="flex-1 whitespace-pre-wrap break-all" />
             ) : (
-              <div className="flex flex-1 items-center justify-center rounded-xs border border-dashed border-border text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center rounded-xs border border-dashed border-border-subtle text-xs text-muted-foreground">
                 {t('testDialog.emptyResult')}
               </div>
             )}
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-3">
+        <DialogFooter className="shrink-0 border-t border-border-subtle px-6 py-3">
           <Button disabled={loading || (readonlyRule ? rules.length === 0 : !selectedRuleId)} onClick={handleRunTest}>
             {loading ? t('testDialog.running') : t('testDialog.runTest')}
           </Button>

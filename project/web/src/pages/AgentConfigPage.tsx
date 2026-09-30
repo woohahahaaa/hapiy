@@ -112,7 +112,7 @@ function SshTestResultPanel({
 }) {
   const { t } = useTranslation('agentConfig')
   return (
-    <div className="rounded-xs border border-border bg-muted/30 p-3">
+    <div className="rounded-xs border border-border-subtle bg-muted/30 p-3">
       <div className="flex flex-col gap-1.5">
         <SshProbeRow label={t('sshProbe.connect')} result={result.connect} />
         <SshProbeRow label={t('sshProbe.readPath')} result={result.read} />
@@ -808,7 +808,7 @@ function AgentConfigFormDialog({
         ))}
         {canSyncPreset && (
           <>
-            <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border" />
+            <span aria-hidden className="mx-2 h-8 w-px shrink-0 bg-border-subtle" />
             <Button
               type="button"
               variant="outline"

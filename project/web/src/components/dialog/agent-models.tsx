@@ -825,7 +825,7 @@ for (const p of summary?.providers ?? []) {
         showCloseButton={false}
         className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0 !w-[1280px] !max-w-[calc(100vw-2rem)]"
       >
-        <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
+        <DialogHeader className="flex-row items-center justify-between border-b border-border-subtle px-4 py-3">
           <div className="flex flex-col gap-0.5">
             <DialogTitle>{t('modelsDialog.title', { name: record?.record_name ?? '' })}</DialogTitle>
             <p className="text-xs text-muted-foreground">
@@ -840,7 +840,7 @@ for (const p of summary?.providers ?? []) {
         </DialogHeader>
 
         {/* 顶部分栏：非托管供应商 / 托管供应商 */}
-        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-muted/20 px-4">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-muted/20 px-4">
           {(['normal', 'managed'] as const).map((key) => (
             <button
               key={key}
@@ -873,7 +873,7 @@ for (const p of summary?.providers ?? []) {
             <>
               <ColumnHeader>{t('columns.providers')}</ColumnHeader>
               {/* 非托管面板工具行：与托管面板样式一致 */}
-              <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center border-b border-border-subtle bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -951,7 +951,7 @@ for (const p of summary?.providers ?? []) {
               <ColumnHeader>
                 <span className="font-medium text-primary">{t('tabs.managed')}</span>
               </ColumnHeader>
-              <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
+              <div className="flex items-center border-b border-border-subtle bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -1195,7 +1195,7 @@ for (const p of summary?.providers ?? []) {
           </div>
         </div>
 
-        <DialogFooter className="border-t border-border px-4 py-3">
+        <DialogFooter className="border-t border-border-subtle px-4 py-3">
           {activePanel === 'normal' ? (
             <>
               <div className="flex flex-1 items-center">
@@ -2296,7 +2296,7 @@ function JsonEditor({
         <div
           ref={gutterRef}
           aria-hidden
-          className="absolute top-0 left-0 z-20 h-full w-8 overflow-hidden border-r border-border bg-muted/30 font-mono text-[10px] leading-[1.5] select-none"
+          className="absolute top-0 left-0 z-20 h-full w-8 overflow-hidden border-r border-border-subtle bg-muted/30 font-mono text-[10px] leading-[1.5] select-none"
         >
           {Array.from({ length: lines.length }, (_, i) => (
             <div
@@ -2444,7 +2444,7 @@ function DiffView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {unsetModels && unsetModels.length > 0 && (
-        <div className="max-h-[30%] overflow-auto border-b border-border bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+        <div className="max-h-[30%] overflow-auto border-b border-border-subtle bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
           <div className="mb-1 font-medium text-foreground/70">{t('columns.syncFromModelsDev')}</div>
           <ul className="space-y-0.5">
             {unsetModels.slice(0, 20).map((u, i) => (
@@ -2460,7 +2460,7 @@ function DiffView({
           </ul>
         </div>
       )}
-      <div className="flex items-center border-b border-border bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
+      <div className="flex items-center border-b border-border-subtle bg-muted/40 px-2 py-1 text-[10px] text-muted-foreground">
         <span>{t('diffView.beforeAfter', { count: rows.filter((r) => r.kind !== 'same').length })}</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
@@ -2608,7 +2608,7 @@ function ColumnHeader({
   action?: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-border bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
+    <div className="flex items-center justify-between border-b border-border-subtle bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground">
       <span>{children}</span>
       {action ? <span className="flex items-center gap-1">{action}</span> : null}
     </div>

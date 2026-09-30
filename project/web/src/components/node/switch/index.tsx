@@ -125,11 +125,11 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
         ))}
 
         {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
-        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
           <span className="min-w-0 truncate text-sm font-medium">{displayTitle}</span>
           <button
             type="button"
-            className="nodrag nopan flex items-center gap-1 rounded-sm border border-border/50 px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="nodrag nopan flex items-center gap-1 rounded-sm border border-border-subtle px-2 py-0.5 text-[10px] transition-colors hover:bg-muted/50 hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
               setConfigOpen(true)
@@ -148,7 +148,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
           </div>
 
           {/* 右列：单独划分出的「是/否」输出（各带一条 pill handlebar） */}
-          <div className="flex shrink-0 flex-col border-l border-border">
+          <div className="flex shrink-0 flex-col border-l border-border-subtle">
             <div className="relative flex flex-1 items-center justify-end gap-1.5 px-2 py-1.5">
               <span className="text-[10px]">{t('switch.yes')}</span>
               <Handle
@@ -159,7 +159,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 style={pillStyle()}
               />
             </div>
-            <div className="relative flex flex-1 items-center justify-end gap-1.5 border-t border-border px-2 py-1.5">
+            <div className="relative flex flex-1 items-center justify-end gap-1.5 border-t border-border-subtle px-2 py-1.5">
               <span className="text-[10px]">{t('switch.no')}</span>
               <Handle
                 type="source"

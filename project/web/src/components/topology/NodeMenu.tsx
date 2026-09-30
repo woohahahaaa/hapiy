@@ -33,7 +33,7 @@ export function NodeMenu({ x, y, mode, providers, onSelect, onClose }: NodeMenuP
         style={positionStyle}
         role="menu"
       >
-        <div className="border-b border-border px-2 pb-2 mb-1 text-xs font-medium">
+        <div className="border-b border-border-subtle px-2 pb-2 mb-1 text-xs font-medium">
           从 provider 创建工作流
         </div>
         {providers.map((p) => (
