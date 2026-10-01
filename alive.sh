@@ -94,7 +94,6 @@ do_stop() {
 case "${1:-}" in
   dev)             do_up_dev ;;
   prod|"")         do_up_prod ;;
-  --foreground)    do_up_prod ;;  # kept for back-compat; the daemon detaches itself
   --status|status) do_status ;;
   --stop|stop)     do_stop ;;
   *)
