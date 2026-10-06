@@ -8,8 +8,10 @@ import { version as appVersion } from '../../package.json'
 import { ModeToggle } from '@/components/ModeToggle'
 import { LanguageToggle } from '@/components/LanguageToggle'
 import { AppIcon } from '@/components/AppIcon'
+import { VersionDialog } from '@/components/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/OtherSettings'
 import { dashboardApi } from '@/lib/dashboard-api'
+import { useUpdateStatus } from '@/lib/update'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -99,6 +101,7 @@ const navigation: NavItem[] = [
       { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
       { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
       { id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' },
+      { id: 'backup', labelKey: 'nav.backup', href: '/settings/backup' },
     ],
   },
   {
@@ -371,6 +374,9 @@ export function AppSidebar() {
   const { t } = useTranslation('common')
   const [openSections, setOpenSections] = useState(readOpenSections)
   const [agentEnabled, setAgentEnabled] = useState(false)
+  const [versionOpen, setVersionOpen] = useState(false)
+  const { status: updateStatus } = useUpdateStatus()
+  const updateAvailable = Boolean(updateStatus?.available)
   const collapsed = state === 'collapsed'
   const showLabel = !collapsed
 
@@ -407,16 +413,24 @@ export function AppSidebar() {
               : 'flex flex-col items-start justify-center gap-1 py-1'
           }
         >
-          <span
-            title={`hapiy v${appVersion}`}
+          <button
+            type="button"
+            onClick={() => setVersionOpen(true)}
+            title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
             className={
               showLabel
-                ? 'font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
+                ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 : 'sr-only font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
             }
           >
             hapiy
-          </span>
+            {showLabel && updateAvailable && (
+              <span
+                aria-hidden
+                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-sidebar"
+              />
+            )}
+          </button>
           <div
             className={
               showLabel
@@ -463,6 +477,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarRail />
+      <VersionDialog open={versionOpen} onOpenChange={setVersionOpen} />
     </SidebarRoot>
   )
 }

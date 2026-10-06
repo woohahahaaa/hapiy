@@ -18,7 +18,9 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -26,6 +28,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hapiy/hapiy/internal/version"
 )
 
 const (
@@ -51,12 +55,33 @@ func stateDir() string {
 func logPath() string           { return filepath.Join(stateDir(), "log", "hapiy.log") }
 func supervisorPIDPath() string { return filepath.Join(stateDir(), "up.pid") }
 func servePIDPath() string      { return filepath.Join(stateDir(), "serve.pid") }
+func portPath() string          { return filepath.Join(stateDir(), "port") }
 
+// port resolves the backend port in priority order: HAPIY_PORT env, then the
+// handshake file recorded by the running server (so `status`/`up`/`down` and
+// the autostart service all agree without repeating the env), then 8080.
 func port() string {
 	if p := os.Getenv("HAPIY_PORT"); p != "" {
 		return p
 	}
+	if b, err := os.ReadFile(portPath()); err == nil {
+		if p := strings.TrimSpace(string(b)); p != "" {
+			return p
+		}
+	}
 	return "8080"
+}
+
+// RecordPort persists the port the server actually bound so every later CLI
+// call and the service agree on it. Called by `serve` at startup.
+func RecordPort(p string) {
+	if p == "" {
+		return
+	}
+	if err := os.MkdirAll(stateDir(), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(portPath(), []byte(p+"\n"), 0o644)
 }
 
 func healthURL() string { return "http://127.0.0.1:" + port() + "/health" }
@@ -64,13 +89,40 @@ func healthURL() string { return "http://127.0.0.1:" + port() + "/health" }
 // backendHealthy probes /health. Status < 500 means the serve process is
 // alive, even if an endpoint reports a business error.
 func backendHealthy() bool {
+	_, ok := probeBackend()
+	return ok
+}
+
+// probeBackend GETs /health and returns the version the running backend
+// reports alongside the health verdict. A missing version (old build) comes
+// back empty, which needsRestart treats as a mismatch.
+func probeBackend() (string, bool) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(healthURL())
 	if err != nil {
-		return false
+		return "", false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode < 500
+	return readHealthVersion(resp.Body), resp.StatusCode < 500
+}
+
+// readHealthVersion pulls "version" out of the /health body. A malformed or
+// empty body yields "", which callers treat as an old/unknown build.
+func readHealthVersion(r io.Reader) string {
+	var body struct {
+		Version string `json:"version"`
+	}
+	if err := json.NewDecoder(r).Decode(&body); err != nil {
+		return ""
+	}
+	return body.Version
+}
+
+// needsRestart reports whether the running backend's version differs from the
+// binary this process is. Empty running version means the response had no
+// version field — an old build, exactly what this command is meant to fix.
+func needsRestart(running, want string) bool {
+	return running != want
 }
 
 // HandleUp is the "hapiy up" entry. --supervise selects the internal daemon
@@ -91,21 +143,38 @@ func HandleUp(args []string) {
 	fatal("up", err)
 }
 
-// up makes sure a healthy backend is running: happy path returns immediately,
-// otherwise it (re)starts the detached supervisor and waits for health.
+// up makes sure a healthy backend of the right version is running: happy path
+// returns immediately; a version mismatch restarts the stale backend; otherwise
+// it (re)starts the detached supervisor and waits for health.
 func up() error {
-	if backendHealthy() {
-		fmt.Printf("hapiy up: backend already running on 127.0.0.1:%s\n", port())
-		return nil
+	if running, ok := probeBackend(); ok {
+		if !needsRestart(running, version.Version) {
+			fmt.Printf("hapiy up: backend already running on 127.0.0.1:%s (version %s)\n", port(), running)
+			return nil
+		}
+		fmt.Printf("hapiy up: backend version %q does not match %s; restarting\n", running, version.Version)
+		restartStaleBackend()
 	}
-	if !supervisorAlive() {
-		if err := spawnSupervisor(); err != nil {
-			return err
+	if serviceActive() {
+		// The autostart service owns the backend: ask it to start, never spawn
+		// a local supervisor, or the two fight over the port and pidfiles.
+		fmt.Println("hapiy up: backend is managed by the autostart service; asking it to start")
+		if err := serviceStart(true); err != nil {
+			fmt.Fprintf(os.Stderr, "hapiy: autostart service start failed: %v\n", err)
+		}
+	} else {
+		if serviceInstalled() {
+			fmt.Println("hapiy up: autostart service is paused; using the local supervisor (service returns at next login)")
+		}
+		if !supervisorAlive() {
+			if err := spawnSupervisor(); err != nil {
+				return err
+			}
 		}
 	}
 	deadline := time.Now().Add(waitTimeout)
 	for {
-		if backendHealthy() {
+		if running, ok := probeBackend(); ok && !needsRestart(running, version.Version) {
 			fmt.Printf("hapiy up: backend ready (port %s, log %s)\n", port(), logPath())
 			return nil
 		}
@@ -114,6 +183,32 @@ func up() error {
 		}
 		time.Sleep(probeInterval)
 	}
+}
+
+// restartStaleBackend stops the supervisor first (so it cannot respawn the old
+// serve), then the version-mismatched backend, clearing the way for `up` to
+// bring up the new binary.
+func restartStaleBackend() {
+	stopSupervisor()
+	stopServe()
+}
+
+// RestartForUpgrade is called after an in-place upgrade has swapped the binary.
+// It exits this process so the manager that owns the backend restarts the new
+// file: the autostart service or the local supervisor respawn automatically; a
+// foreground-only run gets a fresh detached supervisor first.
+func RestartForUpgrade(exePath string) {
+	if !serviceActive() && !supervisorAlive() {
+		cmd := exec.Command(exePath, "up")
+		cmd.Env = os.Environ()
+		applyDetach(cmd)
+		if err := cmd.Start(); err == nil {
+			_ = cmd.Process.Release()
+		}
+	}
+	// Give the /api/update/apply response time to reach the client.
+	time.Sleep(300 * time.Millisecond)
+	os.Exit(0)
 }
 
 // spawnSupervisor re-execs this binary as a detached "up --supervise". The

@@ -184,9 +184,13 @@ go build -o hapiy ./cmd/hapiy && ./hapiy up
 # 只用前端
 cd project/web     && ./scripts/dev.sh --status
 cd project/web     && ./scripts/dev.sh --stop
+
+# 自启服务 / 自升级（安装版，二进制在 ~/.hapiy/app/hapiy）
+hapiy service install|status|start|stop|uninstall
+hapiy upgrade                                   # 等价于设置页/侧边栏的「升级」
 ```
 
-> *Quick command reference. The backend daemon lives in the `hapiy` binary (`up` / `down` / `status`); `alive.sh` wraps rebuild + `up`.*
+> *Quick command reference. The backend daemon lives in the `hapiy` binary (`up` / `down` / `status` / `service` / `upgrade`); `alive.sh` wraps rebuild + `up`. A prod build installs into `~/.hapiy/app` (binary + `webdist/`), the same location curl install and auto-upgrade use.*
 
 ---
 
@@ -199,7 +203,7 @@ cd project/backend && ./scripts/backup-db.sh          # 备份（先做 sqlite �
 ./scripts/backup-db.sh --list                          # 查看已有备份
 ```
 
-- 只备份 `project/backend/hapiy.db`（项目唯一的真实库），写入仓库根 `.backup/`，自动保留最近 15 份。
+- 优先备份运行库 `~/.hapiy/hapiy.db`（prod/安装版真实库）；不存在时回退到仓库内 `project/backend/hapiy.db`（dev 库）。写入仓库根 `.backup/`，自动保留最近 15 份。
 - **不要手动 `cp` 自由发挥**，尤其不要复制根目录那些 0 字节 / 测试用途的 `.db` 文件（如 `one-api.db` 早已废弃）。
 
 > *When the user asks for a DB backup, run scripts/backup-db.sh — never ad-hoc cp. Only backend/hapiy.db is the real database.*
