@@ -86,6 +86,7 @@
     "billing": "币种汇率",
     "tokenUsage": "查询 Token 用量",
     "debug": "Debug",
+    "backup": "数据备份",
     "profile": "个人资料",
     "section": "导航",
     "expandSection": "展开 {{name}}",
@@ -93,5 +94,23 @@
   },
   "auth": {
     "checking": "验证登录态…"
+  },
+  "update": {
+    "title": "hapiy 版本",
+    "check": "检查更新",
+    "checking": "检查中…",
+    "latest": "检测到新版本 v{{version}}",
+    "upToDate": "已是最新版本 v{{version}}",
+    "upgrade": "升级",
+    "upgradeTitle": "升级 hapiy",
+    "upgradeConfirm": "将从 v{{from}} 升级到 v{{to}}：下载并替换程序文件后后端会自动重启，大约十几秒不可用，完成后页面自动刷新。",
+    "upgradeNow": "立即升级",
+    "prepare": "正在准备下载 v{{version}}…",
+    "downloading": "正在下载并安装 v{{version}}",
+    "checkFailed": "检查更新失败：网络不可达",
+    "upgradeFailed": "升级失败：{{message}}",
+    "notExecuted": "升级未执行，请重试",
+    "timeout": "升级等待超时：请稍后重试，或在终端运行 hapiy upgrade",
+    "tooltip": "有新版本，点击查看"
   }
 }

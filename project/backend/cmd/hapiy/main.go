@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
+	"github.com/hapiy/hapiy/internal/version"
 )
 
 func main() {
@@ -43,11 +45,29 @@ func main() {
 	case "status":
 		daemon.HandleStatus(args)
 		return
+	case "service":
+		if err := daemon.RunService(args); err != nil {
+			if code, ok := daemon.ExitCode(err); ok {
+				os.Exit(code)
+			}
+			fmt.Fprintf(os.Stderr, "hapiy service: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	case "upgrade":
+		if err := handler.RunUpgrade(config.Load().WebDistDir); err != nil {
+			fmt.Fprintf(os.Stderr, "hapiy upgrade: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	case "version", "--version", "-v":
+		fmt.Println(version.Version)
+		return
 	case "", "serve":
 		runServe()
 	default:
 		fmt.Fprintf(os.Stderr, "hapiy: unknown command %q\n", cmd)
-		fmt.Fprintln(os.Stderr, "usage: hapiy [serve|up [--supervise]|down|status]")
+		fmt.Fprintln(os.Stderr, "usage: hapiy [serve|up [--supervise]|down|status|service <action>|upgrade|version]")
 		os.Exit(2)
 	}
 }
@@ -191,6 +211,11 @@ func runServe() {
 	stopRetentionEviction := common.Global().StartEvictionLoop(30 * time.Second)
 	defer stopRetentionEviction()
 
+	// Self-update: periodic version check against the GitHub release, surfaced
+	// by /v1/dashboard/update and the version dialog in the sidebar.
+	updateCtl := handler.NewUpdateController(cfg.WebDistDir)
+	updateCtl.Start(context.Background())
+
 	// Create Gin router
 	r := gin.Default()
 
@@ -210,7 +235,7 @@ func runServe() {
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, gin.H{"status": "ok", "version": version.Version})
 	})
 
 	// Metrics endpoint (no auth required for monitoring)
@@ -365,6 +390,11 @@ func runServe() {
 			dashboardAuthed.GET("/active-requests", handler.ActiveRequests())
 			dashboardAuthed.POST("/active-requests/:requestId/kill", handler.KillActiveRequest())
 			dashboardAuthed.GET("/events", handler.DashboardEvents())
+
+			// Self-update (version dialog in the sidebar + settings page)
+			dashboardAuthed.GET("/update", updateCtl.StatusHandler())
+			dashboardAuthed.POST("/update/check", updateCtl.CheckHandler())
+			dashboardAuthed.POST("/update/apply", updateCtl.ApplyHandler())
 		}
 
 		// Relay endpoints (token auth)
@@ -413,6 +443,7 @@ func runServe() {
 
 	// Start server
 	addr := cfg.Host + ":" + cfg.Port
+	daemon.RecordPort(cfg.Port)
 	log.Printf("Server starting on %s", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

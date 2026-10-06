@@ -2409,6 +2409,42 @@ function parseAgentModelSummary(value: unknown): AgentModelSummary {
   }
 }
 
+// UpdateStatus is the self-update snapshot returned by /v1/dashboard/update.
+// It powers the sidebar version dialog and the green "update available" dot.
+export type UpdateStatus = {
+  readonly current: string
+  readonly latest: string
+  readonly available: boolean
+  readonly checking: boolean
+  readonly upgrading: boolean
+  readonly checkedAtMs: number
+  readonly error: string
+  readonly upgradeError: string
+  readonly downloadDone: number
+  readonly downloadTotal: number
+}
+
+// parseUpdateStatus is tolerant: a missing field falls back rather than
+// throwing, so a partially rolled-out backend still renders the dialog.
+function parseUpdateStatus(value: unknown): UpdateStatus {
+  const rec = isRecord(value) ? value : {}
+  const num = (k: string): number => (typeof rec[k] === 'number' && Number.isFinite(rec[k]) ? (rec[k] as number) : 0)
+  const str = (k: string): string => (typeof rec[k] === 'string' ? (rec[k] as string) : '')
+  const bool = (k: string): boolean => rec[k] === true
+  return {
+    current: str('current'),
+    latest: str('latest'),
+    available: bool('available'),
+    checking: bool('checking'),
+    upgrading: bool('upgrading'),
+    checkedAtMs: num('checkedAtMs'),
+    error: str('error'),
+    upgradeError: str('upgradeError'),
+    downloadDone: num('downloadDone'),
+    downloadTotal: num('downloadTotal'),
+  }
+}
+
 export const dashboardApi = {
   // ── Providers ──
   async listProviders(params: ProviderListParams): Promise<{ readonly providers: readonly Provider[]; readonly total: number }> {
@@ -3421,6 +3457,22 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return {
       synced: readNumber(data.synced, 'synced', 0),
       content: typeof data.content === 'string' ? data.content : '',
+    }
+  },
+
+  // ── Self-update ──
+  async getUpdateStatus(): Promise<UpdateStatus> {
+    return parseUpdateStatus(await request('/update'))
+  },
+  async checkUpdate(): Promise<UpdateStatus> {
+    return parseUpdateStatus(await request('/update/check', { method: 'POST' }))
+  },
+  async applyUpdate(): Promise<{ readonly ok: boolean; readonly message: string }> {
+    const data = await request('/update/apply', { method: 'POST' })
+    const rec = isRecord(data) ? data : {}
+    return {
+      ok: rec.ok === true,
+      message: typeof rec.message === 'string' ? rec.message : '',
     }
   },
 }

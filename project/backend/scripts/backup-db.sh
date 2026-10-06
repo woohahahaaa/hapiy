@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-# 数据库备份脚本：只备份 backend/hapiy.db（项目唯一的真实库），写入仓库根 .backup/。
+# 数据库备份脚本：备份运行中的真实库，写入仓库根 .backup/。
 # 以后让 Agent 备份数据库时统一跑这个脚本，不要自由发挥 cp。
 # 用法：
 #   scripts/backup-db.sh          # 备份（先做 sqlite 完整性校验）
 #   scripts/backup-db.sh --list   # 列出已有备份
 # 自动保留最近 15 份 hapiy-*.db，更早的删除。
+#
+# 库位置：prod/安装版用 ~/.hapiy/hapiy.db（见 alive.sh 与 service install），
+# 所以优先备份它；不存在时回退到仓库内 project/backend/hapiy.db（dev 库）。
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BACKEND_DIR/../.." && pwd)"
-SOURCE="$BACKEND_DIR/hapiy.db"
+STATE_DIR="${HAPIY_STATE_DIR:-$HOME/.hapiy}"
+if [ -f "$STATE_DIR/hapiy.db" ]; then
+  SOURCE="$STATE_DIR/hapiy.db"
+else
+  SOURCE="$BACKEND_DIR/hapiy.db"
+fi
 DEST_DIR="$REPO_ROOT/.backup"
 RETENTION=15
 

@@ -86,6 +86,7 @@
     "billing": "Currency & Rates",
     "tokenUsage": "Token Usage",
     "debug": "Debug",
+    "backup": "Data Backup",
     "profile": "Profile",
     "section": "Navigation",
     "expandSection": "Expand {{name}}",
@@ -93,5 +94,23 @@
   },
   "auth": {
     "checking": "Checking session…"
+  },
+  "update": {
+    "title": "hapiy version",
+    "check": "Check for updates",
+    "checking": "Checking…",
+    "latest": "New version v{{version}} available",
+    "upToDate": "Already up to date (v{{version}})",
+    "upgrade": "Upgrade",
+    "upgradeTitle": "Upgrade hapiy",
+    "upgradeConfirm": "Upgrade from v{{from}} to v{{to}}: the program files are downloaded and replaced, then the backend restarts automatically. Expect about ten seconds of downtime; the page reloads when done.",
+    "upgradeNow": "Upgrade now",
+    "prepare": "Preparing to download v{{version}}…",
+    "downloading": "Downloading and installing v{{version}}",
+    "checkFailed": "Update check failed: network unreachable",
+    "upgradeFailed": "Upgrade failed: {{message}}",
+    "notExecuted": "Upgrade did not run, please retry",
+    "timeout": "Upgrade timed out: retry later, or run hapiy upgrade in a terminal",
+    "tooltip": "Update available, click to view"
   }
 }
