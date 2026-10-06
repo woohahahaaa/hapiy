@@ -39,5 +39,3 @@ encryption.key
 .omo/start-work/
 .omo/evidence/task-*-topology-magic-layout*
 
-# Pack artifacts
-build/
