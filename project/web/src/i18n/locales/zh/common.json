@@ -82,7 +82,7 @@
     "agentConfig": "配置文件",
     "settings": "系统设置",
     "baseUrl": "BaseURL",
-    "general": "查询 Model 列表",
+    "general": "获取模型列表",
     "billing": "币种汇率",
     "tokenUsage": "查询 Token 用量",
     "debug": "Debug",
@@ -97,6 +97,7 @@
   },
   "update": {
     "title": "hapiy 版本",
+    "current": "当前版本",
     "check": "检查更新",
     "checking": "检查中…",
     "latest": "检测到新版本 v{{version}}",

@@ -123,6 +123,12 @@ case "${1:-start}" in
     echo $! > "$PID_FILE"
     disown || true
     sleep 2
+    if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+      echo "[dev] dev server exited during startup; last log lines:" >&2
+      tail -n 20 "$LOG_FILE" >&2 || true
+      rm -f "$PID_FILE"
+      exit 1
+    fi
     echo "[dev] launched; log: $LOG_FILE, pid: $(cat "$PID_FILE")"
     show_status
     ;;

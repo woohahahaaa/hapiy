@@ -149,29 +149,28 @@ export function VersionDialog({
           </DialogHeader>
           <div className="flex flex-col gap-3 py-1">
             <div className="flex items-baseline justify-between">
-              <span className="font-hapiy-logo text-3xl leading-none text-foreground">hapiy</span>
-              <span className="text-sm text-muted-foreground">{`v${current}`}</span>
+              <span className="text-sm text-muted-foreground">{t('update.current')}</span>
+              <span className="text-sm font-medium text-foreground">{`v${current}`}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={checkBusy || upgrading || Boolean(status?.checking)}
-                onClick={() => void handleCheck()}
-              >
-                {checkBusy || status?.checking ? t('update.checking') : t('update.check')}
-              </Button>
-              {status?.available && !upgrading && (
-                <>
-                  <span className="text-xs text-amber-600">
-                    {t('update.latest', { version: status.latest })}
-                  </span>
-                  <Button size="sm" onClick={() => setConfirmOpen(true)}>
-                    {t('update.upgrade')}
-                  </Button>
-                </>
-              )}
-            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              disabled={checkBusy || upgrading || Boolean(status?.checking)}
+              onClick={() => void handleCheck()}
+            >
+              {checkBusy || status?.checking ? t('update.checking') : t('update.check')}
+            </Button>
+            {status?.available && !upgrading && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-amber-600">
+                  {t('update.latest', { version: status.latest })}
+                </span>
+                <Button size="sm" onClick={() => setConfirmOpen(true)}>
+                  {t('update.upgrade')}
+                </Button>
+              </div>
+            )}
             {upgrading && <p className="text-xs text-muted-foreground">{progressText}</p>}
             {notice && (
               <p className={notice.kind === 'error' ? 'text-xs text-destructive' : 'text-xs text-emerald-600'}>

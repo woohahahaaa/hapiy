@@ -47,7 +47,10 @@ function App() {
                     <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
                     <Route path="/settings/general" element={<GeneralSettingsPage />} />
                     <Route path="/settings/billing" element={<BillingSettingsPage />} />
-                    <Route path="/settings/debug" element={<DebugSettingsPage />} />
+                    {/* Debug 仅 dev 模式可用，生产构建不注册该路由 */}
+                    {import.meta.env.DEV && (
+                      <Route path="/settings/debug" element={<DebugSettingsPage />} />
+                    )}
                     <Route path="/settings/backup" element={<BackupSettingsPage />} />
                     <Route path="/settings/other" element={<OtherSettingsPage />} />
                     <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />

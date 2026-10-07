@@ -82,7 +82,7 @@
     "agentConfig": "Config File",
     "settings": "Settings",
     "baseUrl": "BaseURL",
-    "general": "Model List",
+    "general": "Get Model List",
     "billing": "Currency & Rates",
     "tokenUsage": "Token Usage",
     "debug": "Debug",
@@ -97,6 +97,7 @@
   },
   "update": {
     "title": "hapiy version",
+    "current": "Current version",
     "check": "Check for updates",
     "checking": "Checking…",
     "latest": "New version v{{version}} available",

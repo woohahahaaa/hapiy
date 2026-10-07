@@ -58,6 +58,17 @@ seed_state_db() {
 
 do_up_dev() {
   need node; need pnpm
+
+  # Stop the running stack before Vite claims the port. dev.sh only kills the
+  # listener, and a live supervisor respawns serve within a second, so Vite
+  # (strictPort) loses the race and dies; `down` stops the supervisor first.
+  [ -x "$BIN" ] && "$BIN" service stop --quiet 2>/dev/null || true
+  if [ -x "$DEV_BIN" ]; then
+    HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" "$DEV_BIN" down || true
+  elif [ -x "$BIN" ]; then
+    HAPIY_ENV=production HAPIY_HOST=0.0.0.0 HAPIY_PORT="$WEB_PORT" "$BIN" down || true
+  fi
+
   msg "ensuring frontend (Vite dev server)..."
   (cd "$WEB_DIR" && ./scripts/dev.sh)
   build_backend_to "$DEV_BIN"
