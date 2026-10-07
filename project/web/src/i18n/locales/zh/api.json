@@ -24,6 +24,7 @@
   "metricsFailed": "获取指标失败（HTTP {{status}}）",
   "fields": {
     "settings": "设置",
+    "backup": "备份",
     "model": "模型",
     "affinityRules": "亲和规则",
     "channelAffinity": "渠道亲和配置",

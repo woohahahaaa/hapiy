@@ -26,6 +26,27 @@ read_pid() {
   [ -f "$PID_FILE" ] && cat "$PID_FILE"
 }
 
+# ours_on_port: some listener on $PORT runs with this project as cwd — our own
+# dev server (detached spawns outlive their launcher), so replacing it is
+# expected and needs no prompt.
+ours_on_port() {
+  for p in $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null); do
+    cwd=$(lsof -a -p "$p" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)
+    [ "$cwd" = "$ROOT_DIR" ] && return 0
+  done
+  return 1
+}
+
+kill_listeners() {
+  lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | while read -r p; do
+    kill "$p" 2>/dev/null || true
+  done
+  sleep 1
+  for p in $(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null); do
+    kill -9 "$p" 2>/dev/null || true
+  done
+}
+
 show_status() {
   echo "[dev] log:    $LOG_FILE"
   echo "[dev] pidfile: $PID_FILE"
@@ -61,7 +82,12 @@ stop_server() {
     rm -f "$PID_FILE"
   fi
   if is_listening; then
-    echo "[dev] listener still present on $PORT; another process may hold it." >&2
+    if ours_on_port; then
+      echo "[dev] killing leftover listener(s) on $PORT..."
+      kill_listeners
+    else
+      echo "[dev] listener still present on $PORT; another process may hold it." >&2
+    fi
   fi
 }
 
@@ -70,7 +96,7 @@ kill_occupant() {
   echo "[dev] port $PORT is ALREADY IN USE."
   echo "[dev] Occupied by:"
   lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >&2 || true
-  if [ "${HAPIY_AUTO_KILL:-}" = "1" ]; then
+  if [ "${HAPIY_AUTO_KILL:-}" = "1" ] || ours_on_port; then
     answer="y"
   else
     printf "[dev] Kill it and start a fresh dev server? [y/N] "
@@ -79,14 +105,7 @@ kill_occupant() {
   case "$answer" in
     y|Y|yes|YES)
       echo "[dev] killing old process..."
-      lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | while read -r p; do
-        kill "$p" 2>/dev/null || true
-      done
-      sleep 1
-      running=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null || true)
-      for p in $running; do
-        kill -9 "$p" 2>/dev/null || true
-      done
+      kill_listeners
       rm -f "$PID_FILE"
       ;;
     *)
@@ -119,12 +138,41 @@ case "${1:-start}" in
     fi
     [ -f "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.prev" 2>/dev/null || true
     : > "$LOG_FILE"
-    nohup pnpm dev >>"$LOG_FILE" 2>&1 </dev/null &
-    echo $! > "$PID_FILE"
-    disown || true
+    # Launch Vite in a new session detached from this process group (Node's
+    # detached spawn = setsid). Plain nohup+& stays in the caller's group: an
+    # agent/session shell that kills its group when the command ends takes Vite
+    # down seconds later, leaving the port dark (502 at the reverse proxy)
+    # until the next prod run.
+    node -e '
+      const { spawn } = require("node:child_process");
+      const fs = require("node:fs");
+      const [, log, pidFile] = process.argv;
+      const out = fs.openSync(log, "a");
+      const child = spawn("pnpm", ["dev"], {
+        cwd: process.cwd(),
+        detached: true,
+        stdio: ["ignore", out, out],
+        env: process.env,
+      });
+      fs.writeFileSync(pidFile, String(child.pid));
+      child.unref();
+    ' "$LOG_FILE" "$PID_FILE"
     sleep 2
     if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
       echo "[dev] dev server exited during startup; last log lines:" >&2
+      tail -n 20 "$LOG_FILE" >&2 || true
+      rm -f "$PID_FILE"
+      exit 1
+    fi
+    # "launched" must mean the port actually serves: callers open the page the
+    # moment this returns, and a reverse proxy hitting the gap gets a 502.
+    n=0
+    while [ "$n" -lt 15 ] && ! is_listening; do
+      sleep 1
+      n=$((n+1))
+    done
+    if ! is_listening; then
+      echo "[dev] port $PORT not listening after $((n+2))s; last log lines:" >&2
       tail -n 20 "$LOG_FILE" >&2 || true
       rm -f "$PID_FILE"
       exit 1

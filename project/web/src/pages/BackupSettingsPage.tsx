@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/checkbox'
@@ -25,35 +24,23 @@ import {
 } from '@/components/dialog'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { toast } from '@/components/ui/toast'
+import { i18n } from '@/i18n/i18n'
+import {
+  dashboardApi,
+  DashboardApiError,
+  type BackupModule,
+  type BackupRecord,
+} from '@/lib/dashboard-api'
 
-// 预览阶段的占位数据：后端 /dashboard/backups 接口就绪后替换为真实数据。
-// MOCK_BASE_DIR 模拟“运行后台服务的那台电脑”上备份的基准目录；接入后端后
-// 由后端返回真实基准目录并把相对路径解析成绝对路径（Windows 为 C:\ 之类盘符）。
-const MOCK_BASE_DIR = '/Users/you/.hapiy'
+const BACKUP_MODULES_KEY = 'backup_modules'
+const BACKUP_FREQUENCY_KEY = 'backup_frequency'
+const BACKUP_PATH_KEY = 'backup_path'
+const DEFAULT_BACKUP_PATH = 'backups'
+const BACKUP_PAGE_SIZE = 10
 
-type BackupModule =
-  | 'topology'
-  | 'providers'
-  | 'tokens'
-  | 'policy'
-  | 'agent'
-  | 'settings'
-  | 'usage'
-  | 'logs'
-// 频率：从不 = 只手动备份；其余为自动备份间隔。
-type BackupFrequency = 'never' | 'hourly' | 'daily' | 'weekly'
+type BackupFrequency = 'never' | 'daily' | 'weekly'
 
-type BackupRecord = {
-  readonly id: string
-  readonly createdAt: string
-  readonly sizeBytes: number
-  readonly modules: readonly BackupModule[]
-  readonly path: string
-  /** true = 和上次无差异，只记一条记录、没有新文件 */
-  readonly unchanged?: boolean
-}
-
-// 模块清单 = 备份选择项；使用记录与日志默认不勾选。
+// UI 侧模块清单：顺序、文案与默认勾选。
 const BACKUP_MODULES: readonly {
   readonly id: BackupModule
   readonly labelKey: string
@@ -78,63 +65,49 @@ const MODULE_LABEL: Record<BackupModule, string> = Object.fromEntries(
   BACKUP_MODULES.map((module) => [module.id, module.labelKey]),
 ) as Record<BackupModule, string>
 
-const MOCK_BACKUPS: readonly BackupRecord[] = [
-  {
-    id: 'bk-20261007-0300',
-    createdAt: '2026-10-07T03:00:00',
-    sizeBytes: 0,
-    modules: ['topology', 'providers', 'tokens', 'policy', 'agent', 'settings'],
-    path: '/Users/you/.hapiy/backups',
-    unchanged: true,
-  },
-  {
-    id: 'bk-20261006-0300',
-    createdAt: '2026-10-06T03:00:00',
-    sizeBytes: 305_000_000,
-    modules: ['topology', 'providers', 'tokens', 'policy', 'agent', 'settings'],
-    path: '/Users/you/.hapiy/backups',
-  },
-  {
-    id: 'bk-20261005-0300',
-    createdAt: '2026-10-05T03:00:00',
-    sizeBytes: 301_500_000,
-    modules: ['topology', 'providers', 'tokens'],
-    path: '/Users/you/.hapiy/backups',
-  },
-  {
-    id: 'bk-20261004-1230',
-    createdAt: '2026-10-04T12:30:00',
-    sizeBytes: 312_400_000,
-    modules: ['topology', 'providers', 'tokens', 'policy', 'agent', 'settings', 'usage', 'logs'],
-    path: '/Volumes/Data/hapiy-backups',
-  },
-  {
-    id: 'bk-20261003-0300',
-    createdAt: '2026-10-03T03:00:00',
-    sizeBytes: 288_100_000,
-    modules: ['topology', 'providers'],
-    path: '/Users/you/.hapiy/backups',
-  },
-  {
-    id: 'bk-20261001-0900',
-    createdAt: '2026-10-01T09:00:00',
-    sizeBytes: 42_800_000,
-    modules: ['tokens', 'settings'],
-    path: '/Users/you/.hapiy/backups',
-  },
-]
-
-// 下拉框顺序：从不放第一个，默认每周。
-const FREQUENCIES: readonly BackupFrequency[] = ['never', 'daily', 'weekly', 'hourly']
+const FREQUENCIES: readonly BackupFrequency[] = ['never', 'daily', 'weekly']
 
 const FREQUENCY_LABEL: Record<BackupFrequency, string> = {
   never: 'backup.frequencyNever',
   daily: 'backup.frequencyDaily',
   weekly: 'backup.frequencyWeekly',
-  hourly: 'backup.frequencyHourly',
 }
 
-const BACKUP_PAGE_SIZE = 10
+type LoadState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'error'; readonly message: string }
+  | { readonly kind: 'ready' }
+
+type RecordsState =
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'error'; readonly message: string }
+  | { readonly kind: 'ready'; readonly records: readonly BackupRecord[]; readonly total: number }
+
+function settingsValue(settings: readonly { key: string; value: string }[], key: string): string {
+  return settings.find((s) => s.key === key)?.value ?? ''
+}
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof DashboardApiError) return err.message
+  return err instanceof Error ? err.message : i18n.t('settings:errors.operationFailed')
+}
+
+function parseBackupModules(raw: string): ReadonlySet<BackupModule> {
+  if (raw.trim() === '') return new Set(DEFAULT_SELECTED_MODULES)
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set(DEFAULT_SELECTED_MODULES)
+    const known = new Set<string>(BACKUP_MODULES.map((module) => module.id))
+    const selected = parsed.filter((id): id is BackupModule => typeof id === 'string' && known.has(id))
+    return selected.length > 0 ? new Set(selected) : new Set(DEFAULT_SELECTED_MODULES)
+  } catch {
+    return new Set(DEFAULT_SELECTED_MODULES)
+  }
+}
+
+function parseBackupFrequency(raw: string): BackupFrequency {
+  return FREQUENCIES.includes(raw as BackupFrequency) ? (raw as BackupFrequency) : 'weekly'
+}
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso)
@@ -149,47 +122,79 @@ function formatSize(bytes: number): string {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
-// 预览用：把相对路径拼到基准目录上并消掉 . / ..；绝对路径原样规范化。
-// 接入后端后这一步由后端完成（它能知道真实系统是 Mac / Windows / Linux）。
-function resolveAbsolutePath(baseDir: string, input: string): string {
-  const trimmed = input.trim()
-  if (!trimmed) return baseDir
-  const isAbsolute = trimmed.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(trimmed)
-  const combined = isAbsolute ? trimmed : `${baseDir}/${trimmed}`
-  const drive = combined.match(/^[a-zA-Z]:/)?.[0] ?? ''
-  const rest = drive ? combined.slice(drive.length) : combined
-  const parts: string[] = []
-  for (const part of rest.split(/[\\/]+/)) {
-    if (!part || part === '.') continue
-    if (part === '..') {
-      parts.pop()
-      continue
-    }
-    parts.push(part)
-  }
-  const sep = drive ? '\\' : '/'
-  return drive + sep + parts.join(sep)
-}
-
-function moduleSignature(modules: readonly BackupModule[]): string {
-  return [...modules].sort().join(',')
-}
-
 export function BackupSettingsPage() {
   const { t } = useTranslation('settings')
+  const [state, setState] = useState<LoadState>({ kind: 'loading' })
+  const [recordsState, setRecordsState] = useState<RecordsState>({ kind: 'loading' })
   const [selectedModules, setSelectedModules] = useState<ReadonlySet<BackupModule>>(
     () => new Set(DEFAULT_SELECTED_MODULES),
   )
   const [frequency, setFrequency] = useState<BackupFrequency>('weekly')
-  const [path, setPath] = useState('backups')
-  const [records, setRecords] = useState<readonly BackupRecord[]>(MOCK_BACKUPS)
+  const [path, setPath] = useState(DEFAULT_BACKUP_PATH)
+  const [resolvedPath, setResolvedPath] = useState('')
   const [offset, setOffset] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<BackupRecord | null>(null)
 
-  const pagedRecords = useMemo(() => records.slice(offset, offset + BACKUP_PAGE_SIZE), [records, offset])
-  const absolutePath = useMemo(() => resolveAbsolutePath(MOCK_BASE_DIR, path), [path])
+  const orderedModules = useMemo(
+    () => BACKUP_MODULES.filter((module) => selectedModules.has(module.id)).map((module) => module.id),
+    [selectedModules],
+  )
 
-  const notifyPreview = () => toast(t('backup.previewToast'))
+  const loadSettings = useCallback(() => {
+    dashboardApi
+      .getSettings()
+      .then((settings) => {
+        setSelectedModules(parseBackupModules(settingsValue(settings, BACKUP_MODULES_KEY)))
+        setFrequency(parseBackupFrequency(settingsValue(settings, BACKUP_FREQUENCY_KEY)))
+        setPath(settingsValue(settings, BACKUP_PATH_KEY) || DEFAULT_BACKUP_PATH)
+        setState({ kind: 'ready' })
+      })
+      .catch((err) => {
+        setState({ kind: 'error', message: toErrorMessage(err) })
+      })
+  }, [])
+
+  const loadRecords = useCallback((nextOffset: number) => {
+    dashboardApi
+      .listBackups(BACKUP_PAGE_SIZE, nextOffset)
+      .then((list) => {
+        setRecordsState({ kind: 'ready', records: list.records, total: list.total })
+        if (nextOffset === 0 && list.resolvedPath) setResolvedPath(list.resolvedPath)
+      })
+      .catch((err) => {
+        setRecordsState({ kind: 'error', message: toErrorMessage(err) })
+      })
+  }, [])
+
+  useEffect(() => {
+    loadSettings()
+    loadRecords(0)
+  }, [loadSettings, loadRecords])
+
+  const reloadSettings = () => {
+    setState({ kind: 'loading' })
+    loadSettings()
+  }
+
+  const reloadRecords = (nextOffset: number) => {
+    setOffset(nextOffset)
+    setRecordsState({ kind: 'loading' })
+    loadRecords(nextOffset)
+  }
+
+  // 相对路径 -> 后端解析出的绝对地址（带防抖）。
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      dashboardApi
+        .resolveBackupPath(path)
+        .then(setResolvedPath)
+        .catch(() => {})
+    }, 300)
+    return () => window.clearTimeout(handle)
+  }, [path])
 
   const toggleModule = (module: BackupModule, checked: boolean) => {
     setSelectedModules((current) => {
@@ -200,26 +205,58 @@ export function BackupSettingsPage() {
     })
   }
 
-  // 与上一条记录对比：内容一致时只加一条“和上次无差异”的记录，不生成新文件。
-  const handleBackupNow = () => {
-    const selected = BACKUP_MODULES.filter((module) => selectedModules.has(module.id)).map(
-      (module) => module.id,
-    )
-    const last = records[0]
-    const unchanged = last !== undefined && moduleSignature(last.modules) === moduleSignature(selected)
-    setRecords((current) => [
-      {
-        id: `bk-preview-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        sizeBytes: 0,
-        modules: selected,
-        path: absolutePath,
-        unchanged,
-      },
-      ...current,
-    ])
-    setOffset(0)
-    notifyPreview()
+  const handleSave = async () => {
+    if (orderedModules.length === 0) {
+      toast.error(t('backup.noModulesError'))
+      return
+    }
+    setSaving(true)
+    try {
+      await Promise.all([
+        dashboardApi.updateSetting(BACKUP_MODULES_KEY, JSON.stringify(orderedModules)),
+        dashboardApi.updateSetting(BACKUP_FREQUENCY_KEY, frequency),
+        dashboardApi.updateSetting(BACKUP_PATH_KEY, path.trim() || DEFAULT_BACKUP_PATH),
+      ])
+      toast(t('toast.saved'))
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleBackupNow = async () => {
+    if (orderedModules.length === 0) {
+      toast.error(t('backup.noModulesError'))
+      return
+    }
+    setBackingUp(true)
+    try {
+      const { fileCreated } = await dashboardApi.createBackup(orderedModules, path.trim())
+      toast(fileCreated ? t('backup.created') : t('backup.createdUnchanged'))
+      reloadRecords(0)
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    if (!restoreTarget) return
+    setRestoring(true)
+    try {
+      await dashboardApi.restoreBackup(restoreTarget.id)
+      toast(t('backup.restored'))
+      setRestoreTarget(null)
+      reloadRecords(0)
+      // 恢复可能覆盖系统设置（包括备份设置本身），重新拉一次保持一致。
+      loadSettings()
+    } catch (err) {
+      toast.error(toErrorMessage(err))
+    } finally {
+      setRestoring(false)
+    }
   }
 
   const columns: ColumnDef<BackupRecord>[] = useMemo(
@@ -271,7 +308,7 @@ export function BackupSettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={row.unchanged === true}
+              disabled={row.unchanged === true || restoring}
               onClick={() => setRestoreTarget(row)}
             >
               {t('backup.restore')}
@@ -280,16 +317,15 @@ export function BackupSettingsPage() {
         ),
       },
     ],
-    [t],
+    [t, restoring],
   )
+
+  const records = recordsState.kind === 'ready' ? recordsState.records : []
+  const total = recordsState.kind === 'ready' ? recordsState.total : 0
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={t('backup.pageTitle')}
-        description={t('backup.pageDescription')}
-        actions={<Badge variant="outline">{t('backup.previewBadge')}</Badge>}
-      />
+      <PageHeader title={t('backup.pageTitle')} description={t('backup.pageDescription')} />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <Tabs defaultValue="backup" className="flex min-h-0 flex-1 flex-col">
           <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border-subtle p-0">
@@ -300,90 +336,112 @@ export function BackupSettingsPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <AppIcon name="layers" size={16} /> {t('backup.contentTitle')}
+                    <AppIcon name="settings" size={16} /> {t('backup.paramsTitle')}
                   </CardTitle>
-                  <CardDescription>{t('backup.contentHint')}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 lg:grid-cols-3">
-                    {BACKUP_MODULES.map((module) => (
-                      <label
-                        key={module.id}
-                        className="flex cursor-pointer items-start gap-2.5 text-sm"
-                      >
-                        <Checkbox
-                          className="mt-0.5 size-[18px] bg-background"
-                          checked={selectedModules.has(module.id)}
-                          onCheckedChange={(v) => toggleModule(module.id, v === true)}
-                          aria-label={t(module.labelKey)}
-                        />
-                        <span className="flex min-w-0 flex-col">
-                          <span className="font-medium">{t(module.labelKey)}</span>
-                          <span className="text-xs text-muted-foreground">{t(module.hintKey)}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-5 flex flex-wrap items-center gap-3">
-                    <Button onClick={handleBackupNow}>
-                      <AppIcon name="add" data-icon="inline-start" />
-                      {t('backup.backupNow')}
-                    </Button>
-                    <Button variant="outline" onClick={notifyPreview}>
-                      {t('common:action.save')}
-                    </Button>
-                    <label className="ml-auto flex items-center gap-2 text-sm">
-                      {t('backup.frequencyLabel')}
-                      <Select
-                        value={frequency}
-                        onValueChange={(v) => setFrequency(v as BackupFrequency)}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {FREQUENCIES.map((value) => (
-                              <SelectItem key={value} value={value}>
-                                {t(FREQUENCY_LABEL[value])}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </label>
-                  </div>
-                  <p className="mt-3 text-xs text-muted-foreground">{t('backup.noChangeHint')}</p>
-                </CardContent>
-              </Card>
+                  {state.kind === 'loading' && (
+                    <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                      <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
+                    </div>
+                  )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <AppIcon name="link" size={16} /> {t('backup.locationTitle')}
-                  </CardTitle>
-                  <CardDescription>{t('backup.locationDescription')}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap items-end gap-4">
-                    <label className="grid min-w-64 flex-1 gap-1.5 text-sm" htmlFor="backup-path">
-                      {t('backup.pathLabel')}
-                      <Input
-                        id="backup-path"
-                        value={path}
-                        onChange={(event) => setPath(event.target.value)}
-                        placeholder={t('backup.pathPlaceholder')}
-                      />
-                    </label>
-                    <Button variant="outline" onClick={notifyPreview}>
-                      {t('common:action.save')}
-                    </Button>
-                  </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    {t('backup.absolutePathLabel')}{' '}
-                    <span className="font-mono text-foreground">{absolutePath}</span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">{t('backup.locationHint')}</p>
+                  {state.kind === 'error' && (
+                    <div className="flex flex-col items-center gap-3 py-8 text-center">
+                      <AppIcon name="warning" size={32} className="text-destructive" />
+                      <p className="text-sm text-muted-foreground">{state.message}</p>
+                      <Button variant="outline" size="sm" onClick={reloadSettings}>
+                        <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
+                      </Button>
+                    </div>
+                  )}
+
+                  {state.kind === 'ready' && (
+                    <div className="flex flex-col gap-6">
+                      <div className="flex flex-col gap-3">
+                        <div>
+                          <div className="text-sm font-medium">{t('backup.contentTitle')}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">{t('backup.contentHint')}</div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-4 lg:grid-cols-3">
+                          {BACKUP_MODULES.map((module) => (
+                            <label
+                              key={module.id}
+                              className="flex cursor-pointer items-start gap-2.5 text-sm"
+                            >
+                              <Checkbox
+                                className="mt-0.5 size-[18px] bg-background"
+                                checked={selectedModules.has(module.id)}
+                                onCheckedChange={(v) => toggleModule(module.id, v === true)}
+                                aria-label={t(module.labelKey)}
+                              />
+                              <span className="flex min-w-0 flex-col">
+                                <span className="font-medium">{t(module.labelKey)}</span>
+                                <span className="text-xs text-muted-foreground">{t(module.hintKey)}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="text-sm font-medium">{t('backup.frequencyLabel')}</div>
+                        <div>
+                          <Select
+                            value={frequency}
+                            onValueChange={(v) => setFrequency(v as BackupFrequency)}
+                          >
+                            <SelectTrigger className="w-40" aria-label={t('backup.frequencyLabel')}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectGroup>
+                                {FREQUENCIES.map((value) => (
+                                  <SelectItem key={value} value={value}>
+                                    {t(FREQUENCY_LABEL[value])}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{t('backup.noChangeHint')}</p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="text-sm font-medium">{t('backup.locationTitle')}</div>
+                        <p className="text-xs text-muted-foreground">{t('backup.locationDescription')}</p>
+                        <label className="grid max-w-xl gap-1.5 text-sm" htmlFor="backup-path">
+                          {t('backup.pathLabel')}
+                          <Input
+                            id="backup-path"
+                            value={path}
+                            onChange={(event) => setPath(event.target.value)}
+                            placeholder={t('backup.pathPlaceholder')}
+                          />
+                        </label>
+                        <div className="text-xs text-muted-foreground">
+                          {t('backup.absolutePathLabel')}{' '}
+                          <span className="font-mono text-foreground">{resolvedPath || '—'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button variant="outline" onClick={handleSave} disabled={saving}>
+                          {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                          {t('common:action.save')}
+                        </Button>
+                        <Button onClick={handleBackupNow} disabled={backingUp || state.kind !== 'ready'}>
+                          {backingUp ? (
+                            <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
+                          ) : (
+                            <AppIcon name="add" data-icon="inline-start" />
+                          )}
+                          {t('backup.backupNow')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -398,11 +456,14 @@ export function BackupSettingsPage() {
                   <DataTable
                     id="backup-records"
                     columns={columns}
-                    data={pagedRecords}
-                    total={records.length}
+                    data={records}
+                    total={total}
+                    loading={recordsState.kind === 'loading'}
+                    error={recordsState.kind === 'error' ? recordsState.message : null}
                     offset={offset}
                     limit={BACKUP_PAGE_SIZE}
-                    onOffsetChange={setOffset}
+                    onOffsetChange={reloadRecords}
+                    onRetry={() => reloadRecords(offset)}
                     emptyText={t('backup.empty')}
                   />
                 </CardContent>
@@ -415,7 +476,7 @@ export function BackupSettingsPage() {
       <Dialog
         open={restoreTarget !== null}
         onOpenChange={(open) => {
-          if (!open) setRestoreTarget(null)
+          if (!open && !restoring) setRestoreTarget(null)
         }}
       >
         <DialogContent width="sm" scrollFooter>
@@ -425,15 +486,11 @@ export function BackupSettingsPage() {
           <DialogScrollBody
             footer={
               <>
-                <Button variant="outline" onClick={() => setRestoreTarget(null)}>
+                <Button variant="outline" onClick={() => setRestoreTarget(null)} disabled={restoring}>
                   {t('common:action.cancel')}
                 </Button>
-                <Button
-                  onClick={() => {
-                    setRestoreTarget(null)
-                    notifyPreview()
-                  }}
-                >
+                <Button onClick={() => void handleRestore()} disabled={restoring}>
+                  {restoring && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                   {t('backup.restoreConfirm')}
                 </Button>
               </>

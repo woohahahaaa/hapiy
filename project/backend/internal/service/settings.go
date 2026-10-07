@@ -14,6 +14,9 @@ var defaultSettings = map[string]string{
 	"own_model_list_endpoint":            "/v1/models",
 	"automatic_disable_recovery_minutes": "60",
 	"recovery_ttfb_seconds":              "0",
+	"backup_modules":                     defaultBackupModulesJSON,
+	"backup_frequency":                   BackupFrequencyWeekly,
+	"backup_path":                        DefaultBackupPath,
 }
 
 // GetSetting returns the value for a system setting key.

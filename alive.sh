@@ -14,7 +14,7 @@
 #
 # Usage:
 #   ./alive.sh              build frontend + backend, start PROD stack
-#   ./alive.sh dev          ensure Vite dev server, then start DEV backend
+#   ./alive.sh dev          build backend, restart DEV stack, ensure Vite
 #   ./alive.sh --status     show backend state + last log lines
 #   ./alive.sh --stop       stop the supervisor, then the backend
 #
@@ -59,22 +59,27 @@ seed_state_db() {
 do_up_dev() {
   need node; need pnpm
 
-  # Stop the running stack before Vite claims the port. dev.sh only kills the
+  # Build first so the running stack keeps serving while we compile.
+  build_backend_to "$DEV_BIN"
+
+  # Stop the running stack before Vite claims the port. dev.sh kills only the
   # listener, and a live supervisor respawns serve within a second, so Vite
   # (strictPort) loses the race and dies; `down` stops the supervisor first.
+  # The dev backend shares prod's state (db/key/logs) so it serves live data.
   [ -x "$BIN" ] && "$BIN" service stop --quiet 2>/dev/null || true
-  if [ -x "$DEV_BIN" ]; then
-    HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" "$DEV_BIN" down || true
-  elif [ -x "$BIN" ]; then
-    HAPIY_ENV=production HAPIY_HOST=0.0.0.0 HAPIY_PORT="$WEB_PORT" "$BIN" down || true
-  fi
+  HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" \
+    HAPIY_STATE_DIR="$STATE_DIR" HAPIY_DB_PATH="$STATE_DIR/hapiy.db" HAPIY_LOG_DIR="$STATE_DIR/logs" \
+    "$DEV_BIN" down || true
 
+  msg "restarting backend (dev, port $API_PORT)..."
+  HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" \
+    HAPIY_STATE_DIR="$STATE_DIR" HAPIY_DB_PATH="$STATE_DIR/hapiy.db" HAPIY_LOG_DIR="$STATE_DIR/logs" \
+    "$DEV_BIN" up
+
+  # Vite last: the backend is already healthy, so 18009 is dark only
+  # between `down` above and this start, instead of erroring on every /v1.
   msg "ensuring frontend (Vite dev server)..."
   (cd "$WEB_DIR" && ./scripts/dev.sh)
-  build_backend_to "$DEV_BIN"
-  msg "restarting backend (dev, port $API_PORT)..."
-  HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" "$DEV_BIN" down || true
-  HAPIY_ENV=development HAPIY_HOST=0.0.0.0 HAPIY_PORT="$API_PORT" "$DEV_BIN" up
 
   LAN_IF=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')
   LAN=$(ipconfig getifaddr "$LAN_IF" 2>/dev/null || true)
@@ -99,6 +104,9 @@ do_up_prod() {
 
   # Let the autostart service yield before the local stack takes the port.
   [ -x "$BIN" ] && "$BIN" service stop --quiet 2>/dev/null || true
+
+  # The dev frontend (Vite) also binds $WEB_PORT; it must release before serve.
+  (cd "$WEB_DIR" && ./scripts/dev.sh --stop) || true
 
   msg "firewall allow-list..."
   firewall_mode_arg=""
