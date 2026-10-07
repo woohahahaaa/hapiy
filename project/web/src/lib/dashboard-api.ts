@@ -378,6 +378,44 @@ export type SystemSetting = {
   readonly value: string
 }
 
+export type BackupModule =
+  | 'topology'
+  | 'providers'
+  | 'tokens'
+  | 'policy'
+  | 'agent'
+  | 'settings'
+  | 'usage'
+  | 'logs'
+
+export type BackupRecord = {
+  readonly id: string
+  readonly createdAt: string
+  readonly sizeBytes: number
+  readonly modules: readonly BackupModule[]
+  readonly path: string
+  readonly fileName: string
+  readonly source: string
+  readonly unchanged: boolean
+}
+
+export type BackupListResult = {
+  readonly records: readonly BackupRecord[]
+  readonly total: number
+  readonly resolvedPath: string
+}
+
+export const BACKUP_MODULE_IDS: readonly BackupModule[] = [
+  'topology',
+  'providers',
+  'tokens',
+  'policy',
+  'agent',
+  'settings',
+  'usage',
+  'logs',
+]
+
 // PriceRule — 一条转发计费倍率规则（请求改写/倍率编辑器用），与已退休的
 // 模型信息价格表无关。
 export type PriceRule = {
@@ -1072,6 +1110,25 @@ function parseSystemSetting(value: unknown): SystemSetting {
   return {
     key: readString(value.key, 'setting.key'),
     value: readString(value.value, 'setting.value'),
+  }
+}
+
+function parseBackupRecord(value: unknown): BackupRecord {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('backup') }), null)
+  }
+  const known = new Set<string>(BACKUP_MODULE_IDS)
+  return {
+    id: readString(value.id, 'backup.id'),
+    createdAt: readString(value.created_at, 'backup.created_at'),
+    sizeBytes: readNumber(value.size_bytes, 'backup.size_bytes', 0),
+    modules: readStringArray(value.modules, 'backup.modules').filter(
+      (module): module is BackupModule => known.has(module),
+    ),
+    path: readString(value.path, 'backup.path'),
+    fileName: readString(value.file_name, 'backup.file_name'),
+    source: readString(value.source, 'backup.source'),
+    unchanged: value.unchanged === true,
   }
 }
 
@@ -2916,6 +2973,43 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ paths }),
     })
+  },
+
+  // ── Data backups ──
+  async listBackups(limit: number, offset: number): Promise<BackupListResult> {
+    const body = await requestFull(`/backups?limit=${limit}&offset=${offset}`)
+    const data = body.data
+    if (!Array.isArray(data)) {
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('backup') }), null)
+    }
+    return {
+      records: data.map(parseBackupRecord),
+      total: readNumber(body.total, 'backups.total', 0),
+      resolvedPath: readString(body.resolved_path, 'backups.resolved_path'),
+    }
+  },
+  async createBackup(
+    modules: readonly BackupModule[],
+    path: string,
+  ): Promise<{ record: BackupRecord; fileCreated: boolean }> {
+    const body = await requestFull('/backups', {
+      method: 'POST',
+      body: JSON.stringify({ modules, path }),
+    })
+    return { record: parseBackupRecord(body.data), fileCreated: body.file_created === true }
+  },
+  async restoreBackup(id: string): Promise<void> {
+    await request(`/backups/${encodeURIComponent(id)}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+  },
+  async resolveBackupPath(path: string): Promise<string> {
+    const body = await requestFull(`/backups/path?path=${encodeURIComponent(path)}`)
+    if (!isRecord(body.data)) {
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('backup') }), null)
+    }
+    return readString(body.data.absolute_path, 'backups.absolute_path')
   },
 
   // ── Provider models ──

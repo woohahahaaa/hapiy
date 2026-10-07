@@ -92,6 +92,10 @@ func runServe() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// Relative backup paths resolve against the directory holding the live
+	// database (e.g. ~/.hapiy/backup → ~/.hapiy/backups).
+	service.SetBackupBaseDir(filepath.Dir(cfg.DatabasePath))
+
 	// Return space stranded by earlier deletes (e.g. cleared log captures) to
 	// the filesystem. Non-fatal: a locked or read-only database should still
 	// serve.
@@ -200,6 +204,10 @@ func runServe() {
 		}
 		return resolved, len(rows)
 	})
+
+	// Data-backup scheduler: never / daily / weekly. No-change runs only add a
+	// history record; a file is written when content actually changed.
+	service.StartBackupScheduler(db)
 
 	// Topology auto-archive: startup compensation + 5-minute stable-window.
 	stopTopologyArchive := handler.StartTopologyVersionAutoArchive(db)
@@ -353,6 +361,14 @@ func runServe() {
 			dashboardAuthed.PUT("/settings", handler.UpsertSetting(db))
 			dashboardAuthed.GET("/settings/base-url-paths", handler.ListBaseUrlPaths(db))
 			dashboardAuthed.PUT("/settings/base-url-paths", handler.ReplaceBaseUrlPaths(db))
+
+			// Data backups
+			dashboardAuthed.GET("/backups", handler.ListBackups(db))
+			dashboardAuthed.POST("/backups", handler.CreateBackup(db))
+			dashboardAuthed.GET("/backups/path", handler.ResolveBackupPath())
+			dashboardAuthed.GET("/backups/:id/download", handler.DownloadBackup(db))
+			dashboardAuthed.POST("/backups/:id/restore", handler.RestoreBackup(db, engine))
+			dashboardAuthed.DELETE("/backups/:id", handler.DeleteBackup(db))
 			dashboardAuthed.POST("/exchange-rate/refresh", handler.RefreshExchangeRate(db))
 			dashboardAuthed.POST("/exchange-rate/test", handler.TestExchangeRate())
 

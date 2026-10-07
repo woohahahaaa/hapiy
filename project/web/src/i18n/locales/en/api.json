@@ -24,6 +24,7 @@
   "metricsFailed": "Failed to fetch metrics (HTTP {{status}})",
   "fields": {
     "settings": "settings",
+    "backup": "backup",
     "model": "model",
     "affinityRules": "affinity rules",
     "channelAffinity": "channel affinity config",
