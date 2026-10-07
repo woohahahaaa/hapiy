@@ -12,6 +12,7 @@ import { VersionDialog } from '@/components/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/OtherSettings'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { useUpdateStatus } from '@/lib/update'
+import { isPathActive, navigation, type NavItem } from '@/config/navigation'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
