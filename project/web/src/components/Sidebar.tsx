@@ -100,8 +100,11 @@ const navigation: NavItem[] = [
       { id: 'general', labelKey: 'nav.general', href: '/settings/general' },
       { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
       { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
-      { id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' },
       { id: 'backup', labelKey: 'nav.backup', href: '/settings/backup' },
+      // Debug 只在 dev 模式（Vite 开发服务器）显示；生产构建里整项隐藏。
+      ...(import.meta.env.DEV
+        ? [{ id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' }]
+        : []),
     ],
   },
   {
