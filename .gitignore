@@ -21,7 +21,6 @@ $RECYCLE.BIN/
 logs/
 .opencode/
 *.db
-!project/backend/hapiy.db
 *.db-shm
 *.db-wal
 *.sqlite
