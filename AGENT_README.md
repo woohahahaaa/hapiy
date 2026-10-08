@@ -4,9 +4,9 @@
 >
 > *This README is AI-generated and may hallucinate. Code is the source of truth — open an issue or fix directly when descriptions diverge from reality.*
 
-hapiy 项目的一站式运行说明：前端 Vite + 后端 Go + 反向代理 + 数据库修复。
+hapiy 是连接模型、应用与 Agent 的自托管 AI 网关（产品介绍见 `README.md`）。本文件是它的一站式运行说明：前端 Vite + 后端 Go + 反向代理 + 数据库修复。
 
-> *One-stop operations guide for hapiy: Vite frontend, Go backend, reverse proxy, and DB recovery.*
+> *hapiy is a self-hosted AI gateway and agent config manager (product intro in `README.md`). One-stop operations guide for hapiy: Vite frontend, Go backend, reverse proxy, and DB recovery.*
 
 ---
 

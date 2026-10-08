@@ -401,10 +401,20 @@ export function HelpPage() {
   }, [location.hash, scrollTo])
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
-      {/* 整页按 1100px 宽的版面处理：顶栏、目录、正文同处一个居中列。 */}
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1100px] flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-card px-4 lg:px-6">
+    <div className="relative flex h-screen flex-col bg-background text-foreground">
+      {/* 顶部辉光铺满整页宽度：1100 版面两侧不能出现背景色差 */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-72"
+        style={{
+          backgroundImage:
+            "radial-gradient(60% 100% at 50% 0%, color-mix(in oklab, var(--primary) 10%, transparent), transparent)",
+        }}
+      />
+
+      {/* 顶栏通铺；内容仍对齐 1100 版面 */}
+      <header className="relative flex h-14 shrink-0 items-center border-b border-border-subtle bg-card">
+        <div className="mx-auto flex w-full max-w-[1100px] items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
               to="/"
@@ -419,8 +429,11 @@ export function HelpPage() {
           <div className="flex items-center gap-2">
             <ModeToggle size="icon" />
           </div>
-        </header>
+        </div>
+      </header>
 
+      {/* 整页按 1100px 宽的版面处理：目录、正文同处一个居中列。 */}
+      <div className="relative mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col">
         {/* 小屏目录：下拉跳转 */}
         <div className="flex items-center gap-2 border-b border-border-subtle bg-card px-4 py-2 lg:hidden">
           <span className="shrink-0 text-xs text-muted-foreground">目录</span>
@@ -445,7 +458,7 @@ export function HelpPage() {
         <div className="flex min-h-0 flex-1">
           <aside
             className={cn(
-              "hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card/30 px-3 py-4 lg:flex",
+              "hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border-subtle px-3 py-4 lg:flex",
               CUSTOM_SCROLLBAR
             )}
           >
@@ -545,23 +558,13 @@ export function HelpPage() {
             className={cn("min-w-0 flex-1 overflow-y-auto", CUSTOM_SCROLLBAR)}
           >
             <div className="relative">
-              {/* 顶部一层主题色辉光，参考文档站的首页氛围 */}
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-72"
-                style={{
-                  backgroundImage:
-                    "radial-gradient(60% 100% at 50% 0%, color-mix(in oklab, var(--primary) 10%, transparent), transparent)",
-                }}
-              />
               <article className="relative mx-auto w-full max-w-3xl px-6 py-10 lg:px-10">
                 <h1 className="text-4xl font-semibold tracking-tight">
                   hapiy 帮助文档
                 </h1>
                 <p className="mt-3 max-w-2xl text-[15px] leading-7 text-muted-foreground">
-                  自托管 LLM API
-                  网关的使用手册：从搭建第一条转发链路，到改写、监控和 Agent
-                  接入。
+                  自托管的 AI 网关与 Agent 接入管理器：分发模型、接管 AI
+                  工具配置，从第一条转发链路开始。
                 </p>
                 <div className="mt-8 grid gap-3 sm:grid-cols-2">
                   {QUICK_LINKS.map((link) => (

@@ -2,9 +2,14 @@
 
 ## hapiy 是什么
 
-hapiy 是一套**自托管的 LLM API 网关**。它对外提供与 OpenAI 兼容的 HTTP 接口（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/images/generations`、`/v1/audio/speech`、`/v1/audio/transcriptions`），对内把请求按你在「转发拓扑」里画出的可视化流程，转发到你配置的上游供应商——OpenAI、Anthropic 兼容服务、自建或第三方中转都行。客户端只需要改一个 BaseURL 和一把令牌 Key，就能把各种应用接到统一的模型出口上。
+hapiy 是一套**自托管的 AI 网关与 Agent 接入管理器**：一套接口接入所有上游模型，一键把 AI 编程工具接到自己的网关，不用逐个手改客户端配置。
 
-围绕转发链路，hapiy 还提供：供应商与密钥池管理、令牌签发与额度、请求/响应改写、并发控制、故障转移与自动恢复、渠道亲和性、请求/响应日志抓取、用量与费用统计，以及把常见 AI Agent 软件（opencode、ChatGPT/Codex、openclaw 等）接入本系统的「接管Agent」。所有数据保存在本地 SQLite，单进程部署，适合在自己的服务器或局域网上运行。
+- **模型网关**：对外提供与 OpenAI 兼容的 HTTP 接口（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/images/generations`、`/v1/audio/speech`、`/v1/audio/transcriptions`），客户端只改一个 BaseURL 和一把令牌 Key；对内按「转发拓扑」把请求转发到 OpenAI、Anthropic 兼容、自建或三方中转等上游。
+- **管理能力**：供应商与密钥池、令牌与额度、请求/响应改写、并发控制、故障转移与自动恢复、渠道亲和性。
+- **监控与成本**：日志抓取、活动监视、使用记录、用量与费用统计。
+- **Agent 接管**：opencode、Codex、openclaw、WorkBuddy 等软件的配置纳入管理（本机或 SSH），写入 hapiy 地址与 Key。
+
+所有数据存本地 SQLite，单进程部署。
 
 一个请求的完整旅程：客户端带 `Authorization: Bearer hk-...` 调用 hapiy → 令牌鉴权 → 按转发拓扑（请求入口、条件开关、供应商插槽）选出一个可用的上游供应商与 Key → 执行请求改写 → 并发控制 → 调用上游 → 响应改写 → 写使用记录并累计用量。
 
