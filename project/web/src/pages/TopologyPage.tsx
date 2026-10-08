@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type TouchEvent as ReactTouchEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   ReactFlow,
@@ -68,6 +69,7 @@ import {
   type FlatCanvas,
 } from '@/lib/flat-topology'
 import { buildCanvasNodes } from '@/lib/canvas-nodes'
+import { attachProviderToTopology } from '@/lib/topology-attach'
 
 const nodeTypes = {
   modelHub: NodeModel,
@@ -309,6 +311,11 @@ function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
 
 export function TopologyPage() {
   const { t } = useTranslation('topology')
+  const location = useLocation()
+  const reactNavigate = useNavigate()
+  // 供应商页保存后「添加到拓扑」：跳转时把待接入的供应商放进 location.state，
+  // 数据加载完成后由 applyPendingProvider 落到拓扑文档里。
+  const pendingProviderRef = useRef<{ id: string; name: string } | null>(null)
   // A-group wiring: 绑定下拉框按类型读取 加载中/加载失败 状态并支持打开时刷新
   const { rules: slotRules, status: slotRuleStatus, refreshRuleType } = useSlotRules()
   const [providers, setProviders] = useState<readonly Provider[] | null>(null)
@@ -1981,6 +1988,29 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     ])
   }, [setTopology, markDirty, commitHistory, placeNewNodes, beginFlowIsolation, t])
 
+  // 供应商页「添加到拓扑」在数据加载完成后执行一次。
+  const applyPendingProvider = useCallback((pending: { id: string; name: string }) => {
+    const cur = tpRef.current
+    if (!cur) return
+    const result = attachProviderToTopology(cur, pending, t('node.entry'))
+    if (result.kind === 'exists') {
+      toast(t('toast.providerAlreadyAdded', { name: pending.name }))
+      return
+    }
+    if (sameFlatTopology(cur, result.topology)) return
+    commitHistory(cur)
+    beginFlowIsolationRef.current()
+    setTopology(result.topology)
+    markDirty()
+    if (result.kind === 'workflowCreated') {
+      placeNewNodes([
+        { id: result.entryId, width: topologyConfig.fallbackNodeSize.width },
+        { id: result.slotId, width: topologyConfig.render.slot.shellMinWidth },
+      ])
+    }
+    toast(t('toast.providerAdded', { name: pending.name }))
+  }, [t, commitHistory, setTopology, markDirty, placeNewNodes])
+
   const handleAddButtonClick = useCallback(() => {
     const btn = addButtonRef.current
     if (!btn) {
@@ -2006,6 +2036,21 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   const totalEntries = useMemo(() => (tp ? tp.nodes.filter((n) => isRequestEntry(n)).length : 0), [tp])
   const canUndo = historyState.undo > 0
   const canRedo = historyState.redo > 0
+
+  // 记录 location.state 里的待接入供应商，并立刻清掉 state，避免返回/刷新时重复执行。
+  useEffect(() => {
+    const state = location.state as { addProviderId?: unknown; addProviderName?: unknown } | null
+    if (!state || typeof state.addProviderId !== 'string' || typeof state.addProviderName !== 'string') return
+    pendingProviderRef.current = { id: state.addProviderId, name: state.addProviderName }
+    reactNavigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, reactNavigate])
+
+  useEffect(() => {
+    const pending = pendingProviderRef.current
+    if (!pending || loading || !tp || providers === null) return
+    pendingProviderRef.current = null
+    applyPendingProvider(pending)
+  }, [loading, tp, providers, applyPendingProvider])
 
   if (loading) {
     return (

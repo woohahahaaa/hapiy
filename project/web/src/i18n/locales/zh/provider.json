@@ -133,5 +133,11 @@
     "loading": "models.dev 数据加载中...",
     "noMatch": "未找到匹配的模型",
     "placeholder": "输入模型名称"
+  },
+  "addToTopology": {
+    "title": "添加到转发拓扑？",
+    "description": "供应商「{{name}}」已保存。添加到转发拓扑后，请求才会正式路由到它；暂不添加的话，它不会参与任何请求。",
+    "later": "暂不添加",
+    "confirm": "添加到拓扑"
   }
 }

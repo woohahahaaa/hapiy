@@ -16,7 +16,9 @@
     "layoutChangedElsewhere": "布局已在其他页面被修改，请刷新以加载最新布局",
     "layoutLoadFailed": "布局加载失败，使用默认位置",
     "nothingToCopy": "没有可复制的选中节点",
-    "duplicateProvider": "同一个 Provider（{{name}}）不能在多个激活工作流中被启用"
+    "duplicateProvider": "同一个 Provider（{{name}}）不能在多个激活工作流中被启用",
+    "providerAdded": "已将「{{name}}」添加到转发拓扑",
+    "providerAlreadyAdded": "「{{name}}」已经在转发拓扑中"
   },
   "validation": {
     "duplicateSlot": "一个工作流里面不能有多个{{slot}}",

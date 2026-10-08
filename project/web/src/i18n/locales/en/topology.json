@@ -16,7 +16,9 @@
     "layoutChangedElsewhere": "The layout was modified in another page. Refresh to load the latest layout.",
     "layoutLoadFailed": "Failed to load layout; using default positions",
     "nothingToCopy": "No selected nodes to copy",
-    "duplicateProvider": "Provider ({{name}}) cannot be enabled in multiple active workflows"
+    "duplicateProvider": "Provider ({{name}}) cannot be enabled in multiple active workflows",
+    "providerAdded": "\"{{name}}\" added to the topology",
+    "providerAlreadyAdded": "\"{{name}}\" is already in the topology"
   },
   "validation": {
     "duplicateSlot": "A workflow cannot contain more than one {{slot}}",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button'
 
 import { Checkbox } from '@/components/checkbox'
 import { DataTable, type ColumnDef } from '@/components/data-table'
-import { Dialog, DialogContent, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -84,12 +85,15 @@ function toErrorMessage(error: unknown): string {
 
 export function ProviderPage() {
   const { t } = useTranslation('provider')
+  const navigate = useNavigate()
   const [providers, setProviders] = useState<readonly Provider[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // 新建成功后询问是否接入转发拓扑；非空即弹窗。
+  const [createdProvider, setCreatedProvider] = useState<Provider | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -133,13 +137,30 @@ export function ProviderPage() {
   }
 
   const handleSave = async (provider: ProviderInput) => {
-    const saved = await runMutation(() => editing
-      ? dashboardApi.updateProvider(editing.id, provider)
-      : dashboardApi.createProvider(provider))
-    if (saved) {
+    const target = editing
+    setIsSaving(true)
+    setError(null)
+    try {
+      const saved = target
+        ? await dashboardApi.updateProvider(target.id, provider)
+        : await dashboardApi.createProvider(provider)
+      await loadProviders()
       setEditing(null)
       setIsDialogOpen(false)
+      // 新建的供应商默认不在拓扑里，只有接入拓扑后请求才会真的路由到它。
+      if (!target) setCreatedProvider(saved)
+    } catch (error) {
+      setError(toErrorMessage(error))
+    } finally {
+      setIsSaving(false)
     }
+  }
+
+  const handleAddToTopology = () => {
+    const provider = createdProvider
+    if (!provider) return
+    setCreatedProvider(null)
+    navigate('/', { state: { addProviderId: provider.id, addProviderName: provider.name } })
   }
 
   const handleResetDisableDimension = async (provider: Provider, dimension: 'provider' | 'base_url' | 'key') => {
@@ -274,6 +295,32 @@ export function ProviderPage() {
             }
           }}
         />
+
+        <Dialog
+          open={createdProvider !== null}
+          onOpenChange={(open) => {
+            if (!open) setCreatedProvider(null)
+          }}
+        >
+          <DialogContent width="sm" scrollFooter>
+            <DialogHeader>
+              <DialogTitle>{t('addToTopology.title')}</DialogTitle>
+              <DialogDescription>
+                {t('addToTopology.description', { name: createdProvider?.name ?? '' })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogScrollBody
+              footer={
+                <>
+                  <Button variant="outline" onClick={() => setCreatedProvider(null)}>
+                    {t('addToTopology.later')}
+                  </Button>
+                  <Button onClick={handleAddToTopology}>{t('addToTopology.confirm')}</Button>
+                </>
+              }
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

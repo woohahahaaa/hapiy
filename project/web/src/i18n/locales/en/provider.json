@@ -138,5 +138,11 @@
     "loading": "Loading models.dev data...",
     "noMatch": "No matching model found",
     "placeholder": "Enter model name"
+  },
+  "addToTopology": {
+    "title": "Add to the topology?",
+    "description": "Provider \"{{name}}\" has been saved. It starts serving requests once added to the topology; if you skip this, it will not participate in any request.",
+    "later": "Not now",
+    "confirm": "Add to topology"
   }
 }
