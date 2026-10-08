@@ -108,7 +108,6 @@ export function ProfilePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.profile')}
         description={t('profile.pageDescription')}
       />
       <div className="flex-1 space-y-6 p-6">

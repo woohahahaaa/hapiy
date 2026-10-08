@@ -152,7 +152,6 @@
     "requestBodyPreview": "Request body preview"
   },
   "backup": {
-    "pageTitle": "Data Backup",
     "pageDescription": "Choose the modules to back up; both automatic and manual backups follow the current selection.",
     "tab": "Data Backup",
     "paramsTitle": "Backup parameters",
@@ -212,7 +211,6 @@
     "flowLightsDescription": "Each run prints the following three kinds of info (example):\n\n[FlowLights] request b3f2.. model=deepseek-v4-flash provider=deepseek source=request-fact path=entry-test→pslot-test→prov-xxx→…\n[FlowLights] run#12 step 3/16 loop#0 activate node prov-xxx\n[FlowLights] run#12 step 4/16 loop#0 activate edge entry-test→pslot-test\n[FlowLights] verify prov-xxx -> deepseek: status=true autoDisabled=false workflow=true   (matched)\n[FlowLights] skip logOutput-..: node switch is off   (when unmatched, the reason is given: switch off/externally disabled/countdown expired/provider record unmatched)"
   },
   "tokenUsage": {
-    "pageTitle": "Token Usage Fields",
     "pageDescription": "Configure the field paths (gjson) used to read token usage from upstream response bodies; tried in order, stopping at the first match",
     "cardTitle": "Field Path Configuration",
     "dialogTitle": "Token Usage Field Configuration",

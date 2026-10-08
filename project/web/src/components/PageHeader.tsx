@@ -1,20 +1,29 @@
 import type { ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Separator } from '@/components/ui/separator'
+import { findNavLabelKey } from '@/config/navigation'
 
 interface PageHeaderProps {
-  title: string
+  title?: string
   description?: string
   status?: string
   actions?: ReactNode
 }
 
 export function PageHeader({ title, description, status, actions }: PageHeaderProps) {
+  const location = useLocation()
+  const { t } = useTranslation('common')
+  // 不传 title 时直接引用侧边栏菜单文案，避免页面和菜单各写一套。
+  const navLabelKey = findNavLabelKey(location.pathname)
+  const heading = title ?? (navLabelKey ? t(navLabelKey) : '')
+
   return (
     <div className="bg-card">
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">{title}</h1>
+            <h1 className="text-xl font-semibold">{heading}</h1>
             {(description || status) && (
               <p className="mt-1 text-sm text-muted-foreground">
                 {description}

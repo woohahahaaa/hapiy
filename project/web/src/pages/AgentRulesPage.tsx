@@ -328,7 +328,6 @@ export function AgentRulesPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.agent')}
         description={t('page.description')}
       />
       <div className="flex min-h-0 flex-1 flex-col p-6">

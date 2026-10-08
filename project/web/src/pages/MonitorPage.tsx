@@ -683,7 +683,6 @@ export function MonitorPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('page.activity.title')}
         description={t('page.activity.description')}
       />
       <div className="flex-1 overflow-auto p-6">

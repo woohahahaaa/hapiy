@@ -74,7 +74,6 @@ export function TokenUsageSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('tokenUsage.pageTitle')}
         description={t('tokenUsage.pageDescription')}
       />
       <div className="p-6">
