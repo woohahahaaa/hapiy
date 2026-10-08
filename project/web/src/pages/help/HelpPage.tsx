@@ -296,6 +296,21 @@ const markdownComponents: Components = {
 
 // ── 页面 ─────────────────────────────────────────────────────────────────────
 
+// 自定义细滚动条：浅色 thumb、悬浮加深，替代系统默认样式（webkit + Firefox）。
+const CUSTOM_SCROLLBAR = [
+  "[scrollbar-width:thin]",
+  "[scrollbar-color:var(--border)_transparent]",
+  "[&::-webkit-scrollbar]:w-2.5",
+  "[&::-webkit-scrollbar-track]:bg-transparent",
+  "[&::-webkit-scrollbar-thumb]:rounded-full",
+  "[&::-webkit-scrollbar-thumb]:border-[3px]",
+  "[&::-webkit-scrollbar-thumb]:border-solid",
+  "[&::-webkit-scrollbar-thumb]:border-transparent",
+  "[&::-webkit-scrollbar-thumb]:bg-foreground/20",
+  "[&::-webkit-scrollbar-thumb]:bg-clip-padding",
+  "[&::-webkit-scrollbar-thumb:hover]:bg-foreground/35",
+].join(" ")
+
 export function HelpPage() {
   const sections = useMemo(() => parseSections(helpMarkdown), [])
   const bodyMarkdown = useMemo(() => helpMarkdown.replace(/^#\s+.*\n+/, ""), [])
@@ -388,7 +403,7 @@ export function HelpPage() {
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       {/* 整页按 1100px 宽的版面处理：顶栏、目录、正文同处一个居中列。 */}
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1100px] flex-col border-x border-border-subtle">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1100px] flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border-subtle bg-card px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -428,7 +443,12 @@ export function HelpPage() {
         </div>
 
         <div className="flex min-h-0 flex-1">
-          <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card/30 px-3 py-4 lg:flex">
+          <aside
+            className={cn(
+              "hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border-subtle bg-card/30 px-3 py-4 lg:flex",
+              CUSTOM_SCROLLBAR
+            )}
+          >
             <div className="relative mb-3">
               <AppIcon
                 name="search"
@@ -520,7 +540,10 @@ export function HelpPage() {
             )}
           </aside>
 
-          <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto">
+          <div
+            ref={scrollRef}
+            className={cn("min-w-0 flex-1 overflow-y-auto", CUSTOM_SCROLLBAR)}
+          >
             <div className="relative">
               {/* 顶部一层主题色辉光，参考文档站的首页氛围 */}
               <div
