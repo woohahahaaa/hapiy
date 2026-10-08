@@ -1,6 +1,6 @@
 # hapiy installer for Windows. Run in PowerShell:
 #
-#   irm https://raw.githubusercontent.com/woohahahaaa/hapiy-releases/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.ps1 | iex
 #
 # 安装脚本做四件事：下载最新发行版、校验 SHA256、装到固定目录并加入用户
 # PATH、注册登录自启（任务计划程序）。重复执行即为升级。
@@ -10,7 +10,7 @@
 #   $env:HAPIY_NO_SERVICE=1    跳过自启任务注册
 $ErrorActionPreference = "Stop"
 
-$Base = "https://github.com/woohahahaaa/hapiy-releases/releases/latest/download"
+$Base = "https://github.com/woohahahaaa/hapiy/releases/latest/download"
 $Asset = "hapiy-windows-amd64.zip"
 $Root = if ($env:HAPIY_HOME) { $env:HAPIY_HOME } else { Join-Path $env:LOCALAPPDATA "hapiy" }
 $AppDir = Join-Path $Root "app"

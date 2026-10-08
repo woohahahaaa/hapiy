@@ -1,5 +1,5 @@
 // Package selfupdate 负责 hapiy 的自升级：从公开发行仓
-// woohahahaaa/hapiy-releases 读取最新版本号，下载对应平台资产，校验 SHA256
+// woohahahaaa/hapiy 读取最新版本号，下载对应平台资产，校验 SHA256
 // 后原地替换二进制与 webdist 目录。
 //
 // 版本号放在 release 资产 version.txt 里（而不是 GitHub API）：检查只是对
@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	releaseRepo = "woohahahaaa/hapiy-releases"
+	releaseRepo = "woohahahaaa/hapiy"
 	baseURL     = "https://github.com/" + releaseRepo + "/releases/latest/download"
 
 	// maxDownloadBytes 是对单个资产的体积上限（防御异常响应把磁盘写满）。
