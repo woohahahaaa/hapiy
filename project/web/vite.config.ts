@@ -4,10 +4,11 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { flowLogMiddleware } from "./flow-log-middleware"
+import { helpDirMiddleware } from "./help-dir-middleware"
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [flowLogMiddleware(), react(), tailwindcss()],
+  plugins: [helpDirMiddleware(), flowLogMiddleware(), react(), tailwindcss()],
   test: {
     // Component snapshot tests render translated UI; load the i18n singleton
     // (defaults to Chinese) before each test file.

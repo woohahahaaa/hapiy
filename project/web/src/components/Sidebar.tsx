@@ -203,10 +203,17 @@ function NavLink({
 
   const trigger = (
     <SidebarMenuButton asChild isActive={selfActive}>
-      <Link to={item.href ?? '/'}>
-        {item.icon}
-        <span>{showLabel ? t(item.labelKey) : ''}</span>
-      </Link>
+      {item.external ? (
+        <a href={item.href} target="_blank" rel="noopener noreferrer">
+          {item.icon}
+          <span>{showLabel ? t(item.labelKey) : ''}</span>
+        </a>
+      ) : (
+        <Link to={item.href ?? '/'}>
+          {item.icon}
+          <span>{showLabel ? t(item.labelKey) : ''}</span>
+        </Link>
+      )}
     </SidebarMenuButton>
   )
 

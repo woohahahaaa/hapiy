@@ -88,6 +88,7 @@
     "debug": "Debug",
     "backup": "Data Backup",
     "profile": "Profile",
+    "help": "Help",
     "section": "Navigation",
     "expandSection": "Expand {{name}}",
     "collapseSection": "Collapse {{name}}"

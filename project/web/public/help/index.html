@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0" />
+  <meta name="description" content="hapiy — 自托管 LLM API 网关使用手册" />
+  <title>hapiy 帮助文档</title>
+  <link rel="icon" href="/logo.svg" />
+  <link id="docsify-theme" rel="stylesheet" href="./vendor/themes/vue.css" />
+  <style>
+    :root { --theme-color: #6e56cf; }
+    .app-name { letter-spacing: 0.01em; }
+    .markdown-section { max-width: 860px; }
+    .markdown-section table { display: table; }
+    .markdown-section code { word-break: break-word; }
+  </style>
+</head>
+<body>
+  <div id="app">正在加载帮助文档…</div>
+
+  <script>
+    // 跟随系统亮/暗色，切换 docsify 主题文件（不依赖网络）。
+    (function () {
+      var media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)')
+      if (!media) return
+      function apply() {
+        var link = document.getElementById('docsify-theme')
+        if (link) link.href = media.matches ? './vendor/themes/dark.css' : './vendor/themes/vue.css'
+      }
+      apply()
+      if (media.addEventListener) media.addEventListener('change', apply)
+    })()
+  </script>
+
+  <script>
+    window.$docsify = {
+      name: 'hapiy 帮助文档',
+      loadSidebar: true,
+      subMaxLevel: 3,
+      auto2top: true,
+      maxLevel: 4,
+      search: {
+        placeholder: '搜索文档…',
+        noData: '没有找到相关内容',
+        depth: 3,
+      },
+    }
+  </script>
+  <script src="./vendor/docsify.min.js"></script>
+  <script src="./vendor/plugins/search.min.js"></script>
+</body>
+</html>
