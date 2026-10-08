@@ -67,6 +67,7 @@
   "wrap_truncation": "TextWrapTruncation",
   "palette": "BackgroundColor",
   "fullscreen": "FullScreen",
-  "translate": "Translate"
+  "translate": "Translate",
+  "search": "Search"
  }
 }
