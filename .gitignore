@@ -26,8 +26,9 @@ logs/
 *.sqlite
 *.sqlite-journal
 encryption.key
-# The live database is encrypted with this key (SSH creds), so it ships too.
-!project/backend/encryption.key
+# Local-only files: never track the credentials memo or the dev build output.
+CREDENTIALS.md
+project/backend/hapiy
 
 # Database backups
 .backup/
