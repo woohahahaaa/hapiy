@@ -21,6 +21,8 @@ $RECYCLE.BIN/
 logs/
 .opencode/
 *.db
+*.bak*
+*.old
 *.db-shm
 *.db-wal
 *.sqlite
