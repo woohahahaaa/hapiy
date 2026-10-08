@@ -89,7 +89,7 @@ export const navigation: NavItem[] = [
     id: 'help',
     labelKey: 'nav.help',
     icon: <AppIcon name="help" />,
-    href: '/help/index.html',
+    href: '/help',
     external: true,
   },
 ]
