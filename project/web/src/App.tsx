@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { AppShell } from '@/layouts/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
 import { TopologyPage } from '@/pages/TopologyPage'
@@ -23,11 +24,23 @@ import { AuthGate } from '@/components/AuthGate'
 import { LanguageProvider } from '@/i18n/language-context'
 import { Toaster } from '@/components/ui/toast'
 
+// 帮助文档整页懒加载：markdown 渲染库只在打开帮助时才下载。
+const HelpPage = lazy(() => import('@/pages/help/HelpPage').then((m) => ({ default: m.HelpPage })))
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* 帮助文档是独立全屏页面：不套 AppShell（没有系统菜单），也不要求登录态。 */}
+        <Route
+          path="/help"
+          element={
+            <Suspense fallback={null}>
+              <HelpPage />
+            </Suspense>
+          }
+        />
         <Route
           path="/*"
           element={
