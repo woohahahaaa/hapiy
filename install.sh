@@ -1,7 +1,7 @@
 #!/bin/sh
 # hapiy installer for macOS / Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/woohahahaaa/hapiy-releases/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.sh | sh
 #
 # 安装脚本做四件事：下载最新发行版、校验 SHA256、装到固定目录并链接到 PATH、
 # 注册登录自启（launchd / systemd --user）。重复执行即为升级。
@@ -12,7 +12,7 @@
 #   HAPIY_NO_SERVICE=1   跳过自启服务注册
 set -eu
 
-BASE="https://github.com/woohahahaaa/hapiy-releases/releases/latest/download"
+BASE="https://github.com/woohahahaaa/hapiy/releases/latest/download"
 APP_DIR="${HAPIY_HOME:-$HOME/.hapiy}/app"
 BIN_DIR="${HAPIY_BIN_DIR:-$HOME/.local/bin}"
 # The installed backend is the prod stack, which serves on 18009 (dev uses 8080).

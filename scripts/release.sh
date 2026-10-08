@@ -13,8 +13,8 @@
 #   SHA256SUMS                       自升级校验清单
 #   version.txt                      版本检查（/update 与版本弹窗用）
 #
-# 同时把 install.sh / install.ps1 同步到公开仓库的 main 分支，raw 安装地址
-# （/main/install.sh）始终指向最新文档。
+# 发行资产直接挂在 hapiy 仓库的 Releases 下；install.sh / install.ps1 就在
+# 仓库根目录，raw 安装地址（/main/install.sh）随代码一起更新。
 #
 # 依赖：node/npm（或 pnpm）、go、lipo（macOS）、gh（已登录）、git、shasum。
 
@@ -23,7 +23,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-RELEASE_REPO="woohahahaaa/hapiy-releases"
+RELEASE_REPO="woohahahaaa/hapiy"
 
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
@@ -87,20 +87,5 @@ Install (Windows, PowerShell):
 
 Upgrade: hapiy upgrade — or use the version dialog in the sidebar." \
   "$DIST"/*
-
-say "syncing install.sh / install.ps1 to $RELEASE_REPO"
-PUB="$WORK/pub"
-gh repo clone "$RELEASE_REPO" "$PUB" -- --depth 1 >/dev/null 2>&1
-cp install.sh install.ps1 "$PUB/"
-(
-  cd "$PUB"
-  git add -A
-  if git diff --cached --quiet; then
-    echo "[release] installers already up to date"
-  else
-    git commit -m "sync installers for $VERSION"
-    git push
-  fi
-)
 
 say "done: $TAG published; users get it via install.sh / install.ps1 / hapiy upgrade"
