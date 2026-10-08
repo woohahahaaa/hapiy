@@ -23,7 +23,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">{heading}</h1>
+            <h1 className="text-lg font-semibold">{heading}</h1>
             {(description || status) && (
               <p className="mt-1 text-sm text-muted-foreground">
                 {description}
