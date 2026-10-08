@@ -88,6 +88,7 @@
     "debug": "Debug",
     "backup": "数据备份",
     "profile": "用户资料",
+    "help": "帮助文档",
     "section": "导航",
     "expandSection": "展开 {{name}}",
     "collapseSection": "折叠 {{name}}"

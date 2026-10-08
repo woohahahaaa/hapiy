@@ -13,6 +13,8 @@ export interface NavItem {
   icon: ReactNode
   href?: string
   children?: NavSubItem[]
+  // 外部静态页面（如帮助文档）：在新标签页打开，不进入 SPA 路由。
+  external?: boolean
 }
 
 export const navigation: NavItem[] = [
@@ -82,6 +84,13 @@ export const navigation: NavItem[] = [
     labelKey: 'nav.profile',
     icon: <AppIcon name="person" />,
     href: '/profile',
+  },
+  {
+    id: 'help',
+    labelKey: 'nav.help',
+    icon: <AppIcon name="help" />,
+    href: '/help/index.html',
+    external: true,
   },
 ]
 

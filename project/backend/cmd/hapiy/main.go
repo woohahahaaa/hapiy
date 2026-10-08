@@ -557,6 +557,21 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			fileServer.ServeHTTP(c.Writer, c.Request)
 			return
 		}
+		// 目录自带 index.html（如帮助文档 /help/）时直接 serve 该目录首页，
+		// 不要落到 SPA fallback（那会返回应用首页）。没有结尾斜杠时先 301，
+		// 保证页面里的相对资源路径按目录解析。
+		if p != "/" {
+			if info, err := os.Stat(filepath.Join(webDist, p, "index.html")); err == nil && !info.IsDir() {
+				if !strings.HasSuffix(c.Request.URL.Path, "/") {
+					c.Redirect(http.StatusMovedPermanently, c.Request.URL.Path+"/")
+					return
+				}
+				req := c.Request.Clone(c.Request.Context())
+				req.URL.Path = p + "/"
+				fileServer.ServeHTTP(c.Writer, req)
+				return
+			}
+		}
 		req := c.Request.Clone(c.Request.Context())
 		req.URL.Path = "/"
 		fileServer.ServeHTTP(c.Writer, req)
