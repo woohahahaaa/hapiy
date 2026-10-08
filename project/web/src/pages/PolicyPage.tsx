@@ -227,7 +227,6 @@ function RewritePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.rewrite')}
         description={t('rewrite.description')}
         status={t('statusCount', { count: total })}
       />
@@ -428,7 +427,6 @@ function FailoverPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.failover')}
         description={t('failover.description')}
       />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
@@ -690,7 +688,6 @@ function RewriteResponsePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.rewriteResponse')}
         description={t('response.description')}
         status={t('statusCount', { count: total })}
       />

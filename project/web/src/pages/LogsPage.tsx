@@ -379,7 +379,6 @@ export function LogsPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('page.usage.title')}
         description={t('page.usage.description')}
         status={total > 0 ? t('page.recordCount', { count: total }) : undefined}
       />

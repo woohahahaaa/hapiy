@@ -7,7 +7,6 @@ export function GeneralSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.general')}
         description={t('general.pageDescription')}
       />
       <div className="flex-1 flex flex-col gap-6 p-6">

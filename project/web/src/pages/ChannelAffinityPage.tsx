@@ -325,7 +325,6 @@ export function ChannelAffinityPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.channelAffinity')}
         description={t('affinity.pageDescription')}
         status={t('affinity.status', { count: total })}
       />

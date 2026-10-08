@@ -1,15 +1,12 @@
 {
   "page": {
     "activity": {
-      "title": "活动监视",
       "description": "实时活动请求与运行统计"
     },
     "usage": {
-      "title": "使用记录",
       "description": "查询 API 请求的使用记录、消耗与耗时"
     },
     "capture": {
-      "title": "日志抓取",
       "description": "查看已抓取的请求/响应日志原文"
     },
     "recordCount": "{{count}} 条记录"

@@ -226,7 +226,6 @@ export function ProviderPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.provider')}
         description={t('description')}
         status={t('list.statusCount', { count: total })}
       />

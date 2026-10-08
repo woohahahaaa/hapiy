@@ -1,6 +1,5 @@
 {
   "page": {
-    "title": "Config Files",
     "description": "Manage config files of taken-over agents: path detection, content editing and parsing"
   },
   "os": {

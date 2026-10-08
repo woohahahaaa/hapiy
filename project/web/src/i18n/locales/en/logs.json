@@ -1,15 +1,12 @@
 {
   "page": {
     "activity": {
-      "title": "Activity Monitor",
       "description": "Live active requests and runtime statistics"
     },
     "usage": {
-      "title": "Usage Logs",
       "description": "Browse API request usage, cost and latency"
     },
     "capture": {
-      "title": "Log Capture",
       "description": "View captured request/response log bodies"
     },
     "recordCount_one": "{{count}} record",

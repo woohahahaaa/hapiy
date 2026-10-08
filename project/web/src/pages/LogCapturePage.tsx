@@ -322,7 +322,6 @@ export function LogCapturePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('page.capture.title')}
         description={t('page.capture.description')}
         status={total > 0 ? t('page.recordCount', { count: total }) : undefined}
         actions={undefined}

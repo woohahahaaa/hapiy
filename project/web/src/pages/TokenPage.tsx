@@ -179,7 +179,6 @@ export function TokenPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title={t('common:nav.token')}
         description={t('description')}
         status={t('list.statusCount', { count: total })}
       />

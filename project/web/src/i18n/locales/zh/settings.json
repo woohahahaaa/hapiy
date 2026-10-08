@@ -152,7 +152,6 @@
     "requestBodyPreview": "请求体预览"
   },
   "backup": {
-    "pageTitle": "数据备份",
     "pageDescription": "选择需要备份的模块，自动与手动备份都按当前选择执行。",
     "tab": "数据备份",
     "paramsTitle": "备份参数",
@@ -212,7 +211,6 @@
     "flowLightsDescription": "每次输出以下三类信息（示例）：\n\n[流光Debug] 请求 b3f2.. model=deepseek-v4-flash provider=deepseek 路径来源=请求事实 path=entry-test→pslot-test→prov-xxx→…\n[流光Debug] run#12 step 3/16 loop#0 激活节点 prov-xxx\n[流光Debug] run#12 step 4/16 loop#0 激活连线 entry-test→pslot-test\n[流光Debug] 校验 prov-xxx -> deepseek: status=true autoDisabled=false workflow=true   （命中）\n[流光Debug] 跳过 logOutput-..: 节点开关已关闭   （未命中时给出原因：开关关闭/外部禁用/倒计时过期/供应商记录未匹配）"
   },
   "tokenUsage": {
-    "pageTitle": "Token 用量字段",
     "pageDescription": "配置从上游响应体读取 token 用量的字段路径（gjson），按顺序尝试，命中即停",
     "cardTitle": "字段路径配置",
     "dialogTitle": "Token 用量字段配置",

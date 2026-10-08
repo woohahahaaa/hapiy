@@ -2010,7 +2010,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   if (loading) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title={t('common:nav.topology')} description={t('page.description')} />
+        <PageHeader description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center gap-3">
           <AppIcon name="progress_activity" size={20} className="animate-spin" />
           <span className="text-sm">{t('state.loadingTopology')}</span>
@@ -2022,7 +2022,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   if (error) {
     return (
       <div className="flex h-screen flex-col">
-        <PageHeader title={t('common:nav.topology')} description={t('page.description')} />
+        <PageHeader description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
             <AppIcon name="warning" size={40} className="text-destructive" />
@@ -2040,7 +2040,6 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   return (
     <div className="flex h-screen flex-col">
       <PageHeader
-        title={t('common:nav.topology')}
         description={t('page.description')}
         status={t('page.status', { active: activeEntries, total: totalEntries, nodes: nodes.filter((n) => n.type !== 'modelHub').length })}
         actions={

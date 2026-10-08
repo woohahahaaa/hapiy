@@ -325,7 +325,7 @@ export function BackupSettingsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={t('backup.pageTitle')} description={t('backup.pageDescription')} />
+      <PageHeader description={t('backup.pageDescription')} />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <Tabs defaultValue="backup" className="flex min-h-0 flex-1 flex-col">
           <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border-subtle p-0">

@@ -190,7 +190,7 @@ export function AgentConfigPage() {
   const { t } = useTranslation('agentConfig')
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title={t('page.title')} description={t('page.description')} />
+      <PageHeader description={t('page.description')} />
       <div className="flex min-h-0 flex-1 flex-col p-6">
         <AgentConfigFilesTab />
       </div>
