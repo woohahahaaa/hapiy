@@ -84,10 +84,10 @@
     "baseUrl": "BaseURL",
     "general": "获取模型列表",
     "billing": "币种汇率",
-    "tokenUsage": "查询 Token 用量",
+    "tokenUsage": "查询Token用量",
     "debug": "Debug",
     "backup": "数据备份",
-    "profile": "个人资料",
+    "profile": "用户资料",
     "section": "导航",
     "expandSection": "展开 {{name}}",
     "collapseSection": "折叠 {{name}}"
