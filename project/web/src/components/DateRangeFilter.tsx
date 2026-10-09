@@ -70,6 +70,7 @@ export function DateRangeFilter({
       <DatePicker
         value={value.from}
         onChange={(from) => onChange({ ...value, from })}
+        size="sm"
         placeholder={t('dateRange.start')}
         aria-label={t('dateRange.start')}
       />
@@ -77,6 +78,7 @@ export function DateRangeFilter({
       <DatePicker
         value={value.to}
         onChange={(to) => onChange({ ...value, to })}
+        size="sm"
         placeholder={t('dateRange.end')}
         aria-label={t('dateRange.end')}
       />
