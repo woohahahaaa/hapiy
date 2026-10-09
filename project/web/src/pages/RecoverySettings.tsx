@@ -22,13 +22,19 @@ import {
 import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+import { DataTable, DefaultCell, type ColumnDef } from '@/components/data-table'
+import { SecretValue } from '@/components/SecretValue'
 import {
   dashboardApi,
   DashboardApiError,
   type DisabledRecord,
   type DisabledRecordDimension,
 } from '@/lib/dashboard-api'
+import {
+  buildProviderKeyNoteIndex,
+  keyNoteFromIndex,
+  type ProviderKeyNoteIndex,
+} from '@/lib/provider-key-notes'
 
 const RECOVERY_INTERVAL_KEY = 'automatic_disable_recovery_minutes'
 const RECOVERY_MODE_KEY = 'recovery_mode'
@@ -182,6 +188,7 @@ export function RecoverySettings() {
   const [savingHandler, setSavingHandler] = useState(false)
   const [previewRecord, setPreviewRecord] = useState<DisabledRecord | null>(null)
   const [providerNameById, setProviderNameById] = useState<ReadonlyMap<string, string>>(new Map())
+  const [keyNoteIndex, setKeyNoteIndex] = useState<ProviderKeyNoteIndex>(() => buildProviderKeyNoteIndex([]))
   // 一次性快照：哪些记录已超时，按顺序逐个弹窗。
   const [pastDeadlineQueue, setPastDeadlineQueue] = useState<readonly DisabledRecord[] | null>(null)
   const [queueIndex, setQueueIndex] = useState(0)
@@ -238,6 +245,7 @@ export function RecoverySettings() {
       })
     dashboardApi.listProviders({ limit: 1000, offset: 0 }).then(({ providers }) => {
       setProviderNameById(new Map(providers.map((p) => [p.id, p.name])))
+      setKeyNoteIndex(buildProviderKeyNoteIndex(providers))
     }).catch(() => {
       // 供应商名字映射失败不影响表格主体展示
     })
@@ -425,13 +433,25 @@ export function RecoverySettings() {
         key: 'value',
         label: t('recovery.colValue'),
         defaultWidth: { kind: 'percent', value: 20 },
-        defaultOverflow: 'ellipsis',
+        defaultOverflow: 'wrap',
         accessor: (row) => {
           // provider 维度的 value 就是 provider ID 本身，直接显示名字即可
           if (row.dimension === 'provider') {
             return providerNameById.get(row.value) ?? null
           }
           return row.value
+        },
+        render: (value, row) => {
+          // Key 维度的值就是具体 Key：默认模糊，有备注就加在第二行。
+          if (row.dimension === 'key') {
+            return (
+              <SecretValue
+                value={row.value}
+                note={keyNoteFromIndex(keyNoteIndex, row.value, row.providerId)}
+              />
+            )
+          }
+          return <DefaultCell value={value as string | null} />
         },
       },
       {
@@ -491,7 +511,7 @@ export function RecoverySettings() {
         ),
       },
     ]
-  }, [replayingId, providerNameById, recoveryMode, recoveryTimedMinutes, extendedRecordIds, handleRestoreDirect, t])
+  }, [replayingId, providerNameById, keyNoteIndex, recoveryMode, recoveryTimedMinutes, extendedRecordIds, handleRestoreDirect, t])
 
   return (
     <div className="flex flex-col gap-6">
