@@ -54,7 +54,7 @@ export function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder={t('login.usernamePlaceholder')}
               disabled={submitting}
-              className="rounded-xs"
+              className="rounded-none"
             />
           </Field>
           <Field>
@@ -67,13 +67,13 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t('login.passwordPlaceholder')}
               disabled={submitting}
-              className="rounded-xs"
+              className="rounded-none"
             />
           </Field>
         </FieldGroup>
 
         {error && (
-          <div className="rounded-xs border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <div className="rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
             {error}
           </div>
         )}

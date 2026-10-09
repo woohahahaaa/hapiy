@@ -128,7 +128,7 @@ export function ColumnSettingsPopover<T>(
                     className="flex-1"
                     disabled={isLocked}
                   />
-                  <div className="flex rounded-xs border border-border">
+                  <div className="flex rounded-none border border-border">
                     <Button
                       variant={cfg.align === "left" ? "secondary" : "ghost"}
                       size="icon-sm"
@@ -148,7 +148,7 @@ export function ColumnSettingsPopover<T>(
                       <AppIcon name="format_align_right" size={14} />
                     </Button>
                   </div>
-                  <div className="flex rounded-xs border border-border">
+                  <div className="flex rounded-none border border-border">
                     <Button
                       variant={
                         cfg.overflow === "ellipsis" ? "secondary" : "ghost"
@@ -176,7 +176,7 @@ export function ColumnSettingsPopover<T>(
                       <AppIcon name="paragraph_break" size={14} />
                     </Button>
                   </div>
-                  <div className="flex rounded-xs border border-border">
+                  <div className="flex rounded-none border border-border">
                     <Button
                       variant={isLocked ? "secondary" : "ghost"}
                       size="icon-sm"

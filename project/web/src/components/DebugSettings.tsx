@@ -66,7 +66,7 @@ export function DebugSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-xs border border-border bg-card p-4">
+      <div className="rounded-none border border-border bg-card p-4">
         <DebugToggle
           title={t('debug.nodeInfoTitle')}
           description={t('debug.nodeInfoDescription')}
@@ -74,7 +74,7 @@ export function DebugSettings() {
           onChange={(v) => handleToggle(DEBUG_NODE_INFO_KEY, v)}
         />
       </div>
-      <div className="rounded-xs border border-border bg-card p-4">
+      <div className="rounded-none border border-border bg-card p-4">
         <DebugToggle
           title={t('debug.flowLightsTitle')}
           description={t('debug.flowLightsDescription')}

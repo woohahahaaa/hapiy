@@ -59,7 +59,7 @@ interface ConditionGroupCardProps {
 function ConditionGroupCard({ group, onChange, onRemove, canRemove }: ConditionGroupCardProps) {
   const { t } = useTranslation('rewrite')
   return (
-    <div className="rounded-xs border border-amber-500/30 bg-amber-500/5 p-2">
+    <div className="rounded-none border border-amber-500/30 bg-amber-500/5 p-2">
       <div className="mb-1.5 flex items-center gap-2">
         <span className="text-xs text-muted-foreground">{t('group.label')}</span>
         <Select
@@ -81,7 +81,7 @@ function ConditionGroupCard({ group, onChange, onRemove, canRemove }: ConditionG
           type="button"
           onClick={onRemove}
           disabled={!canRemove}
-          className="nodrag nopan ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+          className="nodrag nopan ml-auto flex h-6 w-6 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={t('group.deleteLabel')}
           title={t('group.deleteTitle')}
         >
