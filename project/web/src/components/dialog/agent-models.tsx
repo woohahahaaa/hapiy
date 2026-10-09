@@ -934,7 +934,6 @@ for (const p of summary?.providers ?? []) {
                             { key: 'rename', label: t('menu.rename'), icon: 'edit' },
                             { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
                           ]}
-                          light={selectedProviderId === p.provider_id}
                           onSelect={(k) => {
                             if (k === 'rename') setRenamingProvider(p.provider_id)
                             else setConfirmingDeleteProvider(p.provider_id)
@@ -1066,7 +1065,6 @@ for (const p of summary?.providers ?? []) {
                                   icon="settings"
                                   tone="default"
                                   disabled={false}
-                                  light={selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint}
                                   onClick={() => {
                                     setManagedEditing(mv)
                                     setManagedDialogOpen(true)
@@ -1127,7 +1125,6 @@ for (const p of summary?.providers ?? []) {
                             { key: 'rename', label: t('menu.rename'), icon: 'edit' },
                             { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
                           ]}
-                          light={selectedModelId === m.id}
                           onSelect={(k) => {
                             if (!selectedProviderId) return
                             if (k === 'rename') setRenamingModel({ providerId: selectedProviderId, modelId: m.id })
@@ -1469,7 +1466,7 @@ function ProviderRow({
       onClick={onClick}
       className={
         'group relative flex h-[52px] w-full cursor-pointer items-center gap-1 rounded-xs py-1 pr-2 pl-4 text-left transition-colors ' +
-        (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
+        (selected ? 'bg-primary/15' : 'hover:bg-muted')
       }
     >
       {/* 箭头类 leading：绝对叠加在文字左前方，不参与流布局，
@@ -1480,16 +1477,14 @@ function ProviderRow({
         </div>
       ) : null}
       <div className={'flex min-w-0 flex-1 flex-col gap-0.5 text-left ' + (indent ? 'pl-3' : '')}>
-        <span className={'flex min-w-0 items-center truncate text-sm ' + (selected ? 'font-medium text-primary-foreground' : 'font-medium')}>{name}</span>
+        <span className="flex min-w-0 items-center truncate text-sm font-medium">{name}</span>
         {(info || badge) && (
           <span
             className={
               'flex min-w-0 items-center gap-1 text-[11px] ' +
-              (selected
-                ? 'text-primary-foreground/80'
-                : info !== null && typeof info === 'object' && info.green
-                  ? 'text-success'
-                  : 'text-muted-foreground')
+              (info !== null && typeof info === 'object' && info.green
+                ? 'text-success'
+                : 'text-muted-foreground')
             }
           >
             {badge}
@@ -1533,7 +1528,7 @@ function ModelRow({
     <div
       className={
         'group flex h-[52px] w-full items-center gap-1 rounded-xs py-1 pr-2 pl-4 text-left transition-colors ' +
-        (selected ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')
+        (selected ? 'bg-primary/15' : 'hover:bg-muted')
       }
     >
       <button
@@ -1543,18 +1538,16 @@ function ModelRow({
       >
         {info ? (
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className={'flex min-w-0 items-center gap-2 truncate text-sm ' + (selected ? 'font-medium text-primary-foreground' : 'font-medium')}>
-              <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
+            <span className="flex min-w-0 items-center gap-2 truncate text-sm font-medium">
+              <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
               {name}
             </span>
             <span
               className={
                 'truncate text-[11px] ' +
-                (selected
-                  ? 'text-primary-foreground/80'
-                  : typeof info === 'object' && info.green
-                    ? 'text-success'
-                    : 'text-muted-foreground')
+                (typeof info === 'object' && info.green
+                  ? 'text-success'
+                  : 'text-muted-foreground')
               }
             >
               {typeof info === 'object' ? info.text : info}
@@ -1562,8 +1555,8 @@ function ModelRow({
           </span>
         ) : (
           <span className="flex min-h-8 min-w-0 items-center gap-2 truncate text-sm">
-            <AppIcon name="layers" size={12} className={'shrink-0 ' + (selected ? 'text-primary-foreground/80' : 'text-muted-foreground')} />
-            <span className={selected ? 'font-medium text-primary-foreground' : 'font-medium'}>{name}</span>
+            <AppIcon name="layers" size={12} className="shrink-0 text-muted-foreground" />
+            <span className="font-medium">{name}</span>
           </span>
         )}
       </button>
@@ -1587,12 +1580,9 @@ function ModelRow({
 function RowMenu({
   items,
   onSelect,
-  light = false,
 }: {
   items: readonly { key: string; label: string; icon: string; destructive?: boolean }[]
   onSelect: (key: string) => void
-  /** 选中态：图标使用与选中文字一致的深色（primary-foreground）。 */
-  light?: boolean
 }) {
   return (
     <DropdownMenu>
@@ -1601,12 +1591,7 @@ function RowMenu({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className={
-            'h-5 w-5 ' +
-            (light
-              ? 'text-primary-foreground/90 hover:bg-primary/20 hover:text-primary-foreground'
-              : 'text-muted-foreground hover:text-primary')
-          }
+          className="h-5 w-5 text-muted-foreground hover:text-primary"
           onClick={(e) => e.stopPropagation()}
         >
           <AppIcon name="more_horiz" size={14} />
@@ -1633,20 +1618,16 @@ function IconHoverButton({
   icon,
   tone,
   disabled,
-  light = false,
   onClick,
 }: {
   title: string
   icon: string
   tone: 'default' | 'destructive' | 'success'
   disabled: boolean
-  /** 选中态：图标使用与选中文字一致的深色（primary-foreground）。 */
-  light?: boolean
   onClick: () => void
 }) {
-  const toneClass = light
-    ? 'text-primary-foreground/90 hover:bg-primary/20 hover:text-primary-foreground'
-    : tone === 'destructive'
+  const toneClass =
+    tone === 'destructive'
       ? 'text-muted-foreground hover:text-destructive'
       : tone === 'success'
         ? 'text-muted-foreground hover:text-success'
