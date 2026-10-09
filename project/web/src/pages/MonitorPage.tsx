@@ -399,7 +399,7 @@ function StatsSection() {
       )}
 
       <Dialog open={clearOpen} onOpenChange={closeClearDialog}>
-        <DialogContent width="sm" scrollFooter>
+        <DialogContent width="xs" scrollFooter>
           <DialogHeader>
             <DialogTitle>{t('monitor.clear.button')}</DialogTitle>
             <DialogDescription>

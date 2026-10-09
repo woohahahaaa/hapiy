@@ -89,7 +89,7 @@ export function ColumnSettingsPopover<T>(
         <Button
           ref={anchorRef}
           variant="ghost"
-          size="icon"
+          size="icon-sm"
           aria-label={t('columns.settings')}
         >
           <AppIcon name="auto_width" size={16} />

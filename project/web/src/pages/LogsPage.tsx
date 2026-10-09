@@ -406,7 +406,7 @@ export function LogsPage() {
                 value={typeFilter}
                 onValueChange={(value) => setTypeFilter(value as LogTypeFilter | 'all')}
               >
-                <SelectTrigger className="w-32">
+                <SelectTrigger size="sm" className="w-32">
                   <SelectValue placeholder={t('filters.type')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -424,7 +424,7 @@ export function LogsPage() {
                 value={sourceFilter}
                 onValueChange={(value) => handleFilterChange(setSourceFilter, value)}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger size="sm" className="w-40">
                   <SelectValue placeholder={t('filters.source')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -441,7 +441,7 @@ export function LogsPage() {
                 value={tokenFilter}
                 onValueChange={(value) => setTokenFilter(value)}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger size="sm" className="w-40">
                   <SelectValue placeholder={t('filters.token')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -457,7 +457,7 @@ export function LogsPage() {
                 value={providerFilter}
                 onValueChange={(value) => handleFilterChange(setProviderFilter, value)}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger size="sm" className="w-40">
                   <SelectValue placeholder={t('filters.provider')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -473,7 +473,7 @@ export function LogsPage() {
                 value={modelFilter}
                 onValueChange={(value) => handleFilterChange(setModelFilter, value)}
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger size="sm" className="w-40">
                   <SelectValue placeholder={t('filters.model')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -489,7 +489,7 @@ export function LogsPage() {
                 value={statusFilter}
                 onValueChange={(value) => handleFilterChange(setStatusFilter, value)}
               >
-                <SelectTrigger className="w-32">
+                <SelectTrigger size="sm" className="w-32">
                   <SelectValue placeholder={t('filters.status')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -520,7 +520,7 @@ export function LogsPage() {
       </div>
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
-        <DialogContent width="sm" scrollFooter>
+        <DialogContent width="xs" scrollFooter>
           <DialogHeader>
             <DialogTitle>{t('clear.confirmTitle')}</DialogTitle>
             <DialogDescription>
@@ -529,10 +529,10 @@ export function LogsPage() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="outline" size="sm" onClick={() => void handleClearFiltered()}>
+              <Button variant="destructive-strong" size="sm" onClick={() => void handleClearFiltered()}>
                 {t('clear.filtered')}
               </Button>
-              <Button variant="destructive-strong" size="sm" onClick={() => void handleClearAll()}>
+              <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
                 {t('clear.all')}
               </Button>
             </>
