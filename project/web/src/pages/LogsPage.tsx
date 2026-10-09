@@ -529,10 +529,10 @@ export function LogsPage() {
           </DialogHeader>
           <DialogScrollBody footer={
             <>
-              <Button variant="destructive" size="sm" onClick={() => void handleClearFiltered()}>
+              <Button variant="outline" size="sm" onClick={() => void handleClearFiltered()}>
                 {t('clear.filtered')}
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => void handleClearAll()}>
+              <Button variant="destructive-strong" size="sm" onClick={() => void handleClearAll()}>
                 {t('clear.all')}
               </Button>
             </>
