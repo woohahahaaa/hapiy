@@ -66,7 +66,7 @@ export function PolicyPage() {
       <div className="flex h-full flex-col">
         <PageHeader title={t('unknown.title')} />
         <div className="flex-1 p-6">
-          <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-xs border border-border bg-card p-8 text-center">
+          <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-none border border-border bg-card p-8 text-center">
             <AppIcon name="warning" size={32} className="text-destructive" />
             <div className="space-y-1">
               <p className="text-sm font-medium">{t('unknown.notExist')}</p>

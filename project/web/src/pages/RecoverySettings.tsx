@@ -827,12 +827,12 @@ function RecoveryHandlerDialog({
               {t('recovery.handlerDescription')}
             </p>
             {draft.ops.length === 0 ? (
-              <div className="rounded-xs border border-dashed border-border-subtle px-3 py-6 text-center text-xs text-muted-foreground">
+              <div className="rounded-none border border-dashed border-border-subtle px-3 py-6 text-center text-xs text-muted-foreground">
                 {t('recovery.noRules')}
               </div>
             ) : (
               draft.ops.map((op, i) => (
-                <div key={i} className="flex items-start gap-2 rounded-xs border border-border-subtle bg-background px-2 py-2">
+                <div key={i} className="flex items-start gap-2 rounded-none border border-border-subtle bg-background px-2 py-2">
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div className="flex items-center gap-2">
                       <span className="mr-2 inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">
@@ -874,7 +874,7 @@ function RecoveryHandlerDialog({
                   <button
                     type="button"
                     onClick={() => removeOp(i)}
-                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                     aria-label={t('recovery.removeRuleAria', { index: i + 1 })}
                   >
                     <AppIcon name="close" size={14} />
@@ -987,18 +987,18 @@ function RequestPreviewDialog({
         {record && (
           <div className="flex flex-col gap-3 text-xs">
             {errorMessage && !result && (
-              <div className="rounded-xs border border-destructive/30 bg-destructive/5 p-3">
+              <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3">
                 <div className="mb-1 font-medium text-destructive">{t('recovery.triggerReason')}</div>
                 <div className="whitespace-pre-wrap break-words text-destructive/90">{errorMessage}</div>
               </div>
             )}
             {result?.kind === 'success' && (
-              <div className="rounded-xs border border-success/30 bg-success/5 p-3 font-medium text-success">
+              <div className="rounded-none border border-success/30 bg-success/5 p-3 font-medium text-success">
                 {t('recovery.testPassed')}
               </div>
             )}
             {result?.kind === 'error' && (
-              <div className="rounded-xs border border-destructive/30 bg-destructive/5 p-3">
+              <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3">
                 <div className="mb-1 font-medium text-destructive">{t('recovery.upstreamError')}</div>
                 <div className="whitespace-pre-wrap break-words text-destructive/90">{result.message}</div>
               </div>
@@ -1016,13 +1016,13 @@ function RequestPreviewDialog({
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestHeaders')}</div>
-              <pre className="max-h-48 overflow-auto rounded-xs border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-48 overflow-auto rounded-none border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestHeaders ? formatJson(record.requestHeaders) : '-'}
               </pre>
             </div>
             <div>
               <div className="mb-1 font-medium text-muted-foreground">{t('recovery.requestBodyPreview')}</div>
-              <pre className="max-h-96 overflow-auto rounded-xs border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
+              <pre className="max-h-96 overflow-auto rounded-none border border-border-subtle bg-background px-3 py-2 font-mono text-xs whitespace-pre-wrap break-all">
                 {record.requestBody ? formatJson(record.requestBody) : '-'}
               </pre>
             </div>

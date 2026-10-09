@@ -167,7 +167,7 @@ export function BaseUrlSettings() {
               <div className="grid gap-1.5 text-sm">
                 <span>{t('baseUrl.finalUrlLabel')}</span>
                 <div className="flex items-center gap-2">
-                  <code className="w-96 cursor-not-allowed truncate rounded-xs border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
+                  <code className="w-96 cursor-not-allowed truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
                     {baseUrl}
                   </code>
                   <Button
@@ -203,7 +203,7 @@ export function BaseUrlSettings() {
                         placeholder={t('baseUrl.sourceNamePlaceholder')}
                         className="w-36 shrink-0"
                       />
-                      <code className="flex-1 cursor-not-allowed truncate rounded-xs border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
+                      <code className="flex-1 cursor-not-allowed truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
                         {name ? fullUrlFor(name) : `${baseUrl}/__…`}
                       </code>
                       <Button

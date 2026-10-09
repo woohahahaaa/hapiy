@@ -413,17 +413,20 @@ func runServe() {
 			dashboardAuthed.POST("/update/apply", updateCtl.ApplyHandler())
 		}
 
-		// Relay endpoints (token auth)
+		// Relay endpoints (token auth). Every POST under /v1 is accepted by a
+		// parameterised route pair instead of a hardcoded endpoint list: the
+		// relay forwards the request path verbatim (upstream URL = provider
+		// base URL + request path) and the provider-level `endpoints` whitelist
+		// decides which paths a provider actually serves. Adding a new
+		// upstream API shape (e.g. /v1/responses) therefore needs no change
+		// here — only a provider whose endpoints allow it. Static POST routes
+		// registered on this group (e.g. /v1/dashboard/...) still win over
+		// this pair.
 		relayGroup := v1.Group("")
 		relayGroup.Use(middleware.TokenAuth(db))
 		{
-			// OpenAI-compatible endpoints
-			relayGroup.POST("/chat/completions", handler.Relay(db, engine))
-			relayGroup.POST("/completions", handler.Relay(db, engine))
-			relayGroup.POST("/embeddings", handler.Relay(db, engine))
-			relayGroup.POST("/images/generations", handler.Relay(db, engine))
-			relayGroup.POST("/audio/speech", handler.Relay(db, engine))
-			relayGroup.POST("/audio/transcriptions", handler.Relay(db, engine))
+			relayGroup.POST("/:endpoint", handler.Relay(db, engine))
+			relayGroup.POST("/:endpoint/*rest", handler.Relay(db, engine))
 		}
 	}
 
@@ -445,12 +448,10 @@ func runServe() {
 	})
 	proxyRelay.Use(middleware.TokenAuth(db))
 	{
-		proxyRelay.POST("/chat/completions", handler.Relay(db, engine))
-		proxyRelay.POST("/completions", handler.Relay(db, engine))
-		proxyRelay.POST("/embeddings", handler.Relay(db, engine))
-		proxyRelay.POST("/images/generations", handler.Relay(db, engine))
-		proxyRelay.POST("/audio/speech", handler.Relay(db, engine))
-		proxyRelay.POST("/audio/transcriptions", handler.Relay(db, engine))
+		// Same generic endpoint pair as /v1: any POST path is relayed and the
+		// provider `endpoints` whitelist decides what is actually servable.
+		proxyRelay.POST("/:endpoint", handler.Relay(db, engine))
+		proxyRelay.POST("/:endpoint/*rest", handler.Relay(db, engine))
 	}
 
 	// Production mode: serve the built frontend from the same Go origin so

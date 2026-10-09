@@ -167,11 +167,11 @@ export function RewriteTestDialog({
 
         {readonlyRule && rules.length > 0 && (
           <div className="shrink-0 px-6 pb-2">
-            <div className="rounded-xs border border-border-subtle bg-muted/30 p-2">
+            <div className="rounded-none border border-border-subtle bg-muted/30 p-2">
               <span className="text-xs font-medium text-muted-foreground">{t('testDialog.executionOrder')}</span>
               <div className="mt-1 flex flex-wrap gap-2">
                 {rules.map((rule, i) => (
-                  <span key={rule.id} className="inline-flex items-center gap-1 rounded-xs bg-background px-2 py-0.5 font-mono text-xs text-foreground">
+                  <span key={rule.id} className="inline-flex items-center gap-1 rounded-none bg-background px-2 py-0.5 font-mono text-xs text-foreground">
                     {i + 1}. {rule.name}
                   </span>
                 ))}
@@ -184,7 +184,7 @@ export function RewriteTestDialog({
           <div className="flex flex-1 flex-col overflow-hidden">
             <span className="mb-1 text-xs font-medium text-muted-foreground">{t('testDialog.input')}</span>
             <textarea
-              className="flex-1 resize-none rounded-xs border border-border bg-background p-3 font-mono text-xs whitespace-pre"
+              className="flex-1 resize-none rounded-none border border-border bg-background p-3 font-mono text-xs whitespace-pre"
               value={inputBody}
               onChange={(e) => setInputBody(e.target.value)}
             />
@@ -192,17 +192,17 @@ export function RewriteTestDialog({
           <div className="flex flex-1 flex-col overflow-hidden">
             <span className="mb-1 text-xs font-medium text-muted-foreground">{t('testDialog.result')}</span>
             {progress ? (
-              <div className="flex flex-1 items-center justify-center rounded-xs border border-border-subtle text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center rounded-none border border-border-subtle text-xs text-muted-foreground">
                 {progress}
               </div>
             ) : error ? (
-              <div className="flex-1 rounded-xs border border-destructive/50 bg-destructive/5 p-3">
+              <div className="flex-1 rounded-none border border-destructive/50 bg-destructive/5 p-3">
                 <pre className="font-mono text-xs text-destructive whitespace-pre-wrap break-all">{error}</pre>
               </div>
             ) : result ? (
               <JsonHighlight value={result.modified} className="flex-1 whitespace-pre-wrap break-all" />
             ) : (
-              <div className="flex flex-1 items-center justify-center rounded-xs border border-dashed border-border-subtle text-xs text-muted-foreground">
+              <div className="flex flex-1 items-center justify-center rounded-none border border-dashed border-border-subtle text-xs text-muted-foreground">
                 {t('testDialog.emptyResult')}
               </div>
             )}

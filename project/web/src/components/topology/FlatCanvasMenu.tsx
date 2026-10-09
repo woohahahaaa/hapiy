@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { REQUEST_REWRITE_SLOT_TYPES, type RewriteSlotType } from '@/lib/flat-topology'
 
-const ROW_CLASS = 'flex min-h-8 w-full items-center rounded-xs px-2 text-sm transition-colors'
+const ROW_CLASS = 'flex min-h-8 w-full items-center rounded-none px-2 text-sm transition-colors'
 const PLAIN_ROW_CLASS = cn(ROW_CLASS, 'bg-muted/40 hover:bg-muted hover:text-foreground')
 const EMERGENCY_ROW_CLASS = cn(ROW_CLASS, 'bg-warning/10 text-warning hover:bg-warning/20 hover:text-warning')
 
@@ -49,7 +49,7 @@ export function FlatCanvasMenu({
       />
       <div
         className={cn(
-          'fixed z-50 w-56 rounded-xs border border-border bg-popover p-2 text-popover-foreground shadow-lg',
+          'fixed z-50 w-56 rounded-none border border-border bg-popover p-2 text-popover-foreground shadow-lg',
         )}
         style={positionStyle}
         role="menu"

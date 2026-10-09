@@ -69,7 +69,7 @@ export function ResponseBlockCard({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       className={cn(
-        'rounded-xs border border-border bg-card transition-colors',
+        'rounded-none border border-border bg-card transition-colors',
         isDragging && 'opacity-40',
         isDragOver && 'border-primary border-dashed',
       )}
@@ -85,7 +85,7 @@ export function ResponseBlockCard({
                 e.dataTransfer.setData('text/plain', String(index))
                 onDragStart()
               }}
-              className="nodrag nopan flex h-6 w-6 cursor-grab items-center justify-center rounded-xs text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground active:cursor-grabbing"
+              className="nodrag nopan flex h-6 w-6 cursor-grab items-center justify-center rounded-none text-muted-foreground/60 transition-colors hover:bg-muted hover:text-muted-foreground active:cursor-grabbing"
               aria-label={t('drag.sortLabel')}
               title={t('drag.sortTitle')}
             >
@@ -101,7 +101,7 @@ export function ResponseBlockCard({
           type="button"
           onClick={onRemove}
           disabled={!canRemove}
-          className="nodrag nopan flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+          className="nodrag nopan flex h-6 w-6 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
           aria-label={t('rule.deleteLabel')}
           title={t('rule.deleteTitle')}
         >
@@ -112,7 +112,7 @@ export function ResponseBlockCard({
       <div className="space-y-3 p-3">
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2">
-            <span className="inline-flex items-center rounded-xs bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+            <span className="inline-flex items-center rounded-none bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
               {t('section.conditions')}
             </span>
             <div className="flex items-center gap-1.5">
@@ -133,7 +133,7 @@ export function ResponseBlockCard({
               <button
                 type="button"
                 onClick={() => onChange({ ...block, conditions: [...(block.conditions ?? []), emptyCondition()] })}
-                className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
+                className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-none border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-700"
                 aria-label={t('section.addCondition')}
                 title={t('section.addCondition')}
               >
@@ -143,7 +143,7 @@ export function ResponseBlockCard({
             </div>
           </div>
           {!block.conditions || block.conditions.length === 0 ? (
-            <div className="rounded-xs border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
+            <div className="rounded-none border border-dashed border-amber-500/30 bg-amber-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
               {t('section.noConditions')}
             </div>
           ) : (
@@ -156,13 +156,13 @@ export function ResponseBlockCard({
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="inline-flex items-center rounded-xs bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+            <span className="inline-flex items-center rounded-none bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
               {t('section.actions')}
             </span>
             <button
               type="button"
               onClick={addAction}
-              className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-xs border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-sky-500/10 hover:text-sky-700"
+              className="nodrag nopan inline-flex h-6 items-center gap-1 rounded-none border border-border bg-background px-1.5 text-xs text-foreground transition-colors hover:bg-sky-500/10 hover:text-sky-700"
               aria-label={t('section.addAction')}
               title={t('section.addAction')}
             >
@@ -171,7 +171,7 @@ export function ResponseBlockCard({
             </button>
           </div>
           {block.actions.length === 0 ? (
-            <div className="rounded-xs border border-dashed border-sky-500/30 bg-sky-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
+            <div className="rounded-none border border-dashed border-sky-500/30 bg-sky-500/5 px-3 py-2 text-center text-xs text-muted-foreground">
               {t('section.atLeastOneAction')}
             </div>
           ) : (

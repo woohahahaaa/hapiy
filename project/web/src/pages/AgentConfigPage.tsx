@@ -112,7 +112,7 @@ function SshTestResultPanel({
 }) {
   const { t } = useTranslation('agentConfig')
   return (
-    <div className="rounded-xs border border-border-subtle bg-muted/30 p-3">
+    <div className="rounded-none border border-border-subtle bg-muted/30 p-3">
       <div className="flex flex-col gap-1.5">
         <SshProbeRow label={t('sshProbe.connect')} result={result.connect} />
         <SshProbeRow label={t('sshProbe.readPath')} result={result.read} />
@@ -1043,7 +1043,7 @@ function AgentConfigFormDialog({
           )}
 
           {error && (
-            <div className="rounded-xs border border-destructive/30 bg-destructive/5 p-3">
+            <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">{error}</div>
             </div>
           )}

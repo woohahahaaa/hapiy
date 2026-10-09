@@ -91,7 +91,7 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
   return (
     <div className="flex w-full flex-col gap-3">
       {form.blocks.length === 0 ? (
-        <div className="rounded-xs border border-dashed border-border-subtle px-3 py-6 text-center text-xs text-muted-foreground">
+        <div className="rounded-none border border-dashed border-border-subtle px-3 py-6 text-center text-xs text-muted-foreground">
           {t('rule.empty')}
         </div>
       ) : (
@@ -117,7 +117,7 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
       <button
         type="button"
         onClick={addBlock}
-        className="nodrag nopan inline-flex h-8 w-8 items-center justify-center rounded-xs border border-dashed border-border-subtle text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+        className="nodrag nopan inline-flex h-8 w-8 items-center justify-center rounded-none border border-dashed border-border-subtle text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
         aria-label={t('rule.addLabel')}
         title={t('rule.addTitle')}
       >

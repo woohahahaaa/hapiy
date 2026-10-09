@@ -44,17 +44,16 @@ type BackupFrequency = 'never' | 'daily' | 'weekly'
 const BACKUP_MODULES: readonly {
   readonly id: BackupModule
   readonly labelKey: string
-  readonly hintKey: string
   readonly defaultChecked: boolean
 }[] = [
-  { id: 'topology', labelKey: 'backup.moduleTopology', hintKey: 'backup.moduleTopologyHint', defaultChecked: true },
-  { id: 'providers', labelKey: 'backup.moduleProviders', hintKey: 'backup.moduleProvidersHint', defaultChecked: true },
-  { id: 'tokens', labelKey: 'backup.moduleTokens', hintKey: 'backup.moduleTokensHint', defaultChecked: true },
-  { id: 'policy', labelKey: 'backup.modulePolicy', hintKey: 'backup.modulePolicyHint', defaultChecked: true },
-  { id: 'agent', labelKey: 'backup.moduleAgent', hintKey: 'backup.moduleAgentHint', defaultChecked: true },
-  { id: 'settings', labelKey: 'backup.moduleSettings', hintKey: 'backup.moduleSettingsHint', defaultChecked: true },
-  { id: 'usage', labelKey: 'backup.moduleUsage', hintKey: 'backup.moduleUsageHint', defaultChecked: false },
-  { id: 'logs', labelKey: 'backup.moduleLogs', hintKey: 'backup.moduleLogsHint', defaultChecked: false },
+  { id: 'topology', labelKey: 'backup.moduleTopology', defaultChecked: true },
+  { id: 'providers', labelKey: 'backup.moduleProviders', defaultChecked: true },
+  { id: 'tokens', labelKey: 'backup.moduleTokens', defaultChecked: true },
+  { id: 'policy', labelKey: 'backup.modulePolicy', defaultChecked: true },
+  { id: 'agent', labelKey: 'backup.moduleAgent', defaultChecked: true },
+  { id: 'settings', labelKey: 'backup.moduleSettings', defaultChecked: true },
+  { id: 'usage', labelKey: 'backup.moduleUsage', defaultChecked: false },
+  { id: 'logs', labelKey: 'backup.moduleLogs', defaultChecked: false },
 ]
 
 const DEFAULT_SELECTED_MODULES: readonly BackupModule[] = BACKUP_MODULES.filter(
@@ -375,10 +374,7 @@ export function BackupSettingsPage() {
                                 onCheckedChange={(v) => toggleModule(module.id, v === true)}
                                 aria-label={t(module.labelKey)}
                               />
-                              <span className="flex min-w-0 flex-col">
-                                <span className="font-medium">{t(module.labelKey)}</span>
-                                <span className="text-xs text-muted-foreground">{t(module.hintKey)}</span>
-                              </span>
+                              <span className="font-medium">{t(module.labelKey)}</span>
                             </label>
                           ))}
                         </div>

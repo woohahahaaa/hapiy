@@ -28,7 +28,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
   const fields = spec?.needs ?? []
 
   return (
-    <div className="flex items-start gap-2 rounded-xs border border-border bg-background px-2 py-1.5">
+    <div className="flex items-start gap-2 rounded-none border border-border bg-background px-2 py-1.5">
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex items-center gap-2">
           <span className="inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">{index + 1}</span>
@@ -96,7 +96,7 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
         type="button"
         onClick={onRemove}
         disabled={!canRemove}
-        className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+        className="nodrag nopan mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
         aria-label={t('section.deleteAction', { count: index + 1 })}
       >
         <AppIcon name="close" size={14} />
