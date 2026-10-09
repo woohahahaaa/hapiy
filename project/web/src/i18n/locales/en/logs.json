@@ -85,7 +85,7 @@
     "confirmTitle": "Clear everything under the current filters. Continue?",
     "description": "This cannot be undone. Cleared records cannot be recovered.",
     "filtered": "Clear current page",
-    "all": "Clear all pages",
+    "all": "Clear all",
     "filteredDone_one": "Cleared {{count}} record",
     "filteredDone_other": "Cleared {{count}} records",
     "allDone_one": "Cleared all {{count}} record",

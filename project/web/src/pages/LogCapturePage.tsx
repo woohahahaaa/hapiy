@@ -472,14 +472,14 @@ export function LogCapturePage() {
           <DialogScrollBody footer={
             <>
               <Button
-                variant="destructive"
+                variant="outline"
                 disabled={clearing}
                 onClick={() => void handleClear('filtered')}
               >
                 {t('clear.filtered')}
               </Button>
               <Button
-                variant="destructive"
+                variant="destructive-strong"
                 disabled={clearing}
                 onClick={() => void handleClear('all')}
               >
