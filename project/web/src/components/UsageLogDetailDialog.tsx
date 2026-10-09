@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Dialog,
@@ -6,6 +6,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/dialog'
+import { SecretValue } from '@/components/SecretValue'
+import { useProviderKeyNote } from '@/lib/provider-key-notes'
 import type { UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
@@ -34,31 +36,9 @@ export function UsageLogDetailDialog({ log, onOpenChange }: { readonly log: Usag
   )
 }
 
-// 上游 Key 默认模糊，hover 或点击（含触屏）后显示明文，点击后 5 秒恢复模糊。
-function SecretValue({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  useEffect(() => () => clearTimeout(timerRef.current), [])
-
-  const handleClick = () => {
-    setRevealed(true)
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setRevealed(false), 5000)
-  }
-
-  return (
-    <span
-      className={`break-all font-mono blur-sm hover:blur-none ${revealed ? 'blur-none!' : ''}`}
-      onClick={handleClick}
-    >
-      {value || '-'}
-    </span>
-  )
-}
-
 function LogDetailFields({ log }: { log: UsageLog }) {
   const { t } = useTranslation('logs')
+  const keyNote = useProviderKeyNote(log.providerKey)
   const date = new Date(log.createdAt)
   const timeText = Number.isNaN(date.getTime())
     ? log.createdAt
@@ -74,11 +54,11 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow className="col-span-2" label={t('columns.source')} value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.providerKey')}</span>
-          <SecretValue value={log.providerKey || '-'} />
+          <SecretValue value={log.providerKey || '-'} note={keyNote} />
         </div>
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.upstreamUrl')}</span>
-          <span className="break-all font-mono">{log.upstreamUrl || '-'}</span>
+          <span className="break-all font-mono leading-relaxed">{log.upstreamUrl || '-'}</span>
         </div>
       </FieldGroup>
       <FieldGroup>
@@ -154,13 +134,13 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
-            <span className="break-words whitespace-pre-wrap text-destructive">{log.errorMessage}</span>
+            <span className="break-words whitespace-pre-wrap leading-relaxed text-destructive">{log.errorMessage}</span>
           </div>
         )}
         {log.eventDetail && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
-            <span className="break-words whitespace-pre-wrap text-foreground">{log.eventDetail}</span>
+            <span className="break-words whitespace-pre-wrap leading-relaxed text-foreground">{log.eventDetail}</span>
           </div>
         )}
       </FieldGroup>
@@ -181,7 +161,7 @@ function DetailRow({ label, value, className = '' }: { label: string; value: Rea
   return (
     <div className={`flex items-baseline gap-2 ${className}`}>
       <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{label}</span>
-      <span className="min-w-0 break-words whitespace-pre-wrap text-foreground">{value}</span>
+      <span className="min-w-0 break-words whitespace-pre-wrap leading-relaxed text-foreground">{value}</span>
     </div>
   )
 }
