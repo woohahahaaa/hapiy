@@ -13,7 +13,6 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"gorm.io/gorm"
 )
 
@@ -325,8 +324,10 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		return out
 	}
 
-	cleaned := stripJSON5Comments(content)
-	buf := []byte(cleaned)
+	editor, err := newConfigEditor(content, row.Path)
+	if err != nil {
+		return "", 0, fmt.Errorf("解析配置失败: %w", err)
+	}
 	basePrefix := managedBasePrefix(c, db, *m) + managedSourceMarkSuffix(*m)
 	// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
 	// 先整块删除，避免旧块残留成「普通供应商」。
@@ -339,8 +340,9 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 			if currentNames[old] {
 				continue
 			}
-			if next, derr := sjson.DeleteBytes(buf, jpaths.Provider+"."+old); derr == nil {
-				buf = next
+			// 清理是best-effort：路径不存在时 delete 是 no-op。
+			if _, derr := editor.Delete(jpaths.Provider + "." + old); derr != nil {
+				return "", 0, fmt.Errorf("旧 provider 块 %s 删除失败: %w", old, derr)
 			}
 		}
 	}
@@ -358,8 +360,8 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
 		provFields, _ := gen["provider"].(map[string]any)
 		// models 子树形状由规则的 models_container 决定：可能是 object
-		// map（opencode）或 array of {id,...cfg}（openclaw）。rebuild
-		// 整块重写即可，两种形状都能直接交给 sjson 序列化。
+		// map（opencode）或 array of {id,...cfg}（openclaw / dsh）。
+		// rebuild 整块重写即可，两种形状编辑器都能直接序列化。
 		var modelsValue any
 		var modelsCount int
 		switch m := gen["models"].(type) {
@@ -374,38 +376,37 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 			modelsCount = len(m)
 		}
 		if len(provFields) > 0 || modelsCount > 0 {
-			if next, err := sjson.DeleteBytes(buf, providerIDPath); err != nil {
-				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, err)
-			} else {
-				buf = next
+			if _, derr := editor.Delete(providerIDPath); derr != nil {
+				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, derr)
 			}
 		}
 		for k, v := range provFields {
-			next, err := sjson.SetBytes(buf, providerIDPath+"."+k, v)
-			if err != nil {
-				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, err)
+			if werr := editor.Set(providerIDPath+"."+k, v); werr != nil {
+				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, werr)
 			}
-			buf = next
 			synced++
 		}
 		if strings.TrimSpace(jpaths.Model) != "" && modelsValue != nil {
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", fullName)
-			// 模型名可能自带点（gpt-5.6-sol），逐字段拼 gjson 路径会把
-			// 名字拆成嵌套对象，pending 平铺比较永远失败；整个 models
-			// 子树一次写入，模型名按字面量落盘。
-			next, err := sjson.SetBytes(buf, resolved, modelsValue)
-			if err != nil {
-				return "", 0, fmt.Errorf("模型列表写入失败: %w", err)
+			// 模型名可能自带点（gpt-5.6-sol）——整段 models 子树一次写入，
+			// 名字按字面量落盘，不会被拆成嵌套对象。
+			if werr := editor.Set(resolved, modelsValue); werr != nil {
+				return "", 0, fmt.Errorf("模型列表写入失败: %w", werr)
 			}
-			buf = next
 			synced += modelsCount
 		}
 	}
-	// sjson 只原地改写已有行，新增的 provider/模型块会被压成一行；
-	// 写盘前整体重新缩进，保证同步后的文件始终是标准 pretty JSON。
-	formatted := string(buf)
-	if pretty, err := prettifyJSON(string(buf)); err == nil {
-		formatted = pretty
+	// JSON 侧 sjson 只原地改写已有行，新增的块会被压成一行；写盘前整体
+	// 重新缩进，保证同步后的文件始终是标准 pretty JSON。YAML 侧节点序列化
+	// 本身就是规范缩进，直接使用。
+	formatted, merr := editor.Marshal()
+	if merr != nil {
+		return "", 0, fmt.Errorf("序列化配置失败: %w", merr)
+	}
+	if !isYAMLConfigPath(row.Path) {
+		if pretty, perr := prettifyJSON(formatted); perr == nil {
+			formatted = pretty
+		}
 	}
 	if err := writeAgentConfigFileContent(row, formatted, key); err != nil {
 		return "", 0, fmt.Errorf("写入失败: %w", err)
@@ -522,7 +523,8 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 	jpaths, _ := rule.GetJsonPaths()
 	existing := map[string]bool{}
 	if strings.TrimSpace(jpaths.Provider) != "" {
-		provResult := gjson.Parse(stripJSON5Comments(content)).Get(jpaths.Provider)
+		view, _ := configJSONView(content, row.Path)
+		provResult := gjson.Parse(string(view)).Get(jpaths.Provider)
 		if provResult.IsObject() {
 			for id := range provResult.Map() {
 				existing[id] = true
@@ -627,7 +629,8 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		return out
 	}
 	jpaths, _ := rule.GetJsonPaths()
-	provResult := gjson.Parse(stripJSON5Comments(content)).Get(jpaths.Provider)
+	jsonView, _ := configJSONView(content, row.Path)
+	provResult := gjson.Parse(string(jsonView)).Get(jpaths.Provider)
 
 	// Hidden = persisted groups that resolve no live members (deleted or
 	// paused providers for ordinary endpoint groups; dangling ids for the

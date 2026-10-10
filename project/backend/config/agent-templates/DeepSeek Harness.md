@@ -17,7 +17,7 @@
 | 其他文件 | `$DSH_HOME/settings.yaml`（运行时可热更设置）、`$DSH_HOME/profiles/<profile>/package.json`（bundle 列表） |
 | 官方文档 | https://deepseek-harness.github.io/deepseek-harness/en/guide/providers ｜ 仓库 https://github.com/deepseek-ai/deepseek-harness |
 
-关键事实：**dsh 的 provider / model 配置在 YAML 里，且插件需要同时挂载在 patch 层（`- id: llm-pi-ai`）**。现有接管引擎只读写 JSON/JSONC，无法自动生成 / 写回 provider 块，所以模板 `json_paths` 留空合理，字段只作配置参考；「管理模型」的托管生成对该类型不可用，自动写回等引擎支持 YAML 后再补。
+关键事实：**dsh 的 provider / model 配置在 YAML 里，且插件需要同时挂载在 patch 层（`- id: llm-pi-ai`）**。接管引擎见到 `.yml`/`.yaml` 会用 yaml.v3 在节点层读写（其他条目的注释与内容保留），规则路径用 `#(id=="llm-pi-ai")` 先按 id 找到插件条目再进 `config.providers`；「管理模型」的读取、托管供应商生成/同步、推荐值套用、同步模型信息都能用。改名/删除 provider/model 这类结构编辑目前仍只支持 JSON，YAML 文件请用「编辑配置文件」手改（或直接改远端文件）。
 
 ---
 
@@ -109,11 +109,16 @@ Anthropic Messages 官方要求每次请求带 `max_tokens`，所以该协议下
 
 两份模板（`DeepSeek Harness (Desktop).json` / `DeepSeek Harness (Web).json`）字段完全一致，只有 `name` 与 `os_paths` 的 profile 不同。
 
-### 1. `json_paths` 留空（格式不匹配，合理）
-dsh 是 YAML + 多插件 patch 结构，gjson/sjson 无法定位与写回。模板只保留路径检测（os_paths）与字段参考（recommendations / protocols），与 `ChatGPT.json`（TOML）、`WorkBuddy.json` 同口径。
+### 1. `json_paths` 用 YAML 查询段定位
+```json
+{"provider": "#(id==\"llm-pi-ai\").config.providers",
+ "model": "#(id==\"llm-pi-ai\").config.providers.{provider_id}.models",
+ "models_container": "array"}
+```
+`#(id=="llm-pi-ai")` 是 gjson 查询语法，YAML 侧引擎认识同一段语法：文件里没有该条目时，写回会自动创建 `- id: llm-pi-ai`（加上 `config.providers`）；已有条目则原地更新，其他条目和注释不动。
 
 ### 2. `model_info_fields` 只作映射参考
-结构上 pi-ai 模型确实有对应字段（`contextWindow` / `maxTokens` / `input`），映射按官方写；但引擎写不进去，暂不参与「同步模型信息」。`thinking_levels` / `reasoning_effort` 不映射：思考档位由 `reasoningEfforts`（档位→线路写法）表达，和统一值的写法不一致。
+结构上 pi-ai 模型确实有对应字段（`contextWindow` / `maxTokens` / `input`），映射按官方写，YAML 引擎按节点写回。「同步模型信息」可用。`thinking_levels` / `reasoning_effort` 不映射：思考档位由 `reasoningEfforts`（档位→线路写法）表达，和统一值的写法不一致。
 
 ### 3. 漏配提示
 - provider id 永久，写错只能新建再删旧（不要指望改名）；

@@ -63,6 +63,10 @@ export function AgentModelsDialog({
   fetchModels,
 }: AgentModelsDialogProps) {
   const { t } = useTranslation('agentConfig')
+  // YAML 接管文件（dsh 的 cordis.patch.yml 等）：结构编辑（改名/删除/片段
+  // 手改）目前只有 JSON 实现，YAML 侧由服务端托管同步负责写回；界面上这些
+  // 入口对 YAML 只读，避免把重建出来的 JSON 覆盖回 YAML 文件。
+  const yamlFile = isYAMLConfigFile(record?.path)
   const [summary, setSummary] = useState<AgentModelSummary | null>(null)
   const [loading, setLoading] = useState(false)
 const [error, setError] = useState<string | null>(null)
@@ -747,10 +751,13 @@ for (const p of summary?.providers ?? []) {
       }
       const res = await dashboardApi.applyRecommendationConfig(record.id, checked, modelFields)
       // diff 按当前选中 provider 片段对比，保证点击行号与右侧 JsonEditor 对齐。
-      const base = currentEditableProviderValue
-      const afterBlock = selectedProviderId
-        ? extractProviderBlockFromContent(res.content, selectedProviderId)
-        : res.content
+      // YAML 文件的片段无法在本地解析成 JSON 块，直接整文件对比（依然能保存）。
+      const base = yamlFile ? (rawContent ?? currentEditableProviderValue) : currentEditableProviderValue
+      const afterBlock = yamlFile
+        ? res.content
+        : selectedProviderId
+          ? extractProviderBlockFromContent(res.content, selectedProviderId)
+          : res.content
       setDiffBefore(base)
       setDiffAfter(afterBlock)
       setDiffApplyContent(res.content)
@@ -929,16 +936,18 @@ for (const p of summary?.providers ?? []) {
                       selected={selectedProviderId === p.provider_id}
                       onClick={() => handleSelectProvider(p.provider_id)}
                       actions={
-                        <RowMenu
-                          items={[
-                            { key: 'rename', label: t('menu.rename'), icon: 'edit' },
-                            { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
-                          ]}
-                          onSelect={(k) => {
-                            if (k === 'rename') setRenamingProvider(p.provider_id)
-                            else setConfirmingDeleteProvider(p.provider_id)
-                          }}
-                        />
+                        yamlFile ? null : (
+                          <RowMenu
+                            items={[
+                              { key: 'rename', label: t('menu.rename'), icon: 'edit' },
+                              { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
+                            ]}
+                            onSelect={(k) => {
+                              if (k === 'rename') setRenamingProvider(p.provider_id)
+                              else setConfirmingDeleteProvider(p.provider_id)
+                            }}
+                          />
+                        )
                       }
                     />
                   )
@@ -1120,17 +1129,19 @@ for (const p of summary?.providers ?? []) {
                       selected={selectedModelId === m.id}
                       onClick={() => setSelectedModelId(m.id)}
                       actions={
-                        <RowMenu
-                          items={[
-                            { key: 'rename', label: t('menu.rename'), icon: 'edit' },
-                            { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
-                          ]}
-                          onSelect={(k) => {
-                            if (!selectedProviderId) return
-                            if (k === 'rename') setRenamingModel({ providerId: selectedProviderId, modelId: m.id })
-                            else setConfirmingDeleteModel({ providerId: selectedProviderId, modelId: m.id })
-                          }}
-                        />
+                        yamlFile ? null : (
+                          <RowMenu
+                            items={[
+                              { key: 'rename', label: t('menu.rename'), icon: 'edit' },
+                              { key: 'delete', label: t('common:action.delete'), icon: 'delete', destructive: true },
+                            ]}
+                            onSelect={(k) => {
+                              if (!selectedProviderId) return
+                              if (k === 'rename') setRenamingModel({ providerId: selectedProviderId, modelId: m.id })
+                              else setConfirmingDeleteModel({ providerId: selectedProviderId, modelId: m.id })
+                            }}
+                          />
+                        )
                       }
                     />
                   )
@@ -1175,16 +1186,24 @@ for (const p of summary?.providers ?? []) {
                   />
                 )
               ) : selectedProvider ? (
-                <JsonEditor
-                  value={currentEditableProviderValue}
-                  focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
-                  onChange={(text) => {
-                    if (text === currentEditableProviderValue) return
-                    exitDiffPreview()
-                    setDiffJumpLine(null)
-                    setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))
-                  }}
-                />
+                yamlFile ? (
+                  <JsonEditor
+                    value={currentEditableProviderValue}
+                    focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
+                    readonly
+                  />
+                ) : (
+                  <JsonEditor
+                    value={currentEditableProviderValue}
+                    focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
+                    onChange={(text) => {
+                      if (text === currentEditableProviderValue) return
+                      exitDiffPreview()
+                      setDiffJumpLine(null)
+                      setLiveContent(wrapRootScope('provider', text, summary, selectedProviderId, selectedModelId, rawContent))
+                    }}
+                  />
+                )
               ) : (
                 <Placeholder>{t('placeholder.noProviderSelected')}</Placeholder>
               )}
@@ -2012,6 +2031,12 @@ function lastPathSegment(path: string): string {
   if (!path) return 'models'
   const i = path.lastIndexOf('.')
   return i >= 0 ? path.slice(i + 1) : path
+}
+
+// isYAMLConfigFile reports whether the take-over file is YAML (.yml/.yaml).
+function isYAMLConfigFile(path: string | undefined | null): boolean {
+  const lower = (path ?? '').trim().toLowerCase()
+  return lower.endsWith('.yml') || lower.endsWith('.yaml')
 }
 
 // wrapRootScope rebuilds a full file content string from summary +

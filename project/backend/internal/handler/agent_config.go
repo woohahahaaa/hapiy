@@ -12,7 +12,6 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"gorm.io/gorm"
 )
 
@@ -946,10 +945,24 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		providers, err := parseAgentModels(content, jpaths.Provider, jpaths.Model)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		// YAML 文件先转成 JSON 视图，parseAgentModels 的 gjson 逻辑照旧。
+		view, verr := configJSONView(content, row.Path)
+		if verr != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_PARSE_FAILED", "解析配置失败: "+verr.Error(), gin.H{"error": verr.Error()})
 			return
+		}
+		// YAML 文件可能还没有 llm-pi-ai 条目（dsh 首次配置前的正常状态）：
+		// 路径未命中时给空列表，用户仍可进入托管同步把条目建出来。JSON 侧
+		// 路径未命中通常意味着规则配错，保持报错。
+		var providers []modelSummary
+		if isYAMLConfigPath(row.Path) && !gjson.GetBytes(view, jpaths.Provider).Exists() {
+			providers = []modelSummary{}
+		} else {
+			providers, err = parseAgentModels(string(view), jpaths.Provider, jpaths.Model)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 		}
 		recs, _ := rule.GetRecommendations()
 		protocols, _ := rule.GetProtocols()
@@ -1129,17 +1142,19 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		// sjson needs valid JSON, so strip JSON5 comments before mutating.
-		// The round-trip drops comments, which is fine — both opencode and
-		// openclaw accept plain JSON.
-		cleaned := stripJSON5Comments(content)
+		// 协议条件是读操作：YAML 文件先转成 JSON 视图再交给 gjson。
+		view, verr := configJSONView(content, row.Path)
+		if verr != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_PARSE_FAILED", "解析配置失败: "+verr.Error(), gin.H{"error": verr.Error()})
+			return
+		}
 		effective := append([]model.AgentRecommendation(nil), recs...)
 		for _, p := range protocols {
-			if protocolMatchesProvider(cleaned, jpaths, providerID, p) {
+			if protocolMatchesProvider(string(view), jpaths, providerID, p) {
 				effective = append(effective, p.Recommendations...)
 			}
 		}
-		updated, applied, err := applyRecommendationsToContent(cleaned, jpaths.Provider, jpaths.Model, providerID, strings.TrimSpace(req.ModelID), effective)
+		updated, applied, err := applyRecommendationsToContent(content, row.Path, jpaths.Provider, jpaths.Model, providerID, strings.TrimSpace(req.ModelID), effective)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -1194,7 +1209,11 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		cleaned := stripJSON5Comments(content)
+		editor, err := newConfigEditor(content, row.Path)
+		if err != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_PARSE_FAILED", "解析配置失败: "+err.Error(), gin.H{"error": err.Error()})
+			return
+		}
 
 		// Managed provider block names to skip.
 		skip := map[string]bool{}
@@ -1210,7 +1229,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			}
 		}
 
-		provResult := gjson.Parse(cleaned).Get(jpaths.Provider)
+		provResult := gjson.Parse(string(editor.JSON())).Get(jpaths.Provider)
 		var providerIDs []string
 		if provResult.IsObject() {
 			for id := range provResult.Map() {
@@ -1219,13 +1238,12 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 				}
 			}
 		}
-		buf := []byte(cleaned)
 		total := 0
 		tallies := make([]tally, 0, len(providerIDs))
 		for _, pid := range providerIDs {
 			effective := append([]model.AgentRecommendation(nil), recs...)
 			for _, p := range protocols {
-				if protocolMatchesProvider(string(buf), jpaths, pid, p) {
+				if protocolMatchesProvider(string(editor.JSON()), jpaths, pid, p) {
 					effective = append(effective, p.Recommendations...)
 				}
 			}
@@ -1241,13 +1259,12 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 				full := jpaths.Provider + "." + pid + "." + r.Key
 				switch r.RecommendAction() {
 				case "delete":
-					if gjson.Parse(string(buf)).Get(full).Exists() {
-						next, err := sjson.DeleteBytes(buf, full)
-						if err != nil {
-							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
-							return
-						}
-						buf = next
+					ok, derr := editor.Delete(full)
+					if derr != nil {
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
+						return
+					}
+					if ok {
 						providerFields++
 					}
 				case "skip":
@@ -1256,23 +1273,21 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if r.Recommended == nil {
 						continue
 					}
-					next, err := sjson.SetBytes(buf, full, r.Recommended)
-					if err != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
+					if werr := editor.Set(full, r.Recommended); werr != nil {
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
 						return
 					}
-					buf = next
 					providerFields++
 				}
 			}
 			// model scope
 			modelTally := map[string]int{}
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
-			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
+			if sub := gjson.Parse(string(editor.JSON())).Get(resolved); sub.Exists() {
 				for _, me := range modelsFromResult(sub) {
 					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
-					// 当对象 key 写入 sjson（"cannot set array element"）。
-					base, found := modelEntryPath(buf, resolved, me)
+					// 当对象 key 写入（"cannot set array element"）。
+					base, found := modelEntryPath(editor.JSON(), resolved, me)
 					if !found {
 						continue
 					}
@@ -1284,13 +1299,12 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 						full := base + "." + r.Key
 						switch r.RecommendAction() {
 						case "delete":
-							if gjson.Parse(string(buf)).Get(full).Exists() {
-								next, err := sjson.DeleteBytes(buf, full)
-								if err != nil {
-									respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
-									return
-								}
-								buf = next
+							ok, derr := editor.Delete(full)
+							if derr != nil {
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, derr), gin.H{"scope": "model", "id": me, "field": r.Key, "error": derr})
+								return
+							}
+							if ok {
 								count++
 							}
 						case "skip":
@@ -1301,12 +1315,10 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 							if r.Recommended == nil {
 								continue
 							}
-							next, err := sjson.SetBytes(buf, full, r.Recommended)
-							if err != nil {
-								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
+							if werr := editor.Set(full, r.Recommended); werr != nil {
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, werr), gin.H{"scope": "model", "id": me, "field": r.Key, "error": werr})
 								return
 							}
-							buf = next
 							count++
 						}
 					}
@@ -1321,9 +1333,14 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			}
 			total += providerFields
 		}
+		finalContent, merr := editor.Marshal()
+		if merr != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_SERIALIZE_FAILED", "序列化配置失败: "+merr.Error(), gin.H{"error": merr.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"applied":   total,
-			"content":   string(buf),
+			"content":   finalContent,
 			"providers": tallies,
 		}})
 	}
@@ -1411,7 +1428,11 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		buf := []byte(stripJSON5Comments(content))
+		editor, err := newConfigEditor(content, row.Path)
+		if err != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_PARSE_FAILED", "解析配置失败: "+err.Error(), gin.H{"error": err.Error()})
+			return
+		}
 		total := 0
 
 		// Managed provider block names to skip.
@@ -1435,7 +1456,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			}
 			effective := append([]model.AgentRecommendation(nil), recs...)
 			for _, p := range protocols {
-				if protocolMatchesProvider(string(buf), jpaths, pid, p) {
+				if protocolMatchesProvider(string(editor.JSON()), jpaths, pid, p) {
 					effective = append(effective, p.Recommendations...)
 				}
 			}
@@ -1449,13 +1470,12 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 				full := jpaths.Provider + "." + pid + "." + r.Key
 				switch r.RecommendAction() {
 				case "delete":
-					if gjson.Parse(string(buf)).Get(full).Exists() {
-						next, err := sjson.DeleteBytes(buf, full)
-						if err != nil {
-							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
-							return
-						}
-						buf = next
+					ok, derr := editor.Delete(full)
+					if derr != nil {
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
+						return
+					}
+					if ok {
 						total++
 					}
 				case "skip":
@@ -1464,12 +1484,10 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 					if r.Recommended == nil {
 						continue
 					}
-					next, err := sjson.SetBytes(buf, full, r.Recommended)
-					if err != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, err), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": err})
+					if werr := editor.Set(full, r.Recommended); werr != nil {
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
 						return
 					}
-					buf = next
 					total++
 				}
 			}
@@ -1482,14 +1500,14 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 				want[strings.TrimSpace(mid)] = true
 			}
 			resolved := strings.ReplaceAll(jpaths.Model, "{provider_id}", pid)
-			if sub := gjson.Parse(string(buf)).Get(resolved); sub.Exists() {
+			if sub := gjson.Parse(string(editor.JSON())).Get(resolved); sub.Exists() {
 				for _, me := range modelsFromResult(sub) {
 					if !matchAll && !want[me] {
 						continue
 					}
 					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
-					// 当对象 key 写入 sjson（"cannot set array element"）。
-					base, found := modelEntryPath(buf, resolved, me)
+					// 当对象 key 写入（"cannot set array element"）。
+					base, found := modelEntryPath(editor.JSON(), resolved, me)
 					if !found {
 						continue
 					}
@@ -1500,13 +1518,12 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 						full := base + "." + r.Key
 						switch r.RecommendAction() {
 						case "delete":
-							if gjson.Parse(string(buf)).Get(full).Exists() {
-								next, err := sjson.DeleteBytes(buf, full)
-								if err != nil {
-									respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
-									return
-								}
-								buf = next
+							ok, derr := editor.Delete(full)
+							if derr != nil {
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("model %s 字段 %s 删除失败: %v", me, r.Key, derr), gin.H{"scope": "model", "id": me, "field": r.Key, "error": derr})
+								return
+							}
+							if ok {
 								total++
 							}
 						case "skip":
@@ -1517,12 +1534,10 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 							if r.Recommended == nil {
 								continue
 							}
-							next, err := sjson.SetBytes(buf, full, r.Recommended)
-							if err != nil {
-								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, err), gin.H{"scope": "model", "id": me, "field": r.Key, "error": err})
+							if werr := editor.Set(full, r.Recommended); werr != nil {
+								respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", me, r.Key, werr), gin.H{"scope": "model", "id": me, "field": r.Key, "error": werr})
 								return
 							}
-							buf = next
 							total++
 						}
 					}
@@ -1541,27 +1556,30 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 						continue
 					}
 					// 数组容器（openclaw）：按元素 id 定位到索引，避免把模型名
-					// 当对象 key 写入 sjson（"cannot set array element"）。
-					base, found := modelEntryPath(buf, resolved, strings.TrimSpace(mid))
+					// 当对象 key 写入（"cannot set array element"）。
+					base, found := modelEntryPath(editor.JSON(), resolved, strings.TrimSpace(mid))
 					if !found {
 						continue
 					}
 					for path, val := range fields {
 						full := base + "." + path
-						next, err := sjson.SetBytes(buf, full, val)
-						if err != nil {
-							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", mid, path, err), gin.H{"scope": "model", "id": mid, "field": path, "error": err})
+						if werr := editor.Set(full, val); werr != nil {
+							respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("model %s 字段 %s 写入失败: %v", mid, path, werr), gin.H{"scope": "model", "id": mid, "field": path, "error": werr})
 							return
 						}
-						buf = next
 						total++
 					}
 				}
 			}
 		}
+		finalContent, merr := editor.Marshal()
+		if merr != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_SERIALIZE_FAILED", "序列化配置失败: "+merr.Error(), gin.H{"error": merr.Error()})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"applied": total,
-			"content": string(buf),
+			"content": finalContent,
 		}})
 	}
 }
@@ -1654,42 +1672,51 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
 			return
 		}
-		cleaned := stripJSON5Comments(content)
+		editor, err := newConfigEditor(content, row.Path)
+		if err != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_PARSE_FAILED", "解析配置失败: "+err.Error(), gin.H{"error": err.Error()})
+			return
+		}
 		resolvedModels := strings.ReplaceAll(jpaths.Model, "{provider_id}", escapeSjsonKey(req.ProviderID))
-		base, ok := modelEntryPath([]byte(cleaned), resolvedModels, req.ModelID)
+		base, ok := modelEntryPath(editor.JSON(), resolvedModels, req.ModelID)
 		if !ok {
 			respondErrorWithParams(c, http.StatusBadRequest, "MODEL_NOT_FOUND_IN_CONFIG", "未在配置文件的 "+resolvedModels+" 中找到模型 "+req.ModelID, gin.H{"path": resolvedModels, "model": req.ModelID})
 			return
 		}
-		buf := []byte(cleaned)
 		applied := 0
 		for path, val := range req.Fields {
 			full := base + "." + path
-			next, err := sjson.SetBytes(buf, full, val)
-			if err != nil {
-				respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("写入字段 %s 失败: %v", path, err), gin.H{"scope": "model", "id": req.ModelID, "field": path, "error": err})
+			if werr := editor.Set(full, val); werr != nil {
+				respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("写入字段 %s 失败: %v", path, werr), gin.H{"scope": "model", "id": req.ModelID, "field": path, "error": werr})
 				return
 			}
-			buf = next
 			applied++
 		}
-		updated := string(buf)
+		updated, merr := editor.Marshal()
+		if merr != nil {
+			respondErrorWithParams(c, http.StatusBadRequest, "CONFIG_SERIALIZE_FAILED", "序列化配置失败: "+merr.Error(), gin.H{"error": merr.Error()})
+			return
+		}
 		// Preview only — do NOT write here. Caller writes via PUT /:id/content.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"applied": applied, "content": updated}})
 	}
 }
 
 // applyRecommendationsToContent merges each rule's Recommended value at
-// its key path into the supplied JSON document, using sjson, honouring
-// each recommendation's action and 值写法 (op/sep/values):
+// its key path into the supplied document (JSON via sjson, YAML via node
+// edits), honouring each recommendation's action and 值写法 (op/sep/values):
 //
 //	skip   → leave the field untouched
-//	delete → delete the field (sjson.DeleteBytes)
+//	delete → delete the field
 //	set    → shape Recommended then write it
 //
-// Returns the updated content and the count of fields applied.
-func applyRecommendationsToContent(content, providerPath, modelPath, providerID, modelID string, recs []model.AgentRecommendation) (string, int, error) {
-	buf := []byte(content)
+// filePath picks the document format (see configFileFormat). Returns the
+// updated content and the count of fields applied.
+func applyRecommendationsToContent(content, filePath, providerPath, modelPath, providerID, modelID string, recs []model.AgentRecommendation) (string, int, error) {
+	editor, err := newConfigEditor(content, filePath)
+	if err != nil {
+		return content, 0, err
+	}
 	applied := 0
 	for _, r := range recs {
 		action := r.RecommendAction()
@@ -1698,11 +1725,10 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 			continue
 		case "delete":
 			// delete the field regardless of provider/model scope
-			next, ok, err := applyRecDeleteBytes(buf, r, providerPath, modelPath, providerID, modelID)
+			ok, err := applyRecDelete(editor, r, providerPath, modelPath, providerID, modelID)
 			if err != nil {
-				return string(buf), applied, err
+				return content, applied, err
 			}
-			buf = next
 			if ok {
 				applied++
 			}
@@ -1718,65 +1744,57 @@ func applyRecommendationsToContent(content, providerPath, modelPath, providerID,
 		switch r.Scope {
 		case "provider":
 			full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
-			next, err := sjson.SetBytes(buf, full, value)
-			if err != nil {
-				return string(buf), applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
+			if err := editor.Set(full, value); err != nil {
+				return content, applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
 			}
-			buf = next
 			applied++
 		case "model":
 			if modelID == "" {
 				continue
 			}
 			resolved := strings.ReplaceAll(modelPath, "{provider_id}", escapeSjsonKey(providerID))
-			base, found := modelEntryPath(buf, resolved, modelID)
+			base, found := modelEntryPath(editor.JSON(), resolved, modelID)
 			if !found {
-				if gjson.GetBytes(buf, resolved).IsArray() {
+				if gjson.GetBytes(editor.JSON(), resolved).IsArray() {
 					continue // cannot fabricate an array element
 				}
 				base = resolved + "." + escapeSjsonKey(modelID)
 			}
 			full := base + "." + r.Key
-			next, err := sjson.SetBytes(buf, full, value)
-			if err != nil {
-				return string(buf), applied, fmt.Errorf("model %q 字段 %s: %v", modelID, r.Key, err)
+			if err := editor.Set(full, value); err != nil {
+				return content, applied, fmt.Errorf("model %q 字段 %s: %v", modelID, r.Key, err)
 			}
-			buf = next
 			applied++
 		}
 	}
-	return string(buf), applied, nil
+	updated, err := editor.Marshal()
+	if err != nil {
+		return content, applied, err
+	}
+	return updated, applied, nil
 }
 
-// applyRecDeleteBytes deletes one recommendation's field from the JSON
-// document. ok reports whether the field existed. Arrays of model entries
-// (openclaw shape) are only deleted when the model itself exists.
-func applyRecDeleteBytes(buf []byte, r model.AgentRecommendation, providerPath, modelPath, providerID, modelID string) ([]byte, bool, error) {
+// applyRecDelete deletes one recommendation's field from the document. ok
+// reports whether the field existed. Arrays of model entries (openclaw
+// shape) are only deleted when the model itself exists.
+func applyRecDelete(editor configEditor, r model.AgentRecommendation, providerPath, modelPath, providerID, modelID string) (bool, error) {
 	switch r.Scope {
 	case "provider":
 		full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
-		if !gjson.GetBytes(buf, full).Exists() {
-			return buf, false, nil
-		}
-		next, err := sjson.DeleteBytes(buf, full)
-		return next, true, err
+		return editor.Delete(full)
 	case "model":
 		if modelID == "" {
-			return buf, false, nil
+			return false, nil
 		}
 		resolved := strings.ReplaceAll(modelPath, "{provider_id}", escapeSjsonKey(providerID))
-		base, found := modelEntryPath(buf, resolved, modelID)
+		base, found := modelEntryPath(editor.JSON(), resolved, modelID)
 		if !found {
-			return buf, false, nil
+			return false, nil
 		}
 		full := base + "." + r.Key
-		if !gjson.GetBytes(buf, full).Exists() {
-			return buf, false, nil
-		}
-		next, err := sjson.DeleteBytes(buf, full)
-		return next, true, err
+		return editor.Delete(full)
 	}
-	return buf, false, nil
+	return false, nil
 }
 
 // stripJSON5Comments removes // and /* */ comments so gjson can parse

@@ -957,18 +957,22 @@ var builtinAgentRules = []struct {
 	},
 	{
 		// DeepSeek Harness（dsh）桌面版：模型/提供商配置由 dsh-llm-pi-ai 插件
-		// 写在 profile 的 cordis.patch.yml（YAML），现有接管引擎只读写
-		// JSON/JSONC，无法自动生成 provider 块，因此 json_paths 留空，仅按
-		// 官方字段给出配置参考（模型信息字段映射同样只作参考，不参与托管
-		// 生成）。桌面版（Desktop App）建 profile desktop，Web 版
-		// （`npx @deepseek-ai/dsh web`）建 profile web；两条规则只差默认路径。
-		// DSH_HOME 缺省 ~/.dsh。
+		// 写在 profile 的 cordis.patch.yml（YAML）。规则路径用 gjson 查询段
+		// `#(id=="llm-pi-ai")` 先按 id 找到插件条目再进 config.providers；
+		// 引擎见到 .yml/.yaml 会用 yaml.v3 节点读写（保留注释），见到 JSON
+		// 仍走原来的 gjson/sjson。桌面版（Desktop App）建 profile desktop，
+		// Web 版（`npx @deepseek-ai/dsh web`）建 profile web；两条规则只差
+		// 默认路径。DSH_HOME 缺省 ~/.dsh。
 		Name: "DeepSeek Harness (Desktop)",
 		OsPaths: AgentOsPaths{
 			Windows: `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml`,
 			Mac:     `~/.dsh/profiles/desktop/cordis.patch.yml`,
 		},
-		JsonPaths:       AgentJsonPaths{},
+		JsonPaths: AgentJsonPaths{
+			Provider:        `#(id=="llm-pi-ai").config.providers`,
+			Model:           `#(id=="llm-pi-ai").config.providers.{provider_id}.models`,
+			ModelsContainer: "array",
+		},
 		Recommendations: deepseekHarnessRecommendations,
 		Protocols:       deepseekHarnessProtocols,
 		ModelInfoFields: deepseekHarnessModelInfoFields,
@@ -981,7 +985,11 @@ var builtinAgentRules = []struct {
 			Windows: `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml`,
 			Mac:     `~/.dsh/profiles/web/cordis.patch.yml`,
 		},
-		JsonPaths:       AgentJsonPaths{},
+		JsonPaths: AgentJsonPaths{
+			Provider:        `#(id=="llm-pi-ai").config.providers`,
+			Model:           `#(id=="llm-pi-ai").config.providers.{provider_id}.models`,
+			ModelsContainer: "array",
+		},
 		Recommendations: deepseekHarnessRecommendations,
 		Protocols:       deepseekHarnessProtocols,
 		ModelInfoFields: deepseekHarnessModelInfoFields,
@@ -1307,7 +1315,10 @@ var openclawProtocols = []AgentProtocol{
 // 配置文件是 YAML（profile 的 cordis.patch.yml），现有引擎只读写 JSON/JSONC，
 // json_paths 留空，因此这些字段只作文档/字段追踪，不参与托管生成。
 var deepseekHarnessRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "apiKeyEnv", Description: "认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件", Required: true},
+	// apiKeyEnv 写环境变量名而不是密钥本身：dsh 的明文密钥存在
+	// $DSH_HOME/.credentials.yaml，配置里只放引用。托管生成出来的块默认
+	// 引用 HAPIY_API_KEY，目标机把 hapiy 令牌导出到该环境变量即可。
+	{Scope: "provider", Key: "apiKeyEnv", Description: "认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件", Recommended: "HAPIY_API_KEY", Required: true},
 	{Scope: "provider", Key: "displayName", Description: "选择器里显示的提供商名称（缺省用 provider id）"},
 	{Scope: "provider", Key: "baseURL", Description: "自定义提供商的 API 端点（如 https://gateway.example.com/v1；已装目录提供商省略则用目录端点）", Required: true},
 	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见
@@ -1353,7 +1364,7 @@ var deepseekHarnessProtocols = []AgentProtocol{
 
 // deepseekHarnessModelInfoFields 是 DeepSeek Harness 两条规则（桌面版 / Web 版）
 // 共用的模型信息字段映射：pi-ai 模型的 contextWindow / maxTokens / input 与统一
-// 值一一对应；但配置文件是 YAML，引擎写不进去，这里只作参考。思考档位由模型的
+// 值一一对应，YAML 引擎按节点写回（注释保留）。思考档位由模型的
 // reasoningEfforts（档位→线路写法）表达，与统一值的写法不一致，暂不映射。
 var deepseekHarnessModelInfoFields = AgentModelInfoFieldPaths{
 	MaxContext:     ModelInfoPath(`contextWindow`),
