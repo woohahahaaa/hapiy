@@ -40,6 +40,7 @@ import {
 } from '@/lib/dashboard-api'
 import { AgentConfigEditorDialog } from '@/components/dialog/agent-config-editor'
 import { AgentModelsDialog } from '@/components/dialog/agent-models'
+import { formatSshAddress, parseSshAddress, type SshAddress } from '@/lib/ssh-address'
 
 // ── Agent 接管 ──
 
@@ -431,14 +432,12 @@ function AgentConfigFormDialog({
   const [presetSyncSuggested, setPresetSyncSuggested] = useState(false)
   const [path, setPath] = useState('')
   const [host, setHost] = useState('')
-  const [port, setPort] = useState('22')
   const [username, setUsername] = useState('')
   const [authType, setAuthType] = useState<'password' | 'key'>('password')
   const [password, setPassword] = useState('')
   const [privateKey, setPrivateKey] = useState('')
   const [jumpEnabled, setJumpEnabled] = useState(false)
   const [jumpHost, setJumpHost] = useState('')
-  const [jumpPort, setJumpPort] = useState('22')
   const [jumpUsername, setJumpUsername] = useState('')
   const [jumpAuthType, setJumpAuthType] = useState<'password' | 'key'>('password')
   const [jumpPassword, setJumpPassword] = useState('')
@@ -467,15 +466,13 @@ function AgentConfigFormDialog({
     setTargetOs(record?.target_os ?? 'other')
     setPresetSyncSuggested(false)
     setPath(record?.path ?? '')
-    setHost(ssh?.host ?? '')
-    setPort(String(ssh?.port ?? 22))
+    setHost(formatSshAddress(ssh?.host ?? '', ssh?.port))
     setUsername(ssh?.username ?? '')
     setAuthType(ssh?.auth_type ?? 'password')
     setPassword('')
     setPrivateKey('')
     setJumpEnabled(ssh?.jump_enabled ?? false)
-    setJumpHost(ssh?.jump_host ?? '')
-    setJumpPort(String(ssh?.jump_port ?? 22))
+    setJumpHost(formatSshAddress(ssh?.jump_host ?? '', ssh?.jump_port))
     setJumpUsername(ssh?.jump_username ?? '')
     setJumpAuthType(ssh?.jump_auth_type ?? 'password')
     setJumpPassword('')
@@ -625,8 +622,8 @@ function AgentConfigFormDialog({
         setError(t('validation.hostRequired'))
         return
       }
-      const portNum = Number(port)
-      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      const targetAddress = parseSshAddress(host)
+      if (!targetAddress) {
         setError(t('validation.portRange'))
         return
       }
@@ -642,13 +639,14 @@ function AgentConfigFormDialog({
         setError(t('validation.privateKeyRequired'))
         return
       }
+      let jumpAddress: SshAddress | null = null
       if (jumpEnabled) {
         if (!jumpHost.trim()) {
           setError(t('validation.jumpHostRequired'))
           return
         }
-        const jumpPortNum = Number(jumpPort)
-        if (!Number.isInteger(jumpPortNum) || jumpPortNum < 1 || jumpPortNum > 65535) {
+        jumpAddress = parseSshAddress(jumpHost)
+        if (!jumpAddress) {
           setError(t('validation.jumpPortRange'))
           return
         }
@@ -666,15 +664,15 @@ function AgentConfigFormDialog({
         }
       }
       sshConfig = {
-        host: host.trim(),
-        port: portNum,
+        host: targetAddress.host,
+        port: targetAddress.port,
         username: username.trim(),
         auth_type: authType,
         password: authType === 'password' && password !== '' ? password : undefined,
         private_key: authType === 'key' && privateKey.trim() !== '' ? privateKey.trim() : undefined,
         jump_enabled: jumpEnabled,
-        jump_host: jumpEnabled ? jumpHost.trim() : undefined,
-        jump_port: jumpEnabled ? Number(jumpPort) : undefined,
+        jump_host: jumpAddress?.host,
+        jump_port: jumpAddress?.port,
         jump_username: jumpEnabled ? jumpUsername.trim() : undefined,
         jump_auth_type: jumpEnabled ? jumpAuthType : undefined,
         jump_password: jumpEnabled && jumpAuthType === 'password' && jumpPassword !== '' ? jumpPassword : undefined,
@@ -714,10 +712,8 @@ function AgentConfigFormDialog({
   // look at error first.
   const buildSshConfigForProbe = useCallback((): { readonly cfg: AgentSshConfig; readonly error: string | null } => {
     if (!host.trim()) return { cfg: blankSshConfig(), error: t('validation.hostRequired') }
-    const portNum = Number(port)
-    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      return { cfg: blankSshConfig(), error: t('validation.portRange') }
-    }
+    const targetAddress = parseSshAddress(host)
+    if (!targetAddress) return { cfg: blankSshConfig(), error: t('validation.portRange') }
     if (!username.trim()) return { cfg: blankSshConfig(), error: t('validation.usernameRequired') }
     if (authType === 'password' && password === '') {
       return { cfg: blankSshConfig(), error: t('validation.passwordRequired') }
@@ -725,12 +721,11 @@ function AgentConfigFormDialog({
     if (authType === 'key' && privateKey.trim() === '') {
       return { cfg: blankSshConfig(), error: t('validation.privateKeyRequired') }
     }
+    let jumpAddress: SshAddress | null = null
     if (jumpEnabled) {
       if (!jumpHost.trim()) return { cfg: blankSshConfig(), error: t('validation.jumpHostRequired') }
-      const jumpPortNum = Number(jumpPort)
-      if (!Number.isInteger(jumpPortNum) || jumpPortNum < 1 || jumpPortNum > 65535) {
-        return { cfg: blankSshConfig(), error: t('validation.jumpPortRange') }
-      }
+      jumpAddress = parseSshAddress(jumpHost)
+      if (!jumpAddress) return { cfg: blankSshConfig(), error: t('validation.jumpPortRange') }
       if (!jumpUsername.trim()) return { cfg: blankSshConfig(), error: t('validation.jumpUsernameRequired') }
       if (jumpAuthType === 'password' && jumpPassword === '') {
         return { cfg: blankSshConfig(), error: t('validation.jumpPasswordRequired') }
@@ -741,15 +736,15 @@ function AgentConfigFormDialog({
     }
     return {
       cfg: {
-        host: host.trim(),
-        port: portNum,
+        host: targetAddress.host,
+        port: targetAddress.port,
         username: username.trim(),
         auth_type: authType,
         password: authType === 'password' ? password : undefined,
         private_key: authType === 'key' ? privateKey.trim() : undefined,
         jump_enabled: jumpEnabled,
-        jump_host: jumpEnabled ? jumpHost.trim() : undefined,
-        jump_port: jumpEnabled ? Number(jumpPort) : undefined,
+        jump_host: jumpAddress?.host,
+        jump_port: jumpAddress?.port,
         jump_username: jumpEnabled ? jumpUsername.trim() : undefined,
         jump_auth_type: jumpEnabled ? jumpAuthType : undefined,
         jump_password: jumpEnabled && jumpAuthType === 'password' ? jumpPassword : undefined,
@@ -757,7 +752,7 @@ function AgentConfigFormDialog({
       },
       error: null,
     }
-  }, [host, port, username, authType, password, privateKey, jumpEnabled, jumpHost, jumpPort, jumpUsername, jumpAuthType, jumpPassword, jumpPrivateKey, t])
+  }, [host, username, authType, password, privateKey, jumpEnabled, jumpHost, jumpUsername, jumpAuthType, jumpPassword, jumpPrivateKey, t])
 
   const runSshTest = useCallback(async () => {
     const { cfg, error } = buildSshConfigForProbe()
@@ -929,10 +924,7 @@ function AgentConfigFormDialog({
             <>
               <Field>
                 <FieldLabel>{t('form.hostLabel')}</FieldLabel>
-                <div className="flex gap-2">
-                  <Input className="flex-1" value={host} onChange={(e) => setHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
-                  <Input className="w-24" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(e.target.value)} placeholder={t('form.portPlaceholder')} />
-                </div>
+                <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
               </Field>
               <Field>
                 <FieldLabel>{t('form.userAuthLabel')}</FieldLabel>
@@ -972,10 +964,7 @@ function AgentConfigFormDialog({
                 <>
                   <Field>
                     <FieldLabel>{t('form.jumpHostLabel')}</FieldLabel>
-                    <div className="flex gap-2">
-                      <Input className="flex-1" value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
-                      <Input className="w-24" type="number" min={1} max={65535} value={jumpPort} onChange={(e) => setJumpPort(e.target.value)} placeholder={t('form.portPlaceholder')} />
-                    </div>
+                    <Input value={jumpHost} onChange={(e) => setJumpHost(e.target.value)} placeholder={t('form.hostPlaceholder')} />
                   </Field>
                   <Field>
                     <FieldLabel>{t('form.jumpUserAuthLabel')}</FieldLabel>

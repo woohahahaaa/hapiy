@@ -14,6 +14,7 @@ import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
 import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
 import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
+import { ThemeSettingsPage } from '@/pages/ThemeSettingsPage'
 import { BackupSettingsPage } from '@/pages/BackupSettingsPage'
 import { OtherSettingsPage } from '@/pages/OtherSettingsPage'
 import { TokenUsageSettingsPage } from '@/pages/TokenUsageSettingsPage'
@@ -21,6 +22,7 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { AgentConfigPage } from '@/pages/AgentConfigPage'
 import { AgentRulesPage } from '@/pages/AgentRulesPage'
 import { AuthGate } from '@/components/AuthGate'
+import { CustomThemeApplier } from '@/components/CustomThemeApplier'
 import { LanguageProvider } from '@/i18n/language-context'
 import { Toaster } from '@/components/ui/toast'
 
@@ -46,6 +48,7 @@ function App() {
           element={
             <AuthGate>
               <LanguageProvider>
+                <CustomThemeApplier />
                 <AppShell>
                   <Routes>
                     <Route path="/" element={<TopologyPage />} />
@@ -65,6 +68,7 @@ function App() {
                       <Route path="/settings/debug" element={<DebugSettingsPage />} />
                     )}
                     <Route path="/settings/backup" element={<BackupSettingsPage />} />
+                    <Route path="/settings/theme" element={<ThemeSettingsPage />} />
                     <Route path="/settings/other" element={<OtherSettingsPage />} />
                     <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />

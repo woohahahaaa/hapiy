@@ -7,7 +7,7 @@
     "endpoints": "Endpoints",
     "models": "模型",
     "status": "状态",
-    "failover": "故障转移",
+    "failover": "自动禁用状态",
     "actions": "操作"
   },
   "list": {
@@ -32,6 +32,10 @@
     "endpointPathHint": "路径必须以斜杠开头（/），将拼接在 Base URL 之后",
     "endpointUseKey": "是否传入 Key",
     "endpointUseKeyHint": "将使用当前供应商的第一个 Key 作为 Bearer 凭证",
+    "bulkScopeTitle": "选择设置范围",
+    "bulkScopeQuestion": "一键设置价格要应用到哪些模型？",
+    "bulkScopeAll": "所有模型",
+    "bulkScopeReference": "仅参考模式",
     "syncTitle": "同步价格设置",
     "syncConfirm": "确认同步",
     "syncing": "同步中...",
