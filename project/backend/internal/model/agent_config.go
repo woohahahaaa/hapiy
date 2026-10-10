@@ -956,13 +956,14 @@ var builtinAgentRules = []struct {
 		},
 	},
 	{
-		// DeepSeek Harness（dsh）：模型/提供商配置由 dsh-llm-pi-ai 插件写在
-		// profile 的 cordis.patch.yml（YAML），现有接管引擎只读写 JSON/JSONC，
-		// 无法自动生成 provider 块，因此 json_paths 留空，仅按官方字段给出
-		// 配置参考（模型信息字段映射同样只作参考，不参与托管生成）。默认取
-		// 桌面版（Desktop App）的 profile desktop；`dsh web` 场景把 profile
-		// 换成 web。DSH_HOME 缺省 ~/.dsh。
-		Name: "DeepSeek Harness",
+		// DeepSeek Harness（dsh）桌面版：模型/提供商配置由 dsh-llm-pi-ai 插件
+		// 写在 profile 的 cordis.patch.yml（YAML），现有接管引擎只读写
+		// JSON/JSONC，无法自动生成 provider 块，因此 json_paths 留空，仅按
+		// 官方字段给出配置参考（模型信息字段映射同样只作参考，不参与托管
+		// 生成）。桌面版（Desktop App）建 profile desktop，Web 版
+		// （`npx @deepseek-ai/dsh web`）建 profile web；两条规则只差默认路径。
+		// DSH_HOME 缺省 ~/.dsh。
+		Name: "DeepSeek Harness (Desktop)",
 		OsPaths: AgentOsPaths{
 			Windows: `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml`,
 			Mac:     `~/.dsh/profiles/desktop/cordis.patch.yml`,
@@ -970,14 +971,20 @@ var builtinAgentRules = []struct {
 		JsonPaths:       AgentJsonPaths{},
 		Recommendations: deepseekHarnessRecommendations,
 		Protocols:       deepseekHarnessProtocols,
-		ModelInfoFields: AgentModelInfoFieldPaths{
-			MaxContext:     ModelInfoPath(`contextWindow`),
-			MaxOutputToken: ModelInfoPath(`maxTokens`),
-			// pi-ai 的 input 只接受 text / image。
-			InputTypes: AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image"}},
-			// 思考档位由模型的 reasoningEfforts（档位→线路写法）表达，
-			// 与统一值的写法不一致，暂不映射。
+		ModelInfoFields: deepseekHarnessModelInfoFields,
+	},
+	{
+		// DeepSeek Harness（dsh）Web 版：`npx @deepseek-ai/dsh web` 启动的
+		// Web UI 建 profile web，其余与桌面版规则一致。
+		Name: "DeepSeek Harness (Web)",
+		OsPaths: AgentOsPaths{
+			Windows: `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml`,
+			Mac:     `~/.dsh/profiles/web/cordis.patch.yml`,
 		},
+		JsonPaths:       AgentJsonPaths{},
+		Recommendations: deepseekHarnessRecommendations,
+		Protocols:       deepseekHarnessProtocols,
+		ModelInfoFields: deepseekHarnessModelInfoFields,
 	},
 }
 
@@ -1342,6 +1349,17 @@ var deepseekHarnessProtocols = []AgentProtocol{
 			{Scope: "provider", Key: "api", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
 		},
 	},
+}
+
+// deepseekHarnessModelInfoFields 是 DeepSeek Harness 两条规则（桌面版 / Web 版）
+// 共用的模型信息字段映射：pi-ai 模型的 contextWindow / maxTokens / input 与统一
+// 值一一对应；但配置文件是 YAML，引擎写不进去，这里只作参考。思考档位由模型的
+// reasoningEfforts（档位→线路写法）表达，与统一值的写法不一致，暂不映射。
+var deepseekHarnessModelInfoFields = AgentModelInfoFieldPaths{
+	MaxContext:     ModelInfoPath(`contextWindow`),
+	MaxOutputToken: ModelInfoPath(`maxTokens`),
+	// pi-ai 的 input 只接受 text / image。
+	InputTypes: AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image"}},
 }
 
 // AgentModelConfigSource — persisted 模型配置参考供应商 selection for one

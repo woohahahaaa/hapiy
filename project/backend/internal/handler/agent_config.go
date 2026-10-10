@@ -387,8 +387,12 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 
-		// Read-validate: refuse to store a record whose file cannot be
-		// read right now, so the frontend gets immediate feedback.
+		// Content cache only: store the record even when the file cannot be
+		// read right now — connectivity and the file itself are checked by
+		// the explicit 测试 button, and the target may legitimately not
+		// exist yet (e.g. a config file the agent app has not written).
+		// Failed reads cache an empty body so the take-over record still
+		// works; opening it re-reads live and surfaces any real error.
 		var content string
 		var err error
 		if req.Mode == "local" {
@@ -397,8 +401,7 @@ func CreateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
-			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
-			return
+			content = ""
 		}
 
 		var sshBlob string
@@ -597,15 +600,17 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 				respondError(c, http.StatusBadRequest, code, msg)
 				return
 			}
-			if err := sshCfg.EncryptSensitive(key); err != nil {
-				respondErrorWithParams(c, http.StatusInternalServerError, "SSH_CREDENTIALS_ENCRYPT_FAILED", "SSH 凭据加密失败: "+err.Error(), gin.H{"error": err.Error()})
-				return
-			}
 		default:
 			respondError(c, http.StatusBadRequest, "MODE_INVALID", "模式必须是 local 或 ssh")
 			return
 		}
 
+		// Content cache only: a failed live read must not block saving the
+		// binding — connectivity and the file itself are checked by the
+		// explicit 测试 button, and the target may legitimately not exist
+		// yet. When the read fails the previous cache is kept. The read
+		// must happen BEFORE the credentials below are encrypted, otherwise
+		// the SSH dial would carry ciphertext as the password.
 		var content string
 		var err error
 		if req.Mode == "local" {
@@ -614,8 +619,7 @@ func UpdateAgentConfigFile(db *gorm.DB, key []byte) gin.HandlerFunc {
 			content, err = service.ReadRemoteFile(sshCfg, req.Path, req.TargetOS)
 		}
 		if err != nil {
-			respondErrorWithParams(c, http.StatusBadRequest, "READ_FAILED", "读取失败: "+err.Error(), gin.H{"error": err.Error()})
-			return
+			content = row.Content
 		}
 
 		var sshBlob string
