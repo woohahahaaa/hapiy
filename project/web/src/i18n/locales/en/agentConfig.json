@@ -157,7 +157,7 @@
     "sshTestTitle": "Select the target OS above first",
     "sshJsonOnlyHint": "Only .json files are supported",
     "syncPresetButton": "Sync preset agent info",
-    "syncPresetHint": "Click “Sync preset agent info” to fill in the {{os}} default path below",
+    "syncPresetHint": "Selecting {{os}} fills the default path automatically; once you edit the path it is left alone — click “Sync preset agent info” to pull the preset back in",
     "osLabel": "OS",
     "osWarning": "Select the real OS of the target machine: Windows runs cmd commands, Mac/Other run POSIX commands, otherwise the test will fail"
   },

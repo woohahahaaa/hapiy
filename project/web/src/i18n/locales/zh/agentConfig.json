@@ -154,7 +154,7 @@
     "sshTestTitle": "请先在上方选择目标系统",
     "sshJsonOnlyHint": "仅支持 .json 文件",
     "syncPresetButton": "同步预设Agent信息",
-    "syncPresetHint": "点击「同步预设Agent信息」可将 {{os}} 默认路径填入下方",
+    "syncPresetHint": "选择 {{os}} 后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设Agent信息」重新带入",
     "osLabel": "系统",
     "osWarning": "请选择目标机器的真实系统：选 Windows 走 cmd 命令，选 Mac/其他 走 POSIX 命令，否则测试会失败"
   },

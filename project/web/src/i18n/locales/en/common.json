@@ -79,7 +79,7 @@
     "channelAffinity": "Channel Affinity",
     "failover": "Failover",
     "agent": "Agent Takeover",
-    "agentConfig": "Config File",
+    "agentConfig": "Takeover Config Files",
     "settings": "Settings",
     "baseUrl": "BaseURL",
     "general": "Get Model List",

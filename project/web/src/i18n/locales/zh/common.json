@@ -79,7 +79,7 @@
     "channelAffinity": "渠道亲和性",
     "failover": "故障转移",
     "agent": "接管Agent",
-    "agentConfig": "配置文件",
+    "agentConfig": "接管配置文件",
     "settings": "系统设置",
     "baseUrl": "BaseURL",
     "general": "获取模型列表",
