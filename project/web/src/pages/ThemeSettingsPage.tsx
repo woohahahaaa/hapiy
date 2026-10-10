@@ -84,16 +84,20 @@ export function ThemeSettingsPage() {
   const [deleteTarget, setDeleteTarget] = useState<InstalledTheme | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const load = useCallback(() => {
-    setState({ kind: 'loading' })
-    loadThemeState()
+  const runLoad = useCallback(() => {
+    return loadThemeState()
       .then(() => setState({ kind: 'ready' }))
       .catch((err) => setState({ kind: 'error', message: toErrorMessage(err) }))
   }, [])
 
   useEffect(() => {
-    load()
-  }, [load])
+    void runLoad()
+  }, [runLoad])
+
+  const handleRetry = () => {
+    setState({ kind: 'loading' })
+    void runLoad()
+  }
 
   const rows: ThemeRow[] = [
     { id: DEFAULT_THEME_ID, name: t('theme.defaultName'), theme: null },
@@ -170,7 +174,7 @@ export function ThemeSettingsPage() {
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <AppIcon name="warning" size={32} className="text-destructive" />
             <p className="text-sm text-muted-foreground">{state.message}</p>
-            <Button variant="outline" size="sm" onClick={load}>
+            <Button variant="outline" size="sm" onClick={handleRetry}>
               <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
             </Button>
           </div>

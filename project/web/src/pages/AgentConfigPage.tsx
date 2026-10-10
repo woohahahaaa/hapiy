@@ -431,6 +431,7 @@ function AgentConfigFormDialog({
   const [targetOs, setTargetOs] = useState<AgentTargetOs>('other')
   const [presetSyncSuggested, setPresetSyncSuggested] = useState(false)
   const [path, setPath] = useState('')
+  const [pathDirty, setPathDirty] = useState(false)
   const [host, setHost] = useState('')
   const [username, setUsername] = useState('')
   const [authType, setAuthType] = useState<'password' | 'key'>('password')
@@ -466,6 +467,7 @@ function AgentConfigFormDialog({
     setTargetOs(record?.target_os ?? 'other')
     setPresetSyncSuggested(false)
     setPath(record?.path ?? '')
+    setPathDirty((record?.path ?? '') !== '')
     setHost(formatSshAddress(ssh?.host ?? '', ssh?.port))
     setUsername(ssh?.username ?? '')
     setAuthType(ssh?.auth_type ?? 'password')
@@ -508,15 +510,31 @@ function AgentConfigFormDialog({
     [rules, agentType]
   )
 
+  // Auto-fill the path field from the selected rule's per-OS preset, but
+  // only while the user hasn't edited the field themselves (pathDirty).
+  // Returns whether the field was filled. "other" and empty presets leave
+  // the field untouched.
+  const autofillPresetPath = (os: AgentTargetOs, rule: AgentTypeRule | null = ruleForType): boolean => {
+    if (pathDirty || (os !== 'windows' && os !== 'mac') || !rule) return false
+    const template = osPathFor(rule.os_paths, os)
+    if (template === '') return false
+    setPath(template)
+    return true
+  }
+
   const handleAgentTypeChange = (value: string) => {
     setAgentType(value)
     setCheckResult(null)
+    if (autofillPresetPath(targetOs, rules.find((rule) => rule.name === value) ?? null)) {
+      setPresetSyncSuggested(false)
+    }
   }
 
   const handleTargetOsChange = (value: AgentTargetOs) => {
     setTargetOs(value)
     setCheckResult(null)
-    setPresetSyncSuggested(value !== 'other')
+    const filled = autofillPresetPath(value)
+    setPresetSyncSuggested(!filled && value !== 'other')
   }
 
   // Clear SSH-only state when switching modes so the local tab doesn't
@@ -555,6 +573,7 @@ function AgentConfigFormDialog({
     }
     setCheckResult(null)
     setPath(template.trim())
+    setPathDirty(false)
     setPresetSyncSuggested(false)
   }
 
@@ -893,7 +912,7 @@ function AgentConfigFormDialog({
               <Field>
                 <FieldLabel>{t('form.pathLabel')}</FieldLabel>
                 <div className="flex gap-2">
-                  <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                  <Input value={path} onChange={(e) => { setPath(e.target.value); setPathDirty(true) }} placeholder="/path/to/xxx.json" />
                   <Button
                     type="button"
                     variant="outline"
@@ -1002,11 +1021,11 @@ function AgentConfigFormDialog({
               <Field>
                 <FieldLabel>{t('form.remotePathLabel')}</FieldLabel>
                 <div className="flex gap-2">
-                  <Input className="flex-1" value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to/xxx.json" />
+                  <Input className="flex-1" value={path} onChange={(e) => { setPath(e.target.value); setPathDirty(true) }} placeholder="/path/to/xxx.json" />
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    size="default"
                     disabled={sshTesting || targetOs === 'other'}
                     title={targetOs === 'other' ? t('form.sshTestTitle') : undefined}
                     onClick={() => void runSshTest()}

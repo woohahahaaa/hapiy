@@ -960,11 +960,12 @@ var builtinAgentRules = []struct {
 		// profile 的 cordis.patch.yml（YAML），现有接管引擎只读写 JSON/JSONC，
 		// 无法自动生成 provider 块，因此 json_paths 留空，仅按官方字段给出
 		// 配置参考（模型信息字段映射同样只作参考，不参与托管生成）。默认取
-		// 默认 profile web 的 patch 文件；DSH_HOME 缺省 ~/.dsh。
+		// 桌面版（Desktop App）的 profile desktop；`dsh web` 场景把 profile
+		// 换成 web。DSH_HOME 缺省 ~/.dsh。
 		Name: "DeepSeek Harness",
 		OsPaths: AgentOsPaths{
-			Windows: `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml`,
-			Mac:     `~/.dsh/profiles/web/cordis.patch.yml`,
+			Windows: `%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml`,
+			Mac:     `~/.dsh/profiles/desktop/cordis.patch.yml`,
 		},
 		JsonPaths:       AgentJsonPaths{},
 		Recommendations: deepseekHarnessRecommendations,

@@ -10,7 +10,8 @@
 |----|------|
 | 工具 | DeepSeek Harness（命令 `dsh`），DeepSeek 官方开源 agent harness（Everything is a plugin / Cordis） |
 | 启动 | `npx @deepseek-ai/dsh web`，默认 Web UI 在 `http://127.0.0.1:3080` |
-| 配置文件 | profile patch：`$DSH_HOME/profiles/web/cordis.patch.yml`（`DSH_HOME` 缺省 `~/.dsh`）｜ Windows `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml` |
+| 配置文件 | profile patch：`$DSH_HOME/profiles/<profile>/cordis.patch.yml`（`DSH_HOME` 缺省 `~/.dsh`）｜ Windows `%USERPROFILE%\.dsh\profiles\<profile>\cordis.patch.yml` |
+| profile 名 | 随启动方式变化：**桌面版（Desktop App）是 `desktop`**；`dsh web` 是 `web`；自定义 profile 同理替换路径里的 profile 名。接管规则的 os_paths 默认按桌面版 `desktop`，`dsh web` 目标机把路径里的 desktop 换成 web |
 | 格式 | **YAML**。`cordis.yml` 是空基线（勿手改），真实配置来自 patch 层；模型页写入的就是 profile 的 `cordis.patch.yml`，改动下一次请求生效、无需重启 |
 | 凭据 | `$DSH_HOME/.credentials.yaml` 凭据库；配置里只写 `apiKeyEnv`（环境变量名）引用，不写明文密钥 |
 | 其他文件 | `$DSH_HOME/settings.yaml`（运行时可热更设置）、`$DSH_HOME/profiles/<profile>/package.json`（bundle 列表） |
