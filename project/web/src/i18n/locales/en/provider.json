@@ -7,7 +7,7 @@
     "endpoints": "Endpoints",
     "models": "Models",
     "status": "Status",
-    "failover": "Failover",
+    "failover": "Auto-disabled",
     "actions": "Actions"
   },
   "list": {
@@ -33,6 +33,10 @@
     "endpointPathHint": "The path must start with a slash (/); it is appended to the Base URL",
     "endpointUseKey": "Send Key",
     "endpointUseKeyHint": "Uses the provider's first Key as the Bearer credential",
+    "bulkScopeTitle": "Choose scope",
+    "bulkScopeQuestion": "Apply the models.dev pricing to which models?",
+    "bulkScopeAll": "All models",
+    "bulkScopeReference": "Reference mode only",
     "syncTitle": "Sync price settings",
     "syncConfirm": "Confirm sync",
     "syncing": "Syncing...",

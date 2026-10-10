@@ -10,6 +10,7 @@ import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Separator } from '@/components/ui/separator'
 import * as SelectPrimitive from '@radix-ui/react-select'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/tooltip'
@@ -338,9 +339,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
   const [endpointError, setEndpointError] = useState<string | null>(null)
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
-  const [isEndpointDialogOpen, setIsEndpointDialogOpen] = useState(false)
   const [endpointDraft, setEndpointDraft] = useState('')
-  const [isEndpointSaving, setIsEndpointSaving] = useState(false)
+  const [isFetchDialogOpen, setIsFetchDialogOpen] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isFetching, setIsFetching] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
@@ -356,9 +356,9 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
   // All providers are loaded once so the per-model 同步 action can rewrite
   // the equal-named models of the other providers in the same dialog flow.
   const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
-  const [refRefreshing, setRefRefreshing] = useState(false)
   const [refSyncing, setRefSyncing] = useState(false)
   const [bulkRefSetting, setBulkRefSetting] = useState(false)
+  const [bulkScopeOpen, setBulkScopeOpen] = useState(false)
   const [syncTarget, setSyncTarget] = useState<string | null>(null)
 
   useEffect(() => {
@@ -397,35 +397,6 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
     !providersForModel(refSnapshot, model.model)
       .some((p) => p.providerName.toLowerCase() === model.referenceProvider!.toLowerCase())
 
-  const refreshReference = async (index: number) => {
-    const model = form.models[index]
-    if (!model || model.referenceProvider === null) return
-    if (model.referenceProvider.trim() === '') {
-      setRefSnapshotError(t('errors.noReferenceSelected'))
-      return
-    }
-    setRefRefreshing(true)
-    setRefSnapshotError(null)
-    try {
-      const fresh = await refreshModelsDevModels()
-      setRefSnapshot(fresh)
-      const row = findModelsDevProviderRow(fresh, model.model, model.referenceProvider)
-      if (!row) {
-        setRefSnapshotError(t('errors.referenceGone', { reference: model.referenceProvider, model: model.model }))
-        return
-      }
-      patchModel(index, {
-        referencePrices: refPricesOf(row),
-        referenceAt: new Date().toISOString(),
-      })
-      toast(t('toast.snapshotUpdated'))
-    } catch {
-      setRefSnapshotError(t('errors.refreshFailed'))
-    } finally {
-      setRefRefreshing(false)
-    }
-  }
-
   const pickReference = (index: number, providerName: string) => {
     const model = form.models[index]
     if (!model) return
@@ -443,11 +414,11 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
     }
   }
 
-  // 一键为所有可从 models.dev 定价的模型（按弹窗当前 UI 状态判断，未保存
-  // 也生效）拉取最新价格快照并填充：已处于「从 models.dev 参考」的按当前
-  // 厂商（空则推断官方 lab 厂商）；「不设置」的自动推断官方 lab 厂商并升级
-  // 为参考模式。手动「单独设置价格」的模型不覆盖，尊重用户自定义。
-  const applyModelsDevPricesForAll = async () => {
+  // 一键为可从 models.dev 定价的模型（按弹窗当前 UI 状态判断，未保存也生效）
+  // 拉取最新价格快照并填充。scope='reference' 只处理价格模式为「从
+  // models.dev 同步」的模型；scope='all' 处理全部模型（含手动单独设置价格
+  // 的模型），有厂商的按该厂商、无厂商的推断官方 lab 厂商。
+  const applyModelsDevPricesForAll = async (scope: 'all' | 'reference') => {
     setBulkRefSetting(true)
     setRefSnapshotError(null)
     try {
@@ -456,8 +427,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       let filled = 0
       let vendorlessKept = 0
       const next = form.models.map((model) => {
-        // 手动设置了价格（prices 模式）的模型不覆盖。
-        if (model.prices !== null) return model
+        // 参考模式以外（手动价格 / 不设置）的模型在 reference 范围下跳过。
+        if (scope === 'reference' && model.referenceProvider === null) return model
         // reference 有厂商直接用；reference 空厂商 / unset 推断官方 lab 厂商。
         const vendor = model.referenceProvider !== null && model.referenceProvider.trim() !== ''
           ? model.referenceProvider
@@ -564,12 +535,22 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
 
   const effectiveEndpoint = endpointOverride ?? globalDefaultEndpoint
 
+  // 打开「从上游获取模型」弹窗：以当前生效的模型列表接口预填输入框。
+  const openFetchDialog = () => {
+    setEndpointDraft(effectiveEndpoint ?? '')
+    setFetchError(null)
+    setFetchedModels(null)
+    setIsFetchDialogOpen(true)
+  }
+
   const handleFetchModels = async () => {
-    if (!effectiveEndpoint) {
+    const draft = endpointDraft.trim()
+    const endpoint = draft === '' ? globalDefaultEndpoint : draft
+    if (!endpoint) {
       setFetchError(t('errors.noDefaultEndpoint'))
       return
     }
-    if (!effectiveEndpoint.startsWith('/')) {
+    if (!endpoint.startsWith('/')) {
       setFetchError(t('errors.pathMustStartSlash'))
       return
     }
@@ -578,7 +559,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       setFetchError(t('errors.baseUrlRequired'))
       return
     }
-    const fullUrl = `${baseUrl.replace(/\/+$/, '')}${effectiveEndpoint}`
+    setEndpointOverride(draft === '' ? null : draft)
+    const fullUrl = `${baseUrl.replace(/\/+$/, '')}${endpoint}`
     setFetchError(null)
     setIsFetching(true)
     try {
@@ -589,17 +571,6 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       setFetchError(toErrorMessage(error))
     } finally {
       setIsFetching(false)
-    }
-  }
-
-  const handleSaveEndpoint = async () => {
-    setIsEndpointSaving(true)
-    try {
-      const trimmed = endpointDraft.trim()
-      setEndpointOverride(trimmed === '' ? null : trimmed)
-      setIsEndpointDialogOpen(false)
-    } finally {
-      setIsEndpointSaving(false)
     }
   }
 
@@ -735,6 +706,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       }
     }
     setFetchedModels(null)
+    setIsFetchDialogOpen(false)
   }
 
   // 内容区滚动 + 固定底部按钮栏：交给标准组件 DialogScrollBody。
@@ -867,10 +839,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
                     stale={referenceStaleFor(model)}
                     snapshotLoading={refSnapshot === null}
                     syncing={refSyncing}
-                    refreshing={refRefreshing}
                     syncable={syncTargetsFor(model.model) > 0}
                     onPickReference={(name) => pickReference(index, name)}
-                    onRefresh={() => void refreshReference(index)}
                     onSync={() => setSyncTarget(model.model)}
                   />
                   <Select
@@ -890,12 +860,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
               )
             })}
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setForm((current) => ({ ...current, models: [...current.models, emptyProviderModel()] }))}>
-                <AppIcon name="add" data-icon="inline-start" />{t('actions.addRow')}
-              </Button>
-              <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={() => void handleFetchModels()}>
-                {isFetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
-                {t('actions.fetchModels')}
+              <Button type="button" variant="outline" size="sm" disabled={isFetching} onClick={openFetchDialog}>
+                <AppIcon name="refresh" data-icon="inline-start" />{t('actions.fetchModels')}
               </Button>
               <Button
                 type="button"
@@ -903,19 +869,16 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
                 size="sm"
                 title={t('actions.bulkPriceTitle')}
                 disabled={bulkRefSetting}
-                onClick={() => void applyModelsDevPricesForAll()}
+                onClick={() => setBulkScopeOpen(true)}
               >
                 {bulkRefSetting ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
                 {t('actions.bulkPrice')}
               </Button>
-              <Button type="button" variant="ghost" size="icon" onClick={() => { setEndpointDraft(effectiveEndpoint ?? ''); setIsEndpointDialogOpen(true) }}>
-                <AppIcon name="settings" />
-              </Button>
             </div>
+            <Button type="button" variant="outline" size="sm" className="self-start" onClick={() => setForm((current) => ({ ...current, models: [...current.models, emptyProviderModel()] }))}>
+              <AppIcon name="add" data-icon="inline-start" />{t('actions.addRow')}
+            </Button>
           </div>
-          {fetchError && (
-            <p role="alert" className="text-xs text-destructive">{fetchError}</p>
-          )}
           {refSnapshotError && (
             <p role="alert" className="text-xs text-destructive">{refSnapshotError}</p>
           )}
@@ -923,34 +886,18 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       </Field>
         </FieldGroup>
       </DialogScrollBody>
-      <Dialog open={isEndpointDialogOpen} onOpenChange={setIsEndpointDialogOpen}>
-        <DialogContent width="xs" scrollFooter>
-          <DialogHeader><DialogTitle>{t('dialog.endpointTitle')}</DialogTitle></DialogHeader>
-          <DialogScrollBody footer={
-            <>
-              <Button onClick={() => void handleSaveEndpoint()} disabled={isEndpointSaving}>{isEndpointSaving ? t('actions.saving') : t('common:action.save')}</Button>
-            </>
-          }>
-          <div className="flex flex-col gap-2">
-            <Field>
-              <FieldLabel htmlFor="model-list-endpoint">{t('dialog.endpointPathLabel')}</FieldLabel>
-              <Input id="model-list-endpoint" value={endpointDraft} onChange={(event) => setEndpointDraft(event.target.value)} placeholder="/v1/models" />
-              <p className="text-xs text-muted-foreground">{t('dialog.endpointPathHint')}</p>
-            </Field>
-            <label className="flex cursor-pointer items-center gap-2">
-              <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
-              <span className="text-foreground">{t('dialog.endpointUseKey')}</span>
-            </label>
-            <p className="text-xs text-muted-foreground">{t('dialog.endpointUseKeyHint')}</p>
-          </div>
-          </DialogScrollBody>
-        </DialogContent>
-      </Dialog>
-      {fetchedModels && (
+      {isFetchDialogOpen && (
         <FetchModelDialog
+          endpoint={endpointDraft}
+          onEndpointChange={setEndpointDraft}
+          useKey={useKey}
+          onUseKeyChange={onUseKeyChange}
+          fetching={isFetching}
+          error={fetchError}
           models={fetchedModels}
           existingIds={new Set(form.models.map((model) => model.model))}
-          onClose={() => setFetchedModels(null)}
+          onFetch={() => void handleFetchModels()}
+          onClose={() => { setIsFetchDialogOpen(false); setFetchedModels(null) }}
           onConfirm={handleConfirmAddModels}
         />
       )}
@@ -968,6 +915,19 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
           <p className="text-xs text-muted-foreground">
             {t('dialog.syncDetail')}
           </p>
+          </DialogScrollBody>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={bulkScopeOpen} onOpenChange={(open) => { if (!open) setBulkScopeOpen(false) }}>
+        <DialogContent width="xs" scrollFooter>
+          <DialogHeader><DialogTitle>{t('dialog.bulkScopeTitle')}</DialogTitle></DialogHeader>
+          <DialogScrollBody footer={
+            <>
+              <Button variant="outline" disabled={bulkRefSetting} onClick={() => { setBulkScopeOpen(false); void applyModelsDevPricesForAll('reference') }}>{t('dialog.bulkScopeReference')}</Button>
+              <Button disabled={bulkRefSetting} onClick={() => { setBulkScopeOpen(false); void applyModelsDevPricesForAll('all') }}>{t('dialog.bulkScopeAll')}</Button>
+            </>
+          }>
+          <p className="text-sm text-muted-foreground">{t('dialog.bulkScopeQuestion')}</p>
           </DialogScrollBody>
         </DialogContent>
       </Dialog>
@@ -1064,11 +1024,9 @@ type ModelPriceCellProps = {
   readonly referenceCandidates: ReadonlyArray<{ readonly providerId: string; readonly providerName: string }>
   readonly stale: boolean
   readonly snapshotLoading: boolean
-  readonly refreshing: boolean
   readonly syncing: boolean
   readonly syncable: boolean
   readonly onPickReference: (providerName: string) => void
-  readonly onRefresh: () => void
   readonly onSync: () => void
 }
 
@@ -1077,13 +1035,12 @@ type PriceMode = 'prices' | 'reference' | 'unset'
 // Price cell: a dropdown choosing between 单独设置价格 (four per-1M-token
 // price inputs), 模型价格参考供应商 (a models.dev reference supplier whose
 // price snapshot is read-only, with an editable multiplier) and 不设置
-// (legacy rows fall here and bill as 0). The row's right side carries 刷新
-// (re-check the reference supplier upstream and re-snapshot) and 同步
+// (legacy rows fall here and bill as 0). The row's right side carries 同步
 // (copy this model's pricing to the same-named models of the other
-// providers). Both icons are hidden in 不设置 mode since the row carries no
-// price data to act on. When the dialog opens and a reference supplier no
-// longer exists on models.dev for the model, the dropdown turns red (stale)
-// while the stored data stays untouched.
+// providers), hidden in 不设置 mode since the row carries no price data to act
+// on. When the dialog opens and a reference supplier no longer exists on
+// models.dev for the model, the dropdown turns red (stale) while the stored
+// data stays untouched.
 function ModelPriceCell({
   model,
   onPatch,
@@ -1091,11 +1048,9 @@ function ModelPriceCell({
   referenceCandidates,
   stale,
   snapshotLoading,
-  refreshing,
   syncing,
   syncable,
   onPickReference,
-  onRefresh,
   onSync,
 }: ModelPriceCellProps) {
   const { t } = useTranslation('provider')
@@ -1176,7 +1131,7 @@ function ModelPriceCell({
           >
           <TooltipProvider delayDuration={200}>
             <Tooltip>
-              <TooltipTrigger asChild>
+              <TooltipTrigger asChild onFocus={(event) => event.preventDefault()}>
                 <SelectTrigger
                   className={`min-w-0 flex-1 overflow-hidden px-2 text-xs ${stale ? 'border-destructive ring-1 ring-destructive/30' : ''}`}
                 >
@@ -1243,34 +1198,51 @@ function ModelPriceCell({
         />
       )}
       {mode !== 'unset' && (
-        <div className="flex items-center gap-0.5">
-          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={model.referenceProvider === null || refreshing || snapshotLoading} onClick={onRefresh} aria-label={t('price.refreshAria')}>
-            {refreshing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="refresh" />}
-          </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={syncing || !syncable} onClick={onSync} aria-label={t('price.syncAria')}>
-            {syncing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="sync" />}
-          </Button>
-        </div>
+        <TooltipProvider delayDuration={200}>
+          <div className="flex items-center gap-0.5">
+            <Tooltip>
+              <TooltipTrigger asChild onFocus={(event) => event.preventDefault()}>
+                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" disabled={syncing || !syncable} onClick={onSync} aria-label={t('price.syncAria')}>
+                  {syncing ? <AppIcon name="progress_activity" className="animate-spin" /> : <AppIcon name="sync" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t('price.syncAria')}</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       )}
     </div>
   )
 }
 
 type FetchModelDialogProps = {
-  readonly models: readonly FetchedModel[]
+  readonly endpoint: string
+  readonly onEndpointChange: (value: string) => void
+  readonly useKey: boolean
+  readonly onUseKeyChange: (next: boolean) => void
+  readonly fetching: boolean
+  readonly error: string | null
+  readonly models: readonly FetchedModel[] | null
   readonly existingIds: ReadonlySet<string>
+  readonly onFetch: () => void
   readonly onClose: () => void
   readonly onConfirm: (ids: readonly string[], replace?: boolean) => void
 }
 
-function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchModelDialogProps) {
+function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, fetching, error, models, existingIds, onFetch, onClose, onConfirm }: FetchModelDialogProps) {
   const { t } = useTranslation('provider')
-  const [selected, setSelected] = useState<ReadonlySet<string>>(
-    () => new Set(models.filter((model) => existingIds.has(model.id)).map((model) => model.id)),
-  )
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  // 拉取结果到达后按「已存在的模型预先勾选」播种一次；existingIds 走 ref
+  // （仅在 effect 中同步）避免表单每次输入生成新 Set 时重置用户的选择。
+  const existingRef = useRef(existingIds)
+  useEffect(() => { existingRef.current = existingIds }, [existingIds])
+  useEffect(() => {
+    if (!models) return
+    setSelected(new Set(models.filter((model) => existingRef.current.has(model.id)).map((model) => model.id)))
+  }, [models])
 
-  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id))
+  const allSelected = !!models && models.length > 0 && models.every((model) => selected.has(model.id))
 
   const toggle = (id: string, checked: boolean) => {
     setSelected((current) => {
@@ -1282,6 +1254,7 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
   }
 
   const handleToggleSelectAll = () => {
+    if (!models) return
     setSelected(allSelected ? new Set() : new Set(models.map((model) => model.id)))
   }
 
@@ -1300,21 +1273,42 @@ function FetchModelDialog({ models, existingIds, onClose, onConfirm }: FetchMode
       <DialogContent width="xs" scrollFooter>
         <DialogHeader><DialogTitle>{t('actions.fetchModels')}</DialogTitle></DialogHeader>
         <DialogScrollBody footer={
-          <>
-            <Button variant="outline" disabled={saving} onClick={handleToggleSelectAll}>{allSelected ? t('fetchDialog.deselectAll') : t('fetchDialog.selectAll')}</Button>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? t('fetchDialog.adding') : t('fetchDialog.replaceAndAdd')}</Button>
-              <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? t('fetchDialog.adding') : t('fetchDialog.add')}</Button>
-            </div>
-          </>
+          models ? (
+            <>
+              <Button variant="outline" disabled={saving} onClick={handleToggleSelectAll}>{allSelected ? t('fetchDialog.deselectAll') : t('fetchDialog.selectAll')}</Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button disabled={selected.size === 0 || saving} onClick={() => void handleReplaceAndAdd()}>{saving ? t('fetchDialog.adding') : t('fetchDialog.replaceAndAdd')}</Button>
+                <Button disabled={selected.size === 0 || saving} onClick={() => void handleConfirm()}>{saving ? t('fetchDialog.adding') : t('fetchDialog.add')}</Button>
+              </div>
+            </>
+          ) : (
+            <Button disabled={fetching} onClick={onFetch}>
+              {fetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
+              {t('actions.fetchModels')}
+            </Button>
+          )
         }>
-        <div className="flex max-h-64 flex-col overflow-y-auto">
-          {models.map((model) => (
-            <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
-              <Checkbox checked={selected.has(model.id)} onCheckedChange={(checked) => toggle(model.id, checked === true)} />
-              <span className="text-foreground">{model.id}{model.name !== model.id && <span className="text-muted-foreground">（{model.name}）</span>}</span>
-            </label>
-          ))}
+        <div className="flex flex-col gap-3">
+          <Field>
+            <FieldLabel htmlFor="model-list-endpoint">{t('dialog.endpointPathLabel')}</FieldLabel>
+            <Input id="model-list-endpoint" value={endpoint} onChange={(event) => onEndpointChange(event.target.value)} placeholder="/v1/models" />
+          </Field>
+          <label className="flex cursor-pointer items-center gap-2">
+            <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
+            <span className="text-foreground">{t('dialog.endpointUseKey')}</span>
+          </label>
+          <Separator />
+          {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+          {models && (
+            <div className="flex max-h-64 flex-col overflow-y-auto">
+              {models.map((model) => (
+                <label key={model.id} className="flex cursor-pointer items-center gap-2 py-1">
+                  <Checkbox checked={selected.has(model.id)} onCheckedChange={(checked) => toggle(model.id, checked === true)} />
+                  <span className="text-foreground">{model.id}{model.name !== model.id && <span className="text-muted-foreground">（{model.name}）</span>}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
         </DialogScrollBody>
       </DialogContent>

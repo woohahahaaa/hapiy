@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -251,7 +253,7 @@ func remoteReadCommand(targetOS, path string) string {
 		// path prints the file contents to stdout.
 		return `type ` + cmdQuote(path)
 	}
-	return "cat " + shellQuote(path)
+	return "cat " + remotePathExpr(path)
 }
 
 // WriteRemoteFileAtomic replaces a remote file via SSH using one session
@@ -299,7 +301,7 @@ func remoteWriteCommand(targetOS, path string) string {
 		// writers are extremely unlikely in this admin dialog.
 		return `cmd /c "more > %TEMP%\hapiy-write.tmp & move /y %TEMP%\hapiy-write.tmp "` + cmdQuote(path)
 	}
-	return "sh -c 'tmp=$(mktemp) && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"' sh " + shellQuote(path)
+	return "sh -c 'tmp=$(mktemp) && cat > \"$tmp\" && mv -f \"$tmp\" \"$1\"' sh " + remotePathExpr(path)
 }
 
 // sshClientConfig builds an *ssh.ClientConfig for one hop. AuthType selects
@@ -353,6 +355,39 @@ func (c *sshClient) Close() error {
 	return err
 }
 
+// sshDialAddress builds the "host:port" address handed to the network layer.
+// Operators often paste a full address into the host field (e.g. a tunnel
+// provider's `tcp://example.vicp.fun:34604`); passed through verbatim it
+// reaches net.Dial with several colons and fails with "too many colons in
+// address". Accepted forms, stripped in order: an optional scheme prefix
+// (tcp:// ssh:// sftp://), a trailing slash, an optional `user@`, and an
+// optional `:port` suffix that overrides the stored port field (numeric
+// suffixes only). IPv6 hosts may or may not be bracketed; net.JoinHostPort
+// re-brackets them for the dial address.
+func sshDialAddress(host string, port int) string {
+	host = strings.TrimSpace(host)
+	lower := strings.ToLower(host)
+	for _, scheme := range []string{"tcp://", "ssh://", "sftp://"} {
+		if strings.HasPrefix(lower, scheme) {
+			host = host[len(scheme):]
+			break
+		}
+	}
+	host = strings.TrimRight(host, "/")
+	if at := strings.LastIndexByte(host, '@'); at >= 0 {
+		host = host[at+1:]
+	}
+	if h, p, err := net.SplitHostPort(host); err == nil {
+		if n, perr := strconv.Atoi(p); perr == nil && n >= 1 && n <= 65535 {
+			host = h
+			port = n
+		}
+	} else if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = host[1 : len(host)-1]
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
 // dialSSH establishes an SSH client connection with a 10-second dial
 // timeout. Port defaults to 22 when zero. When JumpEnabled, the jump host
 // is dialed first (its port also defaults to 22) and the target SSH
@@ -361,7 +396,7 @@ func dialSSH(cfg SshConfig) (*sshClient, error) {
 	if cfg.Port == 0 {
 		cfg.Port = 22
 	}
-	targetAddr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	targetAddr := sshDialAddress(cfg.Host, cfg.Port)
 	targetConfig, err := sshClientConfig(cfg.Username, cfg.AuthType, cfg.Password, cfg.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -378,7 +413,7 @@ func dialSSH(cfg SshConfig) (*sshClient, error) {
 	if cfg.JumpPort == 0 {
 		cfg.JumpPort = 22
 	}
-	jumpAddr := fmt.Sprintf("%s:%d", cfg.JumpHost, cfg.JumpPort)
+	jumpAddr := sshDialAddress(cfg.JumpHost, cfg.JumpPort)
 	jumpConfig, err := sshClientConfig(cfg.JumpUsername, cfg.JumpAuthType, cfg.JumpPassword, cfg.JumpPrivateKey)
 	if err != nil {
 		return nil, err
@@ -408,6 +443,27 @@ func dialSSH(cfg SshConfig) (*sshClient, error) {
 // so it can be safely embedded in a remote shell command line.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// remotePathExpr renders a POSIX path for embedding in a remote shell
+// command. A leading ~, $HOME or ${HOME} becomes a double-quoted "$HOME"
+// so the remote shell expands the remote user's home directory — passing
+// the whole path through shellQuote left the tilde literal, so
+// `cat '~/.config/...'` failed with "No such file or directory" even when
+// the file existed. The remainder stays single-quoted so spaces and
+// metacharacters remain inert. Non-home paths keep the plain quoted form.
+func remotePathExpr(posixPath string) string {
+	switch {
+	case posixPath == "~" || posixPath == "$HOME" || posixPath == "${HOME}":
+		return `"$HOME"`
+	case strings.HasPrefix(posixPath, "~/"):
+		return `"$HOME"` + shellQuote(posixPath[1:])
+	case strings.HasPrefix(posixPath, "$HOME/"):
+		return `"$HOME"` + shellQuote(posixPath[len("$HOME"):])
+	case strings.HasPrefix(posixPath, "${HOME}/"):
+		return `"$HOME"` + shellQuote(posixPath[len("${HOME}"):])
+	}
+	return shellQuote(posixPath)
 }
 
 // SshProbeResult is the outcome of one capability probe against a remote
@@ -459,7 +515,7 @@ func probeReadCommand(targetOS, path string) string {
 	if targetOS == "windows" {
 		return `if exist ` + cmdQuote(path) + ` type ` + cmdQuote(path) + ` >nul & echo __OK__`
 	}
-	return "cat " + shellQuote(path) + " && echo __OK__"
+	return "cat " + remotePathExpr(path) + " && echo __OK__"
 }
 
 // probeWriteCommand returns the remote shell command that creates a temp
