@@ -66,7 +66,7 @@ export function DateRangeFilter({
   const activePreset = detectPreset(value)
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2', className)}>
       <DatePicker
         value={value.from}
         onChange={(from) => onChange({ ...value, from })}
@@ -82,7 +82,7 @@ export function DateRangeFilter({
         placeholder={t('dateRange.end')}
         aria-label={t('dateRange.end')}
       />
-      <div className="flex items-center gap-1 ml-1">
+      <div className="ml-1 flex flex-wrap items-center gap-1">
         {QUICK_OPTIONS.map((opt) => (
           <Button
             key={opt.value}

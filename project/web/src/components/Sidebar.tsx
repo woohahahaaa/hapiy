@@ -291,8 +291,9 @@ function readOpenSections(): Set<string> {
 }
 
 export function AppSidebar() {
-  const { state } = useSidebar()
+  const { state, setOpenMobile } = useSidebar()
   const { t } = useTranslation('common')
+  const location = useLocation()
   const [openSections, setOpenSections] = useState(readOpenSections)
   const [agentEnabled, setAgentEnabled] = useState(false)
   const [versionOpen, setVersionOpen] = useState(false)
@@ -300,6 +301,11 @@ export function AppSidebar() {
   const updateAvailable = Boolean(updateStatus?.available)
   const collapsed = state === 'collapsed'
   const showLabel = !collapsed
+
+  // 手机浮层菜单：路由切换后自动收起，避免遮住新页面。
+  useEffect(() => {
+    setOpenMobile(false)
+  }, [location.pathname, setOpenMobile])
 
   useEffect(() => {
     localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify([...openSections]))
