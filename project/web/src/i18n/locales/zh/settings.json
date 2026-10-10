@@ -172,7 +172,6 @@
     "frequencyWeekly": "每周",
     "locationTitle": "存放位置",
     "locationDescription": "备份文件保存在运行后台服务的那台电脑上，填相对路径会自动解析成绝对地址。",
-    "pathLabel": "相对路径",
     "pathPlaceholder": "例如：backups 或 ../../.backup",
     "absolutePathLabel": "绝对地址",
     "historyTitle": "历史记录",

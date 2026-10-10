@@ -407,15 +407,15 @@ export function BackupSettingsPage() {
                       <div className="flex flex-col gap-2">
                         <div className="text-sm font-medium">{t('backup.locationTitle')}</div>
                         <p className="text-xs text-muted-foreground">{t('backup.locationDescription')}</p>
-                        <label className="grid max-w-xl gap-1.5 text-sm" htmlFor="backup-path">
-                          {t('backup.pathLabel')}
+                        <div className="max-w-xl">
                           <Input
                             id="backup-path"
+                            aria-label={t('backup.locationTitle')}
                             value={path}
                             onChange={(event) => setPath(event.target.value)}
                             placeholder={t('backup.pathPlaceholder')}
                           />
-                        </label>
+                        </div>
                         <div className="text-xs text-muted-foreground">
                           {t('backup.absolutePathLabel')}{' '}
                           <span className="font-mono text-foreground">{resolvedPath || '—'}</span>

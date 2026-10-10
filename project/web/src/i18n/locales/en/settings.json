@@ -172,7 +172,6 @@
     "frequencyWeekly": "Weekly",
     "locationTitle": "Storage location",
     "locationDescription": "Backup files are stored on the computer running the background service; a relative path is resolved to an absolute path automatically.",
-    "pathLabel": "Relative path",
     "pathPlaceholder": "e.g. backups or ../../.backup",
     "absolutePathLabel": "Absolute path",
     "historyTitle": "History",
