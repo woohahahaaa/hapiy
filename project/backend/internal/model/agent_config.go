@@ -443,6 +443,17 @@ var agentRecommendationDescriptionEn = map[string]string{
 	"自定义 provider 的显示名":                                                                                 "Display name of the custom provider",
 	"该 provider 的 API base URL（如 https://api.example.com/v1）":                                           "The provider's API base URL (e.g. https://api.example.com/v1)",
 	"提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）":                                                             "Environment variable name holding the API key (using an env var is preferred over a plaintext key)",
+	// DeepSeek Harness（dsh）模板
+	"认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件":                         "Credential reference (an environment-variable name resolved per request through dsh's credential seam); the literal secret lives in $DSH_HOME/.credentials.yaml and is never written into the config file",
+	"选择器里显示的提供商名称（缺省用 provider id）":                                                                  "Provider name shown by selector surfaces (defaults to the provider id)",
+	"自定义提供商的 API 端点（如 https://gateway.example.com/v1；已装目录提供商省略则用目录端点）":                               "API endpoint of a hand-declared provider (e.g. https://gateway.example.com/v1; omit it on installed catalog providers to use the catalog endpoint)",
+	"接口协议（openai-completions / openai-responses / anthropic-messages），自定义提供商必填，一般由 endpoint 关键词自动归类": "Wire protocol (openai-completions / openai-responses / anthropic-messages); required for hand-declared routes, usually auto-classified by endpoint keywords",
+	"模型唯一标识（必须与提供商侧精确一致，否则请求前报 UNKNOWN_MODEL）":                                                       "Exact model id (must match the provider side; a mismatch fails with UNKNOWN_MODEL before any request)",
+	"模型显示名（缺省用安装目录名，再缺省用 id）":                                                                        "Model display name (defaults to the catalog name, then the id)",
+	"最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）":                                            "Context window in tokens (falls back to the route's defaultContextWindow, default 262144)",
+	"最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）":                                                             "Maximum output tokens (configuring one also makes it the model's per-request default cap)",
+	"支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）":                                                 "Supported input modalities (text / image only; a declaration rather than a check — an endpoint that disagrees refuses the request)",
+	"Responses API 使用 openai-responses 协议":                                                           "Responses API uses the openai-responses protocol",
 }
 
 // agentProtocolNameEn translates the Chinese protocol display names.
@@ -944,6 +955,29 @@ var builtinAgentRules = []struct {
 			ThinkingLevels: ModelInfoOp(`reasoning`, "bool"),
 		},
 	},
+	{
+		// DeepSeek Harness（dsh）：模型/提供商配置由 dsh-llm-pi-ai 插件写在
+		// profile 的 cordis.patch.yml（YAML），现有接管引擎只读写 JSON/JSONC，
+		// 无法自动生成 provider 块，因此 json_paths 留空，仅按官方字段给出
+		// 配置参考（模型信息字段映射同样只作参考，不参与托管生成）。默认取
+		// 默认 profile web 的 patch 文件；DSH_HOME 缺省 ~/.dsh。
+		Name: "DeepSeek Harness",
+		OsPaths: AgentOsPaths{
+			Windows: `%USERPROFILE%\.dsh\profiles\web\cordis.patch.yml`,
+			Mac:     `~/.dsh/profiles/web/cordis.patch.yml`,
+		},
+		JsonPaths:       AgentJsonPaths{},
+		Recommendations: deepseekHarnessRecommendations,
+		Protocols:       deepseekHarnessProtocols,
+		ModelInfoFields: AgentModelInfoFieldPaths{
+			MaxContext:     ModelInfoPath(`contextWindow`),
+			MaxOutputToken: ModelInfoPath(`maxTokens`),
+			// pi-ai 的 input 只接受 text / image。
+			InputTypes: AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image"}},
+			// 思考档位由模型的 reasoningEfforts（档位→线路写法）表达，
+			// 与统一值的写法不一致，暂不映射。
+		},
+	},
 }
 
 // AgentTemplateConfig is the on-disk representation of one agent's default
@@ -1255,6 +1289,56 @@ var openclawProtocols = []AgentProtocol{
 		EndpointTags: []string{"lmstudio"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "LM Studio 本地推理使用 lmstudio 协议", Recommended: "lmstudio"},
+		},
+	},
+}
+
+// deepseekHarnessRecommendations 对齐 DeepSeek Harness（dsh）官方模型配置
+// （docs/user/guide/providers.md 与 dsh-llm-pi-ai 参考）：provider 配置写在
+// dsh-llm-pi-ai 插件的 providers.<id>（id 是永久键），models[] 是模型列表。
+// 配置文件是 YAML（profile 的 cordis.patch.yml），现有引擎只读写 JSON/JSONC，
+// json_paths 留空，因此这些字段只作文档/字段追踪，不参与托管生成。
+var deepseekHarnessRecommendations = []AgentRecommendation{
+	{Scope: "provider", Key: "apiKeyEnv", Description: "认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件", Required: true},
+	{Scope: "provider", Key: "displayName", Description: "选择器里显示的提供商名称（缺省用 provider id）"},
+	{Scope: "provider", Key: "baseURL", Description: "自定义提供商的 API 端点（如 https://gateway.example.com/v1；已装目录提供商省略则用目录端点）", Required: true},
+	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见
+	// deepseekHarnessProtocols）；common 里只保留字段本身做驱动识别，不给
+	// 推荐值，避免管理模型把 anthropic-messages 端点误判成 openai-completions。
+	{Scope: "provider", Key: "api", Description: "接口协议（openai-completions / openai-responses / anthropic-messages），自定义提供商必填，一般由 endpoint 关键词自动归类"},
+	{Scope: "model", Key: "id", Description: "模型唯一标识（必须与提供商侧精确一致，否则请求前报 UNKNOWN_MODEL）", Required: true},
+	{Scope: "model", Key: "name", Description: "模型显示名（缺省用安装目录名，再缺省用 id）"},
+	{Scope: "model", Key: "contextWindow", Description: "最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）"},
+	{Scope: "model", Key: "maxTokens", Description: "最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）"},
+	{Scope: "model", Key: "input", Description: "支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）"},
+}
+
+// deepseekHarnessProtocols 按 endpoint 关键词把 dsh-llm-pi-ai 的 `api`
+// （线路协议）归类：一个 provider 只使用一种协议，网关同时提供多种协议时
+// 官方建议拆成多个 provider。顺序即优先级，具体关键词放前面避免误命中。
+var deepseekHarnessProtocols = []AgentProtocol{
+	{
+		Name:         "OpenAI Responses API",
+		EndpointTags: []string{"responses"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Description: "Responses API 使用 openai-responses 协议", Recommended: "openai-responses"},
+		},
+	},
+	{
+		Name:         "Anthropic Messages API",
+		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
+			// Anthropic Messages API 官方要求每次请求带 max_tokens，对应 pi-ai
+			// 模型的 maxTokens —— anthropic-messages 协议下必填。
+			{Scope: "model", Key: "maxTokens", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
+		},
+	},
+	{
+		Name:         "OpenAI 兼容 Chat Completions",
+		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		Recommendations: []AgentRecommendation{
+			{Scope: "provider", Key: "api", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
 		},
 	},
 }
