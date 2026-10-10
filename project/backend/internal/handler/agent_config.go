@@ -474,10 +474,17 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		formatted, err := prettifyJSON(req.Content)
-		if err != nil {
-			respondErrorWithParams(c, http.StatusBadRequest, "JSON_FORMAT_FAILED", "JSON 格式化失败: "+err.Error(), gin.H{"error": err.Error()})
-			return
+		// JSON 系文件保存时重新缩进（顺带做格式校验）；YAML（dsh 的
+		// cordis.patch.yml）、TOML（Codex 的 config.toml）等一律按原文写入 ——
+		// 按 JSON 重排会丢掉注释、破坏语法。
+		formatted := req.Content
+		if isJSONConfigPath(row.Path) {
+			pretty, err := prettifyJSON(req.Content)
+			if err != nil {
+				respondErrorWithParams(c, http.StatusBadRequest, "JSON_FORMAT_FAILED", "JSON 格式化失败: "+err.Error(), gin.H{"error": err.Error()})
+				return
+			}
+			formatted = pretty
 		}
 		if err := writeAgentConfigFileContent(&row, formatted, key); err != nil {
 			respondErrorWithParams(c, http.StatusBadRequest, "SAVE_FAILED", "保存失败: "+err.Error(), gin.H{"error": err.Error()})
@@ -490,6 +497,19 @@ func PutAgentConfigFileContent(db *gorm.DB, key []byte) gin.HandlerFunc {
 		recordAgentConfigVersion(db, row.ID, formatted)
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"ok": true, "content": formatted}})
 	}
+}
+
+// isJSONConfigPath reports whether the config file at path is a JSON-family
+// document that the save endpoint may re-indent. Everything else (YAML, TOML,
+// extension-less files) is written verbatim.
+func isJSONConfigPath(path string) bool {
+	lower := strings.ToLower(strings.TrimSpace(path))
+	for _, ext := range []string{".json", ".jsonc", ".json5"} {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // prettifyJSON returns the supplied content indented with two spaces and

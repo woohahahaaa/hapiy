@@ -47,6 +47,14 @@ function jsonWarning(text: string): string | null {
   }
 }
 
+// 只有 JSON 系文件才做 JSON 校验 / 美化；YAML（dsh 的 cordis.patch.yml）、
+// TOML（Codex 的 config.toml）等按原文编辑，不按 JSON 报格式错误、也不做
+// JSON 重排（重排会丢注释、破坏语法）。
+function isJSONPath(path: string): boolean {
+  const lower = path.trim().toLowerCase()
+  return ['.json', '.jsonc', '.json5'].some((ext) => lower.endsWith(ext))
+}
+
 function CodeSurface({ value, onChange, readOnly }: {
   readonly value: string
   readonly onChange: (value: string) => void
@@ -142,7 +150,8 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
   }, [open, loadContent])
 
   const dirty = mode === 'editable' && content !== null && original !== null && content !== original
-  const warning = content === null ? null : jsonWarning(content)
+  const jsonFile = isJSONPath(subtitle)
+  const warning = content === null || !jsonFile ? null : jsonWarning(content)
   // 美化格式只改写编辑器里的工作副本，不落盘；用户仍需点击「保存」。
   const prettify = () => {
     if (content === null || saving) return
@@ -173,7 +182,7 @@ export function DialogCodeEditor({ mode, open, onOpenChange, title, subtitle, lo
           <DialogTitle className="text-base">{title}</DialogTitle>
           <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{subtitle}</span>
           <div className="flex shrink-0 items-center gap-2">
-            {mode === 'editable' && (
+            {mode === 'editable' && jsonFile && (
               <Button
                 variant="outline"
                 size="sm"

@@ -42,7 +42,7 @@ function NavLink({
   onToggle: () => void
   onExpand: () => void
 }) {
-  const { state } = useSidebar()
+  const { state, isMobile } = useSidebar()
   const { t } = useTranslation('common')
   const location = useLocation()
   const hasActiveChild =
@@ -52,8 +52,9 @@ function NavLink({
   const selfActive = item.href
     ? location.pathname === item.href || (isPathActive(location.pathname, item.href) && !hasActiveChild)
     : false
-  const showLabel = state === 'expanded'
-  const collapsed = state === 'collapsed'
+  // 移动端浮层始终展示「图标 + 文字」，忽略桌面端的只显示图标状态。
+  const collapsed = state === 'collapsed' && !isMobile
+  const showLabel = !collapsed
   const hasChildren = item.children && item.children.length > 0
   // A parent with both children and its own page: body navigates + expands,
   // the chevron is a separate toggle-only hit area.
@@ -291,7 +292,7 @@ function readOpenSections(): Set<string> {
 }
 
 export function AppSidebar() {
-  const { state, setOpenMobile } = useSidebar()
+  const { state, setOpenMobile, isMobile } = useSidebar()
   const { t } = useTranslation('common')
   const location = useLocation()
   const [openSections, setOpenSections] = useState(readOpenSections)
@@ -299,7 +300,8 @@ export function AppSidebar() {
   const [versionOpen, setVersionOpen] = useState(false)
   const { status: updateStatus } = useUpdateStatus()
   const updateAvailable = Boolean(updateStatus?.available)
-  const collapsed = state === 'collapsed'
+  // 移动端浮层始终展示「图标 + 文字」，忽略桌面端的只显示图标状态。
+  const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
 
   // 手机浮层菜单：路由切换后自动收起，避免遮住新页面。
@@ -340,24 +342,28 @@ export function AppSidebar() {
               : 'flex flex-col items-start justify-center gap-1 py-1'
           }
         >
-          <button
-            type="button"
-            onClick={() => setVersionOpen(true)}
-            title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
-            className={
-              showLabel
-                ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                : 'sr-only font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
-            }
-          >
-            hapiy
-            {showLabel && updateAvailable && (
-              <span
-                aria-hidden
-                className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-sidebar"
-              />
-            )}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* 移动端：菜单开关固定在左侧，与页面头部同一位置、同为三横线图标 */}
+            {isMobile && <SidebarTrigger icon="menu" size="icon" />}
+            <button
+              type="button"
+              onClick={() => setVersionOpen(true)}
+              title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
+              className={
+                showLabel
+                  ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  : 'sr-only font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
+              }
+            >
+              hapiy
+              {showLabel && updateAvailable && (
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-sidebar"
+                />
+              )}
+            </button>
+          </div>
           <div
             className={
               showLabel
@@ -367,7 +373,7 @@ export function AppSidebar() {
           >
             {showLabel && <LanguageToggle size="icon" />}
             {showLabel && <ModeToggle size="icon" />}
-            <SidebarTrigger size="icon" />
+            {!isMobile && <SidebarTrigger size="icon" />}
           </div>
         </div>
       </SidebarHeader>

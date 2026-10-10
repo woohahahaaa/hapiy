@@ -25,7 +25,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
             {/* 移动端菜单入口：侧栏在手机上收成浮层，触发器需常驻页面头部 */}
-            <SidebarTrigger className="-ml-1 h-10 w-10 shrink-0 md:hidden" />
+            <SidebarTrigger icon="menu" className="-ml-1 h-10 w-10 shrink-0 md:hidden" />
             <div className="min-w-0">
               <h1 className="truncate text-lg font-semibold">{heading}</h1>
               {(description || status) && (

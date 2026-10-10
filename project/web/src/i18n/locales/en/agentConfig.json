@@ -155,7 +155,7 @@
     "remotePathLabel": "Remote path",
     "sshTestButton": "Test SSH read/write",
     "sshTestTitle": "Select the target OS above first",
-    "sshJsonOnlyHint": "Only .json files are supported",
+    "sshJsonOnlyHint": "Supports .json / .jsonc / .yml / .yaml / .toml text configs",
     "syncPresetButton": "Sync preset agent info",
     "syncPresetHint": "Selecting {{os}} fills the default path automatically; once you edit the path it is left alone — click “Sync preset agent info” to pull the preset back in",
     "osLabel": "OS",

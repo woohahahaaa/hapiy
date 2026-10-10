@@ -152,7 +152,7 @@
     "remotePathLabel": "远程路径",
     "sshTestButton": "测试 SSH 读写能力",
     "sshTestTitle": "请先在上方选择目标系统",
-    "sshJsonOnlyHint": "仅支持 .json 文件",
+    "sshJsonOnlyHint": "支持 .json / .jsonc / .yml / .yaml / .toml 等文本配置文件",
     "syncPresetButton": "同步预设Agent信息",
     "syncPresetHint": "选择 {{os}} 后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设Agent信息」重新带入",
     "osLabel": "系统",

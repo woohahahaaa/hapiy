@@ -262,8 +262,9 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  icon = "view_sidebar",
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { icon?: string }) {
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -279,7 +280,7 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <AppIcon name="view_sidebar" />
+      <AppIcon name={icon} />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )

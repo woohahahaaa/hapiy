@@ -51,6 +51,7 @@
   "undo": "Undo",
   "redo": "Redo",
   "tune": "Filter",
+  "menu": "HamburgerButton",
   "view_sidebar": "LayoutOne",
   "grid_view": "ChartGraph",
   "monitoring": "Monitor",

@@ -355,11 +355,12 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
   const [refSnapshotError, setRefSnapshotError] = useState<string | null>(null)
   // All providers are loaded once so the per-model 同步 action can rewrite
   // the equal-named models of the other providers in the same dialog flow.
-  const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
-  const [refSyncing, setRefSyncing] = useState(false)
+  // 同步到其他供应商功能暂时注释，相关状态一并停用。
+  // const [allProviders, setAllProviders] = useState<readonly Provider[]>([])
+  // const [refSyncing, setRefSyncing] = useState(false)
   const [bulkRefSetting, setBulkRefSetting] = useState(false)
   const [bulkScopeOpen, setBulkScopeOpen] = useState(false)
-  const [syncTarget, setSyncTarget] = useState<string | null>(null)
+  // const [syncTarget, setSyncTarget] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -371,13 +372,14 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       .catch(() => {
         if (!cancelled) setRefSnapshotError(t('errors.modelsDevLoad'))
       })
-    void dashboardApi.listProviders({ limit: 10000, offset: 0 })
-      .then((result) => {
-        if (!cancelled) setAllProviders(result.providers)
-      })
-      .catch(() => {
-        if (!cancelled) setAllProviders([])
-      })
+    // 同步到其他供应商功能暂时注释：不再加载全部供应商。
+    // void dashboardApi.listProviders({ limit: 10000, offset: 0 })
+    //   .then((result) => {
+    //     if (!cancelled) setAllProviders(result.providers)
+    //   })
+    //   .catch(() => {
+    //     if (!cancelled) setAllProviders([])
+    //   })
     return () => { cancelled = true }
   }, [])
 
@@ -464,42 +466,43 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
     }
   }
 
-  const syncReference = async () => {
-    if (!syncTarget) return
-    const src = form.models.find((m) => m.model.trim() === syncTarget.trim())
-    if (!src) return
-    setRefSyncing(true)
-    setRefSnapshotError(null)
-    try {
-      const needle = src.model.trim().toLowerCase()
-      let applied = 0
-      for (const target of allProviders) {
-        if (provider && target.id === provider.id) continue
-        if (target.models.every((m) => m.model.trim().toLowerCase() !== needle)) continue
-        const nextModels = target.models.map((m) =>
-          m.model.trim().toLowerCase() === needle
-            ? { ...m, rate: src.rate, referenceProvider: src.referenceProvider, referencePrices: src.referencePrices, referenceAt: src.referenceAt, prices: src.prices }
-            : m,
-        )
-        await dashboardApi.updateProvider(target.id, { ...target, models: nextModels })
-        applied++
-      }
-      const reloaded = await dashboardApi.listProviders({ limit: 10000, offset: 0 })
-      setAllProviders(reloaded.providers)
-      setSyncTarget(null)
-      toast(t('toast.synced', { count: applied }))
-    } catch (err) {
-      setRefSnapshotError(t('errors.syncFailed', { message: err instanceof Error ? err.message : t('errors.unknown') }))
-    } finally {
-      setRefSyncing(false)
-    }
-  }
+  // 同步到其他供应商功能暂时注释：生效逻辑与可同步目标判定。
+  // const syncReference = async () => {
+  //   if (!syncTarget) return
+  //   const src = form.models.find((m) => m.model.trim() === syncTarget.trim())
+  //   if (!src) return
+  //   setRefSyncing(true)
+  //   setRefSnapshotError(null)
+  //   try {
+  //     const needle = src.model.trim().toLowerCase()
+  //     let applied = 0
+  //     for (const target of allProviders) {
+  //       if (provider && target.id === provider.id) continue
+  //       if (target.models.every((m) => m.model.trim().toLowerCase() !== needle)) continue
+  //       const nextModels = target.models.map((m) =>
+  //         m.model.trim().toLowerCase() === needle
+  //           ? { ...m, rate: src.rate, referenceProvider: src.referenceProvider, referencePrices: src.referencePrices, referenceAt: src.referenceAt, prices: src.prices }
+  //           : m,
+  //       )
+  //       await dashboardApi.updateProvider(target.id, { ...target, models: nextModels })
+  //       applied++
+  //     }
+  //     const reloaded = await dashboardApi.listProviders({ limit: 10000, offset: 0 })
+  //     setAllProviders(reloaded.providers)
+  //     setSyncTarget(null)
+  //     toast(t('toast.synced', { count: applied }))
+  //   } catch (err) {
+  //     setRefSnapshotError(t('errors.syncFailed', { message: err instanceof Error ? err.message : t('errors.unknown') }))
+  //   } finally {
+  //     setRefSyncing(false)
+  //   }
+  // }
 
-  const syncTargetsFor = (modelName: string): number =>
-    allProviders.filter((p) =>
-      !(provider && p.id === provider.id) &&
-      p.models.some((m) => m.model.trim().toLowerCase() === modelName.trim().toLowerCase()),
-    ).length
+  // const syncTargetsFor = (modelName: string): number =>
+  //   allProviders.filter((p) =>
+  //     !(provider && p.id === provider.id) &&
+  //     p.models.some((m) => m.model.trim().toLowerCase() === modelName.trim().toLowerCase()),
+  //   ).length
 
   // Floating tooltip near the offending input, auto-dismissed after ~4 seconds.
   const showPriceError = (anchor?: HTMLElement | null) => {
@@ -838,10 +841,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
                     referenceCandidates={referenceCandidates}
                     stale={referenceStaleFor(model)}
                     snapshotLoading={refSnapshot === null}
-                    syncing={refSyncing}
-                    syncable={syncTargetsFor(model.model) > 0}
                     onPickReference={(name) => pickReference(index, name)}
-                    onSync={() => setSyncTarget(model.model)}
                   />
                   <Select
                     value={endpointValue}
@@ -901,6 +901,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
           onConfirm={handleConfirmAddModels}
         />
       )}
+      {/* 同步到其他供应商确认弹窗暂时注释：
       <Dialog open={syncTarget !== null} onOpenChange={(open) => { if (!open) setSyncTarget(null) }}>
         <DialogContent width="xs" scrollFooter>
           <DialogHeader><DialogTitle>{t('dialog.syncTitle')}</DialogTitle></DialogHeader>
@@ -918,6 +919,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
           </DialogScrollBody>
         </DialogContent>
       </Dialog>
+      */}
       <Dialog open={bulkScopeOpen} onOpenChange={(open) => { if (!open) setBulkScopeOpen(false) }}>
         <DialogContent width="xs" scrollFooter>
           <DialogHeader><DialogTitle>{t('dialog.bulkScopeTitle')}</DialogTitle></DialogHeader>
@@ -1024,10 +1026,11 @@ type ModelPriceCellProps = {
   readonly referenceCandidates: ReadonlyArray<{ readonly providerId: string; readonly providerName: string }>
   readonly stale: boolean
   readonly snapshotLoading: boolean
-  readonly syncing: boolean
-  readonly syncable: boolean
+  // 同步到其他供应商：按钮与功能已暂时注释，相关 props 一并停用。
+  // readonly syncing: boolean
+  // readonly syncable: boolean
   readonly onPickReference: (providerName: string) => void
-  readonly onSync: () => void
+  // readonly onSync: () => void
 }
 
 type PriceMode = 'prices' | 'reference' | 'unset'
@@ -1048,10 +1051,7 @@ function ModelPriceCell({
   referenceCandidates,
   stale,
   snapshotLoading,
-  syncing,
-  syncable,
   onPickReference,
-  onSync,
 }: ModelPriceCellProps) {
   const { t } = useTranslation('provider')
   const mode: PriceMode = model.referenceProvider !== null ? 'reference' : model.prices !== null ? 'prices' : 'unset'
@@ -1197,6 +1197,7 @@ function ModelPriceCell({
           className="min-w-0 flex-1 px-2 text-xs"
         />
       )}
+      {/* 同步到其他供应商按钮暂时注释：
       {mode !== 'unset' && (
         <TooltipProvider delayDuration={200}>
           <div className="flex items-center gap-0.5">
@@ -1211,6 +1212,7 @@ function ModelPriceCell({
           </div>
         </TooltipProvider>
       )}
+      */}
     </div>
   )
 }
