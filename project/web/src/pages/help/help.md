@@ -7,7 +7,7 @@ hapiy 是一套**自托管的 AI 网关与 Agent 接入管理器**：一套接�
 - **模型网关**：对外提供与 OpenAI 兼容的 HTTP 接口（`/v1/chat/completions`、`/v1/completions`、`/v1/embeddings`、`/v1/images/generations`、`/v1/audio/speech`、`/v1/audio/transcriptions`），客户端只改一个 BaseURL 和一把令牌 Key；对内按「转发拓扑」把请求转发到 OpenAI、Anthropic 兼容、自建或三方中转等上游。
 - **管理能力**：供应商与密钥池、令牌与额度、请求/响应改写、并发控制、故障转移与自动恢复、渠道亲和性。
 - **监控与成本**：日志抓取、活动监视、使用记录、用量与费用统计。
-- **Agent 接管**：opencode、Codex、openclaw、WorkBuddy 等软件的配置纳入管理（本机或 SSH），写入 hapiy 地址与 Key。
+- **Agent 接管**：opencode、Codex、openclaw、WorkBuddy、DeepSeek Harness 等软件的配置纳入管理（本机或 SSH），写入 hapiy 地址与 Key。
 
 所有数据存本地 SQLite，单进程部署。
 
@@ -254,7 +254,7 @@ Authorization: Bearer hk-xxxxxxxx
 
 ## 接管Agent
 
-「接管Agent」用于把外部 AI 软件（内置支持 opencode-v1/v2、WorkBuddy、ChatGPT(Codex)、openclaw）的配置文件纳入 hapiy 管理：检测路径、修改内容、把模型接入信息写进去，让这些软件直接走 hapiy 网关。
+「接管Agent」用于把外部 AI 软件（内置支持 opencode-v1/v2、WorkBuddy、ChatGPT(Codex)、openclaw、DeepSeek Harness）的配置文件纳入 hapiy 管理：检测路径、修改内容、把模型接入信息写进去，让这些软件直接走 hapiy 网关。
 
 ### 管理规则
 
