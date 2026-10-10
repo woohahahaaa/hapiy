@@ -1,11 +1,11 @@
 // ───────────────────────────────────────────────────────────────
-// 默认推荐模板 JSONC —— DeepSeek Harness
-// 本文件是「DeepSeek Harness」这个 Agent 的默认模板，交给别的 Agent 处理时请先读说明：
+// 默认推荐模板 JSONC —— DeepSeek Harness（桌面版）
+// 本文件是「DeepSeek Harness (Desktop)」这个 Agent 的默认模板，交给别的 Agent 处理时请先读说明：
 //
 // name            规则名称（对应一个 Agent 软件类型，唯一）
 // os_paths        该软件的配置文件默认路径（windows 支持 %USERPROFILE% 等；mac 支持 ~ / $HOME）
-//                 默认按桌面版（Desktop App）的 profile desktop；`dsh web` 场景把
-//                 路径中的 desktop 换成 web；自定义 profile 同理替换。
+//                 桌面版（Desktop App）建的 profile 是 desktop；Web 版
+//                 （`npx @deepseek-ai/dsh web`）见「DeepSeek Harness (Web).json」。
 // json_paths      在配置文件里定位 provider / model 的 gjson 路径（这里留空=不使用 gjson 定位：
 //                  dsh 配置是 YAML，现有接管引擎只读写 JSON/JSONC）
 // recommendations 公共配置：与请求协议 / SDK 无关的字段推荐值（弹窗里叫 common）
@@ -18,7 +18,7 @@
 // model_info_fields  模型信息字段的写入方式（string 或 {path,op,sep,values,action}；仅作参考）
 // ───────────────────────────────────────────────────────────────
 {
-  "name": "DeepSeek Harness",
+  "name": "DeepSeek Harness (Desktop)",
   "os_paths": {
     "windows": "%USERPROFILE%\\.dsh\\profiles\\desktop\\cordis.patch.yml",
     "mac": "~/.dsh/profiles/desktop/cordis.patch.yml"

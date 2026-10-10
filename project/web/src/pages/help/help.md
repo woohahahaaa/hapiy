@@ -253,7 +253,7 @@ Authorization: Bearer hk-xxxxxxxx
 
 ## 接管Agent
 
-「接管Agent」用于把外部 AI 软件（内置支持 opencode-v1/v2、WorkBuddy、ChatGPT(Codex)、openclaw、DeepSeek Harness）的配置文件纳入 hapiy 管理：检测路径、修改内容、把模型接入信息写进去，让这些软件直接走 hapiy 网关。
+「接管Agent」用于把外部 AI 软件（内置支持 opencode-v1/v2、WorkBuddy、ChatGPT(Codex)、openclaw、DeepSeek Harness(桌面版/Web 版)）的配置文件纳入 hapiy 管理：检测路径、修改内容、把模型接入信息写进去，让这些软件直接走 hapiy 网关。
 
 ### 管理规则
 

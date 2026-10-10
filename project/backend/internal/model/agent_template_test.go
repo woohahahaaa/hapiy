@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadAgentTemplate(t *testing.T) {
-	for _, name := range []string{"opencode-v1", "opencode-v2", "WorkBuddy", "ChatGPT", "openclaw", "DeepSeek Harness"} {
+	for _, name := range []string{"opencode-v1", "opencode-v2", "WorkBuddy", "ChatGPT", "openclaw", "DeepSeek Harness (Desktop)", "DeepSeek Harness (Web)"} {
 		tmpl, ok := LoadAgentTemplate(name)
 		if !ok {
 			t.Fatalf("template %s not found", name)

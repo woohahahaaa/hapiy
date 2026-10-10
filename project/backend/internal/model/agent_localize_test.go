@@ -57,7 +57,7 @@ func TestLocalizationCoversTemplates(t *testing.T) {
 		}
 		checkTemplateLocalized(t, "builtin/"+b.Name, tmpl)
 	}
-	for _, name := range []string{"opencode-v1", "opencode-v2", "WorkBuddy", "ChatGPT", "openclaw", "DeepSeek Harness"} {
+	for _, name := range []string{"opencode-v1", "opencode-v2", "WorkBuddy", "ChatGPT", "openclaw", "DeepSeek Harness (Desktop)", "DeepSeek Harness (Web)"} {
 		tmpl, ok := LoadAgentTemplate(name)
 		if !ok {
 			continue

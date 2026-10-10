@@ -17,7 +17,7 @@ func TestTemplateFilesAreJSONC(t *testing.T) {
 		t.Fatalf("chdir to backend root: %v", err)
 	}
 	defer os.Chdir(filepath.Join("internal", "model"))
-	for _, name := range []string{"opencode-v1", "opencode-v2", "openclaw", "WorkBuddy", "ChatGPT", "DeepSeek Harness"} {
+	for _, name := range []string{"opencode-v1", "opencode-v2", "openclaw", "WorkBuddy", "ChatGPT", "DeepSeek Harness (Desktop)", "DeepSeek Harness (Web)"} {
 		tmpl, ok := loadAgentTemplateFile(name)
 		if !ok {
 			t.Fatalf("loadAgentTemplateFile(%q) failed (comment stripping broke the file?)", name)
