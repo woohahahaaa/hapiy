@@ -1,6 +1,6 @@
-# DeepSeek Harness（dsh）配置字段参考（官方 vs 现有 DeepSeek Harness.json 模板）
+# DeepSeek Harness（dsh）配置字段参考（官方 vs 现有 Desktop / Web 模板）
 
-> 本文件仅供阅读参考，系统不会直接调用。基于 DeepSeek Harness 官方文档（`docs/user/guide/providers.zh.md`、`packages/llm/llm-pi-ai/README.zh.md`、生成的配置目录 `docs/config-catalog.zh.md`）整理，并与本目录下 `DeepSeek Harness.json` 模板逐字段对比。
+> 本文件仅供阅读参考，系统不会直接调用。基于 DeepSeek Harness 官方文档（`docs/user/guide/providers.zh.md`、`packages/llm/llm-pi-ai/README.zh.md`、生成的配置目录 `docs/config-catalog.zh.md`）整理，并与本目录下 `DeepSeek Harness (Desktop).json` / `DeepSeek Harness (Web).json` 两份接管模板逐字段对比。
 
 ---
 
@@ -9,9 +9,9 @@
 | 项 | 说明 |
 |----|------|
 | 工具 | DeepSeek Harness（命令 `dsh`），DeepSeek 官方开源 agent harness（Everything is a plugin / Cordis） |
-| 启动 | `npx @deepseek-ai/dsh web`，默认 Web UI 在 `http://127.0.0.1:3080` |
+| 启动 | 桌面版：官网下载 Desktop App；Web 版：`npx @deepseek-ai/dsh web`，默认 Web UI 在 `http://127.0.0.1:3080` |
 | 配置文件 | profile patch：`$DSH_HOME/profiles/<profile>/cordis.patch.yml`（`DSH_HOME` 缺省 `~/.dsh`）｜ Windows `%USERPROFILE%\.dsh\profiles\<profile>\cordis.patch.yml` |
-| profile 名 | 随启动方式变化：**桌面版（Desktop App）是 `desktop`**；`dsh web` 是 `web`；自定义 profile 同理替换路径里的 profile 名。接管规则的 os_paths 默认按桌面版 `desktop`，`dsh web` 目标机把路径里的 desktop 换成 web |
+| profile 名 | 随启动方式变化：**桌面版（Desktop App）是 `desktop`**；**Web 版（`dsh web`）是 `web`**；自定义 profile 同理替换路径里的 profile 名。接管内置两条规则一一对应：「DeepSeek Harness (Desktop)」与「DeepSeek Harness (Web)」，只差默认路径 |
 | 格式 | **YAML**。`cordis.yml` 是空基线（勿手改），真实配置来自 patch 层；模型页写入的就是 profile 的 `cordis.patch.yml`，改动下一次请求生效、无需重启 |
 | 凭据 | `$DSH_HOME/.credentials.yaml` 凭据库；配置里只写 `apiKeyEnv`（环境变量名）引用，不写明文密钥 |
 | 其他文件 | `$DSH_HOME/settings.yaml`（运行时可热更设置）、`$DSH_HOME/profiles/<profile>/package.json`（bundle 列表） |
@@ -105,7 +105,9 @@ Anthropic Messages 官方要求每次请求带 `max_tokens`，所以该协议下
 
 ---
 
-## 六、现有 `DeepSeek Harness.json` 模板说明
+## 六、现有接管模板说明（Desktop / Web 两份）
+
+两份模板（`DeepSeek Harness (Desktop).json` / `DeepSeek Harness (Web).json`）字段完全一致，只有 `name` 与 `os_paths` 的 profile 不同。
 
 ### 1. `json_paths` 留空（格式不匹配，合理）
 dsh 是 YAML + 多插件 patch 结构，gjson/sjson 无法定位与写回。模板只保留路径检测（os_paths）与字段参考（recommendations / protocols），与 `ChatGPT.json`（TOML）、`WorkBuddy.json` 同口径。

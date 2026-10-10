@@ -1,0 +1,167 @@
+// ───────────────────────────────────────────────────────────────
+// 默认推荐模板 JSONC —— DeepSeek Harness（Web 版）
+// 本文件是「DeepSeek Harness (Web)」这个 Agent 的默认模板，交给别的 Agent 处理时请先读说明：
+//
+// name            规则名称（对应一个 Agent 软件类型，唯一）
+// os_paths        该软件的配置文件默认路径（windows 支持 %USERPROFILE% 等；mac 支持 ~ / $HOME）
+//                 Web 版（`npx @deepseek-ai/dsh web`）建的 profile 是 web；桌面版
+//                 （Desktop App）见「DeepSeek Harness (Desktop).json」。
+// json_paths      在配置文件里定位 provider / model 的 gjson 路径（这里留空=不使用 gjson 定位：
+//                  dsh 配置是 YAML，现有接管引擎只读写 JSON/JSONC）
+// recommendations 公共配置：与请求协议 / SDK 无关的字段推荐值（弹窗里叫 common）
+//   每行：key=字段路径(必填) / scope=provider|model / action=set|skip|delete
+//         recommended=推荐值(null=推荐不填) / required=是否必填 / description=说明
+//         op/sep/values=值写法（raw/bool/first/join；values 为允许值白名单）
+// protocols       Endpoint 规则：按请求协议 / SDK 区分（dsh 一个 provider 只使用一种协议）
+//   每块：name=规则名称(必填) / conditions=命中条件 / endpoint_tags=归纳范围关键词(必填，任一命中即应用)
+//         recommendations=该 endpoint 的字段推荐表（行说明同上）
+// model_info_fields  模型信息字段的写入方式（string 或 {path,op,sep,values,action}；仅作参考）
+// ───────────────────────────────────────────────────────────────
+{
+  "name": "DeepSeek Harness (Web)",
+  "os_paths": {
+    "windows": "%USERPROFILE%\\.dsh\\profiles\\web\\cordis.patch.yml",
+    "mac": "~/.dsh/profiles/web/cordis.patch.yml"
+  },
+  "json_paths": {
+    "provider": "",
+    "model": "",
+    "models_container": ""
+  },
+  "recommendations": [
+    {
+      "scope": "provider",
+      "key": "apiKeyEnv",
+      "description": "认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "displayName",
+      "description": "选择器里显示的提供商名称（缺省用 provider id）",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "provider",
+      "key": "baseURL",
+      "description": "自定义提供商的 API 端点（如 https://gateway.example.com/v1；已装目录提供商省略则用目录端点）",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "provider",
+      "key": "api",
+      "description": "接口协议（openai-completions / openai-responses / anthropic-messages），自定义提供商必填，一般由 endpoint 关键词自动归类",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "id",
+      "description": "模型唯一标识（必须与提供商侧精确一致，否则请求前报 UNKNOWN_MODEL）",
+      "recommended": null,
+      "required": true
+    },
+    {
+      "scope": "model",
+      "key": "name",
+      "description": "模型显示名（缺省用安装目录名，再缺省用 id）",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "contextWindow",
+      "description": "最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "maxTokens",
+      "description": "最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）",
+      "recommended": null,
+      "required": false
+    },
+    {
+      "scope": "model",
+      "key": "input",
+      "description": "支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）",
+      "recommended": null,
+      "required": false
+    }
+  ],
+  "protocols": [
+    {
+      "name": "OpenAI Responses API",
+      "conditions": null,
+      "endpoint_tags": [
+        "responses"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Responses API 使用 openai-responses 协议",
+          "recommended": "openai-responses",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Anthropic Messages API",
+      "conditions": null,
+      "endpoint_tags": [
+        "chat/message",
+        "/v1/message",
+        "messages"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Messages API 使用 anthropic-messages 协议",
+          "recommended": "anthropic-messages",
+          "required": false
+        },
+        {
+          "scope": "model",
+          "key": "maxTokens",
+          "description": "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）",
+          "recommended": null,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "OpenAI 兼容 Chat Completions",
+      "conditions": null,
+      "endpoint_tags": [
+        "completions",
+        "chat/comple",
+        "/v1/chat"
+      ],
+      "recommendations": [
+        {
+          "scope": "provider",
+          "key": "api",
+          "description": "Chat Completions API 使用 openai-completions 协议",
+          "recommended": "openai-completions",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "model_info_fields": {
+    "max_context": "contextWindow",
+    "max_output_token": "maxTokens",
+    "input_types": {
+      "path": "input",
+      "values": ["text", "image"]
+    },
+    "thinking_levels": "",
+    "reasoning_effort": ""
+  }
+}
