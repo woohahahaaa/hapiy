@@ -77,11 +77,13 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			if err := db.Model(&model.FailoverRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+			if err := db.Model(&model.FailoverRule{}).Find(&r).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
+			// 故障转移页面按名称字母表排序（中文按拼音）。
+			sortByNameStable(r, func(rule model.FailoverRule) string { return rule.Name })
+			c.JSON(http.StatusOK, gin.H{"data": sliceWindow(r, offset, limit), "total": total})
 		case RuleTypeRewriteResponse:
 			var r []model.ResponseRewriteRule
 			var total int64
@@ -89,11 +91,13 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			if err := db.Model(&model.ResponseRewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
+			if err := db.Model(&model.ResponseRewriteRule{}).Find(&r).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
+			// 响应改写页面按名称字母表排序（中文按拼音）。
+			sortByNameStable(r, func(rule model.ResponseRewriteRule) string { return rule.Name })
+			c.JSON(http.StatusOK, gin.H{"data": sliceWindow(r, offset, limit), "total": total})
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid rule type"})
 			return

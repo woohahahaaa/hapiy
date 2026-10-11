@@ -595,7 +595,7 @@ function PairDialog({ requestId, open, onClose }: {
             <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.loading')}</div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
-              <span className="text-xs text-destructive">{error}</span>
+              <span className="max-w-full break-words text-xs text-destructive">{error}</span>
               <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>{t('common:action.retry')}</Button>
             </div>
           ) : pair ? (
@@ -734,7 +734,7 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
             <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.loading')}</div>
           ) : error ? (
             <div className="flex flex-col items-center gap-3 py-16">
-              <span className="text-xs text-destructive">{error}</span>
+              <span className="max-w-full break-words text-xs text-destructive">{error}</span>
               <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>{t('common:action.retry')}</Button>
             </div>
           ) : row ? (

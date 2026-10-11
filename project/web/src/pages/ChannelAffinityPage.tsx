@@ -269,9 +269,14 @@ export function ChannelAffinityPage() {
   const setting = payload?.setting ?? emptySetting()
   const fallback = payload?.fallback ?? EMPTY_FALLBACK
   const total = setting.rules.length
+  // 渠道亲和性页面按规则名称字母表排序（中文按拼音）。
+  const sortedRules = useMemo(
+    () => [...setting.rules].sort((a, b) => a.name.localeCompare(b.name, 'zh')),
+    [setting.rules],
+  )
   const pagedRules = useMemo(
-    () => setting.rules.slice(offset, offset + limit),
-    [setting.rules, offset, limit],
+    () => sortedRules.slice(offset, offset + limit),
+    [sortedRules, offset, limit],
   )
 
   const columns: ColumnDef<ChannelAffinityRule>[] = [

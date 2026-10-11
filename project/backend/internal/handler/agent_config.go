@@ -46,10 +46,13 @@ func ListAgentTypeRules(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Order("created_at asc").Limit(limit).Offset(offset).Find(&rules).Error; err != nil {
+		if err := db.Find(&rules).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		// 接管Agent 页面按名称字母表排序（中文按拼音）。
+		sortByNameStable(rules, func(r model.AgentTypeRule) string { return r.Name })
+		rules = sliceWindow(rules, offset, limit)
 		out := make([]map[string]any, 0, len(rules))
 		lang := i18n.Lang(c.Request)
 		for _, r := range rules {
@@ -298,10 +301,13 @@ func ListAgentConfigFiles(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Order("updated_at desc").Limit(limit).Offset(offset).Find(&files).Error; err != nil {
+		if err := db.Find(&files).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		// 接管配置文件页面按记录名称字母表排序（中文按拼音）。
+		sortByNameStable(files, func(f model.AgentConfigFile) string { return f.RecordName })
+		files = sliceWindow(files, offset, limit)
 		// Credentials must never leave the server: replace each SSH blob
 		// with its sanitized form before responding.
 		for i := range files {

@@ -134,13 +134,13 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
-            <span className="break-words whitespace-pre-wrap leading-relaxed text-destructive">{log.errorMessage}</span>
+            <span className="min-w-0 break-words whitespace-pre-wrap leading-relaxed text-destructive">{log.errorMessage}</span>
           </div>
         )}
         {log.eventDetail && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
-            <span className="break-words whitespace-pre-wrap leading-relaxed text-foreground">{log.eventDetail}</span>
+            <span className="min-w-0 break-words whitespace-pre-wrap leading-relaxed text-foreground">{log.eventDetail}</span>
           </div>
         )}
       </FieldGroup>
