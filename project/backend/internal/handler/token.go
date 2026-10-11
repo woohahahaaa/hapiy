@@ -25,11 +25,13 @@ func ListTokens(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Order("id asc").Limit(limit).Offset(offset).Find(&tokens).Error; err != nil {
+		if err := db.Find(&tokens).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"data": tokens, "total": total})
+		// 令牌页面按名称字母表排序（中文按拼音）。
+		sortByNameStable(tokens, func(tok model.Token) string { return tok.Name })
+		c.JSON(http.StatusOK, gin.H{"data": sliceWindow(tokens, offset, limit), "total": total})
 	}
 }
 

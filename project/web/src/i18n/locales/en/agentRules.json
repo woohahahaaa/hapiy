@@ -119,7 +119,8 @@
   },
   "modelInfoEditor": {
     "title": "Common model info",
-    "hint": "How model info fields are written into each agent's config; \"Sync model info\" and managed generation write back using this. Each row is one field: path is the write location, op selects raw (as-is, default) / bool (non-empty → true, empty → false) / first (take the first element) / join (join array, sep optional, default comma); action can be set (default) / skip / delete field; allowed values is a whitelist (e.g. openclaw input only allows text/image/video/audio), comma-separated.",
+    "hint": "How model info fields are written into each agent's config; \"Sync model info\" and managed generation write back using this. Each row is one field: path is the write location (empty = this agent has no such field, nothing is written, shown as \"Not set\"); op selects raw (as-is, default) / bool (non-empty → true, empty → false) / first (take the first element) / join (join array, sep optional, default comma); action can be set (default) / skip / delete field; allowed values is a whitelist (e.g. openclaw input only allows text/image/video/audio), comma-separated.",
+    "pathPlaceholder": "Not set",
     "columns": {
       "modelInfo": "Model info",
       "op": "Op",

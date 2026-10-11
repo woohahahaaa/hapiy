@@ -63,11 +63,13 @@ func ListRules(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
-if err := db.Model(&model.RewriteRule{}).Order("id asc").Limit(limit).Offset(offset).Find(&r).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": r, "total": total})
+			if err := db.Model(&model.RewriteRule{}).Find(&r).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// 请求改写页面按名称字母表排序（中文按拼音）。
+			sortByNameStable(r, func(rule model.RewriteRule) string { return rule.Name })
+			c.JSON(http.StatusOK, gin.H{"data": sliceWindow(r, offset, limit), "total": total})
 		case RuleTypeFailover:
 			var r []model.FailoverRule
 			var total int64

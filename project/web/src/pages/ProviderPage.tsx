@@ -791,7 +791,7 @@ function ProviderForm({ provider, endpointLibrary, onSave, isSaving, useKey, onU
                 {t('price.errorPrefix')}
               </div>
             )}
-            <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2 px-1 text-xs text-muted-foreground">
+            <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_calc(var(--spacing)*8)] items-center gap-2 px-1 text-xs text-muted-foreground">
               <span>{t('form.modelNamePlaceholder')}</span>
               <span>{t('price.columnPrice')}</span>
               <span>{t('price.columnEndpoint')}</span>
@@ -801,7 +801,7 @@ function ProviderForm({ provider, endpointLibrary, onSave, isSaving, useKey, onU
               const isPhantom = form.models.length === 0
               const referenceCandidates = referenceCandidatesFor(model.model)
               return (
-                <div key={index} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_2rem] items-center gap-2">
+                <div key={index} className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_12rem_calc(var(--spacing)*8)] items-center gap-2">
                   <Input value={model.model} onChange={(event) => patchModel(index, { model: event.target.value })} className="w-full" placeholder={t('form.modelNamePlaceholder')} />
                   <ModelPriceCell
                     model={model}

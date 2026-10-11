@@ -1417,7 +1417,8 @@ function ModelInfoFieldsEditor({
                   <Input
                     value={value[key].path}
                     onChange={(e) => update(key, { path: e.target.value })}
-                    placeholder="reasoning"
+                    placeholder={t('modelInfoEditor.pathPlaceholder')}
+                    title={t('modelInfoEditor.hint')}
                     className="h-6 text-xs font-mono"
                   />
                 </td>

@@ -60,10 +60,13 @@ func ListProviders(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if err := db.Order("id asc").Limit(limit).Offset(offset).Find(&providers).Error; err != nil {
+		if err := db.Find(&providers).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		// 供应商页面按名称字母表排序（中文按拼音）。
+		sortByNameStable(providers, func(p model.Provider) string { return p.Name })
+		providers = sliceWindow(providers, offset, limit)
 		if err := fillAutoDisabled(db, providers); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
