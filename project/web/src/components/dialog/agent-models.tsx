@@ -1308,6 +1308,7 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={setManagedDialogOpen}
           record={record}
           editing={managedEditing}
+          protocols={summary?.protocols ?? []}
           onSaved={() => reload()}
         />
 

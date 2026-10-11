@@ -720,6 +720,24 @@ export function ManagedProviderDialog({
                                             placeholder={t('managedDialog.manualEndpointPlaceholder')}
                                             className="h-7 w-full text-xs font-mono"
                                           />
+                                        ) : g.ruleIndex >= 0 ? (
+                                          <div className="min-w-0">
+                                            <span className="block truncate font-mono" title={g.ruleTag ?? ''}>
+                                              {g.ruleTag}
+                                            </span>
+                                            <span className="mt-1 block text-[10px] text-muted-foreground">
+                                              {t('managedDialog.hitsLabel')}
+                                            </span>
+                                            {g.hits.map((h) => (
+                                              <span
+                                                key={h}
+                                                className="block truncate font-mono text-[11px] text-muted-foreground"
+                                                title={h}
+                                              >
+                                                {h}
+                                              </span>
+                                            ))}
+                                          </div>
                                         ) : (
                                           <span className="block truncate font-mono" title={g.endpoint}>{g.endpoint}</span>
                                         )}
@@ -751,7 +769,7 @@ export function ManagedProviderDialog({
                                         </td>
                                         <td className="w-[36%] px-2 py-1.5">
                                           <Select
-                                            value={sourceByEndpoint[g.endpoint]?.[m] ?? ''}
+                                            value={storedSourceOf(sourceByEndpoint, g, m) ?? ''}
                                             onValueChange={(v) =>
                                               setSourceByEndpoint((prev) => ({
                                                 ...prev,
@@ -768,7 +786,7 @@ export function ManagedProviderDialog({
                                                 <>
                                                   <SelectItem value="">{t('managedDialog.noSync')}</SelectItem>
                                                   {(() => {
-                                                    const stored = sourceByEndpoint[g.endpoint]?.[m] ?? ''
+                                                    const stored = storedSourceOf(sourceByEndpoint, g, m) ?? ''
                                                     const candidates = providersForModel(snapshot, m)
                                                     if (stored === '' || candidates.some((p) => p.providerName === stored)) return null
                                                     // 存值可能是历史 models.dev providerId：能解析出名称就显示名称。
