@@ -2,32 +2,67 @@ package handler
 
 import (
 	"sort"
-	"sync"
+	"strings"
+	"unicode"
 
-	"golang.org/x/text/collate"
-	"golang.org/x/text/language"
+	"github.com/mozillazg/go-pinyin"
 )
 
 // Locale-aware ordering for the admin list pages whose first column acts as a
-// title (provider name, token name, rule name, …). Latin names sort
-// case-insensitively and CJK names sort by pinyin, which plain SQLite
-// ORDER BY name (byte comparison) does not do.
+// title (provider name, token name, rule name, …). Every name is turned into a
+// lowercase "alphabet" key: Latin letters as-is, Han characters as toneless
+// pinyin. Names are then compared as plain strings, so English and Chinese
+// interleave in one order (deepseek < 多元探索 duoyuan < opencode). When two
+// names share a key — an English name whose spelling matches a pinyin reading —
+// the non-Han one sorts first.
 //
-// A collate.Collator keeps mutable iterators, so every use is serialized. The
-// sorts are over small config tables, so a single mutex is plenty.
-var (
-	nameCollator   = collate.New(language.Chinese)
-	nameCollatorMu sync.Mutex
-)
+// The frontend mirrors this for the one client-sorted table (channel affinity,
+// see lib/title-sort.ts).
+
+func nameSortKey(name string) string {
+	args := pinyin.NewArgs()
+	args.Style = pinyin.Normal
+	// Keep non-Han runes (Latin, digits, punctuation) as-is instead of
+	// dropping them, so both scripts share one comparison key.
+	args.Fallback = func(r rune, _ pinyin.Args) []string { return []string{string(r)} }
+	return strings.ToLower(strings.Join(pinyin.LazyPinyin(name, args), ""))
+}
+
+func hasHan(name string) bool {
+	for _, r := range name {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
 
 // sortByNameStable sorts rows in place by their display name. The comparison is
-// stable so equal names keep their previous (creation) order.
+// stable so rows with an equal key keep their previous (creation) order.
 func sortByNameStable[T any](rows []T, name func(T) string) {
-	nameCollatorMu.Lock()
-	defer nameCollatorMu.Unlock()
-	sort.SliceStable(rows, func(i, j int) bool {
-		return nameCollator.CompareString(name(rows[i]), name(rows[j])) < 0
+	type keyed struct {
+		row T
+		key string
+		han bool
+	}
+	items := make([]keyed, len(rows))
+	for i, r := range rows {
+		n := name(r)
+		items[i] = keyed{row: r, key: nameSortKey(n), han: hasHan(n)}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].key != items[j].key {
+			return items[i].key < items[j].key
+		}
+		// Same pinyin/letter key: English before Chinese.
+		if items[i].han != items[j].han {
+			return !items[i].han
+		}
+		return false
 	})
+	for i := range items {
+		rows[i] = items[i].row
+	}
 }
 
 // sliceWindow returns rows[offset : offset+limit] clamped to the slice bounds,

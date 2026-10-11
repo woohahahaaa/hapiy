@@ -306,13 +306,14 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		groupsByKey[gkey] = g
 	}
 	ids, _ := m.GetProviderIDs()
+	protocols, _ := rule.GetProtocols()
 	live, _ := liveProvision(ids, liveProviders)
 	byID := map[string]model.Provider{}
 	for _, p := range liveProviders {
 		byID[p.ID] = p
 	}
 	membersOf := func(g model.ManagedAgentGroup) []model.Provider {
-		if members := live[g.Endpoint]; len(members) > 0 {
+		if members := membersByRule(live, g.Endpoint, protocols); len(members) > 0 {
 			return members
 		}
 		var out []model.Provider
@@ -616,8 +617,9 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 	for _, p := range liveProviders {
 		byID[p.ID] = p
 	}
+	protocols, _ := rule.GetProtocols()
 	membersOf := func(g model.ManagedAgentGroup) []model.Provider {
-		if members := live[g.Endpoint]; len(members) > 0 {
+		if members := membersByRule(live, g.Endpoint, protocols); len(members) > 0 {
 			return members
 		}
 		var out []model.Provider
@@ -655,7 +657,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		for _, p := range members {
 			mv.ProviderNames = append(mv.ProviderNames, p.Name)
 		}
-		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, stored.Endpoint))
+		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, stored.Endpoint, protocols))
 		mv.ModelCount = len(mv.ModelNames)
 		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
 		mv.Generated = gen
@@ -732,7 +734,7 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 		}
 	}
 
-	models := buildManagedModels(jpaths.ModelsContainer, members, modelRecs, group, mif, mdModels)
+	models := buildManagedModels(jpaths.ModelsContainer, members, modelRecs, group, mif, mdModels, protocols)
 	return map[string]any{"provider": block, "models": models}
 }
 
@@ -742,8 +744,8 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 // by model name whose value is the cfg object when "object"
 // (opencode-style). Empty value falls back to "object" so legacy rules
 // without the field keep their old behaviour.
-func buildManagedModels(container string, members []model.Provider, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel) any {
-	names := uniqueSorted(membersModelNamesForEndpoint(members, group.Endpoint))
+func buildManagedModels(container string, members []model.Provider, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel, protocols []model.AgentProtocol) any {
+	names := uniqueSorted(membersModelNamesForEndpoint(members, group.Endpoint, protocols))
 	if strings.EqualFold(strings.TrimSpace(container), "array") {
 		out := make([]map[string]any, 0, len(names))
 		for _, name := range names {
@@ -1135,7 +1137,46 @@ func membersModelNames(members []model.Provider) []string {
 	return out
 }
 
-func membersModelNamesForEndpoint(members []model.Provider, endpoint string) []string {
+// sameEndpointRule reports whether two endpoints belong to the same managed
+// group: identical strings, or both matching the same non-nil protocol rule.
+// endpoint_tags are globs now, so "/chat/completions" and
+// "/v1/chat/completions" are one group under "*completion*".
+func sameEndpointRule(a, b string, protocols []model.AgentProtocol) bool {
+	if a == b {
+		return true
+	}
+	pa := matchProtocolByEndpoint(a, protocols)
+	pb := matchProtocolByEndpoint(b, protocols)
+	return pa != nil && pa == pb
+}
+
+// membersByRule unions the live providers of every endpoint that shares
+// endpoint's protocol rule, so a rule-merged group keeps the models of each
+// member endpoint. Keys are walked in sorted order so the member list (and
+// the generated block) stays stable across runs.
+func membersByRule(live map[string][]model.Provider, endpoint string, protocols []model.AgentProtocol) []model.Provider {
+	keys := make([]string, 0, len(live))
+	for ep := range live {
+		if sameEndpointRule(ep, endpoint, protocols) {
+			keys = append(keys, ep)
+		}
+	}
+	slices.Sort(keys)
+	var out []model.Provider
+	seen := map[string]bool{}
+	for _, ep := range keys {
+		for _, p := range live[ep] {
+			if seen[p.ID] {
+				continue
+			}
+			seen[p.ID] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func membersModelNamesForEndpoint(members []model.Provider, endpoint string, protocols []model.AgentProtocol) []string {
 	var out []string
 	for _, p := range members {
 		byModel := parseProviderModelEndpoints(p.Models)
@@ -1146,7 +1187,7 @@ func membersModelNamesForEndpoint(members []model.Provider, endpoint string) []s
 				continue
 			}
 			for _, path := range paths {
-				if path == endpoint {
+				if sameEndpointRule(path, endpoint, protocols) {
 					out = append(out, name)
 					break
 				}

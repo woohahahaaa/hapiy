@@ -532,7 +532,7 @@ export function RecoverySettings() {
           {state.kind === 'error' && (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <AppIcon name="warning" size={32} className="text-destructive" />
-              <p className="text-sm text-muted-foreground">{state.message}</p>
+              <p className="max-w-full break-words text-sm text-muted-foreground">{state.message}</p>
               <Button variant="outline" size="sm" onClick={handleRetry}>
                 <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
               </Button>

@@ -39,7 +39,7 @@ export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
         )}
       </div>
       {expanded && (
-        <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] text-destructive/80">
+        <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[11px] text-destructive/80">
           {error}
         </pre>
       )}

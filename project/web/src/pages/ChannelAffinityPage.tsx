@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { i18n } from '@/i18n/i18n'
+import { compareTitle } from '@/lib/title-sort'
 import {
   dashboardApi,
   DashboardApiError,
@@ -269,9 +270,10 @@ export function ChannelAffinityPage() {
   const setting = payload?.setting ?? emptySetting()
   const fallback = payload?.fallback ?? EMPTY_FALLBACK
   const total = setting.rules.length
-  // 渠道亲和性页面按规则名称字母表排序（中文按拼音）。
+  // 渠道亲和性页面按规则名称字母表排序。中英文混排：中文按拼音当作字母，
+  // 与英文同处一条序列（与后端其它列表页口径一致，见 lib/title-sort.ts）。
   const sortedRules = useMemo(
-    () => [...setting.rules].sort((a, b) => a.name.localeCompare(b.name, 'zh')),
+    () => [...setting.rules].sort((a, b) => compareTitle(a.name, b.name)),
     [setting.rules],
   )
   const pagedRules = useMemo(

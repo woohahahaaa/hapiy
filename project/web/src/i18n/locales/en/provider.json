@@ -58,9 +58,8 @@
     "note": "Note",
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
-    "endpointPlaceholder": "e.g. /v1/chat/completions or /v1/responses",
     "deleteEndpointAria": "Delete Endpoint",
-    "endpointHint": "Full request paths allowed for this model; multiple paths supported. Empty means unrestricted. Click a previous path to add it.",
+    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path used above to switch to it, type one and press Enter to use it, or clear and press Enter for unrestricted.",
     "modelNamePlaceholder": "Model name"
   },
   "price": {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
@@ -9,8 +9,7 @@ import { Checkbox } from '@/components/checkbox'
 import { DataTable, type ColumnDef } from '@/components/data-table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/dialog'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { RemovableTag } from '@/components/tag'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { collectDeclaredEndpoints, seedModelEndpointsFromProvider } from '@/lib/provider-endpoints'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Separator } from '@/components/ui/separator'
@@ -40,9 +39,6 @@ type ProviderFormProps = {
   readonly onUseKeyChange: (next: boolean) => void
   readonly disableStatus: ProviderDisableStatus | null
   readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
-  // Endpoint paths collected from every provider (provider-level legacy
-  // lists + model-level lists); candidates in the per-model endpoint editor.
-  readonly endpointLibrary: readonly string[]
 }
 
 const emptyProvider: ProviderInput = {
@@ -107,16 +103,6 @@ export function ProviderPage() {
   const [useKey, setUseKey] = useState(true)
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [deleting, setDeleting] = useState<Provider | null>(null)
-  const [endpointLibrary, setEndpointLibrary] = useState<readonly string[]>([])
-
-  useEffect(() => {
-    if (!isDialogOpen) return
-    let cancelled = false
-    void dashboardApi.listProviders({ limit: 10000, offset: 0 }).then((result) => {
-      if (!cancelled) setEndpointLibrary([...new Set(result.providers.flatMap(collectDeclaredEndpoints))])
-    }).catch(() => {})
-    return () => { cancelled = true }
-  }, [isDialogOpen])
 
   const loadProviders = useCallback(async () => {
     setIsLoading(true)
@@ -292,7 +278,7 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
-             <ProviderForm provider={editing} endpointLibrary={endpointLibrary} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
+             <ProviderForm provider={editing} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
           </DialogContent>
         </Dialog>
 
@@ -343,41 +329,89 @@ export function ProviderPage() {
   )
 }
 
+// ModelEndpointEditor edits a model's allowed request paths as a single
+// combobox value: clicking the field opens a dropdown of the paths already
+// used by this provider's models (merged and deduped), typing filters them,
+// clicking one switches the model to that path, Enter commits the typed value,
+// and an empty value (Enter on empty) means unrestricted.
 function ModelEndpointEditor({ values, candidates, onChange }: {
   readonly values: readonly string[]
   readonly candidates: readonly string[]
   readonly onChange: (values: readonly string[]) => void
 }) {
   const { t } = useTranslation('provider')
-  const [draft, setDraft] = useState('')
+  const display = values.join(', ')
+  const [text, setText] = useState(display)
+  const [open, setOpen] = useState(false)
+  // query === null means "nothing typed yet": show every candidate.
+  const [query, setQuery] = useState<string | null>(null)
   const [error, setError] = useState(false)
-  const add = (raw: string) => {
-    const path = raw.trim()
-    if (!path) return
-    if (!path.startsWith('/')) { setError(true); return }
-    if (!values.includes(path)) onChange([...values, path])
-    setDraft('')
+  // Swallow the first mouseup so the select-all applied on focus survives the
+  // click that opened the field (the browser would collapse it otherwise).
+  const keepSelection = useRef(false)
+  const needle = (query ?? '').trim().toLowerCase()
+  const options = needle === '' ? candidates : candidates.filter((path) => path.toLowerCase().includes(needle))
+  const reset = () => {
+    setOpen(false)
+    setText(display)
+    setQuery(null)
     setError(false)
   }
+  const commit = (raw: string) => {
+    const path = raw.trim()
+    if (path !== '' && !path.startsWith('/')) {
+      setError(true)
+      return
+    }
+    onChange(path === '' ? [] : [path])
+    setText(path)
+    setQuery(null)
+    setError(false)
+    setOpen(false)
+  }
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className="w-full min-w-0 justify-start" title={values.join(', ')}>
-          <span className="truncate">{values.length ? values.join(', ') : t('price.endpointUnset')}</span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="flex w-80 flex-col gap-3">
-        <Field data-invalid={error || undefined}>
-          <FieldLabel>{t('price.columnEndpoint')}</FieldLabel>
-          <Input value={draft} aria-invalid={error || undefined} placeholder={t('form.endpointPlaceholder')} onChange={(event) => { setDraft(event.target.value); setError(false) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); add(draft) } }} />
-          {error && <p role="alert">{t('errors.pathMustStartSlash')}</p>}
-          <Button type="button" variant="outline" size="sm" onClick={() => add(draft)} disabled={!draft.trim()}>{t('actions.addRow')}</Button>
-        </Field>
-        <div className="flex flex-wrap gap-1">
-          {values.map((path) => <RemovableTag key={path} label={path} onRemove={() => onChange(values.filter((value) => value !== path))} />)}
-        </div>
-        <div className="flex max-h-48 flex-col gap-1 overflow-y-auto">
-          {candidates.filter((path) => !values.includes(path) && path.includes(draft.trim())).map((path) => <Button key={path} type="button" variant="ghost" size="sm" className="justify-start" onClick={() => add(path)}>{path}</Button>)}
+    <Popover open={open} onOpenChange={(next) => { if (next) { setOpen(true) } else { reset() } }}>
+      <PopoverAnchor asChild>
+        <Input
+          value={text}
+          title={display || undefined}
+          placeholder={t('price.endpointUnset')}
+          aria-invalid={error || undefined}
+          onFocus={(event) => {
+            keepSelection.current = true
+            event.currentTarget.select()
+            setOpen(true)
+            setQuery(null)
+            setError(false)
+          }}
+          onMouseUp={(event) => {
+            if (!keepSelection.current) return
+            keepSelection.current = false
+            event.preventDefault()
+          }}
+          onChange={(event) => {
+            setText(event.target.value)
+            setQuery(event.target.value)
+            setOpen(true)
+            setError(false)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit(text)
+            }
+          }}
+          onBlur={reset}
+        />
+      </PopoverAnchor>
+      <PopoverContent align="start" className="flex w-80 flex-col gap-2 p-2" onOpenAutoFocus={(event) => event.preventDefault()}>
+        {error && <p role="alert" className="text-xs text-destructive">{t('errors.pathMustStartSlash')}</p>}
+        <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
+          {options.map((path) => (
+            <Button key={path} type="button" variant="ghost" size="sm" className="justify-start font-normal" onMouseDown={(event) => event.preventDefault()} onClick={() => commit(path)}>
+              <span className="truncate">{path}</span>
+            </Button>
+          ))}
         </div>
         <p className="text-xs text-muted-foreground">{t('form.endpointHint')}</p>
       </PopoverContent>
@@ -385,7 +419,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, endpointLibrary, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
   const { t } = useTranslation('provider')
   const [form, setForm] = useState<ProviderInput>(() => provider ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) } : emptyProvider)
   // Per-key remarks as a parallel array aligned with form.keys (array instead
@@ -394,8 +428,7 @@ function ProviderForm({ provider, endpointLibrary, onSave, isSaving, useKey, onU
   const [keyNotes, setKeyNotes] = useState<readonly string[]>(() =>
     provider ? provider.keys.map((key) => provider.keyNotes[key] ?? '') : [],
   )
-  const endpointCandidates = useMemo(() => [...new Set([...endpointLibrary, ...collectDeclaredEndpoints(form)])], [endpointLibrary, form])
-  const [enteredEndpoints, setEnteredEndpoints] = useState<readonly string[]>([])
+  const endpointCandidates = collectDeclaredEndpoints(form)
   const [globalDefaultEndpoint, setGlobalDefaultEndpoint] = useState<string | null>(null)
   const [endpointOverride, setEndpointOverride] = useState<string | null>(null)
   const [endpointDraft, setEndpointDraft] = useState('')
@@ -812,7 +845,7 @@ function ProviderForm({ provider, endpointLibrary, onSave, isSaving, useKey, onU
                     snapshotLoading={refSnapshot === null}
                     onPickReference={(name) => pickReference(index, name)}
                   />
-                  <ModelEndpointEditor values={model.endpoints} candidates={[...new Set([...endpointCandidates, ...enteredEndpoints])]} onChange={(endpoints) => { setEnteredEndpoints((current) => [...new Set([...current, ...endpoints])]); patchModel(index, { endpoints }) }} />
+                  <ModelEndpointEditor values={model.endpoints} candidates={endpointCandidates} onChange={(endpoints) => patchModel(index, { endpoints })} />
                   <Button type="button" variant="ghost" size="icon" disabled={isPhantom} onClick={() => removeModel(index)}><AppIcon name="delete" /></Button>
                 </div>
               )

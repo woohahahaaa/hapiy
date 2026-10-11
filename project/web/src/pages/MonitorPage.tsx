@@ -332,7 +332,7 @@ function StatsSection() {
         <div className="flex items-center justify-center py-8">
           <div className="text-center">
             <AppIcon name="error" size={40} className="mx-auto mb-3 text-destructive" />
-            <p className="text-sm text-muted-foreground">{error}</p>
+            <p className="max-w-full break-words text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={handleRetry}>
               <AppIcon name="refresh" data-icon="inline-start" />
               {t('common:action.retry')}
@@ -394,7 +394,7 @@ function StatsSection() {
       {/* Error banner (with existing data) */}
       {error && stats && (
         <div className="mt-4 rounded-none border border-destructive/30 bg-destructive/5 px-3 py-2">
-          <span className="text-xs text-destructive">{error}</span>
+          <span className="break-words text-xs text-destructive">{error}</span>
         </div>
       )}
 
@@ -612,7 +612,7 @@ function ActiveRequestsSection() {
         actions={
           <>
             {error && (
-              <span className="inline-flex items-center gap-1 text-xs text-destructive">
+              <span className="inline-flex max-w-full items-center gap-1 text-xs text-destructive break-all">
                 <AppIcon name="error" data-icon="inline-start" />
                 {error}
               </span>
