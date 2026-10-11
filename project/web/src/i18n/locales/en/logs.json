@@ -191,6 +191,8 @@
     "requestId": "Request ID",
     "providerKey": "Upstream Key",
     "upstreamUrl": "Upstream URL",
+    "downstreamKey": "Downstream Key",
+    "downstreamUrl": "Downstream URL",
     "details": "Details",
     "timing": "Queue {{queue}} · Request rewrite {{requestRewrite}} · Connect {{connect}} · First byte {{firstByte}} · Response rewrite {{responseRewrite}} · Stream rewrite {{streamRewrite}}"
   },

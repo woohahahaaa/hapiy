@@ -142,12 +142,13 @@ func TokenAuth(db *gorm.DB) gin.HandlerFunc {
 // is logged the same way regardless of which branch fired.
 func rejectTokenAuth(c *gin.Context, status int, body gin.H, userID, tokenName string, err error) {
 	service.LogRelayFailure(service.LogRelayFailureInput{
-		UserID:    userID,
-		TokenName: tokenName,
-		ModelName: service.ExtractModelFromRequestBody(c),
-		RequestID: c.GetString("request_id"),
-		IP:        c.ClientIP(),
-		Error:     err,
+		UserID:        userID,
+		TokenName:     tokenName,
+		ModelName:     service.ExtractModelFromRequestBody(c),
+		RequestID:     c.GetString("request_id"),
+		IP:            c.ClientIP(),
+		DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+		Error:         err,
 	})
 	c.JSON(status, body)
 	c.Abort()

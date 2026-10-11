@@ -59,7 +59,7 @@
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
     "deleteEndpointAria": "Delete Endpoint",
-    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path used above to switch to it, type one and press Enter to use it, or clear and press Enter for unrestricted.",
+    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path used above to switch to it, or type one and leave the field to apply it — clearing it and leaving the field means unrestricted.",
     "modelNamePlaceholder": "Model name"
   },
   "price": {

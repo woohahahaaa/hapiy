@@ -48,17 +48,21 @@ function LogDetailFields({ log }: { log: UsageLog }) {
       <FieldGroup>
         <DetailRow className="col-span-2" label={t('detail.requestId')} value={log.requestId || '-'} />
         <DetailRow className="col-span-2" label={t('columns.time')} value={timeText} />
-        <DetailRow className="col-span-2" label={t('columns.token')} value={log.tokenName || '-'} />
         <DetailRow className="col-span-2" label={t('columns.provider')} value={log.providerName || '-'} />
         <DetailRow className="col-span-2" label={t('columns.model')} value={log.modelName || '-'} />
         <DetailRow className="col-span-2" label={t('columns.source')} value={log.source || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
-          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.providerKey')}</span>
-          <SecretValue value={log.providerKey || '-'} note={keyNote} />
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.downstreamUrl')}</span>
+          <span className="break-all font-mono leading-relaxed">{log.downstreamUrl || '-'}</span>
         </div>
+        <DetailRow className="col-span-2" label={t('detail.downstreamKey')} value={log.tokenName || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.upstreamUrl')}</span>
           <span className="break-all font-mono leading-relaxed">{log.upstreamUrl || '-'}</span>
+        </div>
+        <div className="col-span-2 flex items-baseline gap-2">
+          <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.providerKey')}</span>
+          <SecretValue value={log.providerKey || '-'} note={keyNote} />
         </div>
       </FieldGroup>
       <FieldGroup>

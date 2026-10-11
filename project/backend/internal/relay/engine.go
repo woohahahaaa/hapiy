@@ -211,6 +211,11 @@ type RelayRequest struct {
 	// SourceMark is the optional "__来源" segment carried by the ingress
 	// proxy (X-Hapiy-Source). Empty when the request bypasses the proxy.
 	SourceMark string `json:"-"`
+	// DownstreamURL is the URL the caller used to reach this gateway
+	// (scheme://host + source prefix + Path). The handler fills it so every
+	// log row — including engine-side failover rows — can show the
+	// gateway-side address next to the upstream URL it was translated to.
+	DownstreamURL string `json:"-"`
 	// KeyIndex and BaseURLIndex select which key/baseURL to use (-1 = rotate
 	// from the first available).
 	KeyIndex       int                     `json:"-"`

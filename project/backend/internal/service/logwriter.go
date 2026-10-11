@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -187,14 +188,45 @@ func (w *LogWriter) Stop() {
 // caller — the relay handler, the token-auth middleware — passes the
 // fields it can produce and leaves the rest zero-valued.
 type LogRelayFailureInput struct {
-	UserID       string
-	TokenName    string
-	ProviderName string
-	ModelName    string
-	RequestID    string
-	IP           string
-	UseTimeMs    int
-	Error        error
+	UserID        string
+	TokenName     string
+	ProviderName  string
+	ModelName     string
+	RequestID     string
+	IP            string
+	DownstreamURL string
+	UseTimeMs     int
+	Error         error
+}
+
+// RequestURL rebuilds the gateway-side URL the caller used from the
+// request's scheme/host plus the source-marked proxy prefix and the request
+// path. sourceMark is the X-Hapiy-Source value (e.g. "__macOpenchamber")
+// the ingress proxy stripped; pass "" for the direct /v1 entry. Falls back
+// to the bare path when no host is known. Feeds the 使用记录 详情页's 下游 URL.
+func RequestURL(c *gin.Context, sourceMark, path string) string {
+	if path == "" {
+		return ""
+	}
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); forwarded != "" {
+		scheme = forwarded
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = c.Request.Host
+	}
+	prefix := ""
+	if sourceMark != "" {
+		prefix = "/proxy/" + sourceMark
+	}
+	if host == "" {
+		return prefix + path
+	}
+	return scheme + "://" + host + prefix + path
 }
 
 // LogRelayFailure queues a single "failed" log row for batched insertion.
@@ -207,15 +239,16 @@ func LogRelayFailure(in LogRelayFailureInput) {
 		return
 	}
 	globalLogWriter.Write(&model.Log{
-		UserID:       in.UserID,
-		TokenName:    in.TokenName,
-		ProviderName: in.ProviderName,
-		ModelName:    in.ModelName,
-		Status:       "failed",
-		IP:           in.IP,
-		RequestID:    in.RequestID,
-		ErrorMessage: in.Error.Error(),
-		UseTime:      in.UseTimeMs,
+		UserID:        in.UserID,
+		TokenName:     in.TokenName,
+		ProviderName:  in.ProviderName,
+		ModelName:     in.ModelName,
+		Status:        "failed",
+		IP:            in.IP,
+		RequestID:     in.RequestID,
+		DownstreamURL: in.DownstreamURL,
+		ErrorMessage:  in.Error.Error(),
+		UseTime:       in.UseTimeMs,
 	})
 }
 

@@ -507,13 +507,14 @@ func failoverEventDetail(rule *model.FailoverRule, dimension string, outcome ups
 // final error the handler logs (the relayWithFailover tail return).
 func (e *Engine) recordFailoverAttempt(req *RelayRequest, plan *ExecutionPlan, failErr error) {
 	service.LogRelayFailure(service.LogRelayFailureInput{
-		UserID:       req.UserID,
-		TokenName:    req.TokenName,
-		ProviderName: plan.Provider.Name,
-		ModelName:    req.Model,
-		RequestID:    req.RequestID,
-		IP:           req.IP,
-		Error:        failErr,
+		UserID:        req.UserID,
+		TokenName:     req.TokenName,
+		ProviderName:  plan.Provider.Name,
+		ModelName:     req.Model,
+		RequestID:     req.RequestID,
+		IP:            req.IP,
+		DownstreamURL: req.DownstreamURL,
+		Error:         failErr,
 	})
 }
 

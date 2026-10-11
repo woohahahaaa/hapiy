@@ -85,12 +85,13 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if err != nil {
 			useTime := int(time.Since(startTime).Milliseconds())
 			service.LogRelayFailure(service.LogRelayFailureInput{
-				TokenName: getString(tokenName),
-				UserID:    getString(userID),
-				RequestID: c.GetString("request_id"),
-				IP:        c.ClientIP(),
-				UseTimeMs: useTime,
-				Error:     err,
+				TokenName:     getString(tokenName),
+				UserID:        getString(userID),
+				RequestID:     c.GetString("request_id"),
+				IP:            c.ClientIP(),
+				DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+				UseTimeMs:     useTime,
+				Error:         err,
 			})
 			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
@@ -101,12 +102,13 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
 			useTime := int(time.Since(startTime).Milliseconds())
 			service.LogRelayFailure(service.LogRelayFailureInput{
-				TokenName: getString(tokenName),
-				UserID:    getString(userID),
-				RequestID: c.GetString("request_id"),
-				IP:        c.ClientIP(),
-				UseTimeMs: useTime,
-				Error:     err,
+				TokenName:     getString(tokenName),
+				UserID:        getString(userID),
+				RequestID:     c.GetString("request_id"),
+				IP:            c.ClientIP(),
+				DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+				UseTimeMs:     useTime,
+				Error:         err,
 			})
 			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
@@ -127,6 +129,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.RequestID = c.GetString("request_id")
 		relayReq.Path = c.Request.URL.Path
 		relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
+		relayReq.DownstreamURL = service.RequestURL(c, relayReq.SourceMark, relayReq.Path)
 		relayReq.UserID = getString(userID)
 		relayReq.TokenName = getString(tokenName)
 		relayReq.IP = c.ClientIP()
@@ -367,6 +370,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			UpstreamURL:        resp.UpstreamURL,
 			ProviderKey:        resp.ProviderKey,
 			ProviderBaseURL:    resp.ProviderBaseURL,
+			DownstreamURL:      relayReq.DownstreamURL,
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens
@@ -571,6 +575,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		UpstreamURL:     upstreamURL,
 		ProviderKey:     providerKey,
 		ProviderBaseURL: providerBaseURL,
+		DownstreamURL:   req.DownstreamURL,
 	})
 	outcome := "upstream_error"
 	if errors.Is(err, relay.ErrConcurrencyRejected) {

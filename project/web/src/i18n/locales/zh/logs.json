@@ -188,6 +188,8 @@
     "requestId": "请求 id",
     "providerKey": "上游 Key",
     "upstreamUrl": "上游 URL",
+    "downstreamKey": "下游 Key",
+    "downstreamUrl": "下游 URL",
     "details": "详细信息",
     "timing": "排队 {{queue}} · 请求改写 {{requestRewrite}} · 连接 {{connect}} · 首字 {{firstByte}} · 响应改写 {{responseRewrite}} · 流式改写 {{streamRewrite}}"
   },

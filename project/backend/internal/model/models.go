@@ -133,6 +133,11 @@ type Log struct {
 	// QueueWaitMs is the time spent waiting for a concurrency slot before
 	// the upstream request was issued; nil when no concurrency rule applies.
 	QueueWaitMs *int `json:"queue_wait_ms,omitempty"`
+	// DownstreamURL is the URL the caller used to reach this gateway: scheme
+	// + host + the `/proxy/__<source>` prefix when the ingress proxy carried
+	// one + the request path. It is the gateway-side address the upstream URL
+	// was derived from; empty for rows written before the column existed.
+	DownstreamURL string `json:"downstream_url,omitempty"`
 	// UpstreamURL is the full URL (base URL + path) actually issued to the upstream; empty when the request never reached upstream.
 	UpstreamURL string `json:"upstream_url,omitempty"`
 	// ProviderKey is the actual provider key used to reach upstream; empty

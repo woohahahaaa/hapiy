@@ -332,8 +332,9 @@ export function ProviderPage() {
 // ModelEndpointEditor edits a model's allowed request paths as a single
 // combobox value: clicking the field opens a dropdown of the paths already
 // used by this provider's models (merged and deduped), typing filters them,
-// clicking one switches the model to that path, Enter commits the typed value,
-// and an empty value (Enter on empty) means unrestricted.
+// clicking one switches the model to that path, and leaving the field (blur)
+// commits whatever was typed — no Enter needed. Enter commits too (for
+// keyboard users), Escape discards, and an empty value means unrestricted.
 function ModelEndpointEditor({ values, candidates, onChange }: {
   readonly values: readonly string[]
   readonly candidates: readonly string[]
@@ -355,11 +356,18 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   const anchorRef = useRef<HTMLInputElement | null>(null)
   const needle = (query ?? '').trim().toLowerCase()
   const options = needle === '' ? candidates : candidates.filter((path) => path.toLowerCase().includes(needle))
-  const reset = () => {
+  // close dismisses the dropdown without touching the typed text: blur
+  // commits, so the close path must not restore the previous value first
+  // (that would leave blur with nothing to commit).
+  const close = () => {
     setOpen(false)
-    setText(display)
     setQuery(null)
     setError(false)
+  }
+  // reset discards the edit (Escape) and restores the committed value.
+  const reset = () => {
+    close()
+    setText(display)
   }
   const commit = (raw: string) => {
     const path = raw.trim()
@@ -374,7 +382,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
     setOpen(false)
   }
   return (
-    <Popover open={open} onOpenChange={(next) => { if (next) { setOpen(true) } else { reset() } }}>
+    <Popover open={open} onOpenChange={(next) => { if (next) { setOpen(true) } else { close() } }}>
       <PopoverAnchor asChild>
         <Input
           ref={anchorRef}
@@ -404,9 +412,18 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
             if (event.key === 'Enter') {
               event.preventDefault()
               commit(text)
+            } else if (event.key === 'Escape') {
+              reset()
             }
           }}
-          onBlur={reset}
+          onBlur={() => {
+            // Leaving the field commits; only an unchanged value just closes.
+            if (text.trim() === display.trim()) {
+              close()
+            } else {
+              commit(text)
+            }
+          }}
         />
       </PopoverAnchor>
       <PopoverContent

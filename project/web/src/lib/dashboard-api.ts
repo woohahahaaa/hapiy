@@ -186,6 +186,9 @@ export type UsageLog = {
   readonly errorMessage: string
   // eventDetail is populated for event rows with the matched rule / action explanation; empty for request rows and pre-existing data.
   readonly eventDetail: string
+  // downstreamUrl is the gateway-side URL the caller used (scheme://host +
+  // /proxy/__来源 prefix + path); empty for rows written before it existed.
+  readonly downstreamUrl: string
   readonly upstreamUrl: string
   readonly providerKey: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full' | 'new'
@@ -1480,6 +1483,7 @@ function parseLog(value: unknown): UsageLog {
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
     eventDetail: readString(value.event_detail ?? '', 'log.event_detail'),
+    downstreamUrl: readString(value.downstream_url ?? '', 'log.downstream_url'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
     providerKey: readString(value.provider_key ?? '', 'log.provider_key'),
     affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',

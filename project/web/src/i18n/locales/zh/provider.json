@@ -58,7 +58,7 @@
     "noteAria": "{{label}} 备注",
     "deleteValueAria": "删除{{label}}",
     "deleteEndpointAria": "删除 Endpoint",
-    "endpointHint": "该模型允许的完整请求路径，留空表示不限制。下拉里列出的路径点击可直接切换；也可输入后回车使用；清空后回车回到不限路径。",
+    "endpointHint": "该模型允许的完整请求路径，留空表示不限制。下拉里列出的路径点击可直接切换；也可输入后移开焦点即生效；清空后移开焦点回到不限路径。",
     "modelNamePlaceholder": "模型名称"
   },
   "price": {
