@@ -349,6 +349,10 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   // Swallow the first mouseup so the select-all applied on focus survives the
   // click that opened the field (the browser would collapse it otherwise).
   const keepSelection = useRef(false)
+  // The anchor input; the popover must ignore outside-interactions that target
+  // it, because the click that focuses the field is reported as an outside
+  // interaction once the content mounts and would close the dropdown at once.
+  const anchorRef = useRef<HTMLInputElement | null>(null)
   const needle = (query ?? '').trim().toLowerCase()
   const options = needle === '' ? candidates : candidates.filter((path) => path.toLowerCase().includes(needle))
   const reset = () => {
@@ -373,6 +377,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
     <Popover open={open} onOpenChange={(next) => { if (next) { setOpen(true) } else { reset() } }}>
       <PopoverAnchor asChild>
         <Input
+          ref={anchorRef}
           value={text}
           title={display || undefined}
           placeholder={t('price.endpointUnset')}
@@ -404,7 +409,13 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
           onBlur={reset}
         />
       </PopoverAnchor>
-      <PopoverContent align="start" className="flex w-80 flex-col gap-2 p-2" onOpenAutoFocus={(event) => event.preventDefault()}>
+      <PopoverContent
+        align="start"
+        className="flex w-80 flex-col gap-2 p-2"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onInteractOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}
+        onFocusOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}
+      >
         {error && <p role="alert" className="text-xs text-destructive">{t('errors.pathMustStartSlash')}</p>}
         <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
           {options.map((path) => (
