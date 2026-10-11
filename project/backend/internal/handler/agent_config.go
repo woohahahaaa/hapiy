@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -518,23 +519,21 @@ func isJSONConfigPath(path string) bool {
 }
 
 // prettifyJSON returns the supplied content indented with two spaces and
-// terminated by a newline. The raw blob must be valid JSON (or JSON5-
-// compatible — comments are tolerated via stripJSON5Comments so the
-// previewed content from apply/sync endpoints round-trips cleanly).
-// Inputs that already start as compact or non-standard JSON are still
-// reformatted; non-JSON inputs pass through untouched so a misconfigured
-// caller gets a readable error instead of silently mangled bytes.
+// terminated by a newline, WITHOUT reordering object keys: it formats the
+// source bytes in place (json.Indent) instead of round-tripping through
+// map[string]any — Go's encoding/json sorts map keys alphabetically, which
+// used to reshuffle every provider block (e.g. opencode's `models` landing
+// before `name`/`package`/`settings`). The raw blob must be valid JSON (or
+// JSON5-compatible — comments are tolerated via stripJSON5Comments so the
+// previewed content from apply/sync endpoints round-trips cleanly); invalid
+// JSON still errors here so the caller gets a readable format failure.
 func prettifyJSON(content string) (string, error) {
 	cleaned := stripJSON5Comments(content)
-	var any any
-	if err := json.Unmarshal([]byte(cleaned), &any); err != nil {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, []byte(cleaned), "", "  "); err != nil {
 		return "", err
 	}
-	out, err := json.MarshalIndent(any, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(out) + "\n", nil
+	return strings.TrimRight(buf.String(), "\n") + "\n", nil
 }
 
 func DeleteAgentConfigFile(db *gorm.DB) gin.HandlerFunc {
