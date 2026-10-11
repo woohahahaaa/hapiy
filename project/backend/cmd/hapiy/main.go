@@ -433,20 +433,25 @@ func runServe() {
 		}
 	}
 
-	// Agent taxi prefix (`/proxy/__<source>/...`) mirrors the OpenAI-compatible
-	// /v1 relay endpoints with the same middleware order, so the production
-	// single-origin build accepts the exact URLs agents actually call — e.g.
-	// opencode posts `/proxy/__opencode/chat/completions`. The Vite dev server
-	// rewrites these to /v1 for the backend; here the source mark is captured
-	// into the X-Hapiy-Source header (with the `__` prefix, matching the dev
-	// proxy) and the path is rewritten to /v1 so dispatch / endpoint matching /
-	// audit logging see identical paths in both modes.
+	// Agent taxi prefix (`/proxy/__<source>/...`): the source mark is captured
+	// into the X-Hapiy-Source header and the prefix itself is stripped, leaving
+	// the agent's own request path untouched — e.g. opencode posts
+	// `/proxy/__opencode/chat/completions` and the relay then works with
+	// `/chat/completions`. The path is deliberately NOT normalized to /v1:
+	// dispatch matches the provider's declared endpoint against exactly what
+	// the agent sent, and the relay appends that same path to the upstream base
+	// URL. The Vite dev server forwards the prefix unchanged so dev and
+	// production see identical paths.
 	proxyRelay := r.Group("/proxy/__:source")
 	proxyRelay.Use(middleware.OverloadProtection(nil))
 	proxyRelay.Use(func(c *gin.Context) {
 		src := c.Param("source")
 		c.Request.Header.Set("X-Hapiy-Source", "__"+src)
-		c.Request.URL.Path = "/v1" + c.Request.URL.Path[len("/proxy/__"+src):]
+		rest := c.Request.URL.Path[len("/proxy/__"+src):]
+		if rest == "" || rest[0] != '/' {
+			rest = "/" + rest
+		}
+		c.Request.URL.Path = rest
 		c.Next()
 	})
 	proxyRelay.Use(middleware.TokenAuth(db))
@@ -503,8 +508,17 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			return true
 		}
 		expected := strings.TrimSpace(endpoint)
+		// The agent hits this through either the direct /v1 route or the
+		// /proxy/__<source> prefix (which no longer rewrites the path to /v1),
+		// so also accept the configured endpoint with its leading /v1 stripped:
+		// `/models` must resolve the same list as `/v1/models`.
+		alternate := ""
+		if strings.HasPrefix(expected, "/v1/") {
+			alternate = strings.TrimPrefix(expected, "/v1")
+		}
 		if c.Request.Method != http.MethodGet || expected == "" ||
-			!strings.HasSuffix(c.Request.URL.Path, expected) {
+			!(strings.HasSuffix(c.Request.URL.Path, expected) ||
+				(alternate != "" && strings.HasSuffix(c.Request.URL.Path, alternate))) {
 			return false
 		}
 		middleware.TokenAuth(db)(c)
