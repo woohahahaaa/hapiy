@@ -370,3 +370,68 @@ func TestManagedYAMLDeepSeekHarnessFlow(t *testing.T) {
 		t.Fatalf("sync must converge (pending=false), got %+v\n%s", listed.Data, out)
 	}
 }
+
+// TestApplyRecommendationsYAML 端到端：一键套用推荐值（dsh 规则）在 YAML 文件
+// 上走节点编辑——已存在的 provider 里补上 apiKeyEnv，其余内容与注释保留，
+// 返回值仍是 YAML（不是被 JSON 化的文件）。
+func TestApplyRecommendationsYAML(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := model.AutoMigrate(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.EnsureDefaultAgentTypes(db); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cordis.patch.yml")
+	content := "# keep\n- id: llm-pi-ai\n  config:\n    providers:\n      HAPIY-C:\n        api: openai-completions\n        baseURL: https://gw.example.com/v1\n        models:\n          - id: gpt-x\n"
+	if err := writeFile(path, content); err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "dsh-apply", AgentType: "DeepSeek Harness (Desktop)",
+		Mode: "local", TargetOS: "mac", Path: path,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.POST("/agent-config-files/:id/apply-recommendation-template", ApplyRecommendationTemplate(db, nil))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/apply-recommendation-template", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("apply template: %d %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Applied int    `json:"applied"`
+			Content string `json:"content"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Data.Applied == 0 {
+		t.Fatalf("expected at least one field applied: %s", w.Body.String())
+	}
+	if !strings.Contains(resp.Data.Content, "apiKeyEnv: HAPIY_API_KEY") {
+		t.Fatalf("recommended apiKeyEnv not written:\n%s", resp.Data.Content)
+	}
+	if !strings.Contains(resp.Data.Content, "# keep") {
+		t.Fatalf("unrelated comment must survive:\n%s", resp.Data.Content)
+	}
+	if strings.Contains(resp.Data.Content, "{") {
+		t.Fatalf("YAML output must not be JSON-ified:\n%s", resp.Data.Content)
+	}
+	if _, err := yamlToJSON(resp.Data.Content); err != nil {
+		t.Fatalf("output must stay valid yaml: %v\n%s", err, resp.Data.Content)
+	}
+}

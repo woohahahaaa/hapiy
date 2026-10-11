@@ -9,6 +9,8 @@
   "AGENT_TYPE_TEMPLATE_NOT_FOUND": "This software type has no default recommendation template",
   "CHECKED_PROVIDER_OR_MODEL_REQUIRED": "Please check at least one provider or model",
   "CONFIG_NOT_FOUND": "Config not found",
+  "CONFIG_PARSE_FAILED": "Failed to parse the config: {{error}}",
+  "CONFIG_SERIALIZE_FAILED": "Failed to serialize the config: {{error}}",
   "DISABLED_RECORD_NOT_FOUND": "Record not found",
   "FIELDS_REQUIRED": "fields cannot be empty",
   "JUMP_AUTH_TYPE_INVALID": "Jump host authentication type must be password or key",

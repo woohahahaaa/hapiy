@@ -46,7 +46,7 @@
     "providerPathPlaceholder": "e.g. provider",
     "modelPathLabel": "model gjson path",
     "modelPathPlaceholder": "e.g. provider.{provider_id}.models",
-    "modelPathHint": "Full gjson path; use {provider_id} inside model as a placeholder for the current provider key",
+    "modelPathHint": "Full gjson path; use {provider_id} inside model as a placeholder for the current provider key. YAML files (e.g. dsh) may use a `#(id==\"xxx\")` query segment to locate the plugin entry by id first",
     "modelsContainerLabel": "Model list container format (models_container)",
     "modelsContainerPlaceholder": "Select format",
     "containerArray": "Array [{\"id\": ...}] (openclaw)",

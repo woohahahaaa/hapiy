@@ -16,6 +16,9 @@ import (
 //   - BaseURLs / Keys: pre-parsed from the JSON strings on the model row.
 //   - ModelSet: pre-parsed from the Models JSON, allowing O(1) "supports
 //     this model?" lookups in SelectProvider.
+//   - ModelPaths: pre-parsed per-model endpoint paths from the Models JSON.
+//     The model-level whitelist wins over AllowedPaths; a model without a
+//     declaration falls back to the provider-level list.
 //   - AllowedPaths: pre-parsed from the Endpoints JSON; empty set means
 //     "any path allowed", matching the convention in topology.ProviderRef.
 //   - Compiled rewrite chains: validated []RewriteOp executed in order.
@@ -26,6 +29,7 @@ type ExecutionPlan struct {
 	BaseURLs                 []string
 	Keys                     []string
 	ModelSet                 map[string]struct{}
+	ModelPaths               map[string]map[string]struct{}
 	AllowedPaths             map[string]struct{}
 	RewriteRules             []*model.RewriteRule
 	CompiledRewrite          []CompiledRewriteChain
@@ -36,6 +40,41 @@ type ExecutionPlan struct {
 	LogOutputs               []LogOutputAssignment
 	DebugEnabled             bool
 	DebugFields              []string
+}
+
+// AllowsPath reports whether the plan may serve path for model. The
+// model-level endpoint list wins when the model declares one; a model
+// without endpoints falls back to the provider-level whitelist; both empty
+// means unrestricted (the historic behaviour).
+func (p *ExecutionPlan) AllowsPath(model, path string) bool {
+	paths, restricted := p.endpointsForModel(model)
+	if !restricted {
+		return true
+	}
+	_, ok := paths[path]
+	return ok
+}
+
+// pathRestricted reports whether the effective path rules for model are
+// non-empty (model-level endpoints, else the provider-level whitelist).
+// Callers use it to prefer an explicit whitelist match over an
+// unrestricted provider when both could serve the request.
+func (p *ExecutionPlan) pathRestricted(model string) bool {
+	_, restricted := p.endpointsForModel(model)
+	return restricted
+}
+
+// endpointsForModel returns the effective declared endpoint set for a
+// model: its own list when non-empty, else the provider-level whitelist.
+// restricted is false when neither declares endpoints (unrestricted).
+func (p *ExecutionPlan) endpointsForModel(model string) (map[string]struct{}, bool) {
+	if paths, ok := p.ModelPaths[model]; ok && len(paths) > 0 {
+		return paths, true
+	}
+	if len(p.AllowedPaths) > 0 {
+		return p.AllowedPaths, true
+	}
+	return nil, false
 }
 
 // LogOutputAssignment is a thin wrapper over a topology logOutput slot.

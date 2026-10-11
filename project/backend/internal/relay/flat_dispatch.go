@@ -17,8 +17,9 @@ var ErrNoProvider = errors.New("no provider available")
 
 // buildFlatProviderRefs builds ProviderRef values for every enabled provider
 // known to the engine, keyed by provider name. It reflects the provider's
-// Status, its supported model set, and the set of allowed endpoint paths
-// (empty set means "any path", matching ProviderRef.Paths semantics).
+// Status, its supported model set, and the per-model endpoint sets (a model
+// without a declaration falls back to the provider-level list; both empty
+// means "any path", matching ProviderRef semantics).
 func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
@@ -28,14 +29,15 @@ func (e *Engine) buildFlatProviderRefs() map[string]topology.ProviderRef {
 			continue
 		}
 		ref := topology.ProviderRef{
-			ID:       plan.Provider.ID,
-			Name:     plan.Provider.Name,
-			Status:   plan.Provider.Status,
-			Disabled: e.providerDisabled(plan.Provider),
-			Enabled:  true, // provider node mini-switch is checked in the flat walk
-			Workflow: plan.Provider.WorkflowEnabled,
-			Models:   plan.ModelSet,
-			Paths:    plan.AllowedPaths,
+			ID:         plan.Provider.ID,
+			Name:       plan.Provider.Name,
+			Status:     plan.Provider.Status,
+			Disabled:   e.providerDisabled(plan.Provider),
+			Enabled:    true, // provider node mini-switch is checked in the flat walk
+			Workflow:   plan.Provider.WorkflowEnabled,
+			Models:     plan.ModelSet,
+			ModelPaths: plan.ModelPaths,
+			Paths:      plan.AllowedPaths,
 		}
 		// Bound by ID and by name: nodes carry the stable provider_id and
 		// fall back to the legacy name-only binding. refKey() picks the same
@@ -216,7 +218,7 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 				return result, err
 			}
 		}
-		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, model)
+		return nil, e.noProviderError(model, path)
 	}
 
 	// 无拓扑 legacy 路径
@@ -248,6 +250,9 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 
 	provider, err := e.SelectProvider(model, path)
 	if err != nil {
+		if errors.Is(err, ErrNoProvider) {
+			return nil, e.noProviderError(model, path)
+		}
 		return nil, err
 	}
 	plan, err := e.GetPlan(provider.ID)
@@ -528,12 +533,7 @@ func affinityPlanSupports(plan *ExecutionPlan, model, path string) bool {
 			return false
 		}
 	}
-	if len(plan.AllowedPaths) > 0 {
-		if _, ok := plan.AllowedPaths[path]; !ok {
-			return false
-		}
-	}
-	return true
+	return plan.AllowsPath(model, path)
 }
 
 // hintBaseURL returns the baseURL value the hint's baseURLIndex refers to on
@@ -647,7 +647,7 @@ func (e *Engine) populatePlanWithSlots(db *gorm.DB, plan *ExecutionPlan, chain, 
 	if err := decodeStringList(plan.Provider.ID, plan.Provider.Keys, &plan.Keys, "keys"); err != nil {
 		return err
 	}
-	if err := decodeModelSet(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet); err != nil {
+	if err := decodeModelConfig(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet, &plan.ModelPaths); err != nil {
 		return err
 	}
 	if err := decodeEndpointSet(plan.Provider.ID, plan.Provider.Endpoints, &plan.AllowedPaths); err != nil {

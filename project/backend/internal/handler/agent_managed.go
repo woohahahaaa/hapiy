@@ -75,7 +75,7 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 		}
 		out := make([]option, 0, len(providers))
 		for _, p := range providers {
-			eps := parseProviderEndpoints(p.Endpoints)
+			eps := effectiveProviderEndpoints(p)
 			mods := parseProviderModelNames(p.Models)
 			out = append(out, option{
 				ID: p.ID, Name: p.Name, Status: p.Status,
@@ -1055,8 +1055,10 @@ func managedSourceMarkSuffix(m model.ManagedAgentProvider) string {
 
 // liveProvision splits the system providers referenced by the managed
 // row into live (still in DB) and deleted (stale), then groups live
-// providers by their exact endpoint strings. Providers with no
-// endpoints are ignored for grouping (their models were never synced).
+// providers by their effective endpoint strings (provider-level list when
+// present, else the union of their models' endpoints). Providers with no
+// endpoints at all are ignored for grouping (their models were never
+// synced).
 func liveProvision(ids []string, liveProviders []model.Provider) (map[string][]model.Provider, []string) {
 	want := make(map[string]bool, len(ids))
 	for _, id := range ids {
@@ -1074,7 +1076,7 @@ func liveProvision(ids []string, liveProviders []model.Provider) (map[string][]m
 			stale = append(stale, id)
 			continue
 		}
-		for _, ep := range parseProviderEndpoints(p.Endpoints) {
+		for _, ep := range effectiveProviderEndpoints(p) {
 			if strings.TrimSpace(ep) == "" {
 				continue
 			}
@@ -1372,6 +1374,29 @@ func parseProviderEndpoints(raw string) []string {
 	for _, o := range objs {
 		if strings.TrimSpace(o.PathSuffix) != "" {
 			out = append(out, strings.TrimSpace(o.PathSuffix))
+		}
+	}
+	return out
+}
+
+// effectiveProviderEndpoints returns the endpoint list used for managed-agent
+// grouping and the option table: the legacy provider-level list when it
+// still declares one, else the order-preserving union of its models'
+// endpoints (the new per-model source of truth). Providers with neither
+// have no protocol information and keep being skipped by group derivation.
+func effectiveProviderEndpoints(p model.Provider) []string {
+	if eps := parseProviderEndpoints(p.Endpoints); len(eps) > 0 {
+		return eps
+	}
+	modelEndpoints := parseProviderModelEndpoints(p.Models)
+	var out []string
+	seen := map[string]bool{}
+	for _, name := range parseProviderModelNames(p.Models) {
+		for _, ep := range modelEndpoints[name] {
+			if !seen[ep] {
+				seen[ep] = true
+				out = append(out, ep)
+			}
 		}
 	}
 	return out

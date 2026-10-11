@@ -100,7 +100,7 @@ func (e *Engine) populatePlan(db *gorm.DB, plan *ExecutionPlan) error {
 	if err := decodeStringList(plan.Provider.ID, plan.Provider.Keys, &plan.Keys, "keys"); err != nil {
 		return err
 	}
-	if err := decodeModelSet(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet); err != nil {
+	if err := decodeModelConfig(plan.Provider.ID, plan.Provider.Models, &plan.ModelSet, &plan.ModelPaths); err != nil {
 		return err
 	}
 	if err := decodeEndpointSet(plan.Provider.ID, plan.Provider.Endpoints, &plan.AllowedPaths); err != nil {
@@ -246,25 +246,48 @@ func decodeStringList(providerID, raw string, dst *[]string, field string) error
 	return nil
 }
 
-// decodeModelSet parses the provider Models JSON array (each entry has a
-// "model" string) into a set for O(1) membership tests.
-func decodeModelSet(providerID, raw string, dst *map[string]struct{}) error {
+// decodeModelConfig parses the provider Models JSON array into the model
+// membership set and the per-model endpoint map. Entries without an
+// "endpoints" array (or with an empty one) only land in the set — at match
+// time they fall back to the provider-level whitelist, keeping legacy rows
+// behaviourally identical.
+func decodeModelConfig(providerID, raw string, modelSet *map[string]struct{}, modelPaths *map[string]map[string]struct{}) error {
 	trimmed := jsonOrEmpty(raw)
+	set := map[string]struct{}{}
+	paths := map[string]map[string]struct{}{}
 	if trimmed == "" {
-		*dst = map[string]struct{}{}
+		*modelSet = set
+		*modelPaths = paths
 		return nil
 	}
 	var entries []map[string]interface{}
 	if err := json.Unmarshal([]byte(trimmed), &entries); err != nil {
 		return fmt.Errorf("provider %s: invalid JSON in models: %w", providerID, err)
 	}
-	set := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
-		if name, ok := entry["model"].(string); ok && name != "" {
-			set[name] = struct{}{}
+		name, ok := entry["model"].(string)
+		if !ok || name == "" {
+			continue
+		}
+		set[name] = struct{}{}
+		arr, ok := entry["endpoints"].([]interface{})
+		if !ok {
+			continue
+		}
+		eps := make(map[string]struct{}, len(arr))
+		for _, value := range arr {
+			if s, ok := value.(string); ok {
+				if s = strings.TrimSpace(s); s != "" {
+					eps[s] = struct{}{}
+				}
+			}
+		}
+		if len(eps) > 0 {
+			paths[name] = eps
 		}
 	}
-	*dst = set
+	*modelSet = set
+	*modelPaths = paths
 	return nil
 }
 

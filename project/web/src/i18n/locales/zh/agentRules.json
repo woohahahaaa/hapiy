@@ -46,7 +46,7 @@
     "providerPathPlaceholder": "例如：provider",
     "modelPathLabel": "model gjson 路径",
     "modelPathPlaceholder": "例如：provider.{provider_id}.models",
-    "modelPathHint": "完整 gjson 路径，model 里用 {provider_id} 占位当前 provider 键名",
+    "modelPathHint": "完整 gjson 路径，model 里用 {provider_id} 占位当前 provider 键名；YAML 文件（如 dsh）可写 `#(id==\"xxx\")` 查询段先按 id 定位插件条目",
     "modelsContainerLabel": "模型列表容器格式（models_container）",
     "modelsContainerPlaceholder": "选择格式",
     "containerArray": "数组 [{\"id\": ...}]（openclaw）",

@@ -100,7 +100,10 @@ type ProviderRef struct {
 	Enabled  bool // provider node mini-switch in its slot
 	Workflow bool // master-switch activation (derived from its request entry)
 	Models   map[string]struct{}
-	Paths    map[string]struct{} // supported endpoint paths; empty set = any
+	// ModelPaths maps model name -> declared endpoint paths. A model
+	// missing here falls back to Paths; both empty = any path.
+	ModelPaths map[string]map[string]struct{}
+	Paths      map[string]struct{} // provider-level fallback paths; empty set = any
 }
 
 // refKey returns the identifier a provider node binds to: its stored
@@ -402,7 +405,8 @@ type EligibleProvider struct {
 // provider node reachable from them that can serve the request. Each entry's
 // downstream providers are tagged with the entry's weight. A provider must be
 // enabled (mini-switch), its configured provider must be Status-enabled and
-// match the model, and (when the provider declares paths) the request path.
+// match the model, and (when endpoints are declared for the model or the
+// provider) the request path.
 // ALL eligible providers of a provider slot are returned in display order —
 // the slot's strategy only decides the default pick among them (see
 // PickEligibleProvider); channel affinity is free to reuse any of them.
@@ -532,6 +536,10 @@ func providerSupports(ref ProviderRef, model, path string) bool {
 		if _, ok := ref.Models[model]; !ok {
 			return false
 		}
+	}
+	if modelPaths, ok := ref.ModelPaths[model]; ok && len(modelPaths) > 0 {
+		_, ok := modelPaths[path]
+		return ok
 	}
 	if len(ref.Paths) > 0 {
 		if _, ok := ref.Paths[path]; !ok {

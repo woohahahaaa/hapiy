@@ -142,8 +142,11 @@ func (e *Engine) compilePlan(p *model.Provider) error {
 // SelectProvider selects a provider for the given model (and optional
 // endpoint path) using round-robin with weight. The model membership check
 // uses the pre-parsed ModelSet populated during plan compilation; the path
-// check uses AllowedPaths (empty set = any path). Both filters are O(1)
-// per plan so the loop stays cheap even with many providers.
+// check applies the model-level endpoints first and falls back to the
+// provider-level whitelist (empty set = any path). Both filters are O(1)
+// per plan so the loop stays cheap even with many providers. An explicit
+// whitelist match wins over an unrestricted fallback, which keeps selection
+// deterministic regardless of map iteration order.
 func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error) {
 	e.plansMu.RLock()
 	defer e.plansMu.RUnlock()
@@ -159,10 +162,10 @@ func (e *Engine) SelectProvider(modelName, path string) (*model.Provider, error)
 		if _, ok := plan.ModelSet[modelName]; !ok {
 			continue
 		}
-		if len(plan.AllowedPaths) > 0 {
-			if _, ok := plan.AllowedPaths[path]; !ok {
-				continue
-			}
+		if !plan.AllowsPath(modelName, path) {
+			continue
+		}
+		if plan.pathRestricted(modelName) {
 			return plan.Provider, nil
 		}
 		if fallback == nil {

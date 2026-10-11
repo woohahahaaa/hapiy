@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
@@ -37,6 +37,9 @@ type ProviderFormProps = {
   readonly onUseKeyChange: (next: boolean) => void
   readonly disableStatus: ProviderDisableStatus | null
   readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
+  // Endpoint paths collected from every provider (provider-level legacy
+  // lists + model-level lists); candidates in the per-model endpoint editor.
+  readonly endpointLibrary: readonly string[]
 }
 
 const emptyProvider: ProviderInput = {

@@ -9,6 +9,8 @@
   "AGENT_TYPE_TEMPLATE_NOT_FOUND": "该软件类型没有默认推荐模版",
   "CHECKED_PROVIDER_OR_MODEL_REQUIRED": "请至少勾选一个供应商或模型",
   "CONFIG_NOT_FOUND": "配置不存在",
+  "CONFIG_PARSE_FAILED": "解析配置失败: {{error}}",
+  "CONFIG_SERIALIZE_FAILED": "序列化配置失败: {{error}}",
   "DISABLED_RECORD_NOT_FOUND": "记录不存在",
   "FIELDS_REQUIRED": "fields 不能为空",
   "JUMP_AUTH_TYPE_INVALID": "跳板机认证方式必须是 password 或 key",

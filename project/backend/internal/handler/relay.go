@@ -23,11 +23,47 @@ import (
 )
 
 // i18nMessage localizes the "no usable provider" relay error by the client
-// language. The message is returned verbatim to the caller (the dashboard or
-// an external client) so it must match the active language.
-func i18nMessage(r *http.Request, modelName string) string {
+// language. When dispatch attached a classified reason (model unknown,
+// endpoint unsupported by every provider of the model, or only
+// auto-disabled providers left) the message says exactly that instead of
+// the generic checklist. The message is returned verbatim to the caller
+// (the dashboard or an external client) so it must match the active
+// language.
+func i18nMessage(r *http.Request, modelName string, err error) string {
+	lang := i18n.Lang(r)
+	var noProvider *relay.NoProviderError
+	if errors.As(err, &noProvider) {
+		switch noProvider.Reason {
+		case relay.NoProviderReasonModelUnknown:
+			return i18n.S(
+				lang,
+				fmt.Sprintf("无法为 %s 找到可用供应商：该模型未在任何已启用（开关打开）的供应商的模型列表中声明，请检查模型名（区分大小写）与供应商/工作流开关。", modelName),
+				fmt.Sprintf("No usable provider found for %s: the model is not declared by any enabled provider. Check the model name (case-sensitive) and the provider/workflow switches.", modelName),
+			)
+		case relay.NoProviderReasonPathUnsupported:
+			allowed := strings.Join(noProvider.AllowedPaths, ", ")
+			if allowed == "" {
+				allowed = "—"
+			}
+			return i18n.S(
+				lang,
+				fmt.Sprintf("无法为 %s 找到可用供应商：该模型不支持请求路径 %s（模型声明的 endpoint：%s）。请在供应商页对应模型行补充该 endpoint，或改用模型支持的路径。", modelName, noProvider.Path, allowed),
+				fmt.Sprintf("No usable provider found for %s: the model does not support path %s (declared endpoints: %s). Add the endpoint on the model row in the provider page, or use a supported path.", modelName, noProvider.Path, allowed),
+			)
+		case relay.NoProviderReasonProviderDisabled:
+			names := strings.Join(noProvider.DisabledProviders, ", ")
+			if names == "" {
+				names = "—"
+			}
+			return i18n.S(
+				lang,
+				fmt.Sprintf("无法为 %s 找到可用供应商：支持该请求路径的供应商（%s）已被自动禁用（故障转移中），且没有其他可用供应商。", modelName, names),
+				fmt.Sprintf("No usable provider found for %s: the provider(s) supporting this path (%s) are auto-disabled (failover), and no other provider can serve it.", modelName, names),
+			)
+		}
+	}
 	return i18n.S(
-		i18n.Lang(r),
+		lang,
 		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", modelName),
 		fmt.Sprintf("No usable provider found for %s. Check: model name (case-sensitive), endpoint limits, provider/workflow switches, failover status, and topology wiring.", modelName),
 	)
@@ -122,7 +158,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "", "", "")
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
-					"message": i18nMessage(c.Request, relayReq.Model),
+					"message": i18nMessage(c.Request, relayReq.Model, err),
 					"type":    "service_unavailable",
 				},
 			})
@@ -155,23 +191,12 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			AffinityReuse: affinityReuse,
 		})
 
-		// Endpoint whitelist: an empty endpoints array means unrestricted; a
-		// non-empty one requires an exact pathSuffix match. Malformed config is
-		// treated as empty rather than rejecting every request.
-		var allowed []string
-		if provider.Endpoints != "" {
-			var eps []struct {
-				Name       string `json:"name"`
-				PathSuffix string `json:"pathSuffix"`
-			}
-			if err := json.Unmarshal([]byte(provider.Endpoints), &eps); err == nil {
-				for _, e := range eps {
-					if s := strings.TrimSpace(e.PathSuffix); s != "" {
-						allowed = append(allowed, s)
-					}
-				}
-			}
-		}
+		// Endpoint whitelist: the model's own endpoint list wins when
+		// declared; a model without one falls back to the provider-level
+		// endpoints; both empty means unrestricted. Dispatch already
+		// applies the same rule — this post-check mirrors it so a
+		// mismatched path can never reach the upstream.
+		allowed := relay.PathsForModel(provider, relayReq.Model)
 		if len(allowed) > 0 {
 			matched := false
 			for _, p := range allowed {
@@ -181,7 +206,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				}
 			}
 			if !matched {
-				err := fmt.Errorf("endpoint not allowed: %s (allowed: %s)", relayReq.Path, strings.Join(allowed, ", "))
+				err := fmt.Errorf("endpoint not allowed for model %s: %s (allowed: %s)", relayReq.Model, relayReq.Path, strings.Join(allowed, ", "))
 				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "", "", "")
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error": gin.H{
