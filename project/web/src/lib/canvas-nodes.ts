@@ -11,6 +11,7 @@ import {
 } from '@/lib/flat-topology'
 import { SLOT_LABELS, type SlotEntry } from '@/components/node/slot/items'
 import { i18n } from '@/i18n/i18n'
+import { collectDeclaredEndpoints } from '@/lib/provider-endpoints'
 
 // Default entry labels in both languages: an entry keeps a user-renamed name,
 // and the built-in names are treated as "unnamed" when deriving the display
@@ -138,7 +139,7 @@ export function buildCanvasNodes(canvas: FlatCanvas, ctx: CanvasNodeContext): No
             baseURLCount: provider?.baseUrls.length ?? 0,
             keyCount: provider?.keys.length ?? 0,
             modelCount: provider?.models.length ?? 0,
-            endpointCount: provider?.endpoints.length ?? 0,
+            endpointCount: provider ? collectDeclaredEndpoints(provider).length : 0,
             enabled: p.enabled,
             providerStatus: provider?.status ?? false,
             autoDisabled: provider?.autoDisabled ?? false,

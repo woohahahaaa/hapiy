@@ -223,6 +223,15 @@
     "invalidTheme": "Could not parse a theme from that URL",
     "fetchFailed": "Failed to fetch theme"
   },
+  "reverseProxy": {
+    "title": "Reverse-proxy domains",
+    "description": "Domains added here are allowed to access the development server. Restart Vite after changing them.",
+    "inputLabel": "Reverse-proxy domain",
+    "placeholder": "For example hapiy.example.com",
+    "add": "Add",
+    "remove": "Remove",
+    "saved": "Reverse-proxy domain saved"
+  },
   "debug": {
     "pageDescription": "Debug and troubleshooting switches",
     "nodeInfoTitle": "Node Info Debug",

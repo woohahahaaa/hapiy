@@ -655,7 +655,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		for _, p := range members {
 			mv.ProviderNames = append(mv.ProviderNames, p.Name)
 		}
-		mv.ModelNames = uniqueSorted(membersModelNames(members))
+		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, stored.Endpoint))
 		mv.ModelCount = len(mv.ModelNames)
 		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
 		mv.Generated = gen
@@ -743,7 +743,7 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 // (opencode-style). Empty value falls back to "object" so legacy rules
 // without the field keep their old behaviour.
 func buildManagedModels(container string, members []model.Provider, modelRecs []model.AgentRecommendation, group model.ManagedAgentGroup, mif model.AgentModelInfoFieldPaths, mdModels []modelsDevModel) any {
-	names := uniqueSorted(membersModelNames(members))
+	names := uniqueSorted(membersModelNamesForEndpoint(members, group.Endpoint))
 	if strings.EqualFold(strings.TrimSpace(container), "array") {
 		out := make([]map[string]any, 0, len(names))
 		for _, name := range names {
@@ -1090,6 +1090,27 @@ func membersModelNames(members []model.Provider) []string {
 	var out []string
 	for _, p := range members {
 		out = append(out, parseProviderModelNames(p.Models)...)
+	}
+	return out
+}
+
+func membersModelNamesForEndpoint(members []model.Provider, endpoint string) []string {
+	var out []string
+	for _, p := range members {
+		byModel := parseProviderModelEndpoints(p.Models)
+		for _, name := range parseProviderModelNames(p.Models) {
+			paths := byModel[name]
+			if len(paths) == 0 {
+				out = append(out, name)
+				continue
+			}
+			for _, path := range paths {
+				if path == endpoint {
+					out = append(out, name)
+					break
+				}
+			}
+		}
 	}
 	return out
 }

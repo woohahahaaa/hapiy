@@ -110,6 +110,9 @@ func runServe() {
 	if err := model.AutoMigrate(db); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
+	if err := model.MigrateProviderEndpoints(db); err != nil {
+		log.Fatalf("Failed to migrate model endpoints: %v", err)
+	}
 
 	// Rename the legacy "故障转移" event-source mark to "故障转移" so
 	// dashboard filters keep grouping old rows under the current label.

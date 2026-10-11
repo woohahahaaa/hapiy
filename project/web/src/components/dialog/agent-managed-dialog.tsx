@@ -210,8 +210,6 @@ export function ManagedProviderDialog({
           // 模型设了明确 endpoint 才进对应组；空（不限）归入供应商第一个 endpoint
           if (modelEps.length > 0) {
             if (!modelEps.includes(ep)) continue
-          } else if (ep !== opt.endpoints[0]) {
-            continue
           }
           if (!cur.models.includes(m)) cur.models.push(m)
         }
@@ -842,4 +840,3 @@ function ProviderMultiSelect({
     </Popover>
   )
 }
-

@@ -178,6 +178,9 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		if rule.FallbackProvider == "" {
 			fallbackPlan = e.resolveTopologyFallbackPlan(req, plan)
 		}
+		if fallbackPlan != nil && !affinityPlanSupports(fallbackPlan, req.Model, req.Path) {
+			fallbackPlan = nil
+		}
 		if fallbackPlan != nil {
 			if resp != nil && resp.Body != nil {
 				_, _ = io.Copy(io.Discard, resp.Body)
@@ -194,6 +197,9 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			}
 			return fbResp, fbErr
 		}
+	}
+	if dimension == model.FailoverDimensionProvider {
+		return resp, fmt.Errorf("upstream failed for model %s at %s; no eligible fallback provider supports this model and endpoint: %w", req.Model, req.Path, err)
 	}
 	return resp, err
 }

@@ -58,15 +58,15 @@
     "note": "Note",
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
-    "endpointPlaceholder": "e.g. /chat/completions or /responses",
+    "endpointPlaceholder": "e.g. /v1/chat/completions or /v1/responses",
     "deleteEndpointAria": "Delete Endpoint",
-    "endpointHint": "Paths the request is allowed to access (must start with /). Leave empty to allow any request path.",
+    "endpointHint": "Full request paths allowed for this model; multiple paths supported. Empty means unrestricted. Click a previous path to add it.",
     "modelNamePlaceholder": "Model name"
   },
   "price": {
     "columnPrice": "Price",
     "columnEndpoint": "Endpoint",
-    "endpointUnset": "Not set",
+    "endpointUnset": "Any path",
     "modePrices": "Set prices individually",
     "modeReference": "Sync from models.dev",
     "modeUnset": "Not set",

@@ -1,9 +1,25 @@
 /// <reference types="vitest/config" />
 import path from "node:path"
+import { execFileSync } from "node:child_process"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { flowLogMiddleware } from "./flow-log-middleware"
+
+function configuredReverseProxyDomains(): string[] {
+  const dbPath = process.env.HAPIY_DB_PATH ?? path.resolve(__dirname, "../backend/hapiy.db")
+  try {
+    const raw = execFileSync("sqlite3", ["-json", dbPath, "SELECT value FROM settings WHERE key = 'reverse_proxy_domains' LIMIT 1;"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+    const value = JSON.parse(raw.trim() || "[]")[0]?.value
+    const domains = JSON.parse(typeof value === "string" ? value : "[]")
+    return Array.isArray(domains) ? domains.filter((domain): domain is string => typeof domain === "string") : []
+  } catch {
+    return []
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -17,7 +33,7 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 18009,
     strictPort: true,
-    allowedHosts: ["macs1.example.com", "hapiying.example.com"],
+    allowedHosts: ["macs1.example.com", "hapiying.example.com", ...configuredReverseProxyDomains()],
     proxy: {
       // Agent 接入走 /proxy/__来源 前缀（来源标记），转发到后端 API。
       // 例：/proxy/__opencodetest/chat/completions -> /v1/chat/completions
