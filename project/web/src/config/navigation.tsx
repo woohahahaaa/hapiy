@@ -74,6 +74,7 @@ export const navigation: NavItem[] = [
       { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
       { id: 'backup', labelKey: 'nav.backup', href: '/settings/backup' },
       { id: 'theme', labelKey: 'nav.theme', href: '/settings/theme' },
+      { id: 'reverse-proxy', labelKey: 'nav.reverseProxy', href: '/settings/reverse-proxy' },
       // Debug 只在 dev 模式（Vite 开发服务器）显示；生产构建里整项隐藏。
       ...(import.meta.env.DEV
         ? [{ id: 'debug', labelKey: 'nav.debug', href: '/settings/debug' }]

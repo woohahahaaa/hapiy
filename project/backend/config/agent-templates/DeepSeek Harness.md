@@ -95,11 +95,11 @@
 
 模型页「API 协议」只有三种，一个 provider 只能选一种；网关同时提供多种协议时拆成两个 provider：
 
-| 协议 | `api` 取值 | endpoint 关键词归类 |
+| 协议 | `api` 取值 | endpoint 匹配词（含 `*` 通配，不含 `*` 精确，忽略大小写） |
 |------|-----------|--------------------|
-| OpenAI Chat Completions | `openai-completions` | `completions` / `chat/comple` / `/v1/chat` |
-| OpenAI Responses | `openai-responses` | `responses` |
-| Anthropic Messages | `anthropic-messages` | `chat/message` / `/v1/message` / `messages` |
+| OpenAI Chat Completions | `openai-completions` | `*completion*` |
+| OpenAI Responses | `openai-responses` | `*responses*` |
+| Anthropic Messages | `anthropic-messages` | `*message*` |
 
 Anthropic Messages 官方要求每次请求带 `max_tokens`，所以该协议下 `maxTokens` 必填——模板里已按协议标注。
 

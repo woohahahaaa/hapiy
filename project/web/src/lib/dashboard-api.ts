@@ -799,7 +799,9 @@ export type AgentProtocolCondition = {
 
 // AgentProtocol — one "请求协议 (SDK)" block in a rule. Conditions are
 // ORed provider-level gjson paths; EndpointTags is the required fixed
-// "根据 endpoint 来判断" field.
+// "根据 endpoint 来判断" field: each tag is matched case-insensitively
+// against the endpoint — a tag containing "*" is a glob, one without "*"
+// must equal the endpoint exactly.
 export type AgentProtocol = {
   readonly name: string
   readonly conditions: readonly AgentProtocolCondition[]

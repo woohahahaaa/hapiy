@@ -22,7 +22,7 @@
 //         recommended=推荐值(null=推荐不填) / required=是否必填 / description=说明
 //         op/sep/values=值写法（raw/bool/first/join；values 为允许值白名单）
 // protocols       Endpoint 规则：按请求协议 / SDK 区分
-//   每块：name=规则名称(必填) / conditions=命中条件 / endpoint_tags=归纳范围关键词(必填，任一命中即应用)
+//   每块：name=规则名称(必填) / conditions=命中条件 / endpoint_tags=归纳范围匹配词(必填；含 * 通配、不含 * 精确，忽略大小写，任一命中即应用)
 //         recommendations=该 endpoint 的字段推荐表（行说明同上）
 // model_info_fields  模型信息字段的写入方式（string 或 {path,op,sep,values,action}）
 // ───────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@
       "name": "OpenAI Responses API",
       "conditions": null,
       "endpoint_tags": [
-        "responses"
+        "*responses*"
       ],
       "recommendations": [
         {
@@ -123,9 +123,7 @@
       "name": "Anthropic Messages API",
       "conditions": null,
       "endpoint_tags": [
-        "chat/message",
-        "/v1/message",
-        "messages"
+        "*message*"
       ],
       "recommendations": [
         {
@@ -148,9 +146,7 @@
       "name": "OpenAI 兼容 Chat Completions",
       "conditions": null,
       "endpoint_tags": [
-        "completions",
-        "chat/comple",
-        "/v1/chat"
+        "*completion*"
       ],
       "recommendations": [
         {

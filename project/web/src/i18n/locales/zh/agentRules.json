@@ -133,13 +133,13 @@
   "endpointRules": {
     "title": "Endpoint 规则（按 SDK 区分，一个规则一张卡片）",
     "add": "添加 Endpoint 规则",
-    "hint": "每个 endpoint 一条规则：归纳范围填 endpoint 关键词（如 completions / responses / chat/message，逗号分隔），任一关键词命中该 endpoint 的子串即应用本规则，顺序即优先级。私有配置用「值 + 写法」表格：每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）—— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={\"@ai-sdk/openai-compatible\"}+、必填勾上。需要直接改 JSON 时，用弹窗左下角「切换到 JSON 编辑模式」。",
+    "hint": "每个 endpoint 一条规则：归纳范围填 endpoint 匹配词（逗号分隔）。含 * 的按通配匹配（* 匹配任意字符，忽略大小写，如 *completion* 同时命中 /v1/chat/completions 和不带 /v1 的 /chat/completion）；不含 * 的须与 endpoint 完全相等（如 responses）。任一匹配即应用本规则，顺序即优先级。私有配置用「值 + 写法」表格：每行一个推荐字段（路径 / 落在 / 推荐操作 / 推荐值 / op / sep / 允许值白名单），scope（provider|model）/ required（必填）/ recommended（推荐值，null=推荐不填）—— 如 NPM 用哪个 SDK 就填 key=npm、推荐值={\"@ai-sdk/openai-compatible\"}+、必填勾上。需要直接改 JSON 时，用弹窗左下角「切换到 JSON 编辑模式」。",
     "empty": "尚未添加任何 Endpoint 规则；点击右上「添加 Endpoint 规则」新建。",
     "index": "Endpoint 规则 {{n}}",
     "nameLabel": "规则名称",
     "namePlaceholder": "例如：OpenAI 兼容 Chat Completions",
-    "tagsLabel": "归纳范围（endpoint 关键词，逗号分隔）",
-    "tagsPlaceholder": "例如：completions, /v1/chat, responses, chat/message",
+    "tagsLabel": "归纳范围（endpoint 匹配词，逗号分隔；含 * 通配，不含 * 精确）",
+    "tagsPlaceholder": "例如：*completion*, *responses*, *message*",
     "privateLabel": "私有配置（该 endpoint 的字段推荐表）"
   },
   "match": {

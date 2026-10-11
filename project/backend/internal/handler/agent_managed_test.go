@@ -915,18 +915,18 @@ func TestManagedProviderNameConflict(t *testing.T) {
 	}
 }
 
-// TestMatchProtocolByEndpointKeywords covers the substring-keyword → npm
-// classification: any protocol keyword contained in the endpoint wins,
-// and more specific keywords take priority by order.
+// TestMatchProtocolByEndpointKeywords covers the endpoint_tags → npm
+// classification: wildcard tags ("*completion*") cover /v1-prefixed and
+// bare variants alike, and more specific keywords take priority by order.
 func TestMatchProtocolByEndpointKeywords(t *testing.T) {
 	protocols := []model.AgentProtocol{
-		{Name: "responses", EndpointTags: []string{"responses"}, Recommendations: []model.AgentRecommendation{
+		{Name: "responses", EndpointTags: []string{"*responses*"}, Recommendations: []model.AgentRecommendation{
 			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/openai"},
 		}},
-		{Name: "anthropic", EndpointTags: []string{"chat/message", "messages"}, Recommendations: []model.AgentRecommendation{
+		{Name: "anthropic", EndpointTags: []string{"*message*"}, Recommendations: []model.AgentRecommendation{
 			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/anthropic"},
 		}},
-		{Name: "compat", EndpointTags: []string{"completions", "/v1/chat"}, Recommendations: []model.AgentRecommendation{
+		{Name: "compat", EndpointTags: []string{"*completion*"}, Recommendations: []model.AgentRecommendation{
 			{Scope: "provider", Key: "npm", Recommended: "@ai-sdk/openai-compatible"},
 		}},
 	}
@@ -936,6 +936,8 @@ func TestMatchProtocolByEndpointKeywords(t *testing.T) {
 	}{
 		{"/v1/chat/completions", "@ai-sdk/openai-compatible"},
 		{"/proxy/v1/chat/completions", "@ai-sdk/openai-compatible"},
+		{"/chat/completion", "@ai-sdk/openai-compatible"},
+		{"/V1/Chat/Completions", "@ai-sdk/openai-compatible"},
 		{"/v1/responses", "@ai-sdk/openai"},
 		{"/v1/messages", "@ai-sdk/anthropic"},
 		{"/v1/chat/message", "@ai-sdk/anthropic"},
@@ -954,6 +956,35 @@ func TestMatchProtocolByEndpointKeywords(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Fatalf("endpoint %s: want npm %q, got %q", tc.endpoint, tc.want, got)
+		}
+	}
+}
+
+// TestMatchEndpointTagExactVsGlob pins the two matching modes: a tag
+// without "*" must equal the whole endpoint (case-insensitive), a tag with
+// "*" is a wildcard glob.
+func TestMatchEndpointTagExactVsGlob(t *testing.T) {
+	cases := []struct {
+		endpoint string
+		tag      string
+		want     bool
+	}{
+		{"responses", "responses", true},
+		{"RESPONSES", "responses", true},
+		{"/v1/responses", "responses", false}, // no star → exact, no substring
+		{"/v1/responses", "*responses*", true},
+		{"/v1/chat/completions", "*completion*", true},
+		{"/chat/completion", "*completion*", true},
+		{"/v1/chat/completion", "*completion", true},
+		{"/v1/chat/completions", "*completion", false}, // trailing * anchors the end
+		{"/v1/completions", "completion*", false},
+		{"/v1/ollama/api/chat", "*ollama*", true},
+		{"", "*completion*", false},
+		{"/v1/responses", "", false},
+	}
+	for _, tc := range cases {
+		if got := matchEndpointTag(tc.endpoint, tc.tag); got != tc.want {
+			t.Fatalf("endpoint %q tag %q: want %v, got %v", tc.endpoint, tc.tag, tc.want, got)
 		}
 	}
 }
@@ -981,7 +1012,7 @@ func TestManagedOpenclawEndpointApiClassification(t *testing.T) {
 		{"/v1/chat/message", "anthropic-messages"},
 		{"/anthropic-messages", "anthropic-messages"},
 		{"/v1/chat/completions", "openai-completions"},
-		{"/proxy/v1/chat", "openai-completions"},
+		{"/proxy/v1/chat/completions", "openai-completions"},
 	}
 	for _, tc := range cases {
 		p := matchProtocolByEndpoint(tc.endpoint, tmpl.Protocols)
@@ -1002,7 +1033,8 @@ func TestManagedOpenclawEndpointApiClassification(t *testing.T) {
 	var anthropic *model.AgentProtocol
 	for i := range tmpl.Protocols {
 		for _, tag := range tmpl.Protocols[i].EndpointTags {
-			if tag != "" && (strings.Contains("anthropic-messages", tag) || strings.Contains("chat/message", tag)) {
+			bare := strings.Trim(tag, "*")
+			if bare != "" && (strings.Contains("anthropic-messages", bare) || strings.Contains("chat/message", bare)) {
 				anthropic = &tmpl.Protocols[i]
 				break
 			}

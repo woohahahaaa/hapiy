@@ -88,6 +88,7 @@
     "debug": "Debug",
     "backup": "数据备份",
     "theme": "主题配置",
+    "reverseProxy": "反代域名",
     "profile": "用户资料",
     "help": "帮助文档",
     "section": "导航",

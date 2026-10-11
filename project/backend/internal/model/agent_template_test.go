@@ -73,7 +73,8 @@ func TestEveryAgentProtocolsMatchSdkDriver(t *testing.T) {
 			}
 			isAnthropic := false
 			for _, tag := range p.EndpointTags {
-				if strings.Contains("anthropic-messages", tag) || strings.Contains("chat/message", tag) || tag == "messages" {
+				bare := strings.Trim(tag, "*")
+				if strings.Contains("anthropic-messages", bare) || strings.Contains("chat/message", bare) {
 					isAnthropic = true
 				}
 			}

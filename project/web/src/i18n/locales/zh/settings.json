@@ -225,6 +225,7 @@
   },
   "reverseProxy": {
     "title": "反代域名",
+    "pageDescription": "配置允许通过 Vite 开发服务器访问的反代域名。",
     "description": "添加后允许通过这些域名访问开发服务器。修改后请重启 Vite 服务。",
     "inputLabel": "反代域名",
     "placeholder": "例如 hapiy.example.com",

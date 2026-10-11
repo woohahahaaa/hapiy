@@ -15,6 +15,7 @@ import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
 import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
 import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
 import { ThemeSettingsPage } from '@/pages/ThemeSettingsPage'
+import { ReverseProxySettingsPage } from '@/pages/ReverseProxySettingsPage'
 import { BackupSettingsPage } from '@/pages/BackupSettingsPage'
 import { OtherSettingsPage } from '@/pages/OtherSettingsPage'
 import { TokenUsageSettingsPage } from '@/pages/TokenUsageSettingsPage'
@@ -69,6 +70,7 @@ function App() {
                     )}
                     <Route path="/settings/backup" element={<BackupSettingsPage />} />
                     <Route path="/settings/theme" element={<ThemeSettingsPage />} />
+                    <Route path="/settings/reverse-proxy" element={<ReverseProxySettingsPage />} />
                     <Route path="/settings/other" element={<OtherSettingsPage />} />
                     <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />

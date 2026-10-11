@@ -71,25 +71,28 @@ function CodeSurface({ value, onChange, readOnly }: {
     const textarea = textareaRef.current
     if (!textarea) return
     if (gutterRef.current) gutterRef.current.scrollTop = textarea.scrollTop
-    if (backdropRef.current) backdropRef.current.scrollTop = textarea.scrollTop
+    if (backdropRef.current) {
+      backdropRef.current.scrollTop = textarea.scrollTop
+      backdropRef.current.scrollLeft = textarea.scrollLeft
+    }
   }
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+    <div className="flex min-h-0 flex-1 overflow-hidden font-mono text-xs leading-relaxed">
       <div
         ref={gutterRef}
         aria-hidden
-        className="flex w-14 shrink-0 select-none flex-col overflow-hidden border-r border-border-subtle bg-muted/40 text-right text-muted-foreground/70"
+        className="w-14 shrink-0 select-none overflow-hidden border-r border-border-subtle bg-muted/40 py-3 text-right text-muted-foreground/70"
       >
         {lines.map((_, index) => (
-          <div key={index} className="flex-1 whitespace-nowrap pl-2 pr-2 pt-3 leading-relaxed tabular-nums">
+          <div key={index} className="whitespace-nowrap px-2 leading-relaxed tabular-nums">
             {index + 1}
           </div>
         ))}
       </div>
       <div className="relative min-w-0 flex-1 overflow-hidden">
         {readOnly ? (
-          <pre className={cn('absolute inset-0 m-0 overflow-auto p-3', isJson ? undefined : 'text-foreground')}>
+          <pre onScroll={(event) => { if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop }} className={cn('absolute inset-0 m-0 overflow-auto p-3 font-mono text-xs leading-relaxed whitespace-pre', isJson ? undefined : 'text-foreground')}>
             {isJson ? <JsonTokens text={value} /> : value}
           </pre>
         ) : (
@@ -97,18 +100,18 @@ function CodeSurface({ value, onChange, readOnly }: {
             <pre
               ref={backdropRef}
               aria-hidden
-              className={cn('pointer-events-none absolute inset-0 m-0 overflow-hidden p-3', isJson ? 'text-transparent' : 'text-foreground')}
+              className={cn('pointer-events-none absolute inset-0 m-0 overflow-hidden p-3 font-mono text-xs leading-relaxed whitespace-pre', isJson ? 'text-transparent' : 'text-foreground')}
             >
               {isJson ? <JsonTokens text={value} /> : value}
             </pre>
             <textarea
               ref={textareaRef}
-              className="absolute inset-0 h-full w-full resize-none overflow-auto bg-transparent p-3 text-transparent caret-foreground outline-none"
+              className="absolute inset-0 h-full w-full resize-none overflow-auto border-0 bg-transparent p-3 font-mono text-xs leading-relaxed whitespace-pre text-transparent caret-foreground outline-none"
               value={value}
               onChange={(event) => onChange(event.target.value)}
               onScroll={syncScroll}
               spellCheck={false}
-              wrap="soft"
+              wrap="off"
               readOnly={readOnly}
               aria-label={t('codeEditor.codeAria')}
             />

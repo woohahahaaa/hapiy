@@ -225,6 +225,7 @@
   },
   "reverseProxy": {
     "title": "Reverse-proxy domains",
+    "pageDescription": "Configure the reverse-proxy domains allowed to access the Vite development server.",
     "description": "Domains added here are allowed to access the development server. Restart Vite after changing them.",
     "inputLabel": "Reverse-proxy domain",
     "placeholder": "For example hapiy.example.com",

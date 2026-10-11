@@ -53,7 +53,6 @@ type ThemeRow = {
 }
 
 const PREVIEW_KEYS = ['--background', '--foreground', '--primary', '--accent'] as const
-const REVERSE_PROXY_DOMAINS_KEY = 'reverse_proxy_domains'
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof DashboardApiError) return err.message
@@ -84,24 +83,9 @@ export function ThemeSettingsPage() {
   const [installing, setInstalling] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<InstalledTheme | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [reverseProxyDomains, setReverseProxyDomains] = useState<string[]>([])
-  const [newReverseProxyDomain, setNewReverseProxyDomain] = useState('')
 
   const runLoad = useCallback(() => {
-    return Promise.all([loadThemeState(), dashboardApi.getSettings()])
-      .then(([, settings]) => {
-        const raw = settings.find((setting) => setting.key === REVERSE_PROXY_DOMAINS_KEY)?.value
-        try {
-          const parsed: unknown = raw ? JSON.parse(raw) : []
-          setReverseProxyDomains(
-            Array.isArray(parsed)
-              ? parsed.filter((domain): domain is string => typeof domain === 'string')
-              : [],
-          )
-        } catch {
-          setReverseProxyDomains([])
-        }
-      })
+    return loadThemeState()
       .then(() => setState({ kind: 'ready' }))
       .catch((err) => setState({ kind: 'error', message: toErrorMessage(err) }))
   }, [])
@@ -174,26 +158,6 @@ export function ThemeSettingsPage() {
     } finally {
       setDeleting(false)
     }
-  }
-
-  const saveReverseProxyDomains = async (domains: string[]): Promise<boolean> => {
-    try {
-      await dashboardApi.updateSetting(REVERSE_PROXY_DOMAINS_KEY, JSON.stringify(domains))
-      setReverseProxyDomains(domains)
-      toast(t('reverseProxy.saved'))
-      return true
-    } catch (err) {
-      toast.error(toErrorMessage(err))
-      return false
-    }
-  }
-
-  const handleAddReverseProxyDomain = () => {
-    const domain = newReverseProxyDomain.trim()
-    if (domain === '' || reverseProxyDomains.includes(domain)) return
-    void saveReverseProxyDomains([...reverseProxyDomains, domain]).then((saved) => {
-      if (saved) setNewReverseProxyDomain('')
-    })
   }
 
   return (
@@ -333,46 +297,6 @@ export function ThemeSettingsPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AppIcon name="link" size={16} /> {t('reverseProxy.title')}
-                </CardTitle>
-                <CardDescription>{t('reverseProxy.description')}</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <div className="flex gap-2">
-                  <Input
-                    value={newReverseProxyDomain}
-                    onChange={(event) => setNewReverseProxyDomain(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') handleAddReverseProxyDomain()
-                    }}
-                    placeholder={t('reverseProxy.placeholder')}
-                    aria-label={t('reverseProxy.inputLabel')}
-                  />
-                  <Button variant="outline" onClick={handleAddReverseProxyDomain}>
-                    <AppIcon name="add" data-icon="inline-start" /> {t('reverseProxy.add')}
-                  </Button>
-                </div>
-                {reverseProxyDomains.length > 0 && (
-                  <div className="flex flex-col gap-2">
-                    {reverseProxyDomains.map((domain) => (
-                      <div key={domain} className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2 text-sm">
-                        <span className="break-all">{domain}</span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void saveReverseProxyDomains(reverseProxyDomains.filter((item) => item !== domain))}
-                        >
-                          {t('reverseProxy.remove')}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
           </>
         )}
       </div>

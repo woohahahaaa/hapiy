@@ -563,7 +563,7 @@ function buildDialogDocJsonc(doc: RuleDialogDoc): string {
     '//   每个协议块：',
     '//     name              规则名称（必填）',
     '//     conditions        命中条件（OR 关系；field + op + value）',
-    '//     endpoint_tags     归纳范围关键词（必填；任一关键词命中 endpoint 即应用本规则，顺序即优先级）',
+    '//     endpoint_tags     归纳范围匹配词（必填；含 * 通配、不含 * 精确，忽略大小写；任一命中即应用本规则，顺序即优先级）',
     '//     fields            该 endpoint 的字段推荐表（数组，行说明见下）',
     '//',
     '// 字段推荐表每行（common / protocols[].fields 通用）：',

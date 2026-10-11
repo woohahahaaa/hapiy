@@ -868,14 +868,55 @@ func deleteDottedValue(m map[string]any, path string) {
 	}
 }
 
-// matchProtocolByEndpoint returns the first protocol whose 词库里任一
-// endpoint 关键词是 endpoint 的子串（包含即命中，例如关键词
-// "completions" 命中 "/v1/chat/completions"）。
+// matchEndpointTag reports whether one endpoint_tags entry matches an
+// endpoint. A tag containing "*" is a case-insensitive glob where "*"
+// matches any run of characters (e.g. "*completion*" hits both
+// "/v1/chat/completions" and "/chat/completion"); a tag without "*" must
+// equal the whole endpoint case-insensitively. This keeps precise tags
+// ("responses") exact while letting rules cover /v1-prefixed and bare
+// variants with one wildcard.
+func matchEndpointTag(endpoint, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return false
+	}
+	endpoint = strings.ToLower(strings.TrimSpace(endpoint))
+	tag = strings.ToLower(tag)
+	if !strings.Contains(tag, "*") {
+		return endpoint == tag
+	}
+	parts := strings.Split(tag, "*")
+	pos := 0
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		if i == 0 {
+			if !strings.HasPrefix(endpoint[pos:], part) {
+				return false
+			}
+			pos += len(part)
+			continue
+		}
+		j := strings.Index(endpoint[pos:], part)
+		if j < 0 {
+			return false
+		}
+		pos += j + len(part)
+	}
+	if last := parts[len(parts)-1]; last != "" {
+		return strings.HasSuffix(endpoint, last)
+	}
+	return true
+}
+
+// matchProtocolByEndpoint returns the first protocol with an endpoint_tags
+// entry matching endpoint (see matchEndpointTag). Order is priority, so
+// more specific tags must come first.
 func matchProtocolByEndpoint(endpoint string, protocols []model.AgentProtocol) *model.AgentProtocol {
 	for i := range protocols {
 		for _, tag := range protocols[i].EndpointTags {
-			tag = strings.TrimSpace(tag)
-			if tag != "" && strings.Contains(endpoint, tag) {
+			if matchEndpointTag(endpoint, tag) {
 				return &protocols[i]
 			}
 		}

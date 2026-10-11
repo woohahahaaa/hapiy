@@ -1,13 +1,14 @@
 /// <reference types="vitest/config" />
 import path from "node:path"
 import { execFileSync } from "node:child_process"
+import os from "node:os"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { flowLogMiddleware } from "./flow-log-middleware"
 
 function configuredReverseProxyDomains(): string[] {
-  const dbPath = process.env.HAPIY_DB_PATH ?? path.resolve(__dirname, "../backend/hapiy.db")
+  const dbPath = process.env.HAPIY_DB_PATH ?? path.join(os.homedir(), ".hapiy", "hapiy.db")
   try {
     const raw = execFileSync("sqlite3", ["-json", dbPath, "SELECT value FROM settings WHERE key = 'reverse_proxy_domains' LIMIT 1;"], {
       encoding: "utf8",
@@ -15,7 +16,11 @@ function configuredReverseProxyDomains(): string[] {
     })
     const value = JSON.parse(raw.trim() || "[]")[0]?.value
     const domains = JSON.parse(typeof value === "string" ? value : "[]")
-    return Array.isArray(domains) ? domains.filter((domain): domain is string => typeof domain === "string") : []
+    return Array.isArray(domains)
+      ? domains
+          .filter((domain): domain is string => typeof domain === "string")
+          .map((domain) => (domain.startsWith("*.") ? `.${domain.slice(2)}` : domain))
+      : []
   } catch {
     return []
   }

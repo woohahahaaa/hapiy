@@ -365,11 +365,13 @@ type AgentProtocolCondition struct {
 // AgentProtocol — one "请求协议 (SDK)" block of an agent-type rule.
 // Name is free text. The block applies when ANY of its Conditions match
 // the provider's config fields. EndpointTags is the fixed "根据 endpoint
-// 来判断" field: every tag is a keyword matched as a substring of the
-// model endpoint (e.g. "completions" hits "/v1/chat/completions",
-// "responses" hits "/v1/responses"); at least one tag is required.
-// Recommendations only take effect when the protocol matches,
-// and override/supplement the rule's common recommendations.
+// 来判断" field: each tag is matched case-insensitively against the model
+// endpoint — a tag containing "*" is a glob ("*completion*" hits both
+// "/v1/chat/completions" and "/chat/completion"), a tag without "*" must
+// equal the endpoint exactly (e.g. "responses" hits only "responses").
+// At least one tag is required. Recommendations only take effect when the
+// protocol matches, and override/supplement the rule's common
+// recommendations.
 type AgentProtocol struct {
 	Name            string                   `json:"name"`
 	Conditions      []AgentProtocolCondition `json:"conditions"`
@@ -851,9 +853,9 @@ var builtinAgentRules = []struct {
 				Values: []string{"none", "minimal", "low", "medium", "high", "xhigh"},
 			},
 		},
-		// npm（AI SDK 适配器包）由 endpoint 关键词自动归类：endpoint 是子串
-		// 包含任一关键词即命中该协议，从而拿到对应的 npm 推荐值。顺序即
-		// 优先级 —— 关键词越具体越靠前，避免误命中。
+		// npm（AI SDK 适配器包）由 endpoint 匹配词自动归类：含 * 的标签按通配
+		// 匹配、不含 * 的须完全相等（均忽略大小写），任一命中即拿到该协议的
+		// npm 推荐值。顺序即优先级 —— 匹配词越具体越靠前，避免误命中。
 		Protocols: opencodeProtocols,
 	},
 	{
@@ -1149,19 +1151,21 @@ var opencodeRecommendations = []AgentRecommendation{
 }
 
 // opencodeProtocols 按 endpoint 关键词把规范化 provider 归入对应的 AI SDK。
-// 匹配为子串包含：endpoint 里含任一关键词即命中该协议的 npm 推荐值。
-// 顺序即优先级 —— 具体关键词放前面避免误命中。
+// endpoint_tags 匹配：含 * 的标签按通配匹配（* 匹配任意字符，忽略大小写），
+// 不含 * 的标签须与 endpoint 完全相等；任一标签命中即应用该协议的 npm 推荐值。
+// 顺序即优先级 —— 具体关键词放前面避免误命中。模板统一用 *responses* /
+// *message* / *completion* 覆盖带 /v1 与不带的两种写法。
 var opencodeProtocols = []AgentProtocol{
 	{
 		Name:         "OpenAI Responses API",
-		EndpointTags: []string{"responses"},
+		EndpointTags: []string{"*responses*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "npm", Description: "Responses API 使用 OpenAI SDK", Recommended: "@ai-sdk/openai"},
 		},
 	},
 	{
 		Name:         "Anthropic Messages API",
-		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		EndpointTags: []string{"*message*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "npm", Description: "Messages API 使用 Anthropic SDK", Recommended: "@ai-sdk/anthropic"},
 			// Anthropic Messages API 官方要求每次请求带 max_tokens，对应
@@ -1171,7 +1175,7 @@ var opencodeProtocols = []AgentProtocol{
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
-		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		EndpointTags: []string{"*completion*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "npm", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@ai-sdk/openai-compatible"},
 		},
@@ -1196,14 +1200,14 @@ var opencodeV2Recommendations = []AgentRecommendation{
 var opencodeV2Protocols = []AgentProtocol{
 	{
 		Name:         "OpenAI Responses API",
-		EndpointTags: []string{"responses"},
+		EndpointTags: []string{"*responses*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "package", Description: "Responses API 使用 OpenAI SDK", Recommended: "@opencode/ai/providers/openai"},
 		},
 	},
 	{
 		Name:         "Anthropic Messages API",
-		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		EndpointTags: []string{"*message*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "package", Description: "Messages API 使用 Anthropic SDK", Recommended: "@opencode/ai/providers/anthropic"},
 			{Scope: "model", Key: "limit.output", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
@@ -1211,7 +1215,7 @@ var opencodeV2Protocols = []AgentProtocol{
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
-		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		EndpointTags: []string{"*completion*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "package", Description: "Chat Completions API 使用 OpenAI 兼容 SDK", Recommended: "@opencode/ai/providers/openai-compatible"},
 		},
@@ -1273,14 +1277,15 @@ var openclawRecommendations = []AgentRecommendation{
 }
 
 // openclawProtocols 按 endpoint 关键词把规范化 provider 归入对应的
-// openclaw `api`（协议/SDK）类型。匹配为子串包含：endpoint 里含任一关键词
-// 即命中该协议的 api 推荐值。顺序即优先级 —— 具体关键词放前面避免误命中。
+// openclaw `api`（协议/SDK）类型。endpoint_tags 匹配：含 * 的标签按通配匹配
+// （忽略大小写），不含 * 的标签须完全相等；任一标签命中即应用该协议的 api
+// 推荐值。顺序即优先级 —— 具体关键词放前面避免误命中。
 // anthropic-messages 协议下模型必须有 maxTokens（Anthropic API 官方要求每次
 // 请求都带 max_tokens），故该协议的 model 级推荐把 maxTokens 声明为必填。
 var openclawProtocols = []AgentProtocol{
 	{
 		Name:         "Anthropic Messages API",
-		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		EndpointTags: []string{"*message*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
 			{Scope: "model", Key: "maxTokens", Description: "输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）", Required: true},
@@ -1288,21 +1293,21 @@ var openclawProtocols = []AgentProtocol{
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
-		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		EndpointTags: []string{"*completion*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
 		},
 	},
 	{
 		Name:         "Ollama",
-		EndpointTags: []string{"ollama"},
+		EndpointTags: []string{"*ollama*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Ollama 本地推理使用 ollama 协议", Recommended: "ollama"},
 		},
 	},
 	{
 		Name:         "LM Studio",
-		EndpointTags: []string{"lmstudio"},
+		EndpointTags: []string{"*lmstudio*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "LM Studio 本地推理使用 lmstudio 协议", Recommended: "lmstudio"},
 		},
@@ -1334,18 +1339,19 @@ var deepseekHarnessRecommendations = []AgentRecommendation{
 
 // deepseekHarnessProtocols 按 endpoint 关键词把 dsh-llm-pi-ai 的 `api`
 // （线路协议）归类：一个 provider 只使用一种协议，网关同时提供多种协议时
-// 官方建议拆成多个 provider。顺序即优先级，具体关键词放前面避免误命中。
+// 官方建议拆成多个 provider。endpoint_tags 匹配：含 * 的通配、不含 * 的
+// 完全相等（均忽略大小写）。顺序即优先级，具体关键词放前面避免误命中。
 var deepseekHarnessProtocols = []AgentProtocol{
 	{
 		Name:         "OpenAI Responses API",
-		EndpointTags: []string{"responses"},
+		EndpointTags: []string{"*responses*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Responses API 使用 openai-responses 协议", Recommended: "openai-responses"},
 		},
 	},
 	{
 		Name:         "Anthropic Messages API",
-		EndpointTags: []string{"chat/message", "/v1/message", "messages"},
+		EndpointTags: []string{"*message*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Messages API 使用 anthropic-messages 协议", Recommended: "anthropic-messages"},
 			// Anthropic Messages API 官方要求每次请求带 max_tokens，对应 pi-ai
@@ -1355,7 +1361,7 @@ var deepseekHarnessProtocols = []AgentProtocol{
 	},
 	{
 		Name:         "OpenAI 兼容 Chat Completions",
-		EndpointTags: []string{"completions", "chat/comple", "/v1/chat"},
+		EndpointTags: []string{"*completion*"},
 		Recommendations: []AgentRecommendation{
 			{Scope: "provider", Key: "api", Description: "Chat Completions API 使用 openai-completions 协议", Recommended: "openai-completions"},
 		},
