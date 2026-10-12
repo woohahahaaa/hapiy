@@ -34,6 +34,12 @@ type CaptureRow =
   | { kind: 'pair'; pair: LogCapturePairSummary }
   | { kind: 'system'; file: LogCaptureFile }
 
+// pairRewritten marks a capture as worth opening: 请求/响应改写规则命中过
+// （含命中但未生效、执行失败）或结果确实被改过。
+function pairRewritten(pair: LogCapturePairSummary): boolean {
+  return pair.has_rewrite || pair.has_request_rewrite || pair.has_response_rewrite
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -281,10 +287,11 @@ export function LogCapturePage() {
       render: (_, row) =>
         row.kind === 'pair' ? (
           // max-w-full + 内层 truncate：tag 不超出列宽被裁掉，左右 padding 恒定；
-          // 「·修改过」用 shrink-0 保证不参与截断，颜色跟随主文案。
+          // 「·请求改写」「·响应改写」用 shrink-0 保证不参与截断，颜色跟随主文案。
           <Badge variant={row.pair.has_error ? 'destructive' : 'default'} className="max-w-full">
             <span className="min-w-0 truncate">{row.pair.type_label}</span>
-            {row.pair.has_rewrite ? <span className="shrink-0"> {t('capture.modified')}</span> : null}
+            {row.pair.has_request_rewrite ? <span className="shrink-0"> {t('capture.requestRewrite')}</span> : null}
+            {row.pair.has_response_rewrite ? <span className="shrink-0"> {t('capture.responseRewrite')}</span> : null}
           </Badge>
         ) : (
           <Badge variant="outline">{t('capture.system')}</Badge>
@@ -342,12 +349,12 @@ export function LogCapturePage() {
           emptyText={t('capture.empty')}
           onRetry={() => void fetchPage()}
           rowBackgroundColor={(row) =>
-            row.kind === 'pair' && row.pair.has_rewrite
+            row.kind === 'pair' && pairRewritten(row.pair)
               ? 'rgba(245, 158, 11, 0.10)'
               : null
           }
           rowHoverBackgroundColor={(row) =>
-            row.kind === 'pair' && row.pair.has_rewrite
+            row.kind === 'pair' && pairRewritten(row.pair)
               ? 'rgba(245, 158, 11, 0.16)'
               : null
           }

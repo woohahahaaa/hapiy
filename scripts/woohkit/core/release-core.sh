@@ -29,12 +29,10 @@ EOF
 }
 
 release_init() {
-  : "${APP_NAME:?scripts/project.sh 必须设置 APP_NAME}"
-  : "${APP_ID:?scripts/project.sh 必须设置 APP_ID}"
-  : "${DEFAULT_PORT:?scripts/project.sh 必须设置 DEFAULT_PORT}"
-  : "${RELEASE_REPO:?scripts/project.sh 必须设置 RELEASE_REPO}"
   : "${ROOT_DIR:?内部错误：ROOT_DIR 未导出}"
   : "${KIT_DIR:?内部错误：KIT_DIR 未导出}"
+  kit_load_project_json "$ROOT_DIR"
+  : "${RELEASE_REPO:?scripts/project.sh 必须设置 RELEASE_REPO}"
   : "${RELEASE_PLATFORMS:=darwin-universal windows-amd64 linux-amd64 linux-arm64}"
   : "${RELEASE_PLATFORM_NOTE:=macOS universal / Windows x64 / Linux x64+arm64}"
   hook_exists proj_stage || die "scripts/project.sh 必须实现 proj_stage（见 CONTRACT.md）"

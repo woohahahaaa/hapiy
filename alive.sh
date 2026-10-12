@@ -13,6 +13,10 @@ if [ ! -f "$ROOT_DIR/scripts/project.sh" ]; then
   echo "[alive] missing scripts/project.sh — 这是项目自己的钩子文件，见 scripts/woohkit/CONTRACT.md" >&2
   exit 1
 fi
+if [ ! -f "$ROOT_DIR/woohkit.json" ]; then
+  echo "[alive] missing woohkit.json — 项目身份与默认端口写在项目根目录（{name, id, defaultPort}），见 scripts/woohkit/CONTRACT.md" >&2
+  exit 1
+fi
 if [ ! -f "$KIT_DIR/core/alive-core.sh" ]; then
   echo "[alive] missing $KIT_DIR — 先跑一次 kit 的 tools/sync.sh 把框架同步进来" >&2
   exit 1

@@ -152,7 +152,8 @@
   "capture": {
     "empty": "No captured logs",
     "system": "System",
-    "modified": "·Modified"
+    "requestRewrite": "·Request rewrite",
+    "responseRewrite": "·Response rewrite"
   },
   "typeLabel": {
     "request": "Request",
@@ -177,6 +178,7 @@
     "noData": "(no data)",
     "systemLog": "System Log",
     "ruleNotes": "Rule outcomes",
+    "ruleProblems": "Rewrite issues",
     "responseStatus": "Status code: {{status}}",
     "timing": {
       "queue": "Queue",

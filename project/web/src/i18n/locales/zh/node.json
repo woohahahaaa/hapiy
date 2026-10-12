@@ -80,8 +80,8 @@
   },
   "provider": {
     "selectPlaceholder": "选择供应商",
-    "modelKeyCounts": "模型 {{modelCount}} · key {{keyCount}}",
-    "baseUrlEndpointCounts": "baseURL {{baseURLCount}} · endpoint {{endpointCount}}",
+    "modelKeyCounts": "模型 {{modelCount}} · Key {{keyCount}}",
+    "baseUrlEndpointCounts": "Base URL {{baseURLCount}} · Endpoint {{endpointCount}}",
     "disabled": "禁用"
   },
   "concurrency": {

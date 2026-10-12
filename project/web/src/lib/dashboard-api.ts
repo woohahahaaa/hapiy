@@ -336,6 +336,10 @@ export type LogCapturePairSummary = {
   readonly has_response: boolean
   readonly response_count: number
   readonly has_rewrite: boolean
+  // has_request_rewrite / has_response_rewrite: 该侧规则命中过（不论是否生效/失败）；
+  // 列表据此显示「·请求改写」「·响应改写」标记，失败原因在详情里。
+  readonly has_request_rewrite: boolean
+  readonly has_response_rewrite: boolean
   readonly is_stream: boolean
   readonly has_error: boolean
   readonly is_incomplete: boolean
@@ -350,6 +354,11 @@ export type LogCapturePairFull = {
   readonly request?: LogCaptureRequestNode
   readonly responses: readonly LogCaptureResponseNode[]
   readonly error: string
+  // rule_problems: 命中但未生效 / 命中但执行失败 的规则行（含原因），详情开头展示。
+  readonly rule_problems: string
+  // has_request_rewrite / has_response_rewrite: 与列表标记一致，供详情头部/节点使用。
+  readonly has_request_rewrite: boolean
+  readonly has_response_rewrite: boolean
   readonly timing?: LogCaptureTiming
   readonly is_stream: boolean
 }
@@ -1543,6 +1552,8 @@ function parseLogCapturePairSummary(value: unknown): LogCapturePairSummary {
     has_response: readBoolean(value.has_response, 'pair.has_response'),
     response_count: responseCount,
     has_rewrite: readBoolean(value.has_rewrite, 'pair.has_rewrite'),
+    has_request_rewrite: value.has_request_rewrite === undefined ? false : readBoolean(value.has_request_rewrite, 'pair.has_request_rewrite'),
+    has_response_rewrite: value.has_response_rewrite === undefined ? false : readBoolean(value.has_response_rewrite, 'pair.has_response_rewrite'),
     is_stream: value.is_stream === undefined ? false : readBoolean(value.is_stream, 'pair.is_stream'),
     has_error: readBoolean(value.has_error, 'pair.has_error'),
     is_incomplete: readBoolean(value.is_incomplete, 'pair.is_incomplete'),
@@ -1565,6 +1576,9 @@ function parseLogCapturePairFull(value: unknown): LogCapturePairFull {
     request: value.request == null ? undefined : parseLogCaptureRequestNode(value.request),
     responses: value.responses.map(parseLogCaptureResponseNode),
     error: value.error == null ? '' : readString(value.error, 'pair.error'),
+    rule_problems: value.rule_problems == null ? '' : readString(value.rule_problems, 'pair.rule_problems'),
+    has_request_rewrite: value.has_request_rewrite === undefined ? false : readBoolean(value.has_request_rewrite, 'pair.has_request_rewrite'),
+    has_response_rewrite: value.has_response_rewrite === undefined ? false : readBoolean(value.has_response_rewrite, 'pair.has_response_rewrite'),
     timing: value.timing == null ? undefined : parseLogCaptureTiming(value.timing),
     is_stream: value.is_stream === undefined ? false : readBoolean(value.is_stream, 'pair.is_stream'),
   }

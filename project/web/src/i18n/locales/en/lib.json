@@ -35,9 +35,9 @@
     "requestFailed": "models.dev request failed (HTTP {{status}})"
   },
   "availability": {
-    "providerItem": "provider {{count}}/{{total}}",
-    "baseUrlItem": "base URL {{count}}/{{total}}",
-    "keyItem": "key {{count}}/{{total}}",
+    "providerItem": "Provider {{count}}/{{total}}",
+    "baseUrlItem": "Base URL {{count}}/{{total}}",
+    "keyItem": "Key {{count}}/{{total}}",
     "summary": "Failover: {{items}}",
     "join": ", "
   }

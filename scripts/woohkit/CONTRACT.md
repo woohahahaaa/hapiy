@@ -1,23 +1,35 @@
 # woohkit 契约（CONTRACT）
 
 woohkit 是一个「框架 + 规范」：通用逻辑（alive、release、安装器、桌面壳）都在
-kit 里，跟技术栈无关；项目只写一个 `scripts/project.sh`，回答"我是什么栈、怎么
-构建、怎么打包"。本文件是那份规范——引用 kit 的项目照着实现即可。
+kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `woohkit.json`（身份与
+默认端口，自己定）和 `scripts/project.sh`（钩子：我是什么栈、怎么构建、怎么
+打包）。本文件是那份规范——引用 kit 的项目照着实现即可。
 
 - kit 拥有的文件（**永远不要手改**，`tools/sync.sh` 整文件覆盖）：
   `alive.sh`、`scripts/release.sh`、`scripts/woohkit/**`
 - 项目拥有的文件（kit 永不触碰）：
-  `scripts/project.sh`（唯一必写）、`install.sh` / `install.ps1`（release 时渲染生成）
+  `woohkit.json`（根目录，身份/端口，kit 只读）、`scripts/project.sh`（钩子）、
+  `install.sh` / `install.ps1`（release 时渲染生成）
 
 ---
 
-## 一、项目信息（`scripts/project.sh` 里直接赋值）
+## 一、项目文件（都在项目里；kit 只读不改）
+
+### 1.1 `<项目根>/woohkit.json` — 身份与默认端口（项目自己定）
+
+```json
+{ "name": "MyApp", "id": "myapp", "defaultPort": 18799 }
+```
+
+- `name`：显示名（消息、release 标题、桌面壳名）。简洁 ASCII。
+- `id`：slug，小写字母/数字/`_`/`-`，用作 `~/.<id>`、日志前缀、服务名。
+- `defaultPort`：1-65535 的公共端口。**不带 `--port` 时永远用它**；`--port N`
+  只对当次运行生效，kit 不记忆、不覆盖、不写回。
+
+### 1.2 `scripts/project.sh` — 项目细节 + 钩子
 
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
-| `APP_NAME` | ✓ | 显示名（消息、release 标题、桌面壳名）。简洁 ASCII，不要引号/空格 |
-| `APP_ID` | ✓ | slug：状态目录 `~/.<APP_ID>`、日志前缀、服务/任务名。小写字母数字 |
-| `DEFAULT_PORT` | ✓ | 公共端口（可被 `--port` 覆盖并记住） |
 | `STATE_DIR` | | 状态目录，默认 `$HOME/.$APP_ID` |
 | `BIN` | | 已安装二进制路径，默认 `$STATE_DIR/app/$APP_ID`。构建钩子应把产物写到这（与 install.sh / 自升级同路径） |
 | `LOG_STEM` | | 主日志名，默认 `$APP_ID`（日志在 `$STATE_DIR/log/$LOG_STEM.log`） |
@@ -62,8 +74,10 @@ kit 里，跟技术栈无关；项目只写一个 `scripts/project.sh`，回答"
 - **supervisor 在 shell 侧**：二进制不需要自己做守护循环；`proj_run` 就是一个
   纯前台命令。系统自启服务（launchd/systemd/任务计划）里跑的仍是二进制自己的
   `up --supervise`，与 alive.sh 互不干扰（alive 运行前会 `proj_service_pause`）。
-- 端口解析顺序：`--port` > 环境变量 `PORT`（detach 出来的子进程继承）>
-  `<state>/port` 记忆 > `DEFAULT_PORT`；启动时把结果写回 `<state>/port`。
+- 端口只由「项目默认 + 本次参数」决定：`--port`（仅当次）> `woohkit.json`
+  的 `defaultPort`；detach 出来的子进程用 kit 内部变量继承，不读环境变量
+  `PORT`。启动时会把实际端口写进 `<state>/port`——那只是给桌面壳/外部读者
+  的握手输出，不参与决策。
 - 状态文件：`<state>/mode`、`<state>/supervisor.pid`、`<state>/*.pid`（边车）、
   `<state>/log/<LOG_STEM>.log`、`<state>/log/supervisor.log`。
 
@@ -125,9 +139,9 @@ kit 里，跟技术栈无关；项目只写一个 `scripts/project.sh`，回答"
 - `shell/macapp/build.sh <项目根> <输出目录>` → `<APP_NAME>.app`（WKWebView 通用
   二进制，arm64+x86_64，ad-hoc 签名）
 - `shell/winapp/build.sh <项目根> <输出目录>` → `<APP_NAME>.exe` + 3 个 WebView2 dll
-- 两者读 `scripts/project.sh` 的 `APP_NAME` / `APP_ID` / `DEFAULT_PORT`，可选：
-  `SHELL_THEME`（`#rrggbb`，默认 `#0a0202`）、`SHELL_BUNDLE_ID`、
-  `SHELL_ICON`（默认 `<web|public>/public/icon-512.png`）
+- 两者读项目根 `woohkit.json` 的 `name` / `id` / `defaultPort`，可选
+  （写在 `project.sh`）：`SHELL_THEME`（`#rrggbb`，默认 `#0a0202`）、
+  `SHELL_BUNDLE_ID`、`SHELL_ICON`（默认 `<web|public>/public/icon-512.png`）
 - 壳的行为：窗口只打开 `http://127.0.0.1:<端口>`（端口从 `<用户目录>/.<APP_ID>/port`
   读，读不到退回 `DEFAULT_PORT`）；外链交给系统浏览器。这些由 kit 保证，项目
   无需写任何壳代码。
@@ -141,7 +155,8 @@ kit 里，跟技术栈无关；项目只写一个 `scripts/project.sh`，回答"
 
 ## 七、同步与升级
 
-- 新建项目：`tools/init.sh <项目目录>`（同步框架 + 生成 `project.sh` 骨架）。
+- 新建项目：`tools/init.sh <项目目录>`（同步框架 + 生成 `woohkit.json` 和
+  `scripts/project.sh` 骨架）。
 - 更新框架：`tools/sync.sh <项目目录>`（整文件覆盖 kit 文件）；
   `tools/sync.sh <项目目录> --check` 只对比不写。
 - 契约版本：`scripts/woohkit/VERSION`；kit 升级后看仓库 Release notes /

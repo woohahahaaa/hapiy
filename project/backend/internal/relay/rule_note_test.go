@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 )
 
 // The motivating case: a header set-from-ref whose source header the client
@@ -22,7 +23,7 @@ func TestRewriteNotes_missingRefHeaderReportsNoEffect(t *testing.T) {
 		[]byte(`{"model":"m"}`),
 		headers,
 		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "为 opencode go 添加x-opencode-session", Ops: chain}},
-		RuleCategoryRequest,
+		service.RuleCategoryRequest,
 	)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
@@ -34,7 +35,7 @@ func TestRewriteNotes_missingRefHeaderReportsNoEffect(t *testing.T) {
 		t.Fatalf("missing ref source must not write the header, got %q", out["x-opencode-session"])
 	}
 	want := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
-	if got := RuleNoteText(notes); got != want {
+	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
@@ -62,7 +63,7 @@ func TestRewriteNotes_hitAndMiss(t *testing.T) {
 		[]byte(`{"model":"m","temperature":0.7}`),
 		map[string]string{"X-Session-Id": "ses_1"},
 		chains,
-		RuleCategoryRequest,
+		service.RuleCategoryRequest,
 	)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
@@ -71,7 +72,7 @@ func TestRewriteNotes_hitAndMiss(t *testing.T) {
 		t.Fatalf("ref source should be copied, got %q", out["x-session"])
 	}
 	want := "[请求改写] 拷贝会话：命中并生效\n[请求改写] 改了别的模型的温度：未命中"
-	if got := RuleNoteText(notes); got != want {
+	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
@@ -86,12 +87,12 @@ func TestRewriteNotes_missingBodyPathReportsNoEffect(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	_, _, notes, err := applyRewriteChainsWithNotes([]byte(`{"model":"m"}`), nil,
-		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "替换失败路径", Ops: chain}}, RuleCategoryResponse)
+		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "替换失败路径", Ops: chain}}, service.RuleCategoryResponse)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	want := "[响应改写] 替换失败路径：命中但未生效（目标路径 messages.0.content 不存在）"
-	if got := RuleNoteText(notes); got != want {
+	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
@@ -113,7 +114,7 @@ func TestApplyCompiledRewriteRules_recordsRuleNotes(t *testing.T) {
 		t.Fatalf("applyCompiledRewriteRules: %v", err)
 	}
 	want := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
-	if got := RuleNoteText(req.RuleNotes); got != want {
+	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("req notes = %q, want %q", got, want)
 	}
 	if _, ok := req.Headers["x-opencode-session"]; ok {
@@ -125,19 +126,19 @@ func TestApplyCompiledRewriteRules_recordsRuleNotes(t *testing.T) {
 // should display them: request rewrite on the request nodes, response
 // rewrite and failover on the response nodes.
 func TestCaptureRuleNotes_splitsByStage(t *testing.T) {
-	req := &RelayRequest{RuleNotes: []RuleNote{
-		{Category: RuleCategoryRequest, RuleID: "r1", Rule: "req", Status: RuleStatusHit},
-		{Category: RuleCategoryFailover, RuleID: "f1", Rule: "fo", Status: RuleStatusMiss},
-		{Category: RuleCategoryResponse, RuleID: "r2", Rule: "rsp", Status: RuleStatusHit},
+	req := &RelayRequest{RuleNotes: []service.RuleNote{
+		{Category: service.RuleCategoryRequest, RuleID: "r1", Rule: "req", Status: service.RuleStatusHit},
+		{Category: service.RuleCategoryFailover, RuleID: "f1", Rule: "fo", Status: service.RuleStatusMiss},
+		{Category: service.RuleCategoryResponse, RuleID: "r2", Rule: "rsp", Status: service.RuleStatusHit},
 	}}
-	if got := captureRuleNotes(topologyStageRequestBefore, req); got != "" {
-		t.Fatalf("request_before must carry no notes, got %q", got)
+	if got := captureRuleNotes(topologyStageRequestBefore, req); len(got) != 0 {
+		t.Fatalf("request_before must carry no notes, got %q", service.RuleNotesText(got))
 	}
-	if got := captureRuleNotes(topologyStageRequestAfter, req); got != "[请求改写] req：命中并生效" {
+	if got := service.RuleNotesText(captureRuleNotes(topologyStageRequestAfter, req)); got != "[请求改写] req：命中并生效" {
 		t.Fatalf("request_after notes = %q", got)
 	}
 	want := "[故障转移] fo：未命中\n[响应改写] rsp：命中并生效"
-	if got := captureRuleNotes(topologyStageResponseAfter, req); got != want {
+	if got := service.RuleNotesText(captureRuleNotes(topologyStageResponseAfter, req)); got != want {
 		t.Fatalf("response_after notes = %q, want %q", got, want)
 	}
 }
@@ -153,20 +154,20 @@ func TestFailoverNotes_matchedMissAndReplace(t *testing.T) {
 	req := &RelayRequest{}
 	appendFailoverNotes(req, rules, nil)
 	want := "[故障转移] 主转移：未命中\n[故障转移] 备用转移：未命中"
-	if got := RuleNoteText(req.RuleNotes); got != want {
+	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("miss notes = %q, want %q", got, want)
 	}
 
 	req = &RelayRequest{}
-	appendFailoverNotes(req, rules, failoverNote(rules[0], RuleStatusHit, "已转移至 back"))
+	appendFailoverNotes(req, rules, failoverNote(rules[0], service.RuleStatusHit, "已转移至 back"))
 	want = "[故障转移] 主转移：命中并生效（已转移至 back）\n[故障转移] 备用转移：未命中"
-	if got := RuleNoteText(req.RuleNotes); got != want {
+	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("hit notes = %q, want %q", got, want)
 	}
 
-	replaceFailoverNote(req, *failoverNote(rules[1], RuleStatusHit, "响应速度 3.0 token/s 低于规则限制 5 token/s"))
+	replaceFailoverNote(req, *failoverNote(rules[1], service.RuleStatusHit, "响应速度 3.0 token/s 低于规则限制 5 token/s"))
 	want = "[故障转移] 主转移：命中并生效（已转移至 back）\n[故障转移] 备用转移：命中并生效（响应速度 3.0 token/s 低于规则限制 5 token/s）"
-	if got := RuleNoteText(req.RuleNotes); got != want {
+	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("replaced notes = %q, want %q", got, want)
 	}
 	if len(req.RuleNotes) != 2 {

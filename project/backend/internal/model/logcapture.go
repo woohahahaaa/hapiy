@@ -85,10 +85,10 @@ type LogCapture struct {
 	ResponseStatus int       `json:"response_status,omitempty"`
 	SystemLog      JSONSlice `gorm:"type:jsonb" json:"system_log,omitempty"`
 	Error          string    `json:"error,omitempty"`
-	// RuleNotes carries the per-rule outcome lines of this stage's rewrite
-	// pass (请求改写 on the request nodes; 响应改写 + 故障转移 on the response
-	// nodes). Empty for rows written before the column existed and for
-	// stages without rules.
+	// RuleNotes carries this stage's per-rule outcomes as a JSON array of
+	// {category, rule_id, rule, status, reason} objects (请求改写 on the
+	// request nodes; 响应改写 + 故障转移 on the response nodes). Empty for
+	// rows written before the column existed and for stages without rules.
 	RuleNotes string    `gorm:"type:text" json:"rule_notes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	// Stage timings mirror model.Log; written on every row of a request.

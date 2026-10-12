@@ -5,6 +5,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/hapiy/hapiy/internal/service"
 )
 
 func compileStreamChain(t *testing.T, ruleID, script string) []CompiledRewriteChain {
@@ -41,7 +43,7 @@ func TestStreamRewrite_notes_perRule(t *testing.T) {
 		t.Fatalf("read stream: %v", err)
 	}
 	want := "[响应改写] 改内容：命中并生效\n[响应改写] 改不存在：命中但未生效（目标路径 never.present 不存在）"
-	if got := RuleNoteText(r.Notes()); got != want {
+	if got := service.RuleNotesText(r.Notes()); got != want {
 		t.Fatalf("stream notes = %q, want %q", got, want)
 	}
 }

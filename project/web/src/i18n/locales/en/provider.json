@@ -21,8 +21,8 @@
   },
   "failoverStatus": {
     "provider": "Provider {{disabled}}/{{total}}",
-    "baseUrl": "base URL {{disabled}}/{{total}}",
-    "key": "key {{disabled}}/{{total}}",
+    "baseUrl": "Base URL {{disabled}}/{{total}}",
+    "key": "Key {{disabled}}/{{total}}",
     "dimensionDisabled": "{{label}} disabled {{count}}",
     "restore": "Restore"
   },

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
@@ -94,13 +94,7 @@ export function ChannelAffinityPage() {
     <div className="flex h-full flex-col">
       <PageHeader description={t('affinity.pageDescription')} />
       <div className="flex-1 overflow-auto p-6">
-        <Card className="max-w-3xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AppIcon name="link" size={16} /> {t('affinity.cardTitle')}
-            </CardTitle>
-            <CardDescription>{t('affinity.cardDescription')}</CardDescription>
-          </CardHeader>
+        <Card>
           <CardContent>
             {state.kind === 'loading' && (
               <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">

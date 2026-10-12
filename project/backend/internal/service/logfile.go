@@ -52,7 +52,7 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 		TokenName:  data.TokenName,
 		Stage:      data.Stage,
 		Error:      data.Error,
-		RuleNotes:  data.RuleNotes,
+		RuleNotes:  RuleNotesJSON(data.RuleNotes),
 		// Always keep stage timings, even when body recording is off.
 		ConnectMs:         data.ConnectMs,
 		FirstByteMs:       data.FirstByteMs,
@@ -106,16 +106,16 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 	}
 }
 
-// UpdateRuleNotes backfills the rule-note text on the response-stage rows of
-// a request. Streaming responses only finish rewriting after the capture
-// rows were written, so the handler calls this once the stream ends.
-func (w *LogCaptureWriter) UpdateRuleNotes(requestID, notes string) {
-	if w == nil || requestID == "" || notes == "" {
+// UpdateRuleNotes backfills the rule notes on the response-stage rows of a
+// request. Streaming responses only finish rewriting after the capture rows
+// were written, so the handler calls this once the stream ends.
+func (w *LogCaptureWriter) UpdateRuleNotes(requestID string, notes []RuleNote) {
+	if w == nil || requestID == "" || len(notes) == 0 {
 		return
 	}
 	if err := w.db.Model(&model.LogCapture{}).
 		Where("request_id = ? AND stage IN ?", requestID, []string{"response_before", "response_after"}).
-		Update("rule_notes", notes).Error; err != nil {
+		Update("rule_notes", RuleNotesJSON(notes)).Error; err != nil {
 		println("logcapture: update rule notes failed:", err.Error())
 	}
 }
@@ -180,10 +180,10 @@ type LogCaptureData struct {
 	Response   *HTTPCapture
 	SystemLog  []string
 	Error      string
-	// RuleNotes is the rendered per-rule outcome text for this stage
-	// (request rewrite on the request nodes, response rewrite + failover on
-	// the response nodes).
-	RuleNotes  string
+	// RuleNotes carries this stage's per-rule outcomes (request rewrite on
+	// the request nodes, response rewrite + failover on the response nodes);
+	// stored as JSON on the row and rendered for display by the pair API.
+	RuleNotes []RuleNote
 	// Stage timings (nil = not applicable / not yet known).
 	ConnectMs         *int
 	FirstByteMs       *int

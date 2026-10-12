@@ -17,11 +17,12 @@ set -eu
 ROOT="${1:?usage: build.sh <project-root> <out-dir>}"
 OUT="${2:?usage: build.sh <project-root> <out-dir>}"
 KIT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT_DIR="$ROOT"
+export ROOT_DIR KIT_DIR
 
 . "$ROOT/scripts/project.sh"
-: "${APP_NAME:?scripts/project.sh 必须设置 APP_NAME}"
-: "${APP_ID:?scripts/project.sh 必须设置 APP_ID}"
-: "${DEFAULT_PORT:?scripts/project.sh 必须设置 DEFAULT_PORT}"
+. "$KIT_DIR/core/kit-lib.sh"
+kit_load_project_json "$ROOT"
 
 THEME="${SHELL_THEME:-#0a0202}"
 

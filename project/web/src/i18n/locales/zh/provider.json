@@ -20,8 +20,8 @@
   },
   "failoverStatus": {
     "provider": "供应商 {{disabled}}/{{total}}",
-    "baseUrl": "base URL {{disabled}}/{{total}}",
-    "key": "key {{disabled}}/{{total}}",
+    "baseUrl": "Base URL {{disabled}}/{{total}}",
+    "key": "Key {{disabled}}/{{total}}",
     "dimensionDisabled": "{{label}} 禁用 {{count}} 个",
     "restore": "恢复"
   },

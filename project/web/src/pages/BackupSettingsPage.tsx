@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/checkbox'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
   SelectContent,
@@ -326,11 +325,8 @@ export function BackupSettingsPage() {
     <div className="flex h-full flex-col">
       <PageHeader description={t('backup.pageDescription')} />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
-        <Tabs defaultValue="backup" className="flex min-h-0 flex-1 flex-col">
-          <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border-subtle p-0">
-            <TabsTrigger value="backup" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">{t('backup.tab')}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="backup" className="flex min-h-0 flex-1 flex-col overflow-auto">
+        <div className="flex min-h-0 flex-1 flex-col pt-6">
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto">
             <div className="flex flex-col gap-6 pb-1">
               <Card>
                 <CardHeader>
@@ -465,8 +461,8 @@ export function BackupSettingsPage() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </div>
 
       <Dialog

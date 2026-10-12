@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -78,27 +79,27 @@ func newStreamRewriteReader(src io.Reader, chains []CompiledRewriteChain) *strea
 // reads as 命中并生效; a rule that only ever had nothing to change reads as
 // 命中但未生效 with the first reason; a rule that never matched an event
 // reads as 未命中. Call after the stream has been fully read.
-func (r *streamRewriteReader) Notes() []RuleNote {
+func (r *streamRewriteReader) Notes() []service.RuleNote {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	notes := make([]RuleNote, 0, len(r.chains))
+	notes := make([]service.RuleNote, 0, len(r.chains))
 	for i := range r.chains {
 		chain := &r.chains[i]
 		if len(chain.Ops) == 0 {
 			continue
 		}
-		base := RuleNote{Category: RuleCategoryResponse, RuleID: chain.RuleID, Rule: chain.RuleName}
+		base := service.RuleNote{Category: service.RuleCategoryResponse, RuleID: chain.RuleID, Rule: chain.RuleName}
 		switch {
 		case r.ruleFailed[chain.RuleID] != "":
-			base.Status = RuleStatusFailed
+			base.Status = service.RuleStatusFailed
 			base.Reason = r.ruleFailed[chain.RuleID]
 		case r.ruleHit[chain.RuleID]:
-			base.Status = RuleStatusHit
+			base.Status = service.RuleStatusHit
 		case r.ruleNoEffect[chain.RuleID] != "":
-			base.Status = RuleStatusNoEffect
+			base.Status = service.RuleStatusNoEffect
 			base.Reason = r.ruleNoEffect[chain.RuleID]
 		default:
-			base.Status = RuleStatusMiss
+			base.Status = service.RuleStatusMiss
 		}
 		notes = append(notes, base)
 	}

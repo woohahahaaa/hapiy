@@ -84,7 +84,7 @@
     "baseUrl": "BaseURL",
     "general": "获取模型列表",
     "billing": "币种汇率",
-    "tokenUsage": "查询Token用量",
+    "tokenUsage": "查询 Token 用量",
     "debug": "Debug",
     "backup": "数据备份",
     "theme": "主题配置",

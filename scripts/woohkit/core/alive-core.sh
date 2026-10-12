@@ -9,7 +9,8 @@
 #     detach 出来的 supervisor 守护（退出 2s 重拉）；
 #   - dev：proj_dev_build/proj_dev_run（缺省回退 proj_run），额外的前端 dev
 #     server 用 kit_sidecar 挂成边车（同生命周期、死了自动重拉、停栈一起收）；
-#   - 端口：--port > 环境变量 PORT > <state>/port 记忆 > DEFAULT_PORT；
+#   - 端口：--port（仅当次）> woohkit.json 的 defaultPort；<state>/port 只是
+#     写给桌面壳/外部读的握手输出，不参与决策；
 #   - 状态：<state>/mode、<state>/supervisor.pid、<state>/*.pid（边车）、
 #     <state>/log/<LOG_STEM>.log（主日志）、<state>/log/supervisor.log。
 #
@@ -24,7 +25,7 @@ Usage: ./alive.sh [prod|dev] [--port N] [--no-build]
 
   (no arg)      构建并启动 prod 栈
   dev           构建（proj_dev_build）并启动 dev 栈
-  --port N      用 N 作为公共端口并记住（写入 <state>/port）
+  --port N      本次运行改用 N（不记忆；不带参数永远用 woohkit.json 的 defaultPort）
   --no-build    跳过构建，只重启
 EOF
   exit "${1:-2}"
@@ -51,11 +52,11 @@ alive_entry_point() {
 # alive_init — 解析默认值/端口/状态路径。子进程（_supervise/_sidecar）里
 # PORT 等已在环境里，直接继承。
 alive_init() {
-  : "${APP_NAME:?scripts/project.sh 必须设置 APP_NAME}"
-  : "${APP_ID:?scripts/project.sh 必须设置 APP_ID}"
-  : "${DEFAULT_PORT:?scripts/project.sh 必须设置 DEFAULT_PORT}"
   : "${ROOT_DIR:?内部错误：ROOT_DIR 未导出，请从项目根目录的 alive.sh 运行}"
   : "${KIT_DIR:?内部错误：KIT_DIR 未导出，请从项目根目录的 alive.sh 运行}"
+
+  # 项目身份与默认端口来自项目根目录的 woohkit.json（项目自己定，kit 只读）。
+  kit_load_project_json "$ROOT_DIR"
 
   : "${STATE_DIR:=$HOME/.$APP_ID}"
   : "${BIN:=$STATE_DIR/app/$APP_ID}"
@@ -74,20 +75,21 @@ alive_init() {
   ALIVE_SELF="${ALIVE_SELF:-$ROOT_DIR/alive.sh}"
   KIT_VERSION="$(kit_version)"
 
+  # 端口只由「项目默认 + 本次参数」决定：--port（仅当次）> WOOHKIT_PORT
+  # （detach 子进程继承）> woohkit.json 的 defaultPort。没有"记忆"一说。
   if [ -n "${PORT_ARG:-}" ]; then
     PORT="$PORT_ARG"
-  elif [ -n "${PORT:-}" ]; then
-    : # detach 出来的子进程：继承父进程解析好的端口
-  elif [ -n "$(read_pidfile "$PORT_FILE")" ]; then
-    PORT="$(read_pidfile "$PORT_FILE")"
+  elif [ -n "${WOOHKIT_PORT:-}" ]; then
+    PORT="$WOOHKIT_PORT"
   else
     PORT="$DEFAULT_PORT"
   fi
   case "$PORT" in
     ''|*[!0-9]*) die "invalid port: $PORT" ;;
   esac
+  WOOHKIT_PORT="$PORT"
 
-  export PORT MODE STATE_DIR LOG_DIR ROOT_DIR KIT_DIR
+  export PORT WOOHKIT_PORT MODE STATE_DIR LOG_DIR ROOT_DIR KIT_DIR
 }
 
 # ---------------------------------------------------------------------------
@@ -201,6 +203,7 @@ alive_up() {
   hook_exists proj_health || die "scripts/project.sh 必须实现 proj_health（见 CONTRACT.md）"
 
   mkdir -p "$STATE_DIR" "$LOG_DIR"
+  # 握手输出：给桌面壳/外部读者看本次实际端口；不参与端口决策。
   printf '%s\n' "$PORT" >"$PORT_FILE"
 
   if [ "$mode" = prod ]; then

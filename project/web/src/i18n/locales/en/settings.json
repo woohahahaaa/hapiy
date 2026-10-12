@@ -153,7 +153,6 @@
   },
   "backup": {
     "pageDescription": "Choose the modules to back up; both automatic and manual backups follow the current selection.",
-    "tab": "Data Backup",
     "paramsTitle": "Backup parameters",
     "contentTitle": "Backup contents",
     "contentHint": "Check the modules to back up; usage records and logs are unchecked by default. The saved selection applies to both automatic and manual backups.",
@@ -282,8 +281,6 @@
   },
   "affinity": {
     "pageDescription": "Requests from the same session (Session + model) reuse the last channel first, so multi-channel rotation does not split the context",
-    "cardTitle": "Channel Affinity",
-    "cardDescription": "One global configuration: the last channel (provider + BaseURL + Key) is reused for the same Session + model pair",
     "enableLabel": "Enable channel affinity",
     "enableHint": "When off, Session/Model fields are not read and topology selection applies normally.",
     "sessionFieldsLabel": "Session ID headers (one per line, case-insensitive)",

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -344,10 +345,10 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 // applyRewriteChainsWithNotes is applyRewriteChains plus one RuleNote per
 // compiled chain, tagged with category, recording whether the rule applied,
 // was skipped by its conditions, or was matched but had no effect.
-func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains []CompiledRewriteChain, category string) ([]byte, map[string]string, []RuleNote, error) {
+func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains []CompiledRewriteChain, category string) ([]byte, map[string]string, []service.RuleNote, error) {
 	origBody := body
 	origHeaders := cloneHeaders(headers)
-	notes := make([]RuleNote, 0, len(chains))
+	notes := make([]service.RuleNote, 0, len(chains))
 	for ci := range chains {
 		chain := &chains[ci]
 		if len(chain.Ops) == 0 {
@@ -363,7 +364,7 @@ func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains 
 			op := &chain.Ops[oi]
 			ok, err := evaluateConditions(op.Conditions, body, headers)
 			if err != nil {
-				notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusFailed, Reason: err.Error()})
+				notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusFailed, Reason: err.Error()})
 				return nil, headers, notes, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
 			}
 			if !ok {
@@ -372,7 +373,7 @@ func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains 
 			matched = true
 			updated, updatedHeaders, noEffect, err := applyRewriteOp(body, headers, origBody, origHeaders, op)
 			if err != nil {
-				notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusFailed, Reason: op.Mode + ": " + err.Error()})
+				notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusFailed, Reason: op.Mode + ": " + err.Error()})
 				return nil, headers, notes, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
 			}
 			if noEffect != "" {
@@ -387,14 +388,14 @@ func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains 
 		}
 		switch {
 		case applied > 0:
-			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusHit})
+			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusHit})
 		case firstNoEffect != "":
-			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusNoEffect, Reason: firstNoEffect})
+			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusNoEffect, Reason: firstNoEffect})
 		case matched:
 			// 条件命中但 op 本身无需写入（例如 ensure_prefix 已满足）→ 视为生效。
-			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusHit})
+			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusHit})
 		default:
-			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusMiss})
+			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusMiss})
 		}
 	}
 	return body, headers, notes, nil

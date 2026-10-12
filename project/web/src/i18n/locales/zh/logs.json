@@ -149,7 +149,8 @@
   "capture": {
     "empty": "暂无抓取日志",
     "system": "系统",
-    "modified": "·修改过"
+    "requestRewrite": "·请求改写",
+    "responseRewrite": "·响应改写"
   },
   "typeLabel": {
     "request": "请求",
@@ -174,6 +175,7 @@
     "noData": "（无 data）",
     "systemLog": "系统日志",
     "ruleNotes": "规则命中",
+    "ruleProblems": "改写问题",
     "responseStatus": "响应状态码: {{status}}",
     "timing": {
       "queue": "排队",
@@ -186,7 +188,7 @@
   },
   "detail": {
     "title": "记录详情 {{id}}",
-    "requestId": "请求 id",
+    "requestId": "请求 ID",
     "providerKey": "上游 Key",
     "upstreamUrl": "上游 URL",
     "downstreamKey": "下游 Key",

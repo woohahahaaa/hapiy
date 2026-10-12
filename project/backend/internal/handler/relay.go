@@ -334,7 +334,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			writer := service.LogCapture()
 			if writer != nil {
 				writer.UpdateStreamTimings(relayReq.RequestID, firstByteMs, resp.StreamRewriteTotalMs())
-				writer.UpdateRuleNotes(relayReq.RequestID, relay.RuleNoteText(relay.RuleNotesOf(relayReq.RuleNotes, relay.RuleCategoryResponse, relay.RuleCategoryFailover)))
+				writer.UpdateRuleNotes(relayReq.RequestID, service.RuleNotesOf(relayReq.RuleNotes, service.RuleCategoryResponse, service.RuleCategoryFailover))
 				if captured := resp.StreamCapturedBytes(); len(captured) > 0 {
 					writer.UpdateStreamBody(relayReq.RequestID, captured)
 				}
@@ -394,7 +394,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		// 规则命中情况（请求改写/响应改写/故障转移 + 命中未生效原因）写在
 		// 使用记录详情的最后。
-		logEntry.EventDetail = relay.RuleNoteText(relayReq.RuleNotes)
+		logEntry.EventDetail = service.RuleNotesText(relayReq.RuleNotes)
 		service.Logs().Write(&logEntry)
 
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
@@ -563,7 +563,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 	useTime := int(time.Since(startTime).Milliseconds())
 	ruleNotes := ""
 	if req != nil {
-		ruleNotes = relay.RuleNoteText(req.RuleNotes)
+		ruleNotes = service.RuleNotesText(req.RuleNotes)
 	}
 	service.Logs().Write(&model.Log{
 		UserID:          getString(userID),

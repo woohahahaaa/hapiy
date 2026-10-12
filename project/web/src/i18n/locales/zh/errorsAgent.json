@@ -1,7 +1,7 @@
 {
   "AGENT_TYPE_EXISTS": "该软件类型已存在",
-  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED": "该软件类型尚未配置 json 路径",
-  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL": "该软件类型尚未配置 json 路径，请先在「接管Agent」中填写 provider/model gjson",
+  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED": "该软件类型尚未配置 JSON 路径",
+  "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL": "该软件类型尚未配置 JSON 路径，请先在「接管Agent」中填写 provider/model gjson",
   "AGENT_TYPE_NAME_REQUIRED": "软件类型名称不能为空",
   "AGENT_TYPE_NO_RECOMMENDATIONS": "该规则尚未配置推荐项",
   "AGENT_TYPE_RULE_MISSING": "未找到该软件类型的规则: {{name}}",

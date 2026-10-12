@@ -15,6 +15,53 @@ die()  { printf '[%s] %s\n' "${APP_ID:-woohkit}" "$*" >&2; exit 1; }
 # hook_exists <函数名> — 项目钩子是否实现了这个函数。
 hook_exists() { command -v "$1" >/dev/null 2>&1; }
 
+# kit_load_project_json <项目根目录> — 读项目根目录 woohkit.json（项目自己声明
+# 的身份与默认端口：name / id / defaultPort），导出 APP_NAME / APP_ID /
+# DEFAULT_PORT。端口只认项目自己的值：--port 只当次生效（见 alive-core），
+# kit 不记忆、不覆盖。
+kit_load_project_json() {
+  _kit_json="$1/woohkit.json"
+  [ -f "$_kit_json" ] || die "missing woohkit.json（项目根目录需要 {name, id, defaultPort}，见 CONTRACT.md）"
+  _kit_out="$(python3 - "$_kit_json" <<'PY'
+import json, re, sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        cfg = json.load(f)
+except Exception as e:
+    sys.stderr.write("woohkit.json 解析失败: %s\n" % e)
+    sys.exit(1)
+
+errs = []
+name = cfg.get("name")
+pid = cfg.get("id")
+if not isinstance(name, str) or not name.strip():
+    errs.append("name（显示名，非空字符串）")
+if not isinstance(pid, str) or not re.match(r"^[a-z0-9][a-z0-9_-]*$", pid or ""):
+    errs.append("id（小写字母/数字/_- 开头，用作 ~/.<id> 等）")
+try:
+    port = int(cfg.get("defaultPort"))
+    if not (1 <= port <= 65535):
+        raise ValueError
+except (TypeError, ValueError):
+    errs.append("defaultPort（1-65535 的整数）")
+if errs:
+    sys.stderr.write("woohkit.json 无效字段: %s\n" % "；".join(errs))
+    sys.exit(1)
+
+def q(s):
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
+print("APP_NAME=%s" % q(name))
+print("APP_ID=%s" % q(pid))
+print("DEFAULT_PORT=%d" % port)
+PY
+)" || die "woohkit.json 无效（$_kit_json）"
+  eval "$_kit_out"
+  export APP_NAME APP_ID DEFAULT_PORT
+}
+
 # ---------------------------------------------------------------------------
 # pid / 进程
 # ---------------------------------------------------------------------------

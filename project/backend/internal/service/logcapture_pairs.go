@@ -15,12 +15,14 @@ import (
 
 // LogCaptureStageRow is one stage's full data within a pair.
 type LogCaptureStageRow struct {
-	Headers   model.JSONMap `json:"headers,omitempty"`
-	Body      model.JSONMap `json:"body,omitempty"`
-	Status    int            `json:"status,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	RuleNotes string         `json:"rule_notes,omitempty"`
-	CreatedAt time.Time     `json:"created_at"`
+	Headers model.JSONMap `json:"headers,omitempty"`
+	Body    model.JSONMap `json:"body,omitempty"`
+	Status  int           `json:"status,omitempty"`
+	Error   string        `json:"error,omitempty"`
+	// RuleNotes renders this stage's rule outcomes as display lines
+	// ("[请求改写] 名称：命中并生效 / 命中但未生效（原因）/ …"), one per rule.
+	RuleNotes string    `json:"rule_notes,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // LogCaptureRequestNode is the request half of a pair (1 request, paired by ordinal).
@@ -53,6 +55,13 @@ type LogCapturePairSummary struct {
 	HasResponse  bool      `json:"has_response"`
 	ResponseCount int     `json:"response_count"`
 	HasRewrite   bool      `json:"has_rewrite"`
+	// HasRequestRewrite / HasResponseRewrite mark that the request / response
+	// rewrite stage engaged at least one rule on this request (matched,
+	// regardless of whether the change took effect or failed). They drive the
+	// capture list's 请求改写 / 响应改写 markers, which deliberately do not
+	// distinguish execution outcome — reasons live in the detail.
+	HasRequestRewrite  bool `json:"has_request_rewrite"`
+	HasResponseRewrite bool `json:"has_response_rewrite"`
 	IsStream     bool      `json:"is_stream"`
 	HasError     bool      `json:"has_error"`
 	IsIncomplete bool      `json:"is_incomplete"`
@@ -79,8 +88,17 @@ type LogCapturePairFull struct {
 	Request    *LogCaptureRequestNode   `json:"request,omitempty"`
 	Responses  []LogCaptureResponseNode `json:"responses"`
 	Error      string                   `json:"error,omitempty"`
-	Timing     *LogCaptureTiming        `json:"timing,omitempty"`
-	IsStream   bool                     `json:"is_stream"`
+	// RuleProblems lists the rules that engaged but did not take effect
+	// (命中但未生效 / 命中但执行失败), one line each, deduplicated. The detail
+	// dialog shows it at the top so the reason is visible without expanding
+	// the stage nodes.
+	RuleProblems string `json:"rule_problems,omitempty"`
+	// HasRequestRewrite / HasResponseRewrite mirror the list summary's
+	// markers so the detail header and node labels agree with the list.
+	HasRequestRewrite  bool `json:"has_request_rewrite"`
+	HasResponseRewrite bool `json:"has_response_rewrite"`
+	Timing     *LogCaptureTiming `json:"timing,omitempty"`
+	IsStream   bool              `json:"is_stream"`
 }
 
 // filterSystemFromTypes returns the input slice with any "system" entry
@@ -311,6 +329,12 @@ func assembleSummary(lang, rid string, rows []model.LogCapture) LogCapturePairSu
 	s.HasRewrite = reqModified || rspModified
 	s.IsStream = responseIsStream(rows)
 
+	// 请求改写 / 响应改写 markers: did that stage engage any rule at all
+	// (matched, whether or not the change took effect).
+	allNotes := pairRuleNotes(rows)
+	s.HasRequestRewrite = RuleNotesEngaged(allNotes, RuleCategoryRequest)
+	s.HasResponseRewrite = RuleNotesEngaged(allNotes, RuleCategoryResponse)
+
 	// HasError = any captured row carries an error string or any response
 	// surfaced a 4xx/5xx status (after preferred, before fallback).
 	s.HasError = pairHasError(rows, rspBefore, rspAfter)
@@ -333,6 +357,7 @@ func assembleFull(rid string, rows []model.LogCapture) *LogCapturePairFull {
 	})
 
 	earliest := rows[0]
+	allNotes := pairRuleNotes(rows)
 	full := &LogCapturePairFull{
 		RequestID:  rid,
 		Prefix:     earliest.Prefix,
@@ -341,6 +366,9 @@ func assembleFull(rid string, rows []model.LogCapture) *LogCapturePairFull {
 		CreatedAt:  earliest.CreatedAt,
 		Responses:  []LogCaptureResponseNode{},
 		IsStream:   responseIsStream(rows),
+		RuleProblems: ruleProblemsText(rows),
+		HasRequestRewrite:  RuleNotesEngaged(allNotes, RuleCategoryRequest),
+		HasResponseRewrite: RuleNotesEngaged(allNotes, RuleCategoryResponse),
 	}
 
 	reqBefore, reqAfter, rspBefore, rspAfter := splitStages(rows)
@@ -511,7 +539,7 @@ func stageRow(r *model.LogCapture) *LogCaptureStageRow {
 		Body:      r.RequestBody,
 		Status:    r.ResponseStatus,
 		Error:     r.Error,
-		RuleNotes: r.RuleNotes,
+		RuleNotes: RuleNotesText(ParseRuleNotes(r.RuleNotes)),
 		CreatedAt: r.CreatedAt,
 	}
 }
@@ -541,6 +569,41 @@ func jsonMapEqual(a, b model.JSONMap) bool {
 	ab, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)
 	return bytes.Equal(ab, bb)
+}
+
+// pairRuleNotes parses the stored rule notes of every row in the pair.
+func pairRuleNotes(rows []model.LogCapture) []RuleNote {
+	var notes []RuleNote
+	for i := range rows {
+		notes = append(notes, ParseRuleNotes(rows[i].RuleNotes)...)
+	}
+	return notes
+}
+
+// ruleProblemsText renders the pair's problem lines (命中但未生效 /
+// 命中但执行失败), deduplicated: the response_before and response_after rows
+// carry overlapping notes, so identical lines must collapse. First
+// occurrence wins.
+func ruleProblemsText(rows []model.LogCapture) string {
+	seen := make(map[string]bool)
+	lines := make([]string, 0, len(rows))
+	for i := range rows {
+		for _, note := range ParseRuleNotes(rows[i].RuleNotes) {
+			if note.Status != RuleStatusNoEffect && note.Status != RuleStatusFailed {
+				continue
+			}
+			line := note.Line()
+			if line == "" || seen[line] {
+				continue
+			}
+			seen[line] = true
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
 }
 
 // typeLabel renders the label for a pair's shape in the active language:

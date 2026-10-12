@@ -92,8 +92,8 @@ function circledNumber(n: number): string {
 // ── Type label recomputed from pair shape (LogCapturePairFull has no type_label field).
 // Counts only response nodes that actually have a stage row, matching what's
 // rendered below (the backend can produce empty entries from failover retries).
-// Suffixes (+报错 / +不完整) mirror the backend's label so the dialog header
-// matches the list view.
+// The 请求改写/响应改写 markers and the (+报错 / +不完整) suffixes mirror the
+// backend's label so the dialog header matches the list view.
 function computeTypeLabel(pair: LogCapturePairFull, t: TFunction): string {
   const hasRequest = !!pair.request
   const live = pair.responses.filter((r) => r.before || r.after)
@@ -103,6 +103,8 @@ function computeTypeLabel(pair: LogCapturePairFull, t: TFunction): string {
   else if (hasRequest && n === 0) base = t('typeLabel.request')
   else if (n === 1) base = t('typeLabel.requestResponse')
   else base = t('typeLabel.requestResponseMany', { count: n })
+  if (pair.has_request_rewrite) base += ` ${t('capture.requestRewrite')}`
+  if (pair.has_response_rewrite) base += ` ${t('capture.responseRewrite')}`
   const hasError = pairHasError(pair)
   const isIncomplete = hasRequest && live.some((r) => r.before && !r.after)
   if (hasError) base += t('typeLabel.errorSuffix')
@@ -630,6 +632,12 @@ function PairDialog({ requestId, open, onClose }: {
                   {pair.error}
                 </div>
               )}
+              {pair.rule_problems !== '' && (
+                <div className="rounded-none border border-amber-500/40 bg-amber-500/5 p-3 text-xs break-words whitespace-pre-wrap">
+                  <div className="mb-1 font-medium text-amber-700 dark:text-amber-300">{t('preview.ruleProblems')}</div>
+                  <div className="text-foreground">{pair.rule_problems}</div>
+                </div>
+              )}
               {pair.timing && <TimingBlock timing={pair.timing} />}
               {!pair.request && pair.responses.length === 0 ? (
                 <div className="py-16 text-center text-xs text-muted-foreground">{t('preview.empty')}</div>
@@ -638,7 +646,7 @@ function PairDialog({ requestId, open, onClose }: {
                   {pair.request && (
                     <Node
                       label={
-                        <span>{t('preview.request')}{pair.request.modified ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.modified')}</span> : null}</span>
+                        <span>{t('preview.request')}{(pair.has_request_rewrite || pair.request.modified) ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.requestRewrite')}</span> : null}</span>
                       }
                       actions={<CopyButton getText={() => stageNodeCopyText(pair.request!)} />}
                     >
@@ -659,7 +667,7 @@ function PairDialog({ requestId, open, onClose }: {
                           label={
                             <span>
                               {t('preview.response')} {circledNumber(i + 1)}{resp.status ? ` · ${resp.status}` : ''}
-                              {resp.modified ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.modified')}</span> : null}
+                              {resp.modified ? <span className="text-amber-600 dark:text-amber-400"> {t('capture.responseRewrite')}</span> : null}
                             </span>
                           }
                           actions={<CopyButton getText={() => stageNodeCopyText(resp)} />}

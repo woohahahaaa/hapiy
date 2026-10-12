@@ -236,7 +236,7 @@ type RelayRequest struct {
 	// response rewrite, failover). Capture rows carry the stage-relevant
 	// subset; the handler renders the full list into the usage log's
 	// event_detail so hits without effect and failed executions stay visible.
-	RuleNotes []RuleNote `json:"-"`
+	RuleNotes []service.RuleNote `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
 	// caller surface live progress on the monitoring page without polling the
@@ -297,7 +297,7 @@ func (resp *RelayResponse) StreamRewriteTotalMs() int {
 // response was not stream-rewritten. The handler appends these to
 // RelayRequest.RuleNotes before writing the usage log and backfills them
 // into the capture rows.
-func (resp *RelayResponse) StreamRewriteNotes() []RuleNote {
+func (resp *RelayResponse) StreamRewriteNotes() []service.RuleNote {
 	if resp == nil || resp.streamRewriter == nil {
 		return nil
 	}
@@ -428,7 +428,7 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 						Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 						Error:        err.Error(),
 						ConnectMs:    failConnectMs,
-						RuleNotes:    RuleNoteText(req.RuleNotes),
+						RuleNotes:    req.RuleNotes,
 					}
 					if failHeaders != nil {
 						data.Response = &service.HTTPCapture{Headers: failHeaders, Body: err.Error()}
@@ -508,7 +508,7 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
-	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(raw, req.Headers, plan.CompiledRewrite, RuleCategoryRequest)
+	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(raw, req.Headers, plan.CompiledRewrite, service.RuleCategoryRequest)
 	req.RuleNotes = append(req.RuleNotes, notes...)
 	if err != nil {
 		return err
@@ -537,7 +537,7 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, req *Rel
 		return fmt.Errorf("read response body: %w", err)
 	}
 	_ = resp.Body.Close()
-	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(body, resp.Headers, plan.CompiledResponseRewrites, RuleCategoryResponse)
+	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(body, resp.Headers, plan.CompiledResponseRewrites, service.RuleCategoryResponse)
 	if req != nil {
 		req.RuleNotes = append(req.RuleNotes, notes...)
 	}
@@ -553,21 +553,21 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, req *Rel
 	return nil
 }
 
-// captureRuleNotes picks the rule-note text a capture stage should carry:
-// the request-rewrite outcomes on the request nodes, and the response-
-// rewrite plus failover outcomes on the response nodes (which is all that
-// is known by the time they are written).
-func captureRuleNotes(stage topologyStage, req *RelayRequest) string {
+// captureRuleNotes picks the rule notes a capture stage should carry: the
+// request-rewrite outcomes on the request nodes, and the response-rewrite
+// plus failover outcomes on the response nodes (which is all that is known
+// by the time they are written).
+func captureRuleNotes(stage topologyStage, req *RelayRequest) []service.RuleNote {
 	if req == nil || len(req.RuleNotes) == 0 {
-		return ""
+		return nil
 	}
 	switch stage {
 	case topologyStageRequestBefore:
-		return ""
+		return nil
 	case topologyStageRequestAfter:
-		return RuleNoteText(RuleNotesOf(req.RuleNotes, RuleCategoryRequest))
+		return service.RuleNotesOf(req.RuleNotes, service.RuleCategoryRequest)
 	default:
-		return RuleNoteText(RuleNotesOf(req.RuleNotes, RuleCategoryResponse, RuleCategoryFailover))
+		return service.RuleNotesOf(req.RuleNotes, service.RuleCategoryResponse, service.RuleCategoryFailover)
 	}
 }
 

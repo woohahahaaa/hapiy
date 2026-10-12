@@ -36,8 +36,8 @@
   },
   "availability": {
     "providerItem": "供应商 {{count}}/{{total}}",
-    "baseUrlItem": "base URL {{count}}/{{total}}",
-    "keyItem": "key {{count}}/{{total}}",
+    "baseUrlItem": "Base URL {{count}}/{{total}}",
+    "keyItem": "Key {{count}}/{{total}}",
     "summary": "故障转移：{{items}}",
     "join": "、"
   }

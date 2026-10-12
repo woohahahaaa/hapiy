@@ -120,7 +120,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 1,
       keyCount: 1,
-    })).toBe('故障转移：供应商 1/1、base URL 1/1、key 1/1')
+    })).toBe('故障转移：供应商 1/1、Base URL 1/1、Key 1/1')
   })
 
   it('部分禁用时按 key、base URL 顺序显示分数', () => {
@@ -130,7 +130,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 3,
       keyCount: 2,
-    })).toBe('故障转移：base URL 2/3、key 1/2')
+    })).toBe('故障转移：Base URL 2/3、Key 1/2')
   })
 
   it('全部 base URL 禁用时显示 base URL n/n', () => {
@@ -140,7 +140,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: {},
       baseURLCount: 2,
       keyCount: 0,
-    })).toBe('故障转移：base URL 2/2')
+    })).toBe('故障转移：Base URL 2/2')
   })
 
   it('全部 key 禁用时显示 key n/n', () => {
@@ -150,7 +150,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true, 'sk-b': true },
       baseURLCount: 0,
       keyCount: 2,
-    })).toBe('故障转移：key 2/2')
+    })).toBe('故障转移：Key 2/2')
   })
 
   it('全量与部分禁用混合时按分数同时显示', () => {
@@ -160,6 +160,6 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 2,
       keyCount: 3,
-    })).toBe('故障转移：base URL 2/2、key 1/3')
+    })).toBe('故障转移：Base URL 2/2、Key 1/3')
   })
 })

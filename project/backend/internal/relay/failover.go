@@ -152,7 +152,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	e.breakAffinity(req)
 	dimension, autoDisable := rule.SingleAction()
 	if dimension == "" {
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, "规则未配置有效的转移维度"))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, "规则未配置有效的转移维度"))
 		return resp, err
 	}
 	value := failoverActionValue(plan, req, dimension)
@@ -194,10 +194,10 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			// 转移成功：补记一条原始失败，使用记录里能看出
 			// 「先失败、后经故障转移换通道成功」。
 			e.recordFailoverAttempt(req, plan, err)
-			appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusHit, joinReasons("已切换通道", disableInfo)))
+			appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusHit, joinReasons("已切换通道", disableInfo)))
 			return rotated, nil
 		}
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, joinReasons("没有可切换的其他通道", disableInfo)))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, joinReasons("没有可切换的其他通道", disableInfo)))
 	case model.FailoverDimensionProvider:
 		fallbackPlan := e.resolveFallbackPlan(rule.FallbackProvider)
 		if rule.FallbackProvider == "" {
@@ -219,28 +219,28 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 				// 转移成功：补记原始失败（见上）。
 				e.recordFailoverAttempt(req, plan, err)
 				e.clearFailoverHit(plan.Provider.ID, dimension, value)
-				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusHit, joinReasons("已转移至 "+fallbackPlan.Provider.Name, disableInfo)))
+				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusHit, joinReasons("已转移至 "+fallbackPlan.Provider.Name, disableInfo)))
 			} else {
-				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusFailed, joinReasons("回退供应商调用失败："+fbErr.Error(), disableInfo)))
+				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusFailed, joinReasons("回退供应商调用失败："+fbErr.Error(), disableInfo)))
 			}
 			return fbResp, fbErr
 		}
 	}
 	if dimension == model.FailoverDimensionProvider {
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusFailed, joinReasons("无支持该模型与端点的可用回退供应商", disableInfo)))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusFailed, joinReasons("无支持该模型与端点的可用回退供应商", disableInfo)))
 		return resp, fmt.Errorf("upstream failed for model %s at %s; no eligible fallback provider supports this model and endpoint: %w", req.Model, req.Path, err)
 	}
-	appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, disableInfo))
+	appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, disableInfo))
 	return resp, err
 }
 
 // failoverNote builds a RuleNote for a matched failover rule.
-func failoverNote(rule *model.FailoverRule, status, reason string) *RuleNote {
+func failoverNote(rule *model.FailoverRule, status, reason string) *service.RuleNote {
 	if rule == nil {
 		return nil
 	}
-	return &RuleNote{
-		Category: RuleCategoryFailover,
+	return &service.RuleNote{
+		Category: service.RuleCategoryFailover,
 		RuleID:   rule.ID,
 		Rule:     rule.Name,
 		Status:   status,
@@ -250,7 +250,7 @@ func failoverNote(rule *model.FailoverRule, status, reason string) *RuleNote {
 
 // appendFailoverNotes records one note per configured failover rule: the
 // matched rule's outcome when provided, 未命中 for every other rule.
-func appendFailoverNotes(req *RelayRequest, rules []*model.FailoverRule, matched *RuleNote) {
+func appendFailoverNotes(req *RelayRequest, rules []*model.FailoverRule, matched *service.RuleNote) {
 	if req == nil || len(rules) == 0 {
 		return
 	}
@@ -266,11 +266,11 @@ func appendFailoverNotes(req *RelayRequest, rules []*model.FailoverRule, matched
 			req.RuleNotes = append(req.RuleNotes, *matched)
 			continue
 		}
-		req.RuleNotes = append(req.RuleNotes, RuleNote{
-			Category: RuleCategoryFailover,
+		req.RuleNotes = append(req.RuleNotes, service.RuleNote{
+			Category: service.RuleCategoryFailover,
 			RuleID:   rule.ID,
 			Rule:     rule.Name,
-			Status:   RuleStatusMiss,
+			Status:   service.RuleStatusMiss,
 		})
 	}
 }
@@ -311,7 +311,7 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 		}
 		dimension, autoDisable := rule.SingleAction()
 		if dimension == "" {
-			replaceFailoverNote(req, *failoverNote(rule, RuleStatusNoEffect, "规则未配置有效的转移维度"))
+			replaceFailoverNote(req, *failoverNote(rule, service.RuleStatusNoEffect, "规则未配置有效的转移维度"))
 			continue
 		}
 		value := failoverActionValue(plan, req, dimension)
@@ -324,7 +324,7 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 		if autoDisable {
 			hitCount, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
 		}
-		status := RuleStatusHit
+		status := service.RuleStatusHit
 		if autoDisable && !hitReached {
 			reason = joinReasons(reason, fmt.Sprintf("自动禁用未达阈值（%d/%d）", hitCount, failoverThreshold(rule)))
 		}
@@ -332,7 +332,7 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 			outcome := upstreamOutcome{message: reason}
 			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome); err != nil {
 				log.Printf("relay: applyFailoverAction(speed) %s/%s: %v", plan.Provider.ID, dimension, err)
-				status = RuleStatusFailed
+				status = service.RuleStatusFailed
 				reason = joinReasons(reason, "自动禁用失败："+err.Error())
 			} else {
 				reason = joinReasons(reason, "已自动禁用 "+service.ChannelEventMessage(dimension, value))
@@ -346,12 +346,12 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 // (e.g. the 未命中 written when the upstream call succeeded) with the
 // post-response speed outcome, so one rule never reports two contradictory
 // statuses on the same request.
-func replaceFailoverNote(req *RelayRequest, note RuleNote) {
+func replaceFailoverNote(req *RelayRequest, note service.RuleNote) {
 	if req == nil {
 		return
 	}
 	for i := range req.RuleNotes {
-		if req.RuleNotes[i].Category == RuleCategoryFailover && req.RuleNotes[i].RuleID == note.RuleID {
+		if req.RuleNotes[i].Category == service.RuleCategoryFailover && req.RuleNotes[i].RuleID == note.RuleID {
 			req.RuleNotes[i] = note
 			return
 		}

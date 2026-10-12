@@ -779,23 +779,30 @@ func TestListPairs_header_only_rewrite_is_modified(t *testing.T) {
 	}
 }
 
-// TestReadPair_surfaces_rule_notes: rule outcomes written with the capture
-// rows (命中但未生效 with its reason) reach the stage rows the detail dialog
-// renders, so a matched rule that changed nothing is explainable.
+// TestReadPair_surfaces_rule_notes: structured rule outcomes written with the
+// capture rows reach the display fields the detail dialog renders — the stage
+// rows' rendered lines, the 请求改写/响应改写 markers, and the opening problem
+// block (命中但未生效 with its reason).
 func TestReadPair_surfaces_rule_notes(t *testing.T) {
 	w := newPairsTestWriter(t)
 
-	notes := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	noEffect := RuleNote{
+		Category: RuleCategoryRequest,
+		RuleID:   "5cc4af57",
+		Rule:     "为 opencode go 添加x-opencode-session",
+		Status:   RuleStatusNoEffect,
+		Reason:   "引用源 X-Session-Id 不存在",
+	}
 	w.WriteLog(&LogCaptureData{
 		RequestID: "r1", Type: "request", Stage: "request_after",
 		ModelName: "deepseek-v4.1-flash",
 		Request:   &HTTPCapture{Headers: map[string]string{"Authorization": "Bearer hk-x"}, Body: map[string]any{"model": "deepseek-v4.1-flash"}},
-		RuleNotes: notes,
+		RuleNotes: []RuleNote{noEffect},
 	})
 	w.WriteLog(&LogCaptureData{
 		RequestID: "r1", Type: "response", Stage: "response_after",
 		Response:  &HTTPCapture{Body: map[string]any{"ok": true}},
-		RuleNotes: "[故障转移] 主转移：未命中",
+		RuleNotes: []RuleNote{{Category: RuleCategoryFailover, RuleID: "f1", Rule: "主转移", Status: RuleStatusMiss}},
 	})
 
 	full, err := w.ReadPair("r1")
@@ -805,10 +812,28 @@ func TestReadPair_surfaces_rule_notes(t *testing.T) {
 	if full.Request == nil || full.Request.After == nil {
 		t.Fatalf("request after row missing: %+v", full.Request)
 	}
-	if full.Request.After.RuleNotes != notes {
-		t.Fatalf("request rule notes = %q, want %q", full.Request.After.RuleNotes, notes)
+	wantLine := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	if full.Request.After.RuleNotes != wantLine {
+		t.Fatalf("request rule notes = %q, want %q", full.Request.After.RuleNotes, wantLine)
 	}
 	if len(full.Responses) != 1 || full.Responses[0].After == nil || full.Responses[0].After.RuleNotes != "[故障转移] 主转移：未命中" {
 		t.Fatalf("response rule notes missing: %+v", full.Responses)
+	}
+	if full.RuleProblems != wantLine {
+		t.Fatalf("rule problems = %q, want %q", full.RuleProblems, wantLine)
+	}
+
+	summaries, _, err := w.ListPairs("zh", LogListParams{Limit: 50, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListPairs: %v", err)
+	}
+	if len(summaries) != 1 {
+		t.Fatalf("summaries = %d, want 1", len(summaries))
+	}
+	if !summaries[0].HasRequestRewrite {
+		t.Fatalf("HasRequestRewrite = false, want true (rule engaged with no effect)")
+	}
+	if summaries[0].HasResponseRewrite {
+		t.Fatalf("HasResponseRewrite = true, want false (failover miss is not a response rewrite)")
 	}
 }
