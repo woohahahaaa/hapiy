@@ -52,6 +52,11 @@ func SaveFlatTopology(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		err := db.Transaction(func(tx *gorm.DB) error {
 			backfillProviderIDs(tx, &tp)
+			// Keep the state this save replaces in the version history. History
+			// is bookkeeping: a failed snapshot is logged, never a save failure.
+			if err := SnapshotTopologyBeforeSave(tx); err != nil {
+				log.Printf("flat-topology: version snapshot before save failed: %v", err)
+			}
 			if err := topology.NewStore(tx).Save(&tp); err != nil {
 				return err
 			}

@@ -9,7 +9,7 @@
 # 一、项目信息
 # ===========================================================================
 
-# 身份与默认端口在项目根目录 woohkit.json（name / id / defaultPort）。
+# 身份与默认端口在 alive/woohkit.json（name / id / defaultPort）。
 
 STATE_DIR="${HAPIY_STATE_DIR:-$HOME/.hapiy}"
 APP_DIR="${HAPIY_HOME:-$STATE_DIR}/app"

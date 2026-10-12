@@ -1,21 +1,21 @@
 # woohkit 契约（CONTRACT）
 
 woohkit 是一个「框架 + 规范」：通用逻辑（alive、release、安装器、桌面壳）都在
-kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `woohkit.json`（身份与
+kit 里，跟技术栈无关；项目只写两个自己的文件：`alive/woohkit.json`（身份与
 默认端口，自己定）和 `scripts/project.sh`（钩子：我是什么栈、怎么构建、怎么
 打包）。本文件是那份规范——引用 kit 的项目照着实现即可。
 
 - kit 拥有的文件（**永远不要手改**，`tools/sync.sh` 整文件覆盖）：
   `alive/**`（`alive/alive.sh`、`alive/release.sh`、`alive/woohkit/` 快照）
 - 项目拥有的文件（kit 永不触碰）：
-  `woohkit.json`（根目录，身份/端口，kit 只读）、`scripts/project.sh`（钩子）、
+  `alive/woohkit.json`（身份/端口，kit 只读）、`scripts/project.sh`（钩子）、
   `install.sh` / `install.ps1`（release 时渲染生成）
 
 ---
 
 ## 一、项目文件（都在项目里；kit 只读不改）
 
-### 1.1 `<项目根>/woohkit.json` — 身份与默认端口（项目自己定）
+### 1.1 `<项目根>/alive/woohkit.json` — 身份与默认端口（项目自己定）
 
 ```json
 { "name": "MyApp", "id": "myapp", "defaultPort": 18799 }
@@ -139,7 +139,7 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 - `shell/macapp/build.sh <项目根> <输出目录>` → `<APP_NAME>.app`（WKWebView 通用
   二进制，arm64+x86_64，ad-hoc 签名）
 - `shell/winapp/build.sh <项目根> <输出目录>` → `<APP_NAME>.exe` + 3 个 WebView2 dll
-- 两者读项目根 `woohkit.json` 的 `name` / `id` / `defaultPort`，可选
+- 两者读项目 `alive/woohkit.json` 的 `name` / `id` / `defaultPort`，可选
   （写在 `project.sh`）：`SHELL_THEME`（`#rrggbb`，默认 `#0a0202`）、
   `SHELL_BUNDLE_ID`、`SHELL_ICON`（默认 `<web|public>/public/icon-512.png`）
 - 壳的行为：窗口只打开 `http://127.0.0.1:<端口>`（端口从 `<用户目录>/.<APP_ID>/port`
@@ -155,7 +155,7 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 
 ## 七、同步与升级
 
-- 新建项目：`tools/init.sh <项目目录>`（同步框架 + 生成 `woohkit.json` 和
+- 新建项目：`tools/init.sh <项目目录>`（同步框架 + 生成 `alive/woohkit.json` 和
   `scripts/project.sh` 骨架）。
 - 更新框架：`tools/sync.sh <项目目录>`（整文件覆盖 kit 文件）；
   `tools/sync.sh <项目目录> --check` 只对比不写。

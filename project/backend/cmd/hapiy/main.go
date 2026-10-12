@@ -145,8 +145,10 @@ func runServe() {
 	// Drop archived topology versions stored in the legacy nested-document
 	// format: the version archive was rebuilt around the flat topology, so old
 	// snapshots are unreadable and are intentionally discarded (no migration).
-	if err := db.Where("1 = 1").Delete(&model.TopologyVersion{}).Error; err != nil {
-		log.Printf("Warning: Failed to clear legacy topology versions: %v", err)
+	// Snapshots written since are kept — the purge only drops rows that do not
+	// decode as a flat topology.
+	if err := handler.PurgeLegacyTopologyVersions(db); err != nil {
+		log.Printf("Warning: Failed to purge legacy topology versions: %v", err)
 	}
 
 	creds, err := handler.CreateDefaultAdmin(db)

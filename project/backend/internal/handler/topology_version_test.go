@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
 )
@@ -278,5 +279,97 @@ func TestTopologyVersionGet_not_found(t *testing.T) {
 	rec := versionsRequest(t, http.MethodGet, "/api/versions/does-not-exist", TopologyVersionGet(db))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status: want 404, got %d", rec.Code)
+	}
+}
+
+func TestSaveFlatTopology_archives_the_replaced_state(t *testing.T) {
+	db := newTopologyVersionTestDB(t)
+	engine := relay.NewEngine(db)
+	v1 := `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true}],"wires":[{"source":"e1","target":"ps1"}]}`
+	seedTopologyConfig(t, db, v1)
+
+	// The first save replaces v1, which must land in the history verbatim.
+	flatTopologyRequest(t, http.MethodPut, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false}],"wires":[]}`, SaveFlatTopology(db, engine))
+	if got := countTopologyVersions(t, db); got != 1 {
+		t.Fatalf("after first save: want 1 version, got %d", got)
+	}
+	var stored model.TopologyVersion
+	if err := db.First(&stored).Error; err != nil {
+		t.Fatalf("load stored version: %v", err)
+	}
+	if stored.Nodes != v1 {
+		t.Fatalf("archived document: want the replaced state, got %s", stored.Nodes)
+	}
+
+	// The second save archives the state the first save wrote.
+	flatTopologyRequest(t, http.MethodPut, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"B","enabled":true}],"wires":[]}`, SaveFlatTopology(db, engine))
+	if got := countTopologyVersions(t, db); got != 2 {
+		t.Fatalf("after second save: want 2 versions, got %d", got)
+	}
+	data := decodeVersionsData(t, versionsRequest(t, http.MethodGet, "/api/versions", TopologyVersionList(db)))
+	if current := data["current"].(map[string]any); current["archived"] != false {
+		t.Fatalf("live state after a save: want archived=false, got %v", current["archived"])
+	}
+	if versions := data["versions"].([]any); len(versions) != 2 {
+		t.Fatalf("listed versions: want 2, got %d", len(versions))
+	}
+}
+
+func TestSaveFlatTopology_skips_unchanged_document(t *testing.T) {
+	db := newTopologyVersionTestDB(t)
+	engine := relay.NewEngine(db)
+	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true}],"wires":[]}`)
+	body := `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false}],"wires":[]}`
+
+	// Repeating the same document must not grow the history beyond the state it
+	// replaced.
+	for i := 0; i < 3; i++ {
+		flatTopologyRequest(t, http.MethodPut, body, SaveFlatTopology(db, engine))
+	}
+	if got := countTopologyVersions(t, db); got != 2 {
+		t.Fatalf("identical saves: want 2 versions, got %d", got)
+	}
+}
+
+func TestPurgeLegacyTopologyVersions_keeps_flat_history(t *testing.T) {
+	db := newTopologyVersionTestDB(t)
+	legacy := model.TopologyVersion{
+		Nodes:           `[[{"id":"e1","enabled":true}]]`,
+		ConfigUpdatedAt: time.Now(),
+		WorkflowTotal:   1,
+		WorkflowActive:  1,
+		NodeCount:       1,
+	}
+	flat := model.TopologyVersion{
+		Nodes:           `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true}],"wires":[]}`,
+		ConfigUpdatedAt: time.Now(),
+		WorkflowTotal:   1,
+		WorkflowActive:  1,
+		NodeCount:       1,
+	}
+	if err := db.Create(&legacy).Error; err != nil {
+		t.Fatalf("create legacy version: %v", err)
+	}
+	if err := db.Create(&flat).Error; err != nil {
+		t.Fatalf("create flat version: %v", err)
+	}
+
+	if err := PurgeLegacyTopologyVersions(db); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	var kept []model.TopologyVersion
+	if err := db.Find(&kept).Error; err != nil {
+		t.Fatalf("load remaining versions: %v", err)
+	}
+	if len(kept) != 1 || kept[0].ID != flat.ID {
+		t.Fatalf("purge kept the wrong rows: %v", kept)
+	}
+
+	// Idempotent: a second run keeps the flat snapshot.
+	if err := PurgeLegacyTopologyVersions(db); err != nil {
+		t.Fatalf("second purge: %v", err)
+	}
+	if got := countTopologyVersions(t, db); got != 1 {
+		t.Fatalf("second purge: want 1 version, got %d", got)
 	}
 }

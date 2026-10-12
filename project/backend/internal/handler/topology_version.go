@@ -95,15 +95,25 @@ func topologyVersionList(db *gorm.DB) (gin.H, error) {
 // topologyCurrentArchived reports whether the newest archived version matches
 // the given live config UpdatedAt (i.e. the live state has been captured).
 func topologyCurrentArchived(db *gorm.DB, configUpdatedAt time.Time) (bool, error) {
+	latest, err := latestTopologyVersion(db)
+	if err != nil || latest == nil {
+		return false, err
+	}
+	return latest.ConfigUpdatedAt.Equal(configUpdatedAt), nil
+}
+
+// latestTopologyVersion loads the newest archived version, or nil when the
+// history is empty.
+func latestTopologyVersion(db *gorm.DB) (*model.TopologyVersion, error) {
 	var latest model.TopologyVersion
 	err := db.Order("created_at DESC, id DESC").First(&latest).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil
+		return nil, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("load latest topology version: %w", err)
+		return nil, fmt.Errorf("load latest topology version: %w", err)
 	}
-	return latest.ConfigUpdatedAt.Equal(configUpdatedAt), nil
+	return &latest, nil
 }
 
 // topologyStats derives the summary counters from the stored flat topology.
@@ -154,6 +164,12 @@ func archiveCurrentTopology(db *gorm.DB, force bool) (*model.TopologyVersion, er
 		return nil, nil
 	}
 
+	return createTopologyVersion(db, &config)
+}
+
+// createTopologyVersion stores one snapshot of the given live config and trims
+// the history to the newest maxTopologyVersions entries.
+func createTopologyVersion(db *gorm.DB, config *model.TopologyConfig) (*model.TopologyVersion, error) {
 	total, active, count := topologyStats([]byte(config.Flat))
 	version := model.TopologyVersion{
 		Nodes:           config.Flat,
@@ -178,6 +194,35 @@ func archiveCurrentTopology(db *gorm.DB, force bool) (*model.TopologyVersion, er
 		}
 	}
 	return &version, nil
+}
+
+// SnapshotTopologyBeforeSave stores the live topology as a version unless the
+// newest version already holds the same document. SaveFlatTopology calls it
+// inside the save transaction, right before the new document is written, so
+// every change leaves the state it replaced in the history. Unlike the
+// auto-archive it ignores the 5-minute quiet window: the save itself is the
+// event, and the snapshot is of the state being replaced, not of the live one.
+func SnapshotTopologyBeforeSave(db *gorm.DB) error {
+	var config model.TopologyConfig
+	err := db.Where("id = ?", topologyConfigRowID).First(&config).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load topology config: %w", err)
+	}
+
+	latest, err := latestTopologyVersion(db)
+	if err != nil {
+		return err
+	}
+	if latest != nil && latest.Nodes == config.Flat {
+		// The newest snapshot already holds this document; a save that does not
+		// change it (or a repeat of the previous save) adds nothing.
+		return nil
+	}
+	_, err = createTopologyVersion(db, &config)
+	return err
 }
 
 // ── Handlers ──
@@ -278,6 +323,31 @@ func TopologyVersionRestore(db *gorm.DB, refresher TopologyRefresher) gin.Handle
 		}
 		c.JSON(http.StatusOK, gin.H{"data": payload})
 	}
+}
+
+// PurgeLegacyTopologyVersions drops snapshots written before the archive was
+// rebuilt around the flat topology: the legacy nested-document format can no
+// longer be restored. Rows that decode as a flat topology are kept, so this is
+// idempotent and safe to run on every start.
+func PurgeLegacyTopologyVersions(db *gorm.DB) error {
+	var versions []model.TopologyVersion
+	if err := db.Select("id", "nodes").Find(&versions).Error; err != nil {
+		return fmt.Errorf("load topology versions: %w", err)
+	}
+	legacy := make([]string, 0, len(versions))
+	for _, version := range versions {
+		var tp topology.Topology
+		if err := json.Unmarshal([]byte(version.Nodes), &tp); err != nil {
+			legacy = append(legacy, version.ID)
+		}
+	}
+	if len(legacy) == 0 {
+		return nil
+	}
+	if err := db.Where("id IN ?", legacy).Delete(&model.TopologyVersion{}).Error; err != nil {
+		return fmt.Errorf("delete legacy topology versions: %w", err)
+	}
+	return nil
 }
 
 // StartTopologyVersionAutoArchive runs the startup compensation check once and

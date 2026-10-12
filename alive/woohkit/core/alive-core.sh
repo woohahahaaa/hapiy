@@ -9,8 +9,8 @@
 #     detach 出来的 supervisor 守护（退出 2s 重拉）；
 #   - dev：proj_dev_build/proj_dev_run（缺省回退 proj_run），额外的前端 dev
 #     server 用 kit_sidecar 挂成边车（同生命周期、死了自动重拉、停栈一起收）；
-#   - 端口：--port（仅当次）> woohkit.json 的 defaultPort；<state>/port 只是
-#     写给桌面壳/外部读的握手输出，不参与决策；
+#   - 端口：--port（仅当次）> alive/woohkit.json 的 defaultPort；<state>/port
+#     只是写给桌面壳/外部读的握手输出，不参与决策；
 #   - 状态：<state>/mode、<state>/supervisor.pid、<state>/*.pid（边车）、
 #     <state>/log/<LOG_STEM>.log（主日志）、<state>/log/supervisor.log。
 #
@@ -25,7 +25,7 @@ Usage: ./alive/alive.sh [prod|dev] [--port N] [--no-build]
 
   (no arg)      构建并启动 prod 栈
   dev           构建（proj_dev_build）并启动 dev 栈
-  --port N      本次运行改用 N（不记忆；不带参数永远用 woohkit.json 的 defaultPort）
+  --port N      本次运行改用 N（不记忆；不带参数永远用 alive/woohkit.json 的 defaultPort）
   --no-build    跳过构建，只重启
 EOF
   exit "${1:-2}"
@@ -55,7 +55,7 @@ alive_init() {
   : "${ROOT_DIR:?内部错误：ROOT_DIR 未导出，请从 alive/alive.sh 运行}"
   : "${KIT_DIR:?内部错误：KIT_DIR 未导出，请从 alive/alive.sh 运行}"
 
-  # 项目身份与默认端口来自项目根目录的 woohkit.json（项目自己定，kit 只读）。
+  # 项目身份与默认端口来自 alive/woohkit.json（项目自己定，kit 只读）。
   kit_load_project_json "$ROOT_DIR"
 
   : "${STATE_DIR:=$HOME/.$APP_ID}"
@@ -76,7 +76,7 @@ alive_init() {
   KIT_VERSION="$(kit_version)"
 
   # 端口只由「项目默认 + 本次参数」决定：--port（仅当次）> WOOHKIT_PORT
-  # （detach 子进程继承）> woohkit.json 的 defaultPort。没有"记忆"一说。
+  # （detach 子进程继承）> alive/woohkit.json 的 defaultPort。没有"记忆"一说。
   if [ -n "${PORT_ARG:-}" ]; then
     PORT="$PORT_ARG"
   elif [ -n "${WOOHKIT_PORT:-}" ]; then

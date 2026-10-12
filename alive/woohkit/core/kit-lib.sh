@@ -15,13 +15,13 @@ die()  { printf '[%s] %s\n' "${APP_ID:-woohkit}" "$*" >&2; exit 1; }
 # hook_exists <函数名> — 项目钩子是否实现了这个函数。
 hook_exists() { command -v "$1" >/dev/null 2>&1; }
 
-# kit_load_project_json <项目根目录> — 读项目根目录 woohkit.json（项目自己声明
+# kit_load_project_json <项目根目录> — 读项目的 alive/woohkit.json（项目自己声明
 # 的身份与默认端口：name / id / defaultPort），导出 APP_NAME / APP_ID /
 # DEFAULT_PORT。端口只认项目自己的值：--port 只当次生效（见 alive-core），
 # kit 不记忆、不覆盖。
 kit_load_project_json() {
-  _kit_json="$1/woohkit.json"
-  [ -f "$_kit_json" ] || die "missing woohkit.json（项目根目录需要 {name, id, defaultPort}，见 CONTRACT.md）"
+  _kit_json="$1/alive/woohkit.json"
+  [ -f "$_kit_json" ] || die "missing alive/woohkit.json（需要 {name, id, defaultPort}，见 alive/woohkit/CONTRACT.md）"
   _kit_out="$(python3 - "$_kit_json" <<'PY'
 import json, re, sys
 
