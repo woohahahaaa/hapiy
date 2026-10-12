@@ -26,37 +26,21 @@ import {
 } from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { RemovableTag } from '@/components/tag'
-import { dashboardApi, type AgentConfigFile, type AgentProtocol, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView, type Token } from '@/lib/dashboard-api'
+import { dashboardApi, type AgentConfigFile, type EndpointRuleMap, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView, type Token } from '@/lib/dashboard-api'
 import { isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
-import { matchProtocolIndexByEndpoint, matchedTagOf } from '@/lib/agent-endpoint-rules'
+import { deriveManagedEndpointGroups, type ManagedEndpointGroup } from '@/lib/managed-endpoint-groups'
 
 interface ManagedProviderDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   record: AgentConfigFile | null
   editing: ManagedProviderView | null
-  protocols?: readonly AgentProtocol[]
   onSaved: () => void
-}
-
-// EndpointGroup is the live-derived grouping state. Endpoints hitting the
-// same endpoint_tags rule (e.g. "/chat/completions" and
-// "/v1/chat/completions" both hit "*completion*") fold into ONE group whose
-// `hits` lists every folded endpoint; endpoints without a matching rule
-// stay one group per endpoint (ruleIndex -1).
-interface EndpointGroup {
-  readonly endpoint: string
-  readonly ruleIndex: number
-  readonly ruleTag: string | null
-  readonly hits: readonly string[]
-  readonly providerNames: readonly string[]
-  readonly modelNames: readonly string[]
-  readonly noEndpointProviderIds?: readonly string[] // 未配置 endpoint 组成员 app provider ids
 }
 
 // groupHits lists the endpoints a group covers (its own endpoint for
 // rule-less groups).
-function groupHits(g: EndpointGroup): readonly string[] {
+function groupHits(g: ManagedEndpointGroup): readonly string[] {
   return g.hits.length > 0 ? g.hits : [g.endpoint]
 }
 
@@ -69,11 +53,11 @@ export function ManagedProviderDialog({
   onOpenChange,
   record,
   editing,
-  protocols = [],
   onSaved,
 }: ManagedProviderDialogProps) {
   const { t } = useTranslation('agentConfig')
   const [options, setOptions] = useState<readonly ManagedProviderOption[]>([])
+  const [endpointRules, setEndpointRules] = useState<EndpointRuleMap>({})
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [loading, setLoading] = useState(false)
@@ -106,14 +90,16 @@ export function ManagedProviderDialog({
     setManualEndpoint({})
     setApiKey('')
     setBaseUrl('')
+    setEndpointRules({})
     Promise.all([
-      dashboardApi.listManagedProviderOptions(),
+      dashboardApi.listManagedProviderOptions(record.id),
       loadModelsDevModels(),
       dashboardApi.listTokens({ limit: 1000, offset: 0 }).catch(() => ({ tokens: [] as readonly Token[], total: 0 })),
       dashboardApi.getSettings().catch(() => [] as ReadonlyArray<{ key: string; value: string }>),
     ])
-      .then(([{ options, systemBaseUrl: systemBaseUrlFromBackend }, models, tokensRes, settings]) => {
+      .then(([{ options, systemBaseUrl: systemBaseUrlFromBackend, endpointRules: rulesFromBackend }, models, tokensRes, settings]) => {
         setOptions(options)
+        setEndpointRules(rulesFromBackend)
         setSnapshot(models)
         setTokens(tokensRes.tokens)
         // 系统 BaseURL：优先取后端暴露的 system_base_url —— 与生成 JSON 用的是
@@ -155,32 +141,17 @@ export function ManagedProviderDialog({
             suffix['__none__'] = manualGroup.suffix
             sources['__none__'] = { ...manualGroup.model_sources }
           } else {
-            // 显式重复组恢复：用户给手填组填了与已有分组相同的 endpoint +
-            // 相同后缀，保存后是两条分组记录（写入 JSON 时才合成一个块）。
-            // 同一 endpoint 出现两条即视为有一条是手填的重复组，回填显示，
-            // 弹窗里依旧呈现为独立两组。
-            const endpointCount = new Map<string, number>()
-            for (const g of editing.groups) {
-              endpointCount.set(g.endpoint, (endpointCount.get(g.endpoint) ?? 0) + 1)
-            }
-            const dup = editing.groups.find((g) => (endpointCount.get(g.endpoint) ?? 0) > 1)
-            if (dup) {
-              setManualEndpoint({ __none__: dup.endpoint })
-              suffix['__none__'] = dup.suffix
-              sources['__none__'] = { ...dup.model_sources }
-            } else {
-              // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
-              // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
-              // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
-              const noEpIds = options
-                .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
-                .map((o) => o.id)
-              const mergedGroup = noEpIds.length
-                ? editing.groups.find((g) => (g.provider_ids ?? []).some((pid) => noEpIds.includes(pid)))
-                : undefined
-              if (mergedGroup) {
-                setManualEndpoint({ __none__: mergedGroup.endpoint })
-              }
+            // 合并态恢复：手填 endpoint 在保存时并入了某个已有分组（该
+            // 分组的 endpoint 可从勾选供应商派生），把它的 endpoint 回填进
+            // 手动输入框 —— 否则重开后输入框是空的，看起来像没保存。
+            const noEpIds = options
+              .filter((o) => checkedIds.has(o.id) && o.status && o.endpoints.length === 0)
+              .map((o) => o.id)
+            const mergedGroup = noEpIds.length
+              ? editing.groups.find((g) => (g.provider_ids ?? []).some((pid) => noEpIds.includes(pid)))
+              : undefined
+            if (mergedGroup) {
+              setManualEndpoint({ __none__: mergedGroup.endpoint })
             }
           }
           setSuffixByEndpoint(suffix)
@@ -194,108 +165,27 @@ export function ManagedProviderDialog({
       .finally(() => setLoading(false))
   }, [open, record, editing])
 
-  // Derived groups: identical endpoints merge; models union by name.
-  // Providers without any endpoint form a special 未配置 endpoint group;
-  // a model whose endpoints list is empty (不限) is matched against the
-  // supplier's first endpoint.
-  const deriveGroups = (checkedValue: ReadonlySet<string>): readonly EndpointGroup[] => {
-    interface Acc {
-      providers: string[]
-      models: string[]
-    }
-    const byEndpoint = new Map<string, Acc>()
-    const noEndpoint: Acc = { providers: [], models: [] }
-    const noEndpointIds: string[] = []
-    for (const opt of options) {
-      if (!checkedValue.has(opt.id) || !opt.status) continue
-      if (opt.endpoints.length === 0) {
-        for (const m of opt.models) {
-          if (!noEndpoint.models.includes(m)) noEndpoint.models.push(m)
-        }
-        if (!noEndpoint.providers.includes(opt.name)) noEndpoint.providers.push(opt.name)
-        if (!noEndpointIds.includes(opt.id)) noEndpointIds.push(opt.id)
-        continue
-      }
-      for (const ep of opt.endpoints) {
-        const cur = byEndpoint.get(ep) ?? { providers: [], models: [] }
-        if (!cur.providers.includes(opt.name)) cur.providers.push(opt.name)
-        const mep = opt.model_endpoints ?? {}
-        for (const m of opt.models) {
-          const modelEps = mep[m] ?? []
-          // 模型设了明确 endpoint 才进对应组；空（不限）归入供应商第一个 endpoint
-          if (modelEps.length > 0) {
-            if (!modelEps.includes(ep)) continue
-          }
-          if (!cur.models.includes(m)) cur.models.push(m)
-        }
-        byEndpoint.set(ep, cur)
-      }
-    }
-    // 归类：命中同一条 endpoint_tags 规则的 endpoint 折成一组（例如
-    // /chat/completions 与 /v1/chat/completions 同属 *completion*），
-    // hits 记录被折进来的 endpoint；未命中规则的仍按 endpoint 独立成组。
-    const accs: Array<{
-      endpoint: string
-      ruleIndex: number
-      ruleTag: string | null
-      hits: string[]
-      providerNames: string[]
-      modelNames: string[]
-    }> = []
-    const byRuleAcc = new Map<number, (typeof accs)[number]>()
-    for (const [endpoint, v] of byEndpoint.entries()) {
-      const ruleIndex = matchProtocolIndexByEndpoint(endpoint, protocols)
-      if (ruleIndex < 0) {
-        accs.push({
-          endpoint,
-          ruleIndex: -1,
-          ruleTag: null,
-          hits: [endpoint],
-          providerNames: [...v.providers],
-          modelNames: [...v.models],
-        })
-        continue
-      }
-      let cur = byRuleAcc.get(ruleIndex)
-      if (!cur) {
-        cur = {
-          endpoint,
-          ruleIndex,
-          ruleTag: matchedTagOf(endpoint, protocols[ruleIndex]),
-          hits: [],
-          providerNames: [],
-          modelNames: [],
-        }
-        byRuleAcc.set(ruleIndex, cur)
-        accs.push(cur)
-      }
-      if (!cur.hits.includes(endpoint)) cur.hits.push(endpoint)
-      for (const p of v.providers) if (!cur.providerNames.includes(p)) cur.providerNames.push(p)
-      for (const m of v.models) if (!cur.modelNames.includes(m)) cur.modelNames.push(m)
-    }
-    const groups: EndpointGroup[] = accs
-    if (noEndpoint.providers.length > 0) {
-      groups.push({
-        endpoint: '__none__',
-        ruleIndex: -1,
-        ruleTag: null,
-        hits: [],
-        providerNames: noEndpoint.providers,
-        modelNames: noEndpoint.models,
-        noEndpointProviderIds: noEndpointIds,
-      })
-    }
-    return groups
-  }
+  // 已保存的分组（含隐藏的）：分组按后端的规则归类聚合，但存量分组保留
+  // 自己的 endpoint 与后缀，重存不会改块名。
+  const storedGroups = useMemo<readonly ManagedAgentGroup[]>(
+    () => [...(editing?.groups ?? []), ...(editing?.hidden_groups ?? [])],
+    [editing],
+  )
+
+  // Derived groups：同一规则的 endpoint 折成一组（canonical 由后端给），
+  // 没命中规则的按 endpoint 独立成组；未配置 endpoint 的供应商成为
+  // `__none__` 组，模型设了明确 endpoint 才进对应组。
+  const deriveGroups = (checkedValue: ReadonlySet<string>): readonly ManagedEndpointGroup[] =>
+    deriveManagedEndpointGroups({ options, checked: checkedValue, storedGroups, rules: endpointRules })
 
   // groups (from `checked`) is authoritative for submit; deferredGroups is for
   // rendering only, so toggling suppliers updates tags immediately and the
   // heavier endpoint/模型 sub-tables below catch up without blocking the clicks.
-  const groups = useMemo(() => deriveGroups(checked), [options, checked])
+  const groups = useMemo(() => deriveGroups(checked), [options, checked, storedGroups, endpointRules])
   const deferredChecked = useDeferredValue(checked)
   const deferredGroups = useMemo(
     () => deriveGroups(deferredChecked),
-    [options, deferredChecked],
+    [options, deferredChecked, storedGroups, endpointRules],
   )
   // 未配置 endpoint 组手动填写的 endpoint 命中已有分组时，把命中分组的
   // 后缀作为占位提示（留空保存即自动合并进该分组）。
@@ -323,7 +213,7 @@ export function ManagedProviderDialog({
   // 名下：先按命中顺序找已存值，找不到才算空。
   const storedSourceOf = (
     sources: Record<string, Record<string, string>>,
-    g: EndpointGroup,
+    g: ManagedEndpointGroup,
     model: string,
   ): string | undefined => {
     for (const hit of groupHits(g)) {
@@ -341,7 +231,7 @@ export function ManagedProviderDialog({
 
   // First candidate prefilled once a group's model sources are empty:
   // the first models.dev supplier for the model, else nothing.
-  const ensurePrefill = (g: EndpointGroup) => {
+  const ensurePrefill = (g: ManagedEndpointGroup) => {
     setSourceByEndpoint((prev) => {
       const next = { ...(prev[g.endpoint] ?? {}) }
       let changed = false
@@ -365,7 +255,7 @@ export function ManagedProviderDialog({
 
   // sourcesFor 汇总一个分组名下所有模型的来源（跨命中 endpoint 合并，
   // 分组自身 endpoint 优先），作为保存进 DB 的 model_sources。
-  const sourcesFor = (g: EndpointGroup): Record<string, string> => {
+  const sourcesFor = (g: ManagedEndpointGroup): Record<string, string> => {
     const out: Record<string, string> = {}
     for (const hit of groupHits(g)) {
       for (const [m, s] of Object.entries(sourceByEndpoint[hit] ?? {})) {

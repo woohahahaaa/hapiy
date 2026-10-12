@@ -243,7 +243,12 @@ func TestManagedYAMLDeepSeekHarnessFlow(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	path := filepath.Join(dir, "cordis.patch.yml")
+	// DSH 真实布局：<DSH_HOME>/profiles/<profile>/cordis.patch.yml，
+	// 凭据库在 <DSH_HOME>/.credentials.yaml（规则用 {config_dir}/../.. 定位）。
+	path := filepath.Join(dir, "profiles", "desktop", "cordis.patch.yml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	initial := "# keep me\n- id: agent-default-model\n  name: \"@deepseek-ai/dsh-agent-default-model\"\n  config:\n    provider: deepseek-account\n    model: deepseek-flash\n"
 	if err := writeFile(path, initial); err != nil {
 		t.Fatal(err)
@@ -349,6 +354,15 @@ func TestManagedYAMLDeepSeekHarnessFlow(t *testing.T) {
 		if item.Get("id").String() == "" {
 			t.Fatalf("array entry missing id: %s", item.Raw)
 		}
+	}
+	// 托管块的字段顺序同样适用于 YAML：models 固定最后（写入顺序 = 文件顺序）。
+	var blockKeys []string
+	provs.ForEach(func(k, _ gjson.Result) bool {
+		blockKeys = append(blockKeys, k.String())
+		return true
+	})
+	if len(blockKeys) < 2 || blockKeys[len(blockKeys)-1] != "models" {
+		t.Fatalf("models must be the last key of the yaml managed block, got %v\n%s", blockKeys, out)
 	}
 
 	// 4) 同步必须收敛：文件块与生成块相等，pending_sync=false。

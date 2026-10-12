@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -26,6 +28,9 @@ import (
 type managedGroupView struct {
 	Endpoint      string            `json:"endpoint"`
 	Suffix        string            `json:"suffix"`
+	RuleName      string            `json:"rule_name"` // 命中的 Endpoint 规则名，"" = 没命中任何规则
+	RuleTag       string            `json:"rule_tag"`  // 命中用的通配词（如 "*completion*"）
+	Hits          []string          `json:"hits"`      // 同一条规则归纳到的 live endpoint（含本组）
 	ProviderNames []string          `json:"provider_names"`
 	ProviderIDs   []string          `json:"provider_ids"` // 分组挂的供应商 id（含并入的无 endpoint 供应商），前端恢复手填 endpoint 用
 	ModelCount    int               `json:"model_count"`
@@ -53,11 +58,22 @@ type managedProviderView struct {
 
 // ManagedProviderOptions lists the system Provider rows with endpoint /
 // model counts so the 添加托管provider dialog can render its checkbox
-// table. Deleted (stale) linked providers are reported separately by
+// table, together with the endpoint → rule map (endpoint_rules) the dialog
+// groups by. Deleted (stale) linked providers are reported separately by
 // the managed-provider list endpoint; this endpoint only serves live
-// rows.
+// rows. The map is built from the live providers plus the endpoints the
+// record already saved, so an old group saved before a rule existed still
+// reports the rule it now belongs to.
 func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		row, ok := loadConfigFile(c, db)
+		if !ok {
+			return
+		}
+		rule, ok := loadRuleForRow(c, db, row)
+		if !ok {
+			return
+		}
 		var providers []model.Provider
 		if err := db.Order("name asc").Find(&providers).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -74,9 +90,11 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 			ModelCount     int                 `json:"model_count"`
 		}
 		out := make([]option, 0, len(providers))
+		endpoints := make([]string, 0, len(providers))
 		for _, p := range providers {
 			eps := effectiveProviderEndpoints(p)
 			mods := parseProviderModelNames(p.Models)
+			endpoints = append(endpoints, eps...)
 			out = append(out, option{
 				ID: p.ID, Name: p.Name, Status: p.Status,
 				Endpoints: eps, Models: mods,
@@ -84,11 +102,37 @@ func ManagedProviderOptions(db *gorm.DB) gin.HandlerFunc {
 				EndpointCount:  len(eps), ModelCount: len(mods),
 			})
 		}
+		endpoints = append(endpoints, storedManagedEndpoints(db, row.ID)...)
+		protocols, _ := rule.GetProtocols()
 		// system_base_url is the same value generation uses (systemBaseURLPrefix),
 		// so the托管 dialog can prefill/compare against the authoritative prefix
 		// instead of window.location.origin.
-		c.JSON(http.StatusOK, gin.H{"data": out, "system_base_url": systemBaseURLPrefix(c, db)})
+		c.JSON(http.StatusOK, gin.H{
+			"data":            out,
+			"system_base_url": systemBaseURLPrefix(c, db),
+			"endpoint_rules":  endpointRuleMap(endpoints, protocols),
+		})
 	}
+}
+
+// storedManagedEndpoints returns the endpoints already saved in the
+// record's managed provider groups (both visible and hidden ones).
+func storedManagedEndpoints(db *gorm.DB, configFileID string) []string {
+	var managed []model.ManagedAgentProvider
+	if err := db.Where("agent_config_file_id = ?", configFileID).Find(&managed).Error; err != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range managed {
+		groups, err := m.GetGroups()
+		if err != nil {
+			continue
+		}
+		for _, g := range groups {
+			out = append(out, g.Endpoint)
+		}
+	}
+	return out
 }
 
 // ListManagedProviders derives the display state of every managed
@@ -194,6 +238,11 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 			respondValidationError(c, code, msg, params)
 			return
 		}
+		// 落库前留一份原值：重建配置文件失败时必须把分组/名字回滚回去，
+		// 否则会留下「DB 已是新分组、文件里还是旧块」的半状态——旧块随后
+		// 既不被认领（掉进普通供应商列表），又要等下一次同步才可能被清掉。
+		before := m
+
 		m.Name = strings.TrimSpace(req.Name)
 		applyManagedAuthFields(&m, req)
 		if err := m.SetProviderIDs(req.ProviderIDs); err != nil {
@@ -212,6 +261,16 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		// 重新生成，避免旧块在保存瞬间掉进普通供应商列表（等下次同步才
 		// 清理就晚了）。
 		if _, _, err := rebuildManagedBlocks(c, db, &row, &m, key); err != nil {
+			if restoreErr := db.Model(&model.ManagedAgentProvider{}).Where("id = ?", m.ID).Updates(map[string]any{
+				"name":         before.Name,
+				"provider_ids": before.ProviderIDs,
+				"groups":       before.Groups,
+				"api_key":      before.APIKey,
+				"base_url":     before.BaseURL,
+				"source_name":  before.SourceName,
+			}).Error; restoreErr != nil {
+				log.Printf("managed: 回滚托管行 %s 失败: %v", m.ID, restoreErr)
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
@@ -220,14 +279,35 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 }
 
 // DeleteManagedProvider removes the managed provider row immediately
-// (the confirm dialog already asked the user).
-func DeleteManagedProvider(db *gorm.DB) gin.HandlerFunc {
+// (the confirm dialog already asked the user). The blocks it wrote are
+// removed from the config file first: leaving them behind would silently turn
+// them into 普通供应商 with no record left to recognise them.
+func DeleteManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := db.Delete(&model.ManagedAgentProvider{}, "id = ?", c.Param("mid")).Error; err != nil {
+		var m model.ManagedAgentProvider
+		if err := db.First(&m, "id = ?", c.Param("mid")).Error; err != nil {
+			// 幂等：行已不存在时保持旧行为，直接返回成功。
+			c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+			return
+		}
+		warning := ""
+		if row, ok := loadConfigFile(c, db); ok {
+			if err := removeManagedBlocks(db, &row, &m, key); err != nil {
+				// 清块失败不该挡住删行（例如配置文件已被删除/不可读），
+				// 但要如实告诉前端，方便用户手动检查残留块。
+				log.Printf("managed: 删除托管行时清理配置块失败: %v", err)
+				warning = err.Error()
+			}
+		}
+		if err := db.Delete(&model.ManagedAgentProvider{}, "id = ?", m.ID).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+		resp := gin.H{"message": "deleted"}
+		if warning != "" {
+			resp["warning"] = warning
+		}
+		c.JSON(http.StatusOK, resp)
 	}
 }
 
@@ -267,6 +347,10 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 	if err != nil {
 		return "", 0, err
 	}
+	// 凭据库声明（dsh 的 apiKeyEnv → $DSH_HOME/.credentials.yaml）：生成的块
+	// 只放引用，令牌要同步写进凭据库，见 syncManagedCredentials。
+	credSpec := managedCredentialSpec(rule.Name)
+	var credRefs []string
 	liveProviders, err := loadLiveProviders(db)
 	if err != nil {
 		return "", 0, err
@@ -330,21 +414,44 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		return "", 0, fmt.Errorf("解析配置失败: %w", err)
 	}
 	basePrefix := managedBasePrefix(c, db, *m) + managedSourceMarkSuffix(*m)
-	// 上次同步写过的块名里，已不属于当前名字/分组的（改名、删分组）
-	// 先整块删除，避免旧块残留成「普通供应商」。
+	// currentNames 只收「本轮真的会写出块」的分组：分组失去全部成员后
+	// 不再算当前。否则文件里留着它的块，而界面又不认它（hidden 分组不进
+	// 托管块名），它就会掉进普通供应商列表且永远清不掉。
 	currentNames := make(map[string]bool, len(groupsByKey))
 	for _, stored := range groupsByKey {
+		if len(membersOf(stored)) == 0 {
+			continue
+		}
 		currentNames[providerBlockName(m.Name, stored.Suffix)] = true
+	}
+	// 清理：不在 currentNames 里的托管块整块删除。识别两类来源 ——
+	//  1. 历史记录（synced_blocks，见文末「只增不减」）：改名、删分组、
+	//     以及把旧快照写回文件（版本回滚 / 手工改）后，旧名字仍对得上；
+	//  2. 文件里根名形态（根名 / 根名_ / 根名-）的块：删除旧托管行后又
+	//     建了同名行、或更早版本留下的块，没有历史记录也能认出来。
+	// 别的托管行认领的块名一律不碰（同一文件多行共用根名前缀的场景）。
+	claimsElsewhere := otherManagedClaims(db, row.ID, m.ID)
+	stale := make([]string, 0, 8)
+	staleSeen := make(map[string]bool, 8)
+	addStale := func(name string) {
+		if name == "" || staleSeen[name] || currentNames[name] || claimsElsewhere[name] {
+			return
+		}
+		staleSeen[name] = true
+		stale = append(stale, name)
 	}
 	if previous, err := m.GetSyncedBlocks(); err == nil {
 		for _, old := range previous {
-			if currentNames[old] {
-				continue
-			}
-			// 清理是best-effort：路径不存在时 delete 是 no-op。
-			if _, derr := editor.Delete(jpaths.Provider + "." + old); derr != nil {
-				return "", 0, fmt.Errorf("旧 provider 块 %s 删除失败: %w", old, derr)
-			}
+			addStale(old)
+		}
+	}
+	for _, name := range fileManagedBlockNames(editor, jpaths, m.Name, claimsElsewhere) {
+		addStale(name)
+	}
+	for _, old := range stale {
+		// 清理是best-effort：路径不存在时 delete 是 no-op。
+		if _, derr := editor.Delete(jpaths.Provider + "." + escapeSjsonKey(old)); derr != nil {
+			return "", 0, fmt.Errorf("旧 provider 块 %s 删除失败: %w", old, derr)
 		}
 	}
 	synced := 0
@@ -360,6 +467,11 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
 		// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
 		provFields, _ := gen["provider"].(map[string]any)
+		if credSpec != nil {
+			if ref, ok := provFields[credSpec.RefField].(string); ok && strings.TrimSpace(ref) != "" {
+				credRefs = append(credRefs, strings.TrimSpace(ref))
+			}
+		}
 		// models 子树形状由规则的 models_container 决定：可能是 object
 		// map（opencode）或 array of {id,...cfg}（openclaw / dsh）。
 		// rebuild 整块重写即可，两种形状编辑器都能直接序列化。
@@ -381,8 +493,17 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, derr)
 			}
 		}
-		for k, v := range provFields {
-			if werr := editor.Set(providerIDPath+"."+k, v); werr != nil {
+		// 写入顺序 = 文件里的字段顺序（sjson 与 yaml.v3 编辑器都是追加式，
+		// prettify 只重排缩进）。provider 字段按字典序写，models 子树固定
+		// 最后写：既保证 `models` 永远落在托管块末尾，也让同一份数据多次
+		// 同步产出逐字节一致的文件（map 遍历顺序随机会让字段互相换位）。
+		fieldKeys := make([]string, 0, len(provFields))
+		for k := range provFields {
+			fieldKeys = append(fieldKeys, k)
+		}
+		slices.Sort(fieldKeys)
+		for _, k := range fieldKeys {
+			if werr := editor.Set(providerIDPath+"."+k, provFields[k]); werr != nil {
 				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, werr)
 			}
 			synced++
@@ -396,6 +517,11 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 			}
 			synced += modelsCount
 		}
+	}
+	// 凭据库：写在配置文件之前 —— 凭据写不进去就整次同步失败，避免把配置
+	// 写成一个必然报 MISSING_CREDENTIAL 的块（弹窗选的令牌必须落到目标机）。
+	if err := syncManagedCredentials(row, key, credSpec, m.APIKey, credRefs); err != nil {
+		return "", 0, err
 	}
 	// JSON 侧 sjson 只原地改写已有行，新增的块会被压成一行；写盘前整体
 	// 重新缩进，保证同步后的文件始终是标准 pretty JSON。YAML 侧节点序列化
@@ -416,10 +542,25 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		return "", 0, err
 	}
 	recordAgentConfigVersion(db, row.ID, formatted)
-	// 记录本次写入的块名，供下次同步清理改名/删分组后的旧块。
-	names := make([]string, 0, len(currentNames))
-	for n := range currentNames {
+	// 记录写过的块名，供下次同步清理改名/删分组后的旧块。历史只增不减：
+	// 只记「当前名字」的话，一旦文件被版本回滚/手工改回旧名字，那些块就
+	// 再没有任何记录能认出它们，会永久留在普通供应商列表里。
+	names := make([]string, 0, len(currentNames)+8)
+	seenName := make(map[string]bool, len(currentNames)+8)
+	addName := func(n string) {
+		if n == "" || seenName[n] {
+			return
+		}
+		seenName[n] = true
 		names = append(names, n)
+	}
+	if previous, perr := m.GetSyncedBlocks(); perr == nil {
+		for _, old := range previous {
+			addName(old)
+		}
+	}
+	for n := range currentNames {
+		addName(n)
 	}
 	slices.Sort(names)
 	if namesJSON, merr := json.Marshal(names); merr == nil {
@@ -428,6 +569,137 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		}
 	}
 	return formatted, synced, nil
+}
+
+// otherManagedClaims collects the block names another managed row on the same
+// config file may own — its root name plus everything it has ever written — so
+// 根名形态 清理 never mistakes another row's block for a stale leftover.
+func otherManagedClaims(db *gorm.DB, fileID, selfID string) map[string]bool {
+	claims := map[string]bool{}
+	var rows []model.ManagedAgentProvider
+	if err := db.Where("agent_config_file_id = ? AND id <> ?", fileID, selfID).Find(&rows).Error; err != nil {
+		// 读不到就退化成「只管自己」：宁可不删，也不误删别的托管行。
+		log.Printf("managed: 读取同文件其他托管行失败: %v", err)
+		return claims
+	}
+	for _, r := range rows {
+		if name := strings.TrimSpace(r.Name); name != "" {
+			claims[name] = true
+		}
+		if blocks, err := r.GetSyncedBlocks(); err == nil {
+			for _, b := range blocks {
+				if b != "" {
+					claims[b] = true
+				}
+			}
+		}
+	}
+	return claims
+}
+
+// managedBlockPrefixMatches reports whether a file provider block name carries
+// the managed row's root-name shape: the root itself, or the root followed by
+// a suffix separator (`_` / `-`).
+func managedBlockPrefixMatches(root, blockName string) bool {
+	if root == "" || blockName == "" {
+		return false
+	}
+	return blockName == root ||
+		strings.HasPrefix(blockName, root+"_") ||
+		strings.HasPrefix(blockName, root+"-")
+}
+
+// fileManagedBlockNames lists the provider blocks in the file that carry the
+// managed row's root-name shape, so 残块 left by a rename, a version rollback
+// or a delete-and-recreate are still recognised as ours instead of silently
+// becoming 普通供应商. Names claimed by another managed row are skipped.
+func fileManagedBlockNames(editor configEditor, jpaths model.AgentJsonPaths, root string, claimsElsewhere map[string]bool) []string {
+	root = strings.TrimSpace(root)
+	if root == "" || strings.TrimSpace(jpaths.Provider) == "" {
+		return nil
+	}
+	provResult := gjson.Parse(string(editor.JSON())).Get(jpaths.Provider)
+	if !provResult.IsObject() {
+		return nil
+	}
+	var out []string
+	provResult.ForEach(func(key, _ gjson.Result) bool {
+		name := key.String()
+		if managedBlockPrefixMatches(root, name) && !claimsElsewhere[name] {
+			out = append(out, name)
+		}
+		return true
+	})
+	return out
+}
+
+// removeManagedBlocks deletes every block this managed row owns from the
+// config file (历史记录 ∪ 根名形态), then persists file + cache + version.
+// Used when the row is deleted: without it the orphaned blocks silently turn
+// into 普通供应商 and no record is left to recognise them.
+func removeManagedBlocks(db *gorm.DB, row *model.AgentConfigFile, m *model.ManagedAgentProvider, key []byte) error {
+	rule, err := loadRule(db, row.AgentType)
+	if err != nil {
+		return err
+	}
+	jpaths, err := rule.GetJsonPaths()
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(jpaths.Provider) == "" {
+		return errors.New("该软件类型尚未配置 json 路径")
+	}
+	content, err := readAgentConfigFileContent(row, key)
+	if err != nil {
+		return fmt.Errorf("读取失败: %w", err)
+	}
+	editor, err := newConfigEditor(content, row.Path)
+	if err != nil {
+		return fmt.Errorf("解析配置失败: %w", err)
+	}
+	claimsElsewhere := otherManagedClaims(db, row.ID, m.ID)
+	names := make([]string, 0, 8)
+	seen := make(map[string]bool, 8)
+	add := func(name string) {
+		if name == "" || seen[name] || claimsElsewhere[name] {
+			return
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	if previous, perr := m.GetSyncedBlocks(); perr == nil {
+		for _, old := range previous {
+			add(old)
+		}
+	}
+	for _, name := range fileManagedBlockNames(editor, jpaths, m.Name, claimsElsewhere) {
+		add(name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	for _, name := range names {
+		if _, derr := editor.Delete(jpaths.Provider + "." + escapeSjsonKey(name)); derr != nil {
+			return fmt.Errorf("块 %s 删除失败: %w", name, derr)
+		}
+	}
+	formatted, merr := editor.Marshal()
+	if merr != nil {
+		return fmt.Errorf("序列化配置失败: %w", merr)
+	}
+	if !isYAMLConfigPath(row.Path) {
+		if pretty, perr := prettifyJSON(formatted); perr == nil {
+			formatted = pretty
+		}
+	}
+	if err := writeAgentConfigFileContent(row, formatted, key); err != nil {
+		return fmt.Errorf("写入失败: %w", err)
+	}
+	if err := db.Model(row).Update("content", formatted).Error; err != nil {
+		return err
+	}
+	recordAgentConfigVersion(db, row.ID, formatted)
+	return nil
 }
 
 // ── request / helpers ──────────────────────────────────────────────
@@ -634,34 +906,79 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 	jsonView, _ := configJSONView(content, row.Path)
 	provResult := gjson.Parse(string(jsonView)).Get(jpaths.Provider)
 
+	// 同一规则（endpoint_tags 命中）+ 同一命名后缀的存量分组写进文件时本来
+	// 就合成一个 provider 块（见 rebuildManagedBlocks），视图里也合成一组：
+	// 否则折叠上线前存下的 /chat/completions 与 /v1/chat/completions 会在
+	// 同一规则下显示成两行、两个块名。没命中规则的 endpoint 保持独立成组。
+	type mergedGroup struct {
+		endpoint string
+		suffix   string
+		ids      []string
+		sources  map[string]string
+	}
+	var merged []*mergedGroup
+	byKey := make(map[string]*mergedGroup, len(storedGroups))
+	for _, stored := range storedGroups {
+		key := ruleKey(stored.Endpoint, protocols) + "\x00" + strings.TrimSpace(stored.Suffix)
+		cur, ok := byKey[key]
+		if !ok {
+			cur = &mergedGroup{endpoint: stored.Endpoint, suffix: stored.Suffix, sources: map[string]string{}}
+			byKey[key] = cur
+			merged = append(merged, cur)
+		}
+		cur.ids = uniqueSorted(append(cur.ids, stored.ProviderIDs...))
+		for modelID, source := range stored.ModelSources {
+			cur.sources[modelID] = source
+		}
+	}
+	stored := make([]model.ManagedAgentGroup, 0, len(merged))
+	for _, mg := range merged {
+		stored = append(stored, model.ManagedAgentGroup{
+			Endpoint:     mg.endpoint,
+			Suffix:       mg.suffix,
+			ProviderIDs:  mg.ids,
+			ModelSources: mg.sources,
+		})
+	}
+
 	// Hidden = persisted groups that resolve no live members (deleted or
 	// paused providers for ordinary endpoint groups; dangling ids for the
 	// 未配置 endpoint group).
-	for _, stored := range storedGroups {
-		if len(membersOf(stored)) == 0 {
-			view.HiddenGroups = append(view.HiddenGroups, stored)
+	for _, group := range stored {
+		if len(membersOf(group)) == 0 {
+			view.HiddenGroups = append(view.HiddenGroups, group)
 		}
 	}
 
-	for _, stored := range storedGroups {
-		members := membersOf(stored)
+	for _, group := range stored {
+		members := membersOf(group)
 		if len(members) == 0 {
 			continue
 		}
 		mv := managedGroupView{
-			Endpoint:     stored.Endpoint,
-			Suffix:       stored.Suffix,
-			ProviderIDs:  stored.ProviderIDs,
-			ModelSources: stored.ModelSources,
+			Endpoint:     group.Endpoint,
+			Suffix:       group.Suffix,
+			ProviderIDs:  group.ProviderIDs,
+			ModelSources: group.ModelSources,
+		}
+		// 分组归属的规则：弹窗和列表都按它显示（老记录存的是折叠前的
+		// endpoint，命中信息由这里补齐，不必等用户重存）。
+		if ruleIndex := matchProtocolIndexByEndpoint(group.Endpoint, protocols); ruleIndex >= 0 {
+			mv.RuleName = protocols[ruleIndex].Name
+			mv.RuleTag = matchedEndpointTag(group.Endpoint, protocols[ruleIndex])
+			mv.Hits = endpointsSharingRule(live, group.Endpoint, protocols)
+		}
+		if len(mv.Hits) == 0 {
+			mv.Hits = []string{group.Endpoint}
 		}
 		for _, p := range members {
 			mv.ProviderNames = append(mv.ProviderNames, p.Name)
 		}
-		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, stored.Endpoint, protocols))
+		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, group.Endpoint, protocols))
 		mv.ModelCount = len(mv.ModelNames)
-		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
+		gen := buildGeneratedBlock(rule, jpaths, group, members, m.APIKey, basePrefix, providerBlockName(m.Name, group.Suffix))
 		mv.Generated = gen
-		fullName := providerBlockName(m.Name, stored.Suffix)
+		fullName := providerBlockName(m.Name, group.Suffix)
 		actual := normalizeFileProvider(provResult.Get(fullName), jpaths)
 		mv.FileProvider = actual
 		expected := normalizeGenerated(gen)
@@ -674,6 +991,15 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		view.Groups = append(view.Groups, mv)
 	}
 	return view
+}
+
+// ruleKey identifies the group an endpoint belongs to for merging: the
+// matched rule, or the endpoint itself when no rule hits it.
+func ruleKey(endpoint string, protocols []model.AgentProtocol) string {
+	if idx := matchProtocolIndexByEndpoint(endpoint, protocols); idx >= 0 {
+		return "rule:" + strconv.Itoa(idx)
+	}
+	return "endpoint:" + strings.ToLower(strings.TrimSpace(endpoint))
 }
 
 // buildGeneratedBlock assembles the normalized provider block for one
@@ -916,14 +1242,108 @@ func matchEndpointTag(endpoint, tag string) bool {
 // entry matching endpoint (see matchEndpointTag). Order is priority, so
 // more specific tags must come first.
 func matchProtocolByEndpoint(endpoint string, protocols []model.AgentProtocol) *model.AgentProtocol {
+	if i := matchProtocolIndexByEndpoint(endpoint, protocols); i >= 0 {
+		return &protocols[i]
+	}
+	return nil
+}
+
+// matchProtocolIndexByEndpoint is matchProtocolByEndpoint's index form (the
+// 托管 dialog groups endpoints by rule index, not by pointer).
+func matchProtocolIndexByEndpoint(endpoint string, protocols []model.AgentProtocol) int {
 	for i := range protocols {
 		for _, tag := range protocols[i].EndpointTags {
 			if matchEndpointTag(endpoint, tag) {
-				return &protocols[i]
+				return i
 			}
 		}
 	}
-	return nil
+	return -1
+}
+
+// matchedEndpointTag returns the tag that hit the endpoint (the rule as
+// written, e.g. "*completion*"), "" when none does.
+func matchedEndpointTag(endpoint string, protocol model.AgentProtocol) string {
+	for _, tag := range protocol.EndpointTags {
+		if matchEndpointTag(endpoint, tag) {
+			return tag
+		}
+	}
+	return ""
+}
+
+// endpointRuleInfo classifies one endpoint against the rule's protocols.
+// Canonical is the group's representative endpoint — the shortest endpoint
+// sharing the rule, ties broken lexicographically, so the choice never
+// depends on provider order or on which providers are currently linked.
+type endpointRuleInfo struct {
+	Canonical string `json:"canonical"`
+	RuleIndex int    `json:"rule_index"`
+	RuleName  string `json:"rule_name"`
+	Tag       string `json:"tag"`
+}
+
+// endpointRuleMap classifies every passed endpoint (live provider endpoints
+// plus the endpoints already saved in the record's managed groups). The
+// 托管 dialog groups by Canonical instead of re-running the glob match in
+// the browser: preview（弹窗里现算）与保存后的列表因此是同一套归类。没命中
+// 任何规则的 endpoint 不在表里，调用方按原样独立成组。
+func endpointRuleMap(endpoints []string, protocols []model.AgentProtocol) map[string]endpointRuleInfo {
+	seen := map[string]bool{}
+	byRule := map[int][]string{}
+	for _, raw := range endpoints {
+		ep := strings.TrimSpace(raw)
+		if ep == "" || seen[ep] {
+			continue
+		}
+		seen[ep] = true
+		if idx := matchProtocolIndexByEndpoint(ep, protocols); idx >= 0 {
+			byRule[idx] = append(byRule[idx], ep)
+		}
+	}
+	canonical := make(map[int]string, len(byRule))
+	for idx, eps := range byRule {
+		canonical[idx] = representativeEndpoint(eps)
+	}
+	out := make(map[string]endpointRuleInfo, len(seen))
+	for ep := range seen {
+		idx := matchProtocolIndexByEndpoint(ep, protocols)
+		if idx < 0 {
+			continue
+		}
+		out[ep] = endpointRuleInfo{
+			Canonical: canonical[idx],
+			RuleIndex: idx,
+			RuleName:  protocols[idx].Name,
+			Tag:       matchedEndpointTag(ep, protocols[idx]),
+		}
+	}
+	return out
+}
+
+// representativeEndpoint picks the endpoint a rule group is named after:
+// the shortest one, ties broken lexicographically.
+func representativeEndpoint(endpoints []string) string {
+	best := ""
+	for _, ep := range endpoints {
+		if best == "" || len(ep) < len(best) || (len(ep) == len(best) && ep < best) {
+			best = ep
+		}
+	}
+	return best
+}
+
+// endpointsSharingRule lists the live endpoints that fall into the same
+// managed group as endpoint (sorted, for stable output).
+func endpointsSharingRule(live map[string][]model.Provider, endpoint string, protocols []model.AgentProtocol) []string {
+	out := make([]string, 0, len(live))
+	for ep := range live {
+		if sameEndpointRule(ep, endpoint, protocols) {
+			out = append(out, ep)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // endpointFieldFor picks where the group's endpoint should be written:

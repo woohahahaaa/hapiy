@@ -28,6 +28,7 @@
     "models": "Models",
     "previewDiff": "Preview diff",
     "providerJson": "Provider JSON snippet",
+    "providerYaml": "Provider YAML snippet",
     "syncFromModelsDev": "Sync model config from models.dev"
   },
   "badge": {
@@ -283,7 +284,7 @@
     "apiKeyPlaceholder": "Choose an access token Key",
     "noTokens": "No tokens yet — create one on the Tokens page first",
     "tokenDisabled": " (disabled)",
-    "apiKeyHint": "Required: written into the generated config as apiKey, which the Agent uses to reach this system; leave empty to stop automatically borrowing the selected providers' keys",
+    "apiKeyHint": "Required: written into the generated config as apiKey, which the Agent uses to reach this system; leave empty to stop automatically borrowing the selected providers' keys. Software that only accepts a credential reference (apiKeyEnv), such as dsh, gets the key written into its credential store (.credentials.yaml) instead",
     "baseUrlHint": "Defaults to the system-detected BaseURL; editable. Clear it to restore the system default",
     "sourceLabel": "Source mark",
     "sourcePlaceholder": "Optional",

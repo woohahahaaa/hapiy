@@ -13,7 +13,7 @@
 | 配置文件 | profile patch：`$DSH_HOME/profiles/<profile>/cordis.patch.yml`（`DSH_HOME` 缺省 `~/.dsh`）｜ Windows `%USERPROFILE%\.dsh\profiles\<profile>\cordis.patch.yml` |
 | profile 名 | 随启动方式变化：**桌面版（Desktop App）是 `desktop`**；**Web 版（`dsh web`）是 `web`**；自定义 profile 同理替换路径里的 profile 名。接管内置两条规则一一对应：「DeepSeek Harness (Desktop)」与「DeepSeek Harness (Web)」，只差默认路径 |
 | 格式 | **YAML**。`cordis.yml` 是空基线（勿手改），真实配置来自 patch 层；模型页写入的就是 profile 的 `cordis.patch.yml`，改动下一次请求生效、无需重启 |
-| 凭据 | `$DSH_HOME/.credentials.yaml` 凭据库；配置里只写 `apiKeyEnv`（环境变量名）引用，不写明文密钥 |
+| 凭据 | `$DSH_HOME/.credentials.yaml` 凭据库；配置里只写 `apiKeyEnv`（环境变量名）引用，不写明文密钥。**托管同步会把「接入 Key」写进该文件**（`version: 1` + `refs.<apiKeyEnv 的值>`，已有引用/records/注释保留、文件 0600），路径由模板的 `credentials` 块按 `{config_dir}/../..` 推导，无需人工导出环境变量 |
 | 其他文件 | `$DSH_HOME/settings.yaml`（运行时可热更设置）、`$DSH_HOME/profiles/<profile>/package.json`（bundle 列表） |
 | 官方文档 | https://deepseek-harness.github.io/deepseek-harness/en/guide/providers ｜ 仓库 https://github.com/deepseek-ai/deepseek-harness |
 
@@ -120,7 +120,16 @@ Anthropic Messages 官方要求每次请求带 `max_tokens`，所以该协议下
 ### 2. `model_info_fields` 只作映射参考
 结构上 pi-ai 模型确实有对应字段（`contextWindow` / `maxTokens` / `input`），映射按官方写，YAML 引擎按节点写回。「同步模型信息」可用。`thinking_levels` / `reasoning_effort` 不映射：思考档位由 `reasoningEfforts`（档位→线路写法）表达，和统一值的写法不一致。
 
-### 3. 漏配提示
+### 3. `credentials` 决定令牌写进凭据库
+```json
+{"paths": {"windows": "{config_dir}\\..\\..\\.credentials.yaml",
+           "mac": "{config_dir}/../../.credentials.yaml"},
+ "ref_field": "apiKeyEnv",
+ "format": "dsh-refs-v1"}
+```
+{config_dir} 是接管配置文件所在目录（`<DSH_HOME>/profiles/<profile>`），上两级即 `DSH_HOME`，所以自定义 DSH_HOME 也成立。托管同步在写配置文件**之前**把弹窗里选的令牌写进该文件：文件不存在就建 `version: 1` + `refs:`；已有文档只改 `refs.<apiKeyEnv 的值>`，其他引用 / records / 注释原样保留；旧扁平布局保持扁平（dsh 启动时自行迁移）。凭据写入失败则整次同步失败、配置文件不动 —— 否则会生成一个必然报 `MISSING_CREDENTIAL` 的块。这份声明是模板元数据：规则页不展示、也不参与「是否自定义」比较；要改路径 / 格式，编辑本模板文件（或代码里的内建模板）后重启后端生效。
+
+### 4. 漏配提示
 - provider id 永久，写错只能新建再删旧（不要指望改名）；
 - 手写模型不声明 `reasoningEfforts` 就没有推理档位菜单；
 - `off` 档留空只对「按请求才思考」的模型有效；默认思考的端点要配 `compat.thinkingFormat: deepseek`；

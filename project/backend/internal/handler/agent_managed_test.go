@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/tidwall/gjson"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -114,7 +115,7 @@ func newRouterForManaged(db *gorm.DB) *gin.Engine {
 	r.GET("/agent-config-files/:id/managed-providers", ListManagedProviders(db, nil))
 	r.PUT("/agent-config-files/:id/managed-providers/:mid", UpdateManagedProvider(db, nil))
 	r.POST("/agent-config-files/:id/managed-providers/:mid/sync", SyncManagedProvider(db, nil))
-	r.DELETE("/agent-config-files/:id/managed-providers/:mid", DeleteManagedProvider(db))
+	r.DELETE("/agent-config-files/:id/managed-providers/:mid", DeleteManagedProvider(db, nil))
 	r.GET("/agent-config-files/managed-options", ManagedProviderOptions(db))
 	return r
 }
@@ -316,6 +317,89 @@ func fileID(db *gorm.DB) string {
 	var f model.AgentConfigFile
 	db.First(&f)
 	return f.ID
+}
+
+// TestManagedSyncFieldOrderStable 锁定托管块的字段顺序：provider 字段按
+// 字典序写入、models 子树固定最后。写入顺序 = 文件顺序（sjson 是追加式，
+// prettify 只重排缩进），所以同一份数据重复同步必须产出逐字节一致的文件；
+// 旧实现用 map 遍历写字段，顺序随机，会让字段互相换位且 models 位置不稳。
+func TestManagedSyncFieldOrderStable(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	// 多声明两个 provider 字段，让「字典序」这条断言真正被检验：种子规则
+	// 自带的 provider 字段都只有 required、没有值，生成块里不会出现。
+	var rule model.AgentTypeRule
+	if err := db.Where("name = ?", "opencode").First(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	recs, err := rule.GetRecommendations()
+	if err != nil {
+		t.Fatal(err)
+	}
+	recs = append(recs,
+		model.AgentRecommendation{Scope: "provider", Key: "aaaFirst", Recommended: "1"},
+		model.AgentRecommendation{Scope: "provider", Key: "zzzLast", Recommended: "2"},
+	)
+	if err := rule.SetRecommendations(recs); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Save(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	var providers []model.Provider
+	db.Find(&providers)
+	var ids []string
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	body := `{"name":"HAPIY","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter","gpt-y":""}}]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+
+	sync := func() string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/agent-config-files/"+fileID(db)+"/managed-providers/"+mid+"/sync", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+		}
+		var f model.AgentConfigFile
+		db.First(&f)
+		return f.Content
+	}
+
+	first := sync()
+	var keys []string
+	gjson.Get(first, "provider.HAPIY-C").ForEach(func(k, _ gjson.Result) bool {
+		keys = append(keys, k.String())
+		return true
+	})
+	if len(keys) < 3 {
+		t.Fatalf("provider block too small: %v\n%s", keys, first)
+	}
+	if last := keys[len(keys)-1]; last != "models" {
+		t.Fatalf("models must be the last key of the managed block, got order %v\n%s", keys, first)
+	}
+	fields := keys[:len(keys)-1]
+	for i := 1; i < len(fields); i++ {
+		if fields[i-1] > fields[i] {
+			t.Fatalf("provider fields must be written in sorted order, got %v", fields)
+		}
+	}
+
+	// 再同步一次：字段顺序不再随机，文件必须逐字节相同。
+	if second := sync(); second != first {
+		t.Fatalf("re-sync must reproduce the file byte-for-byte:\n--- first ---\n%s\n--- second ---\n%s", first, second)
+	}
 }
 
 // TestManagedProviderSyncConverges 复现「同步后仍显示待同步」：文件里的
@@ -1398,4 +1482,251 @@ func keysOf(m map[string]any) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ── 托管块残留（改名 / 回滚 / 隐藏分组 / 删行）回归 ──────────────────
+
+// managedCallForTest drives the create/update/sync/delete endpoints.
+func managedCallForTest(t *testing.T, r *gin.Engine, db *gorm.DB, method, mid, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	path := "/agent-config-files/" + fileID(db) + "/managed-providers"
+	if mid != "" {
+		path += "/" + mid
+	}
+	var reader *strings.Reader
+	if body == "" {
+		reader = strings.NewReader("")
+	} else {
+		reader = strings.NewReader(body)
+	}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(method, path, reader)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// managedFileContentForTest reads the synced content of the seeded config file.
+func managedFileContentForTest(t *testing.T, db *gorm.DB) string {
+	t.Helper()
+	var f model.AgentConfigFile
+	if err := db.First(&f).Error; err != nil {
+		t.Fatal(err)
+	}
+	return f.Content
+}
+
+func managedBodyForTest(ids []string, name string, groups string) string {
+	return `{"name":"` + name + `","provider_ids":` + idsJSON(ids) + `,"api_key":"sk-token-1","groups":` + groups + `}`
+}
+
+func allProviderIDs(t *testing.T, db *gorm.DB) []string {
+	t.Helper()
+	var providers []model.Provider
+	db.Find(&providers)
+	ids := make([]string, 0, len(providers))
+	for _, p := range providers {
+		ids = append(ids, p.ID)
+	}
+	return ids
+}
+
+// TestManagedSyncCleansStaleBlocksAfterRollback 覆盖「改名 + 版本回滚/手工改」
+// 后旧块必须还能被认出来并删掉：synced_blocks 历史只增不减，否则回滚把
+// 旧名字写回文件后，那些块会永久留在普通供应商列表里。
+func TestManagedSyncCleansStaleBlocksAfterRollback(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+	ids := allProviderIDs(t, db)
+	groups := `[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter"}}]`
+
+	if w := managedCallForTest(t, r, db, "POST", "", managedBodyForTest(ids, "HAPIY", groups)); w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+	if w := managedCallForTest(t, r, db, "POST", mid+"/sync", ""); w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+	first := managedFileContentForTest(t, db)
+	if !strings.Contains(first, `"HAPIY-C"`) {
+		t.Fatalf("首次同步应写出 HAPIY-C:\n%s", first)
+	}
+
+	// 改名：旧块当场删掉，新块写出。
+	if w := managedCallForTest(t, r, db, "PUT", mid, managedBodyForTest(ids, "HAPIY2", groups)); w.Code != 200 {
+		t.Fatalf("rename: %d %s", w.Code, w.Body.String())
+	}
+	renamed := managedFileContentForTest(t, db)
+	if strings.Contains(renamed, `"HAPIY-C"`) || !strings.Contains(renamed, `"HAPIY2-C"`) {
+		t.Fatalf("改名后文件应只有 HAPIY2-C:\n%s", renamed)
+	}
+	// 关键：历史记录必须把旧块名留下（只增不减），否则回滚把 HAPIY-C 写回
+	// 文件后没有任何记录能认出它（新根名 HAPIY2 的前缀也匹配不上）。
+	var row model.ManagedAgentProvider
+	if err := db.First(&row, "id = ?", mid).Error; err != nil {
+		t.Fatal(err)
+	}
+	blocks, err := row.GetSyncedBlocks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	keptOldName := false
+	for _, b := range blocks {
+		if b == "HAPIY-C" {
+			keptOldName = true
+		}
+	}
+	if !keptOldName {
+		t.Fatalf("synced_blocks 必须保留历史旧块名，实际 %v", blocks)
+	}
+
+	// 模拟版本回滚 / 手工把旧内容写回文件：旧块名重新出现。
+	if err := writeTempFile("/tmp/hapiy-test-open.json", first); err != nil {
+		t.Fatal(err)
+	}
+	if w := managedCallForTest(t, r, db, "POST", mid+"/sync", ""); w.Code != 200 {
+		t.Fatalf("re-sync: %d %s", w.Code, w.Body.String())
+	}
+	final := managedFileContentForTest(t, db)
+	if strings.Contains(final, `"HAPIY-C"`) {
+		t.Fatalf("回滚带回来的旧块必须被再次清掉:\n%s", final)
+	}
+	if !strings.Contains(final, `"HAPIY2-C"`) {
+		t.Fatalf("同步后必须保留当前块 HAPIY2-C:\n%s", final)
+	}
+}
+
+// TestManagedSyncRemovesBlocksOfHiddenGroups 覆盖「分组失去全部成员」：它的块
+// 不再属于当前分组，同步时必须从文件里删掉，否则会掉进普通供应商列表。
+func TestManagedSyncRemovesBlocksOfHiddenGroups(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+	ids := allProviderIDs(t, db)
+	groups := `[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter"}},{"endpoint":"/anthropic","suffix":"-A","model_sources":{}}]`
+
+	if w := managedCallForTest(t, r, db, "POST", "", managedBodyForTest(ids, "HAPIY", groups)); w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+	if w := managedCallForTest(t, r, db, "POST", mid+"/sync", ""); w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+	content := managedFileContentForTest(t, db)
+	if !strings.Contains(content, `"HAPIY-A"`) || !strings.Contains(content, `"HAPIY-C"`) {
+		t.Fatalf("首次同步应写出两个块:\n%s", content)
+	}
+
+	// 取消勾选声明 /anthropic 的供应商：该分组没有成员了。
+	var providers []model.Provider
+	db.Find(&providers)
+	kept := make([]string, 0, len(providers))
+	for _, p := range providers {
+		if strings.Contains(p.Endpoints, "/anthropic") {
+			continue
+		}
+		kept = append(kept, p.ID)
+	}
+	if w := managedCallForTest(t, r, db, "PUT", mid, managedBodyForTest(kept, "HAPIY", groups)); w.Code != 200 {
+		t.Fatalf("update: %d %s", w.Code, w.Body.String())
+	}
+	after := managedFileContentForTest(t, db)
+	if strings.Contains(after, `"HAPIY-A"`) {
+		t.Fatalf("没有成员的分组的块必须被清掉:\n%s", after)
+	}
+	if !strings.Contains(after, `"HAPIY-C"`) {
+		t.Fatalf("仍在使用的块不能受影响:\n%s", after)
+	}
+}
+
+// TestManagedUpdateRollsBackGroupsWhenRebuildFails 覆盖「保存时重建失败」：不能
+// 留下「DB 已换新分组、文件还是旧块」的半状态，否则旧块当场变成普通供应商。
+func TestManagedUpdateRollsBackGroupsWhenRebuildFails(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+	ids := allProviderIDs(t, db)
+	groups := `[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter"}}]`
+
+	// 第二个配置文件：YAML 路径 + 坏内容，让「解析配置」这一步失败。
+	badPath := filepath.Join(t.TempDir(), "broken.yml")
+	if err := writeFile(badPath, "provider: [unclosed\n"); err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "broken-yml", AgentType: "opencode",
+		Mode: "local", TargetOS: "mac", Path: badPath,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	body := managedBodyForTest(ids, "HAPIY", groups)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/agent-config-files/"+file.ID+"/managed-providers", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	var mid string
+	db.Model(&model.ManagedAgentProvider{}).Pluck("id", &mid)
+
+	var before model.ManagedAgentProvider
+	if err := db.First(&before, "id = ?", mid).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 改成 -X：重建必然失败（YAML 坏内容）。
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("PUT", "/agent-config-files/"+file.ID+"/managed-providers/"+mid, strings.NewReader(managedBodyForTest(ids, "HAPIY2", `[{"endpoint":"/v1/chat/completions","suffix":"-X","model_sources":{}}]`)))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	if w.Code == 200 {
+		t.Fatalf("重建失败时必须报错，实际 200: %s", w.Body.String())
+	}
+	// 必须是真的走到「解析配置失败」这一步（而不是更早的校验失败），
+	// 否则这条用例证明不了回滚。
+	if !strings.Contains(w.Body.String(), "解析配置失败") {
+		t.Fatalf("应因配置解析失败而中止（才轮到回滚），实际: %s", w.Body.String())
+	}
+
+	var after model.ManagedAgentProvider
+	if err := db.First(&after, "id = ?", mid).Error; err != nil {
+		t.Fatal(err)
+	}
+	if after.Groups != before.Groups || after.Name != before.Name {
+		t.Fatalf("重建失败后 DB 必须回滚：before=%s/%s after=%s/%s", before.Name, before.Groups, after.Name, after.Groups)
+	}
+}
+
+// TestManagedDeleteRemovesBlocksFromFile 覆盖「删除托管行」：它写过的块必须一并
+// 从文件里删掉，否则会静默变成普通供应商且再无记录能认出它们。
+func TestManagedDeleteRemovesBlocksFromFile(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+	ids := allProviderIDs(t, db)
+	groups := `[{"endpoint":"/v1/chat/completions","suffix":"-C","model_sources":{"gpt-x":"OpenRouter"}}]`
+
+	if w := managedCallForTest(t, r, db, "POST", "", managedBodyForTest(ids, "HAPIY", groups)); w.Code != 201 {
+		t.Fatalf("create: %d %s", w.Code, w.Body.String())
+	}
+	mid := managedProviderID(db)
+	if w := managedCallForTest(t, r, db, "POST", mid+"/sync", ""); w.Code != 200 {
+		t.Fatalf("sync: %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(managedFileContentForTest(t, db), `"HAPIY-C"`) {
+		t.Fatal("同步后文件应包含 HAPIY-C")
+	}
+
+	if w := managedCallForTest(t, r, db, "DELETE", mid, ""); w.Code != 200 {
+		t.Fatalf("delete: %d %s", w.Code, w.Body.String())
+	}
+	after := managedFileContentForTest(t, db)
+	if strings.Contains(after, `"HAPIY-C"`) {
+		t.Fatalf("删除托管行后块必须被清掉:\n%s", after)
+	}
+	var count int64
+	db.Model(&model.ManagedAgentProvider{}).Count(&count)
+	if count != 0 {
+		t.Fatalf("托管行应已删除，剩 %d 行", count)
+	}
 }

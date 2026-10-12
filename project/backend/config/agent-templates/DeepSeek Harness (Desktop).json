@@ -9,6 +9,11 @@
 // json_paths      在配置文件里定位 provider / model 的路径。dsh 是 YAML：
 //                 引擎见到 .yml/.yaml 用 yaml.v3 节点读写（保留注释），
 //                 `#(id=="llm-pi-ai")` 先按 id 找到插件条目再进 config.providers。
+// credentials     凭据库声明（模板元数据，规则页不展示）：paths 是目标机的
+//                 .credentials.yaml 位置（{config_dir}=配置文件所在目录，上两级
+//                 就是 DSH_HOME）；ref_field 指生成块里存引用名的字段；format 是
+//                 文档格式（dsh-refs-v1 = version: 1 + refs 映射）。托管同步据此
+//                 把弹窗选的令牌写进凭据库，否则 apiKeyEnv 引用解析不到。
 // recommendations 公共配置：与请求协议 / SDK 无关的字段推荐值（弹窗里叫 common）
 //   每行：key=字段路径(必填) / scope=provider|model / action=set|skip|delete
 //         recommended=推荐值(null=推荐不填) / required=是否必填 / description=说明
@@ -28,6 +33,14 @@
     "provider": "#(id==\"llm-pi-ai\").config.providers",
     "model": "#(id==\"llm-pi-ai\").config.providers.{provider_id}.models",
     "models_container": "array"
+  },
+  "credentials": {
+    "paths": {
+      "windows": "{config_dir}\\..\\..\\.credentials.yaml",
+      "mac": "{config_dir}/../../.credentials.yaml"
+    },
+    "ref_field": "apiKeyEnv",
+    "format": "dsh-refs-v1"
   },
   "recommendations": [
     {

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { JsonTokens } from '@/components/JsonHighlight'
+import { JsonTokens, YamlTokens } from '@/components/JsonHighlight'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -37,6 +37,8 @@ import { AgentModelInfoMatchDialog } from '@/components/dialog/agent-model-info-
 import { ManagedProviderDialog } from '@/components/dialog/agent-managed-dialog'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { modelInfoChangesFor } from '@/lib/agent-model-info'
+import { configFormatForPath, stringifyConfigValue, type AgentConfigFormat } from '@/lib/agent-config-format'
+import { collectManagedBlockNames } from '@/lib/managed-block-names'
 import { loadModelsDevModels, providersForModel } from '@/lib/models-dev'
 import { diffLines, type Change } from 'diff'
 
@@ -63,10 +65,12 @@ export function AgentModelsDialog({
   fetchModels,
 }: AgentModelsDialogProps) {
   const { t } = useTranslation('agentConfig')
-  // YAML 接管文件（dsh 的 cordis.patch.yml 等）：结构编辑（改名/删除/片段
-  // 手改）目前只有 JSON 实现，YAML 侧由服务端托管同步负责写回；界面上这些
-  // 入口对 YAML 只读，避免把重建出来的 JSON 覆盖回 YAML 文件。
-  const yamlFile = isYAMLConfigFile(record?.path)
+  // 右侧片段面板的格式跟着接管规则的文件后缀走：.yml/.yaml（dsh 的
+  // cordis.patch.yml 等）显示 YAML，其余显示 JSON。YAML 接管文件的结构编辑
+  // （改名/删除/片段手改）目前只有 JSON 实现，YAML 侧由服务端托管同步负责
+  // 写回；界面上这些入口对 YAML 只读，避免把重建出来的 JSON 覆盖回 YAML 文件。
+  const format: AgentConfigFormat = configFormatForPath(record?.path)
+  const yamlFile = format === 'yaml'
   const [summary, setSummary] = useState<AgentModelSummary | null>(null)
   const [loading, setLoading] = useState(false)
 const [error, setError] = useState<string | null>(null)
@@ -188,14 +192,13 @@ const [error, setError] = useState<string | null>(null)
 
   // 托管供应商识别：配置文件里的 provider 块名与托管模板生成的块名
   // （根名，或根名+后缀）相同 → 该块归托管，不再显示在普通供应商列表。
-  const managedBlockNames = useMemo(() => {
-    const names = new Set<string>()
-    for (const mv of managed) {
-      names.add(mv.name)
-      for (const g of mv.groups) names.add(`${mv.name}${g.suffix}`)
-    }
-    return names
-  }, [managed])
+  // 隐藏分组的块、以及根名形态的历史残块（改名/回滚/删行重建留下的旧
+  // 名字）也算托管——后端下一次同步会把残块删掉，在那之前不能让界面先
+  // 把它们当成普通供应商。
+  const managedBlockNames = useMemo(
+    () => collectManagedBlockNames(managed, workingProviders.map((p) => p.provider_id)),
+    [managed, workingProviders],
+  )
 
   // 普通供应商 = 名字不命中任何托管块名。
   const normalProviders = useMemo(
@@ -359,7 +362,9 @@ for (const p of summary?.providers ?? []) {
   }
 
   // rawProviderBaseline: 原始文件里选定 provider 的完整块（含 models），
-  // 作为 diff 对比基准。
+  // 作为 diff 对比基准。YAML 文件无法用 JSON.parse 读原文，退回 summary
+  // 拼出的块；models 子树形状跟着规则的 models_container 走（array = 数组
+  // 每项带 id，dsh / openclaw 的真实文件形状），避免右侧片段与文件形状不符。
   const rawProviderBaseline = useMemo(() => {
     if (!selectedProvider || !summary) return null
     try {
@@ -372,10 +377,16 @@ for (const p of summary?.providers ?? []) {
     } catch {
       // fall through to summary
     }
-    return selectedProvider.other_fields ? {
-      ...selectedProvider.other_fields,
-      models: Object.fromEntries(selectedProvider.models.map((m) => [m.id, m.config ?? {}])),
-    } : null
+    if (!selectedProvider.other_fields) return null
+    const useArray = summary.json_paths?.models_container === 'array'
+    const models = useArray
+      ? selectedProvider.models.map((m) => ({
+          id: m.id,
+          name: m.id,
+          ...(isRecord(m.config) ? m.config : {}),
+        }))
+      : Object.fromEntries(selectedProvider.models.map((m) => [m.id, m.config ?? {}]))
+    return { ...selectedProvider.other_fields, models }
   }, [selectedProvider, rawContent, summary])
 
   // currentEditBaseline: liveContent 里该 provider 的当前块；无 liveContent
@@ -402,25 +413,29 @@ for (const p of summary?.providers ?? []) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProvider, liveContent, rawProviderBaseline, summary, selectedProviderId])
 
-  // currentEditableProviderValue: JsonEditor 显示的文本（provider 块 + models）。
+  // currentEditableProviderValue: JsonEditor 显示的文本（provider 块 + models），
+  // 按接管文件后缀选用 YAML / JSON 呈现。
   const currentEditableProviderValue = useMemo(() => {
     const v = currentEditBaseline ?? {}
-    return JSON.stringify(v, null, 2)
-  }, [currentEditBaseline])
+    return stringifyConfigValue(v, format)
+  }, [currentEditBaseline, format])
 
-  // focusLineForSelectedModel: 选中的模型 key 在右侧 JSON 文本中的起始行
+  // focusLineForSelectedModel: 选中的模型 key 在右侧文本中的起始行
   // （0-based）；未选模型返回 null。用于右侧编辑框滚动到该行并高亮。
   const focusLineForSelectedModel = useMemo(() => {
     if (!selectedModelId) return null
-    return focusLineForKey(currentEditableProviderValue, selectedModelId)
-  }, [selectedModelId, currentEditableProviderValue])
+    return focusLineForKey(currentEditableProviderValue, selectedModelId, format)
+  }, [selectedModelId, currentEditableProviderValue, format])
 
   // 托管供应商：与普通供应商一致的滚动/高亮联动，仅只读。
+  const managedPreviewText = useMemo(
+    () => (selectedManagedGroup ? stringifyConfigValue(selectedManagedGroup.group.generated, format) : ''),
+    [selectedManagedGroup, format],
+  )
   const focusLineForManagedModel = useMemo(() => {
     if (!selectedManagedModelId || !selectedManagedGroup) return null
-    const t = JSON.stringify(selectedManagedGroup.group.generated, null, 2)
-    return focusLineForKey(t, selectedManagedModelId)
-  }, [selectedManagedModelId, selectedManagedGroup])
+    return focusLineForKey(managedPreviewText, selectedManagedModelId, format)
+  }, [selectedManagedModelId, selectedManagedGroup, managedPreviewText, format])
 
   const providerDiff = useMemo(
     () => computeDiff(activeProviderValue, effectiveProviderRecs),
@@ -1039,8 +1054,8 @@ for (const p of summary?.providers ?? []) {
                                   indent
                                   name={mv.name + g.suffix}
                                   info={g.pending
-                                  ? { text: t('row.fieldsPendingSync', { count: g.pending_fields }), green: false }
-                                  : { text: t('row.modelCount', { count: g.model_count }), green: false }}
+                                  ? { text: managedRowInfo(g.rule_tag, t('row.fieldsPendingSync', { count: g.pending_fields })), green: false }
+                                  : { text: managedRowInfo(g.rule_tag, t('row.modelCount', { count: g.model_count })), green: false }}
                                   selected={
                                     selectedManaged?.mid === mv.id && selectedManaged?.endpoint === g.endpoint
                                   }
@@ -1058,8 +1073,8 @@ for (const p of summary?.providers ?? []) {
                             key={g.endpoint}
                             name={<span className="truncate font-medium">{mv.name + g.suffix}</span>}
                             info={g.pending
-                              ? { text: t('row.fieldsPendingSync', { count: g.pending_fields }), green: false }
-                              : { text: t('row.modelCount', { count: g.model_count }), green: false }}
+                              ? { text: managedRowInfo(g.rule_tag, t('row.fieldsPendingSync', { count: g.pending_fields })), green: false }
+                              : { text: managedRowInfo(g.rule_tag, t('row.modelCount', { count: g.model_count })), green: false }}
                             badge={mv.pending_sync ? (
                               <span className="shrink-0 font-mono font-medium text-warning">{t('row.pendingBadge')}</span>
                             ) : null}
@@ -1150,10 +1165,14 @@ for (const p of summary?.providers ?? []) {
             </div>
           </div>
 
-          {/* Right: single syntax-highlighted JSON editor */}
+          {/* Right: single syntax-highlighted JSON / YAML editor */}
         <div className="flex min-h-0 flex-1 flex-col">
             <ColumnHeader>
-              <span>{diffPreviewing ? t('toolbar.previewDiff') : t('columns.providerJson')}</span>
+              <span>
+                {diffPreviewing
+                  ? t('toolbar.previewDiff')
+                  : t(yamlFile ? 'columns.providerYaml' : 'columns.providerJson')}
+              </span>
             </ColumnHeader>
             <div className="min-h-0 flex-1 overflow-hidden p-0">
               {diffPreviewing && diffBefore !== null && diffAfter !== null ? (
@@ -1173,14 +1192,15 @@ for (const p of summary?.providers ?? []) {
                   // 托管分组未同步：默认显示「生成（新） vs 文件实际（旧）」差异，
                   // 与顶部待同步计数一致，一眼看到将应用的变化。
                   <DiffView
-                    before={JSON.stringify(selectedManagedGroup.group.file_provider, null, 2)}
-                    after={JSON.stringify(selectedManagedGroup.group.generated, null, 2)}
+                    before={stringifyConfigValue(selectedManagedGroup.group.file_provider, format)}
+                    after={managedPreviewText}
                     unsetModels={[]}
                     onInteract={() => {}}
                   />
                 ) : (
                   <JsonEditor
                     value={selectedManagedGroup.group.generated}
+                    format={format}
                     focusLine={focusLineForManagedModel}
                     readonly
                   />
@@ -1189,12 +1209,14 @@ for (const p of summary?.providers ?? []) {
                 yamlFile ? (
                   <JsonEditor
                     value={currentEditableProviderValue}
+                    format={format}
                     focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
                     readonly
                   />
                 ) : (
                   <JsonEditor
                     value={currentEditableProviderValue}
+                    format={format}
                     focusLine={diffJumpLine !== null ? diffJumpLine : focusLineForSelectedModel}
                     onChange={(text) => {
                       if (text === currentEditableProviderValue) return
@@ -1308,7 +1330,6 @@ for (const p of summary?.providers ?? []) {
           onOpenChange={setManagedDialogOpen}
           record={record}
           editing={managedEditing}
-          protocols={summary?.protocols ?? []}
           onSaved={() => reload()}
         />
 
@@ -1460,6 +1481,13 @@ function RenameProviderDialog({
 // ProviderRow is a single sidebar row with a leading slot, label and a
 // trailing actions slot rendered on hover.
 type RowInfo = string | { text: string; green: boolean } | null
+
+// managedRowInfo 把分组的 Endpoint 规则标签（如 "*completion*"）缀在行信息
+// 前：折叠上线前存下的老分组（endpoint 还是 /v1/... 那种）和新建分组因此
+// 显示同一种归类，而不是看起来"没按规则分组"。
+function managedRowInfo(ruleTag: string, text: string): string {
+  return ruleTag ? `${ruleTag} · ${text}` : text
+}
 
 function ProviderRow({
   name,
@@ -2034,12 +2062,6 @@ function lastPathSegment(path: string): string {
   return i >= 0 ? path.slice(i + 1) : path
 }
 
-// isYAMLConfigFile reports whether the take-over file is YAML (.yml/.yaml).
-function isYAMLConfigFile(path: string | undefined | null): boolean {
-  const lower = (path ?? '').trim().toLowerCase()
-  return lower.endsWith('.yml') || lower.endsWith('.yaml')
-}
-
 // wrapRootScope rebuilds a full file content string from summary +
 // the edited scope value, so we always have a complete document in
 // liveContent (the save endpoint writes the whole file in one go).
@@ -2194,13 +2216,32 @@ function stripIdLikeKeys(item: Record<string, unknown>, fallback: string): Recor
 // until focusLine changes again.
 const LINE_HEIGHT = 18 // text-xs (12px) * leading-[1.5]
 
-// focusLineForKey returns the 0-based line of `"<key>":` inside a JSON
-// text, or null when the key isn't present.
-function focusLineForKey(text: string, key: string): number | null {
+// focusLineForKey returns the 0-based line that starts the block for `key`
+// inside a serialized snippet: `"<key>":` for JSON, the matching mapping key
+// or `- id: <key>` list item for YAML. null when the key isn't present.
+function focusLineForKey(text: string, key: string, format: AgentConfigFormat = 'json'): number | null {
   if (!text) return null
+  if (format === 'yaml') return focusLineForKeyYaml(text, key)
   const idx = text.indexOf(`"${key}":`)
   if (idx === -1) return null
   return Math.max(0, text.slice(0, idx).split('\n').length - 1)
+}
+
+// focusLineForKeyYaml looks for the model item (`- id: <key>`) first, then a
+// plain mapping key. Model ids may carry dots / dashes, so the search is a
+// literal match against the scalar.
+function focusLineForKeyYaml(text: string, key: string): number | null {
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const itemRe = new RegExp(`^\\s*-\\s+(?:id|name)\\s*:\\s*["']?${escaped}["']?\\s*$`)
+  const keyRe = new RegExp(`^\\s*["']?${escaped}["']?\\s*:`)
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    if (itemRe.test(lines[i])) return i
+  }
+  for (let i = 0; i < lines.length; i++) {
+    if (keyRe.test(lines[i])) return i
+  }
+  return null
 }
 
 // braceEndLine returns the last line index of the brace block that
@@ -2235,27 +2276,50 @@ function braceEndLine(text: string, startLine: number): number {
   return lines.length - 1
 }
 
+// yamlBlockEndLine returns the last line index of the YAML block that starts
+// at startLine: everything indented deeper than the starting line, plus the
+// remaining keys of a `- key:` list item. Dedent to the starting column ends
+// the block.
+function yamlBlockEndLine(text: string, startLine: number): number {
+  const lines = text.split('\n')
+  const start = lines[startLine] ?? ''
+  const indent = start.length - start.trimStart().length
+  const isItem = /^\s*-\s/.test(start)
+  let end = startLine
+  for (let i = startLine + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.trim() === '') {
+      end = i
+      continue
+    }
+    const lineIndent = line.length - line.trimStart().length
+    if (lineIndent < indent) break
+    if (lineIndent === indent) {
+      // Sibling mapping key ends the block; another `- ` item does too.
+      if (!isItem || /^\s*-\s/.test(line)) break
+    }
+    end = i
+  }
+  return end
+}
+
 function JsonEditor({
   value,
   onChange,
   readonly = false,
   focusLine = null,
+  format = 'json',
 }: {
   value: unknown
   onChange?: (text: string) => void
   readonly?: boolean
   focusLine?: number | null
+  /** 片段格式：接管文件是 YAML 时按 YAML 呈现 / 高亮，且不做 JSON 校验。 */
+  format?: AgentConfigFormat
 }) {
   const { t } = useTranslation('agentConfig')
-  const initial = useMemo(() => {
-    if (value === null || value === undefined) return ''
-    if (typeof value === 'string') return value
-    try {
-      return JSON.stringify(value, null, 2)
-    } catch {
-      return String(value)
-    }
-  }, [value])
+  const yaml = format === 'yaml'
+  const initial = useMemo(() => stringifyConfigValue(value, format), [value, format])
   const [text, setText] = useState(initial)
   const [error, setError] = useState<string | null>(null)
   const [dimmed, setDimmed] = useState(false)
@@ -2290,11 +2354,12 @@ function JsonEditor({
 
   const lines = useMemo(() => text.split('\n'), [text])
 
-  // 高亮范围 = [首行, 花括号块末行]；编辑（dimmed）后整体熄灭。
+  // 高亮范围 = [首行, 块末行]（JSON 按花括号、YAML 按缩进）；编辑后熄灭。
   const focusExtent = useMemo(() => {
     if (focusLine === null || focusLine === undefined || dimmed) return null
-    return [focusLine, braceEndLine(text, focusLine)] as const
-  }, [focusLine, text, dimmed])
+    const end = yaml ? yamlBlockEndLine(text, focusLine) : braceEndLine(text, focusLine)
+    return [focusLine, end] as const
+  }, [focusLine, text, dimmed, yaml])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-1">
@@ -2314,18 +2379,21 @@ function JsonEditor({
             </div>
           ))}
         </div>
-        {/* 语法着色层：逐行渲染（高亮整个被聚焦的 JSON 块），与 textarea 完全对齐 */}
+        {/* 语法着色层：逐行渲染（高亮整个被聚焦的块），与 textarea 完全对齐 */}
         <pre
           ref={preRef}
           aria-hidden
-          className="pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden bg-transparent px-0 py-0 pl-9 font-mono text-xs leading-[1.5] whitespace-pre break-words text-transparent"
+          className={
+            'pointer-events-none absolute inset-0 z-0 m-0 overflow-hidden bg-transparent px-0 py-0 pl-9 font-mono text-xs leading-[1.5] whitespace-pre break-words ' +
+            (yaml ? 'text-foreground' : 'text-transparent')
+          }
         >
           {lines.map((line, i) => (
             <div
               key={i}
               className={focusExtent && i >= focusExtent[0] && i <= focusExtent[1] ? 'bg-muted-foreground/10' : undefined}
             >
-              {line === '' ? '\u00A0' : <JsonTokens text={line} />}
+              {line === '' ? '\u00A0' : yaml ? <YamlTokens text={line} /> : <JsonTokens text={line} />}
             </div>
           ))}
         </pre>
@@ -2337,6 +2405,12 @@ function JsonEditor({
             const v = e.target.value
             setText(v)
             setDimmed(true)
+            // YAML 片段不做 JSON 校验（拦截会阻止把合法 YAML 写回）。
+            if (yaml) {
+              setError(null)
+              onChange?.(v)
+              return
+            }
             try {
               JSON.parse(v)
               setError(null)

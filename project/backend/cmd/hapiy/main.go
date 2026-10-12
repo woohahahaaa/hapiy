@@ -310,11 +310,11 @@ func runServe() {
 			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendation-template", handler.ApplyRecommendationTemplate(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/apply-recommendation-config", handler.ApplyRecommendationConfig(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/sync-model-fields", handler.SyncAgentConfigFileModelFields(db, encKey))
-			dashboardAuthed.GET("/agent-config-files/managed-options", handler.ManagedProviderOptions(db))
+			dashboardAuthed.GET("/agent-config-files/:id/managed-options", handler.ManagedProviderOptions(db))
 			dashboardAuthed.GET("/agent-config-files/:id/managed-providers", handler.ListManagedProviders(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/managed-providers", handler.CreateManagedProvider(db, encKey))
 			dashboardAuthed.PUT("/agent-config-files/:id/managed-providers/:mid", handler.UpdateManagedProvider(db, encKey))
-			dashboardAuthed.DELETE("/agent-config-files/:id/managed-providers/:mid", handler.DeleteManagedProvider(db))
+			dashboardAuthed.DELETE("/agent-config-files/:id/managed-providers/:mid", handler.DeleteManagedProvider(db, encKey))
 			dashboardAuthed.POST("/agent-config-files/:id/managed-providers/:mid/sync", handler.SyncManagedProvider(db, encKey))
 			dashboardAuthed.GET("/agent-config-files/:id/model-config-sources", handler.ListAgentModelConfigSources(db))
 			dashboardAuthed.PUT("/agent-config-files/:id/model-config-sources", handler.SaveAgentModelConfigSources(db))
@@ -557,6 +557,12 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			p = "/"
 		}
 		if p == "/" || strings.HasPrefix(p, "/assets/") {
+			// 入口 HTML 必须每次回源校验：SPA 的 JS 名字带哈希，没有这个头
+			// 浏览器会按 Last-Modified 启发式缓存 index.html，长驻标签页就
+			// 一直跑升级前的旧代码（历史上出现过"弹窗预览和保存后不一致"）。
+			if p == "/" {
+				c.Writer.Header().Set("Cache-Control", "no-cache")
+			}
 			fileServer.ServeHTTP(c.Writer, c.Request)
 			return
 		}
@@ -577,6 +583,7 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 		}
 		req := c.Request.Clone(c.Request.Context())
 		req.URL.Path = "/"
+		c.Writer.Header().Set("Cache-Control", "no-cache")
 		fileServer.ServeHTTP(c.Writer, req)
 	}
 }

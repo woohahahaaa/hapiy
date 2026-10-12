@@ -984,6 +984,19 @@ export type ManagedProviderOption = {
   readonly modelCount: number
 }
 
+/**
+ * Endpoint 归类（后端算出）：同一个 canonical 的 endpoint 属于同一组
+ * （命中同一条 Endpoint 规则），ruleIndex -1 表示没命中任何规则。
+ */
+export type EndpointRuleInfo = {
+  readonly canonical: string
+  readonly ruleIndex: number
+  readonly ruleName: string
+  readonly tag: string
+}
+
+export type EndpointRuleMap = Readonly<Record<string, EndpointRuleInfo>>
+
 export type ManagedAgentGroup = {
   readonly endpoint: string
   readonly suffix: string
@@ -994,6 +1007,10 @@ export type ManagedAgentGroup = {
 export type ManagedGroupView = {
   readonly endpoint: string
   readonly suffix: string
+  /** 命中的 Endpoint 规则名（"" = 没命中），列表行与弹窗都按它显示归类。 */
+  readonly rule_name: string
+  readonly rule_tag: string
+  readonly hits: readonly string[]
   readonly provider_names: readonly string[]
   readonly provider_ids: readonly string[]
   readonly model_count: number
@@ -3432,15 +3449,31 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({ sources }),
     })
   },
-  async listManagedProviderOptions(): Promise<{ readonly options: readonly ManagedProviderOption[]; readonly systemBaseUrl: string }> {
-    const body = await requestFull('/agent-config-files/managed-options')
+  async listManagedProviderOptions(id: string): Promise<{ readonly options: readonly ManagedProviderOption[]; readonly systemBaseUrl: string; readonly endpointRules: EndpointRuleMap }> {
+    const body = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/managed-options`)
     const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('providerOptions') }), null)
     }
     const systemBaseUrl = typeof body.system_base_url === 'string' ? body.system_base_url : ''
+    // endpoint → 规则归类由后端算好（哪些 endpoint 同属一条 Endpoint 规则、
+    // 该组的代表 endpoint）。弹窗只按 canonical 聚合，不再在前端重跑一遍
+    // 通配匹配，避免「预览」和「保存后」两套结果。
+    const endpointRules: Record<string, EndpointRuleInfo> = {}
+    if (isRecord(body.endpoint_rules)) {
+      for (const [endpoint, raw] of Object.entries(body.endpoint_rules as Record<string, unknown>)) {
+        if (!isRecord(raw)) continue
+        endpointRules[endpoint] = {
+          canonical: typeof raw.canonical === 'string' && raw.canonical !== '' ? raw.canonical : endpoint,
+          ruleIndex: readNumber(raw.rule_index, 'endpoint_rules.rule_index', -1),
+          ruleName: typeof raw.rule_name === 'string' ? raw.rule_name : '',
+          tag: typeof raw.tag === 'string' ? raw.tag : '',
+        }
+      }
+    }
     return {
       systemBaseUrl,
+      endpointRules,
       options: data.map((raw) => {
         if (!isRecord(raw)) {
           return { id: '', name: '', status: true, endpoints: [], models: [], model_endpoints: {}, endpointCount: 0, modelCount: 0 }
@@ -3494,6 +3527,11 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
           return {
             endpoint: typeof gr.endpoint === 'string' ? gr.endpoint : '',
             suffix: typeof gr.suffix === 'string' ? gr.suffix : '',
+            rule_name: typeof gr.rule_name === 'string' ? gr.rule_name : '',
+            rule_tag: typeof gr.rule_tag === 'string' ? gr.rule_tag : '',
+            hits: Array.isArray(gr.hits)
+              ? gr.hits.filter((x): x is string => typeof x === 'string')
+              : [],
             provider_names: Array.isArray(gr.provider_names)
               ? gr.provider_names.filter((x): x is string => typeof x === 'string')
               : [],

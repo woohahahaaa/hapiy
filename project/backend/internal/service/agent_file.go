@@ -256,6 +256,47 @@ func remoteReadCommand(targetOS, path string) string {
 	return "cat " + remotePathExpr(path)
 }
 
+// ReadRemoteFileIfExists reads a remote file and treats a missing file as
+// ("", nil): the caller may be about to create it. Unlike ReadRemoteFile the
+// probe is existence-tolerant (an absent file is not an error), so a real
+// failure (connection, permission) still surfaces as an error.
+func ReadRemoteFileIfExists(cfg SshConfig, path, targetOS string) (string, error) {
+	client, err := dialSSH(cfg)
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	session, err := client.client.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("创建 SSH 会话失败: %w", err)
+	}
+	defer session.Close()
+
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
+	if err := session.Run(remoteReadIfExistsCommand(targetOS, path)); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return "", fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
+		}
+		return "", fmt.Errorf("读取远程文件失败: %w", err)
+	}
+	return stdout.String(), nil
+}
+
+// remoteReadIfExistsCommand returns a remote command that prints the file
+// when it exists and prints nothing (exit 0) when it does not: `if exist
+// <path> type <path>` on cmd.exe, a `[ -f ... ] && cat ... || true` guard on
+// POSIX shells.
+func remoteReadIfExistsCommand(targetOS, path string) string {
+	if targetOS == "windows" {
+		return `if exist ` + cmdQuote(path) + ` type ` + cmdQuote(path)
+	}
+	return "sh -c '[ -f \"$1\" ] && cat \"$1\" || true' sh " + remotePathExpr(path)
+}
+
 // WriteRemoteFileAtomic replaces a remote file via SSH using one session
 // that writes stdin to a temp file and moves it over the target.
 //

@@ -28,6 +28,7 @@
     "models": "模型列表",
     "previewDiff": "预览差异",
     "providerJson": "供应商 JSON 片段",
+    "providerYaml": "供应商 YAML 片段",
     "syncFromModelsDev": "从 models.dev 同步模型配置"
   },
   "badge": {
@@ -270,7 +271,7 @@
     "apiKeyPlaceholder": "选择接入用的令牌 Key",
     "noTokens": "暂无令牌，请先到令牌页创建",
     "tokenDisabled": "（已禁用）",
-    "apiKeyHint": "必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 key",
+    "apiKeyHint": "必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 key。只认凭据引用（apiKeyEnv）的软件（如 dsh）会同步写进其凭据库（.credentials.yaml）",
     "baseUrlHint": "默认填入系统识别的 BaseURL，可直接编辑；清空则恢复系统默认",
     "sourceLabel": "标记来源",
     "sourcePlaceholder": "可留空",

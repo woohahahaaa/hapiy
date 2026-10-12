@@ -819,6 +819,7 @@ var builtinAgentRules = []struct {
 	Recommendations []AgentRecommendation
 	ModelInfoFields AgentModelInfoFieldPaths
 	Protocols       []AgentProtocol
+	Credentials     *AgentCredentialSpec
 }{
 	{
 		Name: "opencode-v1",
@@ -978,6 +979,7 @@ var builtinAgentRules = []struct {
 		Recommendations: deepseekHarnessRecommendations,
 		Protocols:       deepseekHarnessProtocols,
 		ModelInfoFields: deepseekHarnessModelInfoFields,
+		Credentials:     deepseekHarnessCredentials,
 	},
 	{
 		// DeepSeek Harness（dsh）Web 版：`npx @deepseek-ai/dsh web` 启动的
@@ -995,7 +997,38 @@ var builtinAgentRules = []struct {
 		Recommendations: deepseekHarnessRecommendations,
 		Protocols:       deepseekHarnessProtocols,
 		ModelInfoFields: deepseekHarnessModelInfoFields,
+		Credentials:     deepseekHarnessCredentials,
 	},
+}
+
+// AgentCredentialSpec declares where an agent keeps its credential store and
+// how that store is laid out. Some agents never carry a literal key in their
+// config: dsh's pi-ai providers write `apiKeyEnv: HAPIY_API_KEY` — a
+// *reference* the credential seam resolves at request time — and the literal
+// token lives in $DSH_HOME/.credentials.yaml. A rule template that declares
+// this spec lets 托管同步 write the chosen 令牌 into that store, so the
+// generated block does not reference a credential nobody stored.
+type AgentCredentialSpec struct {
+	// Paths are the per-OS credential-document locations. `{config_dir}` is
+	// substituted with the directory of the take-over config file, so a
+	// non-default install root follows the record's actual path.
+	Paths AgentOsPaths `json:"paths"`
+	// RefField is the provider-level field of the generated block whose value
+	// is the credential reference name (dsh: "apiKeyEnv").
+	RefField string `json:"ref_field"`
+	// Format names the document layout. Only "dsh-refs-v1" (a `version: 1`
+	// document with a `refs:` mapping; a pre-release flat document stays flat
+	// and dsh migrates it on boot) is understood today.
+	Format string `json:"format"`
+}
+
+// PathForOS picks the credential document template for a target OS, "" when
+// the spec does not declare one.
+func (c AgentCredentialSpec) PathForOS(targetOS string) string {
+	if targetOS == "windows" {
+		return strings.TrimSpace(c.Paths.Windows)
+	}
+	return strings.TrimSpace(c.Paths.Mac)
 }
 
 // AgentTemplateConfig is the on-disk representation of one agent's default
@@ -1010,6 +1043,12 @@ type AgentTemplateConfig struct {
 	Recommendations []AgentRecommendation    `json:"recommendations"`
 	Protocols       []AgentProtocol          `json:"protocols"`
 	ModelInfoFields AgentModelInfoFieldPaths `json:"model_info_fields"`
+	// Credentials declares the agent's credential store (see
+	// AgentCredentialSpec); nil = the agent takes its key inline and no
+	// separate store needs writing. It is template metadata, not editable
+	// rule content: MatchesTemplate / ApplyTemplateToRule ignore it, so it
+	// never flips a rule to "customized".
+	Credentials *AgentCredentialSpec `json:"credentials,omitempty"`
 }
 
 // AgentTemplateDir is the directory (relative to backend cwd) where default
@@ -1034,6 +1073,7 @@ func LoadAgentTemplate(name string) (AgentTemplateConfig, bool) {
 				Recommendations: b.Recommendations,
 				Protocols:       b.Protocols,
 				ModelInfoFields: b.ModelInfoFields,
+				Credentials:     b.Credentials,
 			}, true
 		}
 	}
@@ -1126,6 +1166,7 @@ func ListBuiltinTemplates() []AgentTemplateConfig {
 			Recommendations: b.Recommendations,
 			Protocols:       b.Protocols,
 			ModelInfoFields: b.ModelInfoFields,
+			Credentials:     b.Credentials,
 		})
 	}
 	return out
@@ -1377,6 +1418,21 @@ var deepseekHarnessModelInfoFields = AgentModelInfoFieldPaths{
 	MaxOutputToken: ModelInfoPath(`maxTokens`),
 	// pi-ai 的 input 只接受 text / image。
 	InputTypes: AgentModelInfoFieldSpec{Path: `input`, Values: []string{"text", "image"}},
+}
+
+// deepseekHarnessCredentials 是 DeepSeek Harness 两条规则（桌面版 / Web 版）
+// 共用的凭据库声明：生成的块只放 apiKeyEnv 引用，明文令牌在 dsh 的凭据库
+// $DSH_HOME/.credentials.yaml（`version: 1` + `refs:` 映射）。托管同步按这里
+// 的路径把弹窗选的令牌写到目标机，否则 dsh 请求时报 MISSING_CREDENTIAL。
+// 路径以 {config_dir}（配置文件所在目录）为基准：profile 补丁在
+// <DSH_HOME>/profiles/<profile>/，上两级就是 DSH_HOME，非默认 DSH_HOME 也成立。
+var deepseekHarnessCredentials = &AgentCredentialSpec{
+	Paths: AgentOsPaths{
+		Windows: `{config_dir}\..\..\.credentials.yaml`,
+		Mac:     `{config_dir}/../../.credentials.yaml`,
+	},
+	RefField: "apiKeyEnv",
+	Format:   "dsh-refs-v1",
 }
 
 // AgentModelConfigSource — persisted 模型配置参考供应商 selection for one

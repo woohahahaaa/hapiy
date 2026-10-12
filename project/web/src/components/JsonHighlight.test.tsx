@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { ReactElement } from 'react'
 import { describe, expect, it } from 'vitest'
-import { JsonHighlight, JsonTokens, tokenizeJson } from '@/components/JsonHighlight'
+import { JsonHighlight, JsonTokens, YamlTokens, tokenizeJson, tokenizeYaml } from '@/components/JsonHighlight'
 
 function decodeHtml(html: string): string {
   return html
@@ -68,6 +68,44 @@ describe('JsonTokens', () => {
   it('emits whitespace as a raw text node, not a span', () => {
     const html = render(<JsonTokens text="  " />)
     expect(html).toBe('<span>  </span>')
+  })
+})
+
+describe('YamlTokens', () => {
+  it('colors mapping keys, quoted and plain scalars, numbers and comments', () => {
+    const yaml = [
+      '# patch layer',
+      'apiKeyEnv: HAPIY_API_KEY',
+      'models:',
+      '  - id: gpt-5.6-sol',
+      '    maxTokens: 8192',
+      '    input: [text, image]',
+    ].join('\n')
+    const kinds = tokenizeYaml(yaml)
+      .filter((t) => t.kind !== 'whitespace')
+      .map((t) => [t.kind, t.text])
+    expect(kinds).toContainEqual(['comment', '# patch layer'])
+    expect(kinds).toContainEqual(['key', 'apiKeyEnv'])
+    expect(kinds).toContainEqual(['key', 'id'])
+    expect(kinds).toContainEqual(['string', 'gpt-5.6-sol'])
+    expect(kinds).toContainEqual(['number', '8192'])
+    expect(kinds).toContainEqual(['string', 'HAPIY_API_KEY'])
+    expect(kinds).toContainEqual(['punct', '['])
+    expect(kinds).toContainEqual(['string', 'text'])
+  })
+
+  it('joins lines back with newline whitespace tokens so the text round-trips', () => {
+    const text = 'a: 1\nb: 2'
+    expect(tokenizeYaml(text).map((t) => t.text).join('')).toBe(text)
+    const html = render(<YamlTokens text="a: 1" />)
+    expect(html).toContain('text-sky-700')
+    expect(html).toContain('text-amber-700')
+  })
+
+  it('does not treat a url colon as a key separator', () => {
+    const tokens = tokenizeYaml('baseURL: https://gw.example.com/v1')
+    expect(tokens.filter((t) => t.kind === 'key').map((t) => t.text)).toEqual(['baseURL'])
+    expect(tokens.find((t) => t.text.includes('https'))?.kind).toBe('string')
   })
 })
 
