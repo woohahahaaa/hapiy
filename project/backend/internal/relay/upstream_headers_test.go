@@ -5,11 +5,14 @@ import (
 	"testing"
 )
 
-func TestSetupUpstreamHeaders_stripsHapiySource(t *testing.T) {
+// hapiy 不再注入、也不再剥离 来源标记：标记走 gin context
+// (service.SetSourceMark)，客户端自己发的 X-Hapiy-Source 与其他自定义头
+// 一样原样透传到上游。
+func TestSetupUpstreamHeaders_passesClientHeadersThrough(t *testing.T) {
 	eng := &Engine{}
 	req := &RelayRequest{
 		Headers: map[string]string{
-			"X-Hapiy-Source":   "__opencodetest",
+			"X-Hapiy-Source":   "__client_owned",
 			"X-Session-Id":     "ses_keep_me", // client-owned, must pass through
 			"X-Custom-Through": "untouched",   // arbitrary client header, must pass through
 		},
@@ -21,8 +24,8 @@ func TestSetupUpstreamHeaders_stripsHapiySource(t *testing.T) {
 	}
 	eng.setupUpstreamHeaders(httpReq, "test-key", req)
 
-	if got := httpReq.Header.Get("X-Hapiy-Source"); got != "" {
-		t.Fatalf("X-Hapiy-Source must not reach upstream, got %q", got)
+	if got := httpReq.Header.Get("X-Hapiy-Source"); got != "__client_owned" {
+		t.Fatalf("client header X-Hapiy-Source must pass through untouched, got %q", got)
 	}
 	if got := httpReq.Header.Get("Authorization"); got != "Bearer test-key" {
 		t.Fatalf("Authorization must be replaced with provider key, got %q", got)

@@ -209,7 +209,9 @@ type RelayRequest struct {
 	// appended to the provider's base URL when building the upstream URL.
 	Path string `json:"-"`
 	// SourceMark is the optional "__来源" segment carried by the ingress
-	// proxy (X-Hapiy-Source). Empty when the request bypasses the proxy.
+	// proxy (`/proxy/__<source>/...`), captured in the gin context. Empty
+	// when the request bypasses the proxy. It is never sent upstream and
+	// never appears in the request headers the client sent.
 	SourceMark string `json:"-"`
 	// DownstreamURL is the URL the caller used to reach this gateway
 	// (scheme://host + source prefix + Path). The handler fills it so every
@@ -876,7 +878,7 @@ func (e *Engine) setupUpstreamHeaders(httpReq *http.Request, key string, req *Re
 	httpReq.Header.Set("Authorization", "Bearer "+key)
 	for k, v := range req.Headers {
 		switch k {
-		case "Authorization", "Content-Length", "Host", "Connection", "X-Hapiy-Source":
+		case "Authorization", "Content-Length", "Host", "Connection":
 			continue
 		case "Accept-Encoding":
 			// Let Go negotiate encoding itself so it transparently

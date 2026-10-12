@@ -102,6 +102,14 @@ lsof -nP -iTCP:8080  -sTCP:LISTEN
 
 > *If neither port shows a listener, run the matching script.*
 
+### `~/.hapiy/port` 被写成 8080，导致 `./alive.sh` 起错端口
+
+这个文件是**控制台端口**，三个人读它：`alive` 的端口记忆、macOS/Windows 壳打开的地址、install 打印的 `web console` URL。只有 `HAPIY_ENV=production` 的 `serve` 才写它（`daemon.RecordServePort`），dev 边车跑在 8080 但不写，所以 `./alive.sh dev` 跑完再 `./alive.sh` 仍是 18009。若文件已被改坏：`printf '18009\n' > ~/.hapiy/port && ./alive.sh --port 18009`。
+
+手动查 dev 后端要带端口（`status`/`down` 按控制台端口去探）：`HAPIY_PORT=8080 ./hapiy status`。
+
+> *`~/.hapiy/port` is the console port (alive's memory, the app shell, the installer URL). Only a `HAPIY_ENV=production` serve writes it; the dev sidecar on 8080 does not. To inspect a dev backend pass `HAPIY_PORT=8080`.*
+
 ### 前端报“服务器返回的不是有效 JSON”
 
 原因通常是后端路由 404，gin 返回纯文本 `404 page not found`，前端 `JSON.parse` 失败。后端日志会看到 `PUT /v1/dashboard/... | 404`。修法：

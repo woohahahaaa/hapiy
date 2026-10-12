@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,4 +74,60 @@ func TestClaimSupervisor(t *testing.T) {
 		t.Fatalf("pidfile after stale reclaim = %d, want %d", got, os.Getpid())
 	}
 	os.Remove(path)
+}
+
+// TestRecordServePort pins the rule that keeps <state>/port the console port:
+// only a production server may write it. A development serve is the API
+// sidecar behind Vite, and its 8080 used to overwrite the 18009 alive had
+// remembered, so the next ./alive.sh run started on the wrong port.
+func TestRecordServePort(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HAPIY_STATE_DIR", dir)
+	path := filepath.Join(dir, "port")
+
+	RecordServePort("development", "8080")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("development serve wrote %s (err %v), want the file untouched", path, err)
+	}
+
+	RecordServePort("production", "18009")
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("production serve did not record its port: %v", err)
+	}
+	if want := "18009\n"; string(got) != want {
+		t.Fatalf("port file = %q, want %q", got, want)
+	}
+}
+
+// TestServeEnv checks the supervised serve is told the port its supervisor
+// probes, so `up` cannot end up watching 18009 while the child binds 8080.
+func TestServeEnv(t *testing.T) {
+	t.Setenv("HAPIY_PORT", "")
+
+	state := t.TempDir()
+	t.Setenv("HAPIY_STATE_DIR", state)
+	if err := os.WriteFile(filepath.Join(state, "port"), []byte("18009\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastEnvValue(serveEnv(), "HAPIY_PORT"); got != "18009" {
+		t.Fatalf("serveEnv HAPIY_PORT = %q, want 18009 (from the port file)", got)
+	}
+
+	// No file, no env: fall back to the default, still agreeing with port().
+	t.Setenv("HAPIY_STATE_DIR", t.TempDir())
+	if got := lastEnvValue(serveEnv(), "HAPIY_PORT"); got != "8080" {
+		t.Fatalf("serveEnv HAPIY_PORT = %q, want 8080 (default)", got)
+	}
+}
+
+// lastEnvValue reads the value os/exec would pick: duplicate keys keep the last.
+func lastEnvValue(env []string, key string) string {
+	value := ""
+	for _, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			value = strings.TrimPrefix(kv, key+"=")
+		}
+	}
+	return value
 }

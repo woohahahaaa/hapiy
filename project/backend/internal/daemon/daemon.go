@@ -84,6 +84,32 @@ func RecordPort(p string) {
 	_ = os.WriteFile(portPath(), []byte(p+"\n"), 0o644)
 }
 
+// RecordServePort is RecordPort for `serve`, gated on production.
+//
+// <state>/port is the console port, not just a backend handshake: woohkit's
+// alive remembers the public port there, the macOS/Windows shell opens
+// whatever it holds, and install prints it as the web console URL. A
+// development server is the API sidecar behind Vite — its own port (8080) is
+// not the console, so letting it write flipped the next `./alive.sh` run onto
+// 8080 instead of the remembered 18009. Production owns the file; development
+// leaves it alone.
+func RecordServePort(env, p string) {
+	if env != "production" {
+		return
+	}
+	RecordPort(p)
+}
+
+// serveEnv is the environment for the supervised `serve`: the port this CLI
+// just resolved (HAPIY_PORT > port file > 8080), so `up` probes exactly what
+// the child binds. Without it an env-less launch (the Windows Startup VBS, a
+// hand-run `hapiy up`) binds 8080 while the port file still says 18009, and
+// every later probe chases the wrong port. Duplicate keys are fine: os/exec
+// keeps the last value, which is the one appended here.
+func serveEnv() []string {
+	return append(os.Environ(), "HAPIY_PORT="+port())
+}
+
 func healthURL() string { return "http://127.0.0.1:" + port() + "/health" }
 
 // backendHealthy probes /health. Status < 500 means the serve process is
@@ -263,7 +289,7 @@ func superviseLoop() error {
 	logLine("supervising %s serve (supervisor pid=%d)", exe, os.Getpid())
 	for {
 		cmd := exec.Command(exe, "serve")
-		cmd.Env = os.Environ()
+		cmd.Env = serveEnv()
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 		if err := cmd.Start(); err != nil {

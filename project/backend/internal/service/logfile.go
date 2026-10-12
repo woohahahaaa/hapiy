@@ -376,10 +376,12 @@ func ExtractSourceFromPath(path string) string {
 	return seg
 }
 
-// ResolveSourceMark returns the header-carried source mark, falling back to path extraction.
-func ResolveSourceMark(header, path string) string {
-	if header != "" {
-		return header
+// ResolveSourceMark returns the request-carried source mark, falling back to
+// path extraction when the caller bypassed the `/proxy/__<source>` prefix
+// handling.
+func ResolveSourceMark(mark, path string) string {
+	if mark != "" {
+		return mark
 	}
 	return ExtractSourceFromPath(path)
 }

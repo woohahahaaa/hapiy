@@ -434,20 +434,21 @@ func runServe() {
 		}
 	}
 
-	// Agent taxi prefix (`/proxy/__<source>/...`): the source mark is captured
-	// into the X-Hapiy-Source header and the prefix itself is stripped, leaving
-	// the agent's own request path untouched — e.g. opencode posts
-	// `/proxy/__opencode/chat/completions` and the relay then works with
-	// `/chat/completions`. The path is deliberately NOT normalized to /v1:
-	// dispatch matches the provider's declared endpoint against exactly what
-	// the agent sent, and the relay appends that same path to the upstream base
-	// URL. The Vite dev server forwards the prefix unchanged so dev and
-	// production see identical paths.
+	// Agent taxi prefix (`/proxy/__<source>/...`): the source mark is kept in
+	// the gin context (service.SetSourceMark) and the prefix itself is
+	// stripped, leaving the agent's own request path untouched — e.g. opencode
+	// posts `/proxy/__opencode/chat/completions` and the relay then works with
+	// `/chat/completions`. The mark is never injected as a request header, so
+	// nothing the client sent is modified. The path is deliberately NOT
+	// normalized to /v1: dispatch matches the provider's declared endpoint
+	// against exactly what the agent sent, and the relay appends that same
+	// path to the upstream base URL. The Vite dev server forwards the prefix
+	// unchanged so dev and production see identical paths.
 	proxyRelay := r.Group("/proxy/__:source")
 	proxyRelay.Use(middleware.OverloadProtection(nil))
 	proxyRelay.Use(func(c *gin.Context) {
 		src := c.Param("source")
-		c.Request.Header.Set("X-Hapiy-Source", "__"+src)
+		service.SetSourceMark(c, "__"+src)
 		rest := c.Request.URL.Path[len("/proxy/__"+src):]
 		if rest == "" || rest[0] != '/' {
 			rest = "/" + rest
@@ -469,7 +470,7 @@ func runServe() {
 
 	// Start server
 	addr := cfg.Host + ":" + cfg.Port
-	daemon.RecordPort(cfg.Port)
+	daemon.RecordServePort(cfg.Env, cfg.Port)
 	log.Printf("Server starting on %s", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

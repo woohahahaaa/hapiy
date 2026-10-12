@@ -41,7 +41,7 @@ export default defineConfig({
     allowedHosts: ["macs1.example.com", "hapiying.example.com", ...configuredReverseProxyDomains()],
     proxy: {
       // Agent 接入走 /proxy/__来源 前缀（来源标记），原样转发给后端；后端
-      // 的来源前缀路由负责剥离前缀、落 X-Hapiy-Source，并把 agent 自己拼的
+      // 的来源前缀路由负责剥离前缀、把来源标记写进 gin context，并把 agent 自己拼的
       // 操作路径（/chat/completions 等）直接交给 dispatch 与上游拼接。
       // 例：/proxy/__opencodetest/chat/completions -> 后端见 /chat/completions
       "/proxy": {

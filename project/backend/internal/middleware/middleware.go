@@ -147,7 +147,7 @@ func rejectTokenAuth(c *gin.Context, status int, body gin.H, userID, tokenName s
 		ModelName:     service.ExtractModelFromRequestBody(c),
 		RequestID:     c.GetString("request_id"),
 		IP:            c.ClientIP(),
-		DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+		DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
 		Error:         err,
 	})
 	c.JSON(status, body)

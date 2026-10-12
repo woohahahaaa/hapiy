@@ -199,11 +199,40 @@ type LogRelayFailureInput struct {
 	Error         error
 }
 
+// sourceMarkContextKey is the gin context key carrying the 来源标记 captured
+// from the `/proxy/__<source>` prefix. The mark travels in the gin context —
+// never as an injected request header — so the gateway never modifies the
+// request the client sent.
+const sourceMarkContextKey = "hapiy_source_mark"
+
+// SetSourceMark records the source mark ("__<name>") for this request. The
+// proxy prefix middleware calls it once per relayed request.
+func SetSourceMark(c *gin.Context, mark string) {
+	if c == nil || mark == "" {
+		return
+	}
+	c.Set(sourceMarkContextKey, mark)
+}
+
+// SourceMark returns the source mark recorded for this request; empty when
+// the request bypassed the `/proxy/__<source>` prefix.
+func SourceMark(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if v, ok := c.Get(sourceMarkContextKey); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
 // RequestURL rebuilds the gateway-side URL the caller used from the
 // request's scheme/host plus the source-marked proxy prefix and the request
-// path. sourceMark is the X-Hapiy-Source value (e.g. "__macOpenchamber")
-// the ingress proxy stripped; pass "" for the direct /v1 entry. Falls back
-// to the bare path when no host is known. Feeds the 使用记录 详情页's 下游 URL.
+// path. sourceMark is the 来源标记 (e.g. "__macOpenchamber") returned by
+// SourceMark(c); pass "" for the direct /v1 entry. Falls back to the bare
+// path when no host is known. Feeds the 使用记录 详情页's 下游 URL.
 func RequestURL(c *gin.Context, sourceMark, path string) string {
 	if path == "" {
 		return ""

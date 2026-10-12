@@ -89,7 +89,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				UserID:        getString(userID),
 				RequestID:     c.GetString("request_id"),
 				IP:            c.ClientIP(),
-				DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+				DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
 				UseTimeMs:     useTime,
 				Error:         err,
 			})
@@ -106,7 +106,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				UserID:        getString(userID),
 				RequestID:     c.GetString("request_id"),
 				IP:            c.ClientIP(),
-				DownstreamURL: service.RequestURL(c, c.GetHeader("X-Hapiy-Source"), c.Request.URL.Path),
+				DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
 				UseTimeMs:     useTime,
 				Error:         err,
 			})
@@ -128,7 +128,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 		relayReq.RequestID = c.GetString("request_id")
 		relayReq.Path = c.Request.URL.Path
-		relayReq.SourceMark = c.GetHeader("X-Hapiy-Source")
+		relayReq.SourceMark = service.SourceMark(c)
 		relayReq.DownstreamURL = service.RequestURL(c, relayReq.SourceMark, relayReq.Path)
 		relayReq.UserID = getString(userID)
 		relayReq.TokenName = getString(tokenName)
