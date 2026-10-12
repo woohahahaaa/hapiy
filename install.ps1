@@ -2,12 +2,15 @@
 #
 #   irm https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.ps1 | iex
 #
-# 安装脚本做四件事：下载最新发行版、校验 SHA256、装到固定目录并加入用户
-# PATH、注册登录自启（任务计划程序）。重复执行即为升级。
+# 安装脚本做这些事：下载最新发行版、校验 SHA256、装到固定目录并加入用户
+# PATH、注册登录自启（任务计划程序，被安全软件拦截时退回启动文件夹）。
+# 重复执行即为升级。
 #
 # 环境变量：
 #   $env:HAPIY_HOME            安装根目录（默认 %LOCALAPPDATA%\hapiy）
 #   $env:HAPIY_NO_SERVICE=1    跳过自启任务注册
+#
+# 本文件由 woohkit 在 release 时按项目配置渲染生成，勿手改。
 $ErrorActionPreference = "Stop"
 
 $Base = "https://github.com/woohahahaaa/hapiy/releases/latest/download"
@@ -15,7 +18,7 @@ $Asset = "hapiy-windows-amd64.zip"
 $Root = if ($env:HAPIY_HOME) { $env:HAPIY_HOME } else { Join-Path $env:LOCALAPPDATA "hapiy" }
 $AppDir = Join-Path $Root "app"
 $Exe = Join-Path $AppDir "hapiy.exe"
-# The installed backend is the prod stack, which serves on 18009 (dev uses 8080).
+# 安装的是 prod 栈（dev 用另一个端口）。
 if (-not $env:HAPIY_PORT) { $env:HAPIY_PORT = "18009" }
 
 function Say([string]$Message) { Write-Host "[hapiy] $Message" }
@@ -42,11 +45,11 @@ try {
     Expand-Archive -Path (Join-Path $Work $Asset) -DestinationPath $Work -Force
     New-Item -ItemType Directory -Path $AppDir -Force | Out-Null
     Copy-Item (Join-Path $Work "hapiy.exe") $Exe -Force
-    $WebSrc = Join-Path $Work "webdist"
-    if (Test-Path $WebSrc) {
-        $WebDst = Join-Path $AppDir "webdist"
-        Remove-Item $WebDst -Recurse -Force -ErrorAction SilentlyContinue
-        Copy-Item $WebSrc $WebDst -Recurse -Force
+    $ExtraSrc = Join-Path $Work "webdist"
+    if (Test-Path $ExtraSrc) {
+        $ExtraDst = Join-Path $AppDir "webdist"
+        Remove-Item $ExtraDst -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item $ExtraSrc $ExtraDst -Recurse -Force
     }
 
     $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -56,7 +59,7 @@ try {
     }
 
     if ($env:HAPIY_NO_SERVICE -ne "1") {
-        Say "registering autostart task ..."
+        Say "registering autostart ..."
         $InstallCode = 0
         try {
             & $Exe service install
@@ -64,15 +67,71 @@ try {
         } catch {
             if ($LASTEXITCODE) { $InstallCode = $LASTEXITCODE } else { $InstallCode = 1 }
         }
-        # 以任务计划里真实存在为准，而不是只看 service install 的返回值。
+        # 以「任务计划或启动文件夹里真实存在」为准，而不是只看返回值：360 等
+        # 安全软件会拒绝指向未签名 exe 的计划任务，这时后端走启动文件夹兜底。
         $Task = Get-ScheduledTask -TaskName "hapiy" -ErrorAction SilentlyContinue
-        if (-not $Task) {
-            throw "autostart task 'hapiy' was NOT registered (service install exit $InstallCode)"
+        $StartupVbs = Join-Path ([Environment]::GetFolderPath("Startup")) "hapiy.vbs"
+        if (-not $Task -and -not (Test-Path $StartupVbs)) {
+            # Go 侧写启动文件夹也被安全软件拦（它会拦未签名进程写启动项）时，
+            # 安装器自己写：PowerShell 是受信任的脚本宿主，通常能过。
+            $Line = 'CreateObject("WScript.Shell").Run """' + $Exe + '"" up --supervise", 0, False'
+            $LastErr = ""
+            try {
+                Set-Content -LiteralPath $StartupVbs -Value $Line -Encoding Unicode -ErrorAction Stop
+            } catch { $LastErr = $_.Exception.Message }
+            if (-not (Test-Path $StartupVbs)) {
+                try {
+                    [System.IO.File]::WriteAllText($StartupVbs, $Line, [System.Text.Encoding]::Unicode)
+                } catch { $LastErr = $_.Exception.Message }
+            }
+            if (-not (Test-Path $StartupVbs)) {
+                # 直写被拦：先在安装目录生成，再交给资源管理器复制（独立进程 +
+                # 15 秒限时，Shell COM 在个别环境会卡死）。
+                try {
+                    $StagedVbs = Join-Path $AppDir "hapiy.vbs"
+                    [System.IO.File]::WriteAllText($StagedVbs, $Line, [System.Text.Encoding]::Unicode)
+                    $Helper = Join-Path $Work "copy-vbs.ps1"
+                    Set-Content -LiteralPath $Helper -Encoding ASCII -Value (
+                        '(New-Object -ComObject Shell.Application).NameSpace("' +
+                        [Environment]::GetFolderPath("Startup") + '").CopyHere("' + $StagedVbs + '", 20)')
+                    $Proc = Start-Process powershell -PassThru -WindowStyle Hidden -ArgumentList @(
+                        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $Helper)
+                    if (-not $Proc.WaitForExit(15000)) { try { $Proc.Kill() } catch { } }
+                    Start-Sleep -Milliseconds 600
+                } catch { $LastErr = $_.Exception.Message }
+            }
+            if (Test-Path $StartupVbs) {
+                Say "autostart: wrote the Startup folder launcher (the task scheduler was blocked)"
+                & $Exe up | Out-Null
+            } else {
+                Say ("WARN: could not write the Startup folder launcher: " + $LastErr)
+            }
         }
-        if ($Task.State -eq "Running") {
+        if (-not $Task -and -not (Test-Path $StartupVbs)) {
+            # 全部失败：安全软件（典型是 360 主动防御）拦住了自启注册。后端仍然
+            # 立即可用，自启需要用户在安全软件里放行一次；报错保持响亮但给出路径。
+            & $Exe up | Out-Null
+            throw ("autostart was NOT registered (service install exit $InstallCode). " +
+                   "安全软件（如 360 主动防御）拦截了自启注册：请把 $Exe 加入信任区/白名单后重跑安装，" +
+                   "或手动在启动文件夹放一个指向它的快捷方式。后端本次已启动，控制台可直接使用。")
+        }
+        # 任务跑的是 wscript 启动器，拉起后端后任务状态就回到 Ready，所以用
+        # 后端健康而不是任务状态来判断「这次起没起来」。
+        $Healthy = $false
+        try {
+            $PortFile = Join-Path $env:USERPROFILE ".hapiy\port"
+            if (Test-Path $PortFile) {
+                $Port = (Get-Content -LiteralPath $PortFile -Raw).Trim()
+                $Healthy = (Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 -Uri ("http://127.0.0.1:" + $Port + "/")).StatusCode -lt 500
+            }
+        } catch { }
+        if ($Healthy) {
             Say "autostart ready - backend starts automatically after logon"
-        } else {
+        } elseif ($Task) {
             Say "autostart registered - task is in place, starts at next logon"
+            Say "start it now with: $Exe service start"
+        } else {
+            Say "autostart registered - Startup folder fallback is in place, starts at next logon"
             Say "start it now with: $Exe service start"
         }
     }
@@ -80,7 +139,7 @@ try {
     Say ("done: hapiy " + (& $Exe version))
     $Port = "18009"
     $PortFile = Join-Path $Root "port"
-    if (Test-Path $PortFile) { $Port = (Get-Content $PortFile -Raw).Trim() }
+    if (Test-Path $PortFile) { $Port = (Get-Content -LiteralPath $PortFile -Raw).Trim() }
     Say "web console: http://127.0.0.1:$Port"
 } finally {
     Remove-Item $Work -Recurse -Force -ErrorAction SilentlyContinue

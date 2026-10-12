@@ -36,6 +36,7 @@ func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 		&model.Setting{},
 		&model.TopologyState{},
 		&model.TopologySlotAssignment{},
+		&model.RequestChannelHistory{},
 	); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}

@@ -76,11 +76,15 @@ func TestDispatch_emergencyServesOnlyWhenNormalEmpty(t *testing.T) {
 	}
 }
 
-func TestDispatch_ruleAffinityIsLaneScoped(t *testing.T) {
+func TestDispatch_affinityIsLaneScoped(t *testing.T) {
 	engine, db := newTestEngine(t)
 	seedEmergencyProviders(t, db)
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
-		t.Fatalf("save affinity rules: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-User"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
 	engine.ReloadAffinity()
 	if err := engine.LoadProviders(); err != nil {
@@ -97,8 +101,11 @@ func TestDispatch_ruleAffinityIsLaneScoped(t *testing.T) {
 	if first.Provider.ID != "p2" {
 		t.Fatalf("expected emergency provider p2 during outage, got %v", first.Provider)
 	}
-	engine.Affinity().Record(first.AffinityMatch.RuleName, first.AffinityMatch.SessionID, first.AffinityMatch.ModelName,
-		affinity.Triple{ProviderName: "p2", KeyIndex: -1, BaseURLIndex: -1, EntryID: "e2"}, 60)
+	// Record the emergency binding the way the success path would.
+	history := model.RequestChannelHistory{SessionID: "alice", Model: "m1", ProviderID: "p2", KeyIndex: first.KeyIndex, BaseURLIndex: first.BaseURLIndex, EntryID: "e2"}
+	if err := db.Create(&history).Error; err != nil {
+		t.Fatalf("create history: %v", err)
+	}
 
 	setProviderStatus(t, engine, db, "p1", true)
 	got, err := engine.Dispatch("m1", "", req)
@@ -106,7 +113,7 @@ func TestDispatch_ruleAffinityIsLaneScoped(t *testing.T) {
 		t.Fatalf("dispatch after recovery: %v", err)
 	}
 	if got.Provider.ID != "p1" {
-		t.Fatalf("expected revert to p1 despite cached emergency affinity, got %v", got.Provider)
+		t.Fatalf("expected revert to p1 despite recorded emergency affinity, got %v", got.Provider)
 	}
 
 	setProviderStatus(t, engine, db, "p1", false)
@@ -117,21 +124,23 @@ func TestDispatch_ruleAffinityIsLaneScoped(t *testing.T) {
 	if got.Provider.ID != "p2" {
 		t.Fatalf("expected emergency affinity recall of p2, got %v", got.Provider)
 	}
-	if got.AffinityMatch == nil || !got.AffinityMatch.Matched {
-		t.Fatalf("expected a matched (recalled) affinity, got %+v", got.AffinityMatch)
+	if got.AffinityReuse != AffinityReusePartial {
+		t.Fatalf("expected partial affinity reuse (-1 indices), got %q", got.AffinityReuse)
 	}
 }
 
-func TestDispatch_fallbackAffinityIsLaneScoped(t *testing.T) {
+func TestDispatch_emergencyAffinityIsLaneScoped(t *testing.T) {
 	engine, db := newTestEngine(t)
 	seedEmergencyProviders(t, db)
-	if err := affinity.NewFallbackStore(db).Save(&affinity.FallbackSetting{Enabled: true, SessionIDFields: []string{"X-Session-Id"}, ModelFields: []string{"model"}}); err != nil {
-		t.Fatalf("save fallback setting: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-Session-Id"},
+		ModelFields:     []string{"model"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
-	engine.ReloadFallbackAffinity()
-	if err := db.AutoMigrate(&model.RequestChannelHistory{}); err != nil {
-		t.Fatalf("automigrate history: %v", err)
-	}
+	engine.ReloadAffinity()
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load providers: %v", err)
 	}
@@ -156,6 +165,6 @@ func TestDispatch_fallbackAffinityIsLaneScoped(t *testing.T) {
 		t.Fatalf("dispatch during outage: %v", err)
 	}
 	if got.Provider.ID != "p2" || got.KeyIndex != 0 || got.BaseURLIndex != 0 {
-		t.Fatalf("expected fallback reuse of p2 (key 0, url 0), got provider=%v key=%d url=%d", got.Provider, got.KeyIndex, got.BaseURLIndex)
+		t.Fatalf("expected affinity reuse of p2 (key 0, url 0), got provider=%v key=%d url=%d", got.Provider, got.KeyIndex, got.BaseURLIndex)
 	}
 }

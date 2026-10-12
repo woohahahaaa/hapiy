@@ -302,6 +302,10 @@ export type LogCaptureStageRow = {
   readonly body: unknown
   readonly status: number
   readonly error: string
+  // ruleNotes lists this stage's rewrite/failover rule outcomes (命中并生效 /
+  // 命中但未生效（原因）/ 命中但执行失败（原因）/ 未命中), one per line; empty
+  // when the stage has no rules or the row predates the field.
+  readonly ruleNotes: string
   readonly created_at: string
 }
 
@@ -646,34 +650,14 @@ function parseDuplicateActivation(value: unknown): DuplicateActivation {
 }
 
 // ── Channel affinity ──
-export type ChannelAffinityRule = {
-  readonly name: string
+export type ChannelAffinitySetting = {
   readonly enabled: boolean
   readonly sessionIdFields: readonly string[]
   readonly modelFields: readonly string[]
-  readonly ttlSeconds?: number
-}
-
-export type ChannelAffinitySetting = {
-  readonly enabled: boolean
-  readonly defaultTtlSeconds: number
-  readonly rules: readonly ChannelAffinityRule[]
+  readonly ttlSeconds: number
 }
 
 export type ChannelAffinitySettingInput = ChannelAffinitySetting
-
-export type ChannelAffinityFallback = {
-  readonly enabled: boolean
-  readonly sessionIdFields: readonly string[]
-  readonly modelFields: readonly string[]
-}
-
-export type ChannelAffinityPayload = {
-  readonly setting: ChannelAffinitySetting
-  readonly fallback: ChannelAffinityFallback
-}
-
-export type ChannelAffinityPayloadInput = ChannelAffinityPayload
 
 // ── Per-table column display config ──
 export type ColumnWidthConfig =
@@ -1257,48 +1241,15 @@ function readObjectArray<T>(value: unknown, field: string, parseItem: (item: unk
   return parsed.map(parseItem)
 }
 
-function parseChannelAffinityRule(value: unknown): ChannelAffinityRule {
-  if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('affinityRules') }), null)
-  }
-  return {
-    name: readString(value.name, 'affinity_rule.name'),
-    enabled: readBoolean(value.enabled, 'affinity_rule.enabled'),
-    sessionIdFields: readStringArray(value.session_id_fields, 'affinity_rule.session_id_fields'),
-    modelFields: readStringArray(value.model_fields, 'affinity_rule.model_fields'),
-    ...(typeof value.ttl_seconds === 'number' && Number.isFinite(value.ttl_seconds) ? { ttlSeconds: value.ttl_seconds } : {}),
-  }
-}
-
-function parseChannelAffinity(value: unknown): ChannelAffinitySetting {
+function parseChannelAffinitySetting(value: unknown): ChannelAffinitySetting {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('channelAffinity') }), null)
   }
   return {
     enabled: readBoolean(value.enabled, 'affinity.enabled'),
-    defaultTtlSeconds: readNumber(value.default_ttl_seconds, 'affinity.default_ttl_seconds', 1800),
-    rules: readObjectArray(value.rules, 'affinity.rules', parseChannelAffinityRule),
-  }
-}
-
-function parseChannelAffinityFallback(value: unknown): ChannelAffinityFallback {
-  if (!isRecord(value)) {
-    return { enabled: false, sessionIdFields: [], modelFields: [] }
-  }
-  return {
-    enabled: readBoolean(value.enabled, 'affinity.fallback.enabled'),
-    sessionIdFields: readStringArray(value.session_id_fields, 'affinity.fallback.session_id_fields'),
-    modelFields: readStringArray(value.model_fields, 'affinity.fallback.model_fields'),
-  }
-}
-
-function parseChannelAffinityPayload(value: unknown): ChannelAffinityPayload {
-  if (!isRecord(value)) {
-    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('channelAffinity') }), null)
-  }
-  return {
-    setting: parseChannelAffinity(value.setting),
-    fallback: parseChannelAffinityFallback(value.fallback),
+    sessionIdFields: readStringArray(value.session_id_fields, 'affinity.session_id_fields'),
+    modelFields: readStringArray(value.model_fields, 'affinity.model_fields'),
+    ttlSeconds: readNumber(value.ttl_seconds, 'affinity.ttl_seconds', 1800),
   }
 }
 
@@ -1355,14 +1306,9 @@ function parseTableConfig(value: unknown): TableConfig {
 function serializeChannelAffinity(input: ChannelAffinitySettingInput): JsonRecord {
   return {
     enabled: input.enabled,
-    default_ttl_seconds: input.defaultTtlSeconds,
-    rules: input.rules.map((rule) => ({
-      name: rule.name,
-      enabled: rule.enabled,
-      session_id_fields: rule.sessionIdFields,
-      model_fields: rule.modelFields,
-      ...(rule.ttlSeconds !== undefined ? { ttl_seconds: rule.ttlSeconds } : {}),
-    })),
+    session_id_fields: input.sessionIdFields,
+    model_fields: input.modelFields,
+    ttl_seconds: input.ttlSeconds,
   }
 }
 
@@ -1547,6 +1493,7 @@ function parseLogCaptureStageRow(value: unknown): LogCaptureStageRow {
     body: value.body,
     status: readNumber(value.status, 'stage.status', 0),
     error: value.error == null ? '' : readString(value.error, 'stage.error'),
+    ruleNotes: value.rule_notes == null ? '' : readString(value.rule_notes, 'stage.rule_notes'),
     created_at: readString(value.created_at, 'stage.created_at'),
   }
 }
@@ -3110,23 +3057,16 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return parseTopologyDocument(body)
   },
 
-  async getChannelAffinity(): Promise<ChannelAffinityPayload> {
+  async getChannelAffinity(): Promise<ChannelAffinitySetting> {
     const body = await request('/channel-affinity')
-    return parseChannelAffinityPayload(body)
+    return parseChannelAffinitySetting(body)
   },
-  async saveChannelAffinity(input: ChannelAffinityPayloadInput): Promise<ChannelAffinityPayload> {
+  async saveChannelAffinity(input: ChannelAffinitySettingInput): Promise<ChannelAffinitySetting> {
     const body = await request('/channel-affinity', {
       method: 'PUT',
-      body: JSON.stringify({
-        setting: serializeChannelAffinity(input.setting),
-        fallback: {
-          enabled: input.fallback.enabled,
-          session_id_fields: input.fallback.sessionIdFields,
-          model_fields: input.fallback.modelFields,
-        },
-      }),
+      body: JSON.stringify(serializeChannelAffinity(input)),
     })
-    return parseChannelAffinityPayload(body)
+    return parseChannelAffinitySetting(body)
   },
 
   async getTableConfig(id: string): Promise<TableConfig | null> {

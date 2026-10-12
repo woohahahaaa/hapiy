@@ -124,8 +124,9 @@ func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string)
 
 // Channel-reuse states recorded per request after a channel-affinity match.
 const (
-	// AffinityReuseNone: an affinity rule matched but nothing of the last
-	// channel could be reused — the request fell through to normal selection.
+	// AffinityReuseNone: a channel-affinity hit existed but nothing of the
+	// last channel could be reused — the request fell through to normal
+	// selection.
 	AffinityReuseNone = "none"
 	// AffinityReusePartial: part of the last channel (provider, baseURL or
 	// key) was reused, but not the exact same provider+baseURL+key triple.
@@ -144,11 +145,13 @@ type DispatchResult struct {
 	// EntryID is the request entry whose workflow served the request;
 	// empty on the legacy provider scan (no topology).
 	EntryID string
-	// AffinityMatch, when non-nil, means the provider was chosen via channel
-	// affinity; the handler records the successful recall on request success.
-	AffinityMatch *affinity.MatchResult
+	// AffinityNew is true when channel affinity applied to this request
+	// (both session id and model were readable) but nothing was recalled, so
+	// the successful request establishes a fresh binding. The handler
+	// records it as the "new" affinity-reuse state.
+	AffinityNew bool
 	// AffinityReuse records how much of the last channel was reused:
-	// empty when no affinity rule matched, otherwise one of the
+	// empty when no channel-affinity binding applied, otherwise one of the
 	// AffinityReuse* constants.
 	AffinityReuse string
 	// AffinityReuseParts lists which dimensions of the last channel were
@@ -163,9 +166,9 @@ type DispatchResult struct {
 }
 
 // channelHint is the (provider, key, baseURL) tuple a channel-affinity
-// match (fallback history or affinity rule) wants to reuse. entryID scopes
-// the reuse to the request entry the channel was last used through; empty
-// disables the scope (legacy history rows).
+// match wants to reuse. entryID scopes the reuse to the request entry the
+// channel was last used through; empty disables the scope (legacy history
+// rows).
 type channelHint struct {
 	providerID   string
 	providerName string
@@ -182,13 +185,12 @@ type affinityCandidate struct {
 }
 
 // Dispatch selects a provider for a request and builds its execution plan. It
-// consults the fallback channel affinity first (last-used channel for the
-// request's session_id+model), then configured affinity rules, then the
-// flat-topology weighted selection. A channel-affinity hit is only honored
-// when it is still inside the current eligible set; otherwise it degrades by
-// priority (provider -> baseURL -> key) before falling through to normal
-// selection. The returned plan is restricted to the provider's reachable
-// slot types in the wiring.
+// consults channel affinity first (last-used channel for the request's
+// session_id+model), then the flat-topology weighted selection. A
+// channel-affinity hit is only honored when it is still inside the current
+// eligible set; otherwise it degrades by priority (provider -> baseURL -> key)
+// before falling through to normal selection. The returned plan is restricted
+// to the provider's reachable slot types in the wiring.
 func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*DispatchResult, error) {
 	tp, err := topology.NewStore(e.db).Load()
 	if err != nil {
@@ -196,25 +198,17 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 	}
 	hasTopology := tp != nil && len(tp.Nodes) > 0
 
-	var ruleMatch affinity.MatchResult
-	var weakAffinityMatch *affinity.MatchResult
-	if affinityReq != nil && e.Affinity() != nil {
-		match := e.Affinity().Lookup(affinityReq)
-		ruleMatch = match
-		if match.RuleName != "" {
-			weakAffinityMatch = &match
-		}
-	}
+	lookup := e.lookupAffinity(affinityReq)
 
 	if hasTopology {
-		// 普通趟：兜底亲和 → 规则亲和 → 普通入口加权选择。
-		if result, err := e.dispatchLane(model, path, affinityReq, tp, false, &ruleMatch); result != nil || err != nil {
+		// 普通趟：渠道亲和 → 普通入口加权选择。
+		if result, err := e.dispatchLane(model, path, affinityReq, tp, false, lookup); result != nil || err != nil {
 			return result, err
 		}
 		// 应急趟：只有普通趟完全无候选时才进入；亲和命中只会在应急入口
 		// 下游的渠道里解析，普通侧恢复后自然回切。
 		if topology.HasEmergencyEntries(tp) {
-			if result, err := e.dispatchLane(model, path, affinityReq, tp, true, &ruleMatch); result != nil || err != nil {
+			if result, err := e.dispatchLane(model, path, affinityReq, tp, true, lookup); result != nil || err != nil {
 				return result, err
 			}
 		}
@@ -222,29 +216,9 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 	}
 
 	// 无拓扑 legacy 路径
-	if affinityReq != nil {
-		if fallback := e.lookupFallbackAffinity(affinityReq); fallback.matched {
-			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
-				providerID:   fallback.providerID,
-				providerName: fallback.providerName,
-				keyIndex:     fallback.keyIndex,
-				baseURLIndex: fallback.baseURLIndex,
-				entryID:      fallback.entryID,
-			}, false, nil); used {
-				return result, nil
-			}
-		}
-		if ruleMatch.Matched {
-			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
-				providerName: ruleMatch.Triple.ProviderName,
-				keyIndex:     ruleMatch.Triple.KeyIndex,
-				baseURLIndex: ruleMatch.Triple.BaseURLIndex,
-				entryID:      ruleMatch.Triple.EntryID,
-			}, false, nil); used {
-				result.AffinityMatch = &ruleMatch
-				return result, nil
-			}
-			e.Affinity().Delete(ruleMatch.CacheKey)
+	if lookup.matched {
+		if result, used := e.dispatchWithChannelHint(model, path, lookup.hint(), false, nil); used {
+			return result, nil
 		}
 	}
 
@@ -260,20 +234,20 @@ func (e *Engine) Dispatch(model, path string, affinityReq *affinity.Request) (*D
 		return nil, err
 	}
 	return &DispatchResult{
-		Plan:          plan,
-		Provider:      provider,
-		KeyIndex:      -1,
-		BaseURLIndex:  -1,
-		AffinityMatch: weakAffinityMatch,
+		Plan:         plan,
+		Provider:     provider,
+		KeyIndex:     -1,
+		BaseURLIndex: -1,
+		AffinityNew:  lookup.usable,
 	}, nil
 }
 
-// dispatchLane runs one lane of the two-pass dispatch: fallback affinity,
-// then rule affinity, then weighted selection over that lane's request
-// entries. emergency=false walks 普通入口, emergency=true walks 应急请求入口.
-// A nil result (with nil error) means the lane had nothing to serve the
-// request with and the caller should try the next lane.
-func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request, tp *topology.Topology, emergency bool, ruleMatch *affinity.MatchResult) (*DispatchResult, error) {
+// dispatchLane runs one lane of the two-pass dispatch: channel affinity,
+// then weighted selection over that lane's request entries. emergency=false
+// walks 普通入口, emergency=true walks 应急请求入口. A nil result (with nil
+// error) means the lane had nothing to serve the request with and the caller
+// should try the next lane.
+func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request, tp *topology.Topology, emergency bool, lookup affinityLookupResult) (*DispatchResult, error) {
 	var headers map[string]string
 	var body []byte
 	if affinityReq != nil {
@@ -281,34 +255,9 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 		body = affinityReq.Body
 	}
 	eval := switchEvalFor(headers, body)
-	if affinityReq != nil {
-		if fallback := e.lookupFallbackAffinity(affinityReq); fallback.matched {
-			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
-				providerID:   fallback.providerID,
-				providerName: fallback.providerName,
-				keyIndex:     fallback.keyIndex,
-				baseURLIndex: fallback.baseURLIndex,
-				entryID:      fallback.entryID,
-			}, emergency, eval); used {
-				return result, nil
-			}
-		}
-		if ruleMatch != nil && ruleMatch.Matched && e.Affinity() != nil {
-			if result, used := e.dispatchWithChannelHint(model, path, channelHint{
-				providerName: ruleMatch.Triple.ProviderName,
-				keyIndex:     ruleMatch.Triple.KeyIndex,
-				baseURLIndex: ruleMatch.Triple.BaseURLIndex,
-				entryID:      ruleMatch.Triple.EntryID,
-			}, emergency, eval); used {
-				match := *ruleMatch
-				result.AffinityMatch = &match
-				return result, nil
-			}
-			// 普通趟里应急入口命中的条目不算失效（留给应急趟）；其余
-			// 未复用的缓存条目按 stale 删除，避免再次召回。
-			if emergency || !topology.EntryIsEmergency(tp, ruleMatch.Triple.EntryID) {
-				e.Affinity().Delete(ruleMatch.CacheKey)
-			}
+	if lookup.matched {
+		if result, used := e.dispatchWithChannelHint(model, path, lookup.hint(), emergency, eval); used {
+			return result, nil
 		}
 	}
 
@@ -323,20 +272,15 @@ func (e *Engine) dispatchLane(model, path string, affinityReq *affinity.Request,
 	if err != nil {
 		return nil, err
 	}
-	var weak *affinity.MatchResult
-	if ruleMatch != nil && ruleMatch.RuleName != "" {
-		match := *ruleMatch
-		weak = &match
-	}
 	return &DispatchResult{
-		Plan:          plan,
-		Provider:      provider,
-		KeyIndex:      -1,
-		BaseURLIndex:  -1,
-		EntryID:       eligible.EntryID,
-		AffinityMatch: weak,
-		PathNodeIDs:   topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID, model, eval),
-		Origin:        &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
+		Plan:         plan,
+		Provider:     provider,
+		KeyIndex:     -1,
+		BaseURLIndex: -1,
+		EntryID:      eligible.EntryID,
+		AffinityNew:  lookup.usable,
+		PathNodeIDs:  topology.BuildRequestPath(tp, eligible.EntryID, eligible.Node.ID, model, eval),
+		Origin:       &topology.RequestOrigin{EntryID: eligible.EntryID, ProviderSlotID: providerSlotID(tp, eligible.EntryID), ProviderID: provider.ID},
 	}, nil
 }
 

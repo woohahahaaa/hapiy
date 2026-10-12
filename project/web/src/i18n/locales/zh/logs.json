@@ -173,6 +173,7 @@
     "merging": "整合中…",
     "noData": "（无 data）",
     "systemLog": "系统日志",
+    "ruleNotes": "规则命中",
     "responseStatus": "响应状态码: {{status}}",
     "timing": {
       "queue": "排队",

@@ -5,13 +5,17 @@ import (
 	"strings"
 )
 
-func applyHeaderOp(body []byte, headers map[string]string, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+// applyHeaderOp performs one header-scope op. The third return value is a
+// non-empty reason when the op was allowed to run but changed nothing —
+// currently only the set-from-ref case whose source header is absent; the
+// caller records it as "命中但未生效" instead of silently dropping it.
+func applyHeaderOp(body []byte, headers map[string]string, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, string, error) {
 	if headers == nil {
 		headers = make(map[string]string)
 	}
 	key, err := headerKey(op.Path)
 	if err != nil {
-		return body, nil, err
+		return body, nil, "", err
 	}
 	switch op.Mode {
 	case "set":
@@ -19,7 +23,7 @@ func applyHeaderOp(body []byte, headers map[string]string, origHeaders map[strin
 			// 变量引用：拷原始请求里的同名 header；源不存在则跳过。
 			src, ok := origHeaders[op.Ref]
 			if !ok {
-				return body, headers, nil
+				return body, headers, fmt.Sprintf("引用源 %s 不存在", op.Ref), nil
 			}
 			headers[key] = src
 			break
@@ -56,11 +60,11 @@ func applyHeaderOp(body []byte, headers map[string]string, origHeaders map[strin
 			headers[key] = op.Regex.ReplaceAllString(headers[key], op.To)
 		}
 	case "copy", "move":
-		return body, nil, fmt.Errorf("header scope: copy/move not supported (cross-scope rewrite is not allowed)")
+		return body, nil, "", fmt.Errorf("header scope: copy/move not supported (cross-scope rewrite is not allowed)")
 	default:
-		return body, nil, fmt.Errorf("header op: unsupported mode %q", op.Mode)
+		return body, nil, "", fmt.Errorf("header op: unsupported mode %q", op.Mode)
 	}
-	return body, headers, nil
+	return body, headers, "", nil
 }
 
 func headerKey(path string) (string, error) {

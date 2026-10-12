@@ -51,15 +51,80 @@ type streamRewriteReader struct {
 	heldTail  []byte         // trailing bytes (blank lines) of the held event
 	heldOps   []rewriteOpRef // last_append ops the held event matched
 	totalMs   int64
+
+	// Per-rule outcome tracking for the log views: which rules changed at
+	// least one event, the first reason a rule had nothing to change, and
+	// the first error a rule hit. Aggregated into one RuleNote per rule by
+	// Notes() once the stream has been fully forwarded.
+	ruleHit      map[string]bool
+	ruleNoEffect map[string]string
+	ruleFailed   map[string]string
 }
 
 func newStreamRewriteReader(src io.Reader, chains []CompiledRewriteChain) *streamRewriteReader {
 	return &streamRewriteReader{
-		src:       src,
-		chains:    chains,
-		br:        bufio.NewReader(src),
-		firstDone: make(map[string]bool),
+		src:          src,
+		chains:       chains,
+		br:           bufio.NewReader(src),
+		firstDone:    make(map[string]bool),
+		ruleHit:      make(map[string]bool),
+		ruleNoEffect: make(map[string]string),
+		ruleFailed:   make(map[string]string),
 	}
+}
+
+// Notes returns one RuleNote per configured response-rewrite rule,
+// aggregating the whole stream: a rule that changed at least one event
+// reads as 命中并生效; a rule that only ever had nothing to change reads as
+// 命中但未生效 with the first reason; a rule that never matched an event
+// reads as 未命中. Call after the stream has been fully read.
+func (r *streamRewriteReader) Notes() []RuleNote {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	notes := make([]RuleNote, 0, len(r.chains))
+	for i := range r.chains {
+		chain := &r.chains[i]
+		if len(chain.Ops) == 0 {
+			continue
+		}
+		base := RuleNote{Category: RuleCategoryResponse, RuleID: chain.RuleID, Rule: chain.RuleName}
+		switch {
+		case r.ruleFailed[chain.RuleID] != "":
+			base.Status = RuleStatusFailed
+			base.Reason = r.ruleFailed[chain.RuleID]
+		case r.ruleHit[chain.RuleID]:
+			base.Status = RuleStatusHit
+		case r.ruleNoEffect[chain.RuleID] != "":
+			base.Status = RuleStatusNoEffect
+			base.Reason = r.ruleNoEffect[chain.RuleID]
+		default:
+			base.Status = RuleStatusMiss
+		}
+		notes = append(notes, base)
+	}
+	return notes
+}
+
+// markRuleHit records that ruleID changed (or idempotently satisfied) at
+// least one event's payload.
+func (r *streamRewriteReader) markRuleHit(ruleID string) {
+	r.ruleHit[ruleID] = true
+}
+
+// markRuleNoEffect remembers the first reason a rule had nothing to change.
+func (r *streamRewriteReader) markRuleNoEffect(ruleID, reason string) {
+	if reason == "" || r.ruleNoEffect[ruleID] != "" {
+		return
+	}
+	r.ruleNoEffect[ruleID] = reason
+}
+
+// markRuleFailed remembers the first execution error a rule hit.
+func (r *streamRewriteReader) markRuleFailed(ruleID string, err error) {
+	if err == nil || r.ruleFailed[ruleID] != "" {
+		return
+	}
+	r.ruleFailed[ruleID] = err.Error()
 }
 
 // TotalRewriteMs returns the accumulated rewrite time across all events
@@ -211,22 +276,36 @@ func (r *streamRewriteReader) processData(payload []byte) ([]byte, int64) {
 					continue
 				}
 				if !gjson.GetBytes(body, op.Path).Exists() {
+					r.markRuleNoEffect(chain.RuleID, "目标路径 "+op.Path+" 不存在")
 					continue
 				}
 				cur := gjson.GetBytes(body, op.Path).String()
 				updated, err := sjson.SetBytes(body, op.Path, op.Value+cur)
 				if err == nil {
 					body = updated
+					r.markRuleHit(chain.RuleID)
+				} else {
+					r.markRuleFailed(chain.RuleID, err)
 				}
 				r.firstDone[refKey(ref)] = true
 			case "last_append":
 				if gjson.GetBytes(body, op.Path).Exists() {
 					matched = append(matched, ref)
+					r.markRuleHit(chain.RuleID)
+				} else {
+					r.markRuleNoEffect(chain.RuleID, "目标路径 "+op.Path+" 不存在")
 				}
 			default:
-				updated, _, err := applyRewriteOp(body, nil, origBody, nil, op)
+				updated, _, noEffect, err := applyRewriteOp(body, nil, origBody, nil, op)
 				if err == nil {
 					body = updated
+					if noEffect != "" {
+						r.markRuleNoEffect(chain.RuleID, noEffect)
+					} else {
+						r.markRuleHit(chain.RuleID)
+					}
+				} else {
+					r.markRuleFailed(chain.RuleID, err)
 				}
 			}
 		}

@@ -778,3 +778,37 @@ func TestListPairs_header_only_rewrite_is_modified(t *testing.T) {
 		t.Fatalf("Request.Modified = false, want true for header-only rewrite")
 	}
 }
+
+// TestReadPair_surfaces_rule_notes: rule outcomes written with the capture
+// rows (命中但未生效 with its reason) reach the stage rows the detail dialog
+// renders, so a matched rule that changed nothing is explainable.
+func TestReadPair_surfaces_rule_notes(t *testing.T) {
+	w := newPairsTestWriter(t)
+
+	notes := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	w.WriteLog(&LogCaptureData{
+		RequestID: "r1", Type: "request", Stage: "request_after",
+		ModelName: "deepseek-v4.1-flash",
+		Request:   &HTTPCapture{Headers: map[string]string{"Authorization": "Bearer hk-x"}, Body: map[string]any{"model": "deepseek-v4.1-flash"}},
+		RuleNotes: notes,
+	})
+	w.WriteLog(&LogCaptureData{
+		RequestID: "r1", Type: "response", Stage: "response_after",
+		Response:  &HTTPCapture{Body: map[string]any{"ok": true}},
+		RuleNotes: "[故障转移] 主转移：未命中",
+	})
+
+	full, err := w.ReadPair("r1")
+	if err != nil {
+		t.Fatalf("ReadPair: %v", err)
+	}
+	if full.Request == nil || full.Request.After == nil {
+		t.Fatalf("request after row missing: %+v", full.Request)
+	}
+	if full.Request.After.RuleNotes != notes {
+		t.Fatalf("request rule notes = %q, want %q", full.Request.After.RuleNotes, notes)
+	}
+	if len(full.Responses) != 1 || full.Responses[0].After == nil || full.Responses[0].After.RuleNotes != "[故障转移] 主转移：未命中" {
+		t.Fatalf("response rule notes missing: %+v", full.Responses)
+	}
+}

@@ -26,6 +26,35 @@ func readAllStream(t *testing.T, src string, chains []CompiledRewriteChain) stri
 	return string(out)
 }
 
+// Notes aggregates the whole stream per configured rule: a rule that
+// changed at least one event reads 命中并生效, a rule that only ever had
+// nothing to change reads 命中但未生效 with the reason. The handler
+// backfills these into the capture rows and the usage record.
+func TestStreamRewrite_notes_perRule(t *testing.T) {
+	chains := []CompiledRewriteChain{
+		{RuleID: "r1", RuleName: "改内容", Ops: mustChain(t, `[{"path":"choices.0.delta.content","mode":"first_prepend","value":"[[x]]"}]`)},
+		{RuleID: "r2", RuleName: "改不存在", Ops: mustChain(t, `[{"path":"never.present","mode":"trim_prefix","value":"a"}]`)},
+	}
+	src := "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\ndata: [DONE]\n\n"
+	r := newStreamRewriteReader(strings.NewReader(src), chains)
+	if _, err := io.ReadAll(r); err != nil {
+		t.Fatalf("read stream: %v", err)
+	}
+	want := "[响应改写] 改内容：命中并生效\n[响应改写] 改不存在：命中但未生效（目标路径 never.present 不存在）"
+	if got := RuleNoteText(r.Notes()); got != want {
+		t.Fatalf("stream notes = %q, want %q", got, want)
+	}
+}
+
+func mustChain(t *testing.T, script string) []RewriteOp {
+	t.Helper()
+	ops, err := compileRewriteChain("test", script)
+	if err != nil {
+		t.Fatalf("compile %s: %v", script, err)
+	}
+	return ops
+}
+
 func TestStreamRewrite_first_prepend_applies_on_first_matching_event_only(t *testing.T) {
 	chains := compileStreamChain(t, "r", `[{"path":"choices.0.delta.reasoning_content","mode":"first_prepend","value":"[[think]]"}]`)
 	src := "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"a\"}}]}\n\n" +

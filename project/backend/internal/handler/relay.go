@@ -172,11 +172,8 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		relayReq.BaseURLIndex = dispatchResult.BaseURLIndex
 		relayReq.TopologyOrigin = dispatchResult.Origin
 		relayReq.EntryID = dispatchResult.EntryID
-		if dispatchResult.AffinityMatch != nil {
-			relayReq.AffinityCacheKey = dispatchResult.AffinityMatch.CacheKey
-		}
 		affinityReuse := dispatchResult.AffinityReuse
-		if dispatchResult.AffinityMatch != nil && affinityReuse == "" {
+		if dispatchResult.AffinityNew && affinityReuse == "" {
 			affinityReuse = "new"
 		}
 		common.Global().TrackActiveRequest(common.ActiveRequest{
@@ -307,17 +304,6 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 		}
 
-		if dispatchResult.AffinityMatch != nil {
-			// 亲和重建也指向实际服务的通道：否则下一次请求会再次
-			// 粘回失败的供应商。
-			match := dispatchResult.AffinityMatch
-			engine.Affinity().Record(match.RuleName, match.SessionID, match.ModelName, affinity.Triple{
-				ProviderName: recordProvider.Name,
-				KeyIndex:     relayReq.KeyIndex,
-				BaseURLIndex: relayReq.BaseURLIndex,
-				EntryID:      dispatchResult.EntryID,
-			}, 0)
-		}
 		affinityReuseParts := strings.Join(dispatchResult.AffinityReuseParts, ",")
 
 		// Forward the response first so use_time spans the full transfer for
@@ -333,13 +319,22 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			common.Global().UpdateActiveRequestFirstByte(requestID, int64(firstByteMs))
 		}
 
-		// Backfill stream timings on log capture rows when the request has
-		// any log output configured. FirstByteMs and StreamRewriteMs are only
-		// known after the stream body is fully forwarded.
+		// Streaming response rewrites are applied event by event; their
+		// per-rule outcomes are only known once the stream has been fully
+		// forwarded, so collect them before the usage log is written.
+		if relayReq.Stream {
+			relayReq.RuleNotes = append(relayReq.RuleNotes, resp.StreamRewriteNotes()...)
+		}
+
+		// Backfill stream timings and rule notes on log capture rows when
+		// the request has any log output configured. FirstByteMs and
+		// StreamRewriteMs are only known after the stream body is fully
+		// forwarded.
 		if relayReq.Stream && plan != nil && len(plan.LogOutputs) > 0 {
 			writer := service.LogCapture()
 			if writer != nil {
 				writer.UpdateStreamTimings(relayReq.RequestID, firstByteMs, resp.StreamRewriteTotalMs())
+				writer.UpdateRuleNotes(relayReq.RequestID, relay.RuleNoteText(relay.RuleNotesOf(relayReq.RuleNotes, relay.RuleCategoryResponse, relay.RuleCategoryFailover)))
 				if captured := resp.StreamCapturedBytes(); len(captured) > 0 {
 					writer.UpdateStreamBody(relayReq.RequestID, captured)
 				}
@@ -387,15 +382,20 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 		}
 
-		service.Logs().Write(&logEntry)
-
 		// Post-response speed condition: rules with a speed limit feed the
 		// failover hit counters when the full-request speed (connect
 		// included) falls below the limit. The finished response cannot be
-		// re-routed, but the auto-disable protects future requests.
+		// re-routed, but the auto-disable protects future requests. Runs
+		// before the log row is queued so the speed outcome lands in the
+		// same row's rule notes.
 		if totalTokens := logEntry.PromptTokens + logEntry.CompletionTokens; totalTokens > 0 && useTime > 0 {
 			engine.RecordResponseSpeedOutcome(plan, &relayReq, useTime, totalTokens)
 		}
+
+		// 规则命中情况（请求改写/响应改写/故障转移 + 命中未生效原因）写在
+		// 使用记录详情的最后。
+		logEntry.EventDetail = relay.RuleNoteText(relayReq.RuleNotes)
+		service.Logs().Write(&logEntry)
 
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
 			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
@@ -561,6 +561,10 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 
 func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL, providerKey, providerBaseURL string) {
 	useTime := int(time.Since(startTime).Milliseconds())
+	ruleNotes := ""
+	if req != nil {
+		ruleNotes = relay.RuleNoteText(req.RuleNotes)
+	}
 	service.Logs().Write(&model.Log{
 		UserID:          getString(userID),
 		TokenName:       getString(tokenName),
@@ -571,6 +575,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 		IP:              c.ClientIP(),
 		RequestID:       c.GetString("request_id"),
 		ErrorMessage:    err.Error(),
+		EventDetail:     ruleNotes,
 		UseTime:         useTime,
 		UpstreamURL:     upstreamURL,
 		ProviderKey:     providerKey,

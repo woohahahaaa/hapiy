@@ -102,19 +102,21 @@ type Log struct {
 	UseTime  int    `json:"use_time"` // milliseconds
 	Status   string `json:"status"`   // success / failed
 	// AffinityReuse records how much of the last channel-affinity channel was
-	// reused on this request: empty when no affinity rule matched, otherwise
-	// "none" / "partial" / "full" (see relay.AffinityReuse*).
+	// reused on this request: empty when no channel-affinity binding applied,
+	// otherwise "none" / "partial" / "full" (see relay.AffinityReuse*).
 	AffinityReuse string `json:"affinity_reuse"`
 	// AffinityReuseParts is a comma-separated list of the channel dimensions
 	// that were reused ("provider","baseurl","key"); empty when nothing was
-	// reused or no affinity rule matched.
+	// reused or no affinity binding applied.
 	AffinityReuseParts string `json:"affinity_reuse_parts"`
 	IP                 string `json:"ip"`
 	RequestID          string `json:"request_id"`
 	ErrorMessage       string `json:"error_message"`
-	// EventDetail is populated for event rows (auto-disable / auto-recover /
-	// manual action / system admin) and explains which rule fired or which
-	// action ran. Empty for request rows; historical rows stay empty
+	// EventDetail explains what happened on this row: for event rows
+	// (auto-disable / auto-recover / manual action / system admin) it names
+	// the rule or action that fired; for request rows it carries the
+	// per-rule outcomes (请求改写/响应改写/故障转移: 命中并生效 / 命中但未生效
+	// 的原因 / 命中但执行失败的原因 / 未命中). Empty on historical rows
 	// (no backfill).
 	EventDetail string `gorm:"type:text" json:"event_detail,omitempty"`
 	// Stage timings in milliseconds; nil means the stage does not apply.

@@ -130,6 +130,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		// 与自动恢复探针共用同一套首字节测量（publicfunction 包）。
 		ttfbMs = e.ttfbForSlowUpstream(plan, resp)
 		if ttfbMs == 0 {
+			appendFailoverNotes(req, plan.FailoverRules, nil)
 			return resp, nil
 		}
 		err = fmt.Errorf("upstream first byte timeout after %dms", ttfbMs)
@@ -143,37 +144,60 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 	rule, matched := matchingFailoverRule(outcome, plan.FailoverRules)
 	if !matched {
+		appendFailoverNotes(req, plan.FailoverRules, nil)
 		return resp, err
 	}
-	// 故障转移命中：拆掉把请求绑在失败实体上的亲和（规则亲和缓存 +
-	// 兜底亲和历史），后续请求重新进入正常选择，避免继续打向失败方。
+	// 故障转移命中：拆掉把请求绑在失败实体上的渠道亲和记录，
+	// 后续请求重新进入正常选择，避免继续打向失败方。
 	e.breakAffinity(req)
 	dimension, autoDisable := rule.SingleAction()
 	if dimension == "" {
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, "规则未配置有效的转移维度"))
 		return resp, err
 	}
 	value := failoverActionValue(plan, req, dimension)
+	hitCount := 0
 	hitReached := false
 	if autoDisable && value != "" {
-		_, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
+		hitCount, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
 	}
 	disableApplied := false
+	disableError := ""
 	if hitReached {
 		if applyErr := e.applyFailoverAction(plan, req, dimension, rule, outcome); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
+			disableError = applyErr.Error()
 		} else {
 			disableApplied = true
 			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 		}
 	}
+	// disableInfo describes what the auto-disable half did, appended to the
+	// rule's note so the 使用记录 explains why a disabled entity was (or was
+	// not) taken offline.
+	disableInfo := func() string {
+		if !autoDisable {
+			return ""
+		}
+		switch {
+		case disableError != "":
+			return "自动禁用失败：" + disableError
+		case disableApplied:
+			return "已自动禁用 " + service.ChannelEventMessage(dimension, value)
+		default:
+			return fmt.Sprintf("自动禁用未达阈值（%d/%d）", hitCount, failoverThreshold(rule))
+		}
+	}()
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
 		if rotated, _ := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, &disableApplied); rotated != nil {
 			// 转移成功：补记一条原始失败，使用记录里能看出
 			// 「先失败、后经故障转移换通道成功」。
 			e.recordFailoverAttempt(req, plan, err)
+			appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusHit, joinReasons("已切换通道", disableInfo)))
 			return rotated, nil
 		}
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, joinReasons("没有可切换的其他通道", disableInfo)))
 	case model.FailoverDimensionProvider:
 		fallbackPlan := e.resolveFallbackPlan(rule.FallbackProvider)
 		if rule.FallbackProvider == "" {
@@ -195,14 +219,79 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 				// 转移成功：补记原始失败（见上）。
 				e.recordFailoverAttempt(req, plan, err)
 				e.clearFailoverHit(plan.Provider.ID, dimension, value)
+				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusHit, joinReasons("已转移至 "+fallbackPlan.Provider.Name, disableInfo)))
+			} else {
+				appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusFailed, joinReasons("回退供应商调用失败："+fbErr.Error(), disableInfo)))
 			}
 			return fbResp, fbErr
 		}
 	}
 	if dimension == model.FailoverDimensionProvider {
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusFailed, joinReasons("无支持该模型与端点的可用回退供应商", disableInfo)))
 		return resp, fmt.Errorf("upstream failed for model %s at %s; no eligible fallback provider supports this model and endpoint: %w", req.Model, req.Path, err)
 	}
+	appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, RuleStatusNoEffect, disableInfo))
 	return resp, err
+}
+
+// failoverNote builds a RuleNote for a matched failover rule.
+func failoverNote(rule *model.FailoverRule, status, reason string) *RuleNote {
+	if rule == nil {
+		return nil
+	}
+	return &RuleNote{
+		Category: RuleCategoryFailover,
+		RuleID:   rule.ID,
+		Rule:     rule.Name,
+		Status:   status,
+		Reason:   reason,
+	}
+}
+
+// appendFailoverNotes records one note per configured failover rule: the
+// matched rule's outcome when provided, 未命中 for every other rule.
+func appendFailoverNotes(req *RelayRequest, rules []*model.FailoverRule, matched *RuleNote) {
+	if req == nil || len(rules) == 0 {
+		return
+	}
+	matchedID := ""
+	if matched != nil {
+		matchedID = matched.RuleID
+	}
+	for _, rule := range rules {
+		if rule == nil {
+			continue
+		}
+		if matchedID != "" && rule.ID == matchedID {
+			req.RuleNotes = append(req.RuleNotes, *matched)
+			continue
+		}
+		req.RuleNotes = append(req.RuleNotes, RuleNote{
+			Category: RuleCategoryFailover,
+			RuleID:   rule.ID,
+			Rule:     rule.Name,
+			Status:   RuleStatusMiss,
+		})
+	}
+}
+
+// joinReasons concatenates non-empty note reasons with "；".
+func joinReasons(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, "；")
+}
+
+// failoverThreshold mirrors the threshold default used by recordFailoverHit.
+func failoverThreshold(rule *model.FailoverRule) int {
+	if rule == nil || rule.DisableThreshold <= 0 {
+		return 1
+	}
+	return rule.DisableThreshold
 }
 
 // RecordResponseSpeedOutcome feeds post-response speed violations into the
@@ -222,25 +311,52 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 		}
 		dimension, autoDisable := rule.SingleAction()
 		if dimension == "" {
+			replaceFailoverNote(req, *failoverNote(rule, RuleStatusNoEffect, "规则未配置有效的转移维度"))
 			continue
 		}
 		value := failoverActionValue(plan, req, dimension)
 		if value == "" {
 			continue
 		}
+		reason := fmt.Sprintf("响应速度 %.1f token/s 低于规则限制 %d token/s", speed, rule.SpeedLimit)
+		hitCount := 0
 		hitReached := false
 		if autoDisable {
-			_, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
+			hitCount, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
+		}
+		status := RuleStatusHit
+		if autoDisable && !hitReached {
+			reason = joinReasons(reason, fmt.Sprintf("自动禁用未达阈值（%d/%d）", hitCount, failoverThreshold(rule)))
 		}
 		if hitReached {
-			outcome := upstreamOutcome{
-				message: fmt.Sprintf("响应速度 %.1f token/s 低于规则限制 %d token/s", speed, rule.SpeedLimit),
-			}
+			outcome := upstreamOutcome{message: reason}
 			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome); err != nil {
 				log.Printf("relay: applyFailoverAction(speed) %s/%s: %v", plan.Provider.ID, dimension, err)
+				status = RuleStatusFailed
+				reason = joinReasons(reason, "自动禁用失败："+err.Error())
+			} else {
+				reason = joinReasons(reason, "已自动禁用 "+service.ChannelEventMessage(dimension, value))
 			}
 		}
+		replaceFailoverNote(req, *failoverNote(rule, status, reason))
 	}
+}
+
+// replaceFailoverNote swaps the note already recorded for the same rule
+// (e.g. the 未命中 written when the upstream call succeeded) with the
+// post-response speed outcome, so one rule never reports two contradictory
+// statuses on the same request.
+func replaceFailoverNote(req *RelayRequest, note RuleNote) {
+	if req == nil {
+		return
+	}
+	for i := range req.RuleNotes {
+		if req.RuleNotes[i].Category == RuleCategoryFailover && req.RuleNotes[i].RuleID == note.RuleID {
+			req.RuleNotes[i] = note
+			return
+		}
+	}
+	req.RuleNotes = append(req.RuleNotes, note)
 }
 
 // failoverActionValue mirrors the value lookup in applyFailoverAction
@@ -544,7 +660,7 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 			resp, err := e.performUpstreamCall(ctx, plan, &candidate)
 			if err == nil {
 				// 旋转成功：把实际用到的索引写回 req，让亲和记录
-				// (规则亲和 + 兜底亲和历史) 指向真正服务的通道。
+				// 指向真正服务的通道。
 				req.BaseURLIndex = candidate.BaseURLIndex
 				req.KeyIndex = candidate.KeyIndex
 				return resp, false

@@ -19,6 +19,7 @@ type LogCaptureStageRow struct {
 	Body      model.JSONMap `json:"body,omitempty"`
 	Status    int            `json:"status,omitempty"`
 	Error     string         `json:"error,omitempty"`
+	RuleNotes string         `json:"rule_notes,omitempty"`
 	CreatedAt time.Time     `json:"created_at"`
 }
 
@@ -510,6 +511,7 @@ func stageRow(r *model.LogCapture) *LogCaptureStageRow {
 		Body:      r.RequestBody,
 		Status:    r.ResponseStatus,
 		Error:     r.Error,
+		RuleNotes: r.RuleNotes,
 		CreatedAt: r.CreatedAt,
 	}
 }

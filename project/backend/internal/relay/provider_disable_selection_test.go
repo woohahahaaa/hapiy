@@ -91,11 +91,18 @@ func TestDispatch_affinityFallsBackWhenRecalledProviderIsAutoDisabled(t *testing
 	if err := db.Create(&model.AutoDisableState{ProviderID: "disabled", Dimension: model.FailoverDimensionProvider, Value: "disabled", Disabled: true}).Error; err != nil {
 		t.Fatalf("create disable state: %v", err)
 	}
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
-		t.Fatalf("save affinity rules: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-User"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
 	engine.ReloadAffinity()
-	engine.Affinity().Record("by-user", "alice", "m1", affinity.Triple{ProviderName: "disabled", KeyIndex: -1, BaseURLIndex: -1}, 60)
+	history := model.RequestChannelHistory{SessionID: "alice", Model: "m1", ProviderID: "disabled", KeyIndex: -1, BaseURLIndex: -1}
+	if err := db.Create(&history).Error; err != nil {
+		t.Fatalf("create history: %v", err)
+	}
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load providers: %v", err)
 	}
@@ -246,11 +253,18 @@ func TestDispatch_affinityFallsBackWhenRecalledProviderHasAllKeysDisabled(t *tes
 	if err := db.Create(&model.AutoDisableState{ProviderID: "deadkeys", Dimension: model.FailoverDimensionKey, Value: "k1", Disabled: true}).Error; err != nil {
 		t.Fatalf("create disable state: %v", err)
 	}
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
-		t.Fatalf("save affinity rules: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-User"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
 	engine.ReloadAffinity()
-	engine.Affinity().Record("by-user", "alice", "m1", affinity.Triple{ProviderName: "deadkeys", KeyIndex: 0, BaseURLIndex: 0}, 60)
+	history := model.RequestChannelHistory{SessionID: "alice", Model: "m1", ProviderID: "deadkeys", KeyIndex: 0, BaseURLIndex: 0}
+	if err := db.Create(&history).Error; err != nil {
+		t.Fatalf("create history: %v", err)
+	}
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatalf("load providers: %v", err)
 	}

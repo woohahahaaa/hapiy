@@ -8,8 +8,8 @@ import (
 )
 
 func TestDispatch_firstRequestTakesHoldOfChannel(t *testing.T) {
-	// Given: two eligible providers, an affinity rule that applies to the
-	// request, and no cached channel yet (fresh session).
+	// Given: two eligible providers, channel affinity enabled, and no
+	// history yet (fresh session).
 	engine, db := newTestEngine(t)
 	providers := []model.Provider{
 		{ID: "deepseek", Name: "deepseek", BaseURLs: `[]`, Keys: `[]`, Models: `[{"model":"m1"}]`, Status: true, WorkflowEnabled: true},
@@ -18,8 +18,12 @@ func TestDispatch_firstRequestTakesHoldOfChannel(t *testing.T) {
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
 	}
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
-		t.Fatalf("save affinity rules: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-User"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
 	engine.ReloadAffinity()
 	if err := engine.LoadProviders(); err != nil {
@@ -27,17 +31,20 @@ func TestDispatch_firstRequestTakesHoldOfChannel(t *testing.T) {
 	}
 	req := &affinity.Request{Model: "m1", Headers: map[string]string{"X-User": "alice"}}
 
-	// When: first request dispatches (no cache, so it lands via normal
-	// selection) and the handler records the channel that served it.
+	// When: the first request dispatches (no history, so it lands via normal
+	// selection) and the engine records the channel that served it.
 	first, err := engine.Dispatch("m1", "", req)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
-	if first.AffinityMatch == nil || first.AffinityMatch.Matched {
-		t.Fatalf("expected a weak (unmatched) affinity match on first dispatch, got %+v", first.AffinityMatch)
+	if !first.AffinityNew || first.AffinityReuse != "" {
+		t.Fatalf("expected a fresh (unrecalled) affinity binding, got new=%v reuse=%q", first.AffinityNew, first.AffinityReuse)
 	}
-	engine.Affinity().Record(first.AffinityMatch.RuleName, first.AffinityMatch.SessionID, first.AffinityMatch.ModelName,
-		affinity.Triple{ProviderName: first.Provider.Name, KeyIndex: -1, BaseURLIndex: -1}, 60)
+	engine.recordAffinity(&RelayRequest{
+		Model:   "m1",
+		Headers: map[string]string{"X-User": "alice"},
+		EntryID: first.EntryID,
+	}, first.Provider.ID, first.KeyIndex, first.BaseURLIndex)
 
 	// Then: the next request must recall the same provider, even though a
 	// new provider became available in between — not fall back to selection.
@@ -65,8 +72,12 @@ func TestDispatch_affinityBeatsSequentialSlotOrder(t *testing.T) {
 	if err := db.Create(&providers).Error; err != nil {
 		t.Fatalf("create providers: %v", err)
 	}
-	if err := affinity.NewStore(db).Save(&affinity.AffinitySetting{Rules: []affinity.Rule{{Name: "by-user", Enabled: true, SessionIDFields: []string{"X-User"}}}}); err != nil {
-		t.Fatalf("save affinity rules: %v", err)
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-User"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
 	}
 	engine.ReloadAffinity()
 	if err := engine.LoadProviders(); err != nil {
@@ -79,7 +90,10 @@ func TestDispatch_affinityBeatsSequentialSlotOrder(t *testing.T) {
 		{"id":"deepseek-node","kind":"provider","provider_id":"deepseek","enabled":true}
 	],"wires":[{"source":"entry","target":"slot"},{"source":"slot","target":"duoyuan-node"}]}`)
 	req := &affinity.Request{Model: "m1", Headers: map[string]string{"X-User": "alice"}}
-	engine.Affinity().Record("by-user", "alice", "m1", affinity.Triple{ProviderName: "deepseek", EntryID: "entry"}, 60)
+	history := model.RequestChannelHistory{SessionID: "alice", Model: "m1", ProviderID: "deepseek", KeyIndex: -1, BaseURLIndex: -1, EntryID: "entry"}
+	if err := db.Create(&history).Error; err != nil {
+		t.Fatalf("create history row: %v", err)
+	}
 
 	// When: the session's next request dispatches.
 	got, err := engine.Dispatch("m1", "", req)

@@ -872,8 +872,7 @@ func TestRelayWithFailover_autoDisablesProvider_whenTTFBExceedsLimit(t *testing.
 // affinity-hit contract: a request dispatched through channel affinity has
 // no TopologyOrigin, but carrying EntryID it must still fail over to an
 // eligible sibling provider, and the failover must sever the affinity
-// bindings (rule cache key + fallback history row) that pinned the request
-// to the failing entity.
+// binding (history row) that pinned the request to the failing entity.
 func TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack(t *testing.T) {
 	primaryHits := 0
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -918,24 +917,26 @@ func TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack(t *testing.T) {
 	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": alternatePlan}
 	eng.providers = map[string]*model.Provider{"primary": primaryProvider, "alternate": alternateProvider}
 
-	// Seed a rule-affinity binding like a previously successful request would.
-	ruleName, sessionID, modelName := "workbuddy", "sess-1", "glm-5.3-flash"
-	affKey := eng.Affinity().Record(ruleName, sessionID, modelName, affinity.Triple{ProviderName: "primary", EntryID: "entry"}, 600)
-	// Seed a fallback-affinity history row pinning (session, model) to primary.
+	// Seed the affinity history row pinning (session, model) to primary,
+	// like a previously successful request would have.
+	sessionID, modelName := "sess-1", "glm-5.3-flash"
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-Session-Id"},
+		ModelFields:     []string{"model"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
+	}
+	eng.ReloadAffinity()
 	history := model.RequestChannelHistory{SessionID: sessionID, Model: modelName, ProviderID: "primary", EntryID: "entry"}
 	if err := db.Create(&history).Error; err != nil {
 		t.Fatalf("create history: %v", err)
 	}
-	eng.fallbackMu.Lock()
-	eng.fallbackConfig = &affinity.FallbackSetting{Enabled: true, SessionIDFields: []string{"X-Session-Id"}, ModelFields: []string{"model"}}
-	eng.fallbackMu.Unlock()
-	if eng.fallbackSetting() == nil || !eng.fallbackSetting().Enabled {
-		t.Fatal("fallback affinity should be enabled")
-	}
 
 	// When: an affinity-hit request (no TopologyOrigin, EntryID set) hits 429.
 	relayReq := &RelayRequest{
-		Model: modelName, Path: "/v1/chat/completions", EntryID: "entry", AffinityCacheKey: affKey,
+		Model: modelName, Path: "/v1/chat/completions", EntryID: "entry",
 		Headers: map[string]string{"X-Session-Id": sessionID},
 	}
 	resp, err := eng.relayWithFailover(context.Background(), primaryPlan, relayReq)
@@ -950,23 +951,24 @@ func TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack(t *testing.T) {
 		t.Fatalf("ServedProviderID should record the actual serving provider, got %q", relayReq.ServedProviderID)
 	}
 
-	// Then: rule affinity cache entry is gone and fallback history row deleted.
-	if m := eng.Affinity().Lookup(&affinity.Request{Model: modelName, Headers: map[string]string{"X-Session-Id": sessionID}}); m.Matched {
-		t.Fatal("rule affinity must be broken after failover")
+	// Then: the affinity binding is severed so the next request re-enters
+	// normal selection instead of sticking to the failed provider.
+	if m := eng.lookupAffinity(&affinity.Request{Model: modelName, Headers: map[string]string{"X-Session-Id": sessionID}}); m.matched {
+		t.Fatal("affinity must be broken after failover")
 	}
 	var count int64
 	if err := db.Model(&model.RequestChannelHistory{}).Where("session_id = ? AND model = ?", sessionID, modelName).Count(&count).Error; err != nil {
 		t.Fatalf("count history: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("fallback history should be deleted after failover, got %d rows", count)
+		t.Fatalf("affinity history should be deleted after failover, got %d rows", count)
 	}
 }
 
 // TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider runs
-// the full RelayRequest pipeline: affinity-hit request, provider-dimension
+// the full RelayRequest pipeline: affinity-scoped request, provider-dimension
 // failover to a sibling, and the success-path affinity recording. The
-// fallback history must be rebuilt pointing at the ACTUAL serving provider
+// affinity history must be rebuilt pointing at the ACTUAL serving provider
 // (alternate), not the dispatched failing one — otherwise the next request
 // would be pinned back to the failing provider.
 func TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider(t *testing.T) {
@@ -1011,9 +1013,15 @@ func TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider(t *test
 		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"usage limit"}}
 	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"k"}, FailoverRules: []*model.FailoverRule{rule}}
 	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": {ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"k"}}}
-	eng.fallbackMu.Lock()
-	eng.fallbackConfig = &affinity.FallbackSetting{Enabled: true, SessionIDFields: []string{"X-Session-Id"}, ModelFields: []string{"model"}}
-	eng.fallbackMu.Unlock()
+	if err := affinity.NewStore(db).Save(&affinity.Setting{
+		Enabled:         true,
+		SessionIDFields: []string{"X-Session-Id"},
+		ModelFields:     []string{"model"},
+		TTLSeconds:      600,
+	}); err != nil {
+		t.Fatalf("save affinity setting: %v", err)
+	}
+	eng.ReloadAffinity()
 
 	req := &RelayRequest{
 		Model: "glm-5.3-flash", Path: "/v1/chat/completions", EntryID: "entry",
@@ -1025,7 +1033,7 @@ func TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider(t *test
 
 	var row model.RequestChannelHistory
 	if err := db.Where("session_id = ? AND model = ?", "sess-1", "glm-5.3-flash").First(&row).Error; err != nil {
-		t.Fatalf("fallback history should be rebuilt after success: %v", err)
+		t.Fatalf("affinity history should be rebuilt after success: %v", err)
 	}
 	if row.ProviderID != "alternate" {
 		t.Fatalf("history must point at the served provider, got %q", row.ProviderID)

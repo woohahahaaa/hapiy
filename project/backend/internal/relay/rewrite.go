@@ -332,32 +332,72 @@ func compileConditionLeaf(ruleID string, opIndex, ci int, leaf map[string]json.R
 // Variable references ("value":{"ref":...}) resolve against the original
 // (pre-rewrite) body/headers snapshot, so a set-from-ref always reads the
 // value the client actually sent — not one an earlier op may have written.
+//
+// Per-rule outcomes are discarded here; callers that want them (the relay
+// pipeline, so hits without effect are visible in the logs) use
+// applyRewriteChainsWithNotes.
 func applyRewriteChains(body []byte, headers map[string]string, chains []CompiledRewriteChain) ([]byte, map[string]string, error) {
+	updated, updatedHeaders, _, err := applyRewriteChainsWithNotes(body, headers, chains, "")
+	return updated, updatedHeaders, err
+}
+
+// applyRewriteChainsWithNotes is applyRewriteChains plus one RuleNote per
+// compiled chain, tagged with category, recording whether the rule applied,
+// was skipped by its conditions, or was matched but had no effect.
+func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains []CompiledRewriteChain, category string) ([]byte, map[string]string, []RuleNote, error) {
 	origBody := body
 	origHeaders := cloneHeaders(headers)
+	notes := make([]RuleNote, 0, len(chains))
 	for ci := range chains {
 		chain := &chains[ci]
+		if len(chain.Ops) == 0 {
+			continue
+		}
 		if headers == nil && chainHasHeaderOp(chain) {
 			headers = make(map[string]string)
 		}
+		applied := 0
+		matched := false
+		firstNoEffect := ""
 		for oi := range chain.Ops {
 			op := &chain.Ops[oi]
 			ok, err := evaluateConditions(op.Conditions, body, headers)
 			if err != nil {
-				return nil, headers, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
+				notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusFailed, Reason: err.Error()})
+				return nil, headers, notes, fmt.Errorf("rule %s op %d: %w", chain.RuleID, oi, err)
 			}
 			if !ok {
 				continue
 			}
-			updated, updatedHeaders, err := applyRewriteOp(body, headers, origBody, origHeaders, op)
+			matched = true
+			updated, updatedHeaders, noEffect, err := applyRewriteOp(body, headers, origBody, origHeaders, op)
 			if err != nil {
-				return nil, headers, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
+				notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusFailed, Reason: op.Mode + ": " + err.Error()})
+				return nil, headers, notes, fmt.Errorf("rule %s op %d (%s): %w", chain.RuleID, oi, op.Mode, err)
 			}
+			if noEffect != "" {
+				if firstNoEffect == "" {
+					firstNoEffect = noEffect
+				}
+				continue
+			}
+			applied++
 			body = updated
 			headers = updatedHeaders
 		}
+		switch {
+		case applied > 0:
+			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusHit})
+		case firstNoEffect != "":
+			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusNoEffect, Reason: firstNoEffect})
+		case matched:
+			// 条件命中但 op 本身无需写入（例如 ensure_prefix 已满足）→ 视为生效。
+			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusHit})
+		default:
+			notes = append(notes, RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: RuleStatusMiss})
+		}
 	}
-	return body, headers, nil
+	return body, headers, notes, nil
 }
 
 // cloneHeaders snapshots the header map so variable references can read the
@@ -375,7 +415,10 @@ func cloneHeaders(headers map[string]string) map[string]string {
 
 // applyRewriteOp performs a single op. Returns the (possibly new) bytes.
 // origBody/origHeaders are the pre-rewrite snapshots used by variable refs.
-func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, error) {
+// The third return value carries a non-empty reason when the op ran but
+// changed nothing (missing path / missing ref source); the caller turns it
+// into a "命中但未生效" note instead of a silent no-op.
+func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, string, error) {
 	if strings.HasPrefix(op.Path, "header.") {
 		return applyHeaderOp(body, headers, origHeaders, op)
 	}
@@ -383,6 +426,7 @@ func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, ori
 	// gjson (used for condition evaluation above) can. Resolve negative
 	// indexes to their concrete positive position before writing so a rule
 	// like "messages.-1.content" behaves identically in both phases.
+	missing := "目标路径 " + op.Path + " 不存在"
 	writePath := op.Path
 	if resolved := resolveSjsonPath(body, op.Path); resolved != op.Path {
 		writePath = resolved
@@ -393,123 +437,123 @@ func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, ori
 			// 变量引用：拷原始请求里的同域值（保留 JSON 类型）；源不存在则跳过。
 			src := gjson.GetBytes(origBody, op.Ref)
 			if !src.Exists() {
-				return body, headers, nil
+				return body, headers, fmt.Sprintf("引用源 %s 不存在", op.Ref), nil
 			}
 			updated, err := sjson.SetRawBytes(body, writePath, []byte(src.Raw))
-			return updated, headers, err
+			return updated, headers, "", err
 		}
 		updated, err := sjson.SetRawBytes(body, writePath, op.RawValue)
-		return updated, headers, err
+		return updated, headers, "", err
 	case "delete":
 		updated, err := sjson.DeleteBytes(body, writePath)
-		return updated, headers, err
+		return updated, headers, "", err
 	case "append", "last_append":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			updated, err := sjson.SetBytes(body, writePath, op.Value)
-			return updated, headers, err
+			return updated, headers, "", err
 		}
 		updated, err := sjson.SetBytes(body, writePath, current.String()+op.Value)
-		return updated, headers, err
+		return updated, headers, "", err
 	case "prepend", "first_prepend":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
 			updated, err := sjson.SetBytes(body, writePath, op.Value)
-			return updated, headers, err
+			return updated, headers, "", err
 		}
 		updated, err := sjson.SetBytes(body, writePath, op.Value+current.String())
-		return updated, headers, err
+		return updated, headers, "", err
 	case "trim_prefix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.TrimPrefix(current.String(), op.Value))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "trim_suffix":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.TrimSuffix(current.String(), op.Value))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "ensure_prefix":
 		current := gjson.GetBytes(body, op.Path)
 		if current.Exists() && strings.HasPrefix(current.String(), op.Value) {
-			return body, headers, nil
+			return body, headers, "", nil
 		}
 		merged := op.Value
 		if current.Exists() {
 			merged = op.Value + current.String()
 		}
 		updated, err := sjson.SetBytes(body, writePath, merged)
-		return updated, headers, err
+		return updated, headers, "", err
 	case "ensure_suffix":
 		current := gjson.GetBytes(body, op.Path)
 		if current.Exists() && strings.HasSuffix(current.String(), op.Value) {
-			return body, headers, nil
+			return body, headers, "", nil
 		}
 		merged := op.Value
 		if current.Exists() {
 			merged = current.String() + op.Value
 		}
 		updated, err := sjson.SetBytes(body, writePath, merged)
-		return updated, headers, err
+		return updated, headers, "", err
 	case "trim_space":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.TrimSpace(current.String()))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "to_lower":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.ToLower(current.String()))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "to_upper":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.ToUpper(current.String()))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, strings.ReplaceAll(current.String(), op.From, op.To))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "regex_replace":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetBytes(body, writePath, op.Regex.ReplaceAllString(current.String(), op.To))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "copy":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetRawBytes(body, resolveSjsonPath(body, op.DstPath), []byte(current.Raw))
-		return updated, headers, err
+		return updated, headers, "", err
 	case "move":
 		current := gjson.GetBytes(body, op.Path)
 		if !current.Exists() {
-			return body, headers, nil
+			return body, headers, missing, nil
 		}
 		updated, err := sjson.SetRawBytes(body, resolveSjsonPath(body, op.DstPath), []byte(current.Raw))
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, "", err
 		}
 		deleted, err := sjson.DeleteBytes(updated, writePath)
-		return deleted, headers, err
+		return deleted, headers, "", err
 	default:
-		return body, headers, nil
+		return body, headers, "", nil
 	}
 }
 

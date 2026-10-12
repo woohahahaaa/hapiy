@@ -85,7 +85,12 @@ type LogCapture struct {
 	ResponseStatus int       `json:"response_status,omitempty"`
 	SystemLog      JSONSlice `gorm:"type:jsonb" json:"system_log,omitempty"`
 	Error          string    `json:"error,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
+	// RuleNotes carries the per-rule outcome lines of this stage's rewrite
+	// pass (请求改写 on the request nodes; 响应改写 + 故障转移 on the response
+	// nodes). Empty for rows written before the column existed and for
+	// stages without rules.
+	RuleNotes string    `gorm:"type:text" json:"rule_notes,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
 	// Stage timings mirror model.Log; written on every row of a request.
 	ConnectMs         *int `json:"connect_ms,omitempty"`
 	FirstByteMs       *int `json:"first_byte_ms,omitempty"`

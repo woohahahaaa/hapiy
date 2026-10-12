@@ -222,6 +222,27 @@ function StageErrorRow({ error }: { readonly error: string }) {
   )
 }
 
+// ── RuleNotesBlock: the relay's per-rule outcomes for this stage
+// (命中并生效 / 命中但未生效（原因）/ 命中但执行失败（原因）/ 未命中),
+// one per line. Empty for stages without rules.
+function RuleNotesBlock({ notes }: { readonly notes: string }) {
+  const { t } = useTranslation('logs')
+  if (notes === '') return null
+  return (
+    <Node label={t('preview.ruleNotes')}>
+      <pre className="overflow-auto rounded-none border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+        {notes}
+      </pre>
+    </Node>
+  )
+}
+
+// stageRuleNotes picks the stage row that carries the rule notes: the after
+// row when present (it holds the outcome of the stage), else the before row.
+function stageRuleNotes(node: { readonly before?: LogCaptureStageRow; readonly after?: LogCaptureStageRow }): string {
+  return node.after?.ruleNotes ?? node.before?.ruleNotes ?? ''
+}
+
 function renderStageBody(node: StageNode, t: TFunction): ReactNode {
   const headersEl = node.modified
     ? renderHeaderDiff(node.before?.headers ?? null, node.after?.headers ?? null)
@@ -233,12 +254,14 @@ function renderStageBody(node: StageNode, t: TFunction): ReactNode {
     bodyEl = <JsonHighlight value={node.before?.body ?? node.after?.body} />
   }
   const stageError = node.after?.error ?? node.before?.error ?? ''
-  if (headersEl === null && bodyEl === null && stageError === '') return null
+  const ruleNotes = stageRuleNotes(node)
+  if (headersEl === null && bodyEl === null && stageError === '' && ruleNotes === '') return null
   return (
     <>
       {stageError !== '' && <StageErrorRow error={stageError} />}
       {headersEl !== null && <Node label={t('preview.requestHeaders')}>{headersEl}</Node>}
       {bodyEl !== null && <Node label={t('preview.requestBody')}>{bodyEl}</Node>}
+      {ruleNotes !== '' && <RuleNotesBlock notes={ruleNotes} />}
     </>
   )
 }
@@ -417,6 +440,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
         <Node label={t('preview.responseBody')}>
           <JsonHighlight value={stageRow.body} />
         </Node>
+        <RuleNotesBlock notes={stageRow.ruleNotes} />
       </div>
     )
   }
@@ -465,6 +489,7 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
           <JsonHighlight value={stageRow.body} />
         )}
       </Node>
+      <RuleNotesBlock notes={stageRow.ruleNotes} />
     </div>
   )
 }
@@ -672,6 +697,7 @@ function ResponseNodeBody({ resp }: { readonly resp: import('@/lib/dashboard-api
         <Node label={t('preview.responseBody')}>
           <DiffView before={resp.before?.body} after={resp.after?.body} />
         </Node>
+        <RuleNotesBlock notes={stageRuleNotes(resp)} />
       </div>
     )
   }

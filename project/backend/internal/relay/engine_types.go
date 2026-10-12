@@ -152,10 +152,7 @@ type Engine struct {
 	topologyStageHook func(topologyStageEvent)
 
 	affinityMu sync.RWMutex
-	affinity   *affinity.RuleCompiledSet
-
-	fallbackMu     sync.RWMutex
-	fallbackConfig *affinity.FallbackSetting
+	affinity   *affinity.Setting
 }
 
 func NewEngine(db *gorm.DB) *Engine {
@@ -166,59 +163,33 @@ func NewEngine(db *gorm.DB) *Engine {
 		stopCh:    make(chan struct{}),
 	}
 	e.ReloadAffinity()
-	e.ReloadFallbackAffinity()
 	return e
 }
 
-// Affinity returns the current compiled rule set; never nil (an empty set
-// matches nothing), so callers can rely on non-nil checks.
-func (e *Engine) Affinity() *affinity.RuleCompiledSet {
-	e.affinityMu.RLock()
-	defer e.affinityMu.RUnlock()
-	return e.affinity
-}
-
-// ReloadAffinity reloads and compiles the rule set, then swaps it in.
+// ReloadAffinity reloads the channel-affinity setting and swaps it in.
 func (e *Engine) ReloadAffinity() {
-	var setting *affinity.AffinitySetting
+	var setting *affinity.Setting
 	if e.db != nil {
-		var err error
-		setting, err = affinity.NewStore(e.db).Load()
+		s, err := affinity.NewStore(e.db).Load()
 		if err != nil {
-			log.Printf("relay: failed to load affinity rules: %v", err)
-			setting = &affinity.AffinitySetting{}
-		}
-	}
-	compiled := affinity.CompileRules(setting)
-	e.affinityMu.Lock()
-	e.affinity = compiled
-	e.affinityMu.Unlock()
-}
-
-// ReloadFallbackAffinity swaps in the current fallback setting.
-func (e *Engine) ReloadFallbackAffinity() {
-	var setting *affinity.FallbackSetting
-	if e.db != nil {
-		s, err := affinity.NewFallbackStore(e.db).Load()
-		if err != nil {
-			log.Printf("relay: failed to load fallback affinity: %v", err)
-			s = &affinity.FallbackSetting{}
+			log.Printf("relay: failed to load channel affinity: %v", err)
+			s = &affinity.Setting{}
 		}
 		setting = s
 	} else {
-		setting = &affinity.FallbackSetting{}
+		setting = &affinity.Setting{}
 	}
-	e.fallbackMu.Lock()
-	e.fallbackConfig = setting
-	e.fallbackMu.Unlock()
+	e.affinityMu.Lock()
+	e.affinity = setting
+	e.affinityMu.Unlock()
 }
 
-// fallbackSetting returns the current fallback setting (safe copy).
-func (e *Engine) fallbackSetting() *affinity.FallbackSetting {
-	e.fallbackMu.RLock()
-	defer e.fallbackMu.RUnlock()
-	if e.fallbackConfig == nil {
-		return &affinity.FallbackSetting{}
+// affinitySetting returns the current channel-affinity setting (never nil).
+func (e *Engine) affinitySetting() *affinity.Setting {
+	e.affinityMu.RLock()
+	defer e.affinityMu.RUnlock()
+	if e.affinity == nil {
+		return &affinity.Setting{}
 	}
-	return e.fallbackConfig
+	return e.affinity
 }

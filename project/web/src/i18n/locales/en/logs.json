@@ -176,6 +176,7 @@
     "merging": "Merging…",
     "noData": "(no data)",
     "systemLog": "System Log",
+    "ruleNotes": "Rule outcomes",
     "responseStatus": "Status code: {{status}}",
     "timing": {
       "queue": "Queue",

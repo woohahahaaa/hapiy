@@ -3,19 +3,22 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.sh | sh
 #
-# 安装脚本做四件事：下载最新发行版、校验 SHA256、装到固定目录并链接到 PATH、
-# 注册登录自启（launchd / systemd --user）。重复执行即为升级。
+# 安装脚本做这些事：下载最新发行版、校验 SHA256、装到固定目录并链接到
+# PATH、注册登录自启（launchd / systemd --user）。
+# 重复执行即为升级。
 #
 # 环境变量：
-#   HAPIY_HOME           安装根目录（默认 ~/.hapiy）
-#   HAPIY_BIN_DIR        命令链接目录（默认 ~/.local/bin）
-#   HAPIY_NO_SERVICE=1   跳过自启服务注册
+#   HAPIY_HOME          安装根目录（默认 ~/.hapiy）
+#   HAPIY_BIN_DIR       命令链接目录（默认 ~/.local/bin）
+#   HAPIY_NO_SERVICE=1  跳过自启服务注册
+#
+# 本文件由 woohkit 在 release 时按项目配置渲染生成，勿手改。
 set -eu
 
 BASE="https://github.com/woohahahaaa/hapiy/releases/latest/download"
 APP_DIR="${HAPIY_HOME:-$HOME/.hapiy}/app"
 BIN_DIR="${HAPIY_BIN_DIR:-$HOME/.local/bin}"
-# The installed backend is the prod stack, which serves on 18009 (dev uses 8080).
+# 安装的是 prod 栈（dev 用另一个端口）。
 export HAPIY_PORT="${HAPIY_PORT:-18009}"
 
 say() { printf '[hapiy] %s\n' "$*"; }
@@ -95,9 +98,9 @@ fi
 if [ "${HAPIY_NO_SERVICE:-0}" != "1" ]; then
   say "registering autostart service ..."
   "$APP_DIR/hapiy" service install || true
-  # 以退出码为准判断自启到底装上没有：macOS 在无 GUI 会话（如 SSH）里
-  # bootstrap 会失败，但单元已经写好，下次登录 launchd 仍会自动加载——
-  # 那是 4（已安装、当前暂停），仍算成功。
+  # 以退出码为准判断自启到底装上没有，别只看 install 的返回值：macOS 在无
+  # GUI 会话（如 SSH）里 bootstrap 会失败，但单元已经写好，下次登录 launchd
+  # 仍会自动加载——那是 4（已安装、当前暂停），仍算成功。
   #   0 = 已安装且正在运行   4 = 已安装但当前暂停   3 = 未安装
   svc_rc=0
   "$APP_DIR/hapiy" service status >/dev/null 2>&1 || svc_rc=$?

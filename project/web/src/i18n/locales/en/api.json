@@ -27,7 +27,6 @@
     "settings": "settings",
     "backup": "backup",
     "model": "model",
-    "affinityRules": "affinity rules",
     "channelAffinity": "channel affinity config",
     "tableConfig": "table config",
     "provider": "provider",

@@ -52,6 +52,7 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 		TokenName:  data.TokenName,
 		Stage:      data.Stage,
 		Error:      data.Error,
+		RuleNotes:  data.RuleNotes,
 		// Always keep stage timings, even when body recording is off.
 		ConnectMs:         data.ConnectMs,
 		FirstByteMs:       data.FirstByteMs,
@@ -102,6 +103,20 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 
 	if err := w.db.Create(&row).Error; err != nil {
 		println("logcapture: insert failed:", err.Error())
+	}
+}
+
+// UpdateRuleNotes backfills the rule-note text on the response-stage rows of
+// a request. Streaming responses only finish rewriting after the capture
+// rows were written, so the handler calls this once the stream ends.
+func (w *LogCaptureWriter) UpdateRuleNotes(requestID, notes string) {
+	if w == nil || requestID == "" || notes == "" {
+		return
+	}
+	if err := w.db.Model(&model.LogCapture{}).
+		Where("request_id = ? AND stage IN ?", requestID, []string{"response_before", "response_after"}).
+		Update("rule_notes", notes).Error; err != nil {
+		println("logcapture: update rule notes failed:", err.Error())
 	}
 }
 
@@ -165,6 +180,10 @@ type LogCaptureData struct {
 	Response   *HTTPCapture
 	SystemLog  []string
 	Error      string
+	// RuleNotes is the rendered per-rule outcome text for this stage
+	// (request rewrite on the request nodes, response rewrite + failover on
+	// the response nodes).
+	RuleNotes  string
 	// Stage timings (nil = not applicable / not yet known).
 	ConnectMs         *int
 	FirstByteMs       *int

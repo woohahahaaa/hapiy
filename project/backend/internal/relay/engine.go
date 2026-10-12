@@ -222,19 +222,19 @@ type RelayRequest struct {
 	BaseURLIndex   int                     `json:"-"`
 	TopologyOrigin *topology.RequestOrigin `json:"-"`
 	// EntryID is the request entry whose workflow served the request; it is
-	// recorded into fallback channel history so reuse stays entry-scoped.
+	// recorded into channel-affinity history so reuse stays entry-scoped.
 	EntryID string `json:"-"`
-	// AffinityCacheKey is the rule-affinity cache key the request was
-	// dispatched through (empty when no channel affinity was recalled).
-	// relayWithFailover deletes it on a matched failover so the broken
-	// consumer is not routed back to the same failing entity.
-	AffinityCacheKey string `json:"-"`
 	// ServedProviderID records the provider that actually served the
 	// request when a provider-dimension failover rotated it away from the
 	// dispatched plan. Empty when the dispatched provider served it.
 	// Affinity recording and the usage-log row use it so both point at the
 	// healthy provider instead of the failing one.
 	ServedProviderID string `json:"-"`
+	// RuleNotes collects this request's per-rule outcomes (request rewrite,
+	// response rewrite, failover). Capture rows carry the stage-relevant
+	// subset; the handler renders the full list into the usage log's
+	// event_detail so hits without effect and failed executions stay visible.
+	RuleNotes []RuleNote `json:"-"`
 	// Progress, when non-nil, receives stage updates as the request advances
 	// through the relay pipeline (queued, connecting, receiving). It lets the
 	// caller surface live progress on the monitoring page without polling the
@@ -287,6 +287,19 @@ func (resp *RelayResponse) StreamRewriteTotalMs() int {
 		return -1
 	}
 	return int(resp.streamRewriter.TotalRewriteMs())
+}
+
+// StreamRewriteNotes returns the per-rule outcomes of the streaming
+// response rewrite (one note per configured rule: 生效 / 未生效 / 未命中).
+// Only meaningful after the stream has been fully forwarded; nil when the
+// response was not stream-rewritten. The handler appends these to
+// RelayRequest.RuleNotes before writing the usage log and backfills them
+// into the capture rows.
+func (resp *RelayResponse) StreamRewriteNotes() []RuleNote {
+	if resp == nil || resp.streamRewriter == nil {
+		return nil
+	}
+	return resp.streamRewriter.Notes()
 }
 
 // StreamCapturedBytes returns the raw SSE bytes forwarded downstream so the
@@ -413,6 +426,7 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 						Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 						Error:        err.Error(),
 						ConnectMs:    failConnectMs,
+						RuleNotes:    RuleNoteText(req.RuleNotes),
 					}
 					if failHeaders != nil {
 						data.Response = &service.HTTPCapture{Headers: failHeaders, Body: err.Error()}
@@ -439,7 +453,7 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	e.runTopologyLogOutputs(topologyStageResponseBefore, plan.LogOutputs, plan, req, resp)
 	if !req.Stream && len(plan.CompiledResponseRewrites) > 0 {
 		respRewriteStart := time.Now()
-		if err := e.applyCompiledResponseRewriteRules(plan, resp); err != nil {
+		if err := e.applyCompiledResponseRewriteRules(plan, req, resp); err != nil {
 			return nil, err
 		}
 		resp.ResponseRewriteMs = int(time.Since(respRewriteStart).Milliseconds())
@@ -477,7 +491,7 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	if req.ServedProviderID != "" {
 		servedProviderID = req.ServedProviderID
 	}
-	e.recordFallbackChannel(req, servedProviderID, req.KeyIndex, req.BaseURLIndex)
+	e.recordAffinity(req, servedProviderID, req.KeyIndex, req.BaseURLIndex)
 
 	return resp, nil
 }
@@ -485,13 +499,15 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 // applyCompiledRewriteRules reads req.Body, runs the compiled rewrite
 // chain, and writes the result back into req.Body. We round-trip through
 // JSON because the existing req.Body is map[string]any — that's the
-// contract established by handler/relay.go.
+// contract established by handler/relay.go. Per-rule outcomes are appended
+// to req.RuleNotes so the log views can show hits without effect.
 func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayRequest) error {
 	raw, err := json.Marshal(req.Body)
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
-	updated, updatedHeaders, err := applyRewriteChains(raw, req.Headers, plan.CompiledRewrite)
+	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(raw, req.Headers, plan.CompiledRewrite, RuleCategoryRequest)
+	req.RuleNotes = append(req.RuleNotes, notes...)
 	if err != nil {
 		return err
 	}
@@ -508,8 +524,9 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 
 // applyCompiledResponseRewriteRules is the non-streaming counterpart.
 // Streaming bodies are deliberately NOT rewritten here; the engine
-// records a stage event but does not touch the body.
-func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *RelayResponse) error {
+// records a stage event but does not touch the body. Per-rule outcomes are
+// appended to req.RuleNotes.
+func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) error {
 	if resp.Body == nil {
 		return nil
 	}
@@ -518,7 +535,10 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 		return fmt.Errorf("read response body: %w", err)
 	}
 	_ = resp.Body.Close()
-	updated, updatedHeaders, err := applyRewriteChains(body, resp.Headers, plan.CompiledResponseRewrites)
+	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(body, resp.Headers, plan.CompiledResponseRewrites, RuleCategoryResponse)
+	if req != nil {
+		req.RuleNotes = append(req.RuleNotes, notes...)
+	}
 	if err != nil {
 		return err
 	}
@@ -529,6 +549,24 @@ func (e *Engine) applyCompiledResponseRewriteRules(plan *ExecutionPlan, resp *Re
 	}
 	resp.Headers["Content-Length"] = fmt.Sprintf("%d", len(updated))
 	return nil
+}
+
+// captureRuleNotes picks the rule-note text a capture stage should carry:
+// the request-rewrite outcomes on the request nodes, and the response-
+// rewrite plus failover outcomes on the response nodes (which is all that
+// is known by the time they are written).
+func captureRuleNotes(stage topologyStage, req *RelayRequest) string {
+	if req == nil || len(req.RuleNotes) == 0 {
+		return ""
+	}
+	switch stage {
+	case topologyStageRequestBefore:
+		return ""
+	case topologyStageRequestAfter:
+		return RuleNoteText(RuleNotesOf(req.RuleNotes, RuleCategoryRequest))
+	default:
+		return RuleNoteText(RuleNotesOf(req.RuleNotes, RuleCategoryResponse, RuleCategoryFailover))
+	}
 }
 
 // runTopologyLogOutputs records the stage event for the selected log outputs
@@ -577,6 +615,7 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 			TokenName:    req.TokenName,
 			Prefix:       cfg.Prefix,
 			Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
+			RuleNotes:    captureRuleNotes(stage, req),
 		}
 		// Stage timings are always recorded (independent of the record_*
 		// switches) so every captured request carries its timing breakdown.
