@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -499,6 +500,9 @@ func noRouteHandler(db *gorm.DB, engine *relay.Engine, webDist string) gin.Handl
 			webDist = ""
 		} else {
 			log.Printf("Serving frontend from %s (production mode)", webDist)
+			// Go 的 mime 表不认识 .webmanifest，FileServer 会把 manifest 嗅探成
+			// text/plain；装 PWA 时部分浏览器按 JSON MIME 校验，这里显式声明。
+			_ = mime.AddExtensionType(".webmanifest", "application/manifest+json")
 		}
 	}
 	modelList := func(c *gin.Context) bool {

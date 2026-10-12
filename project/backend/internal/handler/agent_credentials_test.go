@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -175,6 +176,27 @@ func TestManagedSyncWritesCredentialStore(t *testing.T) {
 		}
 		return string(data)
 	}
+	pending := func() bool {
+		t.Helper()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-providers", nil)
+		r.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("list: %d %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Data []struct {
+				PendingSync bool `json:"pending_sync"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		if len(resp.Data) != 1 {
+			t.Fatalf("expected one managed provider, got %d: %s", len(resp.Data), w.Body.String())
+		}
+		return resp.Data[0].PendingSync
+	}
 
 	mid := create("sk-token-1")
 	sync(mid)
@@ -198,11 +220,34 @@ func TestManagedSyncWritesCredentialStore(t *testing.T) {
 	} else if perm := info.Mode().Perm(); perm&0o077 != 0 {
 		t.Fatalf("credential document must stay owner-only, got mode %o", perm)
 	}
+	// 配置与凭据都写完 → 不再待同步。
+	if pending() {
+		t.Fatal("nothing pending right after a full sync")
+	}
+	// 凭据被删（或该特性上线前的老记录）→ 仍然待同步：配置块本身没有差异，
+	// 不这样标记的话同步入口不出现，凭据永远写不进去。
+	if err := os.Remove(filepath.Join(home, ".credentials.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if !pending() {
+		t.Fatal("missing credential must mark the row pending_sync")
+	}
+	sync(mid)
+	if !strings.Contains(readCred(), "HAPIY_API_KEY: sk-token-1") {
+		t.Fatalf("sync must recreate the credential document:\n%s", readCred())
+	}
+	if pending() {
+		t.Fatal("pending must clear once the credential is stored again")
+	}
 
 	// 用户已有凭据库：换令牌重存，其余内容（其他引用 / records / 注释）保留。
 	existing := "# mine\nversion: 1\nrefs:\n  OTHER_KEY: sk-keep\nrecords:\n  client-connection/browser-session:\n    kind: grant\n    payload:\n      v: 1\n"
 	if err := os.WriteFile(filepath.Join(home, ".credentials.yaml"), []byte(existing), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	// 凭据里的值还是旧令牌 → 待同步（令牌轮换后也要有同步入口）。
+	if !pending() {
+		t.Fatal("a stale credential value must mark the row pending_sync")
 	}
 	update(mid, "sk-token-2")
 	sync(mid)
@@ -214,5 +259,8 @@ func TestManagedSyncWritesCredentialStore(t *testing.T) {
 	}
 	if strings.Contains(cred, "sk-token-1") {
 		t.Fatalf("rotated credential must replace the old value:\n%s", cred)
+	}
+	if pending() {
+		t.Fatal("nothing pending after rotating and syncing the credential")
 	}
 }

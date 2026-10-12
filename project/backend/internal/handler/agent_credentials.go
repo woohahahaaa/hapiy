@@ -158,6 +158,101 @@ func writeCredentialDoc(row *model.AgentConfigFile, key []byte, path, content st
 	}
 }
 
+// credentialRefsOf collects the credential reference names the generated
+// blocks carry (the value of the spec's reference field), deduplicated.
+func credentialRefsOf(spec *model.AgentCredentialSpec, generated []map[string]any) []string {
+	if spec == nil {
+		return nil
+	}
+	var out []string
+	for _, gen := range generated {
+		provider, _ := gen["provider"].(map[string]any)
+		if provider == nil {
+			continue
+		}
+		if ref, ok := provider[spec.RefField].(string); ok && strings.TrimSpace(ref) != "" {
+			out = append(out, strings.TrimSpace(ref))
+		}
+	}
+	return uniqueSorted(out)
+}
+
+// credentialRefsStored parses a credential document into its reference map:
+// the version-1 `refs:` section, or the pre-release flat top level.
+func credentialRefsStored(content string) (map[string]string, error) {
+	out := map[string]string{}
+	if strings.TrimSpace(content) == "" {
+		return out, nil
+	}
+	doc, err := parseYAMLDoc(content)
+	if err != nil {
+		return nil, err
+	}
+	if doc.root.Kind != yaml.MappingNode {
+		return nil, errors.New("凭据文件顶层必须是映射（mapping）")
+	}
+	section := doc.root
+	if nodeMappingValue(doc.root, "version") != nil {
+		section = nodeMappingValue(doc.root, "refs")
+		if section == nil {
+			return out, nil
+		}
+	}
+	for i := 0; i+1 < len(section.Content); i += 2 {
+		key := section.Content[i].Value
+		val := section.Content[i+1]
+		if credentialRefRe.MatchString(key) && val.Kind == yaml.ScalarNode && strings.TrimSpace(val.Value) != "" {
+			out[key] = val.Value
+		}
+	}
+	return out, nil
+}
+
+// managedCredentialMissing reports whether the declared credential store does
+// not hold the chosen token under every reference the generated blocks carry.
+// 管理模型 views fold this into 待同步: after this feature lands on an existing
+// row — or after a token rotation that the store has not seen — the config
+// block itself may already match the file, which would hide the sync button
+// and leave no way to write the credential. Read failures count as "not
+// missing": the sync itself reports real write errors.
+func managedCredentialMissing(row *model.AgentConfigFile, key []byte, spec *model.AgentCredentialSpec, token string, groups []managedGroupView) bool {
+	if row == nil || spec == nil {
+		return false
+	}
+	if strings.ToLower(strings.TrimSpace(spec.Format)) != "dsh-refs-v1" {
+		return false
+	}
+	token = strings.TrimSpace(token)
+	path := resolveConfigDirPath(row.Path, spec.PathForOS(row.TargetOS))
+	if token == "" || path == "" {
+		return false
+	}
+	generated := make([]map[string]any, 0, len(groups))
+	for _, g := range groups {
+		if g.Generated != nil {
+			generated = append(generated, g.Generated)
+		}
+	}
+	refs := credentialRefsOf(spec, generated)
+	if len(refs) == 0 {
+		return false
+	}
+	content, err := readCredentialDoc(row, key, path)
+	if err != nil {
+		return false
+	}
+	stored, err := credentialRefsStored(content)
+	if err != nil {
+		return false
+	}
+	for _, ref := range refs {
+		if stored[ref] != token {
+			return true
+		}
+	}
+	return false
+}
+
 // upsertCredentialRef sets one credential reference while preserving the rest
 // of the document — comments included. Layouts handled:
 //

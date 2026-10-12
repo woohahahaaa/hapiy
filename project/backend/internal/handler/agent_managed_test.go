@@ -116,7 +116,7 @@ func newRouterForManaged(db *gorm.DB) *gin.Engine {
 	r.PUT("/agent-config-files/:id/managed-providers/:mid", UpdateManagedProvider(db, nil))
 	r.POST("/agent-config-files/:id/managed-providers/:mid/sync", SyncManagedProvider(db, nil))
 	r.DELETE("/agent-config-files/:id/managed-providers/:mid", DeleteManagedProvider(db, nil))
-	r.GET("/agent-config-files/managed-options", ManagedProviderOptions(db))
+	r.GET("/agent-config-files/:id/managed-options", ManagedProviderOptions(db))
 	return r
 }
 
@@ -126,7 +126,7 @@ func TestManagedProviderRoundTrip(t *testing.T) {
 
 	// options
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/agent-config-files/managed-options", nil)
+	req := httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-options", nil)
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
 		t.Fatalf("options: %d %s", w.Code, w.Body.String())
@@ -294,7 +294,7 @@ func TestManagedProviderFollowsSystemBaseURL(t *testing.T) {
 
 	// managed-options 要暴露同一个 system_base_url，供托管弹窗做自动值。
 	w = httptest.NewRecorder()
-	req = httptest.NewRequest("GET", "/agent-config-files/managed-options", nil)
+	req = httptest.NewRequest("GET", "/agent-config-files/"+fileID(db)+"/managed-options", nil)
 	r.ServeHTTP(w, req)
 	if w.Code != 200 {
 		t.Fatalf("options: %d %s", w.Code, w.Body.String())
@@ -1728,5 +1728,106 @@ func TestManagedDeleteRemovesBlocksFromFile(t *testing.T) {
 	db.Model(&model.ManagedAgentProvider{}).Count(&count)
 	if count != 0 {
 		t.Fatalf("托管行应已删除，剩 %d 行", count)
+	}
+}
+
+// TestManagedOptionsAndListShareEndpointRules pins the split of duties the
+// 托管 dialog depends on: managed-options reports which endpoints fold into
+// one Endpoint-rule group (canonical), and the managed list reports the same
+// rule for a group saved before folding existed — while leaving that group's
+// endpoint and suffix untouched, so re-saving never renames the provider
+// block (dsh provider ids are permanent).
+func TestManagedOptionsAndListShareEndpointRules(t *testing.T) {
+	db := seedManagedDB(t)
+	r := newRouterForManaged(db)
+
+	rule := model.AgentTypeRule{Name: "dsh-test"}
+	if err := rule.SetJsonPaths(model.AgentJsonPaths{
+		Provider: "providers",
+		Model:    "providers.{provider_id}.models",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rule.SetProtocols([]model.AgentProtocol{
+		{Name: "completion", EndpointTags: []string{"*completion*"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&rule).Error; err != nil {
+		t.Fatal(err)
+	}
+	file := model.AgentConfigFile{
+		RecordName: "dsh-test", AgentType: "dsh-test",
+		Mode: "local", TargetOS: "mac", Path: "/tmp/hapiy-test-dsh.json",
+		Content: `{"providers":{}}`,
+	}
+	if err := db.Create(&file).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTempFile(file.Path, file.Content); err != nil {
+		t.Fatal(err)
+	}
+	provider := model.Provider{
+		Name:   "DSH-A",
+		Models: `[{"model":"chat","endpoints":["/chat/completions","/v1/chat/completions"]}]`,
+		Keys:   `["sk-a"]`,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatal(err)
+	}
+	managed := model.ManagedAgentProvider{AgentConfigFileID: file.ID, Name: "HAPIY", APIKey: "hk-1"}
+	if err := managed.SetProviderIDs([]string{provider.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := managed.SetGroups([]model.ManagedAgentGroup{
+		{Endpoint: "/v1/chat/completions", Suffix: "_c", ModelSources: map[string]string{}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&managed).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-options", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("options: %d %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if got := gjson.Get(body, `endpoint_rules./v1/chat/completions.canonical`).String(); got != "/chat/completions" {
+		t.Fatalf("endpoint_rules must fold /v1 variants onto the canonical path, got %q: %s", got, body)
+	}
+	if got := gjson.Get(body, `endpoint_rules./v1/chat/completions.rule_name`).String(); got != "completion" {
+		t.Fatalf("endpoint_rules must carry the rule name, got %q: %s", got, body)
+	}
+	if got := gjson.Get(body, `endpoint_rules./v1/chat/completions.tag`).String(); got != "*completion*" {
+		t.Fatalf("endpoint_rules must carry the matched tag, got %q: %s", got, body)
+	}
+
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest("GET", "/agent-config-files/"+file.ID+"/managed-providers", nil)
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	group := gjson.Get(w.Body.String(), "data.0.groups.0")
+	if got := group.Get("endpoint").String(); got != "/v1/chat/completions" {
+		t.Fatalf("stored endpoint must survive (no silent rename), got %q: %s", got, w.Body.String())
+	}
+	if got := group.Get("suffix").String(); got != "_c" {
+		t.Fatalf("stored suffix must survive, got %q", got)
+	}
+	if got := group.Get("rule_name").String(); got != "completion" {
+		t.Fatalf("group must report its rule, got %q: %s", got, w.Body.String())
+	}
+	if got := group.Get("rule_tag").String(); got != "*completion*" {
+		t.Fatalf("group must report its rule tag, got %q", got)
+	}
+	if hits := group.Get("hits").Array(); len(hits) != 2 {
+		t.Fatalf("hits must list every folded endpoint, got %v", hits)
+	}
+	if got := group.Get("model_count").Int(); got != 1 {
+		t.Fatalf("folded group must keep the models, got %d", got)
 	}
 }

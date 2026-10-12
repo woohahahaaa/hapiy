@@ -166,8 +166,15 @@ func ListManagedProviders(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		out := make([]managedProviderView, 0, len(managed))
+		credSpec := managedCredentialSpec(rule.Name)
 		for _, m := range managed {
 			view := deriveManagedProvider(rule, row, liveProviders, content, m, managedBasePrefix(c, db, m)+managedSourceMarkSuffix(m))
+			// 配置块可能已经与文件一致（没有差异），但凭据库里还没有这些引用名
+			// （或存的值不是当前令牌）：也算待同步，否则同步入口不出现、
+			// 凭据永远写不进去。
+			if managedCredentialMissing(&row, key, credSpec, m.APIKey, view.Groups) {
+				view.PendingSync = true
+			}
 			out = append(out, view)
 		}
 		c.JSON(http.StatusOK, gin.H{"data": out})
@@ -350,7 +357,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 	// 凭据库声明（dsh 的 apiKeyEnv → $DSH_HOME/.credentials.yaml）：生成的块
 	// 只放引用，令牌要同步写进凭据库，见 syncManagedCredentials。
 	credSpec := managedCredentialSpec(rule.Name)
-	var credRefs []string
+	var gens []map[string]any
 	liveProviders, err := loadLiveProviders(db)
 	if err != nil {
 		return "", 0, err
@@ -467,11 +474,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		// 清掉上次同步遗留的旧模型条目和用户手改字段，保证同步后
 		// 文件块与生成块全等（pending 收敛，不再永远「待同步」）。
 		provFields, _ := gen["provider"].(map[string]any)
-		if credSpec != nil {
-			if ref, ok := provFields[credSpec.RefField].(string); ok && strings.TrimSpace(ref) != "" {
-				credRefs = append(credRefs, strings.TrimSpace(ref))
-			}
-		}
+		gens = append(gens, gen)
 		// models 子树形状由规则的 models_container 决定：可能是 object
 		// map（opencode）或 array of {id,...cfg}（openclaw / dsh）。
 		// rebuild 整块重写即可，两种形状编辑器都能直接序列化。
@@ -520,6 +523,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 	}
 	// 凭据库：写在配置文件之前 —— 凭据写不进去就整次同步失败，避免把配置
 	// 写成一个必然报 MISSING_CREDENTIAL 的块（弹窗选的令牌必须落到目标机）。
+	credRefs := credentialRefsOf(credSpec, gens)
 	if err := syncManagedCredentials(row, key, credSpec, m.APIKey, credRefs); err != nil {
 		return "", 0, err
 	}

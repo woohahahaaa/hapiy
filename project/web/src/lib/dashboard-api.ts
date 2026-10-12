@@ -1760,9 +1760,21 @@ function parseEnvelope(value: unknown): unknown {
 // AuthGate 等 users/me 或业务请求无限挂起。
 const REQUEST_TIMEOUT_MS = 8000
 
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
+// AGENT_FILE_TIMEOUT_MS is the cap for 接管Agent 记录上的读写。这些记录的
+// 配置文件可能在 SSH 远端：每次调用都要现连一次（隧道 + 认证 + 执行），单次
+// 几秒到十几秒都正常，三个并发的读取里最慢的那个轻松超过 8s —— 默认上限会
+// 把正常请求砍成「无法连接后端：signal is aborted without reason」（管理模型
+// 弹窗就是同时拉 content / models / managed-providers 才踩到）。这些调用都
+// 来自用户手动点开的弹窗，给足时间。
+const AGENT_FILE_TIMEOUT_MS = 120000
+
+async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(url, { ...init, signal: controller.signal })
   } finally {
@@ -1770,7 +1782,7 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
   }
 }
 
-async function request(path: string, init?: RequestInit): Promise<unknown> {
+async function request(path: string, init?: RequestInit, timeoutMs?: number): Promise<unknown> {
   let response: Response
   try {
     response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
@@ -1781,7 +1793,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
         'Accept-Language': i18n.language,
         ...init?.headers,
       },
-    })
+    }, timeoutMs)
   } catch (error) {
     if (error instanceof Error) {
       throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
@@ -1800,7 +1812,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   return parseEnvelope(body)
 }
 
-async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord> {
+async function requestFull(path: string, init?: RequestInit, timeoutMs?: number): Promise<JsonRecord> {
   let response: Response
   try {
     response = await fetchWithTimeout(`${apiBaseUrl}/v1/dashboard${path}`, {
@@ -1811,7 +1823,7 @@ async function requestFull(path: string, init?: RequestInit): Promise<JsonRecord
         'Accept-Language': i18n.language,
         ...init?.headers,
       },
-    })
+    }, timeoutMs)
   } catch (error) {
     if (error instanceof Error) {
       throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
@@ -2525,6 +2537,17 @@ function parseUpdateStatus(value: unknown): UpdateStatus {
   }
 }
 
+// 接管Agent 记录（配置文件可能在 SSH 远端）的读写走 requestAgentFile*：
+// 与其余 dashboard 调用同样的解析与错误处理，只是把超时放宽到
+// AGENT_FILE_TIMEOUT_MS（见上面的说明）。
+function requestAgentFile(path: string, init?: RequestInit): Promise<unknown> {
+  return request(path, init, AGENT_FILE_TIMEOUT_MS)
+}
+
+function requestAgentFileFull(path: string, init?: RequestInit): Promise<JsonRecord> {
+  return requestFull(path, init, AGENT_FILE_TIMEOUT_MS)
+}
+
 export const dashboardApi = {
   // ── Providers ──
   async listProviders(params: ProviderListParams): Promise<{ readonly providers: readonly Provider[]; readonly total: number }> {
@@ -3221,11 +3244,11 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     await request(`/agent-type-rules/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
   async checkAgentConfigPath(rawPath: string): Promise<AgentPathCheckResult> {
-    const data = await request(`/agent-config-files/check?path=${encodeURIComponent(rawPath)}`)
+    const data = await requestAgentFile(`/agent-config-files/check?path=${encodeURIComponent(rawPath)}`)
     return parseAgentPathCheckResult(data)
   },
   async readAgentConfigPath(rawPath: string): Promise<string> {
-    const data = await request(`/agent-config-files/read?path=${encodeURIComponent(rawPath)}`)
+    const data = await requestAgentFile(`/agent-config-files/read?path=${encodeURIComponent(rawPath)}`)
     if (!isRecord(data) || typeof data.content !== 'string') {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
     }
@@ -3240,7 +3263,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     readonly read: AgentSshProbeResult
     readonly write: AgentSshProbeResult
   }> {
-    const data = await request('/agent-config-files/test-ssh', {
+    const data = await requestAgentFile('/agent-config-files/test-ssh', {
       method: 'POST',
       body: JSON.stringify(input),
     })
@@ -3254,7 +3277,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
   },
   async readAgentConfigRemotePath(sshConfig: AgentSshConfig, path: string, target_os: AgentTargetOS): Promise<string> {
-    const data = await request('/agent-config-files/read-remote', {
+    const data = await requestAgentFile('/agent-config-files/read-remote', {
       method: 'POST',
       body: JSON.stringify({ ssh_config: sshConfig, path, target_os }),
     })
@@ -3267,7 +3290,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const qp = new URLSearchParams()
     qp.set('limit', String(params.limit))
     qp.set('offset', String(params.offset))
-    const body = await requestFull(`/agent-config-files?${qp.toString()}`)
+    const body = await requestAgentFileFull(`/agent-config-files?${qp.toString()}`)
     const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('takeoverConfigList') }), null)
@@ -3278,34 +3301,34 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
   },
   async createAgentConfigFile(input: AgentConfigFileInput): Promise<AgentConfigFile> {
-    return parseAgentConfigFile(await request('/agent-config-files', {
+    return parseAgentConfigFile(await requestAgentFile('/agent-config-files', {
       method: 'POST',
       body: JSON.stringify(input),
     }))
   },
   async getAgentConfigFileContent(id: string): Promise<string> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/content`)
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/content`)
     if (!isRecord(data) || typeof data.content !== 'string') {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
     }
     return data.content
   },
   async saveAgentConfigFileContent(id: string, content: string): Promise<void> {
-    await request(`/agent-config-files/${encodeURIComponent(id)}/content`, {
+    await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/content`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     })
   },
   async listAgentConfigFileVersions(id: string): Promise<AgentConfigVersionList> {
-    return parseAgentConfigVersionList(await request(`/agent-config-files/${encodeURIComponent(id)}/versions`))
+    return parseAgentConfigVersionList(await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/versions`))
   },
   async archiveAgentConfigFileVersion(id: string): Promise<AgentConfigVersionList> {
     return parseAgentConfigVersionList(
-      await request(`/agent-config-files/${encodeURIComponent(id)}/versions/archive`, { method: 'POST' }),
+      await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/versions/archive`, { method: 'POST' }),
     )
   },
   async getAgentConfigFileVersion(id: string, versionId: string): Promise<string> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`)
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`)
     if (!isRecord(data) || typeof data.content !== 'string') {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('fileContent') }), null)
     }
@@ -3313,30 +3336,30 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async restoreAgentConfigFileVersion(id: string, versionId: string): Promise<AgentConfigVersionList> {
     return parseAgentConfigVersionList(
-      await request(
+      await requestAgentFile(
         `/agent-config-files/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
         { method: 'POST' },
       ),
     )
   },
   async updateAgentConfigFile(id: string, input: AgentConfigFileInput): Promise<AgentConfigFile> {
-    return parseAgentConfigFile(await request(`/agent-config-files/${encodeURIComponent(id)}`, {
+    return parseAgentConfigFile(await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify(input),
     }))
   },
   async deleteAgentConfigFile(id: string): Promise<void> {
-    await request(`/agent-config-files/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}`, { method: 'DELETE' })
   },
   async getAgentConfigFileModels(id: string): Promise<AgentModelSummary> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/models`)
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/models`)
     return parseAgentModelSummary(data)
   },
   async applyAgentRecommendations(
     id: string,
     input: { readonly provider_id: string; readonly model_id?: string },
   ): Promise<{ readonly applied: number; readonly content: string }> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendations`, {
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendations`, {
       method: 'POST',
       body: JSON.stringify(input),
     })
@@ -3359,7 +3382,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       readonly models: Readonly<Record<string, number>>
     }[]
   }> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-template`, {
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-template`, {
       method: 'POST',
     })
     if (!isRecord(data)) {
@@ -3390,7 +3413,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     checked: Record<string, readonly string[]>,
     modelFields: Record<string, Record<string, Record<string, unknown>>>,
   ): Promise<{ readonly applied: number; readonly content: string }> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-config`, {
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/apply-recommendation-config`, {
       method: 'POST',
       body: JSON.stringify({ checked, model_fields: modelFields }),
     })
@@ -3410,7 +3433,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       readonly fields: Readonly<Record<string, unknown>>
     },
   ): Promise<{ readonly applied: number; readonly content: string }> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/sync-model-fields`, {
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/sync-model-fields`, {
       method: 'POST',
       body: JSON.stringify(input),
     })
@@ -3423,7 +3446,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
   },
   async getAgentModelConfigSources(id: string): Promise<AgentModelConfigSources> {
-    const data = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`)
+    const data = await requestAgentFileFull(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`)
     if (!isRecord(data.data)) {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('modelConfigReferenceProvider') }), null)
     }
@@ -3444,13 +3467,13 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return out
   },
   async saveAgentModelConfigSources(id: string, sources: AgentModelConfigSources): Promise<void> {
-    await request(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`, {
+    await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/model-config-sources`, {
       method: 'PUT',
       body: JSON.stringify({ sources }),
     })
   },
   async listManagedProviderOptions(id: string): Promise<{ readonly options: readonly ManagedProviderOption[]; readonly systemBaseUrl: string; readonly endpointRules: EndpointRuleMap }> {
-    const body = await requestFull(`/agent-config-files/${encodeURIComponent(id)}/managed-options`)
+    const body = await requestAgentFileFull(`/agent-config-files/${encodeURIComponent(id)}/managed-options`)
     const data = body.data
     if (!Array.isArray(data)) {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('providerOptions') }), null)
@@ -3502,7 +3525,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
   },
   async listManagedProviders(id: string): Promise<readonly ManagedProviderView[]> {
-    const data = await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`)
+    const data = await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`)
     if (!Array.isArray(data)) {
       throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('managedProviderList') }), null)
     }
@@ -3564,19 +3587,19 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     })
   },
   async createManagedProvider(id: string, input: ManagedProviderInput): Promise<void> {
-    await request(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`, {
+    await requestAgentFile(`/agent-config-files/${encodeURIComponent(id)}/managed-providers`, {
       method: 'POST',
       body: JSON.stringify(input),
     })
   },
   async updateManagedProvider(id: string, mid: string, input: ManagedProviderInput): Promise<void> {
-    await request(
+    await requestAgentFile(
       `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}`,
       { method: 'PUT', body: JSON.stringify(input) },
     )
   },
   async deleteManagedProvider(id: string, mid: string): Promise<void> {
-    await request(
+    await requestAgentFile(
       `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}`,
       { method: 'DELETE' },
     )
@@ -3585,7 +3608,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     id: string,
     mid: string,
   ): Promise<{ readonly synced: number; readonly content: string }> {
-    const data = await request(
+    const data = await requestAgentFile(
       `/agent-config-files/${encodeURIComponent(id)}/managed-providers/${encodeURIComponent(mid)}/sync`,
       { method: 'POST' },
     )
