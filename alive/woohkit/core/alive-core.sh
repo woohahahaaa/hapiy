@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # alive-core.sh — 通用「构建 + 单入口重启栈」框架（kit 拥有的文件，勿手改）。
 #
-# 由项目根目录的 alive.sh（entry/alive.sh 同步而来）引用；项目自己的信息与
+# 由项目的 alive/alive.sh（entry/alive.sh 同步而来）引用；项目自己的信息与
 # 钩子写在 scripts/project.sh，契约见 CONTRACT.md。
 #
 # 模型：
@@ -15,13 +15,13 @@
 #     <state>/log/<LOG_STEM>.log（主日志）、<state>/log/supervisor.log。
 #
 # 用法（详见 alive_usage）：
-#   ./alive.sh [prod|dev] [--port N] [--no-build]
-#   ./alive.sh --status | --stop | --version | --help
+#   ./alive/alive.sh [prod|dev] [--port N] [--no-build]
+#   ./alive/alive.sh --status | --stop | --version | --help
 
 alive_usage() {
   cat >&2 <<EOF
-Usage: ./alive.sh [prod|dev] [--port N] [--no-build]
-       ./alive.sh --status | --stop | --version | --help
+Usage: ./alive/alive.sh [prod|dev] [--port N] [--no-build]
+       ./alive/alive.sh --status | --stop | --version | --help
 
   (no arg)      构建并启动 prod 栈
   dev           构建（proj_dev_build）并启动 dev 栈
@@ -52,8 +52,8 @@ alive_entry_point() {
 # alive_init — 解析默认值/端口/状态路径。子进程（_supervise/_sidecar）里
 # PORT 等已在环境里，直接继承。
 alive_init() {
-  : "${ROOT_DIR:?内部错误：ROOT_DIR 未导出，请从项目根目录的 alive.sh 运行}"
-  : "${KIT_DIR:?内部错误：KIT_DIR 未导出，请从项目根目录的 alive.sh 运行}"
+  : "${ROOT_DIR:?内部错误：ROOT_DIR 未导出，请从 alive/alive.sh 运行}"
+  : "${KIT_DIR:?内部错误：KIT_DIR 未导出，请从 alive/alive.sh 运行}"
 
   # 项目身份与默认端口来自项目根目录的 woohkit.json（项目自己定，kit 只读）。
   kit_load_project_json "$ROOT_DIR"
@@ -72,7 +72,7 @@ alive_init() {
   LOG_DIR="$STATE_DIR/log"
   MAIN_LOG="$LOG_DIR/$LOG_STEM.log"
   SUP_LOG="$LOG_DIR/supervisor.log"
-  ALIVE_SELF="${ALIVE_SELF:-$ROOT_DIR/alive.sh}"
+  ALIVE_SELF="${ALIVE_SELF:-$ROOT_DIR/alive/alive.sh}"
   KIT_VERSION="$(kit_version)"
 
   # 端口只由「项目默认 + 本次参数」决定：--port（仅当次）> WOOHKIT_PORT
@@ -155,7 +155,7 @@ wait_health() {
   done
   warn "health check failed after ${limit}s — last log lines ($MAIN_LOG):"
   tail -n 15 "$MAIN_LOG" 2>/dev/null >&2 || true
-  die "not healthy on :$PORT；supervisor 仍在跑，看 ./alive.sh --status"
+  die "not healthy on :$PORT；supervisor 仍在跑，看 ./alive/alive.sh --status"
 }
 
 # ---------------------------------------------------------------------------
@@ -242,7 +242,7 @@ alive_status() {
   if [ -x "$BIN" ]; then
     msg "binary: $BIN ($("$BIN" version 2>/dev/null || echo '?'))"
   else
-    msg "binary: $BIN (missing — run ./alive.sh to build)"
+    msg "binary: $BIN (missing — run ./alive/alive.sh to build)"
   fi
   msg "port :$PORT listeners: $(listen_pids "$PORT" | tr '\n' ' ')"
   for p in ${EXTRA_PORTS:-}; do

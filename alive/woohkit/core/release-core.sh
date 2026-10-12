@@ -2,14 +2,14 @@
 # release-core.sh — 通用「构建 + 打包 + 发 GitHub Release + 渲染安装器」流水线
 # （kit 拥有的文件，勿手改）。
 #
-# 由项目 scripts/release.sh（entry/release.sh 同步而来）引用；项目自己的
+# 由项目 alive/release.sh（entry/release.sh 同步而来）引用；项目自己的
 # 信息与钩子写在 scripts/project.sh，契约见 CONTRACT.md。
 #
 # 用法：
-#   ./scripts/release.sh              # 用 proj_version 的版本（存在 proj_bump_version 时先 +1）
-#   ./scripts/release.sh 1.2.0        # 显式指定版本
-#   ./scripts/release.sh --dry-run    # 只构建/打包/渲染安装器，不 gh release create
-#   ./scripts/release.sh --render-only  # 同上，且保留临时产物目录并打印路径
+#   ./alive/release.sh              # 用 proj_version 的版本（存在 proj_bump_version 时先 +1）
+#   ./alive/release.sh 1.2.0        # 显式指定版本
+#   ./alive/release.sh --dry-run    # 只构建/打包/渲染安装器，不 gh release create
+#   ./alive/release.sh --render-only  # 同上，且保留临时产物目录并打印路径
 #
 # 产物名固定不带版本号，配合 releases/latest/download 实现「一条命令装最新」：
 #   <asset>（proj_asset 决定，如 openboss-darwin-universal.tar.gz）
@@ -19,7 +19,7 @@
 
 release_usage() {
   cat >&2 <<EOF
-Usage: ./scripts/release.sh [版本号] [--dry-run] [--render-only]
+Usage: ./alive/release.sh [版本号] [--dry-run] [--render-only]
 
   无版本号   存在 proj_bump_version 时先自增，再取 proj_version
   --dry-run  构建、打包、渲染安装器，但不发布

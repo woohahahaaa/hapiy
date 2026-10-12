@@ -6,7 +6,7 @@
 #   scripts/backup-db.sh --list   # 列出已有备份
 # 自动保留最近 15 份 hapiy-*.db，更早的删除。
 #
-# 库位置：prod/安装版用 ~/.hapiy/hapiy.db（见 alive.sh 与 service install），
+# 库位置：prod/安装版用 ~/.hapiy/hapiy.db（见 alive/alive.sh 与 service install），
 # 所以优先备份它；不存在时回退到仓库内 project/backend/hapiy.db（dev 库）。
 set -uo pipefail
 

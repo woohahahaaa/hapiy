@@ -6,7 +6,7 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 打包）。本文件是那份规范——引用 kit 的项目照着实现即可。
 
 - kit 拥有的文件（**永远不要手改**，`tools/sync.sh` 整文件覆盖）：
-  `alive.sh`、`scripts/release.sh`、`scripts/woohkit/**`
+  `alive/**`（`alive/alive.sh`、`alive/release.sh`、`alive/woohkit/` 快照）
 - 项目拥有的文件（kit 永不触碰）：
   `woohkit.json`（根目录，身份/端口，kit 只读）、`scripts/project.sh`（钩子）、
   `install.sh` / `install.ps1`（release 时渲染生成）
@@ -73,7 +73,7 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 
 - **supervisor 在 shell 侧**：二进制不需要自己做守护循环；`proj_run` 就是一个
   纯前台命令。系统自启服务（launchd/systemd/任务计划）里跑的仍是二进制自己的
-  `up --supervise`，与 alive.sh 互不干扰（alive 运行前会 `proj_service_pause`）。
+  `up --supervise`，与 alive 入口互不干扰（alive 运行前会 `proj_service_pause`）。
 - 端口只由「项目默认 + 本次参数」决定：`--port`（仅当次）> `woohkit.json`
   的 `defaultPort`；detach 出来的子进程用 kit 内部变量继承，不读环境变量
   `PORT`。启动时会把实际端口写进 `<state>/port`——那只是给桌面壳/外部读者
@@ -84,8 +84,8 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 ### alive 用法
 
 ```
-./alive.sh [prod|dev] [--port N] [--no-build]
-./alive.sh --status | --stop | --version | --help
+./alive/alive.sh [prod|dev] [--port N] [--no-build]
+./alive/alive.sh --status | --stop | --version | --help
 ```
 
 ## 三、release 钩子
@@ -112,10 +112,10 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
 ### 用法
 
 ```
-./scripts/release.sh              # 自增（有 proj_bump_version 时）+ 发布
-./scripts/release.sh 1.2.0        # 显式版本
-./scripts/release.sh --dry-run    # 构建/打包/渲染，不发布
-./scripts/release.sh --render-only  # 同上且保留临时产物目录
+./alive/release.sh              # 自增（有 proj_bump_version 时）+ 发布
+./alive/release.sh 1.2.0        # 显式版本
+./alive/release.sh --dry-run    # 构建/打包/渲染，不发布
+./alive/release.sh --render-only  # 同上且保留临时产物目录
 ```
 
 ## 四、安装器渲染配置（决定 install.sh / install.ps1）
@@ -159,5 +159,5 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：根目录 `wo
   `scripts/project.sh` 骨架）。
 - 更新框架：`tools/sync.sh <项目目录>`（整文件覆盖 kit 文件）；
   `tools/sync.sh <项目目录> --check` 只对比不写。
-- 契约版本：`scripts/woohkit/VERSION`；kit 升级后看仓库 Release notes /
+- 契约版本：`alive/woohkit/VERSION`；kit 升级后看仓库 Release notes /
   `CONTRACT.md` 的 diff，钩子签名变了这里会写清楚。

@@ -1,9 +1,9 @@
 #!/usr/bin/env sh
-# project.sh — hapiy 的 woohkit 接入。契约见 scripts/woohkit/CONTRACT.md。
+# project.sh — hapiy 的 woohkit 接入。契约见 alive/woohkit/CONTRACT.md。
 #
 # 这里只有「本项目是什么栈、怎么构建、怎么打包」；守护、停栈、端口、发布流水线
-# 都在 kit 里。alive.sh / scripts/release.sh / scripts/woohkit/** 由 kit 同步，
-# 勿手改。
+# 都在 kit 里。alive/ 下的入口（alive.sh / release.sh）与 woohkit/ 快照由 kit
+# 同步，勿手改。
 
 # ===========================================================================
 # 一、项目信息

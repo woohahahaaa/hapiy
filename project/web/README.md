@@ -8,7 +8,7 @@ Always start the frontend with the project launcher:
 
 ```bash
 cd <repo-root>
-./alive.sh dev
+./alive/alive.sh dev
 ```
 
 It starts Vite on `0.0.0.0:18009` and the Go backend (rebuilt from source) on `0.0.0.0:8080`. Open `http://localhost:18009` locally, or use the machine's LAN address with port `18009` from another device. To run Vite alone, use `project/web/scripts/dev.sh`.

@@ -40,9 +40,9 @@ agent 会执行 `scripts/dev.sh`，把 Vite 放到后台 detach 运行，写入 
 
 > **帮我按 AGENT_README.md 启动后端**
 
-agent 会执行 `./alive.sh dev`（在仓库根目录），它会 `go build` 当前源码、拉起 Vite，再用 `hapiy up` 把 Go 后端 detach 启动到 `:8080`。
+agent 会执行 `./alive/alive.sh dev`（在仓库根目录），它会 `go build` 当前源码、拉起 Vite，并把 Go 后端挂成边车跑在 `:8080`。
 
-> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port. For the backend, say "Start backend per AGENT_README.md" and the agent runs `./alive.sh dev` from the repo root: rebuild the Go binary, ensure Vite, then `hapiy up` to launch the backend detached on `:8080`.*
+> *Hand the project directory to your agent and say "Start dev per AGENT_README.md". The agent runs `scripts/dev.sh`, launches Vite detached with pid + log files, and reports the listening port. For the backend, say "Start backend per AGENT_README.md" and the agent runs `./alive/alive.sh dev` from the repo root: rebuild the Go binary, ensure Vite, and keep the backend running as a sidecar on `:8080`.*
 
 ### 🌍 打开浏览器
 
@@ -89,10 +89,10 @@ cd project/web
 ```bash
 # 后端：见上面的 hapiy up / down / status；或从仓库根一键
 cd <repo-root>
-./alive.sh dev               # 重编译后端 + 拉起前端与后端
+./alive/alive.sh dev               # 重编译后端 + 拉起前端与后端
 ```
 
-> *Manual fallback: `scripts/dev.sh` for the frontend; `hapiy up`/`down`/`status` for the backend, or `./alive.sh dev` from the repo root.*
+> *Manual fallback: `scripts/dev.sh` for the frontend; `hapiy up`/`down`/`status` for the backend, or `./alive/alive.sh dev` from the repo root.*
 
 ---
 
