@@ -3,6 +3,7 @@
   "loginFailed": "登录失败（HTTP {{status}}）",
   "connectFailed": "无法连接后端：{{message}}",
   "connectFailedNoDetail": "无法连接后端",
+  "requestTimeout": "请求超时（{{seconds}} 秒）：后端没在时限内返回。接管记录在 SSH 远端时读取较慢，稍后重试即可。",
   "invalidArray": "{{field}} 必须是数组",
   "invalidCaptureStageHeaders": "capture stage headers 格式无效",
   "invalidDisabledDimension": "服务端返回的禁用维度无效: {{value}}",

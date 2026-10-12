@@ -1768,18 +1768,55 @@ const REQUEST_TIMEOUT_MS = 8000
 // 来自用户手动点开的弹窗，给足时间。
 const AGENT_FILE_TIMEOUT_MS = 120000
 
+// RequestTimeoutError marks a fetch we aborted ourselves because the timeout
+// elapsed. Without it the browser's raw AbortError text（"signal is aborted
+// without reason"）gets shown as 无法连接后端 —— 其实后端没挂，只是这次请求
+// 超过了本地上限（SSH 远端的接管记录读取尤其慢）。
+class RequestTimeoutError extends Error {
+  readonly timeoutMs: number
+  constructor(timeoutMs: number) {
+    super(`timeout after ${timeoutMs}ms`)
+    this.name = 'RequestTimeoutError'
+    this.timeoutMs = timeoutMs
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
   init?: RequestInit,
   timeoutMs: number = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
   try {
     return await fetch(url, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (timedOut && error instanceof Error && error.name === 'AbortError') {
+      throw new RequestTimeoutError(timeoutMs)
+    }
+    throw error
   } finally {
     clearTimeout(timer)
   }
+}
+
+// describeFetchFailure turns a failed fetch into the user-facing error:
+// 超时按「超时（N 秒）」说清楚，其余网络失败才叫「无法连接后端」。
+function describeFetchFailure(error: unknown): DashboardApiError {
+  if (error instanceof RequestTimeoutError) {
+    return new DashboardApiError(
+      i18n.t('api:requestTimeout', { seconds: Math.round(error.timeoutMs / 1000) }),
+      null,
+    )
+  }
+  if (error instanceof Error) {
+    return new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
+  }
+  return new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
 }
 
 async function request(path: string, init?: RequestInit, timeoutMs?: number): Promise<unknown> {
@@ -1795,10 +1832,7 @@ async function request(path: string, init?: RequestInit, timeoutMs?: number): Pr
       },
     }, timeoutMs)
   } catch (error) {
-    if (error instanceof Error) {
-      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
-    }
-    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
+    throw describeFetchFailure(error)
   }
 
   const text = await response.text()
@@ -1825,10 +1859,7 @@ async function requestFull(path: string, init?: RequestInit, timeoutMs?: number)
       },
     }, timeoutMs)
   } catch (error) {
-    if (error instanceof Error) {
-      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
-    }
-    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
+    throw describeFetchFailure(error)
   }
 
   const body = await parseResponseBody(response)
@@ -1860,10 +1891,7 @@ async function requestRaw(path: string, init?: RequestInit): Promise<unknown> {
       },
     })
   } catch (error) {
-    if (error instanceof Error) {
-      throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
-    }
-    throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
+    throw describeFetchFailure(error)
   }
 
   const body = await parseResponseBody(response)
@@ -3185,10 +3213,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (error) {
-      if (error instanceof Error) {
-        throw new DashboardApiError(i18n.t('api:connectFailed', { message: error.message }), null)
-      }
-      throw new DashboardApiError(i18n.t('api:connectFailedNoDetail'), null)
+      throw describeFetchFailure(error)
     }
 
     const text = await response.text()

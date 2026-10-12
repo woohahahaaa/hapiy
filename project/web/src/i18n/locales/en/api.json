@@ -3,6 +3,7 @@
   "loginFailed": "Login failed (HTTP {{status}})",
   "connectFailed": "Cannot reach backend: {{message}}",
   "connectFailedNoDetail": "Cannot reach backend",
+  "requestTimeout": "Request timed out ({{seconds}}s): the backend did not answer in time. Records on a remote SSH host are slow to read — retry shortly.",
   "invalidArray": "{{field}} must be an array",
   "invalidCaptureStageHeaders": "Invalid capture stage headers format",
   "invalidDisabledDimension": "Invalid disable dimension: {{value}}",

@@ -2,13 +2,17 @@ package service
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/i18n"
@@ -219,29 +223,25 @@ func WriteLocalFileAtomic(path, content string) error {
 // Detailed errors (connection, auth, missing file) are returned as-is
 // because the frontend surfaces them.
 func ReadRemoteFile(cfg SshConfig, path, targetOS string) (string, error) {
-	client, err := dialSSH(cfg)
+	var out string
+	err := runSSHCommand(cfg, func(session *ssh.Session) error {
+		var stdout, stderr bytes.Buffer
+		session.Stdout = &stdout
+		session.Stderr = &stderr
+		if err := session.Run(remoteReadCommand(targetOS, path)); err != nil {
+			detail := strings.TrimSpace(stderr.String())
+			if detail != "" {
+				return fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
+			}
+			return fmt.Errorf("读取远程文件失败: %w", err)
+		}
+		out = stdout.String()
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	defer client.Close()
-
-	session, err := client.client.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("创建 SSH 会话失败: %w", err)
-	}
-	defer session.Close()
-
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-	if err := session.Run(remoteReadCommand(targetOS, path)); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return "", fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
-		}
-		return "", fmt.Errorf("读取远程文件失败: %w", err)
-	}
-	return stdout.String(), nil
+	return out, nil
 }
 
 // remoteReadCommand returns the remote read command for the given target
@@ -261,29 +261,25 @@ func remoteReadCommand(targetOS, path string) string {
 // probe is existence-tolerant (an absent file is not an error), so a real
 // failure (connection, permission) still surfaces as an error.
 func ReadRemoteFileIfExists(cfg SshConfig, path, targetOS string) (string, error) {
-	client, err := dialSSH(cfg)
+	var out string
+	err := runSSHCommand(cfg, func(session *ssh.Session) error {
+		var stdout, stderr bytes.Buffer
+		session.Stdout = &stdout
+		session.Stderr = &stderr
+		if err := session.Run(remoteReadIfExistsCommand(targetOS, path)); err != nil {
+			detail := strings.TrimSpace(stderr.String())
+			if detail != "" {
+				return fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
+			}
+			return fmt.Errorf("读取远程文件失败: %w", err)
+		}
+		out = stdout.String()
+		return nil
+	})
 	if err != nil {
 		return "", err
 	}
-	defer client.Close()
-
-	session, err := client.client.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("创建 SSH 会话失败: %w", err)
-	}
-	defer session.Close()
-
-	var stdout, stderr bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stderr
-	if err := session.Run(remoteReadIfExistsCommand(targetOS, path)); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return "", fmt.Errorf("读取远程文件失败: %w (%s)", err, detail)
-		}
-		return "", fmt.Errorf("读取远程文件失败: %w", err)
-	}
-	return stdout.String(), nil
+	return out, nil
 }
 
 // remoteReadIfExistsCommand returns a remote command that prints the file
@@ -306,30 +302,20 @@ func remoteReadIfExistsCommand(targetOS, path string) string {
 // it writes stdin to %TEMP% and moves it over the target with cmd.exe.
 // stderr is captured for error reports.
 func WriteRemoteFileAtomic(cfg SshConfig, path, content, targetOS string) error {
-	client, err := dialSSH(cfg)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
-	session, err := client.client.NewSession()
-	if err != nil {
-		return fmt.Errorf("创建 SSH 会话失败: %w", err)
-	}
-	defer session.Close()
-
-	session.Stdin = strings.NewReader(content)
-	var stderr bytes.Buffer
-	session.Stderr = &stderr
-	cmd := remoteWriteCommand(targetOS, path)
-	if err := session.Run(cmd); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return fmt.Errorf("写入远程文件失败: %w (%s)", err, detail)
+	return runSSHCommand(cfg, func(session *ssh.Session) error {
+		session.Stdin = strings.NewReader(content)
+		var stderr bytes.Buffer
+		session.Stderr = &stderr
+		cmd := remoteWriteCommand(targetOS, path)
+		if err := session.Run(cmd); err != nil {
+			detail := strings.TrimSpace(stderr.String())
+			if detail != "" {
+				return fmt.Errorf("写入远程文件失败: %w (%s)", err, detail)
+			}
+			return fmt.Errorf("写入远程文件失败: %w", err)
 		}
-		return fmt.Errorf("写入远程文件失败: %w", err)
-	}
-	return nil
+		return nil
+	})
 }
 
 // remoteWriteCommand returns the remote write command for the given
@@ -394,6 +380,162 @@ func (c *sshClient) Close() error {
 		}
 	}
 	return err
+}
+
+// ── SSH 连接复用 ─────────────────────────────────────────────────────────
+//
+// 一次「管理模型」会连着读同一个远端文件好几遍（content / models /
+// managed-providers），而每次现连都要重新握手 + 认证：走隧道时单次两三秒，
+// 三条并发就十几秒（历史上正是被前端请求上限掐成了 AbortError）。SSH 本身
+// 允许一条连接上并发开多个 session，所以这里按「连接参数」把连接缓存起来
+// 复用 —— 命令还是每条都当场执行，只是省掉握手，读到的仍是远端当前内容。
+// 连接空闲 sshPoolIdleTTL 后自动关闭；主机 / 端口 / 用户 / 认证 / 密钥任一
+// 变化都算另一把钥匙，不复用旧连接。（变量而非常量：测试会把它调小。）
+var sshPoolIdleTTL = 60 * time.Second
+
+type sshPoolEntry struct {
+	key    string
+	client *sshClient
+	usedAt time.Time
+	timer  *time.Timer
+}
+
+var sshPool = struct {
+	mu      sync.Mutex
+	entries map[string]*sshPoolEntry
+}{entries: map[string]*sshPoolEntry{}}
+
+// sshConnKey fingerprints every parameter that decides where and how we
+// connect, so a cached connection is never reused across a target / credential
+// edit.
+func sshConnKey(cfg SshConfig) string {
+	h := sha256.New()
+	for _, part := range []string{
+		cfg.Host, strconv.Itoa(cfg.Port), cfg.Username, cfg.AuthType, cfg.Password, cfg.PrivateKey,
+		strconv.FormatBool(cfg.JumpEnabled), cfg.JumpHost, strconv.Itoa(cfg.JumpPort),
+		cfg.JumpUsername, cfg.JumpAuthType, cfg.JumpPassword, cfg.JumpPrivateKey,
+	} {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// touch marks the entry as just used and restarts its idle timer. Callers
+// hold sshPool.mu.
+func (e *sshPoolEntry) touch() {
+	e.usedAt = time.Now()
+	if e.timer != nil {
+		e.timer.Reset(sshPoolIdleTTL)
+	}
+}
+
+// schedule closes the entry once it has been idle for sshPoolIdleTTL, giving
+// the connection up when nobody touched it again in time.
+func (e *sshPoolEntry) schedule() {
+	e.timer = time.AfterFunc(sshPoolIdleTTL, func() {
+		sshPool.mu.Lock()
+		idle := time.Since(e.usedAt)
+		if idle < sshPoolIdleTTL {
+			e.timer.Reset(sshPoolIdleTTL - idle)
+			sshPool.mu.Unlock()
+			return
+		}
+		if cur := sshPool.entries[e.key]; cur == e {
+			delete(sshPool.entries, e.key)
+		}
+		sshPool.mu.Unlock()
+		_ = e.client.Close()
+	})
+}
+
+// pooledSSHClient hands out a reusable connection for cfg. pooled reports
+// whether it came from the pool; either way the caller must not Close it.
+func pooledSSHClient(cfg SshConfig) (client *sshClient, pooled bool, err error) {
+	key := sshConnKey(cfg)
+	sshPool.mu.Lock()
+	if e := sshPool.entries[key]; e != nil {
+		e.touch()
+		sshPool.mu.Unlock()
+		return e.client, true, nil
+	}
+	sshPool.mu.Unlock()
+
+	fresh, err := dialSSH(cfg)
+	if err != nil {
+		return nil, false, err
+	}
+
+	sshPool.mu.Lock()
+	if e := sshPool.entries[key]; e != nil {
+		// 并发的另一个调用刚好连好了：复用它，把自己这条多余连接关掉。
+		e.touch()
+		sshPool.mu.Unlock()
+		_ = fresh.Close()
+		return e.client, true, nil
+	}
+	entry := &sshPoolEntry{key: key, client: fresh, usedAt: time.Now()}
+	entry.schedule()
+	sshPool.entries[key] = entry
+	sshPool.mu.Unlock()
+	return fresh, false, nil
+}
+
+// discardSSHClient drops a pooled connection that turned out to be dead
+// (remote restarted, peer closed an idle connection) so the caller can retry
+// on a freshly dialed one.
+func discardSSHClient(cfg SshConfig, client *sshClient) {
+	key := sshConnKey(cfg)
+	sshPool.mu.Lock()
+	entry := sshPool.entries[key]
+	if entry == nil || entry.client != client {
+		sshPool.mu.Unlock()
+		return
+	}
+	delete(sshPool.entries, key)
+	sshPool.mu.Unlock()
+	if entry.timer != nil {
+		entry.timer.Stop()
+	}
+	_ = client.Close()
+}
+
+// runSSHCommand runs one remote command over a pooled connection. A pooled
+// connection that turns out to be dead is discarded and the command retried
+// once on a fresh one — an idle peer closing its side must not surface as a
+// read failure. A command that ran and failed (exit status, missing binary)
+// is returned as-is.
+func runSSHCommand(cfg SshConfig, run func(session *ssh.Session) error) error {
+	for attempt := 0; ; attempt++ {
+		client, pooled, err := pooledSSHClient(cfg)
+		if err != nil {
+			return err
+		}
+		session, err := client.client.NewSession()
+		if err == nil {
+			runErr := run(session)
+			_ = session.Close()
+			if runErr == nil {
+				return nil
+			}
+			err = runErr
+		}
+		if !pooled || attempt > 0 || isRemoteExitError(err) {
+			return err
+		}
+		discardSSHClient(cfg, client)
+	}
+}
+
+// isRemoteExitError reports whether the remote command itself failed rather
+// than the connection: only the latter is worth a retry on a fresh connection.
+func isRemoteExitError(err error) bool {
+	var exitErr *ssh.ExitError
+	if errors.As(err, &exitErr) {
+		return true
+	}
+	var missing *ssh.ExitMissingError
+	return errors.As(err, &missing)
 }
 
 // sshDialAddress builds the "host:port" address handed to the network layer.

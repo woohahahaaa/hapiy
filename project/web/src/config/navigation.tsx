@@ -50,8 +50,8 @@ export const navigation: NavItem[] = [
     children: [
       { id: 'rewrite', labelKey: 'nav.rewrite', href: '/policy/rewrite' },
       { id: 'rewrite-response', labelKey: 'nav.rewriteResponse', href: '/policy/rewrite-response' },
-      { id: 'channel-affinity', labelKey: 'nav.channelAffinity', href: '/channel-affinity' },
       { id: 'failover', labelKey: 'nav.failover', href: '/policy/failover' },
+      { id: 'channel-affinity', labelKey: 'nav.channelAffinity', href: '/channel-affinity' },
     ],
   },
   {
