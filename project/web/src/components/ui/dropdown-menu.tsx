@@ -4,7 +4,7 @@ import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 
 import { cn } from "@/lib/utils"
-import { AppIcon } from "@/components/AppIcon"
+import { AppIcon } from "@/components/wooh/AppIcon"
 
 function DropdownMenu({
   ...props

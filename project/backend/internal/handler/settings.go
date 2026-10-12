@@ -32,7 +32,7 @@ func UpsertSetting(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		if setting.Key == "" {
-			respondError(c, http.StatusBadRequest, "SETTING_KEY_REQUIRED", "key 不能为空")
+			respondError(c, http.StatusBadRequest, "SETTING_KEY_REQUIRED", "配置项 key 不能为空")
 			return
 		}
 

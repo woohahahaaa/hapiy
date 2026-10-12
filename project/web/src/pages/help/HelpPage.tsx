@@ -11,8 +11,8 @@ import {
 import { Link, useLocation } from "react-router-dom"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { AppIcon } from "@/components/AppIcon"
-import { ModeToggle } from "@/components/ModeToggle"
+import { AppIcon } from "@/components/wooh/AppIcon"
+import { ModeToggle } from "@/components/wooh/ModeToggle"
 import {
   Select,
   SelectContent,

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AppIcon } from '@/components/AppIcon'
-import { PageHeader } from '@/components/PageHeader'
+import { AppIcon } from '@/components/wooh/AppIcon'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { Button } from '@/components/ui/button'

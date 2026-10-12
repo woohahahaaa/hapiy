@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { AppIcon } from '@/components/AppIcon'
-import { PageHeader } from '@/components/PageHeader'
+import { AppIcon } from '@/components/wooh/AppIcon'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-import { DataTable, type ColumnDef } from '@/components/data-table'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Dialog,
@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
+} from '@/components/wooh/dialog'
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
@@ -27,9 +27,9 @@ import { dashboardApi,
   type ResponseRewriteRule,
   type RuleType,
 } from '@/lib/dashboard-api'
-import { RewriteTestDialog } from '@/components/RewriteTestDialog'
-import { RewriteRuleEditor, GjsonPathHelp, parseRule, isActionValid } from '@/components/rewrite-rule-editor'
-import { RewriteResponseForm } from '@/components/response-rewrite-editor'
+import { RewriteTestDialog } from '@/components/wooh/RewriteTestDialog'
+import { RewriteRuleEditor, GjsonPathHelp, parseRule, isActionValid } from '@/components/wooh/rewrite-rule-editor'
+import { RewriteResponseForm } from '@/components/wooh/response-rewrite-editor'
 import { RecoverySettings } from '@/pages/RecoverySettings'
 import { i18n } from '@/i18n/i18n'
 

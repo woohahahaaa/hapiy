@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AppIcon } from '@/components/AppIcon'
-import { DialogCodeEditor } from '@/components/dialog/code-editor'
-import { PageHeader } from '@/components/PageHeader'
+import { AppIcon } from '@/components/wooh/AppIcon'
+import { DialogCodeEditor } from '@/components/wooh/dialog/code-editor'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
+} from '@/components/wooh/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Select,
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
@@ -38,8 +38,8 @@ import {
   type AgentSshProbeResult,
   type AgentTypeRule,
 } from '@/lib/dashboard-api'
-import { AgentConfigEditorDialog } from '@/components/dialog/agent-config-editor'
-import { AgentModelsDialog } from '@/components/dialog/agent-models'
+import { AgentConfigEditorDialog } from '@/components/wooh/dialog/agent-config-editor'
+import { AgentModelsDialog } from '@/components/wooh/dialog/agent-models'
 import { formatSshAddress, parseSshAddress, type SshAddress } from '@/lib/ssh-address'
 
 // ── Agent 接管 ──

@@ -371,7 +371,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		return "", 0, err
 	}
 	if strings.TrimSpace(jpaths.Provider) == "" {
-		return "", 0, errors.New("该软件类型尚未配置 json 路径")
+		return "", 0, errors.New("该软件类型尚未配置 JSON 路径")
 	}
 	groups, err := m.GetGroups()
 	if err != nil {
@@ -651,7 +651,7 @@ func removeManagedBlocks(db *gorm.DB, row *model.AgentConfigFile, m *model.Manag
 		return err
 	}
 	if strings.TrimSpace(jpaths.Provider) == "" {
-		return errors.New("该软件类型尚未配置 json 路径")
+		return errors.New("该软件类型尚未配置 JSON 路径")
 	}
 	content, err := readAgentConfigFileContent(row, key)
 	if err != nil {
@@ -768,7 +768,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		}
 	}
 	if len(activeGroups) == 0 {
-		return "MANAGED_NO_AVAILABLE_ENDPOINT", "所选供应商没有可用的 endpoint", nil
+		return "MANAGED_NO_AVAILABLE_ENDPOINT", "所选供应商没有可用的 Endpoint", nil
 	}
 
 	// 1. suffix rules: required; 后缀唯一性按 (endpoint, 后缀) 判定 ——
@@ -779,7 +779,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		for _, g := range activeGroups {
 			suffix := strings.TrimSpace(g.Suffix)
 			if suffix == "" {
-				return "MANAGED_SUFFIX_REQUIRED", fmt.Sprintf("有多个 endpoint 分组，必须为 %s 填写后缀", g.Endpoint), gin.H{"endpoint": g.Endpoint}
+				return "MANAGED_SUFFIX_REQUIRED", fmt.Sprintf("有多个 Endpoint 分组，必须为 %s 填写后缀", g.Endpoint), gin.H{"endpoint": g.Endpoint}
 			}
 			if prev, ok := suffixEndpoint[suffix]; ok && prev != g.Endpoint {
 				return "MANAGED_SUFFIX_DUPLICATE", fmt.Sprintf("后缀 %q 重复", suffix), gin.H{"suffix": suffix}

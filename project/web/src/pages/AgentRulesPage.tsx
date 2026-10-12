@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { i18n } from '@/i18n/i18n'
-import { AppIcon } from '@/components/AppIcon'
-import { PageHeader } from '@/components/PageHeader'
+import { AppIcon } from '@/components/wooh/AppIcon'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Checkbox } from '@/components/checkbox'
+import { Checkbox } from '@/components/wooh/checkbox'
 import {
   Select,
   SelectContent,
@@ -19,10 +19,10 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
+} from '@/components/wooh/dialog'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { toast } from '@/components/ui/toast'
 import {
   dashboardApi,

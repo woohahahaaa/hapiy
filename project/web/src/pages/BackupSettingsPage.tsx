@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AppIcon } from '@/components/AppIcon'
-import { PageHeader } from '@/components/PageHeader'
+import { AppIcon } from '@/components/wooh/AppIcon'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Checkbox } from '@/components/checkbox'
+import { Checkbox } from '@/components/wooh/checkbox'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -20,8 +20,8 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+} from '@/components/wooh/dialog'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
 import {

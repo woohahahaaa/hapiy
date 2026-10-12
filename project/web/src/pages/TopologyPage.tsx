@@ -15,7 +15,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AppIcon } from '@/components/AppIcon'
+import { AppIcon } from '@/components/wooh/AppIcon'
 import { i18n } from '@/i18n/i18n'
 import { toast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
@@ -26,27 +26,27 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
-import { PageHeader } from '@/components/PageHeader'
-import { NodeModel } from '@/components/node/model'
-import { NodeSlot } from '@/components/node/slot'
-import { NodeExecutor } from '@/components/node/executor'
-import { FlatCanvasMenu } from '@/components/topology/FlatCanvasMenu'
-import { FlowColorsPanel } from '@/components/topology/FlowColorsPanel'
-import { TopologyVersionsModal } from '@/components/TopologyVersionsModal'
-import { ExecutorDebug } from '@/components/node/executor-debug'
-import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/DebugSettings'
+} from '@/components/wooh/dialog'
+import { PageHeader } from '@/components/wooh/PageHeader'
+import { NodeModel } from '@/components/wooh/node/model'
+import { NodeSlot } from '@/components/wooh/node/slot'
+import { NodeExecutor } from '@/components/wooh/node/executor'
+import { FlatCanvasMenu } from '@/components/wooh/topology/FlatCanvasMenu'
+import { FlowColorsPanel } from '@/components/wooh/topology/FlowColorsPanel'
+import { TopologyVersionsModal } from '@/components/wooh/TopologyVersionsModal'
+import { ExecutorDebug } from '@/components/wooh/node/executor-debug'
+import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/wooh/DebugSettings'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy } from '@/lib/dashboard-api'
-import { NodeEdge } from '@/components/node/edge'
-import { NodeSwitch } from '@/components/node/switch'
+import { NodeEdge } from '@/components/wooh/node/edge'
+import { NodeSwitch } from '@/components/wooh/node/switch'
 import { getFlowHub, buildFlowSteps, type FlowHub, type FlowLayerOverlay, type FlowStep } from '@/modules/flow-hub'
 import { requestStartedAfterBoundary } from '@/modules/flow-animation-isolation'
 // import { flowDebug } from '@/modules/flow-debug' // FLOW-DEBUG: disabled — re-enable by uncommenting this import and the flowDebug.* call sites below
 import { topologyConfig } from '@/config/topology-config'
 import { useReactFlowNodeSizes } from '@/lib/use-reactflow-node-sizes'
 import { layoutFlatCanvas } from '@/lib/topology-auto-layout'
-import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/node/slot/items'
-import { useSlotRules } from '@/components/node/executor/use-slot-rules'
+import { SLOT_LABELS, type SlotEntry, type SlotType } from '@/components/wooh/node/slot/items'
+import { useSlotRules } from '@/components/wooh/node/executor/use-slot-rules'
 import {
   buildCopySnapshot,
   pasteTopologySnapshot,

@@ -942,7 +942,7 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL", "该软件类型尚未配置 json 路径，请先在「接管Agent」中填写 provider/model gjson")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL", "该软件类型尚未配置 JSON 路径，请先在「接管Agent」中填写 provider/model gjson")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -1122,7 +1122,7 @@ func ApplyAgentRecommendations(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 JSON 路径")
 			return
 		}
 		var req applyReq
@@ -1200,7 +1200,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 JSON 路径")
 			return
 		}
 		recs, _ := rule.GetRecommendations()
@@ -1414,7 +1414,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 JSON 路径")
 			return
 		}
 		recs, _ := rule.GetRecommendations()
@@ -1655,7 +1655,7 @@ func SyncAgentConfigFileModelFields(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 json 路径")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED", "该软件类型尚未配置 JSON 路径")
 			return
 		}
 		var req syncReq

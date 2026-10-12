@@ -9,7 +9,7 @@
   "TOPOLOGY_VERSION_NOT_FOUND": "Version not found",
   "ENGINE_NOT_READY": "The engine is not ready",
   "EXCHANGE_URL_REQUIRED": "API URL is required",
-  "SETTING_KEY_REQUIRED": "key cannot be empty",
+  "SETTING_KEY_REQUIRED": "Setting key cannot be empty",
   "BASE_URL_PATH_INVALID": "Source name {{name}} is invalid: it must not contain / or __ and must be at most 32 characters",
   "RETENTION_MINUTES_OUT_OF_RANGE": "retention_minutes must be between 0 and 1440",
   "ACTIVE_REQUEST_NOT_FOUND": "The request does not exist or has already finished",

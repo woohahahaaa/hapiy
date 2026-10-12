@@ -1,6 +1,6 @@
 import { parseTopologyDocument } from './topology-document'
 import type { Workflow } from './topology-document'
-import type { SlotEntry } from '@/components/node/slot/items'
+import type { SlotEntry } from '@/components/wooh/node/slot/items'
 import { i18n } from '@/i18n/i18n'
 // tField resolves a server-shape field label through the api:fields dictionary,
 // so client-side validation errors read correctly in the active language.

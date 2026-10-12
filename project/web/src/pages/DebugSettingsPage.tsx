@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
-import { PageHeader } from '@/components/PageHeader'
-import { DebugSettings } from '@/components/DebugSettings'
+import { PageHeader } from '@/components/wooh/PageHeader'
+import { DebugSettings } from '@/components/wooh/DebugSettings'
 
 export function DebugSettingsPage() {
   const { t } = useTranslation('settings')

@@ -5,7 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { AppIcon } from "@/components/AppIcon"
+import { AppIcon } from "@/components/wooh/AppIcon"
 import { i18n } from "@/i18n/i18n"
 
 function Sheet({

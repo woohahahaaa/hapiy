@@ -120,7 +120,7 @@ func TestUpsertSetting_rejects_empty_key(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Error != "key 不能为空" {
-		t.Fatalf("error message: got %q, want %q", resp.Error, "key 不能为空")
+	if resp.Error != "配置项 key 不能为空" {
+		t.Fatalf("error message: got %q, want %q", resp.Error, "配置项 key 不能为空")
 	}
 }

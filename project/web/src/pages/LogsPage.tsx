@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PageHeader } from '@/components/PageHeader'
-import { DateRangeFilter } from '@/components/DateRangeFilter'
-import { UsageLogDetailDialog } from '@/components/UsageLogDetailDialog'
+import { PageHeader } from '@/components/wooh/PageHeader'
+import { DateRangeFilter } from '@/components/wooh/DateRangeFilter'
+import { UsageLogDetailDialog } from '@/components/wooh/UsageLogDetailDialog'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
+} from '@/components/wooh/dialog'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, LOG_SOURCE_UNMARKED, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
 

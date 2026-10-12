@@ -9,7 +9,7 @@ import {
   PROVIDER_SLOT_TYPE,
   type FlatCanvas,
 } from '@/lib/flat-topology'
-import { SLOT_LABELS, type SlotEntry } from '@/components/node/slot/items'
+import { SLOT_LABELS, type SlotEntry } from '@/components/wooh/node/slot/items'
 import { i18n } from '@/i18n/i18n'
 import { collectDeclaredEndpoints } from '@/lib/provider-endpoints'
 

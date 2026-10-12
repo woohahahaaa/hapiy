@@ -47,7 +47,7 @@ func i18nMessage(r *http.Request, modelName string, err error) string {
 			}
 			return i18n.S(
 				lang,
-				fmt.Sprintf("无法为 %s 找到可用供应商：该模型不支持请求路径 %s（模型声明的 endpoint：%s）。请在供应商页对应模型行补充该 endpoint，或改用模型支持的路径。", modelName, noProvider.Path, allowed),
+				fmt.Sprintf("无法为 %s 找到可用供应商：该模型不支持请求路径 %s（模型声明的 Endpoint：%s）。请在供应商页对应模型行补充该 Endpoint，或改用模型支持的路径。", modelName, noProvider.Path, allowed),
 				fmt.Sprintf("No usable provider found for %s: the model does not support path %s (declared endpoints: %s). Add the endpoint on the model row in the provider page, or use a supported path.", modelName, noProvider.Path, allowed),
 			)
 		case relay.NoProviderReasonProviderDisabled:
@@ -64,7 +64,7 @@ func i18nMessage(r *http.Request, modelName string, err error) string {
 	}
 	return i18n.S(
 		lang,
-		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、endpoints 端点限制、供应商/工作流开关、故障转移状态、拓扑接线。", modelName),
+		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、Endpoints 白名单、供应商/工作流开关、故障转移状态、拓扑接线。", modelName),
 		fmt.Sprintf("No usable provider found for %s. Check: model name (case-sensitive), endpoint limits, provider/workflow switches, failover status, and topology wiring.", modelName),
 	)
 }

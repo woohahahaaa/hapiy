@@ -2,7 +2,7 @@ import * as React from "react"
 import * as SelectPrimitive from "@radix-ui/react-select"
 
 import { cn } from "@/lib/utils"
-import { AppIcon } from "@/components/AppIcon"
+import { AppIcon } from "@/components/wooh/AppIcon"
 
 const Select = SelectPrimitive.Root
 

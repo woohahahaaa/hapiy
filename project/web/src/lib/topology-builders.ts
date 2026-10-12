@@ -7,7 +7,7 @@ import {
   type SlotEntryMap,
   type SlotRuleMap,
   type SlotType,
-} from '@/components/node/slot/items'
+} from '@/components/wooh/node/slot/items'
 import type { WorkflowEntry } from '@/lib/topology-document'
 import { topologyConfig } from '@/config/topology-config'
 

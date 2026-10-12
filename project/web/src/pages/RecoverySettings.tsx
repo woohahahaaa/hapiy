@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AppIcon } from '@/components/AppIcon'
+import { AppIcon } from '@/components/wooh/AppIcon'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,12 +18,12 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
+} from '@/components/wooh/dialog'
 import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
-import { DataTable, DefaultCell, type ColumnDef } from '@/components/data-table'
-import { SecretValue } from '@/components/SecretValue'
+import { DataTable, DefaultCell, type ColumnDef } from '@/components/wooh/data-table'
+import { SecretValue } from '@/components/wooh/SecretValue'
 import {
   dashboardApi,
   DashboardApiError,

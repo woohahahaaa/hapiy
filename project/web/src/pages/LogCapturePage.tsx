@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { PageHeader } from '@/components/PageHeader'
-import { DateRangeFilter } from '@/components/DateRangeFilter'
-import { LogCapturePreviewDialog } from '@/components/LogCapturePreviewDialog'
+import { PageHeader } from '@/components/wooh/PageHeader'
+import { DateRangeFilter } from '@/components/wooh/DateRangeFilter'
+import { LogCapturePreviewDialog } from '@/components/wooh/LogCapturePreviewDialog'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogScrollBody,
   DialogTitle,
-} from '@/components/dialog'
-import { DataTable, type ColumnDef } from '@/components/data-table'
+} from '@/components/wooh/dialog'
+import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import {
   Select,
   SelectContent,

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { PageHeader } from '@/components/PageHeader'
+import { PageHeader } from '@/components/wooh/PageHeader'
 import { GeneralSettings } from './GeneralSettings'
 
 export function GeneralSettingsPage() {

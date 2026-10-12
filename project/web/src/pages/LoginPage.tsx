@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { AppIcon } from '@/components/AppIcon'
+import { AppIcon } from '@/components/wooh/AppIcon'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
