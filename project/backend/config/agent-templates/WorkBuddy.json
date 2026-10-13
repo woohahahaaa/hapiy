@@ -51,7 +51,7 @@
     {
       "scope": "model",
       "key": "url",
-      "description": "API 端点，必须是完整路径且一般以 /chat/completions 结尾",
+      "description": "API Endpoint，必须是完整路径且一般以 /chat/completions 结尾",
       "recommended": null,
       "required": true
     },

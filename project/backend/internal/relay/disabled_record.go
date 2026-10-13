@@ -372,7 +372,7 @@ func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.Disab
 		return service.ProbeResult{TTFB: ttfb, Body: string(body), ErrorMessage: msg}
 	}
 	var parsed struct {
-		Choices []json.RawMessage `json:"choices"`
+		Choices []json.RawMessage   `json:"choices"`
 		Usage   *service.ProbeUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &parsed); err != nil {

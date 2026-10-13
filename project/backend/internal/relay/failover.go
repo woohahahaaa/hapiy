@@ -227,7 +227,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		}
 	}
 	if dimension == model.FailoverDimensionProvider {
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusFailed, joinReasons("无支持该模型与端点的可用回退供应商", disableInfo)))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusFailed, joinReasons("无支持该模型与 Endpoint 的可用回退供应商", disableInfo)))
 		return resp, fmt.Errorf("upstream failed for model %s at %s; no eligible fallback provider supports this model and endpoint: %w", req.Model, req.Path, err)
 	}
 	appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, disableInfo))

@@ -90,9 +90,9 @@
   "convention": {
     "refHint": "No quotes → variable: header or gjson path",
     "crossDomainHint": "Cross-domain: prefix header. or body.",
-    "hashHint": "hash(path) → stable id from the content",
     "literalHint": "true/false/null/number → JSON literal",
-    "stringHint": "Quoted → fixed string, content inside quotes"
+    "stringHint": "Quoted → fixed string, content inside quotes",
+    "hashHint": "hash(path) → stable id from the content"
   },
   "invert": {
     "label": "Invert match",
@@ -131,7 +131,7 @@
     "input": "Input",
     "result": "Result",
     "runTest": "Run test",
-    "running": "Testing...",
+    "running": "Testing…",
     "emptyResult": "Click “Run test” to see the result",
     "invalidJson": "Invalid JSON, please check the input",
     "progress": "Running rule {{current}}/{{total}}: {{name}}",

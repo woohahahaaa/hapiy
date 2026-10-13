@@ -32,7 +32,7 @@
     {
       "scope": "provider",
       "key": "baseUrl",
-      "description": "供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）",
+      "description": "供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）",
       "recommended": null,
       "required": true
     },

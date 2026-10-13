@@ -7,10 +7,11 @@
 //   - 空 / 不合法的 action 在序列化时被丢弃；空的 block 也丢弃；最终空数组输出为 "[]"。
 //   - set 的 value 遵循「引号约定」：true/false/null/数字（仅 body scope）是原生 JSON
 //     字面量；不带引号的其余裸文本是变量引用（原始请求里的同域值）；字符串必须写成带
-//     引号的 JSON 形式（如 "hello"）。引用在脚本里存成 {"ref":"<name>"}，哈希来源存成
-//     {"hash":"<source>"}，写成 hash(<source>)。详见 parseValueInput。
-//     来源可以显式跨域：header.<名字> 读原始 header，body.<gjson 路径> 读原始 body；
+//     引号的 JSON 形式（如 "hello"）。引用在脚本里存成 {"ref":"<name>"}。详见 parseValueInput。
+//     引用可以显式跨域：header.<名字> 读原始 header，body.<gjson 路径> 读原始 body；
 //     裸文本按目标路径的域解释（历史语义）。
+//   - 哈希来源写成 hash(<来源>)，在脚本里存成 {"hash":"<来源>"}：与 ref 共用路径
+//     语法与域规则，写入的是来源文本派生出的稳定 id。
 //   - 条件值沿用旧约定：字面量 + 带引号字符串，裸文本不合法、序列化时丢弃。
 //   - 不合法的 script（顶层不是数组、解析失败）反序列化时回退到一个空 block。
 //
@@ -72,8 +73,8 @@ export function explicitRefDomain(ref: string): 'header' | 'body' | null {
   return null
 }
 
-// 裸引用跟着目标域走，切 scope 会悄悄改变它的含义。切换之前先用这个把裸引用物化成
-// 显式来源前缀，语义就钉死了；已带前缀的引用、字面量、固定字符串一律原样返回。
+// 裸引用跟着目标域走，切 scope 会悄悄改变它的含义。切换之前先用这个把来源物化成
+// 显式前缀，语义就钉死了；已带前缀的、字面量、固定字符串一律原样返回。
 // 哈希来源（hash(...)）同样处理，只把括号里的来源补上前缀。
 export function materializeSource(a: Action): string {
   const parsed = parseActionValue(a, a.value)

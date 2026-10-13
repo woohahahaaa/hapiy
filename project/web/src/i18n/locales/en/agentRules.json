@@ -28,7 +28,7 @@
     "jsonModeBackTitle": "Validate the JSON and restore it to table editing; switching back is blocked if invalid",
     "useDefaultTemplate": "Use default recommendation template",
     "templateResetTitle": "Reset all fields of this rule (paths / model info fields / common config / each Endpoint rule) to the system default recommendation template",
-    "saving": "Saving...",
+    "saving": "Saving…",
     "addRow": "Add row"
   },
   "form": {

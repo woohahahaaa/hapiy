@@ -164,7 +164,7 @@
     "incompleteSuffix": "+incomplete"
   },
   "preview": {
-    "loading": "Loading...",
+    "loading": "Loading…",
     "empty": "No content",
     "request": "Request",
     "response": "Response",

@@ -911,7 +911,7 @@ func TestRelayWithFailover_affinityHitBreaksAffinityAndFallsBack(t *testing.T) {
 	}
 	eng := NewEngine(db)
 	rule := &model.FailoverRule{ID: "rule-1", Name: "供应商：转移", Condition: "timeout", Status: true,
-		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"走过","usage limit"}}
+		Dimension: model.FailoverDimensionProvider, AutoDisable: false, MatchPatterns: []string{"走过", "usage limit"}}
 	primaryPlan := &ExecutionPlan{ID: "primary", Provider: primaryProvider, BaseURLs: []string{primary.URL}, Keys: []string{"k"}, FailoverRules: []*model.FailoverRule{rule}}
 	alternatePlan := &ExecutionPlan{ID: "alternate", Provider: alternateProvider, BaseURLs: []string{alternate.URL}, Keys: []string{"k"}}
 	eng.plans = map[string]*ExecutionPlan{"primary": primaryPlan, "alternate": alternatePlan}

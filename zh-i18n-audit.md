@@ -1,10 +1,10 @@
 # 中文界面文案检查报告
 
 范围：`project/web`（zh 语言包 + 硬编码文案）、`project/backend`（Go 中文提示、Agent 模板）
-口径：**只改 UI 显示的文案**；填入 input 的值、代码变量名、枚举值、日志样例不动。
-统计只算含中文的字符串，纯英文标签（如 `Base URL`）不计入。
+口径（用户定）：**只改 UI 显示的文案**；填入 input 的值、代码变量名、枚举值、日志样例不动。
+**Endpoint 全篇保持英文**；用户照着写的代码量（`model`、`key` 等）保持英文；其余改中文。
 
-验证（每轮都跑）：`go test ./internal/model/... ./internal/handler/...` ✅ · `npm test`（vitest 379 项 + i18n key 校验）✅
+验证（每轮都跑）：后端 `go test`（model / handler / relay）✅ · 前端 `npm test`（vitest 379 项 + i18n key 校验）✅
 
 ---
 
@@ -31,68 +31,48 @@
 | `internal/model/agent_config.go` | 11 | 在 opencode 界面里的显示名（provider 名称）→（供应商名称） |
 | `config/agent-templates/*.json` | 7 | ChatGPT / opencode-v1 / opencode-v2 / DeepSeek Harness (Desktop\|Web) |
 
-⚠️ 后端 `agentRecommendationDescriptionEn`（中→英映射表）用**中文原文当 key**，所以映射表 key 必须与内置模板、磁盘模板同步改；已同步，英文值未动，`TestLocalizationCoversTemplates` 通过。
+⚠️ 后端 `agentRecommendationDescriptionEn`（中→英映射表）用**中文原文当 key**，映射表 key 必须与内置模板、磁盘模板同步改；已同步，英文值未动，`TestLocalizationCoversTemplates` 通过。
 
-### 同步更新的测试断言（2 处）
-
-- `src/lib/topology-edges.test.ts` → `/未知的供应商引用/`
-- `src/lib/topology-document.test.ts` → `'第一个节点必须是供应商'`
+同步更新的测试断言（2 处）：`topology-edges.test.ts`、`topology-document.test.ts`。
 
 ---
 
-## 二、第二轮：其余 UI 文案规范化
-
-### 2.1 术语统一：提供商 / 服务商 → 供应商（14 行）
-
-| 位置 | 原文案 |
-| --- | --- |
-| `internal/model/agent_config.go` + 映射表 | 选择器里显示的**提供商**名称、自定义**提供商**的 API 端点、已装目录**提供商**省略、自定义**提供商**必填、与**提供商**侧精确一致、**服务商** API 端点 |
-| `config/agent-templates/DeepSeek Harness (Desktop\|Web).json` | 同上 4 条 ×2 |
-| `config/agent-templates/openclaw.json` | **服务商** API 端点 |
-
-### 2.2 中英之间补空格（10 行）
-
-`接管Agent` → `接管 Agent`（common / settings / errorsAgent / 后端 respondError）、`同步预设Agent信息` → `同步预设 Agent 信息`、`Agent软件配置文件默认路径` → `Agent 软件配置文件默认路径`、`文件名/请求ID` → `文件名/请求 ID`、`整合JSON` → `整合 JSON`。
-
-### 2.3 标点规范化（约 45 行）
+## 二、第二轮：UI 文案规范化
 
 | 项 | 处数 | 处理 |
 | --- | --- | --- |
-| 省略号 `...` | 17 | → `…`（删除中…、保存中…、同步中…、加载中… 等） |
-| 中文里的半角冒号 `:` | 20 | → `：`（读取失败：、解析配置失败：、响应状态码：、选择规则： 等） |
-| 直引号 `"` | 10 | → `「」`（点击「添加规则」、名称「{{name}}」、来源名「{{name}}」、如「200 px」） |
-| 整句半角 `,` `?` | 4 | `topology.json` 的保存确认 + 3 条删除说明 → `，` `？` |
-| 半角括号 | 1 | `重命名/移动 (move)` → `（move）` |
+| 提供商 / 服务商 → 供应商 | 14 行 | 后端 `model/agent_config.go`（映射表 + 模板）+ DeepSeek Harness ×2 + openclaw 模板 |
+| 中英之间补空格 | 10 行 | 接管Agent → 接管 Agent、同步预设Agent信息 → 同步预设 Agent 信息、整合JSON → 整合 JSON、文件名/请求ID → 文件名/请求 ID 等 |
+| 省略号 `...` → `…` | 17 | 删除中…、保存中…、同步中…、加载中… |
+| 半角冒号 → `：` | 20 | 读取失败：、解析配置失败：、响应状态码：、选择规则： |
+| 直引号 → `「」` | 10 | 点击「添加规则」、名称「{{name}}」、来源名「{{name}}」、如「200 px」 |
+| 整句半角 `,` `?` → 全角 | 4 | topology 保存确认 + 3 条删除说明 |
+| 半角括号 → 全角 | 1 | 重命名/移动（move） |
 
-### 2.4 修正上一版的一处误判
-
-`ModelInfoFieldLabels`（数组里写着「最大输出token」，与前端「最大输出 Token」不一致）在代码里**没有任何引用**、不参与渲染 —— 属死表，不是 UI 文案，**未改**。将来真要用，记得与前端对齐。
-
----
-
-## 三、按"只改 UI 文案"的规则，还剩这些（都是纯 UI 文案，未动）
-
-都是**同一概念两种写法**，改哪边需要你定：
-
-| # | 概念 | 现状 | 影响面 |
-| --- | --- | --- | --- |
-| 1 | 端点 | `Endpoint` 69 处 vs `端点` 14 处（后端已用「API 端点」） | 最大，跨 agentConfig/provider/logs 等多页 |
-| 2 | 令牌 | `令牌` 50 / `Token` 30 / `Key` 11（托管弹窗「接入 Key」、日志「总 Token」） | 中 |
-| 3 | 工作流 | `工作流` 18 vs `workflow` 12（`zh/lib.json` 的 4 条校验文案） | 小 |
-| 4 | 模型 | `模型` 268 vs `model` 109（「供应商 {{id}} 下没有 models」、「model 里用 {provider_id}」） | 小～中 |
-
-大小写/词形差异（可一并统一，也可不动）：`token` / `Token` / `Tokens`、`Endpoint` / `Endpoints` / `endpoint`、`BaseURL` / `Base URL` / `base URL`、`provider id` / `provider_id` / `ID`。
+修正上一版的一处误判：`ModelInfoFieldLabels`（含「最大输出token」）在代码里没有任何引用、不参与渲染，属死表，未改。
 
 ---
 
-## 四、刻意保留（输入值 / 变量名 / 代码 / 日志样例）
+## 三、第三轮：术语决策落地
+
+| 决策 | 处理 |
+| --- | --- |
+| **Endpoint 全篇保持英文** | E 表 45 处不动；并把现有 **20 处写成「端点」** 的统一为 `Endpoint`：后端 `model/agent_config.go` 11 处（API Endpoint、供应商 API Endpoint、自定义供应商的 API Endpoint、Endpoint 不支持会在请求时被拒）、`relay/failover.go:230` 1 处、模板 WorkBuddy / openclaw / opencode-v1 / opencode-v2 / DeepSeek Harness ×2 共 8 处 |
+| **workflow → 工作流** | `zh/lib.json` 3 条拓扑校验：「第 {{index}} 条工作流必须是数组 / 不能为空 / 第一个节点必须是供应商」 |
+| **Key → 令牌**（指令牌实体时） | `zh/agentConfig.json` 4 处：接入令牌、选择接入用的令牌、（在令牌页创建，必填）、请选择接入用的令牌（必填） |
+| **model / key 保持英文** | M1/M2（model gjson 路径、路径提示）、后端 6 条「model %s 字段 %s 删除失败/写入失败」、`scope（provider\|model）` 等 —— 用户要照着写，保持原样 |
+
+---
+
+## 四、最终"刻意保留"清单（输入值 / 变量名 / 代码 / 日志样例）
 
 - 输入提示里的真值：`例如：provider`、`例如：provider.{provider_id}.models`、`例如：opencode`、`如 %APPDATA%`、`192.168.1.100 或 tcp://host:34604`
-- 枚举/字段名/路径：`落在（provider|model）`、`scope（provider|model）`、`provider_id`、`model_id`、`[model_providers]`、`models.providers`、`@opencode/ai/providers/…`、`provider/model gjson`
+- 枚举 / 字段名 / 路径：`落在（provider|model）`、`scope（provider|model）`、`provider_id`、`model_id`、`[model_providers]`、`models.providers`、`@opencode/ai/providers/…`、`provider/model gjson`、`endpoint_tags`
 - 插值变量：`连接上游{{provider}}`、`在「{{provider}}」下`
-- 代码/JSON 片段：`数组 [{"id": ...}]`、`对象 map {"模型 ID": {...}}`、`#(id=="xxx")`、`usage.prompt_tokens`
-- 日志样例：`settings.json` 的 `debug.nodeInfoDescription` / `debug.flowLightsDescription`（console 原文，含 `provider=deepseek`）
-- 代码注释（含后端 `// 接管Agent 页面按…`）：注释不算 UI，未动
+- 代码 / JSON 片段：`数组 [{"id": ...}]`、`对象 map {"模型 ID": {...}}`、`#(id=="xxx")`、`usage.prompt_tokens`
+- 日志样例：`settings.json` 的 `debug.nodeInfoDescription` / `debug.flowLightsDescription`（console 原文）
+- 技术专名与英文术语：`Endpoint`（全篇）、`Agent`、`gjson`、`SSH`、`JSON(C)`、`YAML`、`API`、`SDK`、`URL`、`BaseURL` / `Base URL`、`models.dev`、`Token`（LLM 用量计数）、`Key`（上游密钥）、`Bearer Token`
+- 代码注释：不算 UI，未动
 
 ---
 
@@ -179,7 +159,7 @@
 - `errorsAgent.json` · `MANAGED_SUFFIX_REQUIRED` — 有多个 Endpoint 分组，必须为 {{endpoint}} 填写后缀
 - `provider.json` · `form.deleteEndpointAria` — 删除 Endpoint
 
-#### `models.dev`（20 条）
+#### `models.dev`（19 条）
 
 - `agentConfig.json` · `columns.syncFromModelsDev` — 从 models.dev 同步模型配置
 - `agentRules.json` · `match.columns.syncFromModelsDev` — 从 models.dev 同步模型配置
@@ -187,8 +167,8 @@
 - `errorsCore.json` · `MODELS_DEV_FETCH_FAILED` — 获取 models.dev 数据失败，请稍后重试
 - `lib.json` · `modelsDev.invalidFormat` — models.dev 数据格式无效
 - `lib.json` · `modelsDev.requestFailed` — models.dev 数据请求失败（{{status}}）
-- `provider.json` · `actions.bulkPrice` — 一键设置 models.dev 供应商
-- `provider.json` · `actions.bulkPriceTitle` — 一键从 models.dev 设置价格：参考模式的模型按参考厂商更新；未设置价格的模型自动匹配官方（lab）参考厂商。手动单独设置价格的模型不覆盖。
+- `provider.json` · `dialog.bulkScopeReference` — 仅从 models.dev 同步价格的模型
+- `provider.json` · `actions.bulkPrice` — 一键设置要参考的 models.dev 供应商
 - `provider.json` · `price.modeReference` — 从 models.dev 同步
 - `provider.json` · `price.stale` — 参考供应商已从 models.dev 下架
 - `provider.json` · `price.notFound` — 未在 models.dev 查到该模型
@@ -198,7 +178,6 @@
 - `provider.json` · `errors.priceNotFound` — models.dev 中未查到「{{model}}」在「{{provider}}」下的价格，请点刷新重试
 - `provider.json` · `errors.bulkRefreshFailed` — models.dev 数据拉取失败，价格未设置
 - `provider.json` · `toast.snapshotUpdated` — 已从 models.dev 更新价格快照
-- `provider.json` · `toast.bulkFilled` — 已为 {{count}} 个模型从 models.dev 设置价格
 - `provider.json` · `toast.bulkVendorless` — {{count}} 个模型未在 models.dev 找到官方参考厂商，未自动设置
 - `provider.json` · `autocomplete.loading` — models.dev 数据加载中…
 
@@ -260,20 +239,6 @@
 - `settings.json` · `affinity.modelFieldsLabel` — Model 字段（gjson 路径，每行一个）
 - `settings.json` · `affinity.modelFieldsHint` — 在请求体里按 gjson 路径查找模型名；留空时直接用请求的 model 字段（OpenAI 标准）。
 
-#### `Key`（11 条）
-
-- `agentConfig.json` · `toast.apiKeyRequired` — 请选择接入用的令牌 Key（必填）
-- `agentConfig.json` · `managedDialog.apiKeyLabel` — 接入 Key
-- `agentConfig.json` · `managedDialog.apiKeyRequiredSuffix` — （令牌页创建的 Key，必填）
-- `agentConfig.json` · `managedDialog.apiKeyPlaceholder` — 选择接入用的令牌 Key
-- `agentConfig.json` · `managedDialog.apiKeyHint` — 必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 Key。只认凭据引用（apiKeyEnv）的软件（如 dsh）会同步写进其凭据库（.credentials.yaml）
-- `logs.json` · `detail.providerKey` — 上游 Key
-- `logs.json` · `detail.downstreamKey` — 下游 Key
-- `node.json` · `provider.modelKeyCounts` — 模型 {{modelCount}} · Key {{keyCount}}
-- `provider.json` · `dialog.endpointUseKey` — 是否传入 Key
-- `provider.json` · `dialog.endpointUseKeyHint` — 将使用当前供应商的第一个 Key 作为 Bearer 凭证
-- `token.json` · `form.serverGenerates` — 服务端会在保存后生成 Token Key。
-
 #### `ID`（10 条）
 
 - `agentRules.json` · `form.modelPathHint` — 完整 gjson 路径，model 里用 {provider_id} 占位当前供应商键名；YAML 文件（如 dsh）可写 `#(id=="xxx")` 查询段先按 ID 定位插件条目
@@ -320,6 +285,16 @@
 - `settings.json` · `general.ownDescription` — 对外暴露的 hapiy 自身模型列表路径
 - `settings.json` · `general.ownEndpointLabel` — hapiy 模型列表接口路径
 - `settings.json` · `general.ownEndpointHintPrefix` — 路径必须以斜杠开头（/）。访问该路径时，hapiy 会以 OpenAI 兼容格式返回自身已知的模型列表（
+
+#### `Key`（7 条）
+
+- `agentConfig.json` · `managedDialog.apiKeyHint` — 必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 Key。只认凭据引用（apiKeyEnv）的软件（如 dsh）会同步写进其凭据库（.credentials.yaml）
+- `logs.json` · `detail.providerKey` — 上游 Key
+- `logs.json` · `detail.downstreamKey` — 下游 Key
+- `node.json` · `provider.modelKeyCounts` — 模型 {{modelCount}} · Key {{keyCount}}
+- `provider.json` · `dialog.endpointUseKey` — 是否传入 Key
+- `provider.json` · `dialog.endpointUseKeyHint` — 将使用当前供应商的第一个 Key 作为 Bearer 凭证
+- `token.json` · `form.serverGenerates` — 服务端会在保存后生成 Token Key。
 
 #### `model`（7 条）
 
@@ -388,20 +363,19 @@
 - `common.json` · `update.prepare` — 正在准备下载 v{{version}}…
 - `common.json` · `update.downloading` — 正在下载并安装 v{{version}}
 
-#### `workflow`（5 条）
-
-- `lib.json` · `doc.workflowMustBeArray` — 第 {{index}} 条 workflow 必须是数组
-- `lib.json` · `doc.workflowNotEmpty` — 第 {{index}} 条 workflow 不能为空
-- `lib.json` · `doc.workflowFirstNode` — 第 {{index}} 条 workflow 的第一个节点必须是供应商
-- `settings.json` · `debug.nodeInfoDescription` — 选中节点/插槽后 console 输出其信息（示例）：\n\n[ExecutorDebug] slot pslot-test (provider)\n  ✓ entry: entry-test enabled=true 
-- `settings.json` · `debug.flowLightsDescription` — 每次输出以下三类信息（示例）：\n\n[流光Debug] 请求 b3f2.. model=deepseek-v4-flash provider=deepseek 路径来源=请求事实 path=entry-test→psl
-
 #### `completion`（4 条）
 
 - `agentConfig.json` · `managedDialog.groupsSuffix` — （命中同一条规则，如 *completion*，的 Endpoint 归为一组）
 - `agentRules.json` · `endpointRules.hint` — 每个 Endpoint 一条规则：归纳范围填 Endpoint 匹配词（逗号分隔）。含 * 的按通配匹配（* 匹配任意字符，忽略大小写，如 *completion* 同时命中 /v1/chat/completions 和
 - `agentRules.json` · `endpointRules.tagsPlaceholder` — 例如：*completion*, *responses*, *message*
 - `settings.json` · `tokenUsage.completionHint` — 输出 Tokens（completion tokens）
+
+#### `lab`（4 条）
+
+- `agentConfig.json` · `managedDialog.bulkSetTitle` — 把全部模型设为官方（lab）参考厂商；没有官方来源的模型取其候选列表第一个
+- `agentRules.json` · `match.officialTitle` — 把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个
+- `provider.json` · `actions.bulkPriceTitle` — 一键把模型匹配到官方（lab）参考供应商并同步价格：官方源优先，官方源没有该模型时保留现有参考供应商。选「所有模型」时，手动单独设置价格的模型也会一并设为参考供应商。
+- `provider.json` · `toast.bulkFilled` — 已为 {{count}} 个模型匹配参考供应商并同步价格（官方 lab 优先）
 
 #### `OR`（4 条）
 
@@ -454,11 +428,11 @@
 - `rewrite.json` · `convention.refHint` — 不加引号 → 变量：header 名或 gjson 路径
 - `rewrite.json` · `gjson.examples.header` — HTTP header（scope=header 时，路径只填名字，如 X-Request-ID）
 
-#### `lab`（3 条）
+#### `id`（3 条）
 
-- `agentConfig.json` · `managedDialog.bulkSetTitle` — 把全部模型设为官方（lab）参考厂商；没有官方来源的模型取其候选列表第一个
-- `agentRules.json` · `match.officialTitle` — 把全部模型设为官方（lab）参考厂商；没有官方来源的取其候选列表第一个
-- `provider.json` · `actions.bulkPriceTitle` — 一键从 models.dev 设置价格：参考模式的模型按参考厂商更新；未设置价格的模型自动匹配官方（lab）参考厂商。手动单独设置价格的模型不覆盖。
+- `agentRules.json` · `form.modelPathHint` — 完整 gjson 路径，model 里用 {provider_id} 占位当前供应商键名；YAML 文件（如 dsh）可写 `#(id=="xxx")` 查询段先按 ID 定位插件条目
+- `agentRules.json` · `form.containerArray` — 数组 [{"id": ...}]（openclaw）
+- `rewrite.json` · `convention.hashHint` — hash(路径) → 按内容生成稳定 id
 
 #### `models`（3 条）
 
@@ -592,6 +566,11 @@
 - `settings.json` · `billing.exchangeDialogDescription` — 配置在线获取人民币兑美元汇率的接口：通过 GET 方法请求接口地址，从返回的 JSON 中读取人民币汇率字段。
 - `settings.json` · `billing.apiUrlHint` — 这是一个通过 GET 方法可以请求到的地址，返回的 JSON 中需包含人民币汇率字段。
 
+#### `header.`（2 条）
+
+- `rewrite.json` · `path.headerPlaceholder` — header 名（不用写 header.）
+- `rewrite.json` · `convention.crossDomainHint` — 跨域加前缀：header.名 或 body.路径
+
 #### `http`（2 条）
 
 - `errorsAgent.json` · `MODEL_FETCH_URL_INVALID` — 接口地址必须是 http(s) URL
@@ -601,11 +580,6 @@
 
 - `settings.json` · `billing.invalidUrl` — 接口地址必须以 http:// 或 https:// 开头
 - `settings.json` · `theme.installDialogDescription` — 粘贴 shadcn 主题的 JSON 地址，例如 https://ui.shadcn.com/r/themes/zinc.json。
-
-#### `id`（2 条）
-
-- `agentRules.json` · `form.modelPathHint` — 完整 gjson 路径，model 里用 {provider_id} 占位当前供应商键名；YAML 文件（如 dsh）可写 `#(id=="xxx")` 查询段先按 ID 定位插件条目
-- `agentRules.json` · `form.containerArray` — 数组 [{"id": ...}]（openclaw）
 
 #### `JSONC`（2 条）
 
@@ -717,6 +691,11 @@
 - `agentConfig.json` · `form.osWarning` — 请选择目标机器的真实系统：Windows 用 cmd.exe 命令测试，Mac/其他 用 POSIX 命令测试，选错会导致测试失败
 - `agentRules.json` · `form.windowsPathLabel` — Windows 默认路径
 
+#### `workflow`（2 条）
+
+- `settings.json` · `debug.nodeInfoDescription` — 选中节点/插槽后 console 输出其信息（示例）：\n\n[ExecutorDebug] slot pslot-test (provider)\n  ✓ entry: entry-test enabled=true 
+- `settings.json` · `debug.flowLightsDescription` — 每次输出以下三类信息（示例）：\n\n[流光Debug] 请求 b3f2.. model=deepseek-v4-flash provider=deepseek 路径来源=请求事实 path=entry-test→psl
+
 #### `YAML`（2 条）
 
 - `agentConfig.json` · `columns.providerYaml` — 供应商 YAML 片段
@@ -778,6 +757,10 @@
 #### `body`（1 条）
 
 - `settings.json` · `affinity.sessionFieldsHint` — 只在请求头里查找（不读 body），第一个有值的生效。
+
+#### `body.`（1 条）
+
+- `rewrite.json` · `convention.crossDomainHint` — 跨域加前缀：header.名 或 body.路径
 
 #### `bool`（1 条）
 
@@ -895,9 +878,9 @@
 
 - `settings.json` · `reverseProxy.placeholder` — 例如 hapiy.example.com
 
-#### `header.`（1 条）
+#### `hash`（1 条）
 
-- `rewrite.json` · `path.headerPlaceholder` — header 名（不用写 header.）
+- `rewrite.json` · `convention.hashHint` — hash(路径) → 按内容生成稳定 id
 
 #### `headers`（1 条）
 
@@ -1264,9 +1247,9 @@
 
 #### `API`（30 条）
 
-- `project/backend/internal/model/agent_config.go:414` — API 端点，必须是完整路径且一般以 /chat/completions 结尾
-- `project/backend/internal/model/agent_config.go:415` — API 端点（不填则走适配器默认）
-- `project/backend/internal/model/agent_config.go:416` — 供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:414` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:415` — API Endpoint（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:416` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
 - `project/backend/internal/model/agent_config.go:433` — Messages API 使用 anthropic-messages 协议
 - `project/backend/internal/model/agent_config.go:434` — Chat Completions API 使用 openai-completions 协议
 - `project/backend/internal/model/agent_config.go:441` — Responses API 使用 OpenAI SDK
@@ -1274,23 +1257,23 @@
 - `project/backend/internal/model/agent_config.go:443` — Chat Completions API 使用 OpenAI 兼容 SDK
 - `project/backend/internal/model/agent_config.go:446` — 该供应商的 API base URL（如 https://api.example.com/v1）
 - `project/backend/internal/model/agent_config.go:447` — 提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）
-- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
+- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
 - `project/backend/internal/model/agent_config.go:458` — Responses API 使用 openai-responses 协议
-- `project/backend/internal/model/agent_config.go:1184` — API 端点（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:1184` — API Endpoint（不填则走适配器默认）
 - `project/backend/internal/model/agent_config.go:1204` — Responses API 使用 OpenAI SDK
 - `project/backend/internal/model/agent_config.go:1211` — Messages API 使用 Anthropic SDK
 - `project/backend/internal/model/agent_config.go:1221` — Chat Completions API 使用 OpenAI 兼容 SDK
-- `project/backend/internal/model/agent_config.go:1232` — API 端点（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:1232` — API Endpoint（不填则走适配器默认）
 - `project/backend/internal/model/agent_config.go:1246` — Responses API 使用 OpenAI SDK
 - `project/backend/internal/model/agent_config.go:1253` — Messages API 使用 Anthropic SDK
 - `project/backend/internal/model/agent_config.go:1261` — Chat Completions API 使用 OpenAI 兼容 SDK
 - `project/backend/internal/model/agent_config.go:1274` — 该供应商的 API base URL（如 https://api.example.com/v1）
 - `project/backend/internal/model/agent_config.go:1278` — 提供 API key 的环境变量名（官方推荐用环境变量，不写明文 key）
-- `project/backend/internal/model/agent_config.go:1293` — API 端点，必须是完整路径且一般以 /chat/completions 结尾
-- `project/backend/internal/model/agent_config.go:1307` — 供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:1293` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:1307` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
 - `project/backend/internal/model/agent_config.go:1331` — Messages API 使用 anthropic-messages 协议
 - `project/backend/internal/model/agent_config.go:1339` — Chat Completions API 使用 openai-completions 协议
-- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
+- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
 - `project/backend/internal/model/agent_config.go:1390` — Responses API 使用 openai-responses 协议
 - `project/backend/internal/model/agent_config.go:1397` — Messages API 使用 anthropic-messages 协议
 - `project/backend/internal/model/agent_config.go:1407` — Chat Completions API 使用 openai-completions 协议
@@ -1345,6 +1328,24 @@
 - `project/backend/internal/model/agent_config.go:1376` — 最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）
 - `project/backend/internal/model/agent_config.go:1377` — 最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）
 - `project/backend/internal/model/agent_config.go:1400` — 输出 token 上限（anthropic-messages 协议必填，Anthropic 官方要求每请求带 max_tokens）
+
+#### `Endpoint`（15 条）
+
+- `project/backend/internal/handler/agent_managed.go:771` — 所选供应商没有可用的 Endpoint
+- `project/backend/internal/handler/agent_managed.go:782` — 有多个 Endpoint 分组，必须为 %s 填写后缀
+- `project/backend/internal/handler/relay.go:50` — 无法为 %s 找到可用供应商：该模型不支持请求路径 %s（模型声明的 Endpoint：%s）。请在供应商页对应模型行补充该 Endpoint，或改用模型支持的路径。
+- `project/backend/internal/model/agent_config.go:414` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:415` — API Endpoint（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:416` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
+- `project/backend/internal/model/agent_config.go:457` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
+- `project/backend/internal/model/agent_config.go:1184` — API Endpoint（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:1232` — API Endpoint（不填则走适配器默认）
+- `project/backend/internal/model/agent_config.go:1293` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:1307` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
+- `project/backend/internal/model/agent_config.go:1378` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
+- `project/backend/internal/relay/failover.go:230` — 无支持该模型与 Endpoint 的可用回退供应商
 
 #### `Chat`（13 条）
 
@@ -1560,9 +1561,9 @@
 #### `https`（4 条）
 
 - `project/backend/internal/model/agent_config.go:446` — 该供应商的 API base URL（如 https://api.example.com/v1）
-- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
+- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
 - `project/backend/internal/model/agent_config.go:1274` — 该供应商的 API base URL（如 https://api.example.com/v1）
-- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
+- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
 
 #### `openai-responses`（4 条）
 
@@ -1600,12 +1601,6 @@
 - `project/backend/internal/handler/agent_managed.go:279` — managed: 回滚托管行 %s 失败: %v
 - `project/backend/internal/handler/agent_managed.go:305` — managed: 删除托管行时清理配置块失败: %v
 - `project/backend/internal/handler/agent_managed.go:586` — managed: 读取同文件其他托管行失败: %v
-
-#### `Endpoint`（3 条）
-
-- `project/backend/internal/handler/agent_managed.go:771` — 所选供应商没有可用的 Endpoint
-- `project/backend/internal/handler/agent_managed.go:782` — 有多个 Endpoint 分组，必须为 %s 填写后缀
-- `project/backend/internal/handler/relay.go:50` — 无法为 %s 找到可用供应商：该模型不支持请求路径 %s（模型声明的 Endpoint：%s）。请在供应商页对应模型行补充该 Endpoint，或改用模型支持的路径。
 
 #### `s`（3 条）
 
@@ -1684,13 +1679,13 @@
 
 #### `chat/completions`（2 条）
 
-- `project/backend/internal/model/agent_config.go:414` — API 端点，必须是完整路径且一般以 /chat/completions 结尾
-- `project/backend/internal/model/agent_config.go:1293` — API 端点，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:414` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
+- `project/backend/internal/model/agent_config.go:1293` — API Endpoint，必须是完整路径且一般以 /chat/completions 结尾
 
 #### `v1`（2 条）
 
-- `project/backend/internal/model/agent_config.go:416` — 供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）
-- `project/backend/internal/model/agent_config.go:1307` — 供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:416` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
+- `project/backend/internal/model/agent_config.go:1307` — 供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）
 
 #### `schema`（2 条）
 
@@ -1789,8 +1784,8 @@
 
 #### `gateway.example.com/v1`（2 条）
 
-- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
-- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）
+- `project/backend/internal/model/agent_config.go:451` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
+- `project/backend/internal/model/agent_config.go:1369` — 自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）
 
 #### `UNKNOWN_MODEL`（2 条）
 
@@ -1804,13 +1799,13 @@
 
 #### `text`（2 条）
 
-- `project/backend/internal/model/agent_config.go:457` — 支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）
-- `project/backend/internal/model/agent_config.go:1378` — 支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）
+- `project/backend/internal/model/agent_config.go:457` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
+- `project/backend/internal/model/agent_config.go:1378` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
 
 #### `image`（2 条）
 
-- `project/backend/internal/model/agent_config.go:457` — 支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）
-- `project/backend/internal/model/agent_config.go:1378` — 支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）
+- `project/backend/internal/model/agent_config.go:457` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
+- `project/backend/internal/model/agent_config.go:1378` — 支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）
 
 #### `choices`（2 条）
 

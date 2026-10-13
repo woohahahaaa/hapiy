@@ -398,7 +398,6 @@ describe('跨域引用（header. / body. 前缀）', () => {
   })
 
   it('切 scope 时 hash 来源同样物化，已带前缀的不重复补', () => {
-    // 裸来源按目标域解释：header 里写的裸来源物化成 header.。
     const bareInHeader = makeAction({ mode: 'set', path: 'x', value: 'hash(messages.1.content)', scope: 'header' })
     expect(materializeSource(bareInHeader)).toBe('hash(header.messages.1.content)')
     // 跨域的来源本来就带前缀，原样保留。

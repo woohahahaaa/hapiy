@@ -77,7 +77,7 @@
     "errorPrefix": "必须以 $ 或 ¥ 开头",
     "prefixTitle": "以 $ 或 ¥ 开头",
     "rateTitle": "倍率，支持分数，如 1/2",
-    "selectReference": "选择参考厂商",
+    "selectReference": "选择参考供应商",
     "noSnapshot": "尚未获取快照",
     "noSnapshotRefresh": "尚未获取价格快照，请点刷新",
     "stale": "参考供应商已从 models.dev 下架",
@@ -116,7 +116,7 @@
     "disableReset": "已恢复故障转移禁用状态",
     "snapshotUpdated": "已从 models.dev 更新价格快照",
     "bulkFilled": "已为 {{count}} 个模型匹配参考供应商并同步价格（官方 lab 优先）",
-    "bulkVendorless": "{{count}} 个模型未在 models.dev 找到官方参考厂商，未自动设置",
+    "bulkVendorless": "{{count}} 个模型未在 models.dev 找到官方参考供应商，未自动设置",
     "noAutoModels": "没有可自动设置的模型",
     "synced": "已同步到 {{count}} 个其他供应商的同名模型"
   },

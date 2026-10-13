@@ -113,7 +113,7 @@ func TestRewriteNotes_crossDomainMissingSourceReportsNoEffect(t *testing.T) {
 	}
 }
 
-// The same note contract holds for a set-from-hash op whose source is absent.
+// The same note contract holds for a hash op whose source is absent.
 func TestRewriteNotes_hashMissingSourceReportsNoEffect(t *testing.T) {
 	chain, err := compileRewriteChain("r1", `[
 		{"path":"header.x-opencode-session","mode":"set","value":{"hash":"body.messages.1.content"},"scope":"header"}

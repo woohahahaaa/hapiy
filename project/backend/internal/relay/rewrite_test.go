@@ -786,7 +786,7 @@ func TestRewriteOpencodeSessionChain(t *testing.T) {
 		{"mode":"set","path":"header.x-opencode-session","value":{"ref":"X-Session-Id"},"scope":"header"},
 		{"mode":"set","path":"header.x-opencode-session","value":{"ref":"x-deepseek-harness-session-id"},"scope":"header",
 		 "conditions":[{"path":"header.x-opencode-session","op":"eq","value":"","scope":"header"}]},
-		{"mode":"set","path":"header.x-opencode-session","value":{"hash":"body.messages.1.content"},"scope":"header",
+		{"path":"header.x-opencode-session","mode":"set","value":{"hash":"body.messages.1.content"},"scope":"header",
 		 "conditions":[{"path":"header.x-opencode-session","op":"eq","value":"","scope":"header"}]}
 	]`
 	chain, err := compileRewriteChain("r", script)
@@ -835,20 +835,20 @@ func TestCompileHashSource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	if chain[0].HashPath != "messages.1.content" || chain[0].HashDomain != "body" {
-		t.Fatalf("hash source = %q/%q, want messages.1.content/body", chain[0].HashDomain, chain[0].HashPath)
+	if chain[0].HashSource != "messages.1.content" || chain[0].HashDomain != "body" {
+		t.Fatalf("hash source = %q/%q, want messages.1.content/body", chain[0].HashDomain, chain[0].HashSource)
 	}
 	// 裸来源同样按目标域解释。
 	bare, err := compileRewriteChain("r", `[{"path":"out","mode":"set","value":{"hash":"messages.1.content"}}]`)
 	if err != nil {
 		t.Fatalf("compile bare: %v", err)
 	}
-	if bare[0].HashPath != "messages.1.content" || bare[0].HashDomain != "body" {
-		t.Fatalf("bare hash source = %q/%q, want messages.1.content/body", bare[0].HashDomain, bare[0].HashPath)
+	if bare[0].HashSource != "messages.1.content" || bare[0].HashDomain != "body" {
+		t.Fatalf("bare hash source = %q/%q, want messages.1.content/body", bare[0].HashDomain, bare[0].HashSource)
 	}
 }
 
-func TestCompileHashSourceRejectsBadShapes(t *testing.T) {
+func TestCompileHashRejectsBadShapes(t *testing.T) {
 	if _, err := compileRewriteChain("r", `[{"path":"x","mode":"set","value":{"hash":123}}]`); err == nil || !strings.Contains(err.Error(), "hash is not a string") {
 		t.Fatalf("expected non-string hash rejection, got: %v", err)
 	}

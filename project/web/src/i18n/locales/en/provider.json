@@ -39,14 +39,14 @@
     "bulkScopeReference": "Only models synced from models.dev",
     "syncTitle": "Sync price settings",
     "syncConfirm": "Confirm sync",
-    "syncing": "Syncing...",
+    "syncing": "Syncing…",
     "syncQuestion": "Sync the current price settings of model \"{{model}}\" to the same-named models of other providers?",
     "syncDetail": "The price mode, reference provider, price snapshot and multiplier are written to the same-named models of other providers.",
     "deleteTitle": "Confirm deletion",
     "deleteDescription": "Provider \"{{name}}\" and all of its channel configurations will be deleted. This cannot be undone."
   },
   "actions": {
-    "saving": "Saving...",
+    "saving": "Saving…",
     "addRow": "Add row",
     "fetchModels": "Fetch models from upstream",
     "bulkPrice": "Set the models.dev providers to reference in one click",
@@ -96,7 +96,7 @@
     "deselectAll": "Deselect all",
     "replaceAndAdd": "Clear existing and add",
     "add": "Add",
-    "adding": "Adding..."
+    "adding": "Adding…"
   },
   "errors": {
     "unexpected": "Something unexpected happened, please try again",
@@ -138,7 +138,7 @@
     "add": "Add rate"
   },
   "autocomplete": {
-    "loading": "Loading models.dev data...",
+    "loading": "Loading models.dev data…",
     "noMatch": "No matching model found",
     "placeholder": "Enter model name"
   },

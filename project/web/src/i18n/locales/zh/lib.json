@@ -25,9 +25,9 @@
     "nodeMustBeObject": "节点必须是对象",
     "unknownNodeType": "未知的节点类型：{{type}}",
     "documentMustBeArray": "拓扑文档必须是数组",
-    "workflowMustBeArray": "第 {{index}} 条 workflow 必须是数组",
-    "workflowNotEmpty": "第 {{index}} 条 workflow 不能为空",
-    "workflowFirstNode": "第 {{index}} 条 workflow 的第一个节点必须是供应商",
+    "workflowMustBeArray": "第 {{index}} 条工作流必须是数组",
+    "workflowNotEmpty": "第 {{index}} 条工作流不能为空",
+    "workflowFirstNode": "第 {{index}} 条工作流的第一个节点必须是供应商",
     "unknownNodeConversion": "无法转换节点类型：{{type}}"
   },
   "modelsDev": {

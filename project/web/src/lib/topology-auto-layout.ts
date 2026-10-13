@@ -179,8 +179,10 @@ export type LayoutPositionMap = Record<string, LayoutPosition>
  *   3. Switch branches: a 条件开关 ends its row; its two outgoing arms (是/否)
  *      are two further workflow rows placed to the RIGHT of the switch (its
  *      right edge + nodeGap, like any row member following its predecessor)
- *      and left-aligned with EACH OTHER. The two branch rows form a block that
- *      is vertically centered on the switch's centerline. A switch inside a
+ *      and left-aligned with EACH OTHER, 是 above 否 to match the switch's
+ *      rendered handles (stored wire order is irrelevant). The two branch rows
+ *      form a block that is vertically centered on the switch's centerline. A
+ *      switch inside a
  *      branch spawns its own block to its right the same way. A node with
  *      multiple incoming wires belongs to the row of its FIRST incoming wire
  *      (canvasWires order) — that source is its horizontal alignment reference.
@@ -248,6 +250,15 @@ export function layoutFlatCanvas(
   const claimed = new Set<string>()
   const entryRows: LayoutRow[] = []
 
+  // Arms of a switch leave its row in the order the node renders its handles
+  // (是 above 否), not in stored-wire order: the branch rows are stacked in
+  // this order, so anything else crosses the two outgoing edges.
+  const armRank = (w: FlatWire): number => {
+    if (w.branch === 'yes') return 0
+    if (w.branch === 'no') return 1
+    return 2
+  }
+
   const buildRow = (startId: string, row: LayoutRow): void => {
     let cur: string | undefined = startId
     while (cur !== undefined) {
@@ -260,7 +271,8 @@ export function layoutFlatCanvas(
       const outs: FlatWire[] = outgoingOf.get(cur) ?? []
       if (outs.length === 0) break
       if (isSwitchNode(node)) {
-        for (const w of outs) {
+        const arms = [...outs].sort((a, b) => armRank(a) - armRank(b))
+        for (const w of arms) {
           if (w.target === undefined) continue
           if (claimed.has(w.target) || parentOf.get(w.target) !== cur) continue
           const child: LayoutRow = { id: `${row.id}→${w.target}`, chain: [], branches: [] }

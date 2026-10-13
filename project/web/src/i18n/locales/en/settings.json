@@ -1,6 +1,6 @@
 {
   "loading": "Loading settings…",
-  "savingEllipsis": "Saving...",
+  "savingEllipsis": "Saving…",
   "restoreDefaults": "Restore defaults",
   "errors": {
     "operationFailed": "Operation failed, please try again",

@@ -1,0 +1,46 @@
+{
+  "title": "Help",
+  "toc": "Contents",
+  "selectSection": "Choose a section",
+  "searchPlaceholder": "Search the docs…",
+  "searchAria": "Search the docs",
+  "foundCount_one": "{{count}} match",
+  "foundCount_other": "{{count}} matches",
+  "tocTitle": "On this page",
+  "noResults": "No matching content",
+  "heroTitle": "hapiy Help",
+  "heroDescription": "A self-hosted AI gateway and agent onboarding manager: distribute models, take over AI tool configs, starting from your first forwarding route.",
+  "footer": "hapiy Help · Content updates with each release; the running app is the source of truth",
+  "quickLinks": {
+    "quickStart": {
+      "id": "quick-start",
+      "title": "Quick start",
+      "description": "Four steps to your first API forwarding workflow"
+    },
+    "topology": {
+      "id": "topology",
+      "title": "Topology",
+      "description": "Visually arrange how requests are forwarded"
+    },
+    "models": {
+      "id": "models",
+      "title": "Models",
+      "description": "Configure upstream providers and access tokens"
+    },
+    "requestHandling": {
+      "id": "request-handling",
+      "title": "Request Handling",
+      "description": "Rewrite, concurrency, failover and channel affinity"
+    },
+    "monitor": {
+      "id": "monitor",
+      "title": "Monitor",
+      "description": "Active requests, usage logs and log capture"
+    },
+    "settings": {
+      "id": "settings",
+      "title": "Settings",
+      "description": "BaseURL, currency rates, backups and usage fields"
+    }
+  }
+}

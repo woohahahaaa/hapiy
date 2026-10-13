@@ -60,7 +60,7 @@
     {
       "scope": "provider",
       "key": "baseURL",
-      "description": "自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）",
+      "description": "自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）",
       "recommended": null,
       "required": true
     },
@@ -102,7 +102,7 @@
     {
       "scope": "model",
       "key": "input",
-      "description": "支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）",
+      "description": "支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）",
       "recommended": null,
       "required": false
     }

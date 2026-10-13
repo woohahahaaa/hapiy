@@ -9,6 +9,29 @@ export const DEFAULT_LANGUAGE: Language = 'zh'
 // Backend setting key that stores the user's language choice.
 export const LANGUAGE_SETTING_KEY = 'ui_language'
 
+// localStorage cache of the same choice: the help page opens in a new tab
+// (outside the authenticated app and its LanguageProvider), so it needs a
+// client-side copy to start in the right language.
+export const LANGUAGE_CACHE_KEY = 'hapiy_language'
+
+export function readCachedLanguage(): Language | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    return normalizeLanguage(localStorage.getItem(LANGUAGE_CACHE_KEY))
+  } catch {
+    return null
+  }
+}
+
+export function writeCachedLanguage(language: Language): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(LANGUAGE_CACHE_KEY, language)
+  } catch {
+    /* private mode / quota: the cache is best-effort */
+  }
+}
+
 export function isLanguage(value: string): value is Language {
   return (SUPPORTED_LANGUAGES as readonly string[]).includes(value)
 }

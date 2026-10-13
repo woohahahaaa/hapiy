@@ -23,13 +23,13 @@ func applyHeaderOp(body []byte, headers map[string]string, origBody []byte, orig
 	}
 	switch op.Mode {
 	case "set":
-		if op.HashPath != "" {
+		if op.HashSource != "" {
 			// 哈希来源：从原始请求取文本，写入派生出的稳定 id。
-			src, ok := readHashSource(origBody, origHeaders, op.HashDomain, op.HashPath)
+			src, ok := readHashSource(origBody, origHeaders, op.HashDomain, op.HashSource)
 			if !ok {
 				return body, headers, fmt.Sprintf("引用源 %s 不存在", hashSourceLabel(op, true)), nil
 			}
-			headers[key] = hashID(src)
+			setHeader(headers, key, hashID(src))
 			break
 		}
 		if op.Ref != "" {

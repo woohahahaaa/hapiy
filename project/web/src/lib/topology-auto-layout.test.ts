@@ -483,6 +483,35 @@ describe('layoutFlatCanvas — switch branches', () => {
     expect(out['no1-a'].y - (out['yes1-a'].y + 100)).toBe(20)
   })
 
+  it('orders branch rows by handle (是 above 否) even when the 否 wire is stored first', () => {
+    const nodes = [
+      flatNode('entry-a', 'requestEntry'),
+      switchNode('sw-a'),
+      flatNode('yes1-a', 'slot', 'requestModify'),
+      flatNode('no1-a', 'slot', 'requestModify'),
+    ]
+    // 否分支先存、是分支后存（真实数据就是这样）：分支行的上下顺序必须按
+    // branch 标签，而不是线序——节点渲染的 handle 是上「是」下「否」。
+    const wires = [
+      wire('entry-a', 'sw-a'),
+      wire('sw-a', 'no1-a', 'no'),
+      wire('sw-a', 'yes1-a', 'yes'),
+    ]
+    const canvas = canvasFromFlat(nodes, wires)
+    const sizes = sizesFrom({
+      'entry-a': { width: 200, height: 60 },
+      'sw-a': { width: 120, height: 50 },
+      'yes1-a': { width: 240, height: 80 },
+      'no1-a': { width: 240, height: 80 },
+    })
+    const out = layoutFlatCanvas(canvas, [] as Node[], flatOpts, sizes)
+
+    // 是行在上、否行在下，两根出线才不会交叉。
+    expect(out['yes1-a'].y).toBeLessThan(out['no1-a'].y)
+    expect(out['no1-a'].y - (out['yes1-a'].y + 80)).toBe(20)
+    expect(out['yes1-a'].x).toBe(out['no1-a'].x)
+  })
+
   it('a node with multiple incoming wires belongs to its FIRST incoming row', () => {
     const nodes = [
       flatNode('entry-a', 'requestEntry'),

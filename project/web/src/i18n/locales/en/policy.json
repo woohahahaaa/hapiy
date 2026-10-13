@@ -23,7 +23,7 @@
     "deleteDescription": "Rule \"{{name}}\" will be deleted. This cannot be undone."
   },
   "actions": {
-    "saving": "Saving..."
+    "saving": "Saving…"
   },
   "errors": {
     "loadFailed": "Failed to load",

@@ -11,6 +11,7 @@ import {
 import { Link, useLocation } from "react-router-dom"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { useTranslation } from "react-i18next"
 import { AppIcon } from "@/components/wooh/AppIcon"
 import { ModeToggle } from "@/components/wooh/ModeToggle"
 import {
@@ -22,7 +23,8 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
-import helpMarkdown from "./help.md?raw"
+import helpZh from "./help.md?raw"
+import helpEn from "./help.en.md?raw"
 
 // ── 目录解析 ──────────────────────────────────────────────────────────────────
 
@@ -34,48 +36,18 @@ interface HelpSection {
   readonly text: string
 }
 
-const QUICK_LINKS: readonly {
-  readonly id: string
-  readonly title: string
-  readonly description: string
+// 快速入口卡片：文案在 help 命名空间里（中文 id 是章标题，英文是标题 slug），
+// 图标属于代码，不进语言包。
+const QUICK_LINK_CARDS: readonly {
+  readonly key: string
   readonly icon: string
 }[] = [
-  {
-    id: "快速开始",
-    title: "快速开始",
-    description: "四步搭好第一条 API 转发工作流",
-    icon: "bolt",
-  },
-  {
-    id: "转发拓扑",
-    title: "转发拓扑",
-    description: "可视化编排请求的转发路径",
-    icon: "call_split",
-  },
-  {
-    id: "模型接入",
-    title: "模型接入",
-    description: "配置上游供应商与访问令牌",
-    icon: "layers",
-  },
-  {
-    id: "请求处理",
-    title: "请求处理",
-    description: "改写、并发控制、故障转移与渠道亲和",
-    icon: "tune",
-  },
-  {
-    id: "监控",
-    title: "监控",
-    description: "活动请求、使用记录与日志抓取",
-    icon: "monitoring",
-  },
-  {
-    id: "系统设置",
-    title: "系统设置",
-    description: "BaseURL、汇率、备份与用量查询",
-    icon: "settings",
-  },
+  { key: "quickStart", icon: "bolt" },
+  { key: "topology", icon: "call_split" },
+  { key: "models", icon: "layers" },
+  { key: "requestHandling", icon: "tune" },
+  { key: "monitor", icon: "monitoring" },
+  { key: "settings", icon: "settings" },
 ]
 
 // 与 Markdown 标题渲染共用同一套 id 生成规则，保证目录锚点可定位。
@@ -312,8 +284,25 @@ const CUSTOM_SCROLLBAR = [
 ].join(" ")
 
 export function HelpPage() {
-  const sections = useMemo(() => parseSections(helpMarkdown), [])
-  const bodyMarkdown = useMemo(() => helpMarkdown.replace(/^#\s+.*\n+/, ""), [])
+  const { t, i18n } = useTranslation("help")
+  // 帮助页不进 AuthGate（不依赖登录态），所以语言直接取 i18n 当前语言。
+  const isEnglish = (i18n.resolvedLanguage ?? i18n.language ?? "zh")
+    .toLowerCase()
+    .startsWith("en")
+  const markdown = isEnglish ? helpEn : helpZh
+  const quickLinks = useMemo(
+    () =>
+      QUICK_LINK_CARDS.map(({ key, icon }) => ({
+        key,
+        icon,
+        id: t(`quickLinks.${key}.id`),
+        title: t(`quickLinks.${key}.title`),
+        description: t(`quickLinks.${key}.description`),
+      })),
+    [t]
+  )
+  const sections = useMemo(() => parseSections(markdown), [markdown])
+  const bodyMarkdown = useMemo(() => markdown.replace(/^#\s+.*\n+/, ""), [markdown])
   const groups = useMemo(() => {
     const result: { item: HelpSection; children: HelpSection[] }[] = []
     for (const item of sections) {
@@ -323,8 +312,8 @@ export function HelpPage() {
     return result
   }, [sections])
   const iconById = useMemo(
-    () => new Map(QUICK_LINKS.map((link) => [link.id, link.icon])),
-    []
+    () => new Map(quickLinks.map((link) => [link.id, link.icon])),
+    [quickLinks]
   )
 
   const [query, setQuery] = useState("")
@@ -423,7 +412,7 @@ export function HelpPage() {
               hapiy
             </Link>
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              帮助文档
+              {t("title")}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -436,10 +425,10 @@ export function HelpPage() {
       <div className="relative mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col">
         {/* 小屏目录：下拉跳转 */}
         <div className="flex items-center gap-2 border-b border-border-subtle bg-card px-4 py-2 lg:hidden">
-          <span className="shrink-0 text-xs text-muted-foreground">目录</span>
+          <span className="shrink-0 text-xs text-muted-foreground">{t("toc")}</span>
           <Select value={activeId} onValueChange={scrollTo}>
             <SelectTrigger size="sm" className="min-w-0 flex-1">
-              <SelectValue placeholder="选择章节" />
+              <SelectValue placeholder={t("selectSection")} />
             </SelectTrigger>
             <SelectContent className="max-h-80">
               {sections.map((item) => (
@@ -476,19 +465,21 @@ export function HelpPage() {
                     scrollTo(searchResults[0].id)
                   if (event.key === "Escape") setQuery("")
                 }}
-                placeholder="搜索文档…"
-                aria-label="搜索文档"
+                placeholder={t("searchPlaceholder")}
+                aria-label={t("searchAria")}
                 className="h-8 w-full rounded-none border border-border-subtle bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
               />
             </div>
             <div className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
-              {trimmedQuery ? `找到 ${searchResults.length} 处` : "本页目录"}
+              {trimmedQuery
+                ? t("foundCount", { count: searchResults.length })
+                : t("tocTitle")}
             </div>
 
             {trimmedQuery ? (
               searchResults.length === 0 ? (
                 <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  没有找到相关内容
+                  {t("noResults")}
                 </p>
               ) : (
                 <div className="flex flex-col gap-1 pb-10">
@@ -560,16 +551,15 @@ export function HelpPage() {
             <div className="relative">
               <article className="relative mx-auto w-full max-w-3xl px-6 py-10 lg:px-10">
                 <h1 className="text-4xl font-semibold tracking-tight">
-                  hapiy 帮助文档
+                  {t("heroTitle")}
                 </h1>
                 <p className="mt-3 max-w-2xl text-[15px] leading-7 text-muted-foreground">
-                  自托管的 AI 网关与 Agent 接入管理器：分发模型、接管 AI
-                  工具配置，从第一条转发链路开始。
+                  {t("heroDescription")}
                 </p>
                 <div className="mt-8 grid gap-3 sm:grid-cols-2">
-                  {QUICK_LINKS.map((link) => (
+                  {quickLinks.map((link) => (
                     <button
-                      key={link.id}
+                      key={link.key}
                       type="button"
                       onClick={() => scrollTo(link.id)}
                       className="group flex items-start gap-3 rounded-none border border-border-subtle bg-card/40 p-4 text-left transition-colors hover:border-border hover:bg-card"
@@ -602,7 +592,7 @@ export function HelpPage() {
                 </ReactMarkdown>
                 <Separator className="mt-12 bg-border-subtle" />
                 <p className="py-6 text-xs text-muted-foreground">
-                  hapiy 帮助文档 · 内容随版本更新，以实际页面为准
+                  {t("footer")}
                 </p>
               </article>
             </div>

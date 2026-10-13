@@ -46,7 +46,7 @@
     {
       "scope": "provider",
       "key": "options.baseURL",
-      "description": "API 端点（不填则走适配器默认）",
+      "description": "API Endpoint（不填则走适配器默认）",
       "recommended": null,
       "required": true
     },

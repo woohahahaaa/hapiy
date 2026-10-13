@@ -104,7 +104,7 @@
     "title": "Edit JSON",
     "format": "Format",
     "formatFailed": "Format failed: invalid JSON",
-    "saving": "Saving...",
+    "saving": "Saving…",
     "saveConfirmTitle": "Save JSON",
     "saveConfirmDescription": "You modified the JSON content. Save it to the backend? The ID fields are strongly bound to data associated by ID, such as usage records and history. Changing any ID may cause these records to stop matching. Please confirm you understand this risk.",
     "reconsider": "Let me reconsider",

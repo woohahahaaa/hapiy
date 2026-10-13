@@ -411,9 +411,9 @@ var agentRecommendationDescriptionEn = map[string]string{
 	"认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）": "API key (the actual key value, not an env-var name; for local Ollama use the placeholder ollama)",
 	"认证密钥": "API key",
 	"认证密钥。规范位置在 auth.profiles 段（用环境变量引用如 ${ZAI_API_KEY}），不在 models.providers 下内联": "API key. The canonical location is the auth.profiles section (reference an env var such as ${ZAI_API_KEY}); do not inline it under models.providers",
-	"API 端点，必须是完整路径且一般以 /chat/completions 结尾":                                     "API endpoint; must be a full path and usually ends with /chat/completions",
-	"API 端点（不填则走适配器默认）":                                                           "API endpoint (leave empty to use the adapter default)",
-	"供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）":                                            "Provider API endpoint (follow the official format; do not add an extra /v1)",
+	"API Endpoint，必须是完整路径且一般以 /chat/completions 结尾":                                     "API endpoint; must be a full path and usually ends with /chat/completions",
+	"API Endpoint（不填则走适配器默认）":                                                           "API endpoint (leave empty to use the adapter default)",
+	"供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）":                                            "Provider API endpoint (follow the official format; do not add an extra /v1)",
 	"最大输入 token 数": "Max input tokens",
 	"最大输出 token 数": "Max output tokens",
 	"上下文 token 上限": "Context window token limit",
@@ -448,13 +448,13 @@ var agentRecommendationDescriptionEn = map[string]string{
 	// DeepSeek Harness（dsh）模板
 	"认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件":                         "Credential reference (an environment-variable name resolved per request through dsh's credential seam); the literal secret lives in $DSH_HOME/.credentials.yaml and is never written into the config file",
 	"选择器里显示的供应商名称（缺省用供应商 id）":                                                                  "Provider name shown by selector surfaces (defaults to the provider id)",
-	"自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）":                               "API endpoint of a hand-declared provider (e.g. https://gateway.example.com/v1; omit it on installed catalog providers to use the catalog endpoint)",
+	"自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）":                               "API endpoint of a hand-declared provider (e.g. https://gateway.example.com/v1; omit it on installed catalog providers to use the catalog endpoint)",
 	"接口协议（openai-completions / openai-responses / anthropic-messages），自定义供应商必填，一般由 endpoint 关键词自动归类": "Wire protocol (openai-completions / openai-responses / anthropic-messages); required for hand-declared routes, usually auto-classified by endpoint keywords",
 	"模型唯一标识（必须与供应商侧精确一致，否则请求前报 UNKNOWN_MODEL）":                                                       "Exact model id (must match the provider side; a mismatch fails with UNKNOWN_MODEL before any request)",
 	"模型显示名（缺省用安装目录名，再缺省用 id）":                                                                        "Model display name (defaults to the catalog name, then the id)",
 	"最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）":                                            "Context window in tokens (falls back to the route's defaultContextWindow, default 262144)",
 	"最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）":                                                             "Maximum output tokens (configuring one also makes it the model's per-request default cap)",
-	"支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）":                                                 "Supported input modalities (text / image only; a declaration rather than a check — an endpoint that disagrees refuses the request)",
+	"支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）":                                                 "Supported input modalities (text / image only; a declaration rather than a check — an endpoint that disagrees refuses the request)",
 	"Responses API 使用 openai-responses 协议":                                                           "Responses API uses the openai-responses protocol",
 }
 
@@ -1181,7 +1181,7 @@ func ListBuiltinTemplates() []AgentTemplateConfig {
 var opencodeRecommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（供应商名称）", Required: true},
 	{Scope: "provider", Key: "npm", Description: "AI SDK 适配器包名（@ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic），一般由 endpoint 关键词自动归类", Required: true},
-	{Scope: "provider", Key: "options.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
+	{Scope: "provider", Key: "options.baseURL", Description: "API Endpoint（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "options.apiKey", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "options.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
 	{Scope: "model", Key: "name", Description: "模型在界面里的显示名"},
@@ -1229,7 +1229,7 @@ var opencodeProtocols = []AgentProtocol{
 var opencodeV2Recommendations = []AgentRecommendation{
 	{Scope: "provider", Key: "name", Description: "在 opencode 界面里的显示名（供应商名称）", Required: true},
 	{Scope: "provider", Key: "package", Description: "运行时适配器包（@opencode/ai/providers/openai-compatible / openai / anthropic），一般由 endpoint 关键词自动归类", Recommended: "@opencode/ai/providers/openai-compatible", Required: true},
-	{Scope: "provider", Key: "settings.baseURL", Description: "API 端点（不填则走适配器默认）", Required: true},
+	{Scope: "provider", Key: "settings.baseURL", Description: "API Endpoint（不填则走适配器默认）", Required: true},
 	{Scope: "provider", Key: "settings.apiKey", Description: "认证密钥", Required: true},
 	{Scope: "provider", Key: "settings.setCacheKey", Description: "启用 promptCacheKey 缓存优化（官方默认 false，建议开启）", Recommended: true},
 	{Scope: "model", Key: "name", Description: "模型在界面里的显示名"},
@@ -1290,7 +1290,7 @@ var workBuddyRecommendations = []AgentRecommendation{
 	// 平铺 models 结构（json_paths 为空），apiKeyFieldFor 只扫描 provider 级
 	// 推荐，因此该标记当前只作文档/字段追踪，不参与托管生成。
 	{Scope: "model", Key: "apiKey", Description: "认证密钥（实际密钥值，非环境变量名；Ollama 本地填占位符 ollama）", Required: true},
-	{Scope: "model", Key: "url", Description: "API 端点，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
+	{Scope: "model", Key: "url", Description: "API Endpoint，必须是完整路径且一般以 /chat/completions 结尾", Required: true},
 	{Scope: "model", Key: "maxInputTokens", Description: "最大输入 token 数"},
 	{Scope: "model", Key: "maxOutputTokens", Description: "最大输出 token 数"},
 	{Scope: "model", Key: "supportsToolCall", Description: "是否支持工具调用"},
@@ -1304,7 +1304,7 @@ var workBuddyRecommendations = []AgentRecommendation{
 // model 字段（如 contextWindow、maxTokens）由 models.dev 同步填充。只保留
 // 缺了就跑不起来的必填字段与输入格式字段（input 收 text/image/video/audio）。
 var openclawRecommendations = []AgentRecommendation{
-	{Scope: "provider", Key: "baseUrl", Description: "供应商 API 端点（按官方格式，注意不要多写不该有的 /v1）", Required: true},
+	{Scope: "provider", Key: "baseUrl", Description: "供应商 API Endpoint（按官方格式，注意不要多写不该有的 /v1）", Required: true},
 	{Scope: "provider", Key: "apiKey", Description: "认证密钥", Required: true},
 	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见 openclawProtocols）；
 	// common 里只保留字段本身做驱动识别，不给推荐值，避免管理模型把
@@ -1366,7 +1366,7 @@ var deepseekHarnessRecommendations = []AgentRecommendation{
 	// 引用 HAPIY_API_KEY，目标机把 hapiy 令牌导出到该环境变量即可。
 	{Scope: "provider", Key: "apiKeyEnv", Description: "认证引用（环境变量名，经 dsh 凭据系统按请求解析）；明文密钥存在 $DSH_HOME/.credentials.yaml，不写进配置文件", Recommended: "HAPIY_API_KEY", Required: true},
 	{Scope: "provider", Key: "displayName", Description: "选择器里显示的供应商名称（缺省用供应商 id）"},
-	{Scope: "provider", Key: "baseURL", Description: "自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）", Required: true},
+	{Scope: "provider", Key: "baseURL", Description: "自定义供应商的 API Endpoint（如 https://gateway.example.com/v1；已装目录供应商省略则用目录 Endpoint）", Required: true},
 	// api 是协议/SDK 驱动字段，由 endpoint 关键词自动归类（见
 	// deepseekHarnessProtocols）；common 里只保留字段本身做驱动识别，不给
 	// 推荐值，避免管理模型把 anthropic-messages 端点误判成 openai-completions。
@@ -1375,7 +1375,7 @@ var deepseekHarnessRecommendations = []AgentRecommendation{
 	{Scope: "model", Key: "name", Description: "模型显示名（缺省用安装目录名，再缺省用 id）"},
 	{Scope: "model", Key: "contextWindow", Description: "最大上下文 token 数（缺省走路由 defaultContextWindow，默认 262144）"},
 	{Scope: "model", Key: "maxTokens", Description: "最大输出 token 数（配置后同时成为该模型每请求的默认输出上限）"},
-	{Scope: "model", Key: "input", Description: "支持的输入类型（仅 text / image；声明是断言不是校验，端点不支持会在请求时被拒）"},
+	{Scope: "model", Key: "input", Description: "支持的输入类型（仅 text / image；声明是断言不是校验，Endpoint 不支持会在请求时被拒）"},
 }
 
 // deepseekHarnessProtocols 按 endpoint 关键词把 dsh-llm-pi-ai 的 `api`

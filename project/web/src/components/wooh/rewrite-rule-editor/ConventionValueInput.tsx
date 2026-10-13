@@ -23,7 +23,8 @@ interface ConventionValueInputProps {
 
 // 「引号约定」的共享输入框：按 parseValueInput 结果给文本着色
 // （带引号字符串 → 绿、原生字面量 → 紫、变量引用 → 蓝、哈希来源 → 品红、跨域引用 → 青、
-// 不合法 → 红），聚焦时在上方弹出约定说明 tooltip，不合法时在下方保留 muted 提示。
+// 不合法 → 红），
+// 聚焦时在上方弹出约定说明 tooltip，不合法时在下方保留 muted 提示。
 export function ConventionValueInput({
   text,
   onChange,
@@ -80,6 +81,11 @@ export function ConventionValueInput({
                 {refs && (
                   <p className="text-xs">
                     {t('convention.refHint')}
+                  </p>
+                )}
+                {refs && (
+                  <p className="text-xs">
+                    {t('convention.crossDomainHint')}
                   </p>
                 )}
                 {refs && (

@@ -85,9 +85,9 @@
   "convention": {
     "refHint": "不加引号 → 变量：header 名或 gjson 路径",
     "crossDomainHint": "跨域加前缀：header.名 或 body.路径",
-    "hashHint": "hash(路径) → 按内容生成稳定 id",
     "literalHint": "true/false/null/数字 → JSON 字面量",
-    "stringHint": "加引号 → 固定字符串，引号内为内容"
+    "stringHint": "加引号 → 固定字符串，引号内为内容",
+    "hashHint": "hash(路径) → 按内容生成稳定 id"
   },
   "invert": {
     "label": "反向匹配",

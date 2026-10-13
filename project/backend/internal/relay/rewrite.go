@@ -36,13 +36,14 @@ type RewriteOp struct {
 	// same-scope behavior), so scripts written before cross-domain refs exist
 	// keep their meaning byte for byte.
 	RefDomain string
-	// HashPath/HashDomain are the set-from-hash form ({"hash":"<source>"}): the
-	// same source syntax as Ref, but the written value is derived from the source
-	// text instead of copied. Because the source is read by path, a history that
-	// shifts under it (e.g. compaction dropping the source message) derives a
-	// different id — still deterministic, just a new bucket for that session.
-	// Empty HashPath means "not a hash op".
-	HashPath   string
+	// HashSource/HashDomain back the set-from-hash value form
+	// ({"hash":"<source>"}): the value written is derived from the source text
+	// instead of copied. The source uses the same syntax as Ref — bare means the
+	// destination's domain, header./body. crosses explicitly. Because the source
+	// is read by path, a history that shifts under it (e.g. compaction dropping
+	// the source message) derives a different id: still deterministic, just a new
+	// bucket for that session. Empty HashSource means "not a hash op".
+	HashSource string
 	HashDomain string
 	From       string             // replace / regex_replace source
 	To         string             // replace / regex_replace target
@@ -133,7 +134,7 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 			if path == "" {
 				return op, fmt.Errorf("rule %s: op %d (set): hash source is empty", ruleID, index)
 			}
-			op.HashPath = path
+			op.HashSource = path
 			op.HashDomain = domain
 			break
 		}
@@ -265,7 +266,7 @@ func parseValueRef(raw json.RawMessage) (string, bool, error) {
 	return ref, true, nil
 }
 
-// parseValueHash recognises the hash-source form {"hash":"<source>"}. Like
+// parseValueHash recognises the hash-source value form {"hash":"<source>"}. Like
 // parseValueRef it requires an object with exactly one string `hash` key, so a
 // body value that legitimately is an object is never misread as one.
 func parseValueHash(raw json.RawMessage) (string, bool, error) {
@@ -318,15 +319,15 @@ func refSourceLabel(op *RewriteOp, destIsHeader bool) string {
 	return op.Ref
 }
 
-// hashSourceLabel mirrors refSourceLabel for the set-from-hash form.
+// hashSourceLabel mirrors refSourceLabel for the set-from-hash value form.
 func hashSourceLabel(op *RewriteOp, destIsHeader bool) string {
 	if op.HashDomain == "header" && !destIsHeader {
-		return "header." + op.HashPath
+		return "header." + op.HashSource
 	}
 	if op.HashDomain == "body" && destIsHeader {
-		return "body." + op.HashPath
+		return "body." + op.HashSource
 	}
-	return op.HashPath
+	return op.HashSource
 }
 
 // readHashSource reads the hash source from the pre-rewrite snapshot.
@@ -550,9 +551,9 @@ func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, ori
 	}
 	switch op.Mode {
 	case "set":
-		if op.HashPath != "" {
+		if op.HashSource != "" {
 			// 哈希来源：从原始请求取文本，写入派生出的稳定 id。
-			src, ok := readHashSource(origBody, origHeaders, op.HashDomain, op.HashPath)
+			src, ok := readHashSource(origBody, origHeaders, op.HashDomain, op.HashSource)
 			if !ok {
 				return body, headers, fmt.Sprintf("引用源 %s 不存在", hashSourceLabel(op, false)), nil
 			}

@@ -1,0 +1,45 @@
+{
+  "title": "帮助文档",
+  "toc": "目录",
+  "selectSection": "选择章节",
+  "searchPlaceholder": "搜索文档…",
+  "searchAria": "搜索文档",
+  "foundCount": "找到 {{count}} 处",
+  "tocTitle": "本页目录",
+  "noResults": "没有找到相关内容",
+  "heroTitle": "hapiy 帮助文档",
+  "heroDescription": "自托管的 AI 网关与 Agent 接入管理器：分发模型、接管 AI 工具配置，从第一条转发链路开始。",
+  "footer": "hapiy 帮助文档 · 内容随版本更新，以实际页面为准",
+  "quickLinks": {
+    "quickStart": {
+      "id": "快速开始",
+      "title": "快速开始",
+      "description": "四步搭好第一条 API 转发工作流"
+    },
+    "topology": {
+      "id": "转发拓扑",
+      "title": "转发拓扑",
+      "description": "可视化编排请求的转发路径"
+    },
+    "models": {
+      "id": "模型接入",
+      "title": "模型接入",
+      "description": "配置上游供应商与访问令牌"
+    },
+    "requestHandling": {
+      "id": "请求处理",
+      "title": "请求处理",
+      "description": "改写、并发控制、故障转移与渠道亲和"
+    },
+    "monitor": {
+      "id": "监控",
+      "title": "监控",
+      "description": "活动请求、使用记录与日志抓取"
+    },
+    "settings": {
+      "id": "系统设置",
+      "title": "系统设置",
+      "description": "BaseURL、汇率、备份与用量查询"
+    }
+  }
+}
