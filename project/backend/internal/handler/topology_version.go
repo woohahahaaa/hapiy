@@ -16,7 +16,7 @@ import (
 
 const (
 	topologyArchiveWindow    = 5 * time.Minute
-	maxTopologyVersions      = 20
+	maxTopologyVersions      = 50
 	topologyArchiveLoopEvery = 5 * time.Second
 )
 
@@ -194,35 +194,6 @@ func createTopologyVersion(db *gorm.DB, config *model.TopologyConfig) (*model.To
 		}
 	}
 	return &version, nil
-}
-
-// SnapshotTopologyBeforeSave stores the live topology as a version unless the
-// newest version already holds the same document. SaveFlatTopology calls it
-// inside the save transaction, right before the new document is written, so
-// every change leaves the state it replaced in the history. Unlike the
-// auto-archive it ignores the 5-minute quiet window: the save itself is the
-// event, and the snapshot is of the state being replaced, not of the live one.
-func SnapshotTopologyBeforeSave(db *gorm.DB) error {
-	var config model.TopologyConfig
-	err := db.Where("id = ?", topologyConfigRowID).First(&config).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load topology config: %w", err)
-	}
-
-	latest, err := latestTopologyVersion(db)
-	if err != nil {
-		return err
-	}
-	if latest != nil && latest.Nodes == config.Flat {
-		// The newest snapshot already holds this document; a save that does not
-		// change it (or a repeat of the previous save) adds nothing.
-		return nil
-	}
-	_, err = createTopologyVersion(db, &config)
-	return err
 }
 
 // ── Handlers ──

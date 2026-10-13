@@ -144,7 +144,7 @@ func TestTopologyVersionArchive_respects_quiet_window(t *testing.T) {
 	}
 }
 
-func TestTopologyVersionArchive_caps_at_twenty(t *testing.T) {
+func TestTopologyVersionArchive_caps_history(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
 	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true},{"id":"p1","kind":"provider","name":"A","enabled":true}],"wires":[{"source":"e1","target":"ps1"},{"source":"ps1","target":"p1"}]}`)
 
@@ -282,52 +282,40 @@ func TestTopologyVersionGet_not_found(t *testing.T) {
 	}
 }
 
-func TestSaveFlatTopology_archives_the_replaced_state(t *testing.T) {
-	db := newTopologyVersionTestDB(t)
-	engine := relay.NewEngine(db)
-	v1 := `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true},{"id":"ps1","kind":"slot","slot_type":"provider","enabled":true}],"wires":[{"source":"e1","target":"ps1"}]}`
-	seedTopologyConfig(t, db, v1)
-
-	// The first save replaces v1, which must land in the history verbatim.
-	flatTopologyRequest(t, http.MethodPut, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false}],"wires":[]}`, SaveFlatTopology(db, engine))
-	if got := countTopologyVersions(t, db); got != 1 {
-		t.Fatalf("after first save: want 1 version, got %d", got)
-	}
-	var stored model.TopologyVersion
-	if err := db.First(&stored).Error; err != nil {
-		t.Fatalf("load stored version: %v", err)
-	}
-	if stored.Nodes != v1 {
-		t.Fatalf("archived document: want the replaced state, got %s", stored.Nodes)
-	}
-
-	// The second save archives the state the first save wrote.
-	flatTopologyRequest(t, http.MethodPut, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"B","enabled":true}],"wires":[]}`, SaveFlatTopology(db, engine))
-	if got := countTopologyVersions(t, db); got != 2 {
-		t.Fatalf("after second save: want 2 versions, got %d", got)
-	}
-	data := decodeVersionsData(t, versionsRequest(t, http.MethodGet, "/api/versions", TopologyVersionList(db)))
-	if current := data["current"].(map[string]any); current["archived"] != false {
-		t.Fatalf("live state after a save: want archived=false, got %v", current["archived"])
-	}
-	if versions := data["versions"].([]any); len(versions) != 2 {
-		t.Fatalf("listed versions: want 2, got %d", len(versions))
-	}
-}
-
-func TestSaveFlatTopology_skips_unchanged_document(t *testing.T) {
+func TestSaveFlatTopology_keeps_no_version_until_quiet(t *testing.T) {
 	db := newTopologyVersionTestDB(t)
 	engine := relay.NewEngine(db)
 	seedTopologyConfig(t, db, `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true}],"wires":[]}`)
-	body := `{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false}],"wires":[]}`
 
-	// Repeating the same document must not grow the history beyond the state it
-	// replaced.
-	for i := 0; i < 3; i++ {
+	// Saving only rewrites the live document: versions appear when the quiet
+	// window elapses, never on the save itself.
+	for _, body := range []string{
+		`{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":false}],"wires":[]}`,
+		`{"nodes":[{"id":"e1","kind":"requestEntry","name":"A","enabled":true}],"wires":[]}`,
+		`{"nodes":[{"id":"e1","kind":"requestEntry","name":"B","enabled":true}],"wires":[]}`,
+	} {
 		flatTopologyRequest(t, http.MethodPut, body, SaveFlatTopology(db, engine))
 	}
-	if got := countTopologyVersions(t, db); got != 2 {
-		t.Fatalf("identical saves: want 2 versions, got %d", got)
+	if got := countTopologyVersions(t, db); got != 0 {
+		t.Fatalf("saves inside the quiet window: want 0 versions, got %d", got)
+	}
+
+	// The live state is not archived, so the modal offers the manual archive.
+	data := decodeVersionsData(t, versionsRequest(t, http.MethodGet, "/api/versions", TopologyVersionList(db)))
+	if current := data["current"].(map[string]any); current["archived"] != false {
+		t.Fatalf("live state after saves: want archived=false, got %v", current["archived"])
+	}
+	if versions := data["versions"].([]any); len(versions) != 0 {
+		t.Fatalf("listed versions: want 0, got %d", len(versions))
+	}
+
+	// Past the window the same live state is archived exactly once.
+	bumpConfigUpdatedAt(t, db, time.Now().Add(-topologyArchiveWindow-30*time.Second))
+	if _, err := archiveCurrentTopology(db, false); err != nil {
+		t.Fatalf("auto archive after window: %v", err)
+	}
+	if got := countTopologyVersions(t, db); got != 1 {
+		t.Fatalf("after the quiet window: want 1 version, got %d", got)
 	}
 }
 
