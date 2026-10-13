@@ -231,7 +231,7 @@ function MetricSkeleton() {
 
 function StatsSection() {
   const { t } = useTranslation('logs')
-  // 统计区顶部的时间筛选同样缓存到 localStorage：刷新后恢复。
+  // 统计区顶部的时间筛选同样缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [dateRange, setDateRange] = usePersistedState<DateRange>('monitor.stats.dateRange', {})
   const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)

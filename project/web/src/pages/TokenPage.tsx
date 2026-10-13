@@ -27,7 +27,7 @@ export function TokenPage() {
   const { t } = useTranslation('token')
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [total, setTotal] = useState(0)
-  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  // 分页状态缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [offset, setOffset] = usePersistedState('tokens.offset', 0)
   const [limit, setLimit] = usePersistedState('tokens.limit', 50)
   const [editing, setEditing] = useState<Token | null>(null)

@@ -131,7 +131,7 @@ export function BackupSettingsPage() {
   const [frequency, setFrequency] = useState<BackupFrequency>('weekly')
   const [path, setPath] = useState(DEFAULT_BACKUP_PATH)
   const [resolvedPath, setResolvedPath] = useState('')
-  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  // 分页状态缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [offset, setOffset] = usePersistedState('backup-records.offset', 0)
   const [saving, setSaving] = useState(false)
   const [backingUp, setBackingUp] = useState(false)

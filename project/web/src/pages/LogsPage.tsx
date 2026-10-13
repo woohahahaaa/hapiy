@@ -70,7 +70,7 @@ export function LogsPage() {
   const [total, setTotal] = useState(0)
   const [initialLoading, setInitialLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // 顶部筛选状态缓存到 localStorage（usePersistedState）：刷新后恢复。
+  // 顶部筛选状态缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [modelFilter, setModelFilter] = usePersistedState('logs.model', 'all')
   const [providerFilter, setProviderFilter] = usePersistedState('logs.provider', 'all')
   const [typeFilter, setTypeFilter] = usePersistedState<LogTypeFilter | 'all'>('logs.type', 'all')
@@ -78,7 +78,7 @@ export function LogsPage() {
   const [tokenFilter, setTokenFilter] = usePersistedState('logs.token', 'all')
   const [sourceFilter, setSourceFilter] = usePersistedState('logs.source', 'all')
   const [dateRange, setDateRange] = usePersistedState<DateRange>('logs.dateRange', {})
-  // 分页状态同样缓存：刷新后回到同一页与每页条数。
+  // 分页状态缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [limit, setLimit] = usePersistedState('logs.limit', 50)
   const [offset, setOffset] = usePersistedState('logs.offset', 0)
   const mountedRef = useRef(true)

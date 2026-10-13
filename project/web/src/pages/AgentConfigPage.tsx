@@ -209,7 +209,7 @@ function AgentConfigFilesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
-  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  // 分页状态缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [offset, setOffset] = usePersistedState('agent-config-files.offset', 0)
   const [limit, setLimit] = usePersistedState('agent-config-files.limit', 50)
   const [takeoverOpen, setTakeoverOpen] = useState(false)

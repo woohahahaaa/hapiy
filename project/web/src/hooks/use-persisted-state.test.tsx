@@ -2,15 +2,16 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
+  clearPersistedValue,
   readPersistedValue,
   usePersistedState,
   writePersistedValue,
 } from './use-persisted-state'
 
-// 测试跑在 Node 环境里（没有 DOM）：给 localStorage 一个内存实现，
-// 验证读写与恢复逻辑本身。
+// 测试跑在 Node 环境里（没有 DOM）：给 sessionStorage 一个内存实现，
+// 验证读写、清除与恢复逻辑本身。
 const memoryStore = new Map<string, string>()
-Object.defineProperty(globalThis, 'localStorage', {
+Object.defineProperty(globalThis, 'sessionStorage', {
   configurable: true,
   value: {
     getItem: (key: string) => memoryStore.get(key) ?? null,
@@ -42,7 +43,7 @@ describe('usePersistedState', () => {
   })
 
   it('缓存损坏时退回默认值', () => {
-    localStorage.setItem('hapiy_filter:probe', '{not json')
+    sessionStorage.setItem('hapiy_filter:probe', '{not json')
     expect(readPersistedValue('probe', 'fallback')).toBe('fallback')
     const html = renderToStaticMarkup(<Probe />)
     expect(html).toContain('fallback')
@@ -51,5 +52,13 @@ describe('usePersistedState', () => {
   it('对象等结构原样往返', () => {
     writePersistedValue('range', { from: '2026-10-01', to: '2026-10-13' })
     expect(readPersistedValue('range', {})).toEqual({ from: '2026-10-01', to: '2026-10-13' })
+  })
+
+  it('清除后不再恢复（切走页面即丢弃）', () => {
+    writePersistedValue('probe', 'saved')
+    clearPersistedValue('probe')
+    expect(sessionStorage.getItem('hapiy_filter:probe')).toBeNull()
+    const html = renderToStaticMarkup(<Probe />)
+    expect(html).toContain('fallback')
   })
 })
