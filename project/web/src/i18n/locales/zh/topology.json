@@ -16,7 +16,7 @@
     "layoutChangedElsewhere": "布局已在其他页面被修改，请刷新以加载最新布局",
     "layoutLoadFailed": "布局加载失败，使用默认位置",
     "nothingToCopy": "没有可复制的选中节点",
-    "duplicateProvider": "同一个 Provider（{{name}}）不能在多个激活工作流中被启用",
+    "duplicateProvider": "同一个供应商（{{name}}）不能在多个激活工作流中被启用",
     "providerAdded": "已将「{{name}}」添加到转发拓扑",
     "providerAlreadyAdded": "「{{name}}」已经在转发拓扑中"
   },
@@ -57,9 +57,9 @@
   },
   "delete": {
     "title": "确认删除",
-    "descriptionWithNodesAndEdges": "将删除 {{nodeCount}} 个节点和 {{edgeCount}} 条连线,删除后可通过撤销恢复。",
-    "descriptionWithNodes": "将删除 {{nodeCount}} 个节点,删除后可通过撤销恢复。",
-    "descriptionEdges": "将删除 {{edgeCount}} 条连线,删除后可通过撤销恢复。",
+    "descriptionWithNodesAndEdges": "将删除 {{nodeCount}} 个节点和 {{edgeCount}} 条连线，删除后可通过撤销恢复。",
+    "descriptionWithNodes": "将删除 {{nodeCount}} 个节点，删除后可通过撤销恢复。",
+    "descriptionEdges": "将删除 {{edgeCount}} 条连线，删除后可通过撤销恢复。",
     "confirm": "确认删除"
   },
   "menu": {
@@ -97,16 +97,16 @@
     "restoreDialogBody": "恢复前会自动存档当前版本，确定恢复到该版本吗？"
   },
   "nodeMenu": {
-    "title": "从 provider 创建工作流",
+    "title": "从供应商创建工作流",
     "empty": "没有可选的供应商"
   },
   "jsonEdit": {
     "title": "编辑 JSON",
     "format": "格式化",
     "formatFailed": "格式化失败：JSON 无效",
-    "saving": "保存中...",
+    "saving": "保存中…",
     "saveConfirmTitle": "保存 JSON",
-    "saveConfirmDescription": "你修改了 JSON 内容,确认保存到后端吗?JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定,修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。",
+    "saveConfirmDescription": "你修改了 JSON 内容，确认保存到后端吗？JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定，修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。",
     "reconsider": "我再想想",
     "confirmSave": "确认保存",
     "topLevelArray": "JSON 顶层必须是数组",

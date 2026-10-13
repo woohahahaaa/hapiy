@@ -51,7 +51,7 @@
   "confirmDelete": {
     "title": "确认删除",
     "description": "将删除接管配置「{{name}}」，删除后不可恢复。",
-    "busy": "删除中...",
+    "busy": "删除中…",
     "confirm": "确认删除"
   },
   "toast": {
@@ -61,11 +61,11 @@
     "saved": "已保存",
     "savedPreviewChanges": "已保存预览中的变更",
     "appliedDiffAndSaved": "已应用差异并保存",
-    "renamePreviewProvider": "已生成预览：provider 改名待保存",
-    "deletePreviewProvider": "已生成预览：删除 provider 待保存",
+    "renamePreviewProvider": "已生成预览：供应商改名待保存",
+    "deletePreviewProvider": "已生成预览：删除供应商待保存",
     "noManagedToSync": "没有需要同步的托管供应商",
     "syncedAll": "已同步全部 {{count}} 个托管供应商，共 {{fields}} 处字段写入配置文件",
-    "deletedManaged": "已删除托管 provider",
+    "deletedManaged": "已删除托管供应商",
     "noChangesToApply": "没有需要应用的变更（均已符合推荐）",
     "appliedTemplate": "已应用推荐模板：{{count}} 处变更已写入文件",
     "noPreviewProviders": "没有可预览的非托管供应商",
@@ -81,9 +81,9 @@
     "manualEndpointRequired": "有未配置 Endpoint 的供应商：请手动填写 Endpoint，或取消勾选它们",
     "mergedIntoGroup": "未配置 Endpoint 的供应商已并入分组「{{endpoint}}」",
     "suffixRequired": "有多个 Endpoint 分组，必须为 {{endpoint}} 填写后缀",
-    "savedProvider": "已保存托管 provider",
-    "createdProvider": "已创建托管 provider",
-    "deletedProvider": "已删除托管 provider"
+    "savedProvider": "已保存托管供应商",
+    "createdProvider": "已创建托管供应商",
+    "deletedProvider": "已删除托管供应商"
   },
   "errors": {
     "deleteFailed": "删除失败",
@@ -121,7 +121,7 @@
   "form": {
     "titleEdit": "编辑接管记录",
     "titleCreate": "接管新的配置文件",
-    "saving": "保存中...",
+    "saving": "保存中…",
     "saveEdit": "保存修改",
     "recordNameLabel": "记录名称",
     "recordNamePlaceholder": "例如：OpenCode 配置",
@@ -154,8 +154,8 @@
     "sshTestButton": "测试 SSH 读写能力",
     "sshTestTitle": "请先在上方选择目标系统",
     "sshJsonOnlyHint": "支持 .json / .jsonc / .yml / .yaml / .toml 等文本配置文件",
-    "syncPresetButton": "同步预设Agent信息",
-    "syncPresetHint": "选择 {{os}} 后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设Agent信息」重新带入",
+    "syncPresetButton": "同步预设 Agent 信息",
+    "syncPresetHint": "选择 {{os}} 后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设 Agent 信息」重新带入",
     "osLabel": "系统",
     "osWarning": "请选择目标机器的真实系统：Windows 用 cmd.exe 命令测试，Mac/其他 用 POSIX 命令测试，选错会导致测试失败"
   },
@@ -170,11 +170,11 @@
     "calculating": "计算中…",
     "cancelPreview": "取消预览",
     "previewDiff": "预览差异",
-    "addManagedTitle": "把我们系统里录入的供应商按 Endpoint 分组后生成托管 provider",
+    "addManagedTitle": "把我们系统里录入的供应商按 Endpoint 分组后生成托管供应商",
     "settings": "设置"
   },
   "placeholder": {
-    "noProviders": "未解析到任何 provider",
+    "noProviders": "未解析到任何供应商",
     "noManagedProviders": "暂无托管供应商",
     "noManagedSelected": "未选择托管供应商",
     "noSyncableModels": "该分组没有可同步的模型",
@@ -204,20 +204,20 @@
     "title": "管理模型 · {{name}}"
   },
   "confirm": {
-    "deleteProviderTitle": "删除 provider",
-    "deleteProviderDescription": "确认删除配置文件中的 provider「{{name}}」？删除会随预览一起提交，点底部「保存」后生效。",
-    "deleteManagedTitle": "删除托管 provider",
-    "deleteManagedDescription": "确认删除托管 provider「{{name}}」？删除会立即生效。",
+    "deleteProviderTitle": "删除供应商",
+    "deleteProviderDescription": "确认删除配置文件中的供应商「{{name}}」？删除会随预览一起提交，点底部「保存」后生效。",
+    "deleteManagedTitle": "删除托管供应商",
+    "deleteManagedDescription": "确认删除托管供应商「{{name}}」？删除会立即生效。",
     "deleteModelTitle": "删除模型",
     "deleteModelDescription": "确认删除配置文件中的模型「{{name}}」？删除会随预览一起提交，点底部「保存」后生效。",
     "applyTemplateTitle": "使用推荐模板",
-    "applyTemplateApplying": "应用中...",
+    "applyTemplateApplying": "应用中…",
     "applyTemplateConfirm": "确认并生效",
     "applyTemplateBody": "将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）及其模型的字段进行调整，并把结果直接写入文件生效。确认？",
     "renameModelTitle": "修改模型名称"
   },
   "rename": {
-    "titleDefault": "修改 provider 名称",
+    "titleDefault": "修改供应商名称",
     "hint": "修改会作为预览的一部分，点右上角「保存」后才会写入配置文件。"
   },
   "discard": {
@@ -251,7 +251,7 @@
     "loadingContent": "正在加载文件内容…",
     "prettifyTitle": "在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件",
     "prettify": "美化格式",
-    "saving": "保存中...",
+    "saving": "保存中…",
     "jsonWarningTitle": "JSON 格式可能有误",
     "confirmSaveTitle": "确认保存",
     "jsonWarningDescription": "检测到 JSON 格式问题，是否仍要保存对「{{name}}」的修改？",
@@ -260,12 +260,12 @@
     "confirmSave": "确认保存"
   },
   "managedDialog": {
-    "titleEdit": "修改托管 provider",
-    "titleCreate": "添加托管 provider",
+    "titleEdit": "修改托管供应商",
+    "titleCreate": "添加托管供应商",
     "loadingProviders": "加载供应商列表…",
     "ruleNameLabel": "规则名称",
     "ruleNamePlaceholder": "例如：HAPIY",
-    "ruleNameHint": "各组最终 provider 名 = 规则名称 + 后缀（只有一个分组时后缀可选）",
+    "ruleNameHint": "各组最终供应商名 = 规则名称 + 后缀（只有一个分组时后缀可选）",
     "apiKeyLabel": "接入 Key",
     "apiKeyRequiredSuffix": "（令牌页创建的 Key，必填）",
     "apiKeyPlaceholder": "选择接入用的令牌 Key",
@@ -278,7 +278,7 @@
     "sourceHint": "填写后在 BaseURL 后追加 __来源 段；可留空",
     "selectProvidersLabel": "从系统配置的供应商中选择",
     "selectProvidersSuffix": "（显示名称 / 模型数 / Endpoint 数）",
-    "groupsLabel": "根据 Endpoint 规则自动归类 provider 配置",
+    "groupsLabel": "根据 Endpoint 规则自动归类供应商配置",
     "groupsSuffix": "（命中同一条规则，如 *completion*，的 Endpoint 归为一组）",
     "hitsLabel": "命中：",
     "suffixColumn": "命名后缀",
@@ -292,9 +292,9 @@
     "staleSuffix": "（已失效）",
     "officialSuffix": "（官方）",
     "noModelsCell": "（无模型）",
-    "confirmDeleteTitle": "删除托管 provider",
+    "confirmDeleteTitle": "删除托管供应商",
     "confirmDeleteBusy": "删除中…",
-    "confirmDeleteDescription": "确认删除托管 provider「{{name}}」？删除会立即生效，已生成的 provider 配置仍会保留。",
+    "confirmDeleteDescription": "确认删除托管供应商「{{name}}」？删除会立即生效，已生成的供应商配置仍会保留。",
     "emptyMultiSelect": "点击展开，勾选系统配置的供应商",
     "removeTitle": "移除 {{name}}",
     "providerDisabled": "（禁用）",
@@ -322,11 +322,11 @@
     "restoreFailed": "恢复失败"
   },
   "jsonErrors": {
-    "providerRootUnrecognized": "无法识别配置文件里的 provider 根路径",
-    "providerRootInvalid": "provider 根路径 {{segment}} 无效",
-    "providerMissing": "provider {{id}} 不存在",
-    "providerExists": "provider {{id}} 已存在",
-    "providerNoModels": "provider {{id}} 下没有 models",
+    "providerRootUnrecognized": "无法识别配置文件里的供应商根路径",
+    "providerRootInvalid": "供应商根路径 {{segment}} 无效",
+    "providerMissing": "供应商 {{id}} 不存在",
+    "providerExists": "供应商 {{id}} 已存在",
+    "providerNoModels": "供应商 {{id}} 下没有 models",
     "modelMissing": "模型 {{id}} 不存在",
     "modelExists": "模型 {{id}} 已存在"
   }

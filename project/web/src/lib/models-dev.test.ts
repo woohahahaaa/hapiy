@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   findModelsDevModel,
   findModelsDevProviderRow,
+  isModelsDevLab,
+  labProviderIdForModel,
   providersForModel,
   searchModelsDevModels,
   type ModelsDevModel,
@@ -230,5 +232,24 @@ describe('findModelsDevProviderRow', () => {
 
   it('returns null for an unmatched model value', () => {
     expect(findModelsDevProviderRow(models, 'claude', 'DeepSeek')).toBeNull()
+  })
+})
+
+describe('labProviderIdForModel', () => {
+  it('maps model families to their first-party provider id', () => {
+    expect(labProviderIdForModel('deepseek-v4.1-flash')).toBe('deepseek')
+    expect(labProviderIdForModel('GLM-5.3')).toBe('zhipuai')
+    expect(labProviderIdForModel('mimo-v2.6-flash')).toBe('xiaomi')
+    expect(labProviderIdForModel('Kimi K3')).toBe('moonshotai')
+  })
+
+  it('returns null for unknown families and blank values', () => {
+    expect(labProviderIdForModel('space-bunny')).toBeNull()
+    expect(labProviderIdForModel('   ')).toBeNull()
+  })
+
+  it('reports lab membership by provider id', () => {
+    expect(isModelsDevLab('deepseek-v4-flash', 'deepseek')).toBe(true)
+    expect(isModelsDevLab('deepseek-v4-flash', 'opencode-go')).toBe(false)
   })
 })

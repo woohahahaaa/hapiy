@@ -942,7 +942,7 @@ func GetAgentConfigFileModels(db *gorm.DB, key []byte) gin.HandlerFunc {
 			return
 		}
 		if strings.TrimSpace(jpaths.Provider) == "" || strings.TrimSpace(jpaths.Model) == "" {
-			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL", "该软件类型尚未配置 JSON 路径，请先在「接管Agent」中填写 provider/model gjson")
+			respondError(c, http.StatusBadRequest, "AGENT_TYPE_JSON_PATHS_UNCONFIGURED_DETAIL", "该软件类型尚未配置 JSON 路径，请先在「接管 Agent」中填写 provider/model gjson")
 			return
 		}
 		content, err := readAgentConfigFileContent(&row, key)
@@ -997,10 +997,10 @@ func parseAgentModels(content, providerPath, modelPath string) ([]modelSummary, 
 	root := gjson.Parse(stripJSON5Comments(content))
 	provResult := root.Get(providerPath)
 	if !provResult.Exists() {
-		return nil, fmt.Errorf("provider 路径 %q 在配置文件中未命中", providerPath)
+		return nil, fmt.Errorf("供应商路径 %q 在配置文件中未命中", providerPath)
 	}
 	if provResult.Type != gjson.JSON {
-		return nil, fmt.Errorf("provider 路径 %q 必须解析为对象，实际类型为 %s", providerPath, provResult.Type)
+		return nil, fmt.Errorf("供应商路径 %q 必须解析为对象，实际类型为 %s", providerPath, provResult.Type)
 	}
 	modelLeaf := lastPathSegment(modelPath)
 	out := make([]modelSummary, 0, len(provResult.Map()))
@@ -1266,7 +1266,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 				case "delete":
 					ok, derr := editor.Delete(full)
 					if derr != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("供应商 %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
 						return
 					}
 					if ok {
@@ -1279,7 +1279,7 @@ func ApplyRecommendationTemplate(db *gorm.DB, key []byte) gin.HandlerFunc {
 						continue
 					}
 					if werr := editor.Set(full, r.Recommended); werr != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("供应商 %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
 						return
 					}
 					providerFields++
@@ -1477,7 +1477,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 				case "delete":
 					ok, derr := editor.Delete(full)
 					if derr != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("provider %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_DELETE_FAILED", fmt.Sprintf("供应商 %s 字段 %s 删除失败: %v", pid, r.Key, derr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": derr})
 						return
 					}
 					if ok {
@@ -1490,7 +1490,7 @@ func ApplyRecommendationConfig(db *gorm.DB, key []byte) gin.HandlerFunc {
 						continue
 					}
 					if werr := editor.Set(full, r.Recommended); werr != nil {
-						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("provider %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
+						respondErrorWithParams(c, http.StatusBadRequest, "FIELD_WRITE_FAILED", fmt.Sprintf("供应商 %s 字段 %s 写入失败: %v", pid, r.Key, werr), gin.H{"scope": "provider", "id": pid, "field": r.Key, "error": werr})
 						return
 					}
 					total++
@@ -1750,7 +1750,7 @@ func applyRecommendationsToContent(content, filePath, providerPath, modelPath, p
 		case "provider":
 			full := providerPath + "." + escapeSjsonKey(providerID) + "." + r.Key
 			if err := editor.Set(full, value); err != nil {
-				return content, applied, fmt.Errorf("provider %q 字段 %s: %v", providerID, r.Key, err)
+				return content, applied, fmt.Errorf("供应商 %q 字段 %s: %v", providerID, r.Key, err)
 			}
 			applied++
 		case "model":

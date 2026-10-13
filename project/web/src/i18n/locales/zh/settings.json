@@ -1,6 +1,6 @@
 {
   "loading": "正在加载设置…",
-  "savingEllipsis": "保存中...",
+  "savingEllipsis": "保存中…",
   "restoreDefaults": "恢复默认",
   "errors": {
     "operationFailed": "操作失败，请重试",
@@ -19,7 +19,7 @@
     "upstreamTitle": "上游模型列表接口",
     "upstreamDescription": "从供应商获取模型列表时的默认接口路径",
     "defaultEndpointLabel": "默认模型列表接口路径",
-    "defaultEndpointHint": "路径必须以斜杠开头（/），将拼接在供应商的 Base URL 之后。当供应商表单中\"从上游获取模型\"未单独配置接口地址时，将使用此路径作为回退。",
+    "defaultEndpointHint": "路径必须以斜杠开头（/），将拼接在供应商的 Base URL 之后。当供应商表单中「从上游获取模型」未单独配置接口地址时，将使用此路径作为回退。",
     "ownTitle": "hapiy 模型列表接口",
     "ownDescription": "对外暴露的 hapiy 自身模型列表路径",
     "ownEndpointLabel": "hapiy 模型列表接口路径",
@@ -62,7 +62,7 @@
     "pageDescription": "在 BaseURL 后追加来源标记即可区分请求来源，系统自动识别",
     "cardDescription": "配置系统的对外 BaseURL，用于 Agent 软件接入",
     "copyFailed": "复制失败",
-    "invalidPathName": "来源名 \"{{name}}\" 无效：不能包含 / 或 __，且长度不超过 {{max}}",
+    "invalidPathName": "来源名「{{name}}」无效：不能包含 / 或 __，且长度不超过 {{max}}",
     "saveFailed": "保存设置失败",
     "originLabel": "域名",
     "originHint": "系统对外 BaseURL 的域名（含 scheme 与端口）。生成代理配置与托管「跟随系统」用它，默认取当前网页域名，隧道/反代场景请改成公网地址",
@@ -79,9 +79,9 @@
     "sourcePathSegment": "来源"
   },
   "other": {
-    "title": "开启接管Agent",
+    "title": "开启接管 Agent",
     "pageDescription": "开启后侧边栏显示「接管 Agent」入口，管理接管文件与规则",
-    "toggleDescription": "开启后侧边栏显示“接管Agent”入口（含配置文件、管理规则等）。\n关闭后侧边栏隐藏该入口。"
+    "toggleDescription": "开启后侧边栏显示“接管 Agent”入口（含配置文件、管理规则等）。\n关闭后侧边栏隐藏该入口。"
   },
   "recovery": {
     "modeProbe": "测试上游恢复",

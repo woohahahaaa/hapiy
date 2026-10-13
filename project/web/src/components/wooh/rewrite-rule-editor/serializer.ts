@@ -7,7 +7,10 @@
 //   - 空 / 不合法的 action 在序列化时被丢弃；空的 block 也丢弃；最终空数组输出为 "[]"。
 //   - set 的 value 遵循「引号约定」：true/false/null/数字（仅 body scope）是原生 JSON
 //     字面量；不带引号的其余裸文本是变量引用（原始请求里的同域值）；字符串必须写成带
-//     引号的 JSON 形式（如 "hello"）。引用在脚本里存成 {"ref":"<name>"}。详见 parseValueInput。
+//     引号的 JSON 形式（如 "hello"）。引用在脚本里存成 {"ref":"<name>"}，哈希来源存成
+//     {"hash":"<source>"}，写成 hash(<source>)。详见 parseValueInput。
+//     来源可以显式跨域：header.<名字> 读原始 header，body.<gjson 路径> 读原始 body；
+//     裸文本按目标路径的域解释（历史语义）。
 //   - 条件值沿用旧约定：字面量 + 带引号字符串，裸文本不合法、序列化时丢弃。
 //   - 不合法的 script（顶层不是数组、解析失败）反序列化时回退到一个空 block。
 //
@@ -59,6 +62,36 @@ export type RuleForm = {
 }
 
 export const HEADER_PREFIX = 'header.'
+export const BODY_PREFIX = 'body.'
+
+// 显式来源域前缀：header. / body.。裸文本返回 null —— 它按目标路径的域解释，
+// 这是前缀能力出现之前的历史语义，后端 compile 也是这么解析的。
+export function explicitRefDomain(ref: string): 'header' | 'body' | null {
+  if (ref.startsWith(HEADER_PREFIX)) return 'header'
+  if (ref.startsWith(BODY_PREFIX)) return 'body'
+  return null
+}
+
+// 裸引用跟着目标域走，切 scope 会悄悄改变它的含义。切换之前先用这个把裸引用物化成
+// 显式来源前缀，语义就钉死了；已带前缀的引用、字面量、固定字符串一律原样返回。
+// 哈希来源（hash(...)）同样处理，只把括号里的来源补上前缀。
+export function materializeSource(a: Action): string {
+  const parsed = parseActionValue(a, a.value)
+  const prefix = a.scope === 'header' ? HEADER_PREFIX : BODY_PREFIX
+  if (parsed.kind === 'hash') {
+    if (explicitRefDomain(parsed.source) !== null) return a.value
+    return `hash(${prefix}${parsed.source})`
+  }
+  if (parsed.kind !== 'ref' || explicitRefDomain(parsed.ref) !== null) return a.value
+  return prefix + parsed.ref
+}
+
+// hash(<来源>)。matched=false 表示不是 hash 形式；matched=true 时 source 可能为空，
+// 由调用方判为不合法。
+function parseHashToken(t: string): { matched: boolean; source: string } {
+  if (!t.startsWith('hash(') || !t.endsWith(')')) return { matched: false, source: '' }
+  return { matched: true, source: t.slice('hash('.length, -1).trim() }
+}
 
 // ── Value input convention ──
 
@@ -66,6 +99,7 @@ export type ParsedValueInput =
   | { kind: 'literal'; json: boolean | number | null }
   | { kind: 'string'; value: string }
   | { kind: 'ref'; ref: string }
+  | { kind: 'hash'; source: string }
   | { kind: 'invalid' }
 
 export type ValueInputOptions = {
@@ -104,7 +138,22 @@ export function parseValueInput(text: string, opts: ValueInputOptions = {}): Par
     }
     return { kind: 'invalid' }
   }
-  if (refs && t !== '') return { kind: 'ref', ref: t }
+  if (refs && t !== '') {
+    // hash(<来源>)：来源不能为空，也不能再嵌一层括号。
+    const hash = parseHashToken(t)
+    if (hash.matched) {
+      if (hash.source === '' || hash.source.includes('(') || hash.source.includes(')')) {
+        return { kind: 'invalid' }
+      }
+      const hashDomain = explicitRefDomain(hash.source)
+      if (hashDomain !== null && hash.source === `${hashDomain}.`) return { kind: 'invalid' }
+      return { kind: 'hash', source: hash.source }
+    }
+    // header. / body. 后面必须还有名字，否则是半截前缀，和坏引用一样算不合法。
+    const domain = explicitRefDomain(t)
+    if (domain !== null && t === `${domain}.`) return { kind: 'invalid' }
+    return { kind: 'ref', ref: t }
+  }
   return { kind: 'invalid' }
 }
 
@@ -256,6 +305,8 @@ function actionToJson(a: Action, conditions: JsonObject[]): JsonObject {
         op.value = parsed.value
       } else if (parsed.kind === 'ref') {
         op.value = { ref: parsed.ref }
+      } else if (parsed.kind === 'hash') {
+        op.value = { hash: parsed.source }
       } else {
         // invalid/空：isActionValid 已过滤，这里兜底原文本。
         op.value = a.value.trim()
@@ -351,13 +402,15 @@ function actionFromJson(op: JsonObject): Action | null {
 }
 
 // JSON value → 输入框显示文本：字符串带引号显示（round-trip 后仍按约定识别为字符串），
-// {"ref":"..."} 显示为裸变量名，boolean/number/null 用 token 文本，
-// 其余（缺失/对象/数组）留空。
+// {"ref":"..."} 显示为裸变量名，{"hash":"..."} 显示为 hash(来源)，boolean/number/null
+// 用 token 文本，其余（缺失/对象/数组）留空。
 function actionValueDisplay(v: unknown): string {
   if (v && typeof v === 'object' && !Array.isArray(v)) {
     const o = v as JsonObject
-    const ref = o.ref
-    if (typeof ref === 'string' && Object.keys(o).length === 1) return ref
+    const keys = Object.keys(o)
+    if (keys.length !== 1) return ''
+    if (keys[0] === 'ref' && typeof o.ref === 'string') return o.ref
+    if (keys[0] === 'hash' && typeof o.hash === 'string') return `hash(${o.hash})`
     return ''
   }
   return literalValueDisplay(v)

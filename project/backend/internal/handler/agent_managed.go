@@ -232,7 +232,7 @@ func UpdateManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		var m model.ManagedAgentProvider
 		if err := db.First(&m, "id = ?", c.Param("mid")).Error; err != nil {
-			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管 provider 不存在")
+			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管供应商不存在")
 			return
 		}
 		var req managedProviderRequest
@@ -330,7 +330,7 @@ func SyncManagedProvider(db *gorm.DB, key []byte) gin.HandlerFunc {
 		}
 		var m model.ManagedAgentProvider
 		if err := db.First(&m, "id = ?", c.Param("mid")).Error; err != nil {
-			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管 provider 不存在")
+			respondError(c, http.StatusNotFound, "MANAGED_PROVIDER_NOT_FOUND", "托管供应商不存在")
 			return
 		}
 		formatted, synced, err := rebuildManagedBlocks(c, db, &row, &m, key)
@@ -458,7 +458,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 	for _, old := range stale {
 		// 清理是best-effort：路径不存在时 delete 是 no-op。
 		if _, derr := editor.Delete(jpaths.Provider + "." + escapeSjsonKey(old)); derr != nil {
-			return "", 0, fmt.Errorf("旧 provider 块 %s 删除失败: %w", old, derr)
+			return "", 0, fmt.Errorf("旧供应商块 %s 删除失败: %w", old, derr)
 		}
 	}
 	synced := 0
@@ -493,7 +493,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		}
 		if len(provFields) > 0 || modelsCount > 0 {
 			if _, derr := editor.Delete(providerIDPath); derr != nil {
-				return "", 0, fmt.Errorf("provider 块 %s 重置失败: %w", fullName, derr)
+				return "", 0, fmt.Errorf("供应商块 %s 重置失败: %w", fullName, derr)
 			}
 		}
 		// 写入顺序 = 文件里的字段顺序（sjson 与 yaml.v3 编辑器都是追加式，
@@ -507,7 +507,7 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		slices.Sort(fieldKeys)
 		for _, k := range fieldKeys {
 			if werr := editor.Set(providerIDPath+"."+k, provFields[k]); werr != nil {
-				return "", 0, fmt.Errorf("provider 字段 %s 写入失败: %w", k, werr)
+				return "", 0, fmt.Errorf("供应商字段 %s 写入失败: %w", k, werr)
 			}
 			synced++
 		}
@@ -826,7 +826,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		full := providerBlockName(name, strings.TrimSpace(g.Suffix))
 		// 本托管 provider 自己上次同步生成的块不算冲突：重存/合并时原地覆盖。
 		if existing[full] && !ownBlocks[full] {
-			return "MANAGED_NAME_CONFLICT_FILE", fmt.Sprintf("名称 %q 与配置文件里已有的 provider 同名，请更换名字或后缀", full), gin.H{"name": full}
+			return "MANAGED_NAME_CONFLICT_FILE", fmt.Sprintf("名称 %q 与配置文件里已有的供应商同名，请更换名字或后缀", full), gin.H{"name": full}
 		}
 	}
 
@@ -842,7 +842,7 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 			continue
 		}
 		if m.Name == name {
-			return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管 provider 同名", name), gin.H{"name": name}
+			return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管供应商同名", name), gin.H{"name": name}
 		}
 		mGroups, err := m.GetGroups()
 		if err != nil {
@@ -851,12 +851,12 @@ func validateManagedProviderRequest(db *gorm.DB, row model.AgentConfigFile, key 
 		for _, g := range mGroups {
 			blockName := providerBlockName(m.Name, g.Suffix)
 			if blockName == name {
-				return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管 provider 同名", name), gin.H{"name": name}
+				return "MANAGED_NAME_CONFLICT_MANAGED", fmt.Sprintf("名称 %q 与其他托管供应商同名", name), gin.H{"name": name}
 			}
 			for _, ag := range activeGroups {
 				full := providerBlockName(name, strings.TrimSpace(ag.Suffix))
 				if blockName == full && full != "" {
-					return "MANAGED_GROUP_NAME_CONFLICT", fmt.Sprintf("名称 %q 与其他托管 provider 的分组同名", full), gin.H{"name": full}
+					return "MANAGED_GROUP_NAME_CONFLICT", fmt.Sprintf("名称 %q 与其他托管供应商的分组同名", full), gin.H{"name": full}
 				}
 			}
 		}

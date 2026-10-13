@@ -88,9 +88,11 @@
     "invalidHint": "Strings need manual quotes"
   },
   "convention": {
-    "refHint": "No quotes → variable: same-scope value from the original request (header name / gjson path)",
-    "literalHint": "true / false / null / number → JSON literal",
-    "stringHint": "Quoted → fixed string; the content inside the quotes"
+    "refHint": "No quotes → variable: header or gjson path",
+    "crossDomainHint": "Cross-domain: prefix header. or body.",
+    "hashHint": "hash(path) → stable id from the content",
+    "literalHint": "true/false/null/number → JSON literal",
+    "stringHint": "Quoted → fixed string, content inside quotes"
   },
   "invert": {
     "label": "Invert match",

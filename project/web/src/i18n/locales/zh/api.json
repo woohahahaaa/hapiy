@@ -6,7 +6,7 @@
   "requestTimeout": "请求超时（{{seconds}} 秒）：后端没在时限内返回。接管记录在 SSH 远端时读取较慢，稍后重试即可。",
   "invalidArray": "{{field}} 必须是数组",
   "invalidCaptureStageHeaders": "capture stage headers 格式无效",
-  "invalidDisabledDimension": "服务端返回的禁用维度无效: {{value}}",
+  "invalidDisabledDimension": "服务端返回的禁用维度无效：{{value}}",
   "invalidDuplicateActivation": "重复激活冲突格式无效",
   "invalidEnum": "无效的 {{what}}: {{value}}",
   "invalidFailoverActionDimension": "服务端返回的故障转移动作维度无效",
@@ -96,6 +96,6 @@
     "syncResult": "同步结果",
     "modelConfigReferenceProvider": "模型配置参考供应商",
     "providerOptions": "供应商选项",
-    "managedProviderList": "托管 provider 列表"
+    "managedProviderList": "托管供应商列表"
   }
 }

@@ -41,7 +41,7 @@
     {
       "scope": "provider",
       "key": "name",
-      "description": "在 opencode 界面里的显示名（provider 名称）",
+      "description": "在 opencode 界面里的显示名（供应商名称）",
       "recommended": null,
       "required": true
     },

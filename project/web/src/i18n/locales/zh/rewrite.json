@@ -49,7 +49,7 @@
     "toUpper": "转大写 (to_upper)",
     "replace": "字符串替换 (replace)",
     "regexReplace": "正则替换 (regex_replace)",
-    "move": "重命名/移动 (move)",
+    "move": "重命名/移动（move）",
     "copy": "复制 (copy)"
   },
   "respMode": {
@@ -83,9 +83,11 @@
     "invalidHint": "字符串需要手动添加引号"
   },
   "convention": {
-    "refHint": "不加引号 → 变量：取原始请求里的同域值（header 名 / gjson 路径）",
-    "literalHint": "true / false / null / 数字 → JSON 字面量",
-    "stringHint": "加引号 → 固定字符串，引号内为实际内容"
+    "refHint": "不加引号 → 变量：header 名或 gjson 路径",
+    "crossDomainHint": "跨域加前缀：header.名 或 body.路径",
+    "hashHint": "hash(路径) → 按内容生成稳定 id",
+    "literalHint": "true/false/null/数字 → JSON 字面量",
+    "stringHint": "加引号 → 固定字符串，引号内为内容"
   },
   "invert": {
     "label": "反向匹配",
@@ -116,14 +118,14 @@
   "testDialog": {
     "title": "规则测试",
     "titleSlot": "规则测试（插槽）",
-    "selectRule": "选择规则:",
+    "selectRule": "选择规则：",
     "selectPlaceholder": "选择一条规则",
     "sequentialHint": "将按顺序执行 {{count}} 条规则",
     "executionOrder": "执行顺序：",
     "input": "输入",
     "result": "结果",
     "runTest": "运行测试",
-    "running": "测试中...",
+    "running": "测试中…",
     "emptyResult": "点击「运行测试」查看结果",
     "invalidJson": "JSON 格式无效，请检查输入",
     "progress": "正在执行第 {{current}}/{{total}} 条规则：{{name}}",

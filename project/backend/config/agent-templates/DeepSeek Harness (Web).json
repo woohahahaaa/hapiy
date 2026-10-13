@@ -53,28 +53,28 @@
     {
       "scope": "provider",
       "key": "displayName",
-      "description": "选择器里显示的提供商名称（缺省用 provider id）",
+      "description": "选择器里显示的供应商名称（缺省用供应商 id）",
       "recommended": null,
       "required": false
     },
     {
       "scope": "provider",
       "key": "baseURL",
-      "description": "自定义提供商的 API 端点（如 https://gateway.example.com/v1；已装目录提供商省略则用目录端点）",
+      "description": "自定义供应商的 API 端点（如 https://gateway.example.com/v1；已装目录供应商省略则用目录端点）",
       "recommended": null,
       "required": true
     },
     {
       "scope": "provider",
       "key": "api",
-      "description": "接口协议（openai-completions / openai-responses / anthropic-messages），自定义提供商必填，一般由 endpoint 关键词自动归类",
+      "description": "接口协议（openai-completions / openai-responses / anthropic-messages），自定义供应商必填，一般由 endpoint 关键词自动归类",
       "recommended": null,
       "required": false
     },
     {
       "scope": "model",
       "key": "id",
-      "description": "模型唯一标识（必须与提供商侧精确一致，否则请求前报 UNKNOWN_MODEL）",
+      "description": "模型唯一标识（必须与供应商侧精确一致，否则请求前报 UNKNOWN_MODEL）",
       "recommended": null,
       "required": true
     },

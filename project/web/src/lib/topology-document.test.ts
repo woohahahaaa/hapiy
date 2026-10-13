@@ -28,7 +28,7 @@ describe('parseTopologyDocument', () => {
     const raw = [[
       { type: 'requestModify', name: 'x', rule_id: 'r-1', order: 1, enabled: true },
     ]]
-    expect(() => parseTopologyDocument(raw)).toThrow('第一个节点必须是 provider')
+    expect(() => parseTopologyDocument(raw)).toThrow('第一个节点必须是供应商')
   })
 
   it('rejects empty workflow', () => {

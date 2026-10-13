@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   allowJsonLiterals,
   emptyAction,
+  explicitRefDomain,
   isActionValid,
   isConditionValid,
+  materializeSource,
   parseRule,
   parseValueInput,
   serializeRule,
@@ -313,5 +315,96 @@ describe('嵌套 AND/OR 条件 round-trip', () => {
     const cond = form.blocks[0].conditions[0]
     expect(cond).toMatchObject({ logic: 'AND' })
     expect('children' in cond && cond.children).toHaveLength(2)
+  })
+})
+
+describe('跨域引用（header. / body. 前缀）', () => {
+  it('显式前缀的引用原样往返，不被改写', () => {
+    const script = JSON.stringify([
+      { mode: 'set', path: 'header.x-opencode-session', value: { ref: 'body.messages.1.content' }, scope: 'header' },
+    ])
+    const form = parseRule(script)
+    expect(form.blocks[0].actions[0].value).toBe('body.messages.1.content')
+    expect(serializeRule(form)).toBe(script)
+  })
+
+  it('表单里写前缀引用 → 序列化保留前缀', () => {
+    const form = makeForm([
+      makeAction({ mode: 'set', path: 'session', value: 'header.X-Session-Id' }),
+    ])
+    expect(serializeRule(form)).toBe(
+      JSON.stringify([
+        { mode: 'set', path: 'session', value: { ref: 'header.X-Session-Id' }, scope: 'body' },
+      ]),
+    )
+  })
+
+  it('只写前缀没有名字算不合法', () => {
+    expect(parseValueInput('header.', { refs: true })).toEqual({ kind: 'invalid' })
+    expect(parseValueInput('body.', { refs: true })).toEqual({ kind: 'invalid' })
+    expect(isActionValid(makeAction({ mode: 'set', path: 'x', value: 'header.' }))).toBe(false)
+  })
+
+  it('explicitRefDomain 只认显式前缀，裸文本返回 null', () => {
+    expect(explicitRefDomain('header.X-Session-Id')).toBe('header')
+    expect(explicitRefDomain('body.messages.0.content')).toBe('body')
+    expect(explicitRefDomain('X-Session-Id')).toBeNull()
+    expect(explicitRefDomain('messages.0.content')).toBeNull()
+  })
+
+  it('切 scope 时裸引用物化成显式前缀，语义不漂', () => {
+    // header → body：来源仍是 header。
+    const fromHeader = makeAction({ mode: 'set', path: 'x', value: 'X-Session-Id', scope: 'header' })
+    expect(materializeSource(fromHeader)).toBe('header.X-Session-Id')
+    // body → header：来源仍是 body。
+    const fromBody = makeAction({ mode: 'set', path: 'x', value: 'messages.1.content', scope: 'body' })
+    expect(materializeSource(fromBody)).toBe('body.messages.1.content')
+  })
+
+  it('已带前缀的引用、字面量、固定字符串物化后不变', () => {
+    const prefixed = makeAction({ mode: 'set', path: 'x', value: 'body.a', scope: 'header' })
+    expect(materializeSource(prefixed)).toBe('body.a')
+    const literal = makeAction({ mode: 'set', path: 'x', value: '123', scope: 'body' })
+    expect(materializeSource(literal)).toBe('123')
+    const quoted = makeAction({ mode: 'set', path: 'x', value: '"hello"', scope: 'header' })
+    expect(materializeSource(quoted)).toBe('"hello"')
+  })
+
+  it('hash(来源) 往返：显示为 hash(...)，保存回 {"hash":"..."}', () => {
+    const script = JSON.stringify([
+      { mode: 'set', path: 'header.x-opencode-session', value: { hash: 'body.messages.1.content' }, scope: 'header' },
+    ])
+    const form = parseRule(script)
+    expect(form.blocks[0].actions[0].value).toBe('hash(body.messages.1.content)')
+    expect(serializeRule(form)).toBe(script)
+  })
+
+  it('表单里写 hash(...) → 序列化为 {"hash":"..."}', () => {
+    const form = makeForm([
+      makeAction({ mode: 'set', path: 'x-opencode-session', value: 'hash(messages.1.content)', scope: 'header' }),
+    ])
+    expect(serializeRule(form)).toBe(
+      JSON.stringify([
+        { mode: 'set', path: 'header.x-opencode-session', value: { hash: 'messages.1.content' }, scope: 'header' },
+      ]),
+    )
+  })
+
+  it('空 / 嵌套 / 半截前缀的 hash 形式不合法', () => {
+    expect(parseValueInput('hash()', { refs: true })).toEqual({ kind: 'invalid' })
+    expect(parseValueInput('hash(hash(a))', { refs: true })).toEqual({ kind: 'invalid' })
+    expect(parseValueInput('hash(header.)', { refs: true })).toEqual({ kind: 'invalid' })
+    expect(isActionValid(makeAction({ mode: 'set', path: 'x', value: 'hash()' }))).toBe(false)
+  })
+
+  it('切 scope 时 hash 来源同样物化，已带前缀的不重复补', () => {
+    // 裸来源按目标域解释：header 里写的裸来源物化成 header.。
+    const bareInHeader = makeAction({ mode: 'set', path: 'x', value: 'hash(messages.1.content)', scope: 'header' })
+    expect(materializeSource(bareInHeader)).toBe('hash(header.messages.1.content)')
+    // 跨域的来源本来就带前缀，原样保留。
+    const crossSource = makeAction({ mode: 'set', path: 'x', value: 'hash(body.messages.1.content)', scope: 'header' })
+    expect(materializeSource(crossSource)).toBe('hash(body.messages.1.content)')
+    const bareInBody = makeAction({ mode: 'set', path: 'x', value: 'hash(messages.1.content)', scope: 'body' })
+    expect(materializeSource(bareInBody)).toBe('hash(body.messages.1.content)')
   })
 })

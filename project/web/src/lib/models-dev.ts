@@ -227,6 +227,7 @@ const LAB_PREFIX_RULES: readonly (readonly [string, string])[] = [
   ['kimi', 'moonshotai'],
   ['glm', 'zhipuai'],
   ['minimax', 'minimax'],
+  ['mimo', 'xiaomi'],
   ['qwen', 'alibaba'],
   ['llama', 'meta'],
   ['mistral', 'mistral'],

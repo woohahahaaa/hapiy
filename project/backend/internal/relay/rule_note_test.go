@@ -77,6 +77,61 @@ func TestRewriteNotes_hitAndMiss(t *testing.T) {
 	}
 }
 
+// A cross-domain ref whose source is absent reports 命中但未生效 with the domain
+// prefix kept, so the note says which domain was read.
+func TestRewriteNotes_crossDomainMissingSourceReportsNoEffect(t *testing.T) {
+	headerChain, err := compileRewriteChain("r1", `[
+		{"path":"header.x-from-body","mode":"set","value":{"ref":"body.messages.0.content"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile header: %v", err)
+	}
+	_, _, notes, err := applyRewriteChainsWithNotes([]byte(`{}`), nil,
+		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "取 body 首句", Ops: headerChain}}, service.RuleCategoryRequest)
+	if err != nil {
+		t.Fatalf("apply header: %v", err)
+	}
+	want := "[请求改写] 取 body 首句：命中但未生效（引用源 body.messages.0.content 不存在）"
+	if got := service.RuleNotesText(notes); got != want {
+		t.Fatalf("note text = %q, want %q", got, want)
+	}
+
+	bodyChain, err := compileRewriteChain("r2", `[
+		{"path":"session","mode":"set","value":{"ref":"header.X-Session-Id"}}
+	]`)
+	if err != nil {
+		t.Fatalf("compile body: %v", err)
+	}
+	_, _, notes, err = applyRewriteChainsWithNotes([]byte(`{}`), map[string]string{"Authorization": "Bearer hk-x"},
+		[]CompiledRewriteChain{{RuleID: "r2", RuleName: "取会话头", Ops: bodyChain}}, service.RuleCategoryRequest)
+	if err != nil {
+		t.Fatalf("apply body: %v", err)
+	}
+	want = "[请求改写] 取会话头：命中但未生效（引用源 header.X-Session-Id 不存在）"
+	if got := service.RuleNotesText(notes); got != want {
+		t.Fatalf("note text = %q, want %q", got, want)
+	}
+}
+
+// The same note contract holds for a set-from-hash op whose source is absent.
+func TestRewriteNotes_hashMissingSourceReportsNoEffect(t *testing.T) {
+	chain, err := compileRewriteChain("r1", `[
+		{"path":"header.x-opencode-session","mode":"set","value":{"hash":"body.messages.1.content"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, _, notes, err := applyRewriteChainsWithNotes([]byte(`{"model":"m"}`), nil,
+		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "派发会话 id", Ops: chain}}, service.RuleCategoryRequest)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	want := "[请求改写] 派发会话 id：命中但未生效（引用源 body.messages.1.content 不存在）"
+	if got := service.RuleNotesText(notes); got != want {
+		t.Fatalf("note text = %q, want %q", got, want)
+	}
+}
+
 // A body op whose target path is absent reports 命中但未生效 with the path,
 // so a rule silently doing nothing is explainable.
 func TestRewriteNotes_missingBodyPathReportsNoEffect(t *testing.T) {

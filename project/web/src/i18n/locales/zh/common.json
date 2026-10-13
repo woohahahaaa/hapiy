@@ -78,7 +78,7 @@
     "rewriteResponse": "响应改写",
     "channelAffinity": "渠道亲和性",
     "failover": "故障转移",
-    "agent": "接管Agent",
+    "agent": "接管 Agent",
     "agentConfig": "接管配置文件",
     "settings": "系统设置",
     "baseUrl": "BaseURL",

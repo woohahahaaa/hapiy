@@ -34,9 +34,9 @@
     "endpointUseKey": "Send Key",
     "endpointUseKeyHint": "Uses the provider's first Key as the Bearer credential",
     "bulkScopeTitle": "Choose scope",
-    "bulkScopeQuestion": "Apply the models.dev pricing to which models?",
+    "bulkScopeQuestion": "Apply the one-click setup to which models?",
     "bulkScopeAll": "All models",
-    "bulkScopeReference": "Reference mode only",
+    "bulkScopeReference": "Only models synced from models.dev",
     "syncTitle": "Sync price settings",
     "syncConfirm": "Confirm sync",
     "syncing": "Syncing...",
@@ -49,8 +49,8 @@
     "saving": "Saving...",
     "addRow": "Add row",
     "fetchModels": "Fetch models from upstream",
-    "bulkPrice": "Set models.dev providers in one click",
-    "bulkPriceTitle": "Set prices from models.dev in one click: models in reference mode are refreshed from their reference provider; models without prices are auto-matched to their official (lab) reference provider. Models with manually set prices are not overridden."
+    "bulkPrice": "Set the models.dev providers to reference in one click",
+    "bulkPriceTitle": "Match models to their official (lab) models.dev reference provider and sync prices in one click: the official source wins; when it does not carry the model, the current reference provider is kept. With the all-models scope, manually priced models are turned into reference mode too."
   },
   "form": {
     "apiKeys": "API Keys",
@@ -116,8 +116,8 @@
   "toast": {
     "disableReset": "Failover disabled state restored",
     "snapshotUpdated": "Price snapshot updated from models.dev",
-    "bulkFilled_one": "Set prices from models.dev for {{count}} model",
-    "bulkFilled_other": "Set prices from models.dev for {{count}} models",
+    "bulkFilled_one": "Matched a reference provider and synced prices for {{count}} model (official lab first)",
+    "bulkFilled_other": "Matched a reference provider and synced prices for {{count}} models (official lab first)",
     "bulkVendorless_one": "Skipped {{count}} model: no official reference provider found on models.dev",
     "bulkVendorless_other": "Skipped {{count}} models: no official reference provider found on models.dev",
     "noAutoModels": "No models available for automatic setup",

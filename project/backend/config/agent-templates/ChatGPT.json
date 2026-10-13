@@ -30,21 +30,21 @@
     {
       "scope": "provider",
       "key": "model_provider",
-      "description": "顶层默认 provider id，取自 [model_providers] 的键（官方默认 openai）",
+      "description": "顶层默认供应商 id，取自 [model_providers] 的键（官方默认 openai）",
       "recommended": null,
       "required": true
     },
     {
       "scope": "provider",
       "key": "name",
-      "description": "自定义 provider 的显示名",
+      "description": "自定义供应商的显示名",
       "recommended": null,
       "required": false
     },
     {
       "scope": "provider",
       "key": "base_url",
-      "description": "该 provider 的 API base URL（如 https://api.example.com/v1）",
+      "description": "该供应商的 API base URL（如 https://api.example.com/v1）",
       "recommended": null,
       "required": true
     },

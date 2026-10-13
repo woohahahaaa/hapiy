@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/wooh/tooltip'
 import { cn } from '@/lib/utils'
-import { parseValueInput } from './serializer'
+import type { Scope } from './modes'
+import { explicitRefDomain, parseValueInput } from './serializer'
 
 interface ConventionValueInputProps {
   /** 输入文本（action.value / condition.value）。 */
@@ -16,11 +17,13 @@ interface ConventionValueInputProps {
   refs?: boolean
   /** true/false/null/数字按 JSON 字面量解析（body scope 的 action / 条件值）。 */
   literals?: boolean
+  /** 目标域；用于把显式跨域的引用和同域引用区分着色。 */
+  scope?: Scope
 }
 
 // 「引号约定」的共享输入框：按 parseValueInput 结果给文本着色
-// （带引号字符串 → 绿、原生字面量 → 紫、变量引用 → 蓝、不合法 → 红），
-// 聚焦时在上方弹出约定说明 tooltip，不合法时在下方保留 muted 提示。
+// （带引号字符串 → 绿、原生字面量 → 紫、变量引用 → 蓝、哈希来源 → 品红、跨域引用 → 青、
+// 不合法 → 红），聚焦时在上方弹出约定说明 tooltip，不合法时在下方保留 muted 提示。
 export function ConventionValueInput({
   text,
   onChange,
@@ -28,20 +31,32 @@ export function ConventionValueInput({
   active,
   refs = false,
   literals = true,
+  scope,
 }: ConventionValueInputProps) {
   const { t } = useTranslation('rewrite')
   const [focused, setFocused] = useState(false)
-  const kind = active ? parseValueInput(text, { literals, refs }).kind : null
+  const parsed = active ? parseValueInput(text, { literals, refs }) : null
+  const kind = parsed?.kind ?? null
   const invalid = kind === 'invalid' && text.trim() !== ''
+  // 引用的来源文本（裸引用 / 哈希来源），用于判断它是否显式指向了另一个域。
+  const source = parsed?.kind === 'ref' ? parsed.ref : parsed?.kind === 'hash' ? parsed.source : null
+  const sourceDomain = source === null ? null : explicitRefDomain(source)
+  const crossDomain = sourceDomain !== null && scope !== undefined && sourceDomain !== scope
   const colorClass = !active || text.trim() === ''
     ? ''
     : kind === 'string'
       ? 'text-emerald-600 dark:text-emerald-400'
       : kind === 'literal'
         ? 'text-violet-600 dark:text-violet-400'
-        : kind === 'ref'
-          ? 'text-sky-600 dark:text-sky-400'
-          : 'text-destructive'
+        : kind === 'hash'
+          ? crossDomain
+            ? 'text-fuchsia-700 dark:text-fuchsia-400'
+            : 'text-fuchsia-600 dark:text-fuchsia-400'
+          : kind === 'ref'
+            ? crossDomain
+              ? 'text-cyan-600 dark:text-cyan-400'
+              : 'text-sky-600 dark:text-sky-400'
+            : 'text-destructive'
 
   const input = (
     <Input
@@ -65,6 +80,16 @@ export function ConventionValueInput({
                 {refs && (
                   <p className="text-xs">
                     {t('convention.refHint')}
+                  </p>
+                )}
+                {refs && (
+                  <p className="text-xs">
+                    {t('convention.crossDomainHint')}
+                  </p>
+                )}
+                {refs && (
+                  <p className="text-xs">
+                    {t('convention.hashHint')}
                   </p>
                 )}
                 {literals && (

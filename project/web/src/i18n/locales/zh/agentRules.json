@@ -18,7 +18,7 @@
     "deleteDescription": "将删除规则「{{name}}」，删除后不可恢复。",
     "templateConfirmTitle": "使用默认推荐模版",
     "templateApplyFor": "将为规则「{{name}}」应用系统的默认推荐模版：",
-    "templateApplyDetail": "默认路径、provider/model gjson 路径、模型信息字段、公共配置（common）与各 Endpoint 规则的字段推荐会全部替换为默认值。确认？",
+    "templateApplyDetail": "默认路径、供应商/模型 gjson 路径、模型信息字段、公共配置（common）与各 Endpoint 规则的字段推荐会全部替换为默认值。确认？",
     "confirmApply": "确认应用"
   },
   "actions": {
@@ -28,13 +28,13 @@
     "jsonModeBackTitle": "校验 JSON 并还原成表格编辑；不合法则无法切回",
     "useDefaultTemplate": "使用默认推荐模版",
     "templateResetTitle": "将该规则的全部字段（路径 / 模型信息字段 / 公共配置 / 各 Endpoint 规则）重置为系统默认推荐模版",
-    "saving": "保存中...",
+    "saving": "保存中…",
     "addRow": "添加一行"
   },
   "form": {
     "nameLabel": "名称",
     "namePlaceholder": "例如：opencode",
-    "defaultPathsGroup": "Agent软件配置文件默认路径",
+    "defaultPathsGroup": "Agent 软件配置文件默认路径",
     "windowsPathLabel": "Windows 默认路径",
     "windowsPathPlaceholder": "例如：%USERPROFILE%\\.config\\opencode\\opencode.json",
     "windowsPathHint": "支持 %APPDATA%、%USERPROFILE% 等环境变量",
@@ -42,11 +42,11 @@
     "macPathPlaceholder": "例如：~/.config/opencode/opencode.json",
     "macPathHint": "支持 ~ 和 $HOME",
     "jsonPathsGroup": "供应商与模型推荐配置表",
-    "providerPathLabel": "provider gjson 路径",
+    "providerPathLabel": "供应商 gjson 路径",
     "providerPathPlaceholder": "例如：provider",
     "modelPathLabel": "model gjson 路径",
     "modelPathPlaceholder": "例如：provider.{provider_id}.models",
-    "modelPathHint": "完整 gjson 路径，model 里用 {provider_id} 占位当前 provider 键名；YAML 文件（如 dsh）可写 `#(id==\"xxx\")` 查询段先按 ID 定位插件条目",
+    "modelPathHint": "完整 gjson 路径，model 里用 {provider_id} 占位当前供应商键名；YAML 文件（如 dsh）可写 `#(id==\"xxx\")` 查询段先按 ID 定位插件条目",
     "modelsContainerLabel": "模型列表容器格式（models_container）",
     "modelsContainerPlaceholder": "选择格式",
     "containerArray": "数组 [{\"id\": ...}]（openclaw）",

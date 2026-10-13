@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -716,10 +717,304 @@ func TestRewriteRefMissingBodySourceIsNoOp(t *testing.T) {
 	}
 }
 
-func TestRewriteRefRejectsCrossScope(t *testing.T) {
-	_, err := compileRewriteChain("r", `[{"path":"model","mode":"set","value":{"ref":"header.X-Session-Id"},"scope":"body"}]`)
-	if err == nil || !strings.Contains(err.Error(), "same scope") {
-		t.Fatalf("expected cross-scope ref rejection, got: %v", err)
+// ── header 名字大小写不敏感 ──
+
+// 客户端头进 map 时是 Go 规范拼写（X-Opencode-Session），规则作者写的名字保持
+// 自己的拼写；两条路径必须能对上，否则条件会误判、写入会留下两个同名条目。
+func TestRewriteHeaderNameCaseInsensitive(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.x-out","mode":"set","value":{"ref":"x-session-id"},"scope":"header",
+		 "conditions":[{"path":"header.x-session-id","op":"eq","value":"","scope":"header","invert":true}]}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	// 客户端按规范拼写发来，规则用全小写引用 + 条件，都要能命中。
+	headers := map[string]string{"X-Session-Id": "ses_1"}
+	_, out, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["x-out"] != "ses_1" {
+		t.Fatalf("lowercase ref must resolve the canonical client header, got %q", out["x-out"])
+	}
+
+	// 写 x-opencode-session 时必须更新已有的规范拼写条目，而不是新增一个小写条目。
+	chain2, err := compileRewriteChain("r2", `[
+		{"path":"header.x-opencode-session","mode":"set","value":"derived","scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile 2: %v", err)
+	}
+	_, out2, err := applyRewriteChains([]byte(`{}`), map[string]string{"X-Opencode-Session": "ses_1"},
+		[]CompiledRewriteChain{{RuleID: "r2", Ops: chain2}})
+	if err != nil {
+		t.Fatalf("apply 2: %v", err)
+	}
+	if out2["X-Opencode-Session"] != "derived" {
+		t.Fatalf("write must update the existing canonical entry, got %q", out2["X-Opencode-Session"])
+	}
+	if _, dup := out2["x-opencode-session"]; dup {
+		t.Fatalf("write must not leave a second case-variant entry: %#v", out2)
+	}
+}
+
+func TestRewriteHeaderDeleteCaseInsensitive(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.x-api-key","mode":"delete","scope":"header"}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains([]byte(`{}`), map[string]string{"X-Api-Key": "secret", "Other": "keep"},
+		[]CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if _, ok := out["X-Api-Key"]; ok {
+		t.Fatalf("delete must remove the case variant, got %#v", out)
+	}
+	if out["Other"] != "keep" {
+		t.Fatalf("unrelated headers must stay, got %#v", out)
+	}
+}
+
+// The deployed "为 opencode go 添加x-opencode-session" chain, verbatim: the
+// client's own session id wins, the harness's native header comes next, and the
+// derived id is the last resort. This guards the property the whole rule exists
+// for — never replacing an id the client already sent.
+func TestRewriteOpencodeSessionChain(t *testing.T) {
+	const script = `[
+		{"mode":"set","path":"header.x-opencode-session","value":{"ref":"X-Session-Id"},"scope":"header"},
+		{"mode":"set","path":"header.x-opencode-session","value":{"ref":"x-deepseek-harness-session-id"},"scope":"header",
+		 "conditions":[{"path":"header.x-opencode-session","op":"eq","value":"","scope":"header"}]},
+		{"mode":"set","path":"header.x-opencode-session","value":{"hash":"body.messages.1.content"},"scope":"header",
+		 "conditions":[{"path":"header.x-opencode-session","op":"eq","value":"","scope":"header"}]}
+	]`
+	chain, err := compileRewriteChain("r", script)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"messages":[{"role":"system","content":"s"},{"role":"user","content":"你好"}]}`)
+
+	// opencode 自己带了会话头（规范拼写）：原值必须原样保留，不能被派生 id 顶掉。
+	clientHeaders := map[string]string{"X-Session-Id": "ses_client", "X-Opencode-Session": "ses_client"}
+	_, out, err := applyRewriteChains(body, clientHeaders, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply client: %v", err)
+	}
+	if out["X-Opencode-Session"] != "ses_client" {
+		t.Fatalf("a client-provided session must win, got %q", out["X-Opencode-Session"])
+	}
+
+	// 只带 DSH 原生头（任意拼写）：优先照抄它。
+	native := map[string]string{"x-deepseek-harness-session-id": "native-1"}
+	_, out2, err := applyRewriteChains(body, native, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply native: %v", err)
+	}
+	if out2["x-opencode-session"] != "native-1" {
+		t.Fatalf("the harness native header must be copied, got %q", out2["x-opencode-session"])
+	}
+
+	// 什么都没有：派生一个稳定 id。这就是 DSH 现在走的路径。
+	_, out3, err := applyRewriteChains(body, map[string]string{"User-Agent": "deepseek-harness/0.2.0-rc.2"},
+		[]CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply derived: %v", err)
+	}
+	if out3["x-opencode-session"] != "670d9743-542c-4e3e-a7eb-e36af56bd536" {
+		t.Fatalf("expected the derived id, got %q", out3["x-opencode-session"])
+	}
+}
+
+// ── 哈希来源（set 的 {"hash":"<来源>"}） ──
+
+func TestCompileHashSource(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.x","mode":"set","value":{"hash":"body.messages.1.content"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if chain[0].HashPath != "messages.1.content" || chain[0].HashDomain != "body" {
+		t.Fatalf("hash source = %q/%q, want messages.1.content/body", chain[0].HashDomain, chain[0].HashPath)
+	}
+	// 裸来源同样按目标域解释。
+	bare, err := compileRewriteChain("r", `[{"path":"out","mode":"set","value":{"hash":"messages.1.content"}}]`)
+	if err != nil {
+		t.Fatalf("compile bare: %v", err)
+	}
+	if bare[0].HashPath != "messages.1.content" || bare[0].HashDomain != "body" {
+		t.Fatalf("bare hash source = %q/%q, want messages.1.content/body", bare[0].HashDomain, bare[0].HashPath)
+	}
+}
+
+func TestCompileHashSourceRejectsBadShapes(t *testing.T) {
+	if _, err := compileRewriteChain("r", `[{"path":"x","mode":"set","value":{"hash":123}}]`); err == nil || !strings.Contains(err.Error(), "hash is not a string") {
+		t.Fatalf("expected non-string hash rejection, got: %v", err)
+	}
+	if _, err := compileRewriteChain("r", `[{"path":"x","mode":"set","value":{"hash":"header."}}]`); err == nil || !strings.Contains(err.Error(), "hash source is empty") {
+		t.Fatalf("expected empty hash source rejection, got: %v", err)
+	}
+}
+
+// The motivating shape: derive the per-conversation id from the first user
+// message and write it into the required header. The value must be a stable,
+// UUID-shaped token — the exact vector pins both the algorithm and the format.
+func TestRewriteHashDerivesStableID(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.x-opencode-session","mode":"set","value":{"hash":"body.messages.1.content"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"messages":[{"content":"hi"},{"content":"你好"}]}`)
+	_, out, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	const want = "670d9743-542c-4e3e-a7eb-e36af56bd536"
+	if out["x-opencode-session"] != want {
+		t.Fatalf("derived id = %q, want %q", out["x-opencode-session"], want)
+	}
+
+	// 同一条首句再来一次：同一个 id（每轮稳定）。
+	_, out2, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply again: %v", err)
+	}
+	if out2["x-opencode-session"] != want {
+		t.Fatalf("derived id must be stable across turns, got %q", out2["x-opencode-session"])
+	}
+
+	// 换个首句：不同的 id（会话之间不同）。
+	other := []byte(`{"messages":[{"content":"hi"},{"content":"hello"}]}`)
+	_, out3, err := applyRewriteChains(other, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply other: %v", err)
+	}
+	if out3["x-opencode-session"] == want || out3["x-opencode-session"] == "" {
+		t.Fatalf("a different opener must derive a different id, got %q", out3["x-opencode-session"])
+	}
+}
+
+func TestRewriteHashBodyDestinationWritesString(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"session","mode":"set","value":{"hash":"header.X-Session-Id"}}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Session-Id": "ses-1"}
+	updated, _, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	// 跨域（header → body）+ 确定性：同一来源两次得到同一个 UUID 形状的值。
+	updated2, _, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply again: %v", err)
+	}
+	if string(updated) != string(updated2) {
+		t.Fatalf("hash must be deterministic: %s vs %s", updated, updated2)
+	}
+	uuidShape := regexp.MustCompile(`^\{"session":"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"\}$`)
+	if !uuidShape.Match(updated) {
+		t.Fatalf("expected a UUID-shaped JSON string, got %s", updated)
+	}
+}
+
+func TestCompileRefDomain(t *testing.T) {
+	cases := []struct {
+		script string
+		domain string
+		ref    string
+	}{
+		// 裸文本沿用历史语义：按目标路径的域解释。
+		{`[{"path":"header.a","mode":"set","value":{"ref":"X-Session-Id"},"scope":"header"}]`, "header", "X-Session-Id"},
+		{`[{"path":"a","mode":"set","value":{"ref":"value"}}]`, "body", "value"},
+		// 显式前缀决定来源域。
+		{`[{"path":"header.a","mode":"set","value":{"ref":"header.X-Session-Id"},"scope":"header"}]`, "header", "X-Session-Id"},
+		{`[{"path":"a","mode":"set","value":{"ref":"body.value"}}]`, "body", "value"},
+		{`[{"path":"header.a","mode":"set","value":{"ref":"body.messages.1.content"},"scope":"header"}]`, "body", "messages.1.content"},
+		{`[{"path":"a","mode":"set","value":{"ref":"header.X-Session-Id"},"scope":"body"}]`, "header", "X-Session-Id"},
+	}
+	for _, tc := range cases {
+		chain, err := compileRewriteChain("r", tc.script)
+		if err != nil {
+			t.Fatalf("compile %s: %v", tc.script, err)
+		}
+		op := chain[0]
+		if op.RefDomain != tc.domain || op.Ref != tc.ref {
+			t.Errorf("%s → domain=%q ref=%q, want domain=%q ref=%q", tc.script, op.RefDomain, op.Ref, tc.domain, tc.ref)
+		}
+	}
+}
+
+func TestRewriteRefCrossDomainHeaderReadsBody(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"header.x-from-body","mode":"set","value":{"ref":"body.messages.1.content"},"scope":"header"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body := []byte(`{"messages":[{"content":"hi"},{"content":"你好"}]}`)
+	_, out, err := applyRewriteChains(body, nil, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["x-from-body"] != "你好" {
+		t.Fatalf("expected the body value in the header, got %q", out["x-from-body"])
+	}
+}
+
+func TestRewriteRefCrossDomainBodyReadsHeader(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[
+		{"path":"session","mode":"set","value":{"ref":"header.X-Session-Id"}}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	headers := map[string]string{"X-Session-Id": "s-1"}
+	updated, _, err := applyRewriteChains([]byte(`{}`), headers, []CompiledRewriteChain{{RuleID: "r", Ops: chain}})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"session":"s-1"}` {
+		t.Fatalf("expected the header value as a JSON string, got %s", updated)
+	}
+}
+
+// 裸引用仍按目标域解释：同名值同时存在于 body 和 header 时各取各的，不能被
+// 跨域能力顺手改掉。
+func TestRewriteRefBareKeepsDestinationScope(t *testing.T) {
+	chain, err := compileRewriteChain("r", `[{"path":"header.out","mode":"set","value":{"ref":"value"}}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	_, out, err := applyRewriteChains(
+		[]byte(`{"value":"from-body"}`),
+		map[string]string{"value": "from-header"},
+		[]CompiledRewriteChain{{RuleID: "r", Ops: chain}},
+	)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if out["out"] != "from-header" {
+		t.Fatalf("bare ref in a header op must read the header, got %q", out["out"])
+	}
+
+	chainBody, err := compileRewriteChain("r", `[{"path":"out","mode":"set","value":{"ref":"value"}}]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	updated, _, err := applyRewriteChains(
+		[]byte(`{"value":"from-body"}`),
+		map[string]string{"value": "from-header"},
+		[]CompiledRewriteChain{{RuleID: "r", Ops: chainBody}},
+	)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if string(updated) != `{"value":"from-body","out":"from-body"}` {
+		t.Fatalf("bare ref in a body op must read the body, got %s", updated)
 	}
 }
 

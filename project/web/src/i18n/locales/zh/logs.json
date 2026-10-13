@@ -25,7 +25,7 @@
     "status": "状态",
     "stream": "流式",
     "latency": "耗时",
-    "latencyWithFirstByte": "{{total}}（首字:{{firstByte}}）",
+    "latencyWithFirstByte": "{{total}}（首字：{{firstByte}}）",
     "affinity": "渠道亲和性",
     "tokens": "Tokens",
     "quota": "消耗",
@@ -33,7 +33,7 @@
     "operation": "操作",
     "prefix": "文件夹路径",
     "type": "类型",
-    "fileName": "文件名/请求ID",
+    "fileName": "文件名/请求 ID",
     "size": "大小"
   },
   "status": {
@@ -161,7 +161,7 @@
     "incompleteSuffix": "+不完整"
   },
   "preview": {
-    "loading": "加载中...",
+    "loading": "加载中…",
     "empty": "暂无内容",
     "request": "请求",
     "response": "响应",
@@ -169,14 +169,14 @@
     "requestBody": "请求体",
     "responseHeaders": "响应头",
     "responseBody": "响应体",
-    "mergeJson": "整合JSON",
+    "mergeJson": "整合 JSON",
     "raw": "原始内容",
     "merging": "整合中…",
     "noData": "（无 data）",
     "systemLog": "系统日志",
     "ruleNotes": "规则命中",
     "ruleProblems": "改写问题",
-    "responseStatus": "响应状态码: {{status}}",
+    "responseStatus": "响应状态码：{{status}}",
     "timing": {
       "queue": "排队",
       "requestRewrite": "请求改写",

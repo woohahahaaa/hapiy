@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -24,11 +25,25 @@ type CompiledRewriteChain struct {
 
 // RewriteOp is a single, pre-parsed operation from a rule's Script.
 type RewriteOp struct {
-	Mode       string // set | delete | append | prepend | trim_prefix | trim_suffix | ensure_prefix | ensure_suffix | trim_space | to_lower | to_upper | replace | regex_replace | move | copy
-	Path       string // gjson path
-	Value      string // raw value for set/append/prepend/ensure_*
-	RawValue   json.RawMessage
-	Ref        string             // set: variable reference — same-domain gjson path / header name in the original request
+	Mode     string // set | delete | append | prepend | trim_prefix | trim_suffix | ensure_prefix | ensure_suffix | trim_space | to_lower | to_upper | replace | regex_replace | move | copy
+	Path     string // gjson path
+	Value    string // raw value for set/append/prepend/ensure_*
+	RawValue json.RawMessage
+	Ref      string // set: variable reference — gjson path / header name in the original request, after the domain prefix is stripped
+	// RefDomain is the domain the Ref reads from: "header" or "body".
+	// Compile always resolves it: an explicit "header."/"body." prefix picks the
+	// domain, a bare reference keeps the destination's domain (the historical
+	// same-scope behavior), so scripts written before cross-domain refs exist
+	// keep their meaning byte for byte.
+	RefDomain string
+	// HashPath/HashDomain are the set-from-hash form ({"hash":"<source>"}): the
+	// same source syntax as Ref, but the written value is derived from the source
+	// text instead of copied. Because the source is read by path, a history that
+	// shifts under it (e.g. compaction dropping the source message) derives a
+	// different id — still deterministic, just a new bucket for that session.
+	// Empty HashPath means "not a hash op".
+	HashPath   string
+	HashDomain string
 	From       string             // replace / regex_replace source
 	To         string             // replace / regex_replace target
 	Regex      *regexp.Regexp     // compiled regex for regex_replace
@@ -108,17 +123,30 @@ func compileRewriteOp(ruleID string, index int, entry map[string]json.RawMessage
 		if err != nil {
 			return op, fmt.Errorf("rule %s: op %d (set): %w", ruleID, index, err)
 		}
-		if isRef {
-			// 变量引用不跨域：header path 引用 header 名，body path 引用 body gjson 路径。
-			if strings.HasPrefix(op.Path, "header.") {
-				ref = strings.TrimPrefix(ref, "header.")
-			} else if strings.HasPrefix(ref, "header.") {
-				return op, fmt.Errorf("rule %s: op %d (set): ref %q must stay in the same scope as path %q", ruleID, index, ref, op.Path)
+		hashSource, isHash, err := parseValueHash(raw)
+		if err != nil {
+			return op, fmt.Errorf("rule %s: op %d (set): %w", ruleID, index, err)
+		}
+		if isHash {
+			// 哈希来源和引用来源共用同一套路径语法与域规则。
+			domain, path := splitRefDomain(hashSource, strings.HasPrefix(op.Path, "header."))
+			if path == "" {
+				return op, fmt.Errorf("rule %s: op %d (set): hash source is empty", ruleID, index)
 			}
-			if ref == "" {
+			op.HashPath = path
+			op.HashDomain = domain
+			break
+		}
+		if isRef {
+			// 变量引用的来源域可以显式指定：header.<名字> 读原始 header，
+			// body.<gjson 路径> 读原始 body。裸文本沿用历史语义，按目标路径的域
+			// 解释（header op 里是 header 名，body op 里是 gjson 路径）。
+			domain, name := splitRefDomain(ref, strings.HasPrefix(op.Path, "header."))
+			if name == "" {
 				return op, fmt.Errorf("rule %s: op %d (set): ref is empty", ruleID, index)
 			}
-			op.Ref = ref
+			op.Ref = name
+			op.RefDomain = domain
 			break
 		}
 		op.RawValue = raw
@@ -235,6 +263,94 @@ func parseValueRef(raw json.RawMessage) (string, bool, error) {
 		return "", true, fmt.Errorf("ref is empty")
 	}
 	return ref, true, nil
+}
+
+// parseValueHash recognises the hash-source form {"hash":"<source>"}. Like
+// parseValueRef it requires an object with exactly one string `hash` key, so a
+// body value that legitimately is an object is never misread as one.
+func parseValueHash(raw json.RawMessage) (string, bool, error) {
+	if !strings.HasPrefix(strings.TrimSpace(string(raw)), "{") {
+		return "", false, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil || len(obj) != 1 {
+		return "", false, nil
+	}
+	hashRaw, ok := obj["hash"]
+	if !ok {
+		return "", false, nil
+	}
+	var source string
+	if err := json.Unmarshal(hashRaw, &source); err != nil {
+		return "", true, fmt.Errorf("hash is not a string: %w", err)
+	}
+	return strings.TrimSpace(source), true, nil
+}
+
+// splitRefDomain resolves a variable reference into the domain it reads from
+// and the name/path inside that domain. An explicit "header." / "body." prefix
+// picks the domain and is stripped; a bare reference keeps the destination's
+// domain, which is the historical same-scope behavior. A header literally named
+// "body.<x>" stays reachable by writing "header.body.<x>".
+func splitRefDomain(ref string, destIsHeader bool) (domain, name string) {
+	if rest, ok := strings.CutPrefix(ref, "header."); ok {
+		return "header", rest
+	}
+	if rest, ok := strings.CutPrefix(ref, "body."); ok {
+		return "body", rest
+	}
+	if destIsHeader {
+		return "header", ref
+	}
+	return "body", ref
+}
+
+// refSourceLabel renders a source for the "引用源 … 不存在" note. A cross-domain
+// source keeps its explicit prefix so the log says which domain was read;
+// same-domain sources keep the historical bare label.
+func refSourceLabel(op *RewriteOp, destIsHeader bool) string {
+	if op.RefDomain == "header" && !destIsHeader {
+		return "header." + op.Ref
+	}
+	if op.RefDomain == "body" && destIsHeader {
+		return "body." + op.Ref
+	}
+	return op.Ref
+}
+
+// hashSourceLabel mirrors refSourceLabel for the set-from-hash form.
+func hashSourceLabel(op *RewriteOp, destIsHeader bool) string {
+	if op.HashDomain == "header" && !destIsHeader {
+		return "header." + op.HashPath
+	}
+	if op.HashDomain == "body" && destIsHeader {
+		return "body." + op.HashPath
+	}
+	return op.HashPath
+}
+
+// readHashSource reads the hash source from the pre-rewrite snapshot.
+func readHashSource(origBody []byte, origHeaders map[string]string, domain, path string) (string, bool) {
+	if domain == "header" {
+		return lookupHeader(origHeaders, path)
+	}
+	src := gjson.GetBytes(origBody, path)
+	if !src.Exists() {
+		return "", false
+	}
+	return src.String(), true
+}
+
+// hashID derives a stable identifier string from the source text: sha256, first
+// 16 bytes, rendered as a UUID v4-shaped token (version/variant bits set so the
+// shape is a syntactically valid UUID, which is the shape per-conversation
+// session ids are expected in).
+func hashID(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	b := sum[:16]
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // compileConditions parses the optional conditions array. In its simple
@@ -421,7 +537,7 @@ func cloneHeaders(headers map[string]string) map[string]string {
 // into a "命中但未生效" note instead of a silent no-op.
 func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, string, error) {
 	if strings.HasPrefix(op.Path, "header.") {
-		return applyHeaderOp(body, headers, origHeaders, op)
+		return applyHeaderOp(body, headers, origBody, origHeaders, op)
 	}
 	// sjson cannot address array elements by negative index ("-1"), while
 	// gjson (used for condition evaluation above) can. Resolve negative
@@ -434,11 +550,29 @@ func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, ori
 	}
 	switch op.Mode {
 	case "set":
+		if op.HashPath != "" {
+			// 哈希来源：从原始请求取文本，写入派生出的稳定 id。
+			src, ok := readHashSource(origBody, origHeaders, op.HashDomain, op.HashPath)
+			if !ok {
+				return body, headers, fmt.Sprintf("引用源 %s 不存在", hashSourceLabel(op, false)), nil
+			}
+			updated, err := sjson.SetBytes(body, writePath, hashID(src))
+			return updated, headers, "", err
+		}
 		if op.Ref != "" {
+			if op.RefDomain == "header" {
+				// 跨域引用：header → body。header 的值天生是字符串，按 JSON 字符串写入。
+				src, ok := lookupHeader(origHeaders, op.Ref)
+				if !ok {
+					return body, headers, fmt.Sprintf("引用源 %s 不存在", refSourceLabel(op, false)), nil
+				}
+				updated, err := sjson.SetBytes(body, writePath, src)
+				return updated, headers, "", err
+			}
 			// 变量引用：拷原始请求里的同域值（保留 JSON 类型）；源不存在则跳过。
 			src := gjson.GetBytes(origBody, op.Ref)
 			if !src.Exists() {
-				return body, headers, fmt.Sprintf("引用源 %s 不存在", op.Ref), nil
+				return body, headers, fmt.Sprintf("引用源 %s 不存在", refSourceLabel(op, false)), nil
 			}
 			updated, err := sjson.SetRawBytes(body, writePath, []byte(src.Raw))
 			return updated, headers, "", err
@@ -629,9 +763,10 @@ func evaluateCondition(c *RewriteCondition, body []byte, headers map[string]stri
 		if err != nil {
 			return false, err
 		}
+		// 大小写不敏感：客户端头是 Go 规范形式，规则写的名字保持作者拼写。
 		actual := ""
 		if headers != nil {
-			actual = headers[key]
+			actual, _ = lookupHeader(headers, key)
 		}
 		expected := c.Value
 		if c.RawValue != nil {

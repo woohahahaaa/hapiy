@@ -13,9 +13,9 @@
     "chainNotEmpty": "连线链不能为空",
     "chainRefMustStart": "连线链 {{chain}}：引用 {{ref}} 必须以 pv- 或 slot- 开头",
     "unknownSlotRef": "连线链 {{chain}}：未知的槽位引用 {{ref}}",
-    "unknownProviderRef": "连线链 {{chain}}：未知的 provider 引用 {{ref}}",
-    "providerDuplicated": "provider {{key}} 出现在多条连线链中",
-    "providerFollowedByNonSlot": "连线链 {{chain}}：provider 之后出现非槽位引用 {{ref}}",
+    "unknownProviderRef": "连线链 {{chain}}：未知的供应商引用 {{ref}}",
+    "providerDuplicated": "供应商 {{key}} 出现在多条连线链中",
+    "providerFollowedByNonSlot": "连线链 {{chain}}：供应商之后出现非槽位引用 {{ref}}",
     "slotRefDuplicated": "连线链 {{chain}}：槽位 {{ref}} 在链中出现多次"
   },
   "doc": {
@@ -23,12 +23,12 @@
     "boolean": "{{field}} 必须是布尔值",
     "nonNegativeInteger": "{{field}} 必须是非负整数",
     "nodeMustBeObject": "节点必须是对象",
-    "unknownNodeType": "未知的节点类型: {{type}}",
+    "unknownNodeType": "未知的节点类型：{{type}}",
     "documentMustBeArray": "拓扑文档必须是数组",
     "workflowMustBeArray": "第 {{index}} 条 workflow 必须是数组",
     "workflowNotEmpty": "第 {{index}} 条 workflow 不能为空",
-    "workflowFirstNode": "第 {{index}} 条 workflow 的第一个节点必须是 provider",
-    "unknownNodeConversion": "无法转换节点类型: {{type}}"
+    "workflowFirstNode": "第 {{index}} 条 workflow 的第一个节点必须是供应商",
+    "unknownNodeConversion": "无法转换节点类型：{{type}}"
   },
   "modelsDev": {
     "invalidFormat": "models.dev 数据格式无效",

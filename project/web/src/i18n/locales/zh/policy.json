@@ -22,7 +22,7 @@
     "deleteDescription": "将删除规则「{{name}}」，删除后不可恢复。"
   },
   "actions": {
-    "saving": "保存中..."
+    "saving": "保存中…"
   },
   "errors": {
     "loadFailed": "加载失败",
@@ -35,13 +35,13 @@
   },
   "rewrite": {
     "description": "使用 JSON 操作数组修改请求体字段",
-    "empty": "暂无请求改写规则，点击\"添加规则\"创建第一条",
+    "empty": "暂无请求改写规则，点击「添加规则」创建第一条",
     "rewriteRules": "改写规则"
   },
   "failover": {
     "description": "主供应商失败时自动转移到备选供应商",
     "recoveryTab": "自动恢复",
-    "empty": "暂无故障转移规则，点击\"添加规则\"创建第一条",
+    "empty": "暂无故障转移规则，点击「添加规则」创建第一条",
     "notSet": "未设置",
     "notEnabled": "未启用",
     "unlimitedWindow": "不限",
@@ -87,6 +87,6 @@
   },
   "response": {
     "description": "按顺序对响应字段执行：重命名 / 加前缀 / 加后缀 / 删除",
-    "empty": "暂无响应改写规则，点击\"添加规则\"创建第一条"
+    "empty": "暂无响应改写规则，点击「添加规则」创建第一条"
   }
 }

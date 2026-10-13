@@ -138,7 +138,7 @@ describe('validateTopologyEdges', () => {
   it('rejects an unknown provider ref', () => {
     const workflows = doc('a')
     expect(() => validateTopologyEdges([['pv-w-x-0', 'slot-w-a-0-logOutput']], workflows))
-      .toThrow(/未知的 provider 引用/)
+      .toThrow(/未知的供应商引用/)
   })
 
   it('rejects a provider appearing in more than one chain', () => {

@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { MODES, MODE_BY_VALUE, SCOPE_OPTIONS, type ModeName } from './modes'
 import { LiteralValueInput } from './LiteralValueInput'
-import type { Action } from './serializer'
+import { materializeSource, type Action } from './serializer'
 
 interface ActionRowProps {
   index: number
@@ -34,7 +34,10 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
           <span className="inline-block w-4 shrink-0 text-center text-xs text-muted-foreground tabular-nums">{index + 1}</span>
           <Select
             value={action.scope}
-            onValueChange={(v) => onChange({ ...action, scope: v as typeof action.scope })}
+            onValueChange={(v) =>
+              // 切域前先把裸引用物化成显式来源前缀，否则"裸文本按目标域解释"会让
+              // 同一个值在切换后指向另一个域。
+              onChange({ ...action, scope: v as typeof action.scope, value: materializeSource(action) })}
           >
             <SelectTrigger className="h-7 w-[130px] shrink-0" size="sm">
               <SelectValue />
