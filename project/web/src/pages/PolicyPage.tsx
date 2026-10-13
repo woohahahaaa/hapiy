@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { dashboardApi,
@@ -99,8 +100,9 @@ function useRulesApi<T>(type: RuleType) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
-  const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(50)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState(`policy.${type}.offset`, 0)
+  const [limit, setLimit] = usePersistedState(`policy.${type}.limit`, 50)
   const [total, setTotal] = useState(0)
 
   const fetch = useCallback(async (specificOffset?: number, specificLimit?: number) => {

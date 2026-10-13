@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { PageHeader } from '@/components/wooh/PageHeader'
@@ -24,6 +24,7 @@ import {
 import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
   DashboardApiError,
@@ -130,7 +131,8 @@ export function BackupSettingsPage() {
   const [frequency, setFrequency] = useState<BackupFrequency>('weekly')
   const [path, setPath] = useState(DEFAULT_BACKUP_PATH)
   const [resolvedPath, setResolvedPath] = useState('')
-  const [offset, setOffset] = useState(0)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState('backup-records.offset', 0)
   const [saving, setSaving] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -167,9 +169,12 @@ export function BackupSettingsPage() {
       })
   }, [])
 
+  // 首屏用恢复出来的页码拉一次（缓存值只在挂载时取，后续翻页走 reloadRecords，
+  // 所以 offset 不进依赖）。
+  const initialOffsetRef = useRef(offset)
   useEffect(() => {
     loadSettings()
-    loadRecords(0)
+    loadRecords(initialOffsetRef.current)
   }, [loadSettings, loadRecords])
 
   const reloadSettings = () => {

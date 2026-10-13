@@ -1,6 +1,7 @@
 "use client"
 
 import type { JSX } from "react"
+import * as React from "react"
 import { useTranslation } from "react-i18next"
 import {
   Select,
@@ -32,6 +33,16 @@ export function Pagination({
   onLimitChange,
 }: PaginationProps): JSX.Element | null {
   const { t } = useTranslation('ui')
+
+  // 缓存恢复出来的页码可能已越界（数据变少、日志被清空）：回到最后一页，
+  // 避免刷新后停在空页上。total 为 0 时不判定——首帧数据还没回来，
+  // 否则刚恢复的页码会被立刻清成第一页。
+  React.useEffect(() => {
+    if (total > 0 && offset >= total) {
+      onOffsetChange(Math.max(0, Math.floor((total - 1) / limit) * limit))
+    }
+  }, [offset, total, limit, onOffsetChange])
+
   if (total === 0) return null
 
   const hasPrev = offset > 0

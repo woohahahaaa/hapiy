@@ -22,6 +22,7 @@ import {
 import { FieldGroup } from '@/components/ui/field'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import { DataTable, DefaultCell, type ColumnDef } from '@/components/wooh/data-table'
 import { SecretValue } from '@/components/wooh/SecretValue'
 import {
@@ -182,7 +183,7 @@ export function RecoverySettings() {
   const [savingInterval, setSavingInterval] = useState(false)
   const [recordsState, setRecordsState] = useState<RecordsState>({ kind: 'loading' })
   const [replayingId, setReplayingId] = useState<string | null>(null)
-  const [recordsOffset, setRecordsOffset] = useState(0)
+  const [recordsOffset, setRecordsOffset] = usePersistedState('recovery-disabled-records.offset', 0)
   const [handler, setHandler] = useState<RecoveryRequestHandler>({ ops: [], timeoutHours: 0 })
   const [handlerDialogOpen, setHandlerDialogOpen] = useState(false)
   const [savingHandler, setSavingHandler] = useState(false)

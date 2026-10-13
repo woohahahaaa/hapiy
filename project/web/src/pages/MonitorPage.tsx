@@ -20,6 +20,7 @@ import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { DateRangeFilter } from '@/components/wooh/DateRangeFilter'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
   type UsageLog,
@@ -230,7 +231,8 @@ function MetricSkeleton() {
 
 function StatsSection() {
   const { t } = useTranslation('logs')
-  const [dateRange, setDateRange] = useState<DateRange>({})
+  // 统计区顶部的时间筛选同样缓存到 localStorage：刷新后恢复。
+  const [dateRange, setDateRange] = usePersistedState<DateRange>('monitor.stats.dateRange', {})
   const [stats, setStats] = useState<LogStats | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

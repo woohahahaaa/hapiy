@@ -28,6 +28,7 @@ import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/toast'
 import { i18n } from '@/i18n/i18n'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
   DashboardApiError,
@@ -208,8 +209,9 @@ function AgentConfigFilesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
-  const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(50)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState('agent-config-files.offset', 0)
+  const [limit, setLimit] = usePersistedState('agent-config-files.limit', 50)
   const [takeoverOpen, setTakeoverOpen] = useState(false)
   const [editing, setEditing] = useState<AgentConfigFile | null>(null)
   const [editingRecord, setEditingRecord] = useState<AgentConfigFile | null>(null)

@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/wooh/dialog'
 import { toast } from '@/components/ui/toast'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, LOG_SOURCE_UNMARKED, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
@@ -57,21 +58,29 @@ const EVENT_SOURCE_COLORS: Record<string, string> = {
   系统管理: '9ca3af',
 }
 
+// 持久化的筛选值可能已不在选项池里（例如令牌被删除）：仍把它渲染成选项，
+// 否则下拉框回落成占位符，看起来没筛选，实际请求还带着旧条件。
+function isStaleOption(value: string, options: readonly string[]): boolean {
+  return value !== 'all' && value !== LOG_SOURCE_UNMARKED && !options.includes(value)
+}
+
 export function LogsPage() {
   const { t } = useTranslation('logs')
   const [logs, setLogs] = useState<readonly UsageLog[]>([])
   const [total, setTotal] = useState(0)
   const [initialLoading, setInitialLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [modelFilter, setModelFilter] = useState('all')
-  const [providerFilter, setProviderFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState<LogTypeFilter | 'all'>('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [tokenFilter, setTokenFilter] = useState('all')
-  const [sourceFilter, setSourceFilter] = useState('all')
-  const [dateRange, setDateRange] = useState<DateRange>({})
-  const [limit, setLimit] = useState(50)
-  const [offset, setOffset] = useState(0)
+  // 顶部筛选状态缓存到 localStorage（usePersistedState）：刷新后恢复。
+  const [modelFilter, setModelFilter] = usePersistedState('logs.model', 'all')
+  const [providerFilter, setProviderFilter] = usePersistedState('logs.provider', 'all')
+  const [typeFilter, setTypeFilter] = usePersistedState<LogTypeFilter | 'all'>('logs.type', 'all')
+  const [statusFilter, setStatusFilter] = usePersistedState('logs.status', 'all')
+  const [tokenFilter, setTokenFilter] = usePersistedState('logs.token', 'all')
+  const [sourceFilter, setSourceFilter] = usePersistedState('logs.source', 'all')
+  const [dateRange, setDateRange] = usePersistedState<DateRange>('logs.dateRange', {})
+  // 分页状态同样缓存：刷新后回到同一页与每页条数。
+  const [limit, setLimit] = usePersistedState('logs.limit', 50)
+  const [offset, setOffset] = usePersistedState('logs.offset', 0)
   const mountedRef = useRef(true)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [selectedLog, setSelectedLog] = useState<UsageLog | null>(null)
@@ -159,7 +168,7 @@ export function LogsPage() {
     setStatusFilter('all')
     setSourceFilter('all')
     setDateRange({})
-  }, [])
+  }, [setTokenFilter, setModelFilter, setProviderFilter, setTypeFilter, setStatusFilter, setSourceFilter, setDateRange])
 
   const handleClearAll = useCallback(async () => {
     try {
@@ -435,6 +444,9 @@ export function LogsPage() {
                     {sourceOptions.map((s) => (
                       <SelectItem key={s} value={s}>{s.replace(/^__/, '')}</SelectItem>
                     ))}
+                    {isStaleOption(sourceFilter, sourceOptions) && (
+                      <SelectItem value={sourceFilter}>{sourceFilter.replace(/^__/, '')}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -451,6 +463,9 @@ export function LogsPage() {
                     {tokenOptions.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
+                    {isStaleOption(tokenFilter, tokenOptions) && (
+                      <SelectItem value={tokenFilter}>{tokenFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -467,6 +482,9 @@ export function LogsPage() {
                     {providerOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
+                    {isStaleOption(providerFilter, providerOptions) && (
+                      <SelectItem value={providerFilter}>{providerFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -483,6 +501,9 @@ export function LogsPage() {
                     {modelOptions.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
+                    {isStaleOption(modelFilter, modelOptions) && (
+                      <SelectItem value={modelFilter}>{modelFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>

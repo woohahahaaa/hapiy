@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { i18n } from '@/i18n/i18n'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Token, TokenInput } from '@/lib/dashboard-api'
 
@@ -26,8 +27,9 @@ export function TokenPage() {
   const { t } = useTranslation('token')
   const [tokens, setTokens] = useState<readonly Token[]>([])
   const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(50)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState('tokens.offset', 0)
+  const [limit, setLimit] = usePersistedState('tokens.limit', 50)
   const [editing, setEditing] = useState<Token | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)

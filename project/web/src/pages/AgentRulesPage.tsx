@@ -24,6 +24,7 @@ import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { toast } from '@/components/ui/toast'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
   DashboardApiError,
@@ -344,8 +345,9 @@ function AgentTypeRulesTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mutating, setMutating] = useState(false)
-  const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(50)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState('agent-type-rules.offset', 0)
+  const [limit, setLimit] = usePersistedState('agent-type-rules.limit', 50)
   const [addOpen, setAddOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<AgentTypeRule | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<AgentTypeRule | null>(null)

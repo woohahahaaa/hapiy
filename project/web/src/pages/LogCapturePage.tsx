@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
   LOG_SOURCE_UNMARKED,
@@ -38,6 +39,12 @@ type CaptureRow =
 // （含命中但未生效、执行失败）或结果确实被改过。
 function pairRewritten(pair: LogCapturePairSummary): boolean {
   return pair.has_rewrite || pair.has_request_rewrite || pair.has_response_rewrite
+}
+
+// 持久化的筛选值可能已不在选项池里（例如目录/令牌被删除）：仍把它渲染成
+// 选项，否则下拉框回落成占位符，看起来没筛选，实际请求还带着旧条件。
+function isStaleOption(value: string, options: readonly string[]): boolean {
+  return value !== 'all' && value !== LOG_SOURCE_UNMARKED && !options.includes(value)
 }
 
 function formatSize(bytes: number): string {
@@ -63,21 +70,23 @@ export function LogCapturePage() {
   const [pairTotal, setPairTotal] = useState(0)
   const [systemFiles, setSystemFiles] = useState<readonly LogCaptureFile[]>([])
   const [systemTotal, setSystemTotal] = useState(0)
-  const [limit, setLimit] = useState(10)
-  const [offset, setOffset] = useState(0)
+  // 分页状态缓存：刷新后回到同一页与每页条数。
+  const [limit, setLimit] = usePersistedState('capture.limit', 10)
+  const [offset, setOffset] = usePersistedState('capture.offset', 0)
   const [initialLoading, setInitialLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [dateRange, setDateRange] = useState<DateRange>({})
-  const [prefixFilter, setPrefixFilter] = useState('all')
+  // 顶部筛选状态缓存到 localStorage（usePersistedState）：刷新后恢复。
+  const [dateRange, setDateRange] = usePersistedState<DateRange>('capture.dateRange', {})
+  const [prefixFilter, setPrefixFilter] = usePersistedState('capture.prefix', 'all')
   const [prefixOptions, setPrefixOptions] = useState<readonly string[]>([])
-  const [tokenFilter, setTokenFilter] = useState('all')
+  const [tokenFilter, setTokenFilter] = usePersistedState('capture.token', 'all')
   const [tokenOptions, setTokenOptions] = useState<readonly string[]>([])
-  const [providerFilter, setProviderFilter] = useState('all')
+  const [providerFilter, setProviderFilter] = usePersistedState('capture.provider', 'all')
   const [providerOptions, setProviderOptions] = useState<readonly string[]>([])
-  const [modelFilter, setModelFilter] = useState('all')
+  const [modelFilter, setModelFilter] = usePersistedState('capture.model', 'all')
   const [modelOptions, setModelOptions] = useState<readonly string[]>([])
-  const [sourceFilter, setSourceFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = usePersistedState('capture.source', 'all')
   const [sourceOptions, setSourceOptions] = useState<readonly string[]>([])
   const [preview, setPreview] = useState<CaptureRow | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
@@ -195,7 +204,7 @@ export function LogCapturePage() {
     setProviderFilter('all')
     setModelFilter('all')
     setSourceFilter('all')
-  }, [])
+  }, [setDateRange, setPrefixFilter, setTokenFilter, setProviderFilter, setModelFilter, setSourceFilter])
 
   const handleClear = useCallback(
     async (scope: 'filtered' | 'all') => {
@@ -376,6 +385,9 @@ export function LogCapturePage() {
                     {prefixOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
+                    {isStaleOption(prefixFilter, prefixOptions) && (
+                      <SelectItem value={prefixFilter}>{prefixFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -390,6 +402,9 @@ export function LogCapturePage() {
                     {sourceOptions.map((s) => (
                       <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
+                    {isStaleOption(sourceFilter, sourceOptions) && (
+                      <SelectItem value={sourceFilter}>{sourceFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -403,6 +418,9 @@ export function LogCapturePage() {
                     {tokenOptions.map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
+                    {isStaleOption(tokenFilter, tokenOptions) && (
+                      <SelectItem value={tokenFilter}>{tokenFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -416,6 +434,9 @@ export function LogCapturePage() {
                     {providerOptions.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
+                    {isStaleOption(providerFilter, providerOptions) && (
+                      <SelectItem value={providerFilter}>{providerFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -429,6 +450,9 @@ export function LogCapturePage() {
                     {modelOptions.map((m) => (
                       <SelectItem key={m} value={m}>{m}</SelectItem>
                     ))}
+                    {isStaleOption(modelFilter, modelOptions) && (
+                      <SelectItem value={modelFilter}>{modelFilter}</SelectItem>
+                    )}
                   </SelectGroup>
                 </SelectContent>
               </Select>

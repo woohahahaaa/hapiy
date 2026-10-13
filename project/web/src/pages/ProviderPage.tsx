@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { toast } from '@/components/ui/toast'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { i18n } from '@/i18n/i18n'
+import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { Provider, ProviderDisableStatus, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
 import {
@@ -91,8 +92,9 @@ export function ProviderPage() {
   const navigate = useNavigate()
   const [providers, setProviders] = useState<readonly Provider[]>([])
   const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [limit, setLimit] = useState(50)
+  // 分页状态缓存到 localStorage（usePersistedState）：刷新后回到同一页。
+  const [offset, setOffset] = usePersistedState('providers.offset', 0)
+  const [limit, setLimit] = usePersistedState('providers.limit', 50)
   const [editing, setEditing] = useState<Provider | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   // 新建成功后询问是否接入转发拓扑；非空即弹窗。
