@@ -46,6 +46,7 @@
     "partial": "Partially reused",
     "new": "New channel",
     "create": "Channel created",
+    "afterRewrite": " (after request rewrite)",
     "withParts": "{{state}} (reused: {{parts}})",
     "partsSeparator": ", "
   },

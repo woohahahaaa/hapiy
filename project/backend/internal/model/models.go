@@ -109,9 +109,15 @@ type Log struct {
 	// that were reused ("provider","baseurl","key"); empty when nothing was
 	// reused or no affinity binding applied.
 	AffinityReuseParts string `json:"affinity_reuse_parts"`
-	IP                 string `json:"ip"`
-	RequestID          string `json:"request_id"`
-	ErrorMessage       string `json:"error_message"`
+	// AffinityAfterRewrite is true when the row's affinity outcome came from
+	// the second, post-rewrite recall: the dispatch-time recall only sees the
+	// incoming headers, so a session id a request-rewrite rule synthesizes is
+	// only visible to the recall that runs after the rewrite. The dashboard
+	// notes that case on the 渠道亲和性 field.
+	AffinityAfterRewrite bool   `json:"affinity_after_rewrite,omitempty"`
+	IP                   string `json:"ip"`
+	RequestID            string `json:"request_id"`
+	ErrorMessage         string `json:"error_message"`
 	// EventDetail explains what happened on this row: for event rows
 	// (auto-disable / auto-recover / manual action / system admin) it names
 	// the rule or action that fired; for request rows it carries the

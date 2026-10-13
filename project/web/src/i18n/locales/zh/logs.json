@@ -45,6 +45,7 @@
     "partial": "部分复用",
     "new": "新渠道",
     "create": "创建渠道",
+    "afterRewrite": "（请求修改后）",
     "withParts": "{{state}}（复用：{{parts}}）",
     "partsSeparator": "、"
   },

@@ -281,10 +281,11 @@ export function LogsPage() {
       accessor: (row) => {
         const log = row as UsageLog
         if (log.affinityReuse === '') return null
-        if (log.affinityReuse === 'full') return `<#16a34a>${t('affinity.full')}</#16a34a>`
-        if (log.affinityReuse === 'partial') return `<#d97706>${t('affinity.partial')}</#d97706>`
-        if (log.affinityReuse === 'new') return `<#0ea5e9>${t('affinity.new')}</#0ea5e9>`
-        return `<#9ca3af>${t('affinity.create')}</#9ca3af>`
+        const note = log.affinityAfterRewrite ? t('affinity.afterRewrite') : ''
+        if (log.affinityReuse === 'full') return `<#16a34a>${t('affinity.full')}${note}</#16a34a>`
+        if (log.affinityReuse === 'partial') return `<#d97706>${t('affinity.partial')}${note}</#d97706>`
+        if (log.affinityReuse === 'new') return `<#0ea5e9>${t('affinity.new')}${note}</#0ea5e9>`
+        return `<#9ca3af>${t('affinity.create')}${note}</#9ca3af>`
       },
     },
     {

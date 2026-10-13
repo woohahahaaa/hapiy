@@ -88,9 +88,12 @@
 
 ## 四、结构性缺口（不是翻译问题）
 
-1. **帮助页只有中文**：`project/web/src/pages/help/help.md` 被 `HelpPage.tsx` 以 `?raw` 引入直接渲染，没有 en 版本 → 英文模式下正文仍是中文（页面外壳的标题/导航是 t() 翻译的）。
-   已顺手统一它的文案（见下节）；**英文版要另立一条翻译工作**，尚未做。
-2. **后端运行期文案只有中文**：使用记录 / 日志预览里的 RuleNotes（例：`[故障转移] 主转移：命中但执行失败（无可用回退供应商）`）与部分 `fmt.Errorf` 没有 en 版本，英文模式下会显示中文。带错误码的那批（errorsCore / errorsAgent）前端有 en 文案，不受影响。
+1. ~~**帮助页只有中文**~~ → **已做**：新增 `project/web/src/pages/help/help.en.md`（与中文 38 个小节一一对应），`HelpPage.tsx` 按当前语言选文件，并新增 `help` 语言包承载页面外壳（标题、目录、搜索、快速入口、页脚——这些原先硬编码中文）。
+   另外：帮助页是在新标签页打开、不套 LanguageProvider，所以 `i18n` 增加了 localStorage 语言缓存（`hapiy_language`，随语言切换写入、启动时读取），否则英文用户点「帮助」会看到中文。
+   测试：`HelpPage.test.tsx` 锁定中英两种渲染与锚点 id。
+2. **后端运行期文案只有中文**（未做）：使用记录 / 日志预览里的 RuleNotes（例：`[故障转移] 主转移：命中但执行失败（无可用回退供应商）`）与部分 `fmt.Errorf` 没有 en 版本，英文模式下显示中文。带错误码的那批（errorsCore / errorsAgent）前端有 en 文案，不受影响。
+   难点：使用记录的 `EventDetail` 是**存下来的中文字符串**，读的时候无法重渲染；日志抓取行有结构化 `RuleNotes` JSON，可读时翻译。
+   两个可选方案：(a) 使用记录也存结构化 notes（新增列/JSON），读接口按 `Accept-Language` 渲染；(b) 维持现状。属后端改造，需单独确认。
 3. `project/backend/config/agent-templates/*.md`（5 个参考文档）只有中文；不在界面里，可忽略。
 
 ### 顺带修掉的 help.md 文案（它是界面内容）

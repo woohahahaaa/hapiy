@@ -118,8 +118,10 @@ function LogDetailFields({ log }: { log: UsageLog }) {
                     none: t('affinity.create'),
                     partial: t('affinity.partial'),
                     full: t('affinity.full'),
+                    new: t('affinity.new'),
                   }
-                  const state = labels[log.affinityReuse] ?? log.affinityReuse
+                  const note = log.affinityAfterRewrite ? t('affinity.afterRewrite') : ''
+                  const state = (labels[log.affinityReuse] ?? log.affinityReuse) + note
                   const partLabels: Record<string, string> = {
                     provider: 'Provider',
                     baseurl: 'Base URL',

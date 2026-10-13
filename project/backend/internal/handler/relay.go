@@ -176,6 +176,11 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if dispatchResult.AffinityNew && affinityReuse == "" {
 			affinityReuse = "new"
 		}
+		// The dispatch-time recall only sees the incoming headers. When it found
+		// no session there, ask the pipeline for a second recall once the
+		// request rewrite has run — a session the rewrite synthesizes is only
+		// visible then. Its result comes back through relayReq.AffinityReuse.
+		relayReq.AffinityPostLookup = !dispatchResult.AffinityNew && dispatchResult.AffinityReuse == ""
 		common.Global().TrackActiveRequest(common.ActiveRequest{
 			RequestID:     relayReq.RequestID,
 			Model:         relayReq.Model,
@@ -305,6 +310,16 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		affinityReuseParts := strings.Join(dispatchResult.AffinityReuseParts, ",")
+		// Prefer the post-rewrite recall's outcome when it resolved this
+		// request's affinity: it read the same snapshot the history records,
+		// so it is the authoritative one for a session the request rewrite
+		// synthesized. The usage log notes that the decision came late.
+		affinityAfterRewrite := false
+		if relayReq.AffinityPostLookup && relayReq.AffinityReuse != "" {
+			affinityReuse = relayReq.AffinityReuse
+			affinityReuseParts = strings.Join(relayReq.AffinityReuseParts, ",")
+			affinityAfterRewrite = true
+		}
 
 		// Forward the response first so use_time spans the full transfer for
 		// streaming requests; the log row is written after the stream ends.
@@ -344,28 +359,29 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// Log successful request
 		useTime := int(time.Since(startTime).Milliseconds())
 		logEntry := model.Log{
-			UserID:             getString(userID),
-			TokenName:          getString(tokenName),
-			ProviderName:       recordProvider.Name,
-			ModelName:          relayReq.Model,
-			Source:             service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
-			IsStream:           relayReq.Stream,
-			Status:             "success",
-			AffinityReuse:      affinityReuse,
-			AffinityReuseParts: affinityReuseParts,
-			IP:                 c.ClientIP(),
-			RequestID:          c.GetString("request_id"),
-			UseTime:            useTime,
-			ConnectMs:          intPtr(resp.ConnectMs),
-			FirstByteMs:        intPtr(firstByteMs),
-			RequestRewriteMs:   intPtr(resp.RequestRewriteMs),
-			ResponseRewriteMs:  intPtr(resp.ResponseRewriteMs),
-			StreamRewriteMs:    intPtr(resp.StreamRewriteTotalMs()),
-			QueueWaitMs:        intPtr(resp.QueueWaitMs),
-			UpstreamURL:        resp.UpstreamURL,
-			ProviderKey:        resp.ProviderKey,
-			ProviderBaseURL:    resp.ProviderBaseURL,
-			DownstreamURL:      relayReq.DownstreamURL,
+			UserID:               getString(userID),
+			TokenName:            getString(tokenName),
+			ProviderName:         recordProvider.Name,
+			ModelName:            relayReq.Model,
+			Source:               service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			IsStream:             relayReq.Stream,
+			Status:               "success",
+			AffinityReuse:        affinityReuse,
+			AffinityReuseParts:   affinityReuseParts,
+			AffinityAfterRewrite: affinityAfterRewrite,
+			IP:                   c.ClientIP(),
+			RequestID:            c.GetString("request_id"),
+			UseTime:              useTime,
+			ConnectMs:            intPtr(resp.ConnectMs),
+			FirstByteMs:          intPtr(firstByteMs),
+			RequestRewriteMs:     intPtr(resp.RequestRewriteMs),
+			ResponseRewriteMs:    intPtr(resp.ResponseRewriteMs),
+			StreamRewriteMs:      intPtr(resp.StreamRewriteTotalMs()),
+			QueueWaitMs:          intPtr(resp.QueueWaitMs),
+			UpstreamURL:          resp.UpstreamURL,
+			ProviderKey:          resp.ProviderKey,
+			ProviderBaseURL:      resp.ProviderBaseURL,
+			DownstreamURL:        relayReq.DownstreamURL,
 		}
 		if resp.Usage != nil {
 			logEntry.PromptTokens = resp.Usage.PromptTokens

@@ -103,6 +103,42 @@ describe('dashboardApi.listLogs stage timings', () => {
   })
 })
 
+describe('dashboardApi.listLogs channel affinity', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('parses the full reuse outcome, including a post-rewrite recall', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      data: [
+        baseLog({ affinity_reuse: 'full', affinity_reuse_parts: 'provider,baseurl,key', affinity_after_rewrite: true }),
+      ],
+      total: 1,
+    })))
+
+    const result = await dashboardApi.listLogs({ limit: 20, offset: 0 })
+    const log = result.logs[0]
+
+    expect(log.affinityReuse).toBe('full')
+    expect(log.affinityReuseParts).toEqual(['provider', 'baseurl', 'key'])
+    expect(log.affinityAfterRewrite).toBe(true)
+  })
+
+  it('keeps the "new" state and defaults the post-rewrite flag to false', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      data: [baseLog({ affinity_reuse: 'new', affinity_reuse_parts: '' })],
+      total: 1,
+    })))
+
+    const result = await dashboardApi.listLogs({ limit: 20, offset: 0 })
+    const log = result.logs[0]
+
+    expect(log.affinityReuse).toBe('new')
+    expect(log.affinityReuseParts).toEqual([])
+    expect(log.affinityAfterRewrite).toBe(false)
+  })
+})
+
 describe('dashboardApi.readLogCapturePair timing', () => {
   afterEach(() => {
     vi.unstubAllGlobals()

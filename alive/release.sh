@@ -3,7 +3,7 @@
 # 更新用 kit 的 tools/sync.sh）。项目自己的信息与钩子写在 scripts/project.sh、
 # 身份/端口在 alive/woohkit.json，契约见 alive/woohkit/CONTRACT.md。
 #
-# 目录约定：alive/ 里除了 woohkit.json（你自己的）之外都是 kit 的；
+# 目录约定：alive/ 里除了 woohkit.json 和 pwa.json（你自己的）之外都是 kit 的；
 # scripts/ 里是你自己的。
 
 set -eu

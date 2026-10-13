@@ -193,6 +193,10 @@ export type UsageLog = {
   readonly providerKey: string
   readonly affinityReuse: '' | 'none' | 'partial' | 'full' | 'new'
   readonly affinityReuseParts: readonly string[]
+  // affinityAfterRewrite is true when the affinity outcome was decided by the
+  // post-rewrite recall (the request rewrite synthesized the session id);
+  // the UI notes that on the channel-affinity field.
+  readonly affinityAfterRewrite: boolean
 }
 
 export type LogListParams = {
@@ -1458,10 +1462,11 @@ function parseLog(value: unknown): UsageLog {
     downstreamUrl: readString(value.downstream_url ?? '', 'log.downstream_url'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
     providerKey: readString(value.provider_key ?? '', 'log.provider_key'),
-    affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' ? value.affinity_reuse : '',
+    affinityReuse: value.affinity_reuse === 'none' || value.affinity_reuse === 'partial' || value.affinity_reuse === 'full' || value.affinity_reuse === 'new' ? value.affinity_reuse : '',
     affinityReuseParts: typeof value.affinity_reuse_parts === 'string' && value.affinity_reuse_parts !== ''
       ? value.affinity_reuse_parts.split(',').map((s) => s.trim()).filter(Boolean)
       : [],
+    affinityAfterRewrite: value.affinity_after_rewrite === true,
   }
 }
 

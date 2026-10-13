@@ -1,19 +1,22 @@
 # woohkit 契约（CONTRACT）
 
-woohkit 是一个「框架 + 规范」：通用逻辑（alive、release、安装器、桌面壳）都在
-kit 里，跟技术栈无关；项目只写两个自己的文件：`alive/woohkit.json`（身份与
-默认端口，自己定）和 `scripts/project.sh`（钩子：我是什么栈、怎么构建、怎么
-打包）。本文件是那份规范——引用 kit 的项目照着实现即可。
+woohkit 是一个「框架 + 规范」：通用逻辑（alive、release、安装器、桌面壳、PWA
+生成）都在 kit 里，跟技术栈无关；项目只写自己的几个文件：`alive/woohkit.json`
+（身份与默认端口）、`scripts/project.sh`（钩子：我是什么栈、怎么构建、怎么打包），
+以及可选的 `alive/pwa.json`（PWA 生成配置，也由 `./alive/pwa.sh` 代写）。本文件是
+那份规范——引用 kit 的项目照着实现即可。
 
 - kit 拥有的文件（**永远不要手改**，`tools/sync.sh` 整文件覆盖）：
-  `alive/**`（`alive/alive.sh`、`alive/release.sh`、`alive/woohkit/` 快照）
-- 项目拥有的文件（kit 永不触碰）：
-  `alive/woohkit.json`（身份/端口，kit 只读）、`scripts/project.sh`（钩子）、
-  `install.sh` / `install.ps1`（release 时渲染生成）
+  `alive/**`（`alive/alive.sh`、`alive/release.sh`、`alive/pwa.sh`、
+  `alive/woohkit/` 快照）
+- 项目拥有的文件（sync/alive/release 永不触碰；`alive/pwa.sh` 只按你的命令更新
+  `alive/pwa.json`）：`alive/woohkit.json`（身份/端口）、`alive/pwa.json`（PWA
+  生成配置）、`scripts/project.sh`（钩子）、`install.sh` / `install.ps1`
+  （release 时渲染生成）
 
 ---
 
-## 一、项目文件（都在项目里；kit 只读不改）
+## 一、项目文件（都在项目里；sync/alive/release 只读不改）
 
 ### 1.1 `<项目根>/alive/woohkit.json` — 身份与默认端口（项目自己定）
 
@@ -40,6 +43,21 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：`alive/woohki
 
 框架导出给钩子用的：`PORT`、`MODE`（prod/dev）、`STATE_DIR`、`LOG_DIR`、
 `ROOT_DIR`、`KIT_DIR`。
+
+### 1.3 `alive/pwa.json` — PWA 生成配置（`alive/pwa.sh` 读写，也可手改）
+
+由 `./alive/pwa.sh` 生成/更新；全部字段可选，缺省值见下。改它之后 `./alive/pwa.sh
+gen` 按它重生成。
+
+| 字段 | 默认 | 说明 |
+| --- | --- | --- |
+| `dir` | 自动探测 | 静态目录（`web/public > public > app/public > frontend/public > static`） |
+| `logo` | 无（必设有 logo 才生成） | 图标源图片，路径相对项目根 |
+| `round` | `0` | 圆角，边长百分比（0-50），只作用于 any 图标 |
+| `title` / `short` | `woohkit.json` 的 `name` | manifest 的 `name` / `short_name` |
+| `desc` | 空 | manifest 的 `description`（空则整个字段不写） |
+| `theme` | `project.sh` 的 `SHELL_THEME`，再退 `#000000` | `theme_color` |
+| `background` | 同 `theme` | `background_color` |
 
 ## 二、alive 钩子
 
@@ -146,18 +164,43 @@ kit 里，跟技术栈无关；项目只写两个自己的文件：`alive/woohki
   读，读不到退回 `DEFAULT_PORT`）；外链交给系统浏览器。这些由 kit 保证，项目
   无需写任何壳代码。
 
-## 六、PWA（框架无关的静态层）
+## 六、PWA（图标 / manifest / service worker 生成）
 
-- 任何前端框架都适用：`pwa/manifest.webmanifest`（改名字/主题色）+ 图标 +
-  可选 `pwa/sw.js`（只缓存静态资产、不碰 `/api`、不拦导航的保守版）。
-- 注册片段与安装按钮（`beforeinstallprompt`）见 `pwa/README.md`。
-- 想接构建器（如 vite-plugin-pwa 的版本化缓存）属于可选增强，不在契约内。
+`./alive/pwa.sh` 从一张 logo 生成全套 PWA 资产，纯静态、框架无关。配置写在
+`alive/pwa.json`（1.3 节），可手改，也可让工具改。
+
+```
+./alive/pwa.sh logo <图片> [--round 10%]      # 设 logo（+圆角），立即重切全套尺寸
+./alive/pwa.sh title <名字> [--short <短名>]  # manifest 标题信息
+./alive/pwa.sh desc <一句话描述>
+./alive/pwa.sh theme <#rrggbb> [--bg <#rrggbb>]
+./alive/pwa.sh dir <静态目录>                 # 覆盖自动探测
+./alive/pwa.sh gen | show                     # 按配置重生成 / 查看（无参数 = show）
+```
+
+- 每个设置命令保存配置后**立即重生成**；`sw.js` 只在缺失时按 `pwa/sw.js` 模板
+  生成一次（不覆盖你改过的），命令同时打印要贴进 `index.html` 的 `<head>` 片段。
+- 生成物（写进静态目录）：`icon-192.png`、`icon-512.png`、
+  `icon-maskable-512.png`、`apple-touch-icon.png`(180)、`favicon.ico`(16/32/48)、
+  `manifest.webmanifest`。`icon-512.png` 正好是桌面壳默认的 `SHELL_ICON`。
+- 圆角只作用于 any 图标（`--round` 是边长百分比，0-50，默认 0）：maskable 满幅、
+  内容缩进 80% 安全区，apple-touch 满幅方图——形状由系统自己裁，提前切会被系统
+  二次裁切 / 填黑。图标源建议 ≥1024px 正方形，非正方形按中心裁剪。
+- 边界：**绝不改 `index.html`**（框架各异，只打印片段）。注册 service worker 与
+  安装按钮（`beforeinstallprompt`）仍是手写，片段见 `pwa/README.md`。
+- 依赖 `python3` + Pillow（`python3 -m pip install Pillow`；winapp 壳体构建也用
+  它）。想接构建器（如 vite-plugin-pwa 的版本化运行时缓存）属于可选增强，不在
+  契约内。
 
 ## 七、同步与升级
 
 - 新建项目：`tools/init.sh <项目目录>`（同步框架 + 生成 `alive/woohkit.json` 和
   `scripts/project.sh` 骨架）。
-- 更新框架：`tools/sync.sh <项目目录>`（整文件覆盖 kit 文件）；
+- 项目内更新：`./alive/update.sh`——先把 kit 缓存（`~/.woohkit`，`WOOHKIT_CACHE`
+  可覆盖）拉到最新，再用最新缓存整文件覆盖同步（`--check` 只对比不写）。它等价于
+  `tools/bootstrap.sh sync <项目目录>`；快照里带着 `woohkit/tools/bootstrap.sh`
+  的副本，所以项目不需要记外部脚本的路径。
+- 外部更新：`tools/sync.sh <项目目录>`（整文件覆盖 kit 文件）；
   `tools/sync.sh <项目目录> --check` 只对比不写。
 - 契约版本：`alive/woohkit/VERSION`；kit 升级后看仓库 Release notes /
   `CONTRACT.md` 的 diff，钩子签名变了这里会写清楚。
