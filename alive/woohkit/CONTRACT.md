@@ -52,12 +52,14 @@ gen` 按它重生成。
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
 | `dir` | 自动探测 | 静态目录（`web/public > public > app/public > frontend/public > static`） |
-| `logo` | 无（必设有 logo 才生成） | 图标源图片，路径相对项目根 |
-| `round` | `0` | 圆角，边长百分比（0-50），只作用于 any 图标 |
+| `logo` | 无（必设有 logo 才生成） | 图标源图片，路径相对项目根；`logo` 命令给的图会自动落成 `assets/logo.png`（zip 先解出里面的图） |
+| `round` | `22.5` | 圆角，边长百分比（0-50；苹果 macOS / iOS 图标的比例，正圆弧逼近），只作用于 any 图标 |
 | `title` / `short` | `woohkit.json` 的 `name` | manifest 的 `name` / `short_name` |
 | `desc` | 空 | manifest 的 `description`（空则整个字段不写） |
 | `theme` | `project.sh` 的 `SHELL_THEME`，再退 `#000000` | `theme_color` |
 | `background` | 同 `theme` | `background_color` |
+| `manifest` | 自动 | 是否生成 `manifest.webmanifest`；默认检测到 Next 的 `app/manifest.ts` 这类“由代码生成”的实现就跳过，显式 `true`/`false` 覆盖 |
+| `favicon` | 自动 | 同上（认 `app/favicon.ico`） |
 
 ## 二、alive 钩子
 
@@ -183,9 +185,15 @@ gen` 按它重生成。
 - 生成物（写进静态目录）：`icon-192.png`、`icon-512.png`、
   `icon-maskable-512.png`、`apple-touch-icon.png`(180)、`favicon.ico`(16/32/48)、
   `manifest.webmanifest`。`icon-512.png` 正好是桌面壳默认的 `SHELL_ICON`。
-- 圆角只作用于 any 图标（`--round` 是边长百分比，0-50，默认 0）：maskable 满幅、
-  内容缩进 80% 安全区，apple-touch 满幅方图——形状由系统自己裁，提前切会被系统
-  二次裁切 / 填黑。图标源建议 ≥1024px 正方形，非正方形按中心裁剪。
+- `logo` 接受任意路径：zip 会先解出里面的图，项目外的图自动拷成
+  `assets/logo.png`（源图留在项目里，以后 `gen` 可复现）。`manifest` / `favicon`
+  默认生成；检测到 Next 的 `app/manifest.ts` / `app/favicon.ico` 这类由代码生成的
+  实现时自动跳过（`pwa.json` 显式 `true`/`false` 覆盖）。
+- 圆角只作用于 any 图标：默认 22.5%（苹果 macOS / iOS 图标的比例，正圆弧逼近），
+  `--round N%` 可调、`0` 是直角。maskable 自动：整幅不透明的图（插画/照片）直接
+  满幅，带透明通道的图形标缩进 80% 安全区、居中放在背景色上；apple-touch 满幅方图
+  ——形状都由系统自己裁，提前切会被二次裁切/填黑。图标源建议 ≥1024px 正方形，非
+  正方形按中心裁剪。
 - 边界：**绝不改 `index.html`**（框架各异，只打印片段）。注册 service worker 与
   安装按钮（`beforeinstallprompt`）仍是手写，片段见 `pwa/README.md`。
 - 依赖 `python3` + Pillow（`python3 -m pip install Pillow`；winapp 壳体构建也用

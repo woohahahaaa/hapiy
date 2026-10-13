@@ -10,10 +10,12 @@
 # 已存在的 sw.js 不覆盖。契约见 CONTRACT.md 第六节。
 
 import argparse
+import io
 import json
 import os
 import re
 import sys
+import zipfile
 
 try:
     from PIL import Image, ImageChops, ImageDraw
@@ -32,7 +34,21 @@ FAVICON_SRC = 256
 MASKABLE_SIZE = 512
 MASKABLE_SAFE = 0.8  # 内容占边长比例（形状由系统按安全区裁）
 
+# any 图标的默认圆角：苹果 macOS 大图标的比例（185.4 / 824 ≈ 22.5%，iOS 是
+# 22.37%）。正圆弧逼近——苹果真机是"连续圆角"，差别在几个像素；0 = 直角。
+DEFAULT_ROUND = 22.5
+
 STATIC_CANDIDATES = ("web/public", "public", "app/public", "frontend/public", "static")
+
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
+
+# manifest / favicon 由框架代码生成时的常见位置（存在就默认不重复生成，
+# pwa.json 里显式写 true/false 可覆盖）。
+FRAMEWORK_FILES = {
+    "manifest": ("app/manifest.ts", "app/manifest.js",
+                 "src/app/manifest.ts", "src/app/manifest.js"),
+    "favicon": ("app/favicon.ico", "src/app/favicon.ico"),
+}
 
 
 def msg(text):
@@ -117,20 +133,86 @@ def find_dir(root, cfg):
     return None
 
 
+def framework_generated(root, kind):
+    """这类 manifest/favicon 是不是由框架代码生成的（存在则返回那个相对路径）。"""
+    for rel_path in FRAMEWORK_FILES[kind]:
+        if os.path.isfile(os.path.join(root, rel_path)):
+            return rel_path
+    return None
+
+
+def install_logo(root, given):
+    """把 <图片> 落成项目里可复现的源图：zip 先解出里面的图，项目外的图拷进
+    assets/logo.png；返回写进 pwa.json 的路径（相对项目根）。"""
+    given_abs = given if os.path.isabs(given) else os.path.abspath(given)
+    if not os.path.exists(given_abs):
+        die("找不到文件：%s" % given)
+
+    data = None
+    if given_abs.lower().endswith(".zip"):
+        try:
+            with zipfile.ZipFile(given_abs) as z:
+                for info in z.infolist():
+                    if not info.is_dir() and info.filename.lower().endswith(IMAGE_EXTS):
+                        msg("从 zip 里取出 %s" % info.filename)
+                        data = z.read(info)
+                        break
+        except zipfile.BadZipFile as exc:
+            die("zip 打不开：%s（%s）" % (given, exc))
+        if data is None:
+            die("zip 里没找到图片：%s" % given)
+
+    if data is None and given_abs.startswith(root + os.sep):
+        return rel(root, given_abs)
+
+    if data is None:
+        with open(given_abs, "rb") as f:
+            data = f.read()
+    try:
+        im = Image.open(io.BytesIO(data))
+        im.load()
+    except Exception as exc:
+        die("这不是能打开的图片：%s（%s）" % (given, exc))
+    if min(im.size) < 512:
+        warn("源图偏小（%dx%d），切出来的图标可能会糊" % im.size)
+
+    dest_dir = os.path.join(root, "assets")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, "logo.png")
+    if im.mode not in ("RGB", "RGBA"):
+        im = im.convert("RGBA")
+    im.save(dest)
+    msg("源图拷进项目 assets/logo.png（以后 gen 用这张；要换位置改 alive/pwa.json 的 logo）")
+    return "assets/logo.png"
+
+
 def effective(root, cfg):
     name, app_id = load_identity(root)
     theme = norm_hex(cfg.get("theme") or os.environ.get("SHELL_THEME") or "#000000")
     title = cfg.get("title") or name
+    switches = {}
+    auto_off = {}
+    for kind in ("manifest", "favicon"):
+        if kind in cfg:
+            switches[kind] = bool(cfg[kind])
+            continue
+        who = framework_generated(root, kind)
+        switches[kind] = who is None
+        if who:
+            auto_off[kind] = who
     return {
         "app_id": app_id,
         "dir": find_dir(root, cfg),
         "logo": cfg.get("logo"),
-        "round": float(cfg.get("round") or 0),
+        "round": float(cfg["round"]) if "round" in cfg else DEFAULT_ROUND,
         "title": title,
         "short": cfg.get("short") or title,
         "desc": cfg.get("desc") or "",
         "theme": theme,
         "background": norm_hex(cfg.get("background") or theme),
+        "manifest": switches["manifest"],
+        "favicon": switches["favicon"],
+        "auto_off": auto_off,
     }
 
 
@@ -187,17 +269,22 @@ def maskable(src, bg_hex):
 def write_icons(src, directory, eff):
     for size in ICON_SIZES:
         rounded(src, size, eff["round"]).save(os.path.join(directory, "icon-%d.png" % size))
-    rounded(src, FAVICON_SRC, eff["round"]).save(
-        os.path.join(directory, "favicon.ico"),
-        format="ICO",
-        sizes=[(s, s) for s in FAVICON_SIZES],
-    )
+    if eff["favicon"]:
+        rounded(src, FAVICON_SRC, eff["round"]).save(
+            os.path.join(directory, "favicon.ico"),
+            format="ICO",
+            sizes=[(s, s) for s in FAVICON_SIZES],
+        )
     flat(src, APPLE_SIZE, eff["background"]).save(
         os.path.join(directory, "apple-touch-icon.png")
     )
-    maskable(src, eff["background"]).save(
-        os.path.join(directory, "icon-maskable-512.png")
-    )
+    # maskable：整幅不透明的图（照片/插画）直接满幅；带透明通道的图形标缩进
+    # 80% 安全区、居中放在背景色上（形状由系统裁）。
+    target = os.path.join(directory, "icon-maskable-512.png")
+    if src.getchannel("A").getextrema()[0] >= 255:
+        src.resize((MASKABLE_SIZE, MASKABLE_SIZE), Image.LANCZOS).save(target)
+    else:
+        maskable(src, eff["background"]).save(target)
 
 
 def build_manifest(eff):
@@ -259,9 +346,11 @@ def fmt_round(pct):
 USAGE = """\
 用法：./alive/pwa.sh <命令>（不加参数就是这份帮助）
 
-  换图标    logo <图片> [--round 10%]
+  换图标    logo <图片> [--round 22.5]
             从这张图切全套尺寸（192 / 512 / maskable-512 / apple-touch-180 /
-            favicon.ico）；圆角是“边长百分比”（0-50，只切 any 图标），省略则沿用。
+            favicon.ico）；圆角是“边长百分比”（0-50，只切 any 图标），默认 22.5%
+            —— 苹果 macOS / iOS 图标的比例，0 = 直角。
+            zip 也行；项目外的图会自动拷进项目的 assets/logo.png 当源图。
   换标题    title <名字> [--short <短名>]
             manifest 的 name / short_name（短名默认同标题）。
   换描述    desc <一句话>
@@ -279,6 +368,9 @@ USAGE = """\
   ./alive/pwa.sh desc "一句话描述"
 
 配置记在 alive/pwa.json（也可以直接手改）；每条设置命令都会立即重生成。
+manifest / favicon 默认都生成；检测到 Next 的 app/manifest.ts / app/favicon.ico
+这类“由代码生成”的实现时自动跳过（pwa.json 里显式写 true/false 可覆盖）。
+maskable：整幅不透明的图（插画/照片）直接满幅；带透明通道的图形标缩进 80% 安全区。
 生成物写进静态目录：icon-192.png、icon-512.png、icon-maskable-512.png、
 apple-touch-icon.png、favicon.ico、manifest.webmanifest、首次的 sw.js。
 依赖 python3 + Pillow。
@@ -305,17 +397,30 @@ def cmd_gen(root, kit_dir, cfg):
 
     os.makedirs(directory, exist_ok=True)
     write_icons(src, directory, eff)
-    with open(os.path.join(directory, MANIFEST_PATH), "w", encoding="utf-8") as f:
-        json.dump(build_manifest(eff), f, ensure_ascii=False, indent=2)
-        f.write("\n")
+    if eff["manifest"]:
+        with open(os.path.join(directory, MANIFEST_PATH), "w", encoding="utf-8") as f:
+            json.dump(build_manifest(eff), f, ensure_ascii=False, indent=2)
+            f.write("\n")
     sw_written = write_sw(kit_dir, directory, eff["app_id"])
 
+    made = ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]
+    if eff["favicon"]:
+        made.append("favicon.ico")
+    if eff["manifest"]:
+        made.append("manifest.webmanifest")
     msg("静态目录 %s" % rel(root, directory))
     msg("logo %s（圆角 %s）" % (logo, fmt_round(eff["round"])))
-    msg("生成 icon-192.png icon-512.png icon-maskable-512.png "
-        "apple-touch-icon.png favicon.ico manifest.webmanifest%s"
-        % (" sw.js" if sw_written else "（sw.js 已存在，未覆盖）"))
-    sys.stdout.write("贴进 index.html <head>：\n%s\n" % head_snippet(eff))
+    msg("生成 " + " ".join(made) + (" sw.js" if sw_written else "（sw.js 已存在，未覆盖）"))
+    for kind in ("manifest", "favicon"):
+        if eff[kind]:
+            continue
+        who = eff["auto_off"].get(kind)
+        if who:
+            msg("%s 由 %s 生成，跳过（要工具生成就在 pwa.json 里写 \"%s\": true）" % (kind, who, kind))
+        else:
+            msg("%s 按 pwa.json 的 %s=false 跳过" % (kind, kind))
+    if eff["manifest"]:
+        sys.stdout.write("贴进 index.html <head>：\n%s\n" % head_snippet(eff))
     return 0
 
 
@@ -332,11 +437,23 @@ def cmd_show(root, cfg):
     print("[pwa]      标题      %s（短名 %s）" % (eff["title"], eff["short"]))
     print("[pwa]      描述      %s" % (eff["desc"] or "（未设置）"))
     print("[pwa]      主题色    %s（背景 %s）" % (eff["theme"], eff["background"]))
+    for kind in ("manifest", "favicon"):
+        if eff[kind]:
+            continue
+        who = eff["auto_off"].get(kind)
+        why = ("由 %s 生成" % who) if who else ("pwa.json 的 %s=false" % kind)
+        print("[pwa]      %-10s跳过（%s）" % (kind, why))
     if eff["dir"]:
-        print("[pwa] 将生成    icon-192.png icon-512.png icon-maskable-512.png "
-              "apple-touch-icon.png favicon.ico manifest.webmanifest sw.js(首次)")
-    print("[pwa] index.html <head> 片段：")
-    print(head_snippet(eff))
+        files = ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]
+        if eff["favicon"]:
+            files.append("favicon.ico")
+        if eff["manifest"]:
+            files.append("manifest.webmanifest")
+        files.append("sw.js(首次)")
+        print("[pwa] 将生成    " + " ".join(files))
+    if eff["manifest"]:
+        print("[pwa] index.html <head> 片段：")
+        print(head_snippet(eff))
     return 0
 
 
@@ -389,7 +506,7 @@ def main(argv):
         return cmd_gen(root, kit_dir, cfg)
 
     if args.cmd == "logo":
-        cfg["logo"] = args.path
+        cfg["logo"] = install_logo(root, args.path)
         if args.round is not None:
             cfg["round"] = parse_round(args.round)
     elif args.cmd == "title":
