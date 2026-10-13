@@ -175,7 +175,7 @@ gen` 按它重生成。
 ./alive/pwa.sh desc <一句话描述>
 ./alive/pwa.sh theme <#rrggbb> [--bg <#rrggbb>]
 ./alive/pwa.sh dir <静态目录>                 # 覆盖自动探测
-./alive/pwa.sh gen | show                     # 按配置重生成 / 查看（无参数 = show）
+./alive/pwa.sh gen | show                     # 按配置重生成 / 看现状（不加参数 = 帮助）
 ```
 
 - 每个设置命令保存配置后**立即重生成**；`sw.js` 只在缺失时按 `pwa/sw.js` 模板

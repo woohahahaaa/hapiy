@@ -108,22 +108,25 @@ func (e *Engine) lookupAffinity(req *affinity.Request) affinityLookupResult {
 // they synthesize (a header derived from the request body, say) is invisible to
 // the dispatch-time recall — which only sees the incoming headers — while it IS
 // what the history gets recorded from. Re-running the recall on the post-rewrite
-// snapshot closes that gap: what is recorded and what is recalled agree.
+// snapshot closes that gap: a session the rewrite created can reuse its channel,
+// and when the rewrite changed which session the request belongs to, the
+// post-rewrite outcome wins — it pins the recalled key/base URL, or reports the
+// fresh "new" binding the request is about to establish, and marks the request
+// so the usage log says the decision came after the rewrite.
 //
 // Only a hit on the plan's own provider is honoured. The rewrite already ran
 // for this plan and the request's entry, log outputs, concurrency and failover
 // wiring all belong to it, so switching providers here would invalidate work
 // already done; cross-provider sticking stays the job of the dispatch-time
-// recall, which sees sessions the client sends itself. A hit on the same
-// provider fills req.AffinityReuse/AffinityReuseParts and pins the recalled
-// key/base URL; the caller notes the later decision in the usage log.
+// recall, which sees sessions the client sends itself.
 func (e *Engine) resolvePostRewriteAffinity(plan *ExecutionPlan, req *RelayRequest) {
 	if plan == nil || plan.Provider == nil || req == nil {
 		return
 	}
-	// An explicit channel pin (recovery probes, callers that pre-select a
-	// channel) is never overridden by a recall.
-	if req.KeyIndex >= 0 || req.BaseURLIndex >= 0 {
+	// A channel the caller pinned itself (recovery probes, callers that
+	// pre-select a channel) is never overridden: it carries no dispatch-time
+	// affinity state.
+	if req.AffinityDispatchState == "" && (req.KeyIndex >= 0 || req.BaseURLIndex >= 0) {
 		return
 	}
 	result := e.lookupAffinity(&affinity.Request{
@@ -135,32 +138,42 @@ func (e *Engine) resolvePostRewriteAffinity(plan *ExecutionPlan, req *RelayReque
 	if !result.usable {
 		return
 	}
-	if !result.matched {
-		// The session is readable now but has no history yet: this request
-		// establishes a fresh binding, exactly like a dispatch-time "new".
-		req.AffinityReuse = "new"
+
+	state := "new"
+	keyIndex, baseURLIndex := -1, -1
+	var parts []string
+	if result.matched {
+		if (result.providerID == "" || result.providerID != plan.Provider.ID) &&
+			(result.providerName == "" || result.providerName != plan.Provider.Name) {
+			return
+		}
+		if result.entryID != "" && result.entryID != req.EntryID {
+			return
+		}
+		if result.keyIndex < 0 || result.keyIndex >= len(plan.Keys) ||
+			result.baseURLIndex < 0 || result.baseURLIndex >= len(plan.BaseURLs) {
+			// Out-of-range indices degrade to a partial reuse: the indices stay
+			// -1 so the relay layer falls back to the plan's first enabled
+			// channel, the same degradation dispatch applies.
+			state = AffinityReusePartial
+			parts = []string{"provider"}
+		} else {
+			state = AffinityReuseFull
+			keyIndex, baseURLIndex = result.keyIndex, result.baseURLIndex
+			parts = []string{"provider", "baseurl", "key"}
+		}
+	}
+
+	if state == req.AffinityDispatchState && keyIndex == req.KeyIndex && baseURLIndex == req.BaseURLIndex {
+		// The rewrite left the request on the session dispatch already
+		// resolved, so dispatch's own decision stands as-is.
 		return
 	}
-	if (result.providerID == "" || result.providerID != plan.Provider.ID) &&
-		(result.providerName == "" || result.providerName != plan.Provider.Name) {
-		return
-	}
-	if result.entryID != "" && result.entryID != req.EntryID {
-		return
-	}
-	if result.keyIndex < 0 || result.keyIndex >= len(plan.Keys) ||
-		result.baseURLIndex < 0 || result.baseURLIndex >= len(plan.BaseURLs) {
-		// Out-of-range indices degrade to a partial reuse: the indices are
-		// left at -1 so the relay layer falls back to the plan's first enabled
-		// channel, the same degradation dispatch applies.
-		req.AffinityReuse = AffinityReusePartial
-		req.AffinityReuseParts = []string{"provider"}
-		return
-	}
-	req.KeyIndex = result.keyIndex
-	req.BaseURLIndex = result.baseURLIndex
-	req.AffinityReuse = AffinityReuseFull
-	req.AffinityReuseParts = []string{"provider", "baseurl", "key"}
+	req.KeyIndex = keyIndex
+	req.BaseURLIndex = baseURLIndex
+	req.AffinityReuse = state
+	req.AffinityReuseParts = parts
+	req.AffinityAfterRewrite = true
 }
 
 // breakAffinity severs the channel-affinity binding that routed the request

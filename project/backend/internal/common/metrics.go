@@ -203,6 +203,25 @@ func (m *Metrics) UpdateActiveRequestFirstByte(requestID string, firstByteMs int
 	m.activeEntries.Store(requestID, &req)
 }
 
+// UpdateActiveRequestAffinity records the channel-affinity outcome on an
+// in-flight request entry. Like the progress updaters it leaves finished
+// entries alone: the usage log (not the live card) is their source of truth.
+func (m *Metrics) UpdateActiveRequestAffinity(requestID, state string) {
+	if requestID == "" || state == "" {
+		return
+	}
+	v, ok := m.activeEntries.Load(requestID)
+	if !ok {
+		return
+	}
+	req := *v.(*ActiveRequest)
+	if req.EndTime != nil {
+		return
+	}
+	req.AffinityReuse = state
+	m.activeEntries.Store(requestID, &req)
+}
+
 // EndRequest records completion of a request. The active entry (if any) is
 // kept with its EndTime set so the monitoring API can show finished requests
 // for the configured retention period. Outcome classifies how it ended:

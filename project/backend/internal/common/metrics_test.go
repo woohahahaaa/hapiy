@@ -113,3 +113,34 @@ func TestUpdateActiveRequestProgress_ignoresUnknownRequest(t *testing.T) {
 		t.Fatal("expected no entry for unknown request")
 	}
 }
+
+func TestUpdateActiveRequestAffinity_updatesInflightRequest(t *testing.T) {
+	m := NewMetrics()
+	m.TrackActiveRequest(ActiveRequest{RequestID: "r1", Model: "m", StartTime: time.Now(), AffinityReuse: "full"})
+
+	m.UpdateActiveRequestAffinity("r1", "new")
+
+	requests := m.ActiveRequests()
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].AffinityReuse != "new" {
+		t.Fatalf("affinity not applied: %+v", requests[0])
+	}
+}
+
+func TestUpdateActiveRequestAffinity_skipsFinishedRequest(t *testing.T) {
+	m := NewMetrics()
+	m.TrackActiveRequest(ActiveRequest{RequestID: "r1", Model: "m", StartTime: time.Now(), AffinityReuse: "full"})
+	m.EndRequest("r1", "m", true, 100, 0, "completed")
+
+	m.UpdateActiveRequestAffinity("r1", "new")
+
+	requests := m.ActiveRequests()
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	if requests[0].AffinityReuse != "full" {
+		t.Fatalf("finished request affinity must stay as recorded, got %q", requests[0].AffinityReuse)
+	}
+}

@@ -9,7 +9,7 @@
 #   ./alive/pwa.sh desc "一句话描述"
 #   ./alive/pwa.sh theme "#0a0202"
 #   ./alive/pwa.sh dir web/public
-#   ./alive/pwa.sh gen | show          # 无参数 = show
+#   ./alive/pwa.sh gen | show          # 重生成 / 看现状；不加参数 = 帮助
 #
 # 配置写在 alive/pwa.json（项目自己的文件，由本工具更新，也可手改）。
 # 依赖 python3 + Pillow。

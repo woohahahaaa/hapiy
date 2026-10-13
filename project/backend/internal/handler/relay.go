@@ -176,11 +176,11 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if dispatchResult.AffinityNew && affinityReuse == "" {
 			affinityReuse = "new"
 		}
-		// The dispatch-time recall only sees the incoming headers. When it found
-		// no session there, ask the pipeline for a second recall once the
-		// request rewrite has run — a session the rewrite synthesizes is only
-		// visible then. Its result comes back through relayReq.AffinityReuse.
-		relayReq.AffinityPostLookup = !dispatchResult.AffinityNew && dispatchResult.AffinityReuse == ""
+		// The dispatch-time recall only sees the incoming headers. Hand the
+		// outcome to the pipeline: it re-runs the recall once the request
+		// rewrite has run, and a session the rewrite changed there wins over
+		// this one.
+		relayReq.AffinityDispatchState = affinityReuse
 		common.Global().TrackActiveRequest(common.ActiveRequest{
 			RequestID:     relayReq.RequestID,
 			Model:         relayReq.Model,
@@ -294,6 +294,13 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
+		// The post-rewrite recall can override the dispatch-time affinity
+		// outcome (the request rewrite changed the session it belongs to);
+		// keep the live card in step with what the usage log will record.
+		if relayReq.AffinityAfterRewrite {
+			common.Global().UpdateActiveRequestAffinity(relayReq.RequestID, relayReq.AffinityReuse)
+		}
+
 		// Set response headers
 		for k, v := range resp.Headers {
 			c.Header(k, v)
@@ -310,12 +317,12 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		affinityReuseParts := strings.Join(dispatchResult.AffinityReuseParts, ",")
-		// Prefer the post-rewrite recall's outcome when it resolved this
-		// request's affinity: it read the same snapshot the history records,
-		// so it is the authoritative one for a session the request rewrite
-		// synthesized. The usage log notes that the decision came late.
+		// The post-rewrite recall wins when the request rewrite changed the
+		// session the request belongs to: it read the same snapshot the
+		// history records, so its channel and state are the authoritative
+		// ones. The usage log notes that the decision came after the rewrite.
 		affinityAfterRewrite := false
-		if relayReq.AffinityPostLookup && relayReq.AffinityReuse != "" {
+		if relayReq.AffinityAfterRewrite {
 			affinityReuse = relayReq.AffinityReuse
 			affinityReuseParts = strings.Join(relayReq.AffinityReuseParts, ",")
 			affinityAfterRewrite = true

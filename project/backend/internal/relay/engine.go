@@ -226,18 +226,20 @@ type RelayRequest struct {
 	// EntryID is the request entry whose workflow served the request; it is
 	// recorded into channel-affinity history so reuse stays entry-scoped.
 	EntryID string `json:"-"`
-	// AffinityPostLookup asks the relay pipeline to run a second
-	// channel-affinity recall right after the request rewrite. The dispatcher
-	// sets it when the dispatch-time recall found no session id on the
-	// incoming request, because a session a rewrite rule synthesizes from the
-	// body or a derived header is only visible after the rewrite has run.
-	AffinityPostLookup bool `json:"-"`
-	// AffinityReuse and AffinityReuseParts are filled by that second recall
-	// when it resolved the request's channel-affinity outcome ("new",
-	// "partial" or "full"); the caller prefers them over the dispatch-time
-	// result and notes the later decision in the usage log.
-	AffinityReuse      string   `json:"-"`
-	AffinityReuseParts []string `json:"-"`
+	// AffinityDispatchState is the channel-affinity outcome dispatch already
+	// reached from the incoming headers: "" when there was no session to read,
+	// otherwise "new" (binding to establish), "partial" or "full" (channel
+	// reused). The relay pipeline re-runs the recall after the request rewrite
+	// and, when the rewrite changed the session the request belongs to, the
+	// post-rewrite outcome wins over this one.
+	AffinityDispatchState string `json:"-"`
+	// AffinityReuse and AffinityReuseParts are filled by the post-rewrite
+	// recall when it resolved (or overrode) the request's channel-affinity
+	// outcome; AffinityAfterRewrite marks the override so the usage log can
+	// note the decision came after the request rewrite.
+	AffinityReuse        string   `json:"-"`
+	AffinityReuseParts   []string `json:"-"`
+	AffinityAfterRewrite bool     `json:"-"`
 	// ServedProviderID records the provider that actually served the
 	// request when a provider-dimension failover rotated it away from the
 	// dispatched plan. Empty when the dispatched provider served it.
@@ -361,11 +363,10 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	// the selected provider's workflow, so a session id they synthesize (e.g.
 	// from the request body) does not exist yet when dispatch recalls the
 	// last-used channel. Re-running the recall now, on the same post-rewrite
-	// snapshot the history is recorded from, is what lets such a session reuse
-	// its channel instead of bouncing between keys/base URLs.
-	if req.AffinityPostLookup {
-		e.resolvePostRewriteAffinity(plan, req)
-	}
+	// snapshot the history is recorded from, lets such a session reuse its
+	// channel; when the rewrite changed the session the request belongs to,
+	// the post-rewrite outcome wins.
+	e.resolvePostRewriteAffinity(plan, req)
 
 	// Step 2: Concurrency control. Only the upstream request is gated; the
 	// rewrite above already completed. Multiple concurrency nodes on the

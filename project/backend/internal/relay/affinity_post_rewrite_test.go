@@ -187,6 +187,95 @@ func TestResolvePostRewriteAffinity_outOfRangeIndicesDegradeToPartial(t *testing
 	}
 }
 
+func TestResolvePostRewriteAffinity_postRewriteHitOverridesEarlierHit(t *testing.T) {
+	// Given: dispatch already recalled channel 0/0 from the incoming session,
+	// and the request rewrite then switches the request to a session whose
+	// history points at the provider's second key.
+	engine, plan := postRewriteFixture(t)
+	if err := engine.db.Create(&model.RequestChannelHistory{
+		SessionID: "alice", Model: "m1", ProviderID: "p1",
+		KeyIndex: 1, BaseURLIndex: 0, EntryID: "entry",
+	}).Error; err != nil {
+		t.Fatalf("create history row: %v", err)
+	}
+	req := &RelayRequest{
+		Model: "m1", EntryID: "entry",
+		Headers:  map[string]string{"X-Session-Id": "alice"},
+		KeyIndex: 0, BaseURLIndex: 0,
+		AffinityDispatchState: AffinityReuseFull,
+	}
+
+	// When: the post-rewrite recall sees the rewritten session.
+	engine.resolvePostRewriteAffinity(plan, req)
+
+	// Then: the post-rewrite hit wins over the dispatch-time one.
+	if req.KeyIndex != 1 || req.BaseURLIndex != 0 {
+		t.Fatalf("expected the post-rewrite channel 1/0, got %d/%d", req.KeyIndex, req.BaseURLIndex)
+	}
+	if req.AffinityReuse != AffinityReuseFull || !req.AffinityAfterRewrite {
+		t.Fatalf("expected a marked full reuse, got state=%q marked=%v", req.AffinityReuse, req.AffinityAfterRewrite)
+	}
+}
+
+func TestResolvePostRewriteAffinity_rewrittenSessionWithNoHistoryDropsThePin(t *testing.T) {
+	// Given: dispatch recalled a channel for the incoming session, but the
+	// request rewrite moved the request to a session with no history yet.
+	engine, plan := postRewriteFixture(t)
+	if err := engine.db.Create(&model.RequestChannelHistory{
+		SessionID: "alice", Model: "m1", ProviderID: "p1",
+		KeyIndex: 1, BaseURLIndex: 0, EntryID: "entry",
+	}).Error; err != nil {
+		t.Fatalf("create history row: %v", err)
+	}
+	req := &RelayRequest{
+		Model: "m1", EntryID: "entry",
+		Headers:  map[string]string{"X-Session-Id": "bob"},
+		KeyIndex: 0, BaseURLIndex: 0,
+		AffinityDispatchState: AffinityReuseFull,
+	}
+
+	// When
+	engine.resolvePostRewriteAffinity(plan, req)
+
+	// Then: the rewritten session is what gets recorded, so its fresh binding
+	// is the outcome and the earlier pin is dropped.
+	if req.AffinityReuse != "new" || !req.AffinityAfterRewrite {
+		t.Fatalf("expected a marked new binding, got state=%q marked=%v", req.AffinityReuse, req.AffinityAfterRewrite)
+	}
+	if req.KeyIndex != -1 || req.BaseURLIndex != -1 {
+		t.Fatalf("a new binding must not pin a channel, got %d/%d", req.KeyIndex, req.BaseURLIndex)
+	}
+}
+
+func TestResolvePostRewriteAffinity_unchangedSessionKeepsDispatchOutcome(t *testing.T) {
+	// Given: the rewrite left the session as-is; the post-rewrite recall finds
+	// exactly the channel dispatch already resolved.
+	engine, plan := postRewriteFixture(t)
+	if err := engine.db.Create(&model.RequestChannelHistory{
+		SessionID: "alice", Model: "m1", ProviderID: "p1",
+		KeyIndex: 1, BaseURLIndex: 0, EntryID: "entry",
+	}).Error; err != nil {
+		t.Fatalf("create history row: %v", err)
+	}
+	req := &RelayRequest{
+		Model: "m1", EntryID: "entry",
+		Headers:  map[string]string{"X-Session-Id": "alice"},
+		KeyIndex: 1, BaseURLIndex: 0,
+		AffinityDispatchState: AffinityReuseFull,
+	}
+
+	// When
+	engine.resolvePostRewriteAffinity(plan, req)
+
+	// Then: nothing is overridden and the usage log stays unmarked.
+	if req.AffinityAfterRewrite != false || req.AffinityReuse != "" {
+		t.Fatalf("identical outcome must not be re-marked, got state=%q marked=%v", req.AffinityReuse, req.AffinityAfterRewrite)
+	}
+	if req.KeyIndex != 1 || req.BaseURLIndex != 0 {
+		t.Fatalf("channel should stay 1/0, got %d/%d", req.KeyIndex, req.BaseURLIndex)
+	}
+}
+
 func TestResolvePostRewriteAffinity_leavesExplicitChannelPinAlone(t *testing.T) {
 	// Given: a caller that already pinned a channel (e.g. a recovery probe).
 	engine, plan := postRewriteFixture(t)
@@ -254,7 +343,6 @@ func TestRelayRequest_postRewriteRecallPinsChannelSynthesizedByRule(t *testing.T
 		RequestID: "req-post-affinity", Model: "m1", Path: "/v1/chat/completions",
 		EntryID: "entry", Headers: map[string]string{}, Body: body,
 		KeyIndex: -1, BaseURLIndex: -1,
-		AffinityPostLookup: true,
 	}
 
 	// When: the pipeline runs its second recall after the rewrite.
@@ -270,8 +358,8 @@ func TestRelayRequest_postRewriteRecallPinsChannelSynthesizedByRule(t *testing.T
 	if got := <-seen; got != "Bearer k1" {
 		t.Fatalf("expected the recalled key to serve the request, got %q", got)
 	}
-	if req.AffinityReuse != AffinityReuseFull {
-		t.Fatalf("expected full reuse, got %q", req.AffinityReuse)
+	if req.AffinityReuse != AffinityReuseFull || !req.AffinityAfterRewrite {
+		t.Fatalf("expected a marked full reuse, got state=%q marked=%v", req.AffinityReuse, req.AffinityAfterRewrite)
 	}
 	// The recorded history stays on the same channel for the next request.
 	var row model.RequestChannelHistory

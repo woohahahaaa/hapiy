@@ -256,6 +256,34 @@ def fmt_round(pct):
 
 # --- 命令 ------------------------------------------------------------------
 
+USAGE = """\
+用法：./alive/pwa.sh <命令>（不加参数就是这份帮助）
+
+  换图标    logo <图片> [--round 10%]
+            从这张图切全套尺寸（192 / 512 / maskable-512 / apple-touch-180 /
+            favicon.ico）；圆角是“边长百分比”（0-50，只切 any 图标），省略则沿用。
+  换标题    title <名字> [--short <短名>]
+            manifest 的 name / short_name（短名默认同标题）。
+  换描述    desc <一句话>
+            manifest 的 description（安装提示 / 应用列表上显示的那句话）。
+  换主题色  theme <#rrggbb> [--bg <#rrggbb>]
+            theme_color；背景色默认同主题色。
+  换目录    dir <静态目录>
+            输出目录（默认自动探测 web/public > public > app/public …）。
+  重新生成  gen
+  看现状    show          当前配置 + 会生成哪些文件 + <head> 片段
+
+例：
+  ./alive/pwa.sh logo web/logo.png --round 10%
+  ./alive/pwa.sh title "我的应用" --short 短名
+  ./alive/pwa.sh desc "一句话描述"
+
+配置记在 alive/pwa.json（也可以直接手改）；每条设置命令都会立即重生成。
+生成物写进静态目录：icon-192.png、icon-512.png、icon-maskable-512.png、
+apple-touch-icon.png、favicon.ico、manifest.webmanifest、首次的 sw.js。
+依赖 python3 + Pillow。
+"""
+
 
 def cmd_gen(root, kit_dir, cfg):
     eff = effective(root, cfg)
@@ -315,8 +343,10 @@ def cmd_show(root, cfg):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="pwa",
+        add_help=False,
         description="从一张 logo 生成 PWA 资产（图标 / manifest / sw.js）。",
     )
+    parser.add_argument("-h", "--help", action="store_true", help="显示帮助")
     parser.add_argument("--root", default=os.getcwd(), help="项目根目录（默认当前目录）")
     sub = parser.add_subparsers(dest="cmd", metavar="<命令>")
 
@@ -350,7 +380,10 @@ def main(argv):
     kit_dir = os.environ.get("KIT_DIR") or os.path.join(root, "alive/woohkit")
     cfg = load_cfg(root)
 
-    if args.cmd in (None, "show"):
+    if args.cmd is None or args.help:
+        sys.stdout.write(USAGE)
+        return 0
+    if args.cmd == "show":
         return cmd_show(root, cfg)
     if args.cmd == "gen":
         return cmd_gen(root, kit_dir, cfg)
