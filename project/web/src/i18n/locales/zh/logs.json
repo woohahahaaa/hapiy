@@ -112,7 +112,8 @@
       "successRate": "成功率",
       "cost": "花费",
       "throughput": "吞吐量",
-      "cacheHitRate": "缓存命中率"
+      "cacheHitRate": "缓存命中率",
+      "totalTokensDedup": "总 Token（缓存命中去重）"
     },
     "active": {
       "title": "活跃请求",

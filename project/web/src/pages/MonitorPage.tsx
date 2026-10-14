@@ -20,6 +20,8 @@ import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { DateRangeFilter } from '@/components/wooh/DateRangeFilter'
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
+import { sortActiveRequests } from '@/lib/active-requests'
+import { formatCompactNumber } from '@/lib/compact-number'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import {
   dashboardApi,
@@ -32,12 +34,6 @@ import {
 
 const POLL_INTERVAL_MS = 2000
 const ELAPSED_TICK_MS = 1000
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
 
 function formatBytes(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}MB`
@@ -230,7 +226,8 @@ function MetricSkeleton() {
 // ── 统计模块 ──
 
 function StatsSection() {
-  const { t } = useTranslation('logs')
+  const { t, i18n } = useTranslation('logs')
+  const locale = i18n.language?.startsWith('en') ? 'en-US' : 'zh-CN'
   // 统计区顶部的时间筛选同样缓存（usePersistedState）：刷新保留，切走本页即清除。
   const [dateRange, setDateRange] = usePersistedState<DateRange>('monitor.stats.dateRange', {})
   const [stats, setStats] = useState<LogStats | null>(null)
@@ -280,6 +277,8 @@ function StatsSection() {
   const totalCost = stats?.totalCost ?? 0
   const throughput = stats?.throughput ?? 0
   const cacheHitRate = stats?.cacheHitRate ?? 0
+  // 总 Token（缓存命中去重）：把缓存命中部分从总量里去掉，只统计真正消耗的 Token。
+  const dedupedTokens = stats ? Math.max(0, stats.totalTokens - stats.cacheHitTokens) : 0
   const cacheActivity = stats && (stats.successCount > 0 || stats.totalRequests > 0)
 
   const handleClearUsage = useCallback(async () => {
@@ -314,7 +313,7 @@ function StatsSection() {
         <div className="flex flex-wrap items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
           <Button
-            variant="outline"
+            variant="destructive"
             size="sm"
             onClick={() => setClearOpen(true)}
             title={t('monitor.clear.tooltip')}
@@ -328,7 +327,7 @@ function StatsSection() {
       {/* Loading state: first load only */}
       {loading && !stats ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {Array.from({ length: 9 }).map((_, i) => <MetricSkeleton key={i} />)}
+          {Array.from({ length: 10 }).map((_, i) => <MetricSkeleton key={i} />)}
         </div>
       ) : error && !stats ? (
         <div className="flex items-center justify-center py-8">
@@ -362,7 +361,7 @@ function StatsSection() {
             <MetricCard
               icon={<AppIcon name="chat" />}
               label={t('monitor.metrics.totalTokens')}
-              value={formatTokens(stats.totalTokens)}
+              value={formatCompactNumber(stats.totalTokens, locale)}
             />
             <MetricCard
               icon={<AppIcon name="schedule" />}
@@ -388,6 +387,11 @@ function StatsSection() {
               icon={<AppIcon name="refresh" />}
               label={t('monitor.metrics.cacheHitRate')}
               value={cacheActivity && cacheHitRate > 0 ? cacheHitRateText(cacheHitRate) : '-'}
+            />
+            <MetricCard
+              icon={<AppIcon name="layers" />}
+              label={t('monitor.metrics.totalTokensDedup')}
+              value={formatCompactNumber(dedupedTokens, locale)}
             />
           </div>
         </>
@@ -483,8 +487,7 @@ function ActiveRequestsSection() {
     try {
       const data = await dashboardApi.getActiveRequests()
       if (!mountedRef.current || seq !== fetchSeqRef.current) return
-      const sorted = [...data].sort((a, b) => (a.startTime < b.startTime ? 1 : a.startTime > b.startTime ? -1 : 0))
-      setRequests(sorted)
+      setRequests(sortActiveRequests(data))
       setError(null)
     } catch (err) {
       if (!mountedRef.current || seq !== fetchSeqRef.current) return

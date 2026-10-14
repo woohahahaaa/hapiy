@@ -234,16 +234,19 @@ func GetLogStats(db *gorm.DB) gin.HandlerFunc {
 			throughput = float64(totalTokens) * 1000.0 / float64(totalUseTimeMs)
 		}
 
+		// cache_hit_tokens is the raw counter alongside the rate: the UI
+		// subtracts it from total_tokens for the 总 Token（缓存命中去重）card.
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
-			"total_requests":  totalRequests,
-			"success_count":   successCount,
-			"failed_count":    failedCount,
-			"total_tokens":    totalTokens,
-			"average_latency": avgLatency,
-			"total_cost":      totalCost,
-			"cache_hit_rate":  cacheHitRate,
-			"throughput":      throughput,
-			"models":          []struct{}{},
+			"total_requests":   totalRequests,
+			"success_count":    successCount,
+			"failed_count":     failedCount,
+			"total_tokens":     totalTokens,
+			"average_latency":  avgLatency,
+			"total_cost":       totalCost,
+			"cache_hit_rate":   cacheHitRate,
+			"cache_hit_tokens": cacheHitTokens,
+			"throughput":       throughput,
+			"models":           []struct{}{},
 		}})
 	}
 }

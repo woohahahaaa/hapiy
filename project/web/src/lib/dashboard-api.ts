@@ -235,6 +235,9 @@ export type LogStats = {
   readonly averageLatency: number
   readonly totalCost: number
   readonly cacheHitRate: number
+  // Raw cache-hit token counter (subset of totalTokens); the monitor page
+  // subtracts it to build the 总 Token（缓存命中去重）card.
+  readonly cacheHitTokens: number
   readonly throughput: number
   readonly models: readonly ModelStat[]
 }
@@ -1638,6 +1641,7 @@ function parseLogStats(value: unknown): LogStats {
     averageLatency: readNumber(value.average_latency, 'stat.average_latency'),
     totalCost: readNumber(value.total_cost, 'stat.total_cost'),
     cacheHitRate: readNumber(value.cache_hit_rate, 'stat.cache_hit_rate'),
+    cacheHitTokens: readNumber(value.cache_hit_tokens, 'stat.cache_hit_tokens'),
     throughput: readNumber(value.throughput, 'stat.throughput'),
     models: readObjectArray(value.models, 'stat.models', parseModelStat),
   }

@@ -115,7 +115,8 @@
       "successRate": "Success rate",
       "cost": "Cost",
       "throughput": "Throughput",
-      "cacheHitRate": "Cache hit rate"
+      "cacheHitRate": "Cache hit rate",
+      "totalTokensDedup": "Total Tokens (cache hits deduped)"
     },
     "active": {
       "title": "Active Requests",
