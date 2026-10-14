@@ -34,13 +34,13 @@ func TestRewriteNotes_missingRefHeaderReportsNoEffect(t *testing.T) {
 	if _, ok := out["x-opencode-session"]; ok {
 		t.Fatalf("missing ref source must not write the header, got %q", out["x-opencode-session"])
 	}
-	want := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	want := "[请求改写] 命中·未生效：为 opencode go 添加x-opencode-session（引用源 X-Session-Id 不存在）"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
 
-// A ref whose source exists reports 命中并生效, and a rule whose conditions
+// A ref whose source exists reports 命中·生效, and a rule whose conditions
 // do not match reports 未命中 — the three states must stay distinguishable.
 func TestRewriteNotes_hitAndMiss(t *testing.T) {
 	hitChain, err := compileRewriteChain("r1", `[
@@ -71,13 +71,13 @@ func TestRewriteNotes_hitAndMiss(t *testing.T) {
 	if out["x-session"] != "ses_1" {
 		t.Fatalf("ref source should be copied, got %q", out["x-session"])
 	}
-	want := "[请求改写] 拷贝会话：命中并生效\n[请求改写] 改了别的模型的温度：未命中"
+	want := "[请求改写] 命中·生效：拷贝会话\n[请求改写] 未命中：改了别的模型的温度"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
 
-// A cross-domain ref whose source is absent reports 命中但未生效 with the domain
+// A cross-domain ref whose source is absent reports 命中·未生效 with the domain
 // prefix kept, so the note says which domain was read.
 func TestRewriteNotes_crossDomainMissingSourceReportsNoEffect(t *testing.T) {
 	headerChain, err := compileRewriteChain("r1", `[
@@ -91,7 +91,7 @@ func TestRewriteNotes_crossDomainMissingSourceReportsNoEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply header: %v", err)
 	}
-	want := "[请求改写] 取 body 首句：命中但未生效（引用源 body.messages.0.content 不存在）"
+	want := "[请求改写] 命中·未生效：取 body 首句（引用源 body.messages.0.content 不存在）"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
@@ -107,7 +107,7 @@ func TestRewriteNotes_crossDomainMissingSourceReportsNoEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply body: %v", err)
 	}
-	want = "[请求改写] 取会话头：命中但未生效（引用源 header.X-Session-Id 不存在）"
+	want = "[请求改写] 命中·未生效：取会话头（引用源 header.X-Session-Id 不存在）"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
@@ -126,13 +126,13 @@ func TestRewriteNotes_hashMissingSourceReportsNoEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	want := "[请求改写] 派发会话 id：命中但未生效（引用源 body.messages.1.content 不存在）"
+	want := "[请求改写] 命中·未生效：派发会话 id（引用源 body.messages.1.content 不存在）"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
 }
 
-// A body op whose target path is absent reports 命中但未生效 with the path,
+// A body op whose target path is absent reports 命中·未生效 with the path,
 // so a rule silently doing nothing is explainable.
 func TestRewriteNotes_missingBodyPathReportsNoEffect(t *testing.T) {
 	chain, err := compileRewriteChain("r1", `[
@@ -146,7 +146,31 @@ func TestRewriteNotes_missingBodyPathReportsNoEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	want := "[响应改写] 替换失败路径：命中但未生效（目标路径 messages.0.content 不存在）"
+	want := "[响应改写] 命中·未生效：替换失败路径（目标路径 messages.0.content 不存在）"
+	if got := service.RuleNotesText(notes); got != want {
+		t.Fatalf("note text = %q, want %q", got, want)
+	}
+}
+
+// A rule whose ops only partly land reads 命中·部分生效, so the op that did
+// not apply is not hidden behind a plain 命中·生效.
+func TestRewriteNotes_partialEffect(t *testing.T) {
+	chain, err := compileRewriteChain("r1", `[
+		{"path":"temperature","mode":"set","value":0.1},
+		{"path":"messages.0.content","mode":"replace","from":"a","to":"b"}
+	]`)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	body, _, notes, err := applyRewriteChainsWithNotes([]byte(`{"model":"m"}`), nil,
+		[]CompiledRewriteChain{{RuleID: "r1", RuleName: "改温度并替换", Ops: chain}}, service.RuleCategoryRequest)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !strings.Contains(string(body), `"temperature":0.1`) {
+		t.Fatalf("first op must apply, got %s", body)
+	}
+	want := "[请求改写] 命中·部分生效：改温度并替换（目标路径 messages.0.content 不存在）"
 	if got := service.RuleNotesText(notes); got != want {
 		t.Fatalf("note text = %q, want %q", got, want)
 	}
@@ -168,7 +192,7 @@ func TestApplyCompiledRewriteRules_recordsRuleNotes(t *testing.T) {
 	if err := eng.applyCompiledRewriteRules(plan, req); err != nil {
 		t.Fatalf("applyCompiledRewriteRules: %v", err)
 	}
-	want := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	want := "[请求改写] 命中·未生效：为 opencode go 添加x-opencode-session（引用源 X-Session-Id 不存在）"
 	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("req notes = %q, want %q", got, want)
 	}
@@ -189,10 +213,10 @@ func TestCaptureRuleNotes_splitsByStage(t *testing.T) {
 	if got := captureRuleNotes(topologyStageRequestBefore, req); len(got) != 0 {
 		t.Fatalf("request_before must carry no notes, got %q", service.RuleNotesText(got))
 	}
-	if got := service.RuleNotesText(captureRuleNotes(topologyStageRequestAfter, req)); got != "[请求改写] req：命中并生效" {
+	if got := service.RuleNotesText(captureRuleNotes(topologyStageRequestAfter, req)); got != "[请求改写] 命中·生效：req" {
 		t.Fatalf("request_after notes = %q", got)
 	}
-	want := "[故障转移] fo：未命中\n[响应改写] rsp：命中并生效"
+	want := "[故障转移] 未命中：fo\n[响应改写] 命中·生效：rsp"
 	if got := service.RuleNotesText(captureRuleNotes(topologyStageResponseAfter, req)); got != want {
 		t.Fatalf("response_after notes = %q, want %q", got, want)
 	}
@@ -208,20 +232,20 @@ func TestFailoverNotes_matchedMissAndReplace(t *testing.T) {
 	}
 	req := &RelayRequest{}
 	appendFailoverNotes(req, rules, nil)
-	want := "[故障转移] 主转移：未命中\n[故障转移] 备用转移：未命中"
+	want := "[故障转移] 未命中：主转移\n[故障转移] 未命中：备用转移"
 	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("miss notes = %q, want %q", got, want)
 	}
 
 	req = &RelayRequest{}
 	appendFailoverNotes(req, rules, failoverNote(rules[0], service.RuleStatusHit, "已转移至 back"))
-	want = "[故障转移] 主转移：命中并生效（已转移至 back）\n[故障转移] 备用转移：未命中"
+	want = "[故障转移] 命中·生效：主转移（已转移至 back）\n[故障转移] 未命中：备用转移"
 	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("hit notes = %q, want %q", got, want)
 	}
 
 	replaceFailoverNote(req, *failoverNote(rules[1], service.RuleStatusHit, "响应速度 3.0 token/s 低于规则限制 5 token/s"))
-	want = "[故障转移] 主转移：命中并生效（已转移至 back）\n[故障转移] 备用转移：命中并生效（响应速度 3.0 token/s 低于规则限制 5 token/s）"
+	want = "[故障转移] 命中·生效：主转移（已转移至 back）\n[故障转移] 命中·生效：备用转移（响应速度 3.0 token/s 低于规则限制 5 token/s）"
 	if got := service.RuleNotesText(req.RuleNotes); got != want {
 		t.Fatalf("replaced notes = %q, want %q", got, want)
 	}

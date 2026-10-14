@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DiffView } from '@/components/wooh/DiffView'
 import { JsonHighlight } from '@/components/wooh/JsonHighlight'
+import { RuleNoteLines } from '@/components/wooh/RuleNoteLines'
 import { dashboardApi } from '@/lib/dashboard-api'
 import type { LogCapturePairFull, LogCaptureStageRow, LogCaptureTiming } from '@/lib/dashboard-api'
 
@@ -225,16 +226,16 @@ function StageErrorRow({ error }: { readonly error: string }) {
 }
 
 // ── RuleNotesBlock: the relay's per-rule outcomes for this stage
-// (命中并生效 / 命中但未生效（原因）/ 命中但执行失败（原因）/ 未命中),
-// one per line. Empty for stages without rules.
+// (命中·生效 / 命中·部分生效 / 命中·未生效（原因）/ 命中·出错（原因）/ 未命中),
+// one per line, verdict colour-coded. Empty for stages without rules.
 function RuleNotesBlock({ notes }: { readonly notes: string }) {
   const { t } = useTranslation('logs')
   if (notes === '') return null
   return (
     <Node label={t('preview.ruleNotes')}>
-      <pre className="overflow-auto rounded-none border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
-        {notes}
-      </pre>
+      <div className="overflow-auto rounded-none border border-border-subtle bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+        <RuleNoteLines text={notes} />
+      </div>
     </Node>
   )
 }

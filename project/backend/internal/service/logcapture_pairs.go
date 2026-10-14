@@ -20,7 +20,7 @@ type LogCaptureStageRow struct {
 	Status  int           `json:"status,omitempty"`
 	Error   string        `json:"error,omitempty"`
 	// RuleNotes renders this stage's rule outcomes as display lines
-	// ("[请求改写] 名称：命中并生效 / 命中但未生效（原因）/ …"), one per rule.
+	// ("[请求改写] 命中·生效：名称（原因）/ …"), one per rule.
 	RuleNotes string    `json:"rule_notes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -88,10 +88,10 @@ type LogCapturePairFull struct {
 	Request    *LogCaptureRequestNode   `json:"request,omitempty"`
 	Responses  []LogCaptureResponseNode `json:"responses"`
 	Error      string                   `json:"error,omitempty"`
-	// RuleProblems lists the rules that engaged but did not take effect
-	// (命中但未生效 / 命中但执行失败), one line each, deduplicated. The detail
-	// dialog shows it at the top so the reason is visible without expanding
-	// the stage nodes.
+	// RuleProblems lists the rules that engaged but did not fully take effect
+	// (命中·部分生效 / 命中·未生效 / 命中·出错), one line each, deduplicated. The
+	// detail dialog shows it at the top so the reason is visible without
+	// expanding the stage nodes.
 	RuleProblems string `json:"rule_problems,omitempty"`
 	// HasRequestRewrite / HasResponseRewrite mirror the list summary's
 	// markers so the detail header and node labels agree with the list.
@@ -580,16 +580,16 @@ func pairRuleNotes(rows []model.LogCapture) []RuleNote {
 	return notes
 }
 
-// ruleProblemsText renders the pair's problem lines (命中但未生效 /
-// 命中但执行失败), deduplicated: the response_before and response_after rows
-// carry overlapping notes, so identical lines must collapse. First
+// ruleProblemsText renders the pair's problem lines (命中·部分生效 /
+// 命中·未生效 / 命中·出错), deduplicated: the response_before and response_after
+// rows carry overlapping notes, so identical lines must collapse. First
 // occurrence wins.
 func ruleProblemsText(rows []model.LogCapture) string {
 	seen := make(map[string]bool)
 	lines := make([]string, 0, len(rows))
 	for i := range rows {
 		for _, note := range ParseRuleNotes(rows[i].RuleNotes) {
-			if note.Status != RuleStatusNoEffect && note.Status != RuleStatusFailed {
+			if note.Status != RuleStatusPartial && note.Status != RuleStatusNoEffect && note.Status != RuleStatusFailed {
 				continue
 			}
 			line := note.Line()

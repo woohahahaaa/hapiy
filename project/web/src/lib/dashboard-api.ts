@@ -309,9 +309,9 @@ export type LogCaptureStageRow = {
   readonly body: unknown
   readonly status: number
   readonly error: string
-  // ruleNotes lists this stage's rewrite/failover rule outcomes (命中并生效 /
-  // 命中但未生效（原因）/ 命中但执行失败（原因）/ 未命中), one per line; empty
-  // when the stage has no rules or the row predates the field.
+  // ruleNotes lists this stage's rewrite/failover rule outcomes (命中·生效 /
+  // 命中·部分生效（原因）/ 命中·未生效（原因）/ 命中·出错（原因）/ 未命中), one per
+  // line; empty when the stage has no rules or the row predates the field.
   readonly ruleNotes: string
   readonly created_at: string
 }
@@ -361,7 +361,7 @@ export type LogCapturePairFull = {
   readonly request?: LogCaptureRequestNode
   readonly responses: readonly LogCaptureResponseNode[]
   readonly error: string
-  // rule_problems: 命中但未生效 / 命中但执行失败 的规则行（含原因），详情开头展示。
+  // rule_problems: 命中·部分生效 / 命中·未生效 / 命中·出错 的规则行（含原因），详情开头展示。
   readonly rule_problems: string
   // has_request_rewrite / has_response_rewrite: 与列表标记一致，供详情头部/节点使用。
   readonly has_request_rewrite: boolean

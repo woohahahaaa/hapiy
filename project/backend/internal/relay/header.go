@@ -11,7 +11,7 @@ import (
 // pre-rewrite snapshots a variable reference reads from (a cross-domain ref may
 // name either domain). The third return value is a non-empty reason when the op
 // was allowed to run but changed nothing — currently only the set-from-ref case
-// whose source is absent; the caller records it as "命中但未生效" instead of
+// whose source is absent; the caller records it as "命中·未生效" instead of
 // silently dropping it.
 func applyHeaderOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, string, error) {
 	if headers == nil {

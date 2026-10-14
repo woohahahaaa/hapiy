@@ -782,7 +782,7 @@ func TestListPairs_header_only_rewrite_is_modified(t *testing.T) {
 // TestReadPair_surfaces_rule_notes: structured rule outcomes written with the
 // capture rows reach the display fields the detail dialog renders — the stage
 // rows' rendered lines, the 请求改写/响应改写 markers, and the opening problem
-// block (命中但未生效 with its reason).
+// block (命中·未生效 with its reason).
 func TestReadPair_surfaces_rule_notes(t *testing.T) {
 	w := newPairsTestWriter(t)
 
@@ -812,11 +812,11 @@ func TestReadPair_surfaces_rule_notes(t *testing.T) {
 	if full.Request == nil || full.Request.After == nil {
 		t.Fatalf("request after row missing: %+v", full.Request)
 	}
-	wantLine := "[请求改写] 为 opencode go 添加x-opencode-session：命中但未生效（引用源 X-Session-Id 不存在）"
+	wantLine := "[请求改写] 命中·未生效：为 opencode go 添加x-opencode-session（引用源 X-Session-Id 不存在）"
 	if full.Request.After.RuleNotes != wantLine {
 		t.Fatalf("request rule notes = %q, want %q", full.Request.After.RuleNotes, wantLine)
 	}
-	if len(full.Responses) != 1 || full.Responses[0].After == nil || full.Responses[0].After.RuleNotes != "[故障转移] 主转移：未命中" {
+	if len(full.Responses) != 1 || full.Responses[0].After == nil || full.Responses[0].After.RuleNotes != "[故障转移] 未命中：主转移" {
 		t.Fatalf("response rule notes missing: %+v", full.Responses)
 	}
 	if full.RuleProblems != wantLine {

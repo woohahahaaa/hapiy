@@ -75,10 +75,12 @@ func newStreamRewriteReader(src io.Reader, chains []CompiledRewriteChain) *strea
 }
 
 // Notes returns one RuleNote per configured response-rewrite rule,
-// aggregating the whole stream: a rule that changed at least one event
-// reads as 命中并生效; a rule that only ever had nothing to change reads as
-// 命中但未生效 with the first reason; a rule that never matched an event
-// reads as 未命中. Call after the stream has been fully read.
+// aggregating the whole stream: a rule that changed some events but had
+// nothing to change on others reads as 命中·部分生效; a rule that only ever
+// changed at least one event with no idle events reads as 命中·生效; a rule
+// that only ever had nothing to change reads as 命中·未生效 with the first
+// reason; a rule that never matched an event reads as 未命中. Call after the
+// stream has been fully read.
 func (r *streamRewriteReader) Notes() []service.RuleNote {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -93,6 +95,9 @@ func (r *streamRewriteReader) Notes() []service.RuleNote {
 		case r.ruleFailed[chain.RuleID] != "":
 			base.Status = service.RuleStatusFailed
 			base.Reason = r.ruleFailed[chain.RuleID]
+		case r.ruleHit[chain.RuleID] && r.ruleNoEffect[chain.RuleID] != "":
+			base.Status = service.RuleStatusPartial
+			base.Reason = r.ruleNoEffect[chain.RuleID]
 		case r.ruleHit[chain.RuleID]:
 			base.Status = service.RuleStatusHit
 		case r.ruleNoEffect[chain.RuleID] != "":

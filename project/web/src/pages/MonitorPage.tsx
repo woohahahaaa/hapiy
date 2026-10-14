@@ -312,15 +312,6 @@ function StatsSection() {
         <h3 className="text-sm font-medium">{t('monitor.stats.title')}</h3>
         <div className="flex flex-wrap items-center gap-2">
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setClearOpen(true)}
-            title={t('monitor.clear.tooltip')}
-          >
-            <AppIcon name="delete" data-icon="inline-start" />
-            {t('monitor.clear.button')}
-          </Button>
         </div>
       </div>
 
@@ -359,29 +350,19 @@ function StatsSection() {
               value={String(stats.failedCount)}
             />
             <MetricCard
-              icon={<AppIcon name="chat" />}
-              label={t('monitor.metrics.totalTokens')}
-              value={formatCompactNumber(stats.totalTokens, locale)}
-            />
-            <MetricCard
-              icon={<AppIcon name="schedule" />}
-              label={t('monitor.metrics.averageLatency')}
-              value={formatLatency(stats.averageLatency)}
-            />
-            <MetricCard
               icon={<AppIcon name="dns" />}
               label={t('monitor.metrics.successRate')}
               value={successRate}
             />
             <MetricCard
-              icon={<AppIcon name="sell" />}
-              label={t('monitor.metrics.cost')}
-              value={`¥${totalCost.toFixed(2)}`}
+              icon={<AppIcon name="chat" />}
+              label={t('monitor.metrics.totalTokens')}
+              value={formatCompactNumber(stats.totalTokens, locale)}
             />
             <MetricCard
-              icon={<AppIcon name="bolt" />}
-              label={t('monitor.metrics.throughput')}
-              value={throughput > 0 ? `${throughput.toFixed(2)} tokens/s` : '-'}
+              icon={<AppIcon name="layers" />}
+              label={t('monitor.metrics.totalTokensDedup')}
+              value={formatCompactNumber(dedupedTokens, locale)}
             />
             <MetricCard
               icon={<AppIcon name="refresh" />}
@@ -389,10 +370,32 @@ function StatsSection() {
               value={cacheActivity && cacheHitRate > 0 ? cacheHitRateText(cacheHitRate) : '-'}
             />
             <MetricCard
-              icon={<AppIcon name="layers" />}
-              label={t('monitor.metrics.totalTokensDedup')}
-              value={formatCompactNumber(dedupedTokens, locale)}
+              icon={<AppIcon name="bolt" />}
+              label={t('monitor.metrics.throughput')}
+              value={throughput > 0 ? `${throughput.toFixed(2)} tokens/s` : '-'}
             />
+            <MetricCard
+              icon={<AppIcon name="schedule" />}
+              label={t('monitor.metrics.averageLatency')}
+              value={formatLatency(stats.averageLatency)}
+            />
+            <MetricCard
+              icon={<AppIcon name="sell" />}
+              label={t('monitor.metrics.cost')}
+              value={`¥${totalCost.toFixed(2)}`}
+            />
+            {/* 清空用量：固定在最后一行的最右一列并沉底；该列已被卡片占满时
+                自动落到下一行的同一列（纯 CSS 网格自动布局，不需要测量）。 */}
+            <Button
+              variant="destructive"
+              size="sm"
+              className="[grid-column:-2/-1] self-end justify-self-end"
+              onClick={() => setClearOpen(true)}
+              title={t('monitor.clear.tooltip')}
+            >
+              <AppIcon name="delete" data-icon="inline-start" />
+              {t('monitor.clear.button')}
+            </Button>
           </div>
         </>
       ) : null}

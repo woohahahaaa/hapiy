@@ -121,8 +121,8 @@ type Log struct {
 	// EventDetail explains what happened on this row: for event rows
 	// (auto-disable / auto-recover / manual action / system admin) it names
 	// the rule or action that fired; for request rows it carries the
-	// per-rule outcomes (请求改写/响应改写/故障转移: 命中并生效 / 命中但未生效
-	// 的原因 / 命中但执行失败的原因 / 未命中). Empty on historical rows
+	// per-rule outcomes (请求改写/响应改写/故障转移: 命中·生效 / 命中·部分生效 /
+	// 命中·未生效的原因 / 命中·出错的原因 / 未命中). Empty on historical rows
 	// (no backfill).
 	EventDetail string `gorm:"type:text" json:"event_detail,omitempty"`
 	// Stage timings in milliseconds; nil means the stage does not apply.

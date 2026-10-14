@@ -36,7 +36,7 @@ type CaptureRow =
   | { kind: 'system'; file: LogCaptureFile }
 
 // pairRewritten marks a capture as worth opening: 请求/响应改写规则命中过
-// （含命中但未生效、执行失败）或结果确实被改过。
+// （含部分生效、未生效、出错）或结果确实被改过。
 function pairRewritten(pair: LogCapturePairSummary): boolean {
   return pair.has_rewrite || pair.has_request_rewrite || pair.has_response_rewrite
 }

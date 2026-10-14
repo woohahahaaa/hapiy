@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/wooh/dialog'
 import { SecretValue } from '@/components/wooh/SecretValue'
+import { RuleNoteLines } from '@/components/wooh/RuleNoteLines'
 import { useProviderKeyNote } from '@/lib/provider-key-notes'
 import type { UsageLog } from '@/lib/dashboard-api'
 
@@ -146,7 +147,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         {log.eventDetail && (
           <div className="col-span-2 flex items-baseline gap-2">
             <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.details')}</span>
-            <span className="min-w-0 break-words whitespace-pre-wrap leading-relaxed text-foreground">{log.eventDetail}</span>
+            <RuleNoteLines text={log.eventDetail} className="min-w-0 leading-relaxed text-foreground" />
           </div>
         )}
       </FieldGroup>

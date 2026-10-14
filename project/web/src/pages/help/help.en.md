@@ -231,7 +231,7 @@ Semantics: a request occupies a slot on arrival, the countdown starts when it co
 
 Live view of in-flight requests and running statistics.
 
-- The cards on top show total requests, successes, failures, total tokens, average latency, success rate, cost, throughput, cache hit rate and total tokens (cache hits deduped), with a date filter; "Clear usage" only clears statistics, not request records.
+- The cards on top show total requests, successes, failures, success rate, total tokens, total tokens (cache hits deduped), cache hit rate, throughput, average latency and cost, with a date filter; "Clear usage" only clears statistics, not request records.
 - The "Active requests" table below refreshes every 2 seconds and shows each request's current stage (queued, connecting upstream, waiting for response, receiving…), TTFB and channel affinity; unfinished requests can be killed.
 - Clicking a finished row opens that request's details; "Show active requests within N" adjusts how long finished requests stay in the list.
 

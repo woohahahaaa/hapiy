@@ -2,7 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -18,6 +17,7 @@ const (
 // Rule-note statuses.
 const (
 	RuleStatusHit      = "hit"       // 条件命中且规则生效
+	RuleStatusPartial  = "partial"   // 条件命中但只有部分 op 生效
 	RuleStatusNoEffect = "no_effect" // 条件命中但没有任何修改（例如引用源不存在）
 	RuleStatusFailed   = "failed"    // 条件命中但执行出错
 	RuleStatusMiss     = "miss"      // 条件未命中
@@ -104,33 +104,38 @@ func RuleNotesEngaged(notes []RuleNote, cats ...string) bool {
 	return false
 }
 
-// Line renders the human-readable one-liner for a note.
+// Line renders the human-readable one-liner for a note as
+// "[分类] 命中·生效：规则名（原因）". The verdict leads so a glance down the
+// column shows how each rule went; the frontend colours these verdict tokens
+// by literal match (see RuleNoteLines.tsx).
 func (n RuleNote) Line() string {
-	switch n.Status {
-	case RuleStatusHit:
-		if n.Reason != "" {
-			return n.prefix() + fmt.Sprintf("：命中并生效（%s）", n.Reason)
-		}
-		return n.prefix() + "：命中并生效"
-	case RuleStatusNoEffect:
-		if n.Reason != "" {
-			return n.prefix() + fmt.Sprintf("：命中但未生效（%s）", n.Reason)
-		}
-		return n.prefix() + "：命中但未生效"
-	case RuleStatusFailed:
-		if n.Reason != "" {
-			return n.prefix() + fmt.Sprintf("：命中但执行失败（%s）", n.Reason)
-		}
-		return n.prefix() + "：命中但执行失败"
-	case RuleStatusMiss:
-		return n.prefix() + "：未命中"
+	verdict := n.verdict()
+	if verdict == "" {
+		return ""
 	}
-	return ""
+	line := "[" + n.Category + "] " + verdict
+	if n.Rule != "" {
+		line += "：" + n.Rule
+	}
+	if n.Reason != "" {
+		line += "（" + n.Reason + "）"
+	}
+	return line
 }
 
-func (n RuleNote) prefix() string {
-	if n.Rule == "" {
-		return "[" + n.Category + "]"
+// verdict maps a status to its leading keyword.
+func (n RuleNote) verdict() string {
+	switch n.Status {
+	case RuleStatusHit:
+		return "命中·生效"
+	case RuleStatusPartial:
+		return "命中·部分生效"
+	case RuleStatusNoEffect:
+		return "命中·未生效"
+	case RuleStatusFailed:
+		return "命中·出错"
+	case RuleStatusMiss:
+		return "未命中"
 	}
-	return "[" + n.Category + "] " + n.Rule
+	return ""
 }

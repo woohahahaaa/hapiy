@@ -29,8 +29,8 @@ func readAllStream(t *testing.T, src string, chains []CompiledRewriteChain) stri
 }
 
 // Notes aggregates the whole stream per configured rule: a rule that
-// changed at least one event reads 命中并生效, a rule that only ever had
-// nothing to change reads 命中但未生效 with the reason. The handler
+// changed at least one event reads 命中·生效, a rule that only ever had
+// nothing to change reads 命中·未生效 with the reason. The handler
 // backfills these into the capture rows and the usage record.
 func TestStreamRewrite_notes_perRule(t *testing.T) {
 	chains := []CompiledRewriteChain{
@@ -42,7 +42,7 @@ func TestStreamRewrite_notes_perRule(t *testing.T) {
 	if _, err := io.ReadAll(r); err != nil {
 		t.Fatalf("read stream: %v", err)
 	}
-	want := "[响应改写] 改内容：命中并生效\n[响应改写] 改不存在：命中但未生效（目标路径 never.present 不存在）"
+	want := "[响应改写] 命中·生效：改内容\n[响应改写] 命中·未生效：改不存在（目标路径 never.present 不存在）"
 	if got := service.RuleNotesText(r.Notes()); got != want {
 		t.Fatalf("stream notes = %q, want %q", got, want)
 	}

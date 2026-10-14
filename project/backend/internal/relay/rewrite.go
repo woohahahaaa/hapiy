@@ -460,8 +460,9 @@ func applyRewriteChains(body []byte, headers map[string]string, chains []Compile
 }
 
 // applyRewriteChainsWithNotes is applyRewriteChains plus one RuleNote per
-// compiled chain, tagged with category, recording whether the rule applied,
-// was skipped by its conditions, or was matched but had no effect.
+// compiled chain, tagged with category, recording whether the rule applied
+// (or partly applied), was skipped by its conditions, or was matched but had
+// no effect.
 func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains []CompiledRewriteChain, category string) ([]byte, map[string]string, []service.RuleNote, error) {
 	origBody := body
 	origHeaders := cloneHeaders(headers)
@@ -504,6 +505,8 @@ func applyRewriteChainsWithNotes(body []byte, headers map[string]string, chains 
 			headers = updatedHeaders
 		}
 		switch {
+		case applied > 0 && firstNoEffect != "":
+			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusPartial, Reason: firstNoEffect})
 		case applied > 0:
 			notes = append(notes, service.RuleNote{Category: category, RuleID: chain.RuleID, Rule: chain.RuleName, Status: service.RuleStatusHit})
 		case firstNoEffect != "":
@@ -535,7 +538,7 @@ func cloneHeaders(headers map[string]string) map[string]string {
 // origBody/origHeaders are the pre-rewrite snapshots used by variable refs.
 // The third return value carries a non-empty reason when the op ran but
 // changed nothing (missing path / missing ref source); the caller turns it
-// into a "命中但未生效" note instead of a silent no-op.
+// into a "命中·未生效" note instead of a silent no-op.
 func applyRewriteOp(body []byte, headers map[string]string, origBody []byte, origHeaders map[string]string, op *RewriteOp) ([]byte, map[string]string, string, error) {
 	if strings.HasPrefix(op.Path, "header.") {
 		return applyHeaderOp(body, headers, origBody, origHeaders, op)
