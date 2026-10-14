@@ -289,8 +289,11 @@ func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFu
 			c.JSON(http.StatusBadRequest, gin.H{"error": "value is required for base_url and key"})
 			return
 		}
-		if err := db.Model(&model.AutoDisableState{}).Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).Update("disabled", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		stateResult := db.Model(&model.AutoDisableState{}).
+			Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).
+			Update("disabled", false)
+		if stateResult.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
 			return
 		}
 		// Manual restore only clears the exact restored entity: drop the
@@ -300,6 +303,9 @@ func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFu
 			Delete(&model.DisabledRecord{}).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
+		}
+		if stateResult.RowsAffected > 0 {
+			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, req.Value), "操作: 恢复供应商 "+service.DimensionLabel(req.Dimension)+" 的单个禁用条目")
 		}
 		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": provider.ID, "dimension": req.Dimension, "value": req.Value}})

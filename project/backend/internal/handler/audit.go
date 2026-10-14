@@ -19,6 +19,7 @@ var auditSkips = map[string]struct{}{
 	"/v1/dashboard/disabled-records/:id/replay":                  {},
 	"/v1/dashboard/disabled-records/:id/restore-direct":          {},
 	"/v1/dashboard/providers/disable-status/reset-all":           {},
+	"/v1/dashboard/providers/:id/disable-status/reset":           {},
 	"/v1/dashboard/providers/:id/disable-status/reset-dimension": {},
 }
 

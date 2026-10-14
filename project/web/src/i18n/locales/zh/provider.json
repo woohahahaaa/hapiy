@@ -23,6 +23,8 @@
     "baseUrl": "Base URL {{disabled}}/{{total}}",
     "key": "Key {{disabled}}/{{total}}",
     "dimensionDisabled": "{{label}} 禁用 {{count}} 个",
+    "disabledNote": "已禁用",
+    "restoreDirect": "直接恢复",
     "restore": "恢复"
   },
   "dialog": {

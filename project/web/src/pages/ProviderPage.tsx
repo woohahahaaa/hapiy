@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
@@ -40,6 +40,8 @@ type ProviderFormProps = {
   readonly onUseKeyChange: (next: boolean) => void
   readonly disableStatus: ProviderDisableStatus | null
   readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
+  // 恢复单条被自动禁用的 base URL / key（只恢复这一条，不碰同维度的其他条目）。
+  readonly onResetDisableValue: (dimension: 'base_url' | 'key', value: string) => void
 }
 
 const emptyProvider: ProviderInput = {
@@ -173,6 +175,11 @@ export function ProviderPage() {
     if (reset) toast(t('toast.disableReset'))
   }
 
+  const handleResetDisableValue = async (provider: Provider, dimension: 'base_url' | 'key', value: string) => {
+    const reset = await runMutation(() => dashboardApi.resetProviderDisableStatus(provider.id, { dimension, value }))
+    if (reset) toast(t('toast.disableReset'))
+  }
+
   const columns: ColumnDef<Provider>[] = [
     { key: 'name', label: t('columns.name'), defaultWidth: { kind: 'pixel', value: 160 }, render: (_, provider) => <span className="font-medium">{provider.name}</span> },
     { key: 'baseUrls', label: t('columns.baseUrls'), defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs">{t('list.urls', { count: provider.baseUrls.length })}</span> },
@@ -280,7 +287,7 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
-             <ProviderForm provider={editing} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} />
+             <ProviderForm provider={editing} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} onResetDisableValue={(dimension, value) => { if (editing) void handleResetDisableValue(editing, dimension, value) }} />
           </DialogContent>
         </Dialog>
 
@@ -449,7 +456,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue }: ProviderFormProps) {
   const { t } = useTranslation('provider')
   const [form, setForm] = useState<ProviderInput>(() => provider ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) } : emptyProvider)
   // Per-key remarks as a parallel array aligned with form.keys (array instead
@@ -836,7 +843,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
           </div>
         )
       })()}
-      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash />
+      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} onRestore={(value) => onResetDisableValue('base_url', value)} />
       <ProviderValueList
         label={t('form.apiKeys')}
         placeholder="sk-xxx"
@@ -845,6 +852,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         notes={keyNotes}
         onNotesChange={setKeyNotes}
         notesPlaceholder={t('form.notesPlaceholder')}
+        disabledValues={disableStatus?.keys}
+        onRestore={(value) => onResetDisableValue('key', value)}
       />
       <Field>
         <FieldLabel>{t('columns.models')}</FieldLabel>
@@ -971,9 +980,13 @@ type ProviderValueListProps = {
   readonly notes?: readonly string[]
   readonly onNotesChange?: (notes: readonly string[]) => void
   readonly notesPlaceholder?: string
+  // 被自动禁用（故障转移）的条目：值为 true 的行在下方追加一行「已禁用」备注，
+  // 右侧带「直接恢复」文字按钮，点击只恢复这一条。
+  readonly disabledValues?: Readonly<Record<string, boolean>>
+  readonly onRestore?: (value: string) => void
 }
 
-function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder }: ProviderValueListProps) {
+export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, onRestore }: ProviderValueListProps) {
   const { t } = useTranslation('provider')
   const rows = values.length === 0 ? [''] : [...values]
   const withNotes = onNotesChange !== undefined
@@ -990,6 +1003,8 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
       <div className="space-y-2">
         {rows.map((value, index) => {
           const isPhantom = values.length === 0
+          const trimmedValue = value.trim()
+          const isAutoDisabled = !isPhantom && disabledValues?.[trimmedValue] === true
           const apply = (next: string) => {
             if (isPhantom) {
               onChange([next])
@@ -998,40 +1013,57 @@ function ProviderValueList({ label, placeholder, values, onChange, stripTrailing
             }
           }
           return (
-            <div key={index} className="flex items-center gap-2">
-              <Input
-                value={value}
-                onChange={(event) => apply(event.target.value)}
-                onBlur={stripTrailingSlash ? () => {
-                  const trimmed = value.replace(/\/+$/, '')
-                  if (trimmed !== value) apply(trimmed)
-                } : undefined}
-                placeholder={placeholder}
-                className={withNotes ? 'min-w-0 flex-1' : undefined}
-              />
-              {withNotes && (
+            <Fragment key={index}>
+              <div className="flex items-center gap-2">
                 <Input
-                  value={notes?.[index] ?? ''}
-                  onChange={(event) => applyNote(index, event.target.value)}
-                  placeholder={notesPlaceholder ?? t('form.note')}
-                  aria-label={t('form.noteAria', { label })}
-                  className="w-40 shrink-0"
+                  value={value}
+                  onChange={(event) => apply(event.target.value)}
+                  onBlur={stripTrailingSlash ? () => {
+                    const trimmed = value.replace(/\/+$/, '')
+                    if (trimmed !== value) apply(trimmed)
+                  } : undefined}
+                  placeholder={placeholder}
+                  className={withNotes ? 'min-w-0 flex-1' : undefined}
                 />
+                {withNotes && (
+                  <Input
+                    value={notes?.[index] ?? ''}
+                    onChange={(event) => applyNote(index, event.target.value)}
+                    placeholder={notesPlaceholder ?? t('form.note')}
+                    aria-label={t('form.noteAria', { label })}
+                    className="w-40 shrink-0"
+                  />
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={isPhantom}
+                  onClick={() => {
+                    onChange(values.filter((_, i) => i !== index))
+                    onNotesChange?.((notes ?? []).filter((_, i) => i !== index))
+                  }}
+                  aria-label={t('form.deleteValueAria', { label })}
+                >
+                  <AppIcon name="delete" />
+                </Button>
+              </div>
+              {isAutoDisabled && (
+                <div className="flex items-center gap-1.5 px-1 text-xs text-warning">
+                  <AppIcon name="caution" size={14} />
+                  <span>{t('failoverStatus.disabledNote')}</span>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="ml-auto h-auto shrink-0 px-0 text-xs text-warning underline"
+                    onClick={() => onRestore?.(trimmedValue)}
+                  >
+                    {t('failoverStatus.restoreDirect')}
+                  </Button>
+                </div>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={isPhantom}
-                onClick={() => {
-                  onChange(values.filter((_, i) => i !== index))
-                  onNotesChange?.((notes ?? []).filter((_, i) => i !== index))
-                }}
-                aria-label={t('form.deleteValueAria', { label })}
-              >
-                <AppIcon name="delete" />
-              </Button>
-            </div>
+            </Fragment>
           )
         })}
         <Button type="button" variant="outline" size="sm" onClick={() => onChange([...values, ''])}>

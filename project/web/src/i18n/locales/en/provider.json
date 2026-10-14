@@ -24,6 +24,8 @@
     "baseUrl": "Base URL {{disabled}}/{{total}}",
     "key": "Key {{disabled}}/{{total}}",
     "dimensionDisabled": "{{label}} disabled {{count}}",
+    "disabledNote": "Disabled",
+    "restoreDirect": "Restore directly",
     "restore": "Restore"
   },
   "dialog": {
