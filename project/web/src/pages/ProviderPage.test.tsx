@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { i18n } from '@/i18n/i18n'
 import { ProviderValueList } from './ProviderPage'
 
-// 被自动禁用的条目：只在该条下面追加一行「已禁用」备注 + 「直接恢复」文字按钮，
+// 被自动禁用的条目：只在该条下面追加一行「当前 X 已禁用」备注 + 「直接恢复」文字按钮，
 // 未禁用的条目不受影响（两个 key 禁用就是两行备注）。
 function renderList(values: readonly string[], disabledValues?: Readonly<Record<string, boolean>>): string {
   return renderToStaticMarkup(
@@ -14,6 +14,7 @@ function renderList(values: readonly string[], disabledValues?: Readonly<Record<
       values={values}
       onChange={() => {}}
       disabledValues={disabledValues}
+      disabledNote={i18n.t('provider:failoverStatus.disabledNote', { label: 'Base URL' })}
       onRestore={() => {}}
     />,
   )
@@ -59,7 +60,7 @@ describe('ProviderValueList 自动禁用备注', () => {
   it('英文界面跟着翻译', async () => {
     await i18n.changeLanguage('en')
     const html = renderList(['sk-1'], { 'sk-1': true })
-    expect(html).toContain('Disabled')
+    expect(html).toContain('This Base URL is disabled')
     expect(html).toContain('Restore directly')
   })
 })

@@ -794,56 +794,30 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         </>
       }>
         <FieldGroup>
+      {disableStatus?.provider && (
+        <div className="rounded-none border border-border-subtle bg-muted p-3">
+          <div className="flex items-center gap-1.5 text-xs text-warning">
+            <AppIcon name="caution" size={14} />
+            <span>{t('failoverStatus.providerDisabledNote')}</span>
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="h-auto shrink-0 px-0 text-xs text-warning underline"
+              onClick={() => onResetDisableDimension('provider')}
+            >
+              {t('failoverStatus.restoreDirect')}
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <Field>
           <FieldLabel htmlFor="provider-name">{t('columns.name')}</FieldLabel>
           <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
         </Field>
       </div>
-      {disableStatus && (() => {
-        const rows = [
-          {
-            label: 'Provider',
-            count: disableStatus.provider ? 1 : 0,
-            dimension: 'provider' as const,
-          },
-          {
-            label: 'Base URL',
-            count: Object.values(disableStatus.baseUrls).filter(Boolean).length,
-            dimension: 'base_url' as const,
-          },
-          {
-            label: 'Key',
-            count: Object.values(disableStatus.keys).filter(Boolean).length,
-            dimension: 'key' as const,
-          },
-        ].filter((row) => row.count > 0)
-        if (rows.length === 0) return null
-        return (
-          <div className="rounded-none border border-border-subtle bg-muted p-3">
-            <div className="mb-2 text-xs font-medium">{t('columns.failover')}</div>
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs">
-              {rows.map((row) => (
-                <div key={row.dimension} className="flex items-center gap-2">
-                  <span className="text-muted-foreground">
-                    {t('failoverStatus.dimensionDisabled', { label: row.label, count: row.count })}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onResetDisableDimension(row.dimension)}
-                  >
-                    <AppIcon name="refresh" data-icon="inline-start" />
-                    {t('failoverStatus.restore')}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
-      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} onRestore={(value) => onResetDisableValue('base_url', value)} />
+      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} disabledNote={t('failoverStatus.disabledNote', { label: 'Base URL' })} onRestore={(value) => onResetDisableValue('base_url', value)} />
       <ProviderValueList
         label={t('form.apiKeys')}
         placeholder="sk-xxx"
@@ -853,6 +827,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         onNotesChange={setKeyNotes}
         notesPlaceholder={t('form.notesPlaceholder')}
         disabledValues={disableStatus?.keys}
+        disabledNote={t('failoverStatus.disabledNote', { label: 'Key' })}
         onRestore={(value) => onResetDisableValue('key', value)}
       />
       <Field>
@@ -980,13 +955,15 @@ type ProviderValueListProps = {
   readonly notes?: readonly string[]
   readonly onNotesChange?: (notes: readonly string[]) => void
   readonly notesPlaceholder?: string
-  // 被自动禁用（故障转移）的条目：值为 true 的行在下方追加一行「已禁用」备注，
-  // 右侧带「直接恢复」文字按钮，点击只恢复这一条。
+  // 被自动禁用（故障转移）的条目：值为 true 的行在下方追加一行备注
+  // （disabledNote，如「当前 Key 已禁用」），右侧带「直接恢复」文字按钮，
+  // 点击只恢复这一条。
   readonly disabledValues?: Readonly<Record<string, boolean>>
+  readonly disabledNote?: string
   readonly onRestore?: (value: string) => void
 }
 
-export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, onRestore }: ProviderValueListProps) {
+export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, disabledNote, onRestore }: ProviderValueListProps) {
   const { t } = useTranslation('provider')
   const rows = values.length === 0 ? [''] : [...values]
   const withNotes = onNotesChange !== undefined
@@ -1051,12 +1028,12 @@ export function ProviderValueList({ label, placeholder, values, onChange, stripT
               {isAutoDisabled && (
                 <div className="flex items-center gap-1.5 px-1 text-xs text-warning">
                   <AppIcon name="caution" size={14} />
-                  <span>{t('failoverStatus.disabledNote')}</span>
+                  <span>{disabledNote}</span>
                   <Button
                     type="button"
                     variant="link"
                     size="xs"
-                    className="ml-auto h-auto shrink-0 px-0 text-xs text-warning underline"
+                    className="h-auto shrink-0 px-0 text-xs text-warning underline"
                     onClick={() => onRestore?.(trimmedValue)}
                   >
                     {t('failoverStatus.restoreDirect')}

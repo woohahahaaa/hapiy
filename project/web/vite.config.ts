@@ -38,7 +38,7 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 18009,
     strictPort: true,
-    allowedHosts: ["macs1.example.com", "hapiying.example.com", ...configuredReverseProxyDomains()],
+    allowedHosts: [".example.com", ...configuredReverseProxyDomains()],
     proxy: {
       // Agent 接入走 /proxy/__来源 前缀（来源标记），原样转发给后端；后端
       // 的来源前缀路由负责剥离前缀、把来源标记写进 gin context，并把 agent 自己拼的
