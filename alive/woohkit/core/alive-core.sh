@@ -175,9 +175,18 @@ alive_stop_stack() {
   if [ -n "$sup" ]; then stop_pid_group "$sup" "supervisor"; fi
   rm -f "$SUP_PID_FILE"
   pkill -f "$ALIVE_SELF _supervise" 2>/dev/null || true
+  # 上面那条只认「命令行里有绝对路径」的守护；手工起的可能写成相对路径
+  # （也没有 pidfile 记账），按命令行脚本路径还原后是不是本项目 alive.sh 再
+  # 认领一遍。见 kit_stray_pids。
+  for pid in $(kit_stray_pids _supervise); do
+    stop_pid_group "$pid" "supervisor (stray)"
+  done
 
   # 3) 边车。
   kit_stop_sidecars
+  for pid in $(kit_stray_pids _sidecar); do
+    stop_pid_group "$pid" "sidecar (stray)"
+  done
 
   # 4) 端口上残留的监听者（手工起的 dev server 等）。
   for p in $PORT ${EXTRA_PORTS:-}; do

@@ -105,6 +105,56 @@ stop_pid_group() {
   msg "stopped $label pid $pid"
 }
 
+# pid_cwd <pid> — 进程的工作目录（Linux 读 /proc，其余走 lsof）。取不到输出空。
+pid_cwd() {
+  if [ -e "/proc/$1/cwd" ]; then
+    readlink "/proc/$1/cwd" 2>/dev/null || true
+  else
+    lsof -a -p "$1" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1
+  fi
+}
+
+# path_join <基准目录> <路径> — 把（可能是相对的）路径按基准目录还原成绝对路径
+# 并规范化（…/x/../y 交给 cd）。输出物理路径（pwd -P，符号链接解析掉）——lsof
+# 和 /proc 给的 cwd 都是物理路径，不统一就永远比不相等。文件本身不必存在，只要
+# 所在目录存在；否则输出空。
+path_join() {
+  case "$2" in
+    /*) _pj="$2" ;;
+    *)  _pj="$1/$2" ;;
+  esac
+  _dir="$(cd "$(dirname "$_pj")" 2>/dev/null && pwd -P)" || return 0
+  printf '%s/%s\n' "$_dir" "$(basename "$_pj")"
+}
+
+# kit_stray_pids <子入口名> — 列出「属于本项目这套 kit」的再入口进程
+# （_supervise / _sidecar）pid：命令行里有 alive.sh <子入口名>，且把命令行里的
+# 脚本路径按该进程自己的 cwd 还原后，正好是本项目的 alive.sh（$ALIVE_SELF）。
+# 只认自己的项目——别的项目同名进程不会被误收。
+#
+# 为什么绕这一圈：手工起的守护常把脚本写成相对路径（sh ./alive/alive.sh
+# _supervise dev），命令行里没有绝对路径，`pkill -f "$ALIVE_SELF _supervise"`
+# 匹配不到，又没有 pidfile 记录，停栈就收不干净。也不能放宽成 `alive.sh
+# _supervise`——pkill 是全量匹配，那样会连别的项目的守护一起杀。
+kit_stray_pids() {
+  sub="${1:?kit_stray_pids 需要子入口名}"
+  # 自己这边也走物理路径，跟 lsof / /proc 给的 cwd 同一口径。
+  self="$(path_join / "$ALIVE_SELF")"
+  ps -axww -o pid=,command= 2>/dev/null | while read -r pid cmd; do
+    case "$cmd" in *alive.sh*) ;; *) continue ;; esac
+    script="$(printf '%s\n' "$cmd" |
+      awk -v s="$sub" '{ for (i = 2; i <= NF; i++) if ($i == s) { print $(i-1); exit } }')"
+    [ -n "$script" ] || continue
+    cwd="$(pid_cwd "$pid")"
+    [ -n "$cwd" ] || continue
+    abs="$(path_join "$cwd" "$script")"
+    [ -n "$abs" ] || continue
+    if [ "$abs" = "$ALIVE_SELF" ] || [ "$abs" = "$self" ]; then
+      printf '%s\n' "$pid"
+    fi
+  done
+}
+
 # ---------------------------------------------------------------------------
 # 网络
 # ---------------------------------------------------------------------------
