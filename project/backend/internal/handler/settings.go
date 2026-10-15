@@ -81,7 +81,7 @@ func ReplaceBaseUrlPaths(db *gorm.DB) gin.HandlerFunc {
 				continue
 			}
 			if strings.ContainsAny(p, "/") || strings.Contains(p, "__") || len(p) > 32 {
-				respondErrorWithParams(c, http.StatusBadRequest, "BASE_URL_PATH_INVALID", fmt.Sprintf("来源名 %q 无效：不能包含 / 或 __，且长度不超过 32", p), gin.H{"name": p})
+				respondErrorWithParams(c, http.StatusBadRequest, "BASE_URL_PATH_INVALID", fmt.Sprintf("来源 %q 无效：不能包含 / 或 __，且长度不超过 32", p), gin.H{"name": p})
 				return
 			}
 			if seen[p] {

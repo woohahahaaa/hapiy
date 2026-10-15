@@ -287,7 +287,10 @@ export function LogCapturePage() {
       key: 'source',
       label: t('columns.source'),
       defaultWidth: { kind: 'pixel', value: 100 },
-      accessor: (row) => (row.kind === 'pair' ? row.pair.source : row.file.source),
+      accessor: (row) => {
+        const source = row.kind === 'pair' ? row.pair.source : row.file.source
+        return source ? source.replace(/^__/, '') : null
+      },
     },
     {
       key: 'type',
@@ -400,10 +403,10 @@ export function LogCapturePage() {
                     <SelectItem value="all">{t('filters.allSources')}</SelectItem>
                     <SelectItem value={LOG_SOURCE_UNMARKED}>{t('filters.unmarkedSource')}</SelectItem>
                     {sourceOptions.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s}>{s.replace(/^__/, '')}</SelectItem>
                     ))}
                     {isStaleOption(sourceFilter, sourceOptions) && (
-                      <SelectItem value={sourceFilter}>{sourceFilter}</SelectItem>
+                      <SelectItem value={sourceFilter}>{sourceFilter.replace(/^__/, '')}</SelectItem>
                     )}
                   </SelectGroup>
                 </SelectContent>

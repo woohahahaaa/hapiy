@@ -51,7 +51,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow className="col-span-2" label={t('columns.time')} value={timeText} />
         <DetailRow className="col-span-2" label={t('columns.provider')} value={log.providerName || '-'} />
         <DetailRow className="col-span-2" label={t('columns.model')} value={log.modelName || '-'} />
-        <DetailRow className="col-span-2" label={t('columns.source')} value={log.source || '-'} />
+        <DetailRow className="col-span-2" label={t('columns.source')} value={log.source.replace(/^__/, '') || '-'} />
         <div className="col-span-2 flex items-baseline gap-2">
           <span className="shrink-0 min-w-[4rem] text-muted-foreground/60">{t('detail.downstreamUrl')}</span>
           <span className="break-all font-mono leading-relaxed">{log.downstreamUrl || '-'}</span>
@@ -136,7 +136,7 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow
           className="col-span-2"
           label={t('columns.status')}
-          value={log.status === 'success' ? t('status.success') : log.status === 'failed' ? t('status.failed') : (log.source || '-')}
+          value={log.status === 'success' ? t('status.success') : log.status === 'failed' ? t('status.failed') : (log.source.replace(/^__/, '') || '-')}
         />
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">

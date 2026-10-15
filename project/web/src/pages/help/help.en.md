@@ -289,7 +289,7 @@ Configures the system's public address, mainly for Agent Takeover's managed conf
 - **Domain**: defaults to the current web domain, port included;
 - **Suffix**: `proxy` by default;
 - The final BaseURL is domain + suffix, copyable in one click;
-- **Source marks**: name your clients to get addresses carrying `__source-name`; calls made through such an address show that name in the "source" column of Usage Logs.
+- **Source marks**: name your clients to get addresses carrying a `__source` segment; calls made through such an address show that name in the "source" column of Usage Logs.
 
 > Tip: if hapiy sits behind a reverse proxy or tunnel, set the domain to an externally reachable address first — managed Agent config follows it by default.
 

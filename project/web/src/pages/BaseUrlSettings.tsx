@@ -19,23 +19,21 @@ type LoadState =
   | { readonly kind: 'error'; readonly message: string }
   | { readonly kind: 'ready' }
 
-const MAX_PATH_LEN = 32
-
-function isValidPathName(name: string): boolean {
-  return !name.includes('/') && !name.includes('__') && name.length <= MAX_PATH_LEN
-}
+// 说明用的示例来源（完整地址 = 最终 BaseURL + /__来源 + Agent 自己的路径）。
+const EXAMPLE_SOURCES = ['opencode', 'macOpenchamber'] as const
 
 export function BaseUrlSettings() {
   const { t } = useTranslation('settings')
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
   const [suffixValue, setSuffixValue] = useState('')
   const [origin, setOrigin] = useState(window.location.origin)
-  const [paths, setPaths] = useState<string[]>([])
+  const [sources, setSources] = useState<readonly string[]>([])
+  const [sourcesFailed, setSourcesFailed] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(() => {
-    Promise.all([dashboardApi.getSettings(), dashboardApi.getBaseUrlPaths()])
-      .then(([settings, savedPaths]) => {
+    dashboardApi.getSettings()
+      .then((settings) => {
         const suffix = settings.find((s) => s.key === BASE_URL_SUFFIX_KEY)
         setSuffixValue(suffix?.value ?? '')
         // 已配置过 system_base_url 时，域名从设置回填（去尾缀），以便编辑；
@@ -47,7 +45,6 @@ export function BaseUrlSettings() {
         } else {
           setOrigin(window.location.origin)
         }
-        setPaths([...savedPaths])
         setState({ kind: 'ready' })
       })
       .catch((err) => {
@@ -56,18 +53,30 @@ export function BaseUrlSettings() {
       })
   }, [])
 
+  // 只读列表：使用记录里实际出现过的来源标记。
+  const loadSources = useCallback(() => {
+    dashboardApi
+      .listLogSources()
+      .then((list) => {
+        setSources(list.filter((s) => s.startsWith('__')))
+        setSourcesFailed(false)
+      })
+      .catch(() => setSourcesFailed(true))
+  }, [])
+
   useEffect(() => {
     load()
-  }, [load])
+    loadSources()
+  }, [load, loadSources])
 
   const handleRetry = () => {
     setState({ kind: 'loading' })
     load()
+    loadSources()
   }
 
   const originTrimmed = origin.replace(/\/+$/, '')
   const baseUrl = `${originTrimmed}/${suffixValue.trim() || 'proxy'}`
-  const fullUrlFor = (name: string) => `${baseUrl}/__${name}`
 
   const copyUrl = async (url: string) => {
     try {
@@ -78,35 +87,15 @@ export function BaseUrlSettings() {
     }
   }
 
-  const updatePath = (index: number, value: string) => {
-    setPaths((current) => current.map((p, i) => (i === index ? value : p)))
-  }
-
-  const removePath = (index: number) => {
-    setPaths((current) => current.filter((_, i) => i !== index))
-  }
-
-  const addPath = () => {
-    setPaths((current) => [...current, ''])
-  }
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const invalid = paths.find((p) => p.trim() !== '' && !isValidPathName(p.trim()))
-    if (invalid) {
-      toast.error(t('baseUrl.invalidPathName', { name: invalid.trim(), max: MAX_PATH_LEN }))
-      return
-    }
     setSaving(true)
     try {
-      const cleaned = paths.map((p) => p.trim()).filter((p) => p !== '')
       const effective = `${origin.trim().replace(/\/+$/, '')}/${suffixValue.trim() || 'proxy'}`
       await Promise.all([
         dashboardApi.updateSetting(BASE_URL_SUFFIX_KEY, suffixValue),
         dashboardApi.updateSetting(SYSTEM_BASE_URL_KEY, effective),
-        dashboardApi.replaceBaseUrlPaths(cleaned),
       ])
-      setPaths(cleaned)
       toast(t('toast.saved'))
     } catch (err) {
       const message = err instanceof DashboardApiError ? err.message : t('baseUrl.saveFailed')
@@ -190,61 +179,56 @@ export function BaseUrlSettings() {
               <p className="text-xs text-muted-foreground">
                 {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
               </p>
-              <div className="grid max-w-2xl gap-1.5">
-              <div className="flex flex-col gap-2">
-                {paths.map((p, index) => {
-                  const name = p.trim()
-                  return (
-                    <div key={index} className="flex items-center gap-2">
-                      <Input
-                        value={p}
-                        onChange={(event) => updatePath(index, event.target.value)}
-                        disabled={saving}
-                        placeholder={t('baseUrl.sourceNamePlaceholder')}
-                        className="w-36 shrink-0"
-                      />
-                      <code className="flex-1 cursor-not-allowed truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
-                        {name ? fullUrlFor(name) : `${baseUrl}/__…`}
-                      </code>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyUrl(fullUrlFor(name))}
-                        disabled={saving || !name}
-                      >
-                        <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removePath(index)}
-                        disabled={saving}
-                        aria-label={t('baseUrl.removePathAria')}
-                      >
-                        <AppIcon name="delete" size={14} />
-                      </Button>
-                    </div>
-                  )
-                })}
-              </div>
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addPath}
-                  disabled={saving}
-                >
-                  <AppIcon name="add" size={14} /> {t('baseUrl.addSource')}
-                </Button>
-              </div>
+              <div className="grid max-w-2xl gap-1">
+                {EXAMPLE_SOURCES.map((name) => (
+                  <code
+                    key={name}
+                    className="truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs"
+                  >
+                    {`${baseUrl}/__${name}/v1/chat/completions`}
+                  </code>
+                ))}
               </div>
             </div>
-            <p className="max-w-2xl text-xs text-muted-foreground">
-              {t('baseUrl.requestExamplePrefix')}<code>{`${baseUrl}/__${t('baseUrl.sourcePathSegment')}/v1/chat/completions`}</code>
-            </p>
+            <div className="grid gap-1.5 text-sm">
+              <span>{t('baseUrl.sourcesInUseLabel')}</span>
+              <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseHint')}</p>
+              {sourcesFailed ? (
+                <p className="text-xs text-destructive">{t('baseUrl.sourcesInUseFailed')}</p>
+              ) : sources.length === 0 ? (
+                <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseEmpty')}</p>
+              ) : (
+                <div className="max-w-2xl overflow-hidden rounded-none border border-border-subtle">
+                  <div className="flex items-center gap-2 border-b border-border-subtle bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                    <span className="w-32 shrink-0">{t('baseUrl.sourcesInUseName')}</span>
+                    <span className="min-w-0 flex-1">{t('baseUrl.sourcesInUseUrl')}</span>
+                  </div>
+                  {sources.map((source) => {
+                    const fullUrl = `${baseUrl}/${source}`
+                    return (
+                      <div
+                        key={source}
+                        className="flex items-center gap-2 border-b border-border-subtle px-3 py-2 last:border-b-0"
+                      >
+                        <span className="w-32 shrink-0 truncate font-mono text-xs">{source.replace(/^__/, '')}</span>
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <code className="min-w-0 flex-1 truncate font-mono text-xs">{fullUrl}</code>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyUrl(fullUrl)}
+                            disabled={saving}
+                          >
+                            <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               <Button type="submit" disabled={saving}>
                 {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}

@@ -3005,19 +3005,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     }
     return rate
   },
-  async getBaseUrlPaths(): Promise<readonly string[]> {
-    const data = await request('/settings/base-url-paths')
-    if (!Array.isArray(data)) {
-      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('pathList') }), null)
-    }
-    return data.filter(isRecord).map((v) => readString(v.path, 'base-url-path.path'))
-  },
-  async replaceBaseUrlPaths(paths: readonly string[]): Promise<void> {
-    await request('/settings/base-url-paths', {
-      method: 'PUT',
-      body: JSON.stringify({ paths }),
-    })
-  },
 
   // ── Data backups ──
   async listBackups(limit: number, offset: number): Promise<BackupListResult> {

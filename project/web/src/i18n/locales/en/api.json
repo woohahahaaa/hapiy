@@ -81,7 +81,6 @@
     "userInfo": "user info",
     "loginResponse": "login response",
     "exchangeRate": "exchange rate",
-    "pathList": "path list",
     "duplicateActivationConflict": "duplicate activation conflict",
     "concurrencyWindowState": "concurrency window state",
     "versionDetail": "version detail",
