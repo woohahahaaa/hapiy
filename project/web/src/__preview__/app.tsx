@@ -216,8 +216,8 @@ function NavLink({
               type="button"
               aria-label={
                 open
-                  ? t('nav.collapseSection', { name: item.label })
-                  : t('nav.expandSection', { name: item.label })
+                  ? t('common:nav.collapseSection', { name: item.label })
+                  : t('common:nav.expandSection', { name: item.label })
               }
               onClick={() => setOpen((v) => !v)}
               className={cn(
