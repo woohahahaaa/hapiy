@@ -5,7 +5,7 @@
       "maxWidth": 300
     },
     "slot": {
-      "padding": 16,
+      "padding": 10,
       "contentGap": 8,
       "shellMinWidth": 240
     },

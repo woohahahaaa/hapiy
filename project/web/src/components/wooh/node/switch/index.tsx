@@ -115,13 +115,13 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
       <div
         ref={cardRef}
         className={cn(
-          'relative w-fit rounded-sm border-2 border-border bg-card text-card-foreground',
+          'relative w-fit rounded-3xl border-2 border-border bg-card text-card-foreground',
           externallyDisabled && 'pointer-events-none',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >
         {flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
         ))}
 
         {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
@@ -129,7 +129,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
           <span className="min-w-0 truncate text-sm font-medium">{displayTitle}</span>
           <button
             type="button"
-            className="nodrag nopan flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5 text-[13px] transition-colors hover:bg-muted/50 hover:text-foreground"
+            className="nodrag nopan flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[13px] transition-colors hover:bg-muted/50 hover:text-foreground"
             onClick={(e) => {
               e.stopPropagation()
               setConfigOpen(true)

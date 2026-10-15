@@ -65,7 +65,7 @@ export function SlotItemCard({
         onDrop()
       }}
       className={cn(
-        'relative rounded-sm border-2 border-border bg-card text-card-foreground transition-opacity',
+        'relative rounded-lg border-2 border-border bg-card text-card-foreground transition-opacity',
         !dimContentWhenDisabled && !enabled && 'opacity-60',
         isDragging && 'opacity-40',
         isDragOver && 'border-dashed border-[var(--node-accent,var(--color-primary))]',
@@ -77,7 +77,7 @@ export function SlotItemCard({
         maxWidth: nodeRenderBounds.maxWidth,
       }}
     >{enabled && layers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} />
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-lg" />
       ))}      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (

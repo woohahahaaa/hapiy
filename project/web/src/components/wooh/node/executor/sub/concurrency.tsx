@@ -70,7 +70,7 @@ function ConcurrencyNumber({ value, onCommit, ...rest }: ConcurrencyNumberProps)
         if (!valid) setText(String(value))
       }}
       onKeyDown={(e) => e.stopPropagation()}
-      className="nodrag nopan w-12 px-1 py-0 text-center"
+      className="nodrag nopan w-12 rounded-md px-1 py-0 text-center"
       {...rest}
     />
   )

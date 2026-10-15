@@ -64,7 +64,7 @@ export function RuleSelect({
         if (open) onOpenRefresh?.()
       }}
     >
-      <SelectTrigger size="sm" className="w-0 min-w-full">
+      <SelectTrigger size="sm" className="w-0 min-w-full rounded-md">
         <SelectValue placeholder={placeholder} className="min-w-0">
           <span className="block min-w-0 truncate">{displayValue}</span>
         </SelectValue>
@@ -85,7 +85,7 @@ export function RuleSelect({
                 e.stopPropagation()
                 onOpenRefresh?.()
               }}
-              className="rounded-sm border border-border px-1.5 py-0.5 transition-colors hover:bg-muted/60"
+              className="rounded-md border border-border px-1.5 py-0.5 transition-colors hover:bg-muted/60"
             >
               {t('common:action.retry')}
             </button>

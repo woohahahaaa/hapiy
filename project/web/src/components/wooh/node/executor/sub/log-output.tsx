@@ -80,7 +80,7 @@ export function NodeExecutorLogOutputItem({
           <span className="text-[10px]">{t('logOutput.prefixLabel')}</span>
           <Input
             size="sm"
-            className="text-[10px]"
+            className="rounded-md text-[10px]"
             value={localPrefix}
             onChange={(e) => {
               setLocalPrefix(e.target.value)

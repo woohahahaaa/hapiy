@@ -14,7 +14,7 @@ export function SlotErrorBox({ error, onDismiss }: SlotErrorBoxProps) {
   if (!error) return null
 
   return (
-    <div className="bg-destructive/10 border border-destructive/30 rounded-sm p-3 text-xs text-destructive">
+    <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 text-xs text-destructive">
       <div className="flex items-center justify-between">
         <button
           type="button"

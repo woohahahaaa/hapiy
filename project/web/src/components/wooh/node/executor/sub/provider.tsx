@@ -98,7 +98,7 @@ export function NodeExecutorProvider({ index, child, providers, takenLabels, fla
     >
       <div className="space-y-1.5">
         <Select value={selectedId} onValueChange={(value) => value && onSelect(value)}>
-          <SelectTrigger size="sm" className="w-full">
+          <SelectTrigger size="sm" className="w-full rounded-md">
             <SelectValue placeholder={t('provider.selectPlaceholder')} />
           </SelectTrigger>
           <SelectContent>

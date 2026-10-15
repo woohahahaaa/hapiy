@@ -39,14 +39,14 @@ export function NodeModel({ data, id }: NodeModelProps) {
   return (
     <div
       className={cn(
-        'relative rounded-sm border-2 border-border bg-card text-card-foreground',
+        'relative rounded-3xl border-2 border-border bg-card text-card-foreground',
         allDisabled && 'opacity-60',
       )}
       style={{
         width: 'fit-content',
       }}
     >{flashLayers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
       ))}      {!simplified && (
         <div
           className="border-b border-border"

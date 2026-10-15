@@ -119,13 +119,13 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
       <div
         ref={rootRef}
         className={cn(
-          'relative rounded-sm border-2 bg-card text-card-foreground',
+          'relative rounded-3xl border-2 bg-card text-card-foreground',
           data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
           !enabled && 'opacity-60',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >{flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-sm" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
         ))}
         <Handle
           type="source"
@@ -173,7 +173,7 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
               }}
               onBlur={commitWeightOnBlur}
               onKeyDown={(e) => e.stopPropagation()}
-              className="nodrag nopan w-full px-1 py-0 text-left"
+              className="nodrag nopan w-full rounded-md px-1 py-0 text-left"
             />
           </div>
         </div>
