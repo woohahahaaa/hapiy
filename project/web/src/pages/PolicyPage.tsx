@@ -433,7 +433,7 @@ function FailoverPage() {
       />
       <div className="flex min-h-0 flex-1 flex-col px-6 pb-6">
         <Tabs defaultValue="failover" className="flex min-h-0 flex-1 flex-col">
-          <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border p-0">
+          <TabsList variant="line" className="mb-5 !h-[50px] w-full justify-start gap-6 border-b border-border-subtle p-0">
             <TabsTrigger value="failover" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">{t('common:nav.failover')}</TabsTrigger>
             <TabsTrigger value="recovery" className="-mb-px !h-[50px] flex-none !border-x-0 !border-t-0 !border-b-2 border-transparent px-0 text-sm font-medium after:hidden data-[state=active]:!border-primary data-[state=active]:!text-primary">{t('failover.recoveryTab')}</TabsTrigger>
           </TabsList>

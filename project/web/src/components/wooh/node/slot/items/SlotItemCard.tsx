@@ -78,7 +78,7 @@ export function SlotItemCard({
       }}
     >{enabled && layers.map((layer) => (
         <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} />
-      ))}      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
+      ))}      <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-2 py-1.5">
         <div className={cn('flex items-center gap-1', dimContentWhenDisabled && !enabled && 'opacity-50')}>
           {onDragStart && (
             <span

@@ -156,7 +156,7 @@ export function BaseUrlSettings() {
               <div className="grid gap-1.5 text-sm">
                 <span>{t('baseUrl.finalUrlLabel')}</span>
                 <div className="flex items-center gap-2">
-                  <code className="w-96 cursor-not-allowed truncate rounded-none border border-border bg-muted px-3 py-2 font-mono text-xs">
+                  <code className="w-96 cursor-not-allowed truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs">
                     {baseUrl}
                   </code>
                   <Button
@@ -177,15 +177,15 @@ export function BaseUrlSettings() {
             <div className="grid gap-1.5 text-sm">
               <span>{t('baseUrl.sourceMarkerLabel')}</span>
               <p className="text-xs text-muted-foreground">
-                {t('baseUrl.sourceMarkerHintPrefix')}<code className="text-primary">{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
+                {t('baseUrl.sourceMarkerHintPrefix')}<code>{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
               </p>
               <div className="grid max-w-2xl gap-1">
                 {EXAMPLE_SOURCES.map((name) => (
                   <code
                     key={name}
-                    className="truncate rounded-none border border-border bg-muted px-3 py-2 font-mono text-xs"
+                    className="truncate rounded-none border border-border-subtle bg-muted px-3 py-2 font-mono text-xs"
                   >
-                    {baseUrl}/<span className="text-primary">{`__${name}`}</span>/v1/chat/completions
+                    {`${baseUrl}/__${name}/v1/chat/completions`}
                   </code>
                 ))}
               </div>
@@ -198,8 +198,8 @@ export function BaseUrlSettings() {
               ) : sources.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseEmpty')}</p>
               ) : (
-                <div className="max-w-2xl overflow-hidden rounded-none border border-border">
-                  <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                <div className="max-w-2xl overflow-hidden rounded-none border border-border-subtle">
+                  <div className="flex items-center gap-2 border-b border-border-subtle bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
                     <span className="w-32 shrink-0">{t('baseUrl.sourcesInUseName')}</span>
                     <span className="min-w-0 flex-1">{t('baseUrl.sourcesInUseUrl')}</span>
                   </div>
@@ -208,7 +208,7 @@ export function BaseUrlSettings() {
                     return (
                       <div
                         key={source}
-                        className="flex items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"
+                        className="flex items-center gap-2 border-b border-border-subtle px-3 py-2 last:border-b-0"
                       >
                         <span className="w-32 shrink-0 truncate font-mono text-xs">{source.replace(/^__/, '')}</span>
                         <div className="flex min-w-0 flex-1 items-center gap-2">

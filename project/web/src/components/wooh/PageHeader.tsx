@@ -44,7 +44,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       </div>
-      <Separator className="bg-border/60" />
+      <Separator className="bg-border-subtle/60" />
     </div>
   )
 }

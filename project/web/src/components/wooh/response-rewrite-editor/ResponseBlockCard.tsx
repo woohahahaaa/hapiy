@@ -74,7 +74,7 @@ export function ResponseBlockCard({
         isDragOver && 'border-primary border-dashed',
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-2 py-1.5">
         <div className="flex items-center gap-2">
           {onDragStart && (
             <button

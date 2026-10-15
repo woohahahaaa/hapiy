@@ -571,11 +571,11 @@ export function ManagedProviderDialog({
                   </FieldLabel>
                   <div className="space-y-2">
                     <div className="overflow-hidden rounded-none border border-border">
-                      <div className="flex items-center border-b border-border bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
+                      <div className="flex items-center border-b border-border-subtle bg-muted/40 px-2 py-2 text-xs font-medium text-muted-foreground">
                         <div className="w-[24%]">Endpoint</div>
-                        <div className="w-[14%] border-l border-border pl-2">{t('managedDialog.suffixColumn')}</div>
-                        <div className="w-[26%] border-l border-border pl-2">{t('managedDialog.modelsColumn')}</div>
-                        <div className="flex w-[36%] items-center justify-between gap-1 border-l border-border pl-2">
+                        <div className="w-[14%] border-l border-border-subtle pl-2">{t('managedDialog.suffixColumn')}</div>
+                        <div className="w-[26%] border-l border-border-subtle pl-2">{t('managedDialog.modelsColumn')}</div>
+                        <div className="flex w-[36%] items-center justify-between gap-1 border-l border-border-subtle pl-2">
                           <span>{t('columns.syncFromModelsDev')}</span>
                           <Button
                             type="button"
@@ -598,9 +598,9 @@ export function ManagedProviderDialog({
                             <table key={g.endpoint} className="w-full table-fixed text-xs">
                               <tbody>
                                 {rows.map((m, idx) => (
-                                  <tr key={m || '__empty__'} className={idx > 0 ? 'border-t border-border' : undefined}>
+                                  <tr key={m || '__empty__'} className={idx > 0 ? 'border-t border-border-subtle' : undefined}>
                                     {idx === 0 && (
-                                      <td rowSpan={rows.length} className="w-[24%] border-r border-border px-2 py-2 align-middle">
+                                      <td rowSpan={rows.length} className="w-[24%] border-r border-border-subtle px-2 py-2 align-middle">
                                         {isNone ? (
                                           <Input
                                             value={manualEndpoint[g.endpoint] ?? ''}
@@ -634,7 +634,7 @@ export function ManagedProviderDialog({
                                       </td>
                                     )}
                                     {idx === 0 && (
-                                      <td rowSpan={rows.length} className="w-[14%] border-r border-border px-2 py-2 align-middle">
+                                      <td rowSpan={rows.length} className="w-[14%] border-r border-border-subtle px-2 py-2 align-middle">
                                         <Input
                                           value={
                                             isNone
@@ -654,7 +654,7 @@ export function ManagedProviderDialog({
                                     )}
                                     {m ? (
                                       <>
-                                        <td className="w-[26%] border-r border-border px-2 py-1.5">
+                                        <td className="w-[26%] border-r border-border-subtle px-2 py-1.5">
                                           <span className="block truncate font-mono" title={m}>{m}</span>
                                         </td>
                                         <td className="w-[36%] px-2 py-1.5">
