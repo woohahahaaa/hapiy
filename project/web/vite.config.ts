@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process"
 import os from "node:os"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 import { flowLogMiddleware } from "./flow-log-middleware"
 
 function configuredReverseProxyDomains(): string[] {
@@ -27,8 +27,26 @@ function configuredReverseProxyDomains(): string[] {
 }
 
 // https://vite.dev/config/
+// 开发期样式预览页的固定短链：浏览器里直接输 /p 就行（免后缀、免改名）。
+// 只影响 dev server，生产构建不受影响；预览模式收尾时可以删掉这个插件。
+function previewShortcut(): Plugin {
+  return {
+    name: "preview-shortcut",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const url = req.url ?? ""
+        if (url === "/p" || url === "/p/" || url.startsWith("/p?")) {
+          req.url = "/preview.html"
+        }
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [flowLogMiddleware(), react(), tailwindcss()],
+  plugins: [flowLogMiddleware(), previewShortcut(), react(), tailwindcss()],
   test: {
     // Component snapshot tests render translated UI; load the i18n singleton
     // (defaults to Chinese) before each test file.
