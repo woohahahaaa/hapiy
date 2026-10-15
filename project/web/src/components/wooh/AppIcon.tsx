@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils"
 interface AppIconProps extends React.ComponentProps<"span"> {
   name: string
   size?: number | string
+  /** Override the global stroke width (src/config/icons.json) for this call. */
+  strokeWidth?: number
   /** Convenience flag: true = 'filled', false = leave undefined (global default). */
   filled?: boolean
   /** Override the global icon theme for this call. */
@@ -16,6 +18,7 @@ interface AppIconProps extends React.ComponentProps<"span"> {
 export function AppIcon({
   name,
   size,
+  strokeWidth,
   filled = false,
   theme,
   fill,
@@ -25,6 +28,7 @@ export function AppIcon({
 }: AppIconProps) {
   const icon = renderIcon(name, {
     size,
+    strokeWidth,
     theme: theme ?? (filled ? 'filled' : undefined),
     fill,
   } as IconProps)

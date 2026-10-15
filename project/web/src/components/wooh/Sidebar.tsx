@@ -29,9 +29,6 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 
-// 置底的次级导航（对应官方 dashboard 侧边栏的 NavSecondary）。
-const SECONDARY_NAV_IDS = new Set(['profile', 'help'])
-
 function NavLink({
   item,
   isOpen,
@@ -177,7 +174,9 @@ function NavLink({
             >
               <AppIcon
                 name="chevron_right"
-                className={`[&_svg]:size-3! transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                /* strokeWidth 6 = 2 × global strokeWidth: 3 (src/config/icons.json)：10px 的小箭头需要更粗才醒目 */
+                strokeWidth={6}
+                className={`[&_svg]:size-[10px]! transition-transform ${isOpen ? 'rotate-90' : ''}`}
               />
             </button>
           </div>
@@ -187,12 +186,15 @@ function NavLink({
     }
 
     const trigger = (
-      <SidebarMenuButton onClick={onToggle}>
+      /* pr-[11px]：10px 箭头下让中心仍落在 224px（= 底板中心）*/
+      <SidebarMenuButton onClick={onToggle} className="pr-[11px]">
         {item.icon}
         <span>{t(item.labelKey)}</span>
         <AppIcon
           name="chevron_right"
-          className={`[&_svg]:size-3! ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          /* strokeWidth 6 = 2 × global strokeWidth: 3 (src/config/icons.json)：10px 的小箭头需要更粗才醒目 */
+          strokeWidth={6}
+          className={`[&_svg]:size-[10px]! ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
         />
       </SidebarMenuButton>
     )
@@ -299,8 +301,6 @@ export function AppSidebar() {
 
   const visibleNavigation =
     agentEnabled ? navigation : navigation.filter((item) => item.id !== 'agent')
-  const mainItems = visibleNavigation.filter((item) => !SECONDARY_NAV_IDS.has(item.id))
-  const secondaryItems = visibleNavigation.filter((item) => SECONDARY_NAV_IDS.has(item.id))
 
   const renderItems = (items: NavItem[]) =>
     items.map((item) => (
@@ -365,12 +365,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <SidebarMenu>{renderItems(mainItems)}</SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>{renderItems(secondaryItems)}</SidebarMenu>
+            <SidebarMenu>{renderItems(visibleNavigation)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

@@ -224,7 +224,12 @@ function NavLink({
                 active && !activeChild && 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25',
               )}
             >
-              <AppIcon name="chevron_right" className={`[&_svg]:size-3! transition-transform ${open ? 'rotate-90' : ''}`} />
+              <AppIcon
+                name="chevron_right"
+                /* strokeWidth 6 = 2 × global strokeWidth: 3 (src/config/icons.json)：10px 的小箭头需要更粗才醒目 */
+                strokeWidth={6}
+                className={`[&_svg]:size-[10px]! transition-transform ${open ? 'rotate-90' : ''}`}
+              />
             </button>
           </div>
           {subMenu}
@@ -236,7 +241,8 @@ function NavLink({
       <SidebarMenuItem>
         <SidebarMenuButton
           isActive={active && !activeChild}
-          className={cn(active && activeChild && 'rounded-full bg-sidebar-accent text-sidebar-accent-foreground')}
+          /* pr-[11px]：10px 箭头下让中心仍落在 224px（= 底板中心） */
+          className={cn('pr-[11px]', active && activeChild && 'rounded-full bg-sidebar-accent text-sidebar-accent-foreground')}
           onClick={() => {
             setOpen((v) => !v)
             onSelect(null)
@@ -244,7 +250,12 @@ function NavLink({
         >
           {item.icon}
           <span>{item.label}</span>
-          <AppIcon name="chevron_right" className={`[&_svg]:size-3! ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
+          <AppIcon
+            name="chevron_right"
+            /* strokeWidth 6 = 2 × global strokeWidth: 3 (src/config/icons.json)：10px 的小箭头需要更粗才醒目 */
+            strokeWidth={6}
+            className={`[&_svg]:size-[10px]! ml-auto transition-transform ${open ? 'rotate-90' : ''}`}
+          />
         </SidebarMenuButton>
         {subMenu}
       </SidebarMenuItem>
@@ -313,6 +324,8 @@ function PreviewSidebar() {
       children: [{ label: t('common:nav.agentConfig') }],
     },
     { id: 'settings', label: t('common:nav.settings'), icon: settings },
+    { id: 'profile', label: t('common:nav.profile'), icon: person },
+    { id: 'help', label: t('common:nav.help'), icon: help },
   ]
 
   const selectItem = (id: string) => (child: string | null) => {
@@ -370,24 +383,6 @@ function PreviewSidebar() {
                   onSelect={selectItem(item.id)}
                 />
               ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <NavLink
-                item={{ id: 'profile', label: t('common:nav.profile'), icon: person }}
-                active={activeId === 'profile'}
-                activeChild={activeChild}
-                onSelect={selectItem('profile')}
-              />
-              <NavLink
-                item={{ id: 'help', label: t('common:nav.help'), icon: help }}
-                active={activeId === 'help'}
-                activeChild={activeChild}
-                onSelect={selectItem('help')}
-              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

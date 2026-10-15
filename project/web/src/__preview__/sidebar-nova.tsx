@@ -640,7 +640,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
       data-slot="sidebar-menu-sub"
       data-sidebar="menu-sub"
       className={cn(
-        "mt-2 flex min-w-0 flex-col gap-2 border-l border-sidebar-border group-data-[collapsible=icon]:hidden",
+        "mt-2 flex min-w-0 flex-col gap-2 border-l border-sidebar-foreground/25 group-data-[collapsible=icon]:hidden",
         className
       )}
       {...props}
@@ -682,7 +682,7 @@ function SidebarMenuSubButton({
       data-size={size}
       data-active={isActive}
       className={cn(
-        "flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md px-4 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:rounded-full active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-xs data-[size=sm]:text-xs data-[active=true]:rounded-full data-[active=true]:bg-primary data-[active=true]:text-primary-foreground [&>span:last-child]:truncate [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
+        "flex h-8 min-w-0 -translate-x-px items-center gap-2 overflow-hidden rounded-md pl-[31px] pr-4 text-sidebar-foreground ring-sidebar-ring outline-hidden group-data-[collapsible=icon]:hidden hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:rounded-full active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[size=md]:text-xs data-[size=sm]:text-xs data-[active=true]:rounded-full data-[active=true]:bg-primary data-[active=true]:text-primary-foreground [&>span:last-child]:truncate [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:text-sidebar-accent-foreground",
         className
       )}
       {...props}
