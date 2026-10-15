@@ -361,7 +361,7 @@ export function DatePicker({
                 )
               })}
             </div>
-            {hasTime && <div className="mt-2 border-t border-border-subtle" />}
+            {hasTime && <div className="mt-2 border-t border-border" />}
           </>
         )}
 
@@ -389,7 +389,7 @@ export function DatePicker({
           </div>
         )}
 
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border-subtle pt-2">
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border pt-2">
           {clearable ? (
             <Button
               type="button"

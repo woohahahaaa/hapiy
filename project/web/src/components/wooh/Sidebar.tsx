@@ -99,7 +99,7 @@ function NavLink({
             side="right"
             align="start"
             sideOffset={20}
-            className="z-[100] min-w-40 rounded-none border border-border bg-popover p-1 shadow-md outline-none"
+            className="z-[100] min-w-40 rounded-none ring-1 ring-foreground/10 bg-popover p-1 shadow-md outline-none"
             onMouseEnter={(event) => event.stopPropagation()}
             onMouseLeave={(event) => event.stopPropagation()}
           >
@@ -107,7 +107,7 @@ function NavLink({
               <Link
                 to={item.href!}
                 onClick={closeFlyout}
-                className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
                 <span>{t(item.labelKey)}</span>
               </Link>
@@ -126,8 +126,8 @@ function NavLink({
                   className={cn(
                     'flex h-8 items-center rounded-none pl-3 pr-2 text-xs outline-none transition-colors',
                     childActive
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
-                      : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                      : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   )}
                 >
                   <span>{t(child.labelKey)}</span>
@@ -152,7 +152,7 @@ function NavLink({
             <SidebarMenuButton
               asChild
               isActive={selfActive}
-              className="group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground"
+              className="group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground"
             >
               <Link to={item.href!} onClick={onExpand}>
                 {item.icon}
@@ -168,8 +168,8 @@ function NavLink({
               }
               onClick={onToggle}
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
-                selfActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground',
+                selfActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
               )}
             >
               <AppIcon
@@ -235,7 +235,7 @@ function NavLink({
         side="right"
         align="start"
         sideOffset={20}
-        className="z-[100] min-w-40 rounded-none border border-border bg-popover p-1 shadow-md outline-none"
+        className="z-[100] min-w-40 rounded-none ring-1 ring-foreground/10 bg-popover p-1 shadow-md outline-none"
       >
         <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
           {t(item.labelKey)}
@@ -351,7 +351,7 @@ export function AppSidebar() {
               title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
               className={
                 showLabel
-                  ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded-none px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   : 'sr-only font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
               }
             >
@@ -359,7 +359,7 @@ export function AppSidebar() {
               {showLabel && updateAvailable && (
                 <span
                   aria-hidden
-                  className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-sidebar"
+                  className="absolute -top-0.5 -right-0.5 size-2 rounded-none bg-success ring-2 ring-sidebar"
                 />
               )}
             </button>

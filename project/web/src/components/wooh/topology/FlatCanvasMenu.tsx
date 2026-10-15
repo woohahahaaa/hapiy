@@ -64,7 +64,7 @@ export function FlatCanvasMenu({
         >
           <span>{t('menu.addFullWorkflow')}</span>
         </button>
-        <div className="my-1.5 border-t border-border-subtle" />
+        <div className="my-1.5 border-t border-border" />
         <button
           type="button"
           onClick={() => {
@@ -108,7 +108,7 @@ export function FlatCanvasMenu({
         >
           <span>{t('menu.addSwitch')}</span>
         </button>
-        <div className="my-1.5 border-t border-border-subtle" />
+        <div className="my-1.5 border-t border-border" />
         <button
           type="button"
           onClick={() => {

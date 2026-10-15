@@ -212,8 +212,8 @@ function DialogFooter({
     }
   }, [scrollRef])
   const borderClass = scrollRef
-    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border-subtle')
-    : 'border-t border-border-subtle'
+    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border')
+    : 'border-t border-border'
   return (
     <div
       data-slot="dialog-footer"
