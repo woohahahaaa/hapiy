@@ -606,7 +606,7 @@ function LogsPage() {
         </div>
 
         {/* 表格 */}
-        <div className="relative w-full overflow-x-hidden rounded-lg border border-border">
+        <div className="relative w-full overflow-x-hidden rounded-xl border border-border">
           <table data-slot="table" className="w-full caption-bottom text-xs leading-5 table-fixed">
             <thead data-slot="table-header" className="[&_tr]:border-b">
               <tr data-slot="table-row" className="border-b border-border transition-colors">

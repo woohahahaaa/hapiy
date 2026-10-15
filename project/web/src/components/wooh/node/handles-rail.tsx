@@ -48,8 +48,8 @@ export function HandlesRail({
 
   return (
     <div
-      className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
-      style={{ width: target.width, height: total, borderRadius: target.width / 3 }}
+      className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
+      style={{ width: target.width, height: total }}
     >
       {segmentCount > 0 && (
         <>

@@ -97,7 +97,7 @@ function NavLink({
             side="right"
             align="start"
             sideOffset={20}
-            className="z-[100] min-w-40 rounded-none ring-1 ring-foreground/10 bg-popover p-1 shadow-md outline-none"
+            className="z-[100] min-w-40 rounded-md ring-1 ring-foreground/10 bg-popover p-1 shadow-md outline-none"
             onMouseEnter={(event) => event.stopPropagation()}
             onMouseLeave={(event) => event.stopPropagation()}
           >

@@ -259,3 +259,13 @@ input:-webkit-autofill:active {
   -webkit-text-fill-color: var(--foreground) !important;
   caret-color: var(--foreground);
 }
+
+/* sonner 在运行时注入 CSS（晚于本文件），且 toast 圆角/按钮圆角写死在库内（8px / 4px）；
+   html 前缀抬高优先级，把它们拉回主题 --radius 派生值。 */
+html [data-sonner-toaster] {
+  --border-radius: var(--radius-xl);
+}
+
+html [data-sonner-toast][data-styled='true'] [data-button] {
+  border-radius: var(--radius-md);
+}

@@ -47,7 +47,7 @@ export function ReverseProxySettingsPage() {
         <CardHeader><CardTitle className="flex items-center gap-2 text-base"><AppIcon name="link" size={16} /> {t('reverseProxy.title')}</CardTitle><CardDescription>{t('reverseProxy.description')}</CardDescription></CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex gap-2"><Input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && add()} placeholder={t('reverseProxy.placeholder')} /><Button variant="outline" onClick={add}><AppIcon name="add" data-icon="inline-start" /> {t('reverseProxy.add')}</Button></div>
-          {domains.map((domain) => <div key={domain} className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2 text-sm"><span className="break-all">{domain}</span><Button variant="ghost" size="sm" onClick={() => void save(domains.filter((item) => item !== domain))}>{t('reverseProxy.remove')}</Button></div>)}
+          {domains.map((domain) => <div key={domain} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"><span className="break-all">{domain}</span><Button variant="ghost" size="sm" onClick={() => void save(domains.filter((item) => item !== domain))}>{t('reverseProxy.remove')}</Button></div>)}
         </CardContent>
       </Card></div>
     </div>

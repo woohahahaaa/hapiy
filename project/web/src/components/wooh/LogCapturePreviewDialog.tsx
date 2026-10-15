@@ -54,7 +54,7 @@ function renderHeaders(headers: Record<string, string> | null, showTitle = true,
   return (
     <div className="flex flex-col gap-1.5">
       {showTitle && <div className="font-mono text-xs font-medium text-foreground">{title}</div>}
-      <div className="overflow-auto rounded-none border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+      <div className="overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
         {Object.entries(headers).map(([k, v]) => (
           <div key={k}>
             <span className="text-muted-foreground">{k}: </span>{v}
@@ -219,7 +219,7 @@ type StageNode = {
 
 function StageErrorRow({ error }: { readonly error: string }) {
   return (
-    <div className="rounded-none border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive whitespace-pre-wrap break-words">
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive whitespace-pre-wrap break-words">
       {error}
     </div>
   )
@@ -233,7 +233,7 @@ function RuleNotesBlock({ notes }: { readonly notes: string }) {
   if (notes === '') return null
   return (
     <Node label={t('preview.ruleNotes')}>
-      <div className="overflow-auto rounded-none border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+      <div className="overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
         <RuleNoteLines text={notes} />
       </div>
     </Node>
@@ -299,7 +299,7 @@ function RawSseView({ text }: { readonly text: string }) {
 
   if (blocks === null) {
     return (
-      <pre className="overflow-auto rounded-none border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+      <pre className="overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
         {text}
       </pre>
     )
@@ -341,7 +341,7 @@ function SseBlock({ index, block }: { readonly index: number; readonly block: st
   }, [data, eventType, isDone])
 
   return (
-    <div className="overflow-hidden rounded-none border border-border bg-muted/20">
+    <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -476,11 +476,11 @@ function ResponseStageBody({ stageRow }: { readonly stageRow: LogCaptureStageRow
       >
         {mode === 'merged' ? (
           mergeError ? (
-            <div className="rounded-none border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive break-words whitespace-pre-wrap">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive break-words whitespace-pre-wrap">
               {mergeError}
             </div>
           ) : merged === undefined ? (
-            <div className="rounded-none border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
               {t('preview.merging')}
             </div>
           ) : (
@@ -531,7 +531,7 @@ function TimingBlock({ timing }: { timing: LogCaptureTiming }) {
     [t('preview.timing.streamRewrite'), timing.streamRewriteMs],
   ]
   return (
-    <div className="rounded-none border border-border bg-muted/30 p-3">
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
       <div className="mb-2 h-px bg-border" />
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs">
         {rows.map(([label, val]) => (
@@ -629,12 +629,12 @@ function PairDialog({ requestId, open, onClose }: {
           ) : pair ? (
             <div className="flex flex-col gap-3">
               {pair.error && (
-                <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
                   {pair.error}
                 </div>
               )}
               {pair.rule_problems !== '' && (
-                <div className="rounded-none border border-amber-500/40 bg-amber-500/5 p-3 text-xs break-words whitespace-pre-wrap">
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs break-words whitespace-pre-wrap">
                   <div className="mb-1 font-medium text-amber-700 dark:text-amber-300">{t('preview.ruleProblems')}</div>
                   <div className="text-foreground">{pair.rule_problems}</div>
                 </div>
@@ -775,14 +775,14 @@ function SystemDialog({ fileId, fileName, open, onClose }: {
           ) : row ? (
             <div className="flex flex-col gap-3">
               {row.error && (
-                <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
                   {row.error}
                 </div>
               )}
               {row.type === 'system' && row.system_log ? (
                 <div className="flex flex-col gap-1.5">
                   <div className="font-mono text-xs font-medium text-foreground">{t('preview.systemLog')}</div>
-                  <pre className="overflow-auto rounded-none border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
+                  <pre className="overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words">
                     {Array.isArray(row.system_log) ? row.system_log.join('\n') : String(row.system_log)}
                   </pre>
                 </div>

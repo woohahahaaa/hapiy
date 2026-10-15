@@ -1147,7 +1147,7 @@ function RuleDialog({
           </Group>
 
           {error && (
-            <div className="rounded-none border border-destructive/30 bg-destructive/5 p-3">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
               <div className="whitespace-pre-wrap break-words font-mono text-xs text-destructive">{error}</div>
             </div>
           )}
@@ -1217,7 +1217,7 @@ function RecommendationTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-none border border-border">
+    <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-xs">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr>
@@ -1398,7 +1398,7 @@ function ModelInfoFieldsEditor({
       <p className="text-xs text-muted-foreground">
         {t('modelInfoEditor.hint')}
       </p>
-      <div className="overflow-hidden rounded-none border border-border">
+      <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
@@ -1501,7 +1501,7 @@ function ModelInfoFieldsEditor({
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-3 rounded-none border border-border p-3">
+    <fieldset className="flex flex-col gap-3 rounded-lg border border-border p-3">
       <legend className="px-1 text-xs font-medium text-muted-foreground">{label}</legend>
       {children}
     </fieldset>
@@ -1542,14 +1542,14 @@ function EndpointRulesEditor({
       </p>
 
       {value.length === 0 ? (
-        <div className="rounded-none border border-dashed border-border p-3 text-xs text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           {t('endpointRules.empty')}
         </div>
       ) : (
         <div className="space-y-3">
           {value.map((rule, ruleIndex) => {
             return (
-              <div key={ruleIndex} className="rounded-none border border-border p-3">
+              <div key={ruleIndex} className="rounded-lg border border-border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t('endpointRules.index', { n: ruleIndex + 1 })}

@@ -156,7 +156,7 @@ export function BaseUrlSettings() {
               <div className="grid gap-1.5 text-sm">
                 <span>{t('baseUrl.finalUrlLabel')}</span>
                 <div className="flex items-center gap-2">
-                  <code className="w-96 cursor-not-allowed truncate rounded-none border border-border bg-muted px-3 py-2 font-mono text-xs">
+                  <code className="w-96 cursor-not-allowed truncate rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs">
                     {baseUrl}
                   </code>
                   <Button
@@ -183,7 +183,7 @@ export function BaseUrlSettings() {
                 {EXAMPLE_SOURCES.map((name) => (
                   <code
                     key={name}
-                    className="truncate rounded-none border border-border bg-muted px-3 py-2 font-mono text-xs"
+                    className="truncate rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs"
                   >
                     {baseUrl}/<span className="text-primary">{`__${name}`}</span>/v1/chat/completions
                   </code>
@@ -198,7 +198,7 @@ export function BaseUrlSettings() {
               ) : sources.length === 0 ? (
                 <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseEmpty')}</p>
               ) : (
-                <div className="max-w-2xl overflow-hidden rounded-none border border-border">
+                <div className="max-w-2xl overflow-hidden rounded-xl border border-border">
                   <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
                     <span className="w-32 shrink-0">{t('baseUrl.sourcesInUseName')}</span>
                     <span className="min-w-0 flex-1">{t('baseUrl.sourcesInUseUrl')}</span>

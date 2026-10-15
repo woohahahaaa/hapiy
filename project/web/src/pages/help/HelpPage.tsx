@@ -218,7 +218,7 @@ const markdownComponents: Components = {
   ),
   hr: () => <Separator className="my-10 bg-border" />,
   blockquote: ({ children }) => (
-    <blockquote className="my-5 flex gap-3 rounded-none border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground [&_p]:my-0 [&_p]:leading-7 [&_p]:text-muted-foreground">
+    <blockquote className="my-5 flex gap-3 rounded-lg border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground [&_p]:my-0 [&_p]:leading-7 [&_p]:text-muted-foreground">
       <AppIcon name="info" size={16} className="mt-1 shrink-0 text-primary" />
       <div className="min-w-0">{children}</div>
     </blockquote>
@@ -226,7 +226,7 @@ const markdownComponents: Components = {
   pre: ({ children }) => {
     const language = codeLanguage(children)
     return (
-      <div className="my-5 overflow-hidden rounded-none border border-border bg-card/50">
+      <div className="my-5 overflow-hidden rounded-lg border border-border bg-card/50">
         <div className="flex items-center border-b border-border px-4 py-2">
           <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
             {language ?? "text"}
@@ -242,13 +242,13 @@ const markdownComponents: Components = {
     if (/language-/.test(className ?? ""))
       return <code className={cn("font-mono", className)}>{children}</code>
     return (
-      <code className="rounded-none bg-muted px-1.5 py-0.5 font-mono text-[0.85em] break-all">
+      <code className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[0.85em] break-all">
         {children}
       </code>
     )
   },
   table: ({ children }) => (
-    <div className="my-5 overflow-x-auto rounded-none border border-border">
+    <div className="my-5 overflow-x-auto rounded-xl border border-border">
       <table className="w-full border-collapse text-sm [&_tr:last-child>*]:border-b-0">
         {children}
       </table>
@@ -467,7 +467,7 @@ export function HelpPage() {
                 }}
                 placeholder={t("searchPlaceholder")}
                 aria-label={t("searchAria")}
-                className="h-8 w-full rounded-none border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+                className="h-8 w-full rounded-lg border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
               />
             </div>
             <div className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
@@ -488,7 +488,7 @@ export function HelpPage() {
                       key={section.id}
                       type="button"
                       onClick={() => scrollTo(section.id)}
-                      className="rounded-none px-2 py-2 text-left transition-colors hover:bg-muted"
+                      className="rounded-md px-2 py-2 text-left transition-colors hover:bg-muted"
                     >
                       <div className="truncate text-xs font-medium">
                         {section.title}
@@ -508,7 +508,7 @@ export function HelpPage() {
                       type="button"
                       onClick={() => scrollTo(item.id)}
                       className={cn(
-                        "flex items-center gap-2 rounded-none px-2 py-1.5 text-left text-[13px] transition-colors",
+                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
                         activeId === item.id
                           ? "bg-primary/10 font-medium text-primary"
                           : "text-foreground/80 hover:bg-muted"
@@ -529,7 +529,7 @@ export function HelpPage() {
                         type="button"
                         onClick={() => scrollTo(child.id)}
                         className={cn(
-                          "truncate rounded-none py-1.5 pr-2 pl-8 text-left text-xs transition-colors",
+                          "truncate rounded-md py-1.5 pr-2 pl-8 text-left text-xs transition-colors",
                           activeId === child.id
                             ? "font-medium text-primary"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground/80"
@@ -562,9 +562,9 @@ export function HelpPage() {
                       key={link.key}
                       type="button"
                       onClick={() => scrollTo(link.id)}
-                      className="group flex items-start gap-3 rounded-none border border-border bg-card/40 p-4 text-left transition-colors hover:border-border hover:bg-card"
+                      className="group flex items-start gap-3 rounded-lg border border-border bg-card/40 p-4 text-left transition-colors hover:border-border hover:bg-card"
                     >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
                         <AppIcon name={link.icon} size={16} />
                       </span>
                       <span className="min-w-0">

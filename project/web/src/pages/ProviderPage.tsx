@@ -795,7 +795,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       }>
         <FieldGroup>
       {disableStatus?.provider && (
-        <div className="rounded-none border border-border bg-muted p-3">
+        <div className="rounded-lg border border-border bg-muted p-3">
           <div className="flex items-center gap-1.5 text-xs text-warning">
             <AppIcon name="caution" size={14} />
             <span>{t('failoverStatus.providerDisabledNote')}</span>
@@ -835,7 +835,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         <div className="flex flex-col gap-2">
           <div ref={listRef} className="relative flex flex-col gap-2">
             {priceError && (
-              <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-none border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
+              <div role="alert" className="pointer-events-none absolute z-10 -translate-y-full translate-x-0 rounded-md border border-destructive/30 bg-background px-2.5 py-1 text-xs text-destructive shadow-md animate-in fade-in-0"
                 style={priceErrorPos ? { left: priceErrorPos.left + 4, top: priceErrorPos.top - 8 } : undefined}>
                 {t('price.errorPrefix')}
               </div>
