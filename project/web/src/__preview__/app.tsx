@@ -150,6 +150,7 @@ function NavLink({
   onSelect: (child: string | null) => void
 }) {
   const { state, isMobile } = useSidebar()
+  const { t } = useTranslation('common')
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
   const hasChildren = (item.children?.length ?? 0) > 0
@@ -188,6 +189,46 @@ function NavLink({
             </HoverCard.Trigger>
             <CollapsedFlyout item={item} activeChild={activeChild} close={() => undefined} />
           </HoverCard.Root>
+        </SidebarMenuItem>
+      )
+    }
+
+    // 一级项既可选自己又要有子菜单：整行一个胶囊，右侧圆形底板单独切换展开。
+    // 与线上 wooh/Sidebar.tsx 的 parentClickable 分支一致。
+    if (item.href) {
+      return (
+        <SidebarMenuItem>
+          <div className="group/menu-row relative flex w-full items-center">
+            {/* 整行一个胶囊：箭头也在胶囊内，右侧留出箭头底板的位置 */}
+            <SidebarMenuButton
+              isActive={active && !activeChild}
+              className="pr-10 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground"
+              onClick={() => {
+                setOpen(true)
+                onSelect(null)
+              }}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </SidebarMenuButton>
+            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 6px = 26px，上下与右侧各留 3px */}
+            <button
+              type="button"
+              aria-label={
+                open
+                  ? t('nav.collapseSection', { name: item.label })
+                  : t('nav.expandSection', { name: item.label })
+              }
+              onClick={() => setOpen((v) => !v)}
+              className={cn(
+                'absolute top-[3px] right-[3px] z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-foreground/10 text-sidebar-foreground outline-none transition-colors hover:bg-foreground/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                active && 'text-primary-foreground',
+              )}
+            >
+              <AppIcon name="chevron_right" className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+            </button>
+          </div>
+          {subMenu}
         </SidebarMenuItem>
       )
     }
@@ -265,7 +306,13 @@ function PreviewSidebar() {
     },
     { id: 'llm', label: t('common:nav.llmConfig'), icon: layers },
     { id: 'policy', label: t('common:nav.policy'), icon: policy },
-    { id: 'agent', label: t('common:nav.agent'), icon: robot },
+    {
+      id: 'agent',
+      label: t('common:nav.agent'),
+      icon: robot,
+      href: '#',
+      children: [{ label: t('common:nav.agentConfig') }],
+    },
     { id: 'settings', label: t('common:nav.settings'), icon: settings },
   ]
 

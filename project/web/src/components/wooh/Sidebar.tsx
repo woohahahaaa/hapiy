@@ -150,17 +150,19 @@ function NavLink({
     if (parentClickable) {
       return (
         <SidebarMenuItem>
-          <div className="group/menu-row flex w-full items-center">
+          <div className="group/menu-row relative flex w-full items-center">
+            {/* 整行一个胶囊：箭头也在胶囊内，右侧留出箭头底板的位置 */}
             <SidebarMenuButton
               asChild
               isActive={selfActive}
-              className="group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground"
+              className="pr-10 group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground"
             >
               <Link to={item.href!} onClick={onExpand}>
                 {item.icon}
                 <span>{t(item.labelKey)}</span>
               </Link>
             </SidebarMenuButton>
+            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 6px = 26px，上下与右侧各留 3px */}
             <button
               type="button"
               aria-label={
@@ -170,8 +172,8 @@ function NavLink({
               }
               onClick={onToggle}
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground',
-                selfActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
+                'absolute top-[3px] right-[3px] z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-foreground/10 text-sidebar-foreground outline-none transition-colors hover:bg-foreground/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                selfActive && 'text-primary-foreground',
               )}
             >
               <AppIcon
