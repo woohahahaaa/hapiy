@@ -93,13 +93,12 @@ type NavEntry = {
   label: string
   icon: React.ReactNode
   href?: string
-  active?: boolean
-  children?: { label: string; active?: boolean }[]
+  children?: { label: string }[]
 }
 
 // 侧边栏专用的两个浮层：折叠时子菜单用 HoverCard 飞出、叶子项用 Tooltip 面板，
 // 和我们现在线上（wooh/Sidebar.tsx）一模一样。
-function CollapsedFlyout({ item, close }: { item: NavEntry; close: () => void }) {
+function CollapsedFlyout({ item, activeChild, close }: { item: NavEntry; activeChild: string | null; close: () => void }) {
   return (
     <HoverCard.Portal>
       <HoverCard.Content
@@ -126,8 +125,8 @@ function CollapsedFlyout({ item, close }: { item: NavEntry; close: () => void })
             onClick={close}
             className={cn(
               'flex h-8 items-center rounded-md pr-2 pl-3 text-xs outline-none transition-colors',
-              child.active
-                ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
+              activeChild === child.label
+                ? 'bg-primary font-medium text-primary-foreground'
                 : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             )}
           >
@@ -139,7 +138,17 @@ function CollapsedFlyout({ item, close }: { item: NavEntry; close: () => void })
   )
 }
 
-function NavLink({ item }: { item: NavEntry }) {
+function NavLink({
+  item,
+  active,
+  activeChild,
+  onSelect,
+}: {
+  item: NavEntry
+  active: boolean
+  activeChild: string | null
+  onSelect: (child: string | null) => void
+}) {
   const { state, isMobile } = useSidebar()
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
@@ -152,7 +161,7 @@ function NavLink({ item }: { item: NavEntry }) {
       <SidebarMenuSub>
         {item.children!.map((child) => (
           <SidebarMenuSubItem key={child.label}>
-            <SidebarMenuSubButton isActive={child.active}>
+            <SidebarMenuSubButton isActive={activeChild === child.label} onClick={() => onSelect(child.label)}>
               <span>{child.label}</span>
             </SidebarMenuSubButton>
           </SidebarMenuSubItem>
@@ -162,7 +171,11 @@ function NavLink({ item }: { item: NavEntry }) {
 
     if (collapsed) {
       const trigger = (
-        <SidebarMenuButton isActive={item.active}>
+        <SidebarMenuButton
+          isActive={active && !activeChild}
+          className={cn(active && activeChild && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+          onClick={() => onSelect(null)}
+        >
           {item.icon}
           <span>{showLabel ? item.label : ''}</span>
         </SidebarMenuButton>
@@ -173,7 +186,7 @@ function NavLink({ item }: { item: NavEntry }) {
             <HoverCard.Trigger asChild>
               <span className="block w-full">{trigger}</span>
             </HoverCard.Trigger>
-            <CollapsedFlyout item={item} close={() => undefined} />
+            <CollapsedFlyout item={item} activeChild={activeChild} close={() => undefined} />
           </HoverCard.Root>
         </SidebarMenuItem>
       )
@@ -181,7 +194,14 @@ function NavLink({ item }: { item: NavEntry }) {
 
     return (
       <SidebarMenuItem>
-        <SidebarMenuButton isActive={item.active} onClick={() => setOpen((v) => !v)}>
+        <SidebarMenuButton
+          isActive={active && !activeChild}
+          className={cn(active && activeChild && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+          onClick={() => {
+            setOpen((v) => !v)
+            onSelect(null)
+          }}
+        >
           {item.icon}
           <span>{item.label}</span>
           <AppIcon name="chevron_right" className={`ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
@@ -192,7 +212,7 @@ function NavLink({ item }: { item: NavEntry }) {
   }
 
   const trigger = (
-    <SidebarMenuButton isActive={item.active}>
+    <SidebarMenuButton isActive={active} onClick={() => onSelect(null)}>
       {item.icon}
       <span>{showLabel ? item.label : ''}</span>
     </SidebarMenuButton>
@@ -228,6 +248,8 @@ function PreviewSidebar() {
   const { state, isMobile } = useSidebar()
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
+  const [activeId, setActiveId] = useState('monitor')
+  const [activeChild, setActiveChild] = useState<string | null>(t('common:nav.activity'))
 
   const items: NavEntry[] = [
     { id: 'topology', label: t('common:nav.topology'), icon: square },
@@ -235,10 +257,8 @@ function PreviewSidebar() {
       id: 'monitor',
       label: t('common:nav.monitor'),
       icon: activity,
-      href: '#',
-      active: true,
       children: [
-        { label: t('common:nav.activity'), active: true },
+        { label: t('common:nav.activity') },
         { label: t('common:nav.logs') },
         { label: t('common:nav.capture') },
       ],
@@ -249,22 +269,31 @@ function PreviewSidebar() {
     { id: 'settings', label: t('common:nav.settings'), icon: settings },
   ]
 
+  const selectItem = (id: string) => (child: string | null) => {
+    setActiveId(id)
+    setActiveChild(child)
+  }
+
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         {/* 顶部一行：左边 logo、右边语言/深浅/折叠——沿用我们原来的位置与折叠逻辑 */}
         <div
           className={
-            showLabel ? 'flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-start justify-center gap-1 py-1'
+            showLabel ? 'flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
           }
         >
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               title="hapiy v1.0.0"
-              className="relative -mx-1 cursor-pointer rounded-md px-1 font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className={cn(
+                showLabel
+                  ? 'relative -mx-1 cursor-pointer rounded-md px-1 font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  : 'relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )}
             >
-              hapiy
+              {collapsed ? 'h' : 'hapiy'}
             </button>
           </div>
           <div className={showLabel ? 'flex items-center gap-1.5' : 'flex flex-col items-center gap-1'}>
@@ -288,7 +317,13 @@ function PreviewSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
-                <NavLink key={item.id} item={item} />
+                <NavLink
+                  key={item.id}
+                  item={item}
+                  active={activeId === item.id}
+                  activeChild={activeChild}
+                  onSelect={selectItem(item.id)}
+                />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -296,8 +331,18 @@ function PreviewSidebar() {
         <SidebarGroup className="mt-auto">
           <SidebarGroupContent>
             <SidebarMenu>
-              <NavLink item={{ id: 'profile', label: t('common:nav.profile'), icon: person }} />
-              <NavLink item={{ id: 'help', label: t('common:nav.help'), icon: help }} />
+              <NavLink
+                item={{ id: 'profile', label: t('common:nav.profile'), icon: person }}
+                active={activeId === 'profile'}
+                activeChild={activeChild}
+                onSelect={selectItem('profile')}
+              />
+              <NavLink
+                item={{ id: 'help', label: t('common:nav.help'), icon: help }}
+                active={activeId === 'help'}
+                activeChild={activeChild}
+                onSelect={selectItem('help')}
+              />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -636,13 +681,13 @@ export function PreviewApp() {
     <SidebarProvider
       style={
         {
-          '--sidebar-width': 'calc(var(--spacing) * 72)',
+          '--sidebar-width': 'calc(var(--spacing) * 68)',
           '--header-height': 'calc(var(--spacing) * 12)',
         } as React.CSSProperties
       }
     >
       <PreviewSidebar />
-      <SidebarInset>
+      <SidebarInset className="overflow-hidden">
         <LogsPage />
       </SidebarInset>
     </SidebarProvider>
