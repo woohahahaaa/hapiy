@@ -216,7 +216,7 @@ const markdownComponents: Components = {
   strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  hr: () => <Separator className="my-10 bg-border-subtle" />,
+  hr: () => <Separator className="my-10 bg-border" />,
   blockquote: ({ children }) => (
     <blockquote className="my-5 flex gap-3 rounded-none border border-primary/25 bg-primary/5 px-4 py-3 text-sm text-muted-foreground [&_p]:my-0 [&_p]:leading-7 [&_p]:text-muted-foreground">
       <AppIcon name="info" size={16} className="mt-1 shrink-0 text-primary" />
@@ -226,8 +226,8 @@ const markdownComponents: Components = {
   pre: ({ children }) => {
     const language = codeLanguage(children)
     return (
-      <div className="my-5 overflow-hidden rounded-none border border-border-subtle bg-card/50">
-        <div className="flex items-center border-b border-border-subtle px-4 py-2">
+      <div className="my-5 overflow-hidden rounded-none border border-border bg-card/50">
+        <div className="flex items-center border-b border-border px-4 py-2">
           <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
             {language ?? "text"}
           </span>
@@ -248,19 +248,19 @@ const markdownComponents: Components = {
     )
   },
   table: ({ children }) => (
-    <div className="my-5 overflow-x-auto rounded-none border border-border-subtle">
+    <div className="my-5 overflow-x-auto rounded-none border border-border">
       <table className="w-full border-collapse text-sm [&_tr:last-child>*]:border-b-0">
         {children}
       </table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border-b border-border-subtle bg-muted/50 px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
+    <th className="border-b border-border bg-muted/50 px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="border-b border-border-subtle px-4 py-2.5 align-top text-sm text-foreground/85">
+    <td className="border-b border-border px-4 py-2.5 align-top text-sm text-foreground/85">
       {children}
     </td>
   ),
@@ -402,7 +402,7 @@ export function HelpPage() {
       />
 
       {/* 顶栏通铺；内容仍对齐 1100 版面 */}
-      <header className="relative flex h-14 shrink-0 items-center border-b border-border-subtle bg-card">
+      <header className="relative flex h-14 shrink-0 items-center border-b border-border bg-card">
         <div className="mx-auto flex w-full max-w-[1100px] items-center justify-between gap-3 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -424,7 +424,7 @@ export function HelpPage() {
       {/* 整页按 1100px 宽的版面处理：目录、正文同处一个居中列。 */}
       <div className="relative mx-auto flex min-h-0 w-full max-w-[1100px] flex-1 flex-col">
         {/* 小屏目录：下拉跳转 */}
-        <div className="flex items-center gap-2 border-b border-border-subtle bg-card px-4 py-2 lg:hidden">
+        <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-2 lg:hidden">
           <span className="shrink-0 text-xs text-muted-foreground">{t("toc")}</span>
           <Select value={activeId} onValueChange={scrollTo}>
             <SelectTrigger size="sm" className="min-w-0 flex-1">
@@ -447,7 +447,7 @@ export function HelpPage() {
         <div className="flex min-h-0 flex-1">
           <aside
             className={cn(
-              "hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border-subtle px-3 py-4 lg:flex",
+              "hidden w-64 shrink-0 flex-col overflow-y-auto border-r border-border px-3 py-4 lg:flex",
               CUSTOM_SCROLLBAR
             )}
           >
@@ -467,7 +467,7 @@ export function HelpPage() {
                 }}
                 placeholder={t("searchPlaceholder")}
                 aria-label={t("searchAria")}
-                className="h-8 w-full rounded-none border border-border-subtle bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+                className="h-8 w-full rounded-none border border-border bg-background pr-2 pl-8 text-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
               />
             </div>
             <div className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
@@ -562,7 +562,7 @@ export function HelpPage() {
                       key={link.key}
                       type="button"
                       onClick={() => scrollTo(link.id)}
-                      className="group flex items-start gap-3 rounded-none border border-border-subtle bg-card/40 p-4 text-left transition-colors hover:border-border hover:bg-card"
+                      className="group flex items-start gap-3 rounded-none border border-border bg-card/40 p-4 text-left transition-colors hover:border-border hover:bg-card"
                     >
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-none bg-primary/10 text-primary">
                         <AppIcon name={link.icon} size={16} />
@@ -590,7 +590,7 @@ export function HelpPage() {
                 >
                   {bodyMarkdown}
                 </ReactMarkdown>
-                <Separator className="mt-12 bg-border-subtle" />
+                <Separator className="mt-12 bg-border" />
                 <p className="py-6 text-xs text-muted-foreground">
                   {t("footer")}
                 </p>

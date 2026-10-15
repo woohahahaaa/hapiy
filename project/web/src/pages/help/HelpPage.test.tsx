@@ -39,10 +39,10 @@ describe('HelpPage 中英对照', () => {
   it('中文模式渲染中文帮助与中文锚点', async () => {
     await i18n.changeLanguage('zh')
     const html = renderPage()
-    expect(html).toContain('hapiy 帮助文档')
-    expect(html).toContain('四步搭好第一条 API 转发工作流')
+    expect(html).toContain('hapiy帮助文档')
+    expect(html).toContain('四步搭好第一条API转发工作流')
     expect(html).toContain('搜索文档')
-    expect(html).toContain('第-1-步-添加供应商')
+    expect(html).toContain('第1步-添加供应商')
   })
 
   it('英文模式渲染英文帮助与英文锚点', async () => {
@@ -52,6 +52,6 @@ describe('HelpPage 中英对照', () => {
     expect(html).toContain('Four steps to your first API forwarding workflow')
     expect(html).toContain('Search the docs')
     expect(html).toContain('step-1-add-a-provider')
-    expect(html).not.toContain('四步搭好第一条 API 转发工作流')
+    expect(html).not.toContain('四步搭好第一条API转发工作流')
   })
 })

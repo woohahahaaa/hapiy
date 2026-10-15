@@ -50,7 +50,7 @@
     "strokeWidth": 1.5
   },
   "grid": {
-    "color": "var(--border)",
+    "color": "var(--grid-dot)",
     "gap": 20,
     "size": 1
   },

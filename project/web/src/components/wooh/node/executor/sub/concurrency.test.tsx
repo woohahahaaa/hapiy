@@ -26,7 +26,7 @@ describe('NodeExecutorConcurrency', () => {
     const markup = renderToStaticMarkup(
       <NodeExecutorConcurrency entry={entry} nodeId="cq-node" onChange={() => {}} onDelete={() => {}} />,
     )
-    expect(markup).toContain('窗口内 0/20')
+    expect(markup).toContain('窗口内0/20')
   })
 
   it('未提供 nodeId 时不渲染窗口占用行', () => {

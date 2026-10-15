@@ -1,7 +1,7 @@
 {
   "page": {
     "description": "可视化编辑请求转发的拓扑结构",
-    "status": "请求入口：{{active}}/{{total}} · {{nodes}} 节点"
+    "status": "请求入口：{{active}}/{{total}} · {{nodes}}节点"
   },
   "state": {
     "loadingTopology": "加载拓扑数据…"
@@ -57,16 +57,16 @@
   },
   "delete": {
     "title": "确认删除",
-    "descriptionWithNodesAndEdges": "将删除 {{nodeCount}} 个节点和 {{edgeCount}} 条连线，删除后可通过撤销恢复。",
-    "descriptionWithNodes": "将删除 {{nodeCount}} 个节点，删除后可通过撤销恢复。",
-    "descriptionEdges": "将删除 {{edgeCount}} 条连线，删除后可通过撤销恢复。",
+    "descriptionWithNodesAndEdges": "将删除{{nodeCount}}个节点和{{edgeCount}}条连线，删除后可通过撤销恢复。",
+    "descriptionWithNodes": "将删除{{nodeCount}}个节点，删除后可通过撤销恢复。",
+    "descriptionEdges": "将删除{{edgeCount}}条连线，删除后可通过撤销恢复。",
     "confirm": "确认删除"
   },
   "menu": {
     "addFullWorkflow": "添加完整工作流",
     "addEntry": "添加请求入口",
     "addProviderSlot": "添加供应商插槽",
-    "addSlot": "添加 {{slot}} 插槽",
+    "addSlot": "添加{{slot}}插槽",
     "addSwitch": "添加 条件开关",
     "addEmergencyWorkflow": "添加应急供应商"
   },
@@ -75,7 +75,7 @@
     "description": "为模型节点分配流光颜色，按顺序循环使用；未配置时使用主题色",
     "empty": "未配置，使用主题色",
     "removeAria": "删除色值",
-    "placeholder": "HEX 色值，空格分隔多个，如 #4ade80 #38bdf8",
+    "placeholder": "HEX色值，空格分隔多个，如 #4ade80 #38bdf8",
     "add": "添加"
   },
   "versions": {
@@ -88,7 +88,7 @@
     "restoreFailed": "恢复失败",
     "restored": "已恢复到该版本",
     "current": "当前版本",
-    "workflowSummary": "工作流 {{active}}/{{total}} · {{nodes}} 节点",
+    "workflowSummary": "工作流{{active}}/{{total}} · {{nodes}}节点",
     "restore": "恢复",
     "empty": "暂无历史版本",
     "previewHint": "选择左侧条目以预览",
@@ -101,20 +101,20 @@
     "empty": "没有可选的供应商"
   },
   "jsonEdit": {
-    "title": "编辑 JSON",
+    "title": "编辑JSON",
     "format": "格式化",
-    "formatFailed": "格式化失败：JSON 无效",
+    "formatFailed": "格式化失败：JSON无效",
     "saving": "保存中…",
-    "saveConfirmTitle": "保存 JSON",
-    "saveConfirmDescription": "你修改了 JSON 内容，确认保存到后端吗？JSON 里的 ID 字段与使用记录、历史记录等按 ID 关联的数据强绑定，修改任意一条 ID 都可能导致这些数据匹配失败。请确认你已了解此风险。",
+    "saveConfirmTitle": "保存JSON",
+    "saveConfirmDescription": "你修改了JSON内容，确认保存到后端吗？JSON里的ID字段与使用记录、历史记录等按ID关联的数据强绑定，修改任意一条ID都可能导致这些数据匹配失败。请确认你已了解此风险。",
     "reconsider": "我再想想",
     "confirmSave": "确认保存",
-    "topLevelArray": "JSON 顶层必须是数组",
-    "invalidId": "每条记录的 ID 必须是大于 0 的整数",
-    "duplicateId": "ID {{id}} 重复"
+    "topLevelArray": "JSON顶层必须是数组",
+    "invalidId": "每条记录的ID必须是大于0的整数",
+    "duplicateId": "ID {{id}}重复"
   },
   "jsonEditor": {
-    "contentAria": "JSON 内容"
+    "contentAria": "JSON内容"
   },
   "diff": {
     "empty": "（空）"

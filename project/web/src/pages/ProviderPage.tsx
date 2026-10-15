@@ -795,7 +795,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       }>
         <FieldGroup>
       {disableStatus?.provider && (
-        <div className="rounded-none border border-border-subtle bg-muted p-3">
+        <div className="rounded-none border border-border bg-muted p-3">
           <div className="flex items-center gap-1.5 text-xs text-warning">
             <AppIcon name="caution" size={14} />
             <span>{t('failoverStatus.providerDisabledNote')}</span>

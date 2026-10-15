@@ -1,21 +1,21 @@
 {
   "page": {
-    "description": "管理被接管 Agent 的配置文件：路径检测、内容修改与解析方法"
+    "description": "管理被接管Agent的配置文件：路径检测、内容修改与解析方法"
   },
   "os": {
     "other": "其他"
   },
   "pathCheck": {
     "notExists": "文件不存在（已检查：{{path}}）",
-    "osMismatch": " · 目标系统 {{target}}，当前系统 {{current}}，路径可能不适用",
-    "existsZero": "文件存在，大小 0（{{path}}）",
-    "existsSize": "文件存在，大小 {{size}}（{{path}}）",
+    "osMismatch": " · 目标系统{{target}}，当前系统{{current}}，路径可能不适用",
+    "existsZero": "文件存在，大小0（{{path}}）",
+    "existsSize": "文件存在，大小{{size}}（{{path}}）",
     "preview": "预览"
   },
   "sshProbe": {
     "connect": "连接",
     "readPath": "读取远程路径",
-    "writeProbe": "写入（临时文件 mktemp → 写 → 删除）"
+    "writeProbe": "写入（临时文件mktemp → 写 → 删除）"
   },
   "columns": {
     "recordName": "记录名称",
@@ -27,9 +27,9 @@
     "providers": "供应商",
     "models": "模型列表",
     "previewDiff": "预览差异",
-    "providerJson": "供应商 JSON 片段",
-    "providerYaml": "供应商 YAML 片段",
-    "syncFromModelsDev": "从 models.dev 同步模型配置"
+    "providerJson": "供应商JSON片段",
+    "providerYaml": "供应商YAML片段",
+    "syncFromModelsDev": "从models.dev同步模型配置"
   },
   "badge": {
     "local": "本机"
@@ -64,23 +64,23 @@
     "renamePreviewProvider": "已生成预览：供应商改名待保存",
     "deletePreviewProvider": "已生成预览：删除供应商待保存",
     "noManagedToSync": "没有需要同步的托管供应商",
-    "syncedAll": "已同步全部 {{count}} 个托管供应商，共 {{fields}} 处字段写入配置文件",
+    "syncedAll": "已同步全部{{count}}个托管供应商，共{{fields}}处字段写入配置文件",
     "deletedManaged": "已删除托管供应商",
     "noChangesToApply": "没有需要应用的变更（均已符合推荐）",
-    "appliedTemplate": "已应用推荐模板：{{count}} 处变更已写入文件",
+    "appliedTemplate": "已应用推荐模板：{{count}}处变更已写入文件",
     "noPreviewProviders": "没有可预览的非托管供应商",
     "renamePreviewModel": "已生成预览：模型改名待保存",
     "deletePreviewModel": "已生成预览：删除模型待保存",
-    "appliedRecommendation": "已应用推荐配置：{{count}} 处变更待保存",
+    "appliedRecommendation": "已应用推荐配置：{{count}}处变更待保存",
     "selectAgentTypeFirst": "请先选择软件类型",
-    "noDefaultPath": "当前软件类型「{{type}}」未配置 {{os}} 默认路径",
+    "noDefaultPath": "当前软件类型「{{type}}」未配置{{os}}默认路径",
     "officialAll": "已把全部模型设为官方参考供应商（无官方的取候选第一个）",
     "nameRequired": "请填写供应商名字",
-    "noEndpointProvider": "请至少勾选一个有 Endpoint 的供应商",
+    "noEndpointProvider": "请至少勾选一个有Endpoint的供应商",
     "apiKeyRequired": "请选择接入用的令牌（必填）",
-    "manualEndpointRequired": "有未配置 Endpoint 的供应商：请手动填写 Endpoint，或取消勾选它们",
-    "mergedIntoGroup": "未配置 Endpoint 的供应商已并入分组「{{endpoint}}」",
-    "suffixRequired": "有多个 Endpoint 分组，必须为 {{endpoint}} 填写后缀",
+    "manualEndpointRequired": "有未配置Endpoint的供应商：请手动填写Endpoint，或取消勾选它们",
+    "mergedIntoGroup": "未配置Endpoint的供应商已并入分组「{{endpoint}}」",
+    "suffixRequired": "有多个Endpoint分组，必须为{{endpoint}}填写后缀",
     "savedProvider": "已保存托管供应商",
     "createdProvider": "已创建托管供应商",
     "deletedProvider": "已删除托管供应商"
@@ -98,9 +98,9 @@
     "applyFailed": "套用失败",
     "previewFailed": "预览差异失败",
     "readFailed": "读取失败",
-    "cannotPrettify": "内容不是合法 JSON，无法美化",
-    "cannotParseJson": "无法解析 JSON",
-    "parseJson": "JSON 解析失败"
+    "cannotPrettify": "内容不是合法JSON，无法美化",
+    "cannotParseJson": "无法解析JSON",
+    "parseJson": "JSON解析失败"
   },
   "validation": {
     "recordNameRequired": "请填写记录名称",
@@ -108,12 +108,12 @@
     "localPathRequired": "请填写本机路径",
     "remotePathRequired": "请填写远程路径",
     "hostRequired": "请填写主机地址",
-    "portRange": "端口必须是 1-65535 之间的整数",
+    "portRange": "端口必须是1-65535之间的整数",
     "usernameRequired": "请填写用户名",
     "passwordRequired": "请填写密码",
     "privateKeyRequired": "请填写私钥内容",
     "jumpHostRequired": "请填写跳板机主机地址",
-    "jumpPortRange": "跳板机端口必须是 1-65535 之间的整数",
+    "jumpPortRange": "跳板机端口必须是1-65535之间的整数",
     "jumpUsernameRequired": "请填写跳板机用户名",
     "jumpPasswordRequired": "请填写跳板机密码",
     "jumpPrivateKeyRequired": "请填写跳板机私钥内容"
@@ -124,7 +124,7 @@
     "saving": "保存中…",
     "saveEdit": "保存修改",
     "recordNameLabel": "记录名称",
-    "recordNamePlaceholder": "例如：OpenCode 配置",
+    "recordNamePlaceholder": "例如：OpenCode配置",
     "agentTypeLabel": "软件类型",
     "agentTypePlaceholder": "选择软件类型",
     "noAgentTypes": "暂无可用软件类型，请先在「管理规则」中添加",
@@ -135,29 +135,29 @@
     "detectingFile": "正在检测文件…",
     "pathAutoCheckHint": "输入路径后自动检测文件是否存在",
     "hostLabel": "主机（含端口）",
-    "hostPlaceholder": "例如：192.168.1.100 或 tcp://host:34604（不填端口默认 22）",
+    "hostPlaceholder": "例如：192.168.1.100或tcp://host:34604（不填端口默认22）",
     "usernamePlaceholder": "例如：root",
     "userAuthLabel": "用户名 / 认证方式",
     "authPassword": "密码",
     "authKey": "私钥",
     "passwordLabel": "密码",
-    "sshPasswordPlaceholder": "SSH 密码",
+    "sshPasswordPlaceholder": "SSH密码",
     "passwordUnchangedPlaceholder": "如需修改请填入新的值，否则就不动",
     "privateKeyLabel": "私钥内容",
     "jumpMode": "跳板模式",
     "jumpHostLabel": "跳板机主机（含端口）",
     "jumpUserAuthLabel": "跳板机用户名 / 认证方式",
     "jumpPasswordLabel": "跳板机密码",
-    "jumpSshPasswordPlaceholder": "跳板机 SSH 密码",
+    "jumpSshPasswordPlaceholder": "跳板机SSH密码",
     "jumpPrivateKeyLabel": "跳板机私钥内容",
     "remotePathLabel": "远程路径",
-    "sshTestButton": "测试 SSH 读写能力",
+    "sshTestButton": "测试SSH读写能力",
     "sshTestTitle": "请先在上方选择目标系统",
-    "sshJsonOnlyHint": "支持 .json / .jsonc / .yml / .yaml / .toml 等文本配置文件",
-    "syncPresetButton": "同步预设 Agent 信息",
-    "syncPresetHint": "选择 {{os}} 后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设 Agent 信息」重新带入",
+    "sshJsonOnlyHint": "支持 .json / .jsonc / .yml / .yaml / .toml等文本配置文件",
+    "syncPresetButton": "同步预设Agent信息",
+    "syncPresetHint": "选择{{os}}后会自动填入默认路径；手动改过路径则不再自动覆盖，可点「同步预设Agent信息」重新带入",
     "osLabel": "系统",
-    "osWarning": "请选择目标机器的真实系统：Windows 用 cmd.exe 命令测试，Mac/其他 用 POSIX 命令测试，选错会导致测试失败"
+    "osWarning": "请选择目标机器的真实系统：Windows用cmd.exe命令测试，Mac/其他 用POSIX命令测试，选错会导致测试失败"
   },
   "tabs": {
     "normal": "非托管供应商",
@@ -170,7 +170,7 @@
     "calculating": "计算中…",
     "cancelPreview": "取消预览",
     "previewDiff": "预览差异",
-    "addManagedTitle": "把我们系统里录入的供应商按 Endpoint 分组后生成托管供应商",
+    "addManagedTitle": "把我们系统里录入的供应商按Endpoint分组后生成托管供应商",
     "settings": "设置"
   },
   "placeholder": {
@@ -182,19 +182,19 @@
     "noProviderSelected": "未选择供应商"
   },
   "row": {
-    "changesCount": "{{count}} 处修改",
-    "conflictCount": "{{count}} 个字段与推荐不一致",
+    "changesCount": "{{count}}处修改",
+    "conflictCount": "{{count}}个字段与推荐不一致",
     "modelCount": "{{count}}模型",
-    "groupCount": "{{count}} 分组",
-    "fieldsPendingSync": "{{count}} 字段待同步",
+    "groupCount": "{{count}}分组",
+    "fieldsPendingSync": "{{count}}字段待同步",
     "pendingBadge": "[待同步]",
-    "providersPendingSync": "{{count}} 个供应商待同步"
+    "providersPendingSync": "{{count}}个供应商待同步"
   },
   "menu": {
     "rename": "修改名字"
   },
   "footer": {
-    "pendingChanges": "已修改 {{count}} 项",
+    "pendingChanges": "已修改{{count}}项",
     "saveSuccess": "保存成功",
     "applyDiff": "应用差异",
     "syncSuccess": "同步成功",
@@ -213,7 +213,7 @@
     "applyTemplateTitle": "使用推荐模板",
     "applyTemplateApplying": "应用中…",
     "applyTemplateConfirm": "确认并生效",
-    "applyTemplateBody": "将根据 AI 软件官方的配置文档，对页面中全部供应商（托管供应商除外）及其模型的字段进行调整，并把结果直接写入文件生效。确认？",
+    "applyTemplateBody": "将根据AI软件官方的配置文档，对页面中全部供应商（托管供应商除外）及其模型的字段进行调整，并把结果直接写入文件生效。确认？",
     "renameModelTitle": "修改模型名称"
   },
   "rename": {
@@ -229,32 +229,32 @@
   "syncManaged": {
     "title": "同步到配置文件",
     "description": "将把所有「待同步」的托管供应商分组写入配置文件",
-    "descriptionCount": "（共 {{count}} 个供应商）",
+    "descriptionCount": "（共{{count}}个供应商）",
     "descriptionSuffix": "，确认同步？",
     "confirm": "确认同步"
   },
   "diffView": {
     "staleSupplier": "已失效（上次选择的参考供应商已不在候选，未套用）",
     "unsetSupplier": "未设置参考供应商（未套用该模型基础字段）",
-    "andMoreModels": "…等 {{count}} 个模型",
-    "beforeAfter": "当前内容 → 套用推荐后（{{count}} 处变更）"
+    "andMoreModels": "…等{{count}}个模型",
+    "beforeAfter": "当前内容 → 套用推荐后（{{count}}处变更）"
   },
   "previewBanner": {
     "changesPrefix": "预览：当前编辑与文件实际值相比，共 ",
     "changesSuffix": " 处差异待保存"
   },
   "codeEditor": {
-    "cannotParseJson": "无法解析 JSON",
-    "notValidJson": "内容不是合法 JSON：{{message}}",
-    "jsonProblemNear": "第 {{line}} 行第 {{column}} 列附近可能存在 JSON 格式问题：{{message}}",
+    "cannotParseJson": "无法解析JSON",
+    "notValidJson": "内容不是合法JSON：{{message}}",
+    "jsonProblemNear": "第{{line}}行第{{column}}列附近可能存在JSON格式问题：{{message}}",
     "codeAria": "代码内容",
     "loadingContent": "正在加载文件内容…",
-    "prettifyTitle": "在编辑器里重新缩进 JSON；需再点击「保存」才会写入文件",
+    "prettifyTitle": "在编辑器里重新缩进JSON；需再点击「保存」才会写入文件",
     "prettify": "美化格式",
     "saving": "保存中…",
-    "jsonWarningTitle": "JSON 格式可能有误",
+    "jsonWarningTitle": "JSON格式可能有误",
     "confirmSaveTitle": "确认保存",
-    "jsonWarningDescription": "检测到 JSON 格式问题，是否仍要保存对「{{name}}」的修改？",
+    "jsonWarningDescription": "检测到JSON格式问题，是否仍要保存对「{{name}}」的修改？",
     "confirmSaveDescription": "是否确认保存对「{{name}}」的修改？",
     "saveAnyway": "仍然保存",
     "confirmSave": "确认保存"
@@ -271,15 +271,15 @@
     "apiKeyPlaceholder": "选择接入用的令牌",
     "noTokens": "暂无令牌，请先到令牌页创建",
     "tokenDisabled": "（已禁用）",
-    "apiKeyHint": "必填：写入生成配置的 apiKey，Agent 用它接入本系统；留空不再自动借用所勾选供应商的 Key。只认凭据引用（apiKeyEnv）的软件（如 dsh）会同步写进其凭据库（.credentials.yaml）",
-    "baseUrlHint": "默认填入系统识别的 BaseURL，可直接编辑；清空则恢复系统默认",
+    "apiKeyHint": "必填：写入生成配置的apiKey，Agent用它接入本系统；留空不再自动借用所勾选供应商的Key。只认凭据引用（apiKeyEnv）的软件（如dsh）会同步写进其凭据库（.credentials.yaml）",
+    "baseUrlHint": "默认填入系统识别的BaseURL，可直接编辑；清空则恢复系统默认",
     "sourceLabel": "标记来源",
     "sourcePlaceholder": "可留空",
-    "sourceHint": "填写后在 BaseURL 后追加 __来源 段；可留空",
+    "sourceHint": "填写后在BaseURL后追加 __来源 段；可留空",
     "selectProvidersLabel": "从系统配置的供应商中选择",
-    "selectProvidersSuffix": "（显示名称 / 模型数 / Endpoint 数）",
-    "groupsLabel": "根据 Endpoint 规则自动归类供应商配置",
-    "groupsSuffix": "（命中同一条规则，如 *completion*，的 Endpoint 归为一组）",
+    "selectProvidersSuffix": "（显示名称 / 模型数 / Endpoint数）",
+    "groupsLabel": "根据Endpoint规则自动归类供应商配置",
+    "groupsSuffix": "（命中同一条规则，如 *completion*，的Endpoint归为一组）",
     "hitsLabel": "命中：",
     "suffixColumn": "命名后缀",
     "modelsColumn": "模型",
@@ -296,11 +296,11 @@
     "confirmDeleteBusy": "删除中…",
     "confirmDeleteDescription": "确认删除托管供应商「{{name}}」？删除会立即生效，已生成的供应商配置仍会保留。",
     "emptyMultiSelect": "点击展开，勾选系统配置的供应商",
-    "removeTitle": "移除 {{name}}",
+    "removeTitle": "移除{{name}}",
     "providerDisabled": "（禁用）",
-    "providerMeta": "{{models}} 模型 · {{endpoints}} Endpoint",
+    "providerMeta": "{{models}}模型 · {{endpoints}} Endpoint",
     "noneMergeHint": "已匹配到同名分组「{{endpoint}}」{{suffixHint}}，此处留空保存将自动合并",
-    "noneMergeSuffixPart": "（命名后缀 {{suffix}}）"
+    "noneMergeSuffixPart": "（命名后缀{{suffix}}）"
   },
   "versions": {
     "entry": "历史版本",
@@ -313,7 +313,7 @@
     "archivedToast": "已存档",
     "archive": "存档",
     "archiveFailed": "存档失败",
-    "summary": "{{lines}} 行 · {{size}}",
+    "summary": "{{lines}}行 · {{size}}",
     "restore": "恢复",
     "restoreDialogTitle": "恢复历史版本",
     "restoreDialogBody": "将把该历史版本的内容写回配置文件。恢复前会先把当前文件存档，编辑器中未保存的修改会丢失。确认恢复？",
@@ -323,11 +323,11 @@
   },
   "jsonErrors": {
     "providerRootUnrecognized": "无法识别配置文件里的供应商根路径",
-    "providerRootInvalid": "供应商根路径 {{segment}} 无效",
-    "providerMissing": "供应商 {{id}} 不存在",
-    "providerExists": "供应商 {{id}} 已存在",
-    "providerNoModels": "供应商 {{id}} 下没有 models",
-    "modelMissing": "模型 {{id}} 不存在",
-    "modelExists": "模型 {{id}} 已存在"
+    "providerRootInvalid": "供应商根路径{{segment}}无效",
+    "providerMissing": "供应商{{id}}不存在",
+    "providerExists": "供应商{{id}}已存在",
+    "providerNoModels": "供应商{{id}}下没有models",
+    "modelMissing": "模型{{id}}不存在",
+    "modelExists": "模型{{id}}已存在"
   }
 }

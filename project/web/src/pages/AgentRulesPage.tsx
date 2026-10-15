@@ -544,36 +544,36 @@ function reindentJson(json: string, extraIndent: string): string {
 function buildDialogDocJsonc(doc: RuleDialogDoc): string {
   const header = [
     '// ───────────────────────────────────────────────────────────────',
-    '// 接管规则 JSONC（支持 // 注释；交给别的 Agent 处理时请先读这段说明）',
+    '// 接管规则JSONC（支持 // 注释；交给别的Agent处理时请先读这段说明）',
     '//',
-    '// name                    规则名称（唯一，对应一个 Agent 软件类型，如 opencode）',
+    '// name                    规则名称（唯一，对应一个Agent软件类型，如opencode）',
     '// os_paths                该软件的配置文件默认路径',
-    '//   windows              Windows 路径（支持 %USERPROFILE%、%APPDATA% 等环境变量）',
-    '//   mac                  macOS 路径（支持 ~、$HOME）',
-    '// json_paths              在配置文件里定位 provider / model 的 gjson 路径',
+    '//   windows              Windows路径（支持 %USERPROFILE%、%APPDATA% 等环境变量）',
+    '//   mac                  macOS路径（支持 ~、$HOME）',
+    '// json_paths              在配置文件里定位provider / model的gjson路径',
     '//   provider             供应商列表路径',
-    '//   model                model 路径（用 {provider_id} 占位当前供应商键名）',
-    '//   models_container     object=以模型名做键（opencode）；array=数组每项带 id（openclaw）',
-    '// model_info_fields       模型信息字段在各 agent 配置里的写入方式（每项 string 或 {path, op, sep, values, action}）',
-    '//   path                写入位置（gjson 路径）',
+    '//   model                model路径（用 {provider_id} 占位当前供应商键名）',
+    '//   models_container     object=以模型名做键（opencode）；array=数组每项带id（openclaw）',
+    '// model_info_fields       模型信息字段在各agent配置里的写入方式（每项string或 {path, op, sep, values, action}）',
+    '//   path                写入位置（gjson路径）',
     '//   op                  raw(原样，默认)/bool(非空→true)/first(取第一个)/join(拼接)',
-    '//   sep                 join 的分隔符（默认逗号）',
-    '//   values              允许值白名单（如 openclaw input 只允许 text/image/video/audio）',
+    '//   sep                 join的分隔符（默认逗号）',
+    '//   values              允许值白名单（如openclaw input只允许text/image/video/audio）',
     '//   action              set(填，默认)/skip(不填)/delete(删除字段)',
-    '// common                  公共配置：与请求协议 / SDK 无关的字段推荐值（数组，行说明见下）',
-    '// protocols               Endpoint 规则：按请求协议 / SDK 区分（数组）',
+    '// common                  公共配置：与请求协议 / SDK无关的字段推荐值（数组，行说明见下）',
+    '// protocols               Endpoint规则：按请求协议 / SDK区分（数组）',
     '//   每个协议块：',
     '//     name              规则名称（必填）',
-    '//     conditions        命中条件（OR 关系；field + op + value）',
+    '//     conditions        命中条件（OR关系；field + op + value）',
     '//     endpoint_tags     归纳范围匹配词（必填；含 * 通配、不含 * 精确，忽略大小写；任一命中即应用本规则，顺序即优先级）',
-    '//     fields            该 endpoint 的字段推荐表（数组，行说明见下）',
+    '//     fields            该endpoint的字段推荐表（数组，行说明见下）',
     '//',
-    '// 字段推荐表每行（common / protocols[].fields 通用）：',
+    '// 字段推荐表每行（common / protocols[].fields通用）：',
     '//   key           字段路径（必填）',
     '//   scope         provider | model（字段落在供应商还是模型配置）',
     '//   action        set(推荐填)/skip(推荐不填)/delete(删除字段)',
     '//   recommended   推荐值（null = 推荐不填）',
-    '//   op/sep/values 值写法（同 model_info_fields）',
+    '//   op/sep/values值写法（同model_info_fields）',
     '//   required      是否必填',
     '//   description   说明',
     '// ───────────────────────────────────────────────────────────────',
@@ -582,17 +582,17 @@ function buildDialogDocJsonc(doc: RuleDialogDoc): string {
   return [
     header,
     '{',
-    '  // 规则名称（对应一个 Agent 软件类型，唯一）',
+    '  // 规则名称（对应一个Agent软件类型，唯一）',
     `  "name": ${JSON.stringify(doc.name, null, 2)},`,
-    '  // 配置文件默认路径：windows 支持 %USERPROFILE% 等环境变量；mac 支持 ~ / $HOME',
+    '  // 配置文件默认路径：windows支持 %USERPROFILE% 等环境变量；mac支持 ~ / $HOME',
     `  "os_paths": ${p(JSON.stringify(doc.os_paths, null, 2))},`,
-    '  // provider/model 的 gjson 路径；models_container: object=模型名做键 / array=数组每项带 id',
+    '  // provider/model的gjson路径；models_container: object=模型名做键 / array=数组每项带id',
     `  "json_paths": ${p(JSON.stringify(doc.json_paths, null, 2))},`,
-    '  // 模型信息字段写入方式：path=写入位置；op=raw/bool/first/join；sep=join 分隔符；values=允许值白名单；action=填/不填/删除',
+    '  // 模型信息字段写入方式：path=写入位置；op=raw/bool/first/join；sep=join分隔符；values=允许值白名单；action=填/不填/删除',
     `  "model_info_fields": ${p(JSON.stringify(doc.model_info_fields, null, 2))},`,
-    '  // 公共配置（common）：与请求协议 / SDK 无关的字段推荐值，数组',
+    '  // 公共配置（common）：与请求协议 / SDK无关的字段推荐值，数组',
     `  "common": ${p(JSON.stringify(doc.common, null, 2))},`,
-    '  // Endpoint 规则（protocols）：按请求协议 / SDK 区分；每块含 name / conditions / endpoint_tags / fields',
+    '  // Endpoint规则（protocols）：按请求协议 / SDK区分；每块含name / conditions / endpoint_tags / fields',
     `  "protocols": ${p(JSON.stringify(doc.protocols, null, 2))}`,
     '}',
   ].join('\n')
@@ -1369,7 +1369,7 @@ function RecommendationTable({
           )}
         </tbody>
       </table>
-      <div className="flex items-center justify-end border-t border-border-subtle bg-muted/40 px-2 py-1">
+      <div className="flex items-center justify-end border-t border-border bg-muted/40 px-2 py-1">
         <Button type="button" variant="outline" size="xs" onClick={addRow}>
           {t('recTable.addRow')}
         </Button>
@@ -1398,7 +1398,7 @@ function ModelInfoFieldsEditor({
       <p className="text-xs text-muted-foreground">
         {t('modelInfoEditor.hint')}
       </p>
-      <div className="overflow-hidden rounded-none border border-border-subtle">
+      <div className="overflow-hidden rounded-none border border-border">
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
@@ -1501,7 +1501,7 @@ function ModelInfoFieldsEditor({
 
 function Group({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <fieldset className="flex flex-col gap-3 rounded-none border border-border-subtle p-3">
+    <fieldset className="flex flex-col gap-3 rounded-none border border-border p-3">
       <legend className="px-1 text-xs font-medium text-muted-foreground">{label}</legend>
       {children}
     </fieldset>
@@ -1542,14 +1542,14 @@ function EndpointRulesEditor({
       </p>
 
       {value.length === 0 ? (
-        <div className="rounded-none border border-dashed border-border-subtle p-3 text-xs text-muted-foreground">
+        <div className="rounded-none border border-dashed border-border p-3 text-xs text-muted-foreground">
           {t('endpointRules.empty')}
         </div>
       ) : (
         <div className="space-y-3">
           {value.map((rule, ruleIndex) => {
             return (
-              <div key={ruleIndex} className="rounded-none border border-border-subtle p-3">
+              <div key={ruleIndex} className="rounded-none border border-border p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
                     {t('endpointRules.index', { n: ruleIndex + 1 })}

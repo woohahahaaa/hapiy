@@ -29,8 +29,10 @@
     "perPage": "Per page",
     "rows": "rows",
     "pageOf": "Page {{page}} of {{total}}",
+    "first": "First page",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "last": "Last page"
   },
   "tag": {
     "remove": "Remove"

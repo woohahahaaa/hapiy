@@ -4,12 +4,12 @@
       "description": "实时活动请求与运行统计"
     },
     "usage": {
-      "description": "查询 API 请求的使用记录、消耗与耗时"
+      "description": "查询API请求的使用记录、消耗与耗时"
     },
     "capture": {
       "description": "查看已抓取的请求/响应日志原文"
     },
-    "recordCount": "{{count}} 条记录"
+    "recordCount": "{{count}}条记录"
   },
   "action": {
     "copy": "复制",
@@ -33,7 +33,7 @@
     "operation": "操作",
     "prefix": "文件夹路径",
     "type": "类型",
-    "fileName": "文件名/请求 ID",
+    "fileName": "文件名/请求ID",
     "size": "大小"
   },
   "status": {
@@ -54,7 +54,7 @@
     "cacheWrite": "缓存写入",
     "cacheRead": "缓存读取",
     "output": "输出",
-    "summary": "输入 {{input}} · 缓存写入 {{cacheWrite}} · 缓存读取 {{cacheRead}}{{hitRate}} · 输出 {{output}}",
+    "summary": "输入{{input}} · 缓存写入{{cacheWrite}} · 缓存读取{{cacheRead}}{{hitRate}} · 输出{{output}}",
     "detailOpen": "（",
     "detailClose": "）/"
   },
@@ -86,8 +86,8 @@
     "description": "此操作不可恢复，清空后无法找回相关记录。",
     "filtered": "清空当前页面",
     "all": "清空所有",
-    "filteredDone": "已清空 {{count}} 条记录",
-    "allDone": "已清空全部 {{count}} 条记录"
+    "filteredDone": "已清空{{count}}条记录",
+    "allDone": "已清空全部{{count}}条记录"
   },
   "monitor": {
     "stats": {
@@ -107,13 +107,13 @@
       "totalRequests": "总请求",
       "successRequests": "成功请求",
       "failedRequests": "失败请求",
-      "totalTokens": "总 Token",
+      "totalTokens": "总Token",
       "averageLatency": "平均延迟",
       "successRate": "成功率",
       "cost": "花费",
       "throughput": "吞吐量",
       "cacheHitRate": "缓存命中率",
-      "totalTokensDedup": "总 Token（缓存命中去重）"
+      "totalTokensDedup": "总Token（缓存命中去重）"
     },
     "active": {
       "title": "活跃请求",
@@ -139,9 +139,9 @@
     },
     "retention": {
       "immediate": "请求完成后立即移除",
-      "seconds": "{{count}} 秒",
-      "minutes": "{{count}} 分钟",
-      "label": "显示 {{retention}} 内的活跃请求",
+      "seconds": "{{count}}秒",
+      "minutes": "{{count}}分钟",
+      "label": "显示{{retention}}内的活跃请求",
       "unknown": "保留时间未知",
       "setTooltip": "设置保留时间",
       "dialogTitle": "保留时间设置",
@@ -171,10 +171,10 @@
     "requestBody": "请求体",
     "responseHeaders": "响应头",
     "responseBody": "响应体",
-    "mergeJson": "整合 JSON",
+    "mergeJson": "整合JSON",
     "raw": "原始内容",
     "merging": "整合中…",
-    "noData": "（无 data）",
+    "noData": "（无data）",
     "systemLog": "系统日志",
     "ruleNotes": "规则命中",
     "ruleProblems": "改写问题",
@@ -189,14 +189,14 @@
     }
   },
   "detail": {
-    "title": "记录详情 {{id}}",
-    "requestId": "请求 ID",
-    "providerKey": "上游 Key",
-    "upstreamUrl": "上游 URL",
-    "downstreamKey": "下游 Key",
-    "downstreamUrl": "下游 URL",
+    "title": "记录详情{{id}}",
+    "requestId": "请求ID",
+    "providerKey": "上游Key",
+    "upstreamUrl": "上游URL",
+    "downstreamKey": "下游Key",
+    "downstreamUrl": "下游URL",
     "details": "详细信息",
-    "timing": "排队 {{queue}} · 请求改写 {{requestRewrite}} · 连接 {{connect}} · 首字 {{firstByte}} · 响应改写 {{responseRewrite}} · 流式改写 {{streamRewrite}}"
+    "timing": "排队{{queue}} · 请求改写{{requestRewrite}} · 连接{{connect}} · 首字{{firstByte}} · 响应改写{{responseRewrite}} · 流式改写{{streamRewrite}}"
   },
   "error": {
     "loadFailed": "加载失败",

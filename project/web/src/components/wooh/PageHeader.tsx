@@ -27,9 +27,9 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
             {/* 移动端菜单入口：侧栏在手机上收成浮层，触发器需常驻页面头部 */}
             <SidebarTrigger icon="menu" className="-ml-1 h-10 w-10 shrink-0 md:hidden" />
             <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold">{heading}</h1>
+              <h1 className="truncate text-base font-semibold">{heading}</h1>
               {(description || status) && (
-                <p className="mt-1 hidden text-sm text-muted-foreground md:block">
+                <p className="mt-1 hidden text-xs text-muted-foreground md:block">
                   {description}
                   {status && (
                     <>
@@ -44,7 +44,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       </div>
-      <Separator className="bg-border-subtle/60" />
+      <Separator className="bg-border/60" />
     </div>
   )
 }

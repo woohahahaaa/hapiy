@@ -4,7 +4,8 @@ import { createRoot } from 'react-dom/client'
 import { IconProvider, DEFAULT_ICON_CONFIGS } from '@icon-park/react'
 import type { IIconConfig } from '@icon-park/react/es/runtime'
 
-import '@/index.css'
+// 预览页刻意自带新主题副本，不跟随应用 src/index.css 的主题。
+import './theme.css'
 import '@/i18n/i18n'
 import iconConfig from '@/config/icons.json'
 import { PreviewApp } from './app'

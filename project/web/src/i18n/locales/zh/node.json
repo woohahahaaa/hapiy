@@ -8,7 +8,7 @@
     "modeModel": "对选中模型生效",
     "selectProviderPlaceholder": "选择供应商（不选时对全部生效）",
     "selectModelPlaceholder": "选择模型（不选时对全部生效）",
-    "removeOption": "移除 {{name}}",
+    "removeOption": "移除{{name}}",
     "noProviders": "暂无供应商",
     "noModels": "暂无模型",
     "conditions": "条件",
@@ -34,12 +34,12 @@
     "title": "模型中心",
     "copyTitle": "点击复制模型名",
     "copied": "已复制模型名：{{name}}",
-    "count": "{{count}} 个模型"
+    "count": "{{count}}个模型"
   },
   "slotEnableControl": {
     "open": "开启",
     "close": "关闭",
-    "remaining": "剩余 {{hours}}小时{{minutes}}分{{seconds}}秒",
+    "remaining": "剩余{{hours}}小时{{minutes}}分{{seconds}}秒",
     "dialogTitle": "设置开启时长",
     "hours": "时",
     "minutes": "分",
@@ -80,7 +80,7 @@
   },
   "provider": {
     "selectPlaceholder": "选择供应商",
-    "modelKeyCounts": "模型 {{modelCount}} · Key {{keyCount}}",
+    "modelKeyCounts": "模型{{modelCount}} · Key {{keyCount}}",
     "baseUrlEndpointCounts": "Base URL {{baseURLCount}} · Endpoint {{endpointCount}}",
     "disabled": "禁用"
   },
@@ -90,7 +90,7 @@
     "items": "条",
     "windowAria": "时间窗口（分钟）",
     "limitAria": "并发上限（条）",
-    "windowCount": "窗口内 {{count}}/{{max}}"
+    "windowCount": "窗口内{{count}}/{{max}}"
   },
   "logOutput": {
     "prefixLabel": "日志前缀",
@@ -100,8 +100,8 @@
   },
   "entry": {
     "requestEntryFallback": "请求入口",
-    "enabledAria": "{{label}} 已启用，点击关闭",
-    "disabledAria": "{{label}} 已停用，点击启用",
+    "enabledAria": "{{label}}已启用，点击关闭",
+    "disabledAria": "{{label}}已停用，点击启用",
     "weightLabel": "权重"
   }
 }

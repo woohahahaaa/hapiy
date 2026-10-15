@@ -1,3 +1,6 @@
+// 圆角主题：弹层与内容使用 rounded-lg，遮罩为 bg-black/40。
+// 尺寸映射（WIDTH_MAP / HEIGHT_MAP）与既有交互行为保持不变。
+// 结构与类名顺序保持既有封装不变，仅调整圆角相关类。
 import * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
@@ -69,7 +72,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/10 duration-100 supports-backdrop-filter:backdrop-blur-xs data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/40 duration-100 supports-backdrop-filter:backdrop-blur-xs data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
         className
       )}
       {...props}
@@ -112,7 +115,7 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-none bg-popover p-4 text-xs/relaxed text-popover-foreground border border-border duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg bg-popover p-4 text-xs/relaxed text-popover-foreground border border-border duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
           sizeClass,
           bare && 'rounded-none border-0 p-0 !gap-0',
           scrollFooter && 'flex max-h-[85vh] flex-col overflow-hidden',
@@ -212,8 +215,8 @@ function DialogFooter({
     }
   }, [scrollRef])
   const borderClass = scrollRef
-    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border-subtle')
-    : 'border-t border-border-subtle'
+    ? (atBottom ? 'border-t border-transparent' : 'border-t border-border')
+    : 'border-t border-border'
   return (
     <div
       data-slot="dialog-footer"

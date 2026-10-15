@@ -4,17 +4,17 @@
   "selectSection": "选择章节",
   "searchPlaceholder": "搜索文档…",
   "searchAria": "搜索文档",
-  "foundCount": "找到 {{count}} 处",
+  "foundCount": "找到{{count}}处",
   "tocTitle": "本页目录",
   "noResults": "没有找到相关内容",
-  "heroTitle": "hapiy 帮助文档",
-  "heroDescription": "自托管的 AI 网关与 Agent 接入管理器：分发模型、接管 AI 工具配置，从第一条转发链路开始。",
-  "footer": "hapiy 帮助文档 · 内容随版本更新，以实际页面为准",
+  "heroTitle": "hapiy帮助文档",
+  "heroDescription": "自托管的AI网关与Agent接入管理器：分发模型、接管AI工具配置，从第一条转发链路开始。",
+  "footer": "hapiy帮助文档 · 内容随版本更新，以实际页面为准",
   "quickLinks": {
     "quickStart": {
       "id": "快速开始",
       "title": "快速开始",
-      "description": "四步搭好第一条 API 转发工作流"
+      "description": "四步搭好第一条API转发工作流"
     },
     "topology": {
       "id": "转发拓扑",

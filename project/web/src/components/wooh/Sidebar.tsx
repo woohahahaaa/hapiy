@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useLocation, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import * as HoverCard from '@radix-ui/react-hover-card'
-import * as Tooltip from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
 import { version as appVersion } from '../../../package.json'
 import { ModeToggle } from '@/components/wooh/ModeToggle'
@@ -30,6 +29,9 @@ import {
   SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar'
+
+// 置底的次级导航（对应官方 dashboard 侧边栏的 NavSecondary）。
+const SECONDARY_NAV_IDS = new Set(['profile', 'help'])
 
 function NavLink({
   item,
@@ -99,7 +101,7 @@ function NavLink({
             side="right"
             align="start"
             sideOffset={20}
-            className="z-[100] min-w-40 rounded-none border border-border bg-popover p-1 shadow-md outline-none"
+            className="z-[100] min-w-40 rounded-none ring-1 ring-foreground/10 bg-popover p-1 shadow-md outline-none"
             onMouseEnter={(event) => event.stopPropagation()}
             onMouseLeave={(event) => event.stopPropagation()}
           >
@@ -107,7 +109,7 @@ function NavLink({
               <Link
                 to={item.href!}
                 onClick={closeFlyout}
-                className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                className="flex h-8 shrink-0 items-center px-3 text-xs text-sidebar-foreground outline-none transition-colors hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               >
                 <span>{t(item.labelKey)}</span>
               </Link>
@@ -124,10 +126,10 @@ function NavLink({
                   to={child.href}
                   onClick={closeFlyout}
                   className={cn(
-                    'flex h-8 items-center rounded-none pl-3 pr-2 text-xs outline-none transition-colors',
+                    'flex h-8 items-center rounded-md pr-4 pl-5 text-xs outline-none transition-colors',
                     childActive
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground font-medium'
-                      : 'hover:bg-sidebar-primary hover:text-sidebar-primary-foreground',
+                      ? 'rounded-full bg-primary font-medium text-primary-foreground'
+                      : 'hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   )}
                 >
                   <span>{t(child.labelKey)}</span>
@@ -152,7 +154,7 @@ function NavLink({
             <SidebarMenuButton
               asChild
               isActive={selfActive}
-              className="group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground"
+              className="group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground"
             >
               <Link to={item.href!} onClick={onExpand}>
                 {item.icon}
@@ -168,8 +170,8 @@ function NavLink({
               }
               onClick={onToggle}
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-primary group-hover/menu-row:text-sidebar-primary-foreground',
-                selfActive && 'bg-sidebar-primary text-sidebar-primary-foreground',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-none text-sidebar-foreground/70 outline-none group-hover/menu-row:bg-sidebar-accent group-hover/menu-row:text-sidebar-accent-foreground',
+                selfActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
               )}
             >
               <AppIcon
@@ -203,7 +205,7 @@ function NavLink({
   }
 
   const trigger = (
-    <SidebarMenuButton asChild isActive={selfActive}>
+    <SidebarMenuButton asChild isActive={selfActive} tooltip={t(item.labelKey)}>
       {item.external ? (
         <a href={item.href} target="_blank" rel="noopener noreferrer">
           {item.icon}
@@ -218,42 +220,7 @@ function NavLink({
     </SidebarMenuButton>
   )
 
-  if (!collapsed) {
-    return (
-      <SidebarMenuItem>
-        {trigger}
-      </SidebarMenuItem>
-    )
-  }
-
-  // Collapsed: show a tooltip that mirrors the style of the submenu
-  // popover (same panel, border, title row), but clicking the icon
-  // navigates directly instead of expanding a menu.
-  const tooltipContent = (
-    <Tooltip.Portal>
-      <Tooltip.Content
-        side="right"
-        align="start"
-        sideOffset={20}
-        className="z-[100] min-w-40 rounded-none border border-border bg-popover p-1 shadow-md outline-none"
-      >
-        <div className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground/70">
-          {t(item.labelKey)}
-        </div>
-      </Tooltip.Content>
-    </Tooltip.Portal>
-  )
-
-  return (
-    <SidebarMenuItem>
-      <Tooltip.Root delayDuration={60} disableHoverableContent>
-        <Tooltip.Trigger asChild>
-          <span className="block w-full">{trigger}</span>
-        </Tooltip.Trigger>
-        {tooltipContent}
-      </Tooltip.Root>
-    </SidebarMenuItem>
-  )
+  return <SidebarMenuItem>{trigger}</SidebarMenuItem>
 }
 
 function CollapsedNavItem({
@@ -300,7 +267,7 @@ export function AppSidebar() {
   const [versionOpen, setVersionOpen] = useState(false)
   const { status: updateStatus } = useUpdateStatus()
   const updateAvailable = Boolean(updateStatus?.available)
-  // 移动端浮层始终展示「图标 + 文字」，忽略桌面端的只显示图标状态。
+  // 移动端浮层始终是展开形态，只有桌面端折叠成图标栏。
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
 
@@ -331,81 +298,79 @@ export function AppSidebar() {
 
   const visibleNavigation =
     agentEnabled ? navigation : navigation.filter((item) => item.id !== 'agent')
+  const mainItems = visibleNavigation.filter((item) => !SECONDARY_NAV_IDS.has(item.id))
+  const secondaryItems = visibleNavigation.filter((item) => SECONDARY_NAV_IDS.has(item.id))
+
+  const renderItems = (items: NavItem[]) =>
+    items.map((item) => (
+      <NavLink
+        key={item.id}
+        item={item}
+        isOpen={openSections.has(item.id)}
+        onToggle={() => {
+          setOpenSections((sections) => {
+            const next = new Set(sections)
+            if (next.has(item.id)) next.delete(item.id)
+            else next.add(item.id)
+            return next
+          })
+        }}
+        onExpand={() => {
+          setOpenSections((sections) => {
+            if (sections.has(item.id)) return sections
+            const next = new Set(sections)
+            next.add(item.id)
+            return next
+          })
+        }}
+      />
+    ))
 
   return (
-    <SidebarRoot collapsible="icon">
+    <SidebarRoot collapsible="icon" variant="inset">
       <SidebarHeader>
+        {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}
         <div
           className={
-            showLabel
-              ? 'flex items-center justify-between gap-2 py-2 pl-2'
-              : 'flex flex-col items-start justify-center gap-1 py-1'
+            showLabel ? 'flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
           }
         >
           <div className="flex items-center gap-1.5">
             {/* 移动端：菜单开关固定在左侧，与页面头部同一位置、同为三横线图标 */}
-            {isMobile && <SidebarTrigger icon="menu" size="icon" />}
+            {isMobile && <SidebarTrigger icon="menu" />}
             <button
               type="button"
               onClick={() => setVersionOpen(true)}
               title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
-              className={
+              className={cn(
                 showLabel
-                  ? 'font-hapiy-logo relative -mx-1 cursor-pointer rounded px-1 text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                  : 'sr-only font-hapiy-logo text-2xl leading-none text-sidebar-foreground'
-              }
+                  ? 'relative -mx-1 cursor-pointer rounded-md px-1 font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  : 'relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )}
             >
-              hapiy
+              {collapsed ? 'h' : 'hapiy'}
               {showLabel && updateAvailable && (
-                <span
-                  aria-hidden
-                  className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-sidebar"
-                />
+                <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success" />
               )}
             </button>
           </div>
-          <div
-            className={
-              showLabel
-                ? 'flex items-center gap-1.5'
-                : 'flex flex-col items-center gap-1'
-            }
-          >
+          <div className={showLabel ? 'flex items-center gap-1.5' : 'flex flex-col items-center gap-1'}>
             {showLabel && <LanguageToggle size="icon" />}
             {showLabel && <ModeToggle size="icon" />}
-            {!isMobile && <SidebarTrigger size="icon" />}
+            <SidebarTrigger size="icon" />
           </div>
         </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          {showLabel && <SidebarGroupLabel>{t('nav.section')}</SidebarGroupLabel>}
+          <SidebarGroupLabel>{t('nav.section')}</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {visibleNavigation.map((item) => (
-                <NavLink
-                  key={item.id}
-                  item={item}
-                  isOpen={openSections.has(item.id)}
-                  onToggle={() => {
-                    setOpenSections((sections) => {
-                      const next = new Set(sections)
-                      if (next.has(item.id)) next.delete(item.id)
-                      else next.add(item.id)
-                      return next
-                    })
-                  }}
-                  onExpand={() => {
-                    setOpenSections((sections) => {
-                      if (sections.has(item.id)) return sections
-                      const next = new Set(sections)
-                      next.add(item.id)
-                      return next
-                    })
-                  }}
-                />
-              ))}
-            </SidebarMenu>
+            <SidebarMenu>{renderItems(mainItems)}</SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>{renderItems(secondaryItems)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

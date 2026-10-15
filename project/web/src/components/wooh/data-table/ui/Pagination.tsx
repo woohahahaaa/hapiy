@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { AppIcon } from '@/components/wooh/AppIcon'
 
 const DEFAULT_PAGE_SIZE_OPTIONS: readonly number[] = [10, 20, 50, 100]
 
@@ -66,7 +67,7 @@ export function Pagination({
           <SelectTrigger className="w-20">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent side="top">
             <SelectGroup>
               {pageSizeOptions.map((n) => (
                 <SelectItem key={n} value={String(n)}>
@@ -81,22 +82,44 @@ export function Pagination({
       <div className="text-xs text-muted-foreground">
         {pageText || t('pagination.pageOf', { page: 1, total: 0 })}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Button
           variant="outline"
-          size="sm"
+          size="icon"
+          className="hidden lg:inline-flex"
           disabled={!hasPrev}
-          onClick={() => onOffsetChange(Math.max(0, offset - limit))}
+          aria-label={t('pagination.first')}
+          onClick={() => onOffsetChange(0)}
         >
-          {t('pagination.prev')}
+          <AppIcon name="first_page" />
         </Button>
         <Button
           variant="outline"
-          size="sm"
+          size="icon"
+          disabled={!hasPrev}
+          aria-label={t('pagination.prev')}
+          onClick={() => onOffsetChange(Math.max(0, offset - limit))}
+        >
+          <AppIcon name="chevron_left" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
           disabled={!hasNext}
+          aria-label={t('pagination.next')}
           onClick={() => onOffsetChange(offset + limit)}
         >
-          {t('pagination.next')}
+          <AppIcon name="chevron_right" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="hidden lg:inline-flex"
+          disabled={!hasNext}
+          aria-label={t('pagination.last')}
+          onClick={() => onOffsetChange(Math.max(0, (Math.ceil(total / limit) - 1) * limit))}
+        >
+          <AppIcon name="last_page" />
         </Button>
       </div>
     </div>

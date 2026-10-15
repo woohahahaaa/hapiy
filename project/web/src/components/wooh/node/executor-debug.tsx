@@ -61,7 +61,7 @@ function ruleCheck(kind: string, child: FlatNode | undefined, providers: readonl
       ok,
     }
   }
-  return { label: '规则', detail: `${kind} 规则（status 由执行链校验）`, ok: true }
+  return { label: '规则', detail: `${kind} 规则（status由执行链校验）`, ok: true }
 }
 
 function entryOf(nodeId: string, topology: FlatTopology): FlatNode | undefined {
@@ -138,14 +138,14 @@ export function ExecutorDebug({ topology, providers, canvas, externallyDisabledS
 
     console.group(`[ExecutorDebug] slot ${node.id} (${node.slotType ?? '?'})`)
     logChecks('  ', [entry, slotC])
-    console.log(`  == slot 整体判定: ${slotOk ? '生效' : '不生效'}`)
+    console.log(`  == slot整体判定: ${slotOk ? '生效' : '不生效'}`)
 
     if (node.slotType === 'provider') {
       const children = canvas.providers.filter((p) => canvas.providerSlotOf.get(p.id) === node.id)
       if (children.length === 0) {
-        console.log('  （插槽为空，无内部 executor）')
+        console.log('  （插槽为空，无内部executor）')
       } else {
-        console.log('  ── 内部 executor ──')
+        console.log('  ── 内部executor ──')
         for (const child of children) {
           const self = selfCheck(child)
           const rule = ruleCheck('provider', child, providers)
@@ -156,9 +156,9 @@ export function ExecutorDebug({ topology, providers, canvas, externallyDisabledS
     } else {
       const entries = node.entries ?? []
       if (entries.length === 0) {
-        console.log('  （插槽为空，无内部 executor）')
+        console.log('  （插槽为空，无内部executor）')
       } else {
-        console.log('  ── 内部 executor ──')
+        console.log('  ── 内部executor ──')
         for (const e of entries) {
           const selfOk = e.enabled === true
           console.log(`  [${selfOk && slotOk ? '启用' : '禁用'}] ${node.slotType} #${e.index ?? 1}: entry${entry.ok ? '✓' : '✗'} slot${slotC.ok ? '✓' : '✗'} 自身${selfOk ? '✓' : '✗'}`)

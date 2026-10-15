@@ -111,7 +111,7 @@ function CollapsedFlyout({ item, activeChild, close }: { item: NavEntry; activeC
           <a
             href="#"
             onClick={close}
-            className="flex h-8 shrink-0 items-center px-2 text-xs text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="flex h-8 shrink-0 items-center px-3 text-xs text-sidebar-foreground outline-none transition-colors hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           >
             <span>{item.label}</span>
           </a>
@@ -124,10 +124,10 @@ function CollapsedFlyout({ item, activeChild, close }: { item: NavEntry; activeC
             href="#"
             onClick={close}
             className={cn(
-              'flex h-8 items-center rounded-md pr-2 pl-3 text-xs outline-none transition-colors',
+              'flex h-8 items-center rounded-md pr-4 pl-5 text-xs outline-none transition-colors',
               activeChild === child.label
-                ? 'bg-primary font-medium text-primary-foreground'
-                : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                ? 'rounded-full bg-primary font-medium text-primary-foreground'
+                : 'hover:rounded-full hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
             )}
           >
             <span>{child.label}</span>
@@ -173,7 +173,7 @@ function NavLink({
       const trigger = (
         <SidebarMenuButton
           isActive={active && !activeChild}
-          className={cn(active && activeChild && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+          className={cn(active && activeChild && 'rounded-full bg-sidebar-accent text-sidebar-accent-foreground')}
           onClick={() => onSelect(null)}
         >
           {item.icon}
@@ -196,7 +196,7 @@ function NavLink({
       <SidebarMenuItem>
         <SidebarMenuButton
           isActive={active && !activeChild}
-          className={cn(active && activeChild && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+          className={cn(active && activeChild && 'rounded-full bg-sidebar-accent text-sidebar-accent-foreground')}
           onClick={() => {
             setOpen((v) => !v)
             onSelect(null)
@@ -468,8 +468,8 @@ function LogsPage() {
             <div className="flex min-w-0 items-center gap-2">
               <SidebarTrigger icon="menu" className="-ml-1 h-10 w-10 shrink-0 md:hidden" />
               <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold">使用日志</h1>
-                <p className="mt-1 hidden text-sm text-muted-foreground md:block">
+                <h1 className="truncate text-base font-semibold">使用日志</h1>
+                <p className="mt-1 hidden text-xs text-muted-foreground md:block">
                   {t('logs:page.usage.description')}{' '}
                   <span className="text-muted-foreground/80">[{t('logs:page.recordCount', { count: TOTAL })}]</span>
                 </p>
@@ -486,15 +486,33 @@ function LogsPage() {
           <div data-group="active" className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             {/* DateRangeFilter：两个 DatePicker + 至 + 五个快捷按钮 */}
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm">
-                <AppIcon name="schedule" className="text-muted-foreground" />
-                {t('logs:dateRange.start')}
-              </Button>
+              <button
+                type="button"
+                aria-label={t('logs:dateRange.start')}
+                className={cn(
+                  'flex w-36 items-center gap-1.5 rounded-lg border border-border bg-input/30 px-2.5 text-xs transition-colors outline-none',
+                  'h-7',
+                  'hover:bg-input/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
+                  'disabled:pointer-events-none disabled:opacity-50',
+                )}
+              >
+                <AppIcon name="schedule" className="shrink-0 text-muted-foreground" />
+                <span className="truncate text-muted-foreground">{t('logs:dateRange.start')}</span>
+              </button>
               <span className="text-xs text-muted-foreground">{t('logs:dateRange.to')}</span>
-              <Button variant="outline" size="sm">
-                <AppIcon name="schedule" className="text-muted-foreground" />
-                {t('logs:dateRange.end')}
-              </Button>
+              <button
+                type="button"
+                aria-label={t('logs:dateRange.end')}
+                className={cn(
+                  'flex w-36 items-center gap-1.5 rounded-lg border border-border bg-input/30 px-2.5 text-xs transition-colors outline-none',
+                  'h-7',
+                  'hover:bg-input/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50',
+                  'disabled:pointer-events-none disabled:opacity-50',
+                )}
+              >
+                <AppIcon name="schedule" className="shrink-0 text-muted-foreground" />
+                <span className="truncate text-muted-foreground">{t('logs:dateRange.end')}</span>
+              </button>
               <div className="ml-1 flex flex-wrap items-center gap-1">
                 {presets.map((p) => (
                   <Button key={p.key} variant={preset === p.key ? 'default' : 'outline'} size="sm" onClick={() => setPreset(p.key)}>
@@ -549,7 +567,7 @@ function LogsPage() {
 
         {/* 表格 */}
         <div className="relative w-full overflow-x-hidden rounded-lg border border-border">
-          <table data-slot="table" className="w-full caption-bottom text-xs table-fixed">
+          <table data-slot="table" className="w-full caption-bottom text-xs leading-5 table-fixed">
             <thead data-slot="table-header" className="[&_tr]:border-b">
               <tr data-slot="table-row" className="border-b border-border transition-colors">
                 {columns.map((label, i) => (
@@ -630,12 +648,44 @@ function LogsPage() {
             <span className="text-xs text-muted-foreground">{t('ui:pagination.rows')}</span>
           </div>
           <div className="text-xs text-muted-foreground">{t('ui:pagination.pageOf', { page: currentPage, total: Math.ceil(TOTAL / Number(limit)) })}</div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={!hasPrev} onClick={() => setOffset(Math.max(0, offset - Number(limit)))}>
-              {t('ui:pagination.prev')}
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="icon"
+              className="hidden lg:inline-flex"
+              disabled={!hasPrev}
+              aria-label={t('ui:pagination.first')}
+              onClick={() => setOffset(0)}
+            >
+              <AppIcon name="first_page" />
             </Button>
-            <Button variant="outline" size="sm" disabled={!hasNext} onClick={() => setOffset(offset + Number(limit))}>
-              {t('ui:pagination.next')}
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!hasPrev}
+              aria-label={t('ui:pagination.prev')}
+              onClick={() => setOffset(Math.max(0, offset - Number(limit)))}
+            >
+              <AppIcon name="chevron_left" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              disabled={!hasNext}
+              aria-label={t('ui:pagination.next')}
+              onClick={() => setOffset(offset + Number(limit))}
+            >
+              <AppIcon name="chevron_right" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="hidden lg:inline-flex"
+              disabled={!hasNext}
+              aria-label={t('ui:pagination.last')}
+              onClick={() => setOffset(Math.max(0, (Math.ceil(TOTAL / Number(limit)) - 1) * Number(limit)))}
+            >
+              <AppIcon name="last_page" />
             </Button>
           </div>
         </div>
@@ -681,7 +731,7 @@ export function PreviewApp() {
     <SidebarProvider
       style={
         {
-          '--sidebar-width': 'calc(var(--spacing) * 68)',
+          '--sidebar-width': 'calc(var(--spacing) * 64)',
           '--header-height': 'calc(var(--spacing) * 12)',
         } as React.CSSProperties
       }

@@ -4,11 +4,11 @@
     "loading": "加载中…",
     "retry": "重试",
     "widthRequired": "宽度不能为空",
-    "widthFormatInvalid": "必须以 % 或 pt/px 结尾（如「200 px」或「30 %」）"
+    "widthFormatInvalid": "必须以 % 或pt/px结尾（如「200 px」或「30 %」）"
   },
   "columns": {
     "settings": "列设置",
-    "widthPlaceholder": "如 200 px 或 30 %",
+    "widthPlaceholder": "如200 px或30 %",
     "alignLeft": "左对齐",
     "alignRight": "右对齐",
     "ellipsis": "省略号",
@@ -28,9 +28,11 @@
   "pagination": {
     "perPage": "每页",
     "rows": "条",
-    "pageOf": "第 {{page}} 页，共 {{total}} 条",
+    "pageOf": "第{{page}}页，共{{total}}条",
+    "first": "首页",
     "prev": "上一页",
-    "next": "下一页"
+    "next": "下一页",
+    "last": "末页"
   },
   "tag": {
     "remove": "移除"

@@ -120,7 +120,7 @@ describe('formatAutoDisableSummary', () => {
       keysDisabled: { 'sk-a': true },
       baseURLCount: 1,
       keyCount: 1,
-    })).toBe('故障转移：供应商 1/1、Base URL 1/1、Key 1/1')
+    })).toBe('故障转移：供应商1/1、Base URL 1/1、Key 1/1')
   })
 
   it('部分禁用时按 key、base URL 顺序显示分数', () => {
