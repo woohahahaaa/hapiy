@@ -29,7 +29,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
@@ -211,7 +210,7 @@ function NavLink({
               {item.icon}
               <span>{item.label}</span>
             </SidebarMenuButton>
-            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 6px = 26px，上下与右侧各留 3px */}
+            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 8px = 24px，上下与右侧各留 4px；底板是「可点」提示，仅在本行选中时出现 */}
             <button
               type="button"
               aria-label={
@@ -221,11 +220,11 @@ function NavLink({
               }
               onClick={() => setOpen((v) => !v)}
               className={cn(
-                'absolute top-[3px] right-[3px] z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-foreground/10 text-sidebar-foreground outline-none transition-colors hover:bg-foreground/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                active && 'text-primary-foreground',
+                'absolute top-1 right-1 z-10 flex size-6 shrink-0 items-center justify-center rounded-full text-sidebar-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                active && !activeChild && 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25',
               )}
             >
-              <AppIcon name="chevron_right" className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+              <AppIcon name="chevron_right" className={`[&_svg]:size-3! transition-transform ${open ? 'rotate-90' : ''}`} />
             </button>
           </div>
           {subMenu}
@@ -245,7 +244,7 @@ function NavLink({
         >
           {item.icon}
           <span>{item.label}</span>
-          <AppIcon name="chevron_right" className={`ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
+          <AppIcon name="chevron_right" className={`[&_svg]:size-3! ml-auto transition-transform ${open ? 'rotate-90' : ''}`} />
         </SidebarMenuButton>
         {subMenu}
       </SidebarMenuItem>
@@ -360,7 +359,6 @@ function PreviewSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>{t('common:nav.section')}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (

@@ -17,7 +17,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -162,7 +161,7 @@ function NavLink({
                 <span>{t(item.labelKey)}</span>
               </Link>
             </SidebarMenuButton>
-            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 6px = 26px，上下与右侧各留 3px */}
+            {/* 箭头单独可点：圆形底板直径 = 行高 32px − 8px = 24px，上下与右侧各留 4px；底板是「可点」提示，仅在本行选中时出现 */}
             <button
               type="button"
               aria-label={
@@ -172,13 +171,13 @@ function NavLink({
               }
               onClick={onToggle}
               className={cn(
-                'absolute top-[3px] right-[3px] z-10 flex size-[26px] shrink-0 items-center justify-center rounded-full bg-foreground/10 text-sidebar-foreground outline-none transition-colors hover:bg-foreground/20 focus-visible:ring-2 focus-visible:ring-sidebar-ring',
-                selfActive && 'text-primary-foreground',
+                'absolute top-1 right-1 z-10 flex size-6 shrink-0 items-center justify-center rounded-full text-sidebar-foreground outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring',
+                selfActive && 'bg-primary-foreground/15 text-primary-foreground hover:bg-primary-foreground/25',
               )}
             >
               <AppIcon
                 name="chevron_right"
-                className={`transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                className={`[&_svg]:size-3! transition-transform ${isOpen ? 'rotate-90' : ''}`}
               />
             </button>
           </div>
@@ -193,7 +192,7 @@ function NavLink({
         <span>{t(item.labelKey)}</span>
         <AppIcon
           name="chevron_right"
-          className={`ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
+          className={`[&_svg]:size-3! ml-auto transition-transform ${isOpen ? 'rotate-90' : ''}`}
         />
       </SidebarMenuButton>
     )
@@ -365,7 +364,6 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>{t('nav.section')}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(mainItems)}</SidebarMenu>
           </SidebarGroupContent>

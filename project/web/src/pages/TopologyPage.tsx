@@ -2054,7 +2054,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   if (loading) {
     return (
-      <div className="flex h-screen flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <PageHeader description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center gap-3">
           <AppIcon name="progress_activity" size={20} className="animate-spin" />
@@ -2066,7 +2066,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   if (error) {
     return (
-      <div className="flex h-screen flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <PageHeader description={t('page.description')} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-4 text-center">
@@ -2083,7 +2083,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         description={t('page.description')}
         status={t('page.status', { active: activeEntries, total: totalEntries, nodes: nodes.filter((n) => n.type !== 'modelHub').length })}

@@ -390,7 +390,7 @@ export function HelpPage() {
   }, [location.hash, scrollTo])
 
   return (
-    <div className="relative flex h-screen flex-col bg-background text-foreground">
+    <div className="relative flex h-full min-h-0 flex-col bg-background text-foreground">
       {/* 顶部辉光铺满整页宽度：1100 版面两侧不能出现背景色差 */}
       <div
         aria-hidden
