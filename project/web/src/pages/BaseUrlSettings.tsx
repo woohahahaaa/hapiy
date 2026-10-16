@@ -106,103 +106,155 @@ export function BaseUrlSettings() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <AppIcon name="link" size={16} /> {t('common:nav.baseUrl')}
-          </CardTitle>
-        <CardDescription>{t('baseUrl.cardDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {state.kind === 'loading' && (
-          <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-            <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
-          </div>
-        )}
-
-        {state.kind === 'error' && (
-          <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <AppIcon name="warning" size={32} className="text-destructive" />
-            <p className="text-sm text-muted-foreground">{state.message}</p>
-            <Button variant="outline" size="sm" onClick={handleRetry}>
-              <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
-            </Button>
-          </div>
-        )}
-
-        {state.kind === 'ready' && (
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <div className="flex max-w-2xl flex-wrap items-end gap-4">
-              <label className="grid min-w-0 flex-1 gap-1.5 text-sm" htmlFor="base-url-origin">
-                {t('baseUrl.originLabel')}
-                <Input
-                  id="base-url-origin"
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  placeholder="https://hapiying.example.com:6060"
-                  className="font-mono"
-                />
-              </label>
-              <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
-                {t('baseUrl.suffixLabel')}
-                <Input
-                  id="base-url-suffix"
-                  value={suffixValue}
-                  onChange={(event) => setSuffixValue(event.target.value)}
-                  disabled={saving}
-                  placeholder="proxy"
-                  className="w-40"
-                />
-              </label>
+    <>
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AppIcon name="link" size={16} /> {t('common:nav.baseUrl')}
+            </CardTitle>
+          <CardDescription>{t('baseUrl.cardDescription')}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {state.kind === 'loading' && (
+            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+              <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('loading')}
             </div>
-            <p className="max-w-2xl text-xs text-muted-foreground">
-              {t('baseUrl.originHint')}
-            </p>
-            <div className="grid max-w-2xl gap-1.5 text-sm">
-              <span>{t('baseUrl.finalUrlLabel')}</span>
-              <div className="flex items-center gap-2">
-                <Input
-                  readOnly
-                  value={baseUrl}
-                  aria-label={t('baseUrl.finalUrlLabel')}
-                  className="min-w-0 flex-1 font-mono"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyUrl(baseUrl)}
-                  disabled={saving}
-                >
-                  <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+          )}
+
+          {state.kind === 'error' && (
+            <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <AppIcon name="warning" size={32} className="text-destructive" />
+              <p className="text-sm text-muted-foreground">{state.message}</p>
+              <Button variant="outline" size="sm" onClick={handleRetry}>
+                <AppIcon name="refresh" data-icon="inline-start" /> {t('common:action.retry')}
+              </Button>
+            </div>
+          )}
+
+          {state.kind === 'ready' && (
+            <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+              <div className="flex max-w-4xl flex-wrap items-end gap-4">
+                <label className="grid min-w-0 flex-1 gap-1.5 text-sm" htmlFor="base-url-origin">
+                  {t('baseUrl.originLabel')}
+                  <Input
+                    id="base-url-origin"
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value)}
+                    placeholder="https://hapiying.example.com:6060"
+                    className="font-mono"
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
+                  {t('baseUrl.suffixLabel')}
+                  <Input
+                    id="base-url-suffix"
+                    value={suffixValue}
+                    onChange={(event) => setSuffixValue(event.target.value)}
+                    disabled={saving}
+                    placeholder="proxy"
+                    className="w-40"
+                  />
+                </label>
+              </div>
+              <p className="max-w-4xl text-xs text-pretty text-muted-foreground">
+                {t('baseUrl.originHint')}
+              </p>
+              <div className="grid max-w-4xl gap-1.5 text-sm">
+                <span>{t('baseUrl.finalUrlLabel')}</span>
+                <div className="flex items-center gap-2">
+                  <Input
+                    readOnly
+                    value={baseUrl}
+                    aria-label={t('baseUrl.finalUrlLabel')}
+                    className="min-w-0 flex-1 font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyUrl(baseUrl)}
+                    disabled={saving}
+                  >
+                    <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button type="submit" disabled={saving}>
+                  {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
+                  {t('common:action.save')}
                 </Button>
               </div>
-            </div>
-            <div className="grid gap-1.5 text-sm">
-              <span>{t('baseUrl.sourceMarkerLabel')}</span>
-              <p className="text-xs text-muted-foreground">
-                {t('baseUrl.sourceMarkerHintPrefix')}<code className="text-primary">{t('baseUrl.sourceMarkerInlineCode')}</code>{t('baseUrl.sourceMarkerHintSuffix')}
-              </p>
-              <div className="grid max-w-2xl gap-1">
-                {EXAMPLE_SOURCES.map((name) => (
-                  <code
-                    key={name}
-                    className="truncate rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs"
-                  >
-                    {baseUrl}/<span className="text-primary">{`__${name}`}</span>/v1/chat/completions
-                  </code>
-                ))}
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
+      {state.kind === 'ready' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AppIcon name="sell" size={16} /> {t('baseUrl.sourcesCardTitle')}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex max-w-4xl flex-col gap-6">
+              <div className="grid gap-2">
+                <p className="text-xl leading-snug text-balance sm:text-2xl">{t('baseUrl.sourceLead')}</p>
+                <p className="text-sm text-pretty text-muted-foreground">{t('baseUrl.sourceSub')}</p>
               </div>
-            </div>
-            <div className="grid gap-1.5 text-sm">
-              <span>{t('baseUrl.sourcesInUseLabel')}</span>
-              <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseHint')}</p>
+
+              <div className="grid gap-3">
+                <div className="text-sm font-medium">{t('baseUrl.sourceFormulaLabel')}</div>
+                <div className="flex flex-wrap items-center gap-2.5 text-xl sm:text-2xl">
+                  <span className="min-w-0 rounded-xl border border-border bg-muted/40 px-3.5 py-2 font-mono break-all">
+                    {baseUrl}
+                  </span>
+                  <span className="inline-flex items-center gap-2.5 whitespace-nowrap">
+                    <span className="text-lg text-muted-foreground">+</span>
+                    <span className="rounded-xl border border-primary/50 bg-primary/10 px-3.5 py-2 font-mono text-primary">
+                      {t('baseUrl.sourceFormulaMarker')}
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-2.5 whitespace-nowrap">
+                    <span className="text-lg text-muted-foreground">+</span>
+                    <span className="rounded-xl border border-border bg-muted/40 px-3.5 py-2">
+                      {t('baseUrl.sourceFormulaPath')}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <div className="text-sm font-medium">{t('baseUrl.sourceExampleLabel')}</div>
+                <div className="grid gap-1">
+                  {EXAMPLE_SOURCES.map((name) => (
+                    <code
+                      key={name}
+                      className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs break-all"
+                    >
+                      {baseUrl}/<span className="text-primary">{`__${name}`}</span>/v1/chat/completions
+                    </code>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AppIcon name="history" size={16} /> {t('baseUrl.sourcesInUseLabel')}
+              </CardTitle>
+              <CardDescription>{t('baseUrl.sourcesInUseHint')}</CardDescription>
+            </CardHeader>
+            <CardContent className="max-w-4xl">
               {sourcesFailed ? (
                 <p className="text-xs text-destructive">{t('baseUrl.sourcesInUseFailed')}</p>
               ) : sources.length === 0 ? (
-                <p className="text-xs text-muted-foreground">{t('baseUrl.sourcesInUseEmpty')}</p>
+                <p className="text-sm text-muted-foreground">{t('baseUrl.sourcesInUseEmpty')}</p>
               ) : (
-                <div className="max-w-2xl overflow-hidden rounded-xl border border-border">
+                <div className="overflow-hidden rounded-xl border border-border">
                   <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
                     <span className="w-32 shrink-0">{t('baseUrl.sourcesInUseName')}</span>
                     <span className="min-w-0 flex-1">{t('baseUrl.sourcesInUseUrl')}</span>
@@ -232,16 +284,10 @@ export function BaseUrlSettings() {
                   })}
                 </div>
               )}
-            </div>
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={saving}>
-                {saving && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
-                {t('common:action.save')}
-              </Button>
-            </div>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+            </CardContent>
+          </Card>
+        </>
+      )}
+    </>
   )
 }
