@@ -126,7 +126,7 @@ export function GeneralSettings() {
           {state.kind === 'ready' && (
             <form className="flex flex-col gap-3" onSubmit={handleSaveDefault}>
               <label
-                className="grid gap-1.5 text-sm"
+                className="grid max-w-xl gap-1.5 text-sm"
                 htmlFor="general-default-model-list-endpoint"
               >
                 {t('general.defaultEndpointLabel')}
@@ -179,7 +179,7 @@ export function GeneralSettings() {
           {state.kind === 'ready' && (
             <form className="flex flex-col gap-3" onSubmit={handleSaveOwn}>
               <label
-                className="grid gap-1.5 text-sm"
+                className="grid max-w-xl gap-1.5 text-sm"
                 htmlFor="general-own-model-list-endpoint"
               >
                 {t('general.ownEndpointLabel')}

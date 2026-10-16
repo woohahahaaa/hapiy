@@ -111,7 +111,7 @@ export function TokenUsageSettingsPage() {
                           <div className="text-sm font-medium">{t(group.labelKey)}</div>
                           <div className="text-xs text-muted-foreground">{t(group.hintKey)}</div>
                         </div>
-                        <div className="flex flex-col gap-1.5">
+                        <div className="flex max-w-xl flex-col gap-1.5">
                           {paths.map((path, i) => (
                             <div key={i} className="flex items-center gap-2">
                               <Input

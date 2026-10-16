@@ -132,14 +132,15 @@ export function BaseUrlSettings() {
 
         {state.kind === 'ready' && (
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <div className="flex flex-wrap items-end gap-4">
-              <label className="grid gap-1.5 text-sm">
+            <div className="flex max-w-2xl flex-wrap items-end gap-4">
+              <label className="grid min-w-0 flex-1 gap-1.5 text-sm" htmlFor="base-url-origin">
                 {t('baseUrl.originLabel')}
                 <Input
+                  id="base-url-origin"
                   value={origin}
                   onChange={(e) => setOrigin(e.target.value)}
                   placeholder="https://hapiying.example.com:6060"
-                  className="w-96 font-mono"
+                  className="font-mono"
                 />
               </label>
               <label className="grid gap-1.5 text-sm" htmlFor="base-url-suffix">
@@ -153,27 +154,30 @@ export function BaseUrlSettings() {
                   className="w-40"
                 />
               </label>
-              <div className="grid gap-1.5 text-sm">
-                <span>{t('baseUrl.finalUrlLabel')}</span>
-                <div className="flex items-center gap-2">
-                  <code className="w-96 cursor-not-allowed truncate rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs">
-                    {baseUrl}
-                  </code>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyUrl(baseUrl)}
-                    disabled={saving}
-                  >
-                    <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
-                  </Button>
-                </div>
-              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="max-w-2xl text-xs text-muted-foreground">
               {t('baseUrl.originHint')}
             </p>
+            <div className="grid max-w-2xl gap-1.5 text-sm">
+              <span>{t('baseUrl.finalUrlLabel')}</span>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={baseUrl}
+                  aria-label={t('baseUrl.finalUrlLabel')}
+                  className="min-w-0 flex-1 font-mono"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyUrl(baseUrl)}
+                  disabled={saving}
+                >
+                  <AppIcon name="content_copy" size={14} /> {t('common:action.copy')}
+                </Button>
+              </div>
+            </div>
             <div className="grid gap-1.5 text-sm">
               <span>{t('baseUrl.sourceMarkerLabel')}</span>
               <p className="text-xs text-muted-foreground">

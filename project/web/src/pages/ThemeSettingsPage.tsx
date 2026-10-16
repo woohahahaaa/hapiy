@@ -190,7 +190,7 @@ export function ThemeSettingsPage() {
                 <CardDescription>{t('theme.modeDescription')}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-6 sm:grid-cols-2">
+                <div className="grid max-w-xl gap-6 sm:grid-cols-2">
                   <div className="flex flex-col gap-2">
                     <div className="text-sm font-medium">{t('theme.darkLabel')}</div>
                     <Select
