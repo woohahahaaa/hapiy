@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { CurrentUser } from '@/lib/dashboard-api'
@@ -109,8 +110,20 @@ export function ProfilePage() {
     <div className="flex h-full flex-col">
       <PageHeader
         description={t('profile.pageDescription')}
+        actions={
+          state.kind === 'ready' ? (
+            <Button variant="outline" size="sm" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? (
+                <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <AppIcon name="logout" data-icon="inline-start" />
+              )}
+              {t('profile.logout')}
+            </Button>
+          ) : undefined
+        }
       />
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex flex-1 flex-col gap-6 p-6">
         {state.kind === 'loading' && (
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <AppIcon name="progress_activity" size={16} className="animate-spin" /> {t('profile.loading')}
@@ -130,81 +143,74 @@ export function ProfilePage() {
         )}
 
         {state.kind === 'ready' && (
-          <>
-            <Button
-              onClick={handleLogout}
-              disabled={loggingOut}
-            >
-              {loggingOut ? (
-                <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />
-              ) : (
-                <AppIcon name="logout" data-icon="inline-start" />
-              )}
-              {t('profile.logout')}
-            </Button>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <AppIcon name="shield" size={16} /> {t('profile.securityTitle')}
-                </CardTitle>
-                <CardDescription>{t('profile.securityDescription')}</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6 lg:grid-cols-2">
-                <form className="space-y-3" onSubmit={handleUsernameSave}>
-                  <label className="grid gap-1.5 text-sm" htmlFor="profile-username">
-                    {t('profile.usernameLabel')}
-                    <Input
-                      id="profile-username"
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      disabled={savingUsername}
-                    />
-                  </label>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AppIcon name="shield" size={16} /> {t('profile.securityTitle')}
+              </CardTitle>
+              <CardDescription>{t('profile.securityDescription')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex max-w-xl flex-col gap-6">
+              <form className="flex flex-col gap-3" onSubmit={handleUsernameSave}>
+                <label className="grid gap-1.5 text-sm" htmlFor="profile-username">
+                  {t('profile.usernameLabel')}
+                  <Input
+                    id="profile-username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    disabled={savingUsername}
+                  />
+                </label>
+                <div className="flex items-center gap-3">
                   <Button type="submit" disabled={savingUsername}>
                     {savingUsername && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                     {t('profile.saveUsername')}
                   </Button>
-                </form>
-                <form className="space-y-3" onSubmit={handlePasswordSave}>
-                  <label className="grid gap-1.5 text-sm" htmlFor="profile-current-password">
-                    {t('profile.currentPasswordLabel')}
-                    <Input
-                      id="profile-current-password"
-                      type="password"
-                      value={currentPassword}
-                      onChange={(event) => setCurrentPassword(event.target.value)}
-                      disabled={savingPassword}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm" htmlFor="profile-new-password">
-                    {t('profile.newPasswordLabel')}
-                    <Input
-                      id="profile-new-password"
-                      type="password"
-                      value={newPassword}
-                      onChange={(event) => setNewPassword(event.target.value)}
-                      disabled={savingPassword}
-                    />
-                  </label>
-                  <label className="grid gap-1.5 text-sm" htmlFor="profile-password-confirmation">
-                    {t('profile.confirmPasswordLabel')}
-                    <Input
-                      id="profile-password-confirmation"
-                      type="password"
-                      value={passwordConfirmation}
-                      onChange={(event) => setPasswordConfirmation(event.target.value)}
-                      disabled={savingPassword}
-                    />
-                  </label>
+                </div>
+              </form>
+
+              <Separator />
+
+              <form className="flex flex-col gap-3" onSubmit={handlePasswordSave}>
+                <label className="grid gap-1.5 text-sm" htmlFor="profile-current-password">
+                  {t('profile.currentPasswordLabel')}
+                  <Input
+                    id="profile-current-password"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                    disabled={savingPassword}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm" htmlFor="profile-new-password">
+                  {t('profile.newPasswordLabel')}
+                  <Input
+                    id="profile-new-password"
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    disabled={savingPassword}
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm" htmlFor="profile-password-confirmation">
+                  {t('profile.confirmPasswordLabel')}
+                  <Input
+                    id="profile-password-confirmation"
+                    type="password"
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                    disabled={savingPassword}
+                  />
+                </label>
+                <div className="flex items-center gap-3">
                   <Button type="submit" disabled={savingPassword}>
                     {savingPassword && <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" />}
                     {t('profile.savePassword')}
                   </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
