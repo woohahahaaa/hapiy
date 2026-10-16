@@ -20,7 +20,7 @@ type LoadState =
   | { readonly kind: 'ready' }
 
 // 说明用的示例来源（完整地址 = 最终 BaseURL + /__来源 + Agent 自己的路径）。
-const EXAMPLE_SOURCES = ['opencode', 'macOpenchamber'] as const
+const EXAMPLE_SOURCES = ['opencode', 'myapp'] as const
 
 export function BaseUrlSettings() {
   const { t } = useTranslation('settings')
@@ -197,46 +197,25 @@ export function BaseUrlSettings() {
               <CardTitle className="flex items-center gap-2 text-base">
                 <AppIcon name="sell" size={16} /> {t('baseUrl.sourcesCardTitle')}
               </CardTitle>
+              <CardDescription className="mt-2 w-fit max-w-full rounded-xl border border-success bg-muted/40 px-4 py-3 text-foreground">
+                {t('baseUrl.sourcesCardDescription')} {t('baseUrl.sourceMarkerHint')}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="flex max-w-4xl flex-col gap-6">
-              <div className="grid gap-2">
-                <p className="text-xl leading-snug text-balance sm:text-2xl">{t('baseUrl.sourceLead')}</p>
-                <p className="text-sm text-pretty text-muted-foreground">{t('baseUrl.sourceSub')}</p>
-              </div>
-
-              <div className="grid gap-3">
-                <div className="text-sm font-medium">{t('baseUrl.sourceFormulaLabel')}</div>
-                <div className="flex flex-wrap items-center gap-2.5 text-xl sm:text-2xl">
-                  <span className="min-w-0 rounded-xl border border-border bg-muted/40 px-3.5 py-2 font-mono break-all">
-                    {baseUrl}
-                  </span>
-                  <span className="inline-flex items-center gap-2.5 whitespace-nowrap">
-                    <span className="text-lg text-muted-foreground">+</span>
-                    <span className="rounded-xl border border-primary/50 bg-primary/10 px-3.5 py-2 font-mono text-primary">
-                      {t('baseUrl.sourceFormulaMarker')}
-                    </span>
-                  </span>
-                  <span className="inline-flex items-center gap-2.5 whitespace-nowrap">
-                    <span className="text-lg text-muted-foreground">+</span>
-                    <span className="rounded-xl border border-border bg-muted/40 px-3.5 py-2">
-                      {t('baseUrl.sourceFormulaPath')}
-                    </span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <div className="text-sm font-medium">{t('baseUrl.sourceExampleLabel')}</div>
-                <div className="grid gap-1">
-                  {EXAMPLE_SOURCES.map((name) => (
-                    <code
-                      key={name}
-                      className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs break-all"
-                    >
-                      {baseUrl}/<span className="text-primary">{`__${name}`}</span>/v1/chat/completions
+            <CardContent className="flex max-w-4xl flex-col gap-2">
+              <div className="text-sm font-medium">{t('baseUrl.sourceExampleLabel')}</div>
+              <div className="grid gap-4">
+                {EXAMPLE_SOURCES.map((name) => (
+                  <div key={name} className="grid gap-2">
+                    <code className="rounded-lg border border-border bg-muted px-3 py-2 font-mono text-xs break-all">
+                      {baseUrl}/<span className="text-success">{`__${name}`}</span>/v1/chat/completions
                     </code>
-                  ))}
-                </div>
+                    <p className="text-xs text-muted-foreground text-pretty">
+                      {t('baseUrl.sourceExampleNotePrefix')}
+                      <span className="font-mono text-success">{name}</span>
+                      {t('baseUrl.sourceExampleNoteSuffix')}
+                    </p>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>

@@ -67,15 +67,14 @@
     "originHint": "系统对外BaseURL的域名（含scheme与端口）。生成代理配置与托管「跟随系统」用它，默认取当前网页域名，隧道/反代场景请改成公网地址",
     "suffixLabel": "后缀",
     "finalUrlLabel": "最终BaseURL",
-    "sourceExampleLabel": "示例",
     "sourcesCardTitle": "标记来源",
-    "sourceLead": "不同 Agent 软件用不同的来源标记，请求来自谁一目了然。",
-    "sourceSub": "来源名加在「最终BaseURL」后面就行，不用额外设置、不用预先登记；使用记录里能按来源筛选。",
-    "sourceFormulaLabel": "请求地址的组成",
-    "sourceFormulaMarker": "/__来源",
-    "sourceFormulaPath": "接口路径",
+    "sourcesCardDescription": "在 BaseURL 后面添加后缀，可以标记每个请求的来源，方便在使用记录中分类查看。",
+    "sourceExampleLabel": "例如",
+    "sourceExampleNotePrefix": "使用记录里的「来源」字段会显示为 ",
+    "sourceExampleNoteSuffix": "",
+    "sourceMarkerHint": "后缀以 __ 开头，名字随意，不加也照常转发。",
     "sourcesInUseLabel": "已出现过的来源",
-    "sourcesInUseHint": "只读列表，来自使用记录：只列出真的被调用过的来源标记。",
+    "sourcesInUseHint": "地址里起的名字，被请求用过之后就会出现在这里。",
     "sourcesInUseEmpty": "使用记录中还没有带来源标记的请求",
     "sourcesInUseFailed": "读取使用记录失败",
     "sourcesInUseName": "来源",
@@ -299,6 +298,6 @@
     "saveFailed": "保存渠道亲和性配置失败"
   },
   "page": {
-    "baseUrlDescription": "在BaseURL后追加来源标记即可区分请求来源，系统自动识别"
+    "baseUrlDescription": "配置系统的对外BaseURL；在地址后加后缀可以标记请求来源"
   }
 }
