@@ -569,7 +569,10 @@ export function DataTable<T extends Record<string, unknown>>({
             data-group="passive" → 右侧：列设置弹窗 + 魔棒
               （仅调整表格自身的展示形态，不动数据）
           三个插槽里 filters、actions 视觉上都落在 active 侧；
-          renderToolbarControls 永远在 passive 侧。 */}
+          renderToolbarControls 永远在 passive 侧。
+          高度约定：表格内控件统一 28px（h-7 / size-7）——Button size="sm" | "icon-sm"，
+            Input / SelectTrigger / DatePicker 一律 size="sm"（含列设置弹层、分页行）。
+            新增工具条按钮时别用 default（h-8），否则会和 passive 侧的图标按钮差一截。 */}
       {(filters || actions) && (
         <div className="mb-4 flex flex-wrap items-end gap-3">
           {filters && (

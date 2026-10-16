@@ -64,7 +64,7 @@ export function Pagination({
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">{t('pagination.perPage')}</span>
         <Select value={String(limit)} onValueChange={handleLimitChange}>
-          <SelectTrigger className="w-20">
+          <SelectTrigger size="sm" className="w-20">
             <SelectValue />
           </SelectTrigger>
           <SelectContent side="top">
@@ -85,7 +85,7 @@ export function Pagination({
       <div className="flex items-center gap-1.5">
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           className="hidden lg:inline-flex"
           disabled={!hasPrev}
           aria-label={t('pagination.first')}
@@ -95,7 +95,7 @@ export function Pagination({
         </Button>
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           disabled={!hasPrev}
           aria-label={t('pagination.prev')}
           onClick={() => onOffsetChange(Math.max(0, offset - limit))}
@@ -104,7 +104,7 @@ export function Pagination({
         </Button>
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           disabled={!hasNext}
           aria-label={t('pagination.next')}
           onClick={() => onOffsetChange(offset + limit)}
@@ -113,7 +113,7 @@ export function Pagination({
         </Button>
         <Button
           variant="outline"
-          size="icon"
+          size="icon-sm"
           className="hidden lg:inline-flex"
           disabled={!hasNext}
           aria-label={t('pagination.last')}

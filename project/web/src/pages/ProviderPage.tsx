@@ -249,8 +249,8 @@ export function ProviderPage() {
       render: (_, provider) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? t('common:action.disable') : t('common:action.enable')}</Button>
-          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
-          <Button variant="ghost" size="icon" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
         </div>
       ),
     },
@@ -278,7 +278,7 @@ export function ProviderPage() {
           onRetry={() => void loadProviders()}
           actions={(
             <>
-              <Button onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
+              <Button size="sm" onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />{t('list.add')}
               </Button>
             </>

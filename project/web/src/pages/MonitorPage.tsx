@@ -203,7 +203,7 @@ function MetricCard({ icon, label, value, sub, className }: MetricCardProps) {
             <p className="mt-1 text-2xl font-bold tabular-nums break-words">{value}</p>
             {sub && <p className="mt-0.5 text-xs text-muted-foreground truncate">{sub}</p>}
           </div>
-          <div className="ml-2 shrink-0 rounded-md bg-muted p-2 text-muted-foreground [&>svg]:size-4">
+          <div className="ml-2 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
             {icon}
           </div>
         </div>

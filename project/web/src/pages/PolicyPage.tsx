@@ -215,10 +215,10 @@ function RewritePage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -248,11 +248,11 @@ function RewritePage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Button size="sm" onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 {t('dialog.addRule')}
               </Button>
-              <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+              <Button size="sm" variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />{t('common:action.test')}
               </Button>
             </div>
@@ -415,10 +415,10 @@ function FailoverPage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -453,7 +453,7 @@ function FailoverPage() {
               onRetry={() => void fetch()}
               actions={
                 <div className="flex items-center gap-2">
-                  <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+                  <Button size="sm" onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                     <AppIcon name="add" data-icon="inline-start" />
                     {t('dialog.addRule')}
                   </Button>
@@ -676,10 +676,10 @@ function RewriteResponsePage() {
       showEmptyPlaceholder: false,
       render: (_, row) => (
         <div className="inline-flex items-center gap-2">
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => { setEditing(row); setIsOpen(true); }}>
             <AppIcon name="edit" />
           </Button>
-          <Button variant="ghost" size="icon" disabled={mutating} onClick={() => setDeleting(row)}>
+          <Button variant="ghost" size="icon-sm" disabled={mutating} onClick={() => setDeleting(row)}>
             <AppIcon name="delete" />
           </Button>
         </div>
@@ -709,11 +709,11 @@ function RewriteResponsePage() {
           onRetry={() => void fetch()}
           actions={
             <div className="flex items-center gap-2">
-              <Button onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
+              <Button size="sm" onClick={() => { setEditing(null); setIsOpen(true); }} disabled={mutating}>
                 <AppIcon name="add" data-icon="inline-start" />
                 {t('dialog.addRule')}
               </Button>
-              <Button variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
+              <Button size="sm" variant="outline" onClick={() => setTestOpen(true)} disabled={mutating}>
                 <AppIcon name="play" data-icon="inline-start" />{t('common:action.test')}
               </Button>
             </div>

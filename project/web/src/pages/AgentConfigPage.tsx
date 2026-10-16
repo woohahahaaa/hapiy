@@ -314,7 +314,7 @@ function AgentConfigFilesTab() {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             disabled={mutating}
             title={t('actions.editRecord')}
             onClick={() => setEditingRecord(row)}
@@ -323,7 +323,7 @@ function AgentConfigFilesTab() {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             disabled={mutating}
             title={t('common:action.delete')}
             onClick={() => setConfirmDelete(row)}

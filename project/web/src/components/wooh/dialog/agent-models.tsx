@@ -1047,7 +1047,7 @@ for (const p of summary?.providers ?? []) {
                             }
                           />
                           {expanded && (
-                            <div className="space-y-0.5 rounded-md bg-muted/60">
+                            <div className="space-y-0.5 rounded-none bg-muted/60">
                               {mv.groups.map((g) => (
                                 <ProviderRow
                                   key={g.endpoint}
@@ -1513,7 +1513,7 @@ function ProviderRow({
     <div
       onClick={onClick}
       className={
-        'group relative flex h-[52px] w-full cursor-pointer items-center gap-1 rounded-md border-l-2 py-1 pr-2 pl-4 text-left transition-colors ' +
+        'group relative flex h-[52px] w-full cursor-pointer items-center gap-1 rounded-none border-l-2 py-1 pr-2 pl-4 text-left transition-colors ' +
         (selected ? 'border-primary bg-foreground/[0.06]' : 'border-transparent hover:bg-foreground/[0.04]')
       }
     >
@@ -1575,7 +1575,7 @@ function ModelRow({
   return (
     <div
       className={
-        'group flex h-[52px] w-full items-center gap-1 rounded-md border-l-2 py-1 pr-2 pl-4 text-left transition-colors ' +
+        'group flex h-[52px] w-full items-center gap-1 rounded-none border-l-2 py-1 pr-2 pl-4 text-left transition-colors ' +
         (selected ? 'border-primary bg-foreground/[0.06]' : 'border-transparent hover:bg-foreground/[0.04]')
       }
     >
@@ -1639,7 +1639,7 @@ function RowMenu({
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="h-5 w-5 text-muted-foreground hover:text-primary"
+          className="h-5 w-5 rounded-none text-muted-foreground hover:text-primary"
           onClick={(e) => e.stopPropagation()}
         >
           <AppIcon name="more_horiz" size={14} />
@@ -1687,7 +1687,7 @@ function IconHoverButton({
       size="icon-sm"
       title={title}
       disabled={disabled}
-      className={'h-5 w-5 ' + toneClass}
+      className={"h-5 w-5 rounded-none " + toneClass}
       onClick={(e) => {
         e.stopPropagation()
         onClick()

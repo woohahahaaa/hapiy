@@ -29,9 +29,9 @@
 }
 
 @theme inline {
-  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui, var(--font-cjk-sans);
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace, var(--font-cjk-sans);
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif, var(--font-cjk-sans);
   --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
   --tracking-tight: calc(var(--tracking-normal) - 0.025em);
   --tracking-wide: calc(var(--tracking-normal) + 0.025em);
@@ -141,9 +141,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  /* 中日韩字形回退：Geist Mono / DM Sans 都没有 CJK 字形，末尾统一挂 sans 系系统字体，
+     避免落到浏览器 last-resort（Windows 上常常是宋体）。Latin 仍走前面的 Mono / Sans。 */
+  --font-cjk-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "WenQuanYi Micro Hei", sans-serif;
+  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui, var(--font-cjk-sans);
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif, var(--font-cjk-sans);
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace, var(--font-cjk-sans);
   --shadow-color: oklch(0 0 0);
   --shadow-opacity: 0.1;
   --shadow-blur: 3px;
@@ -202,9 +205,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.275 0 0);
   --sidebar-ring: oklch(0.439 0 0);
-  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-sans: "DM Sans Variable", ui-sans-serif, sans-serif, system-ui, var(--font-cjk-sans);
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif, var(--font-cjk-sans);
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace, var(--font-cjk-sans);
   --shadow-color: oklch(0 0 0);
   --shadow-opacity: 0.1;
   --shadow-blur: 3px;

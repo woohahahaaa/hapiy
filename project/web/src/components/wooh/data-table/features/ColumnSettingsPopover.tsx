@@ -122,6 +122,7 @@ export function ColumnSettingsPopover<T>(
                 <div className="text-xs font-medium">{col.label}</div>
                 <div className="flex gap-2">
                   <Input
+                    size="sm"
                     value={widthInput[i] ?? ""}
                     onChange={(e) => onWidthInputChange(i, e.target.value)}
                     placeholder={t('columns.widthPlaceholder')}

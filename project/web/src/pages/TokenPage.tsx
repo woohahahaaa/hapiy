@@ -103,7 +103,7 @@ export function TokenPage() {
       render: (_, row) => (
         <div className="flex items-center gap-2">
           <code className="rounded-sm bg-muted px-2 py-1 text-xs font-mono">{row.key.slice(0, 12)}...</code>
-          <Button variant="ghost" size="icon" onClick={() => void copyToClipboard(row.key)}>
+          <Button variant="ghost" size="icon-sm" onClick={() => void copyToClipboard(row.key)}>
             <AppIcon name="content_copy" />
           </Button>
         </div>
@@ -156,7 +156,7 @@ export function TokenPage() {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             disabled={isSaving}
             onClick={() => {
               setEditing(row)
@@ -167,7 +167,7 @@ export function TokenPage() {
           </Button>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             disabled={isSaving}
             onClick={() => setDeleting(row)}
           >
@@ -201,6 +201,7 @@ export function TokenPage() {
           actions={
             <>
               <Button
+                size="sm"
                 onClick={() => {
                   setEditing(null)
                   setIsDialogOpen(true)
