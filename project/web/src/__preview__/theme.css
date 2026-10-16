@@ -239,10 +239,50 @@
   }
 }
 
-.react-flow__node.selected,
-.react-flow__node.selected > div {
-  box-shadow: 0 0 0 2px var(--node-accent, var(--color-primary));
-  border-radius: var(--radius-xs);
+/* 拓扑节点外形的唯一来源：框本体和边缘件（右侧 handle、左侧 handlebar）都只读
+   下面这两个变量，节点组件里不再各写一套圆角与点亮色。
+   --node-radius 框的圆角（缺省 = rounded-3xl；嵌套小卡可局部覆盖）
+   --node-lit    边缘件的点亮色：应急链路写 --node-accent，选中时换成 primary，
+                 平时落到普通边框色（= 未点亮时的默认外观） */
+.react-flow__node {
+  --node-radius: var(--radius-3xl);
+  --node-lit: var(--node-accent, var(--color-border));
+}
+
+/* 框本体（卡片、左侧 handlebar 的 pill） */
+.node-frame {
+  border-radius: var(--node-radius);
+}
+
+/* 框内侧（2px 边框里）的覆盖层：半径减掉边框宽度，才和外框同心 */
+.node-frame-inset {
+  border-radius: calc(var(--node-radius) - 2px);
+}
+
+/* 边缘件描边：形状跟框一致，颜色跟点亮状态一致 */
+.node-frame-lit {
+  border-radius: var(--node-radius);
+  border-color: var(--node-lit);
+}
+
+/* 嵌套小卡（插槽里的 item 卡）比外框小一档；它的覆盖层自动跟着算 */
+.node-frame-nested {
+  --node-radius: var(--radius-lg);
+}
+
+/* 所有 handle 统一读节点变量：半径不再各写 rounded-sm，点亮色不再各写 border-* */
+.react-flow__node .react-flow__handle {
+  border-radius: var(--node-radius);
+  border-color: var(--node-lit);
+  background-color: var(--color-card);
+}
+
+/* 选中态：只在外层画一圈 ring，半径取框的圆角（与框同心）；不再改子元素形状、
+   也不再把 ring 重复画到 handlebar 上（那会让 input 亮、output 不亮）。 */
+.react-flow__node.selected {
+  --node-lit: var(--node-accent, var(--color-primary));
+  box-shadow: 0 0 0 2px var(--node-lit);
+  border-radius: var(--node-radius);
 }
 
 .react-flow__node.dim {

@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { toast } from '@/components/ui/toast'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
-import { FlashLayer, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
+import { FlashLayer, flashKeyframeStyle, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
 
 interface NodeModelData {
   models?: Array<{ id: string; label: string; disabled?: boolean; color?: string }>
@@ -39,14 +39,14 @@ export function NodeModel({ data, id }: NodeModelProps) {
   return (
     <div
       className={cn(
-        'relative rounded-3xl border-2 border-border bg-card text-card-foreground',
+        'node-frame relative border-2 border-border bg-card text-card-foreground',
         allDisabled && 'opacity-60',
       )}
       style={{
         width: 'fit-content',
       }}
     >{flashLayers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} />
       ))}      {!simplified && (
         <div
           className="border-b border-border"
@@ -83,11 +83,11 @@ export function NodeModel({ data, id }: NodeModelProps) {
               type="source"
               position={Position.Right}
               id={m.id}
-              className="!rounded-sm !border-border !bg-card"
               style={{
                 width: topologyConfig.handles.modelHub.source.width,
                 height: topologyConfig.handles.modelHub.source.height,
                 borderWidth: topologyConfig.handles.modelHub.source.borderWidth,
+                ...flashKeyframeStyle(flashLayers),
               }}
             />
           </div>

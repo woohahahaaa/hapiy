@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import { FlashLayer, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
+import { FlashLayer, flashKeyframeStyle, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
 import { HandlesRail } from '@/components/wooh/node/handles-rail'
 import { useTranslation } from 'react-i18next'
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
@@ -113,28 +113,26 @@ export function NodeExecutorEntry({ data, id }: NodeExecutorEntryProps) {
         height={nodeHeight}
         segmentCount={models.length}
         segmentIds={models.map((m) => m.id)}
-        borderColor={data.accentColor}
         flashLayers={flashLayers}
       />
       <div
         ref={rootRef}
         className={cn(
-          'relative rounded-3xl border-2 bg-card text-card-foreground',
-          data.accentColor ? 'border-[var(--node-accent)]' : 'border-border',
+          'node-frame relative border-2 bg-card text-card-foreground border-[var(--node-accent,var(--color-border))]',
           !enabled && 'opacity-60',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >{flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} />
         ))}
         <Handle
           type="source"
           position={Position.Right}
-          className="!rounded-sm !border-border !bg-card"
           style={{
             width: sourceHandle.width,
             height: sourceHandle.height,
             borderWidth: sourceHandle.borderWidth,
+            ...flashKeyframeStyle(flashLayers),
           }}
         />
 

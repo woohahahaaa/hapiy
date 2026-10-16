@@ -2,6 +2,7 @@ import { Handle, Position, useNodeId, useUpdateNodeInternals } from '@xyflow/rea
 import { useEffect, useRef, useState } from 'react'
 import { SlotErrorBox } from '@/components/wooh/node/slot/slot-error-box'
 import { HandlesRail } from '@/components/wooh/node/handles-rail'
+import { flashKeyframeStyle } from '@/components/wooh/node/flash-layer'
 import { topologyConfig } from '@/config/topology-config'
 import type {
   RequestModifySlotEntry,
@@ -307,11 +308,11 @@ export function NodeSlot({ data }: NodeSlotProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!rounded-sm !border-border !bg-card"
         style={{
           width: topologyConfig.handles.slot.source.width,
           height: topologyConfig.handles.slot.source.height,
           borderWidth: topologyConfig.handles.slot.source.borderWidth,
+          ...flashKeyframeStyle(flashLayers ?? []),
         }}
       />
     </>

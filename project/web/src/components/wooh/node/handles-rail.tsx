@@ -5,6 +5,8 @@ import type { FlowLayerOverlay } from '@/modules/flow-hub'
 
 // 左侧 handlebar 的统一实现：请求入口（每个模型一段）与 slot（单段，
 // 条跟随节点高度）共用同一份几何逻辑，闪效直接点亮整条 bar。
+// pill 的形状与点亮色全部来自 index.css 的 --node-radius / --node-lit，
+// 不再自己写圆角或接收 borderColor。
 
 export interface HandlesRailProps {
   /** 节点自身测得的高度；0 = 未知 */
@@ -13,8 +15,6 @@ export interface HandlesRailProps {
   segmentCount: number
   /** 每段的 handle id（入口 = 模型 id；slot 省略则匿名） */
   segmentIds?: readonly (string | null)[]
-  /** bar 颜色 = 所在节点自身的外边框颜色；不传则中性边框色 */
-  borderColor?: string
   flashLayers?: readonly FlowLayerOverlay[]
   /**
    * 右半边填充的 Tailwind 背景类：要跟节点本体背景一致，否则 pill 会在
@@ -31,7 +31,6 @@ export function HandlesRail({
   height,
   segmentCount,
   segmentIds,
-  borderColor,
   flashLayers = [],
   fillBgClass = 'bg-card',
 }: HandlesRailProps) {
@@ -48,7 +47,7 @@ export function HandlesRail({
 
   return (
     <div
-      className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full"
+      className="absolute left-0 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
       style={{ width: target.width, height: total }}
     >
       {segmentCount > 0 && (
@@ -56,22 +55,19 @@ export function HandlesRail({
           {/* 整颗 pill 实心填充（含悬空的左半边）：与条件开关的输出 pill 一致。
               早期左半边只画描边是为了不盖连线末端，但连线端点落在 pill 左缘，
               填充最多盖住线尖 ~0.75px；而选中态的 box-shadow ring 画在卡片盒外
-              侧 2px，恰好从透明左半边透出来（发绿），实心填充把它一并盖住。 */}
+              侧 2px，恰好从透明左半边透出来（发绿），实心填充把它一并盖住。
+              pill 本体就是这颗节点的"框"，圆角/描边都读 --node-radius / --node-lit。 */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 overflow-hidden rounded-[inherit]"
+            className="node-frame pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 overflow-hidden"
             style={{ width: target.width, height: total }}
           >
             <div className={`absolute inset-0 ${fillBgClass}`} />
           </div>
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 rounded-[inherit] border-2 border-solid"
-            style={{
-              width: target.width,
-              height: total,
-              borderColor: borderColor ?? 'var(--color-border)',
-            }}
+            className="node-frame node-frame-lit pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 border-2 border-solid"
+            style={{ width: target.width, height: total }}
           />
         </>
       )}
@@ -101,7 +97,7 @@ export function HandlesRail({
         />
       ))}
       {flashLayers.map((layer) => (
-        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-[inherit]" />
+        <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="node-frame" />
       ))}
     </div>
   )

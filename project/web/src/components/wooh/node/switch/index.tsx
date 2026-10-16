@@ -1,9 +1,9 @@
-import { Handle, Position, useStore, useUpdateNodeInternals } from '@xyflow/react'
+import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { topologyConfig } from '@/config/topology-config'
-import { FlashLayer, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
+import { FlashLayer, flashKeyframeStyle, nodeFlashKeyframeName } from '@/components/wooh/node/flash-layer'
 import { HandlesRail } from '@/components/wooh/node/handles-rail'
 import { SwitchConfigDialog } from '@/components/wooh/node/switch/config-dialog'
 import { COND_OPS } from '@/components/wooh/rewrite-rule-editor/modes'
@@ -77,9 +77,7 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
     }
   }, [id, updateNodeInternals])
 
-  const selected = useStore((s) => s.nodes.find((n) => n.id === id)?.selected ?? false)
   const mode = config?.mode ?? 'provider'
-  const accent = 'var(--node-accent, var(--color-primary))'
 
   const pillStyle = (): CSSProperties => {
     return {
@@ -90,11 +88,9 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
       // 比 2px 边框的外缘靠左 2px），不动会比左侧 handlebar 的 pill 偏
       // 左 2px；right:-2 把 pill 中心线挪到节点右边框竖线上。
       right: -2,
-      // 选中点亮：只把描边换成主题色（与卡片选中 ring 同色），背景保持
-      // 卡片色。不实心填充、不加 box-shadow 外圈——前者像整根被填掉，
-      // 后者看起来比其他节点的 handle 粗一圈。
-      borderColor: selected ? accent : 'var(--color-border)',
-      background: 'var(--color-card)',
+      // 描边色与圆角交给 index.css 的统一规则（--node-lit / --node-radius）：
+      // 选中、应急、动态点亮三种状态在这里不再各写一份，只补动画。
+      ...flashKeyframeStyle(flashLayers),
     }
   }
 
@@ -115,13 +111,13 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
       <div
         ref={cardRef}
         className={cn(
-          'relative w-fit rounded-3xl border-2 border-border bg-card text-card-foreground',
+          'node-frame relative w-fit border-2 bg-card text-card-foreground border-[var(--node-accent,var(--color-border))]',
           externallyDisabled && 'pointer-events-none',
         )}
         style={{ width: 'fit-content', minWidth: topologyConfig.render.node.minWidth }}
       >
         {flashLayers.map((layer) => (
-          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} className="rounded-3xl" />
+          <FlashLayer key={nodeFlashKeyframeName(layer)} layer={layer} />
         ))}
 
         {/* 头部：规则名称 + 「编辑」按钮（无启停开关，在链路中即生效） */}
@@ -155,7 +151,6 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="yes"
-                className="!rounded-sm"
                 style={pillStyle()}
               />
             </div>
@@ -165,7 +160,6 @@ export function NodeSwitch({ data, id }: NodeSwitchProps) {
                 type="source"
                 position={Position.Right}
                 id="no"
-                className="!rounded-sm"
                 style={pillStyle()}
               />
             </div>
