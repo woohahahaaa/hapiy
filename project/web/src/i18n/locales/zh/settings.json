@@ -13,8 +13,10 @@
     "actions": "操作",
     "status": "状态"
   },
+  "advancedQuery": {
+    "pageDescription": "配置模型列表接口、Token用量字段与币种汇率"
+  },
   "general": {
-    "pageDescription": "查询模型列表接口路径的默认配置",
     "pathMustStartSlash": "路径必须以斜杠开头（/）",
     "upstreamTitle": "上游模型列表接口",
     "upstreamDescription": "从供应商获取模型列表时的默认接口路径",
@@ -27,7 +29,6 @@
     "ownEndpointHintSuffix": "），使用Bearer Token鉴权，调用方式与其他对外接口一致。"
   },
   "billing": {
-    "pageDescription": "配置金额展示与计费的币种、汇率及汇率来源接口",
     "cardDescription": "使用记录、模型信息等所有金额展示与计费的币种与汇率",
     "currencyLabel": "全局消耗统计币种",
     "currencyPlaceholder": "选择币种",
@@ -242,7 +243,6 @@
     "flowLightsDescription": "每次输出以下三类信息（示例）：\n\n[流光Debug] 请求b3f2.. model=deepseek-v4-flash provider=deepseek路径来源=请求事实path=entry-test→pslot-test→prov-xxx→…\n[流光Debug] run#12 step 3/16 loop#0激活节点prov-xxx\n[流光Debug] run#12 step 4/16 loop#0激活连线entry-test→pslot-test\n[流光Debug] 校验prov-xxx -> deepseek: status=true autoDisabled=false workflow=true   （命中）\n[流光Debug] 跳过logOutput-..: 节点开关已关闭   （未命中时给出原因：开关关闭/外部禁用/倒计时过期/供应商记录未匹配）"
   },
   "tokenUsage": {
-    "pageDescription": "配置从上游响应体读取Token用量的字段路径（gjson），按顺序尝试，命中即停",
     "cardTitle": "字段路径配置",
     "dialogTitle": "Token用量字段配置",
     "promptLabel": "输入",

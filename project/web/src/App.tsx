@@ -11,14 +11,12 @@ import { TokenPage } from '@/pages/TokenPage'
 import { PolicyPage } from '@/pages/PolicyPage'
 import { BaseUrlSettingsPage } from '@/pages/BaseUrlSettingsPage'
 import { ChannelAffinityPage } from '@/pages/ChannelAffinityPage'
-import { GeneralSettingsPage } from '@/pages/GeneralSettingsPage'
-import { BillingSettingsPage } from '@/pages/BillingSettingsPage'
+import { AdvancedQuerySettingsPage } from '@/pages/AdvancedQuerySettingsPage'
 import { DebugSettingsPage } from '@/pages/DebugSettingsPage'
 import { ThemeSettingsPage } from '@/pages/ThemeSettingsPage'
 import { ReverseProxySettingsPage } from '@/pages/ReverseProxySettingsPage'
 import { BackupSettingsPage } from '@/pages/BackupSettingsPage'
 import { OtherSettingsPage } from '@/pages/OtherSettingsPage'
-import { TokenUsageSettingsPage } from '@/pages/TokenUsageSettingsPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AgentConfigPage } from '@/pages/AgentConfigPage'
 import { AgentRulesPage } from '@/pages/AgentRulesPage'
@@ -60,10 +58,13 @@ function App() {
                     <Route path="/token" element={<TokenPage />} />
                     <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
                     <Route path="/policy/:type" element={<PolicyPage />} />
-                    <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                    <Route path="/settings" element={<Navigate to="/settings/advanced-query" replace />} />
                     <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
-                    <Route path="/settings/general" element={<GeneralSettingsPage />} />
-                    <Route path="/settings/billing" element={<BillingSettingsPage />} />
+                    <Route path="/settings/advanced-query" element={<AdvancedQuerySettingsPage />} />
+                    {/* 旧地址已合并进「高级查询」，保留重定向避免书签失效 */}
+                    <Route path="/settings/general" element={<Navigate to="/settings/advanced-query" replace />} />
+                    <Route path="/settings/billing" element={<Navigate to="/settings/advanced-query" replace />} />
+                    <Route path="/settings/token-usage" element={<Navigate to="/settings/advanced-query" replace />} />
                     {/* Debug 仅 dev 模式可用，生产构建不注册该路由 */}
                     {import.meta.env.DEV && (
                       <Route path="/settings/debug" element={<DebugSettingsPage />} />
@@ -72,7 +73,6 @@ function App() {
                     <Route path="/settings/theme" element={<ThemeSettingsPage />} />
                     <Route path="/settings/reverse-proxy" element={<ReverseProxySettingsPage />} />
                     <Route path="/settings/other" element={<OtherSettingsPage />} />
-                    <Route path="/settings/token-usage" element={<TokenUsageSettingsPage />} />
                     <Route path="/profile" element={<ProfilePage />} />
                     <Route path="/agent" element={<AgentRulesPage />} />
                     <Route path="/agent/config" element={<AgentConfigPage />} />

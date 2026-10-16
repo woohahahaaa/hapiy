@@ -129,7 +129,7 @@ Form fields for creating/editing:
   - Set a price: four fields (input / cache write / cache read / output, per 1M token) that must start with `$` or `¥`; the symbol sets the model's billing currency;
   - Sync from models.dev: choose a reference provider, sync the reference price and optionally set a multiplier (fractions such as `1/2` are supported);
   - Not set: billed as 0.
-- **Fetch models from upstream**: a dialog whose top field takes the "Model list endpoint" path (appended to the first Base URL) plus a checkbox for sending the first Key; click "Fetch" to pull the upstream models, then "Select all / Deselect all" and choose "Add" (merge and dedupe) or "Clear existing and add" (replace all). The endpoint settings only apply to this fetch and are not saved on the provider (change the global default under "Settings → Get Model List").
+- **Fetch models from upstream**: a dialog whose top field takes the "Model list endpoint" path (appended to the first Base URL) plus a checkbox for sending the first Key; click "Fetch" to pull the upstream models, then "Select all / Deselect all" and choose "Add" (merge and dedupe) or "Clear existing and add" (replace all). The endpoint settings only apply to this fetch and are not saved on the provider (change the global default under "Settings → Advanced Query → Get Model List").
 
 There is no "Test connection" button; verify connectivity with "Fetch models from upstream".
 
@@ -293,22 +293,18 @@ Configures the system's public address, mainly for Agent Takeover's managed conf
 
 > Tip: if hapiy sits behind a reverse proxy or tunnel, set the domain to an externally reachable address first — managed Agent config follows it by default.
 
-### Get Model List
+### Advanced Query
+
+"Advanced Query" merges the three query settings into one page with tabs:
+
+**Get Model List**
 
 - **Default model list endpoint path**: the default endpoint for a provider's "Fetch models from upstream", `/v1/models` by default;
 - **hapiy model list endpoint path**: the model list path hapiy exposes; clients can call it with a token and `Authorization: Bearer hk-...` to get the enabled model names.
 
 Both paths must start with `/`.
 
-### Currency & Rates
-
-- **Global cost currency**: CNY / USD;
-- **Rate**: how many CNY one USD is worth;
-- The gear button configures an online rate endpoint (URL, field path, daily auto-refresh) with "Test endpoint" and "Save and refresh".
-
-Currency and rate only affect records created afterwards; existing records keep the currency and amount of their time.
-
-### Token Usage
+**Get Token Usage**
 
 Configures the gjson paths used to read token usage from upstream responses. Each of the four counters — input, cache write, cache read, output — takes several paths, tried in order, stopping at the first hit:
 
@@ -320,6 +316,14 @@ Configures the gjson paths used to read token usage from upstream responses. Eac
 Changes apply immediately after saving; "Restore defaults" only resets the form — you still have to click "Save".
 
 > Tip: if Usage Logs always shows 0 tokens, check whether these paths match your upstream response shape.
+
+**Currency & Rates**
+
+- **Global cost currency**: CNY / USD;
+- **Rate**: how many CNY one USD is worth;
+- The gear button configures an online rate endpoint (URL, field path, daily auto-refresh) with "Test endpoint" and "Save and refresh".
+
+Currency and rate only affect records created afterwards; existing records keep the currency and amount of their time.
 
 ### Data Backup
 

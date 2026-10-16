@@ -69,9 +69,7 @@ export const navigation: NavItem[] = [
     icon: <AppIcon name="settings" />,
     children: [
       { id: 'base-url', labelKey: 'nav.baseUrl', href: '/settings/base-url' },
-      { id: 'general', labelKey: 'nav.general', href: '/settings/general' },
-      { id: 'billing', labelKey: 'nav.billing', href: '/settings/billing' },
-      { id: 'token-usage', labelKey: 'nav.tokenUsage', href: '/settings/token-usage' },
+      { id: 'advanced-query', labelKey: 'nav.advancedQuery', href: '/settings/advanced-query' },
       { id: 'backup', labelKey: 'nav.backup', href: '/settings/backup' },
       { id: 'theme', labelKey: 'nav.theme', href: '/settings/theme' },
       { id: 'reverse-proxy', labelKey: 'nav.reverseProxy', href: '/settings/reverse-proxy' },
