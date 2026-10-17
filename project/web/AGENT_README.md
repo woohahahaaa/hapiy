@@ -148,8 +148,32 @@ project/web
 | 停止 dev | `./scripts/dev.sh --stop` |
 | 重新构建生产产物 | `pnpm run build` |
 | 修改主题 | 编辑 `src/index.css` 中 `:root` / `.dark` 的 CSS 变量 |
+| 换／加图标 | svg 放进 `myIconpark/source/<分类>/`，改 `src/config/icons.json`（语义名 → 文件名），跑 `pnpm icons:build` |
 
-> *Feature list: detached dev start/status/stop, production build via `pnpm run build`, and theme tweaks via CSS variables in `src/index.css`.*
+> *Feature list: detached dev start/status/stop, production build via `pnpm run build`, theme tweaks via CSS variables in `src/index.css`, and icons from the sibling `myIconpark` checkout compiled by `pnpm icons:build`.*
+
+---
+
+## 🧩 图标
+
+图标不再来自 `@icon-park/react`：形状是 `myIconpark` 的 svg，`scripts/icons-build.mjs` 按
+`src/config/icons.json` 把用到的那些编译成 `src/config/icon-glyphs.tsx`（生成物，已提交，
+构建不需要 myIconpark 在场）。`src/config/icon-runtime.tsx` 是画法（48×48、四个颜色槽、
+主题、线宽），`src/config/icons.tsx` 是出口（`renderIcon` / `AppIcon`）。
+
+| 想改什么 | 去哪儿 |
+|---|---|
+| 某个图标长什么样 | `myIconpark/source/<分类>/<名字>.svg`（改完 `pnpm icons:build`） |
+| 某个语义名用另一个图标 | `src/config/icons.json` |
+| 所有图标的粗细／圆角／配色／主题 | `src/config/icons.json` 的 `global` 段 |
+| 生成物是否最新 | `pnpm icons:check`（对不上就报错） |
+
+> *Icons are drawn from the sibling `myIconpark` sources instead of `@icon-park/react`:
+> `scripts/icons-build.mjs` compiles the ones named in `src/config/icons.json` into
+> `src/config/icon-glyphs.tsx` (committed; builds don't need the checkout). `icon-runtime.tsx`
+> holds the drawing rules, `icons.tsx` the public `renderIcon` / `AppIcon` API. Refresh the
+> generated file with `pnpm icons:build`, verify with `pnpm icons:check`; `MYICONPARK_DIR`
+> points at another checkout.*
 
 ---
 
