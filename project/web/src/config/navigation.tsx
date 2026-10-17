@@ -69,9 +69,9 @@ export const navigation: NavItem[] = [
     icon: <AppIcon name="settings" />,
     children: [
       { id: 'base-url', labelKey: 'nav.baseUrl', href: '/settings/base-url' },
+      { id: 'reverse-proxy', labelKey: 'nav.reverseProxy', href: '/settings/reverse-proxy' },
       { id: 'advanced-query', labelKey: 'nav.advancedQuery', href: '/settings/advanced-query' },
       { id: 'backup', labelKey: 'nav.backup', href: '/settings/backup' },
-      { id: 'reverse-proxy', labelKey: 'nav.reverseProxy', href: '/settings/reverse-proxy' },
       { id: 'theme', labelKey: 'nav.theme', href: '/settings/theme' },
       // Debug 只在 dev 模式（Vite 开发服务器）显示；生产构建里整项隐藏。
       ...(import.meta.env.DEV
