@@ -4,7 +4,35 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@icon-park/react/styles/index.css";
+
+/* 图标运行时（原来是 @icon-park/react 的那份 i-icon 样式，现在图标自己画）：
+   外壳 span 不占行高，spin 转的是里面的 svg，rtl 只做水平镜像。 */
+.i-icon {
+  display: inline-block;
+  color: inherit;
+  font-style: normal;
+  line-height: 0;
+  text-align: center;
+  text-transform: none;
+  vertical-align: -0.125em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.i-icon-spin svg {
+  animation: i-icon-spin 1s infinite linear;
+}
+
+.i-icon-rtl {
+  transform: scaleX(-1);
+}
+
+@keyframes i-icon-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
 
 @custom-variant dark (&:is(.dark *));
 

@@ -6,19 +6,6 @@ import App from "./App.tsx"
 import { i18n } from "@/i18n/i18n"
 import { detectBrowserLanguage } from "@/i18n/languages"
 import { ThemeProvider } from "@/components/wooh/theme-provider.tsx"
-import { IconProvider, DEFAULT_ICON_CONFIGS } from "@icon-park/react"
-import type { IIconConfig } from "@icon-park/react/es/runtime"
-import iconConfig from "@/config/icons.json"
-
-const iconProviderValue: IIconConfig = {
-  ...DEFAULT_ICON_CONFIGS,
-  rtl: iconConfig.global.rtl,
-  size: iconConfig.global.size,
-  strokeWidth: iconConfig.global.strokeWidth,
-  theme: iconConfig.global.theme as IIconConfig["theme"],
-  strokeLinecap: iconConfig.global.strokeLinecap as IIconConfig["strokeLinecap"],
-  strokeLinejoin: iconConfig.global.strokeLinejoin as IIconConfig["strokeLinejoin"],
-}
 
 // Before authentication we cannot read the stored language, so boot with the
 // browser language. LanguageProvider reconciles with the backend afterwards.
@@ -27,9 +14,7 @@ void i18n.changeLanguage(detectBrowserLanguage())
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ThemeProvider defaultTheme="dark">
-      <IconProvider value={iconProviderValue}>
-        <App />
-      </IconProvider>
+      <App />
     </ThemeProvider>
   </StrictMode>
 )
