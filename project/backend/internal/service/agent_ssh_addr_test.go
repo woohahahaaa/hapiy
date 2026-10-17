@@ -13,8 +13,8 @@ func TestSshDialAddressNormalizesPastedHosts(t *testing.T) {
 		want string
 	}{
 		{"plain host", "192.168.1.100", 22, "192.168.1.100:22"},
-		{"tcp scheme from tunnel provider", "tcp://998pkkg09745.vicp.fun", 34604, "998pkkg09745.vicp.fun:34604"},
-		{"ssh url with user and port", "ssh://wooh@192.168.1.200:2222", 22, "192.168.1.200:2222"},
+		{"tcp scheme from tunnel provider", "tcp://tunnel.example.com", 34604, "tunnel.example.com:34604"},
+		{"ssh url with user and port", "ssh://deploy@bastion.example.com:2222", 22, "bastion.example.com:2222"},
 		{"embedded port overrides field", "gateway.example.com:2200", 22, "gateway.example.com:2200"},
 		{"trailing slash", "tcp://host.example/", 22, "host.example:22"},
 		{"bracketed ipv6 with port", "[2001:db8::1]:2200", 22, "[2001:db8::1]:2200"},

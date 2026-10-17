@@ -10,14 +10,14 @@ describe('parseSshAddress', () => {
   })
 
   it('strips the scheme and honors the embedded port', () => {
-    expect(parseSshAddress('tcp://998pkkg09745.vicp.fun:34604')).toEqual({
-      host: '998pkkg09745.vicp.fun',
+    expect(parseSshAddress('tcp://tunnel.example.com:34604')).toEqual({
+      host: 'tunnel.example.com',
       port: 34604,
     })
   })
 
   it('accepts an ssh url with user, host and port', () => {
-    expect(parseSshAddress('ssh://wooh@192.168.1.200:2222')).toEqual({ host: '192.168.1.200', port: 2222 })
+    expect(parseSshAddress('ssh://deploy@bastion.example.com:2222')).toEqual({ host: 'bastion.example.com', port: 2222 })
   })
 
   it('uses the embedded port over the default', () => {
