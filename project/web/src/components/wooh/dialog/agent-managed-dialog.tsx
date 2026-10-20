@@ -523,7 +523,7 @@ export function ManagedProviderDialog({
 
               <div className="grid grid-cols-2 items-start gap-4">
                 <Field>
-                  <FieldLabel>BaseURL</FieldLabel>
+                  <FieldLabel>Base URL</FieldLabel>
                   <Input
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}

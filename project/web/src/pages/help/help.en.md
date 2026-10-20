@@ -4,7 +4,7 @@
 
 hapiy is a **self-hosted AI gateway and agent onboarding manager**: one API surface for every upstream model, and one click to point your AI coding tools at your own gateway instead of editing each client config by hand.
 
-- **Model gateway**: exposes OpenAI-compatible HTTP endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/speech`, `/v1/audio/transcriptions`), so clients only change a BaseURL and a token; internally it forwards requests along the "Topology" to OpenAI-compatible, Anthropic-compatible, self-hosted or third-party upstreams.
+- **Model gateway**: exposes OpenAI-compatible HTTP endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/speech`, `/v1/audio/transcriptions`), so clients only change a Base URL and a token; internally it forwards requests along the "Topology" to OpenAI-compatible, Anthropic-compatible, self-hosted or third-party upstreams.
 - **Management**: providers and key pools, tokens and quota, request/response rewrite, concurrency control, failover and auto recovery, channel affinity.
 - **Monitoring & cost**: log capture, activity monitor, usage logs, usage and cost statistics.
 - **Agent takeover**: take over config files of opencode, Codex, openclaw, WorkBuddy, DeepSeek Harness and more (locally or over SSH), writing the hapiy address and token into them.
@@ -14,6 +14,25 @@ All data lives in a local SQLite database; single-process deployment.
 A request's full journey: the client calls hapiy with `Authorization: Bearer hk-...` → token auth → the topology (request entry, switch, provider slots) picks a usable upstream provider and Key → request rewrite → concurrency control → upstream call → response rewrite → usage record written and usage accumulated.
 
 > Note: hapiy is a pass-through gateway; it does not change the OpenAI request/response format. Clients change two things: point the request URL at hapiy (for the OpenAI SDK, `base_url` is `http(s)://<hapiy address>/v1`) and replace the API Key with the `hk-` token created on the Tokens page.
+
+hapiy is mainly about solving the problems agents hit while calling models: slow upstreams, rate limits, upstream errors, client bugs, and costs that don't add up. There's a lot here, so hapiy is not a zero-learning-cost product—run through the typical scenarios below first and the rest gets easier.
+
+We're also building a built-in agent: eventually you won't need to understand these settings at all—just let it handle them for you.
+
+## Typical scenarios
+
+These scenarios come from real use, organized as problem → fix → result.
+
+| Scenario | Problem | How to fix | Result |
+| --- | --- | --- | --- |
+| Flaky relays | Multiple relay providers are fast one minute and slow the next, or suddenly rate-limit; switching configs by hand is painful | Add them all under Providers; create a failover rule under Request Handling → Failover with triggers (first byte too slow, speed too low, upstream errors) and a hit threshold, then attach it to the route in Topology | A slow provider is switched away automatically; your preferred route is still used while healthy, and a disabled one is restored automatically |
+| All relays down | Every relay is down, or an urgent task needs a faster route | Add an emergency request entry in Topology and bind it to the official provider; normal entries keep preferring third parties | The official route is only used when no normal provider is available; any relay recovering switches things back |
+| Upstream errors | WorkBuddy calls GLM-5.3-flash through opencode go; `max_token` is set as GLM requires, but the upstream keeps saying it is too large | Turn on log capture for this request in Topology, then export the request and response under Logs / Usage and compare them | Confirm the client sent the wrong value in minutes |
+| Client bug | You have confirmed it is a client bug, but a fix is nowhere in sight | Create a request rewrite rule that sets `max_token` to a value the upstream accepts, and attach it to the route | The request is fixed before it leaves, so the task runs now |
+| Agent stuck | It says Working for 30–60 seconds; you cannot tell whether the upstream or the client is stuck | Open Activity Monitor and check connection state, chunks received, and average token speed | See whether it is stuck at connect, first byte, or streaming; kill it if needed |
+| Unclear costs | Relays price differently and cache hits change the bill, so the total is hard to work out | Set per-model prices under Providers; sync public prices from Model DB with a multiplier, or enter custom prices by hand; set the exchange rate under Settings → Currency | One consistent total across providers, so you can see where the money goes |
+| Many agents and computers | Every new relay or model means editing JSON on each machine, and a missed parameter (like cache) can quietly raise costs | Use Agent Takeover → Managed models to sync enabled providers and models in one click; recommended configs catch omissions; edit remote configs over SSH | One change applies everywhere; syntax checks and rollback keep it safe |
+| Model returns 502 | DeepSeek harness calls dsv4.1flash via opencode go and gets a 502; the upstream says `x-opencode-session` is missing | Add a request rewrite rule that sets `header.x-opencode-session` from an existing session header or a fixed identifier, and attach it to the route | The header is filled in, the 502 is gone, and the model responds |
 
 ## Quick start
 
@@ -183,18 +202,19 @@ Note: in streaming mode response rewrite does not evaluate conditions; condition
 
 ### Failover and auto recovery
 
-The "Failover" page configures how the channel switches when the primary one fails, and when a bad channel is marked disabled.
+The "Failover" page configures how the channel switches when the primary one fails, and when an offending target is marked disabled.
 
 Rule fields:
 
 - **Failover dimension**: Base URL / Key / Provider;
-- **Auto-disable**: whether hits accumulate and disable the offending channel;
+- **Action**: skip only (just move to the next candidate) or skip and disable (fail over and then disable the offending provider / Base URL / Key);
+- **Hit threshold**: the action runs only after the same target hits N times within the window; below the threshold it neither fails over nor disables;
 - **Triggers**: TTFB timeout (seconds), speed limit (token/s), upstream error containing keywords;
 - New rules trigger on **any non-2xx response** by default.
 
-The speed limit is special: it is evaluated from the overall speed after the response completes, only accumulates hits, and does not resend the request.
+The speed limit is special: it is evaluated from the overall speed after the response completes, only counts hits, and does not resend the request.
 
-Once the "disable threshold" (N hits within X minutes) is reached, the channel is marked disabled and a "failover" event is recorded. A rule also has to be bound in a "Failover" slot of the topology to take effect.
+Once the "hit threshold" (N hits within the window) is reached, the action runs: skip only just fails over, skip and disable fails over and disables, and a "failover" record is written. A rule also has to be bound in a "Failover" slot of the topology to take effect.
 
 The "Auto Recovery" tab brings disabled channels back, in two modes:
 
@@ -282,13 +302,13 @@ The "Agent Takeover" entry is hidden from the sidebar by default; turn it on und
 
 ## Settings
 
-### BaseURL
+### Base URL
 
 Configures the system's public address, mainly for Agent Takeover's managed config:
 
 - **Domain**: defaults to the current web domain, port included;
 - **Suffix**: `proxy` by default;
-- The final BaseURL is domain + suffix, copyable in one click;
+- The final Base URL is domain + suffix, copyable in one click;
 - **Source marks**: name your clients to get addresses carrying a `__source` segment; calls made through such an address show that name in the "source" column of Usage Logs.
 
 > Tip: if hapiy sits behind a reverse proxy or tunnel, set the domain to an externally reachable address first — managed Agent config follows it by default.
@@ -356,6 +376,6 @@ Manages the login account:
 
 **Are cost and quota the same thing?** No. A token's quota is deducted by token usage; "cost" is money computed from model prices. They are different measures.
 
-**How do I onboard an Agent tool?** Set the public address under "Settings → BaseURL" first, then add a managed provider under "Agent Takeover → Config Files" and sync it back to the config file.
+**How do I onboard an Agent tool?** Set the public address under "Settings → Base URL" first, then add a managed provider under "Agent Takeover → Config Files" and sync it back to the config file.
 
 **Why is Log Capture empty?** Capture is off by default: open the switch in the "Log capture" slot of the topology, set how long it stays on, and make sure the entry records requests/responses and the slot sits downstream of the right provider route.

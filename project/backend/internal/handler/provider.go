@@ -160,6 +160,32 @@ func UpdateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	}
 }
 
+// SetProviderDedupeV1Suffix updates only the model-list /v1 dedupe
+// preference. It is a narrow endpoint so toggling the checkbox in the
+// "fetch models" dialog never rewrites the rest of the provider form.
+func SetProviderDedupeV1Suffix(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		var body struct {
+			Enabled bool `json:"dedupe_v1_suffix"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			respondError(c, http.StatusBadRequest, "REQUEST_BODY_INVALID", "请求体格式错误")
+			return
+		}
+		var provider model.Provider
+		if err := db.First(&provider, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			return
+		}
+		if err := db.Model(&provider).Update("dedupe_v1_suffix", body.Enabled).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "dedupe_v1_suffix": body.Enabled}})
+	}
+}
+
 func DeleteProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")

@@ -112,15 +112,12 @@ func (e *Engine) resolveFallbackPlan(name string) *ExecutionPlan {
 
 // relayWithFailover sends the request to upstream with automatic failover.
 // On the first attempt, attempts the current plan. If the upstream
-// outcome matches a failover rule, the rule's single action decides
-// which dimension to rotate on and whether to auto-disable the
-// originating entity. Each rule fires exactly one rotation.
-//
-// Auto-disable is gated by a consecutive-hit counter: the matched
-// (provider, dimension, value) only gets disabled once it has been
-// matched DisableThreshold times within DisableWindowMinutes (or on
-// the very first match when the threshold is the legacy default of 1).
-// A successful follow-up request on the same entity resets the count.
+// outcome matches a failover rule, the rule's hit threshold decides
+// whether the action runs: each match counts toward DisableThreshold
+// within DisableWindowMinutes, and only once reached does the action
+// rotate along the rule's dimension (and, when AutoDisable is set, also
+// disable the originating entity). The hit counter is cleared when the
+// action succeeds, so the next round starts counting from scratch.
 func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req *RelayRequest) (*RelayResponse, error) {
 	resp, err := e.performUpstreamCall(ctx, plan, req)
 	ttfbMs := 0
@@ -147,9 +144,8 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		appendFailoverNotes(req, plan.FailoverRules, nil)
 		return resp, err
 	}
-	// 故障转移命中：拆掉把请求绑在失败实体上的渠道亲和记录，
-	// 后续请求重新进入正常选择，避免继续打向失败方。
-	e.breakAffinity(req)
+	// 故障转移命中：先按命中阈值累计次数。未达阈值不执行动作
+	// （不转移、不禁用），达到阈值才按动作转移，必要时追加禁用。
 	dimension, autoDisable := rule.SingleAction()
 	if dimension == "" {
 		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, "规则未配置有效的转移维度"))
@@ -157,13 +153,21 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	}
 	value := failoverActionValue(plan, req, dimension)
 	hitCount := 0
-	hitReached := false
-	if autoDisable && value != "" {
+	hitReached := value == ""
+	if value != "" {
 		hitCount, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
 	}
+	if !hitReached {
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect,
+			fmt.Sprintf("未达命中阈值（%d/%d）", hitCount, failoverThreshold(rule))))
+		return resp, err
+	}
+	// 达到阈值：拆掉把请求绑在失败实体上的渠道亲和记录，
+	// 后续请求重新进入正常选择，避免继续打向失败方。
+	e.breakAffinity(req)
 	disableApplied := false
 	disableError := ""
-	if hitReached {
+	if autoDisable {
 		if applyErr := e.applyFailoverAction(plan, req, dimension, rule, outcome); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 			disableError = applyErr.Error()
@@ -172,7 +176,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 		}
 	}
-	// disableInfo describes what the auto-disable half did, appended to the
+	// disableInfo describes what the disable half did, appended to the
 	// rule's note so the 使用记录 explains why a disabled entity was (or was
 	// not) taken offline.
 	disableInfo := func() string {
@@ -185,12 +189,14 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		case disableApplied:
 			return "已自动禁用 " + service.ChannelEventMessage(dimension, value)
 		default:
-			return fmt.Sprintf("自动禁用未达阈值（%d/%d）", hitCount, failoverThreshold(rule))
+			return ""
 		}
 	}()
 	switch dimension {
 	case model.FailoverDimensionBaseURL, model.FailoverDimensionKey:
 		if rotated, _ := e.rotateKeyOrBaseURL(ctx, plan, req, dimension, &disableApplied); rotated != nil {
+			// 转移成功：动作已执行，频率计数归零，下一轮重新累计。
+			e.clearFailoverHit(plan.Provider.ID, dimension, value)
 			// 转移成功：补记一条原始失败，使用记录里能看出
 			// 「先失败、后经故障转移换通道成功」。
 			e.recordFailoverAttempt(req, plan, err)
@@ -296,9 +302,9 @@ func failoverThreshold(rule *model.FailoverRule) int {
 
 // RecordResponseSpeedOutcome feeds post-response speed violations into the
 // failover hit counters. A slow response that already finished cannot be
-// re-routed for this request, but the auto-disable machinery still protects
-// future requests: every enabled rule with a speed limit counts one hit
-// when the response speed (tokens/s over the full request, connect
+// re-routed for this request, but the hit-threshold machinery still
+// protects future requests: every enabled rule with a speed limit counts one
+// hit when the response speed (tokens/s over the full request, connect
 // included) falls below the limit.
 func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayRequest, elapsedMs, totalTokens int) {
 	if e == nil || e.db == nil || plan == nil || req == nil || elapsedMs <= 0 || totalTokens <= 0 {
@@ -319,24 +325,26 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 			continue
 		}
 		reason := fmt.Sprintf("响应速度 %.1f token/s 低于规则限制 %d token/s", speed, rule.SpeedLimit)
-		hitCount := 0
-		hitReached := false
-		if autoDisable {
-			hitCount, hitReached = e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
-		}
+		hitCount, hitReached := e.recordFailoverHit(plan.Provider.ID, dimension, value, rule)
 		status := service.RuleStatusHit
-		if autoDisable && !hitReached {
-			reason = joinReasons(reason, fmt.Sprintf("自动禁用未达阈值（%d/%d）", hitCount, failoverThreshold(rule)))
-		}
-		if hitReached {
+		switch {
+		case !hitReached:
+			// 速度判定在响应结束后才发生，无法重发本次请求；未达阈值时只记次数。
+			status = service.RuleStatusNoEffect
+			reason = joinReasons(reason, fmt.Sprintf("未达命中阈值（%d/%d）", hitCount, failoverThreshold(rule)))
+		case autoDisable:
 			outcome := upstreamOutcome{message: reason}
 			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome); err != nil {
 				log.Printf("relay: applyFailoverAction(speed) %s/%s: %v", plan.Provider.ID, dimension, err)
 				status = service.RuleStatusFailed
 				reason = joinReasons(reason, "自动禁用失败："+err.Error())
 			} else {
+				e.clearFailoverHit(plan.Provider.ID, dimension, value)
 				reason = joinReasons(reason, "已自动禁用 "+service.ChannelEventMessage(dimension, value))
 			}
+		default:
+			e.clearFailoverHit(plan.Provider.ID, dimension, value)
+			reason = joinReasons(reason, "已达命中阈值")
 		}
 		replaceFailoverNote(req, *failoverNote(rule, status, reason))
 	}
@@ -416,13 +424,21 @@ func (e *Engine) ttfbForSlowUpstream(plan *ExecutionPlan, resp *RelayResponse) i
 	return int(time.Since(start).Milliseconds())
 }
 
-// recordFailoverHit increments the consecutive-match counter for
-// (providerID, dimension, value) and reports whether DisableThreshold
-// has been reached inside DisableWindowMinutes. A first hit seeds the
-// counter; subsequent hits inside the window increment, and a hit
-// outside the window resets the counter to 1.
+// recordFailoverHit increments the counter for (providerID, dimension,
+// value) and reports whether the rule's hit threshold has been
+// reached inside DisableWindowMinutes. Every match counts, regardless of
+// the action: the threshold gates whether the action (skip and/or disable)
+// runs at all. A first hit seeds the counter; subsequent hits inside the
+// window increment, and a hit outside the window resets it to 1.
 func (e *Engine) recordFailoverHit(providerID, dimension, value string, rule *model.FailoverRule) (int, bool) {
-	if e.db == nil || providerID == "" || dimension == "" || value == "" || rule == nil || !rule.AutoDisable {
+	if rule == nil {
+		return 0, false
+	}
+	if e.db == nil {
+		// 没有计数器可用时不要挡住故障转移本身。
+		return 0, true
+	}
+	if providerID == "" || dimension == "" || value == "" {
 		return 0, false
 	}
 	threshold := rule.DisableThreshold
@@ -444,13 +460,14 @@ func (e *Engine) recordFailoverHit(providerID, dimension, value string, rule *mo
 		}
 		if createErr := e.db.Create(&counter).Error; createErr != nil {
 			log.Printf("relay: create failover hit counter: %v", createErr)
-			return 0, false
+			// 计数落库失败时放行动作，避免因为计数问题挡住故障转移。
+			return 0, true
 		}
 		return 1, threshold <= 1
 	}
 	if err != nil {
 		log.Printf("relay: load failover hit counter: %v", err)
-		return 0, false
+		return 0, true
 	}
 
 	withinWindow := window == 0 || counter.FirstHitAt.IsZero() || now.Sub(counter.FirstHitAt) <= time.Duration(window)*time.Minute
@@ -463,7 +480,7 @@ func (e *Engine) recordFailoverHit(providerID, dimension, value string, rule *mo
 	counter.LastHitAt = now
 	if saveErr := e.db.Save(&counter).Error; saveErr != nil {
 		log.Printf("relay: save failover hit counter: %v", saveErr)
-		return 0, false
+		return 0, true
 	}
 	return counter.HitCount, counter.HitCount >= threshold
 }

@@ -92,6 +92,9 @@ export type Provider = {
   readonly status: boolean
   readonly autoDisabled: boolean
   readonly workflowEnabled: boolean
+  // dedupeV1Suffix drives the model-list URL builder in the "fetch models"
+  // dialog. Missing on older backends → default true.
+  readonly dedupeV1Suffix: boolean
 }
 
 export type ProviderInput = Omit<Provider, 'id'>
@@ -1343,6 +1346,9 @@ function parseProvider(value: unknown): Provider {
     status: readBoolean(value.status, 'provider.status'),
     autoDisabled: readBoolean(value.auto_disabled, 'provider.auto_disabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
+    dedupeV1Suffix: value.dedupe_v1_suffix === undefined
+      ? true
+      : readBoolean(value.dedupe_v1_suffix, 'provider.dedupe_v1_suffix'),
   }
 }
 
@@ -1895,6 +1901,7 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     status: provider.status,
     auto_disabled: provider.autoDisabled,
     workflow_enabled: provider.workflowEnabled,
+    dedupe_v1_suffix: provider.dedupeV1Suffix,
   }
 }
 
@@ -2567,6 +2574,12 @@ export const dashboardApi = {
   },
   async updateProvider(id: string, provider: ProviderInput): Promise<Provider> {
     return parseProvider(await request(`/providers/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ id, ...serializeProvider(provider) }) }))
+  },
+  async setProviderDedupeV1Suffix(id: string, enabled: boolean): Promise<void> {
+    await request(`/providers/${encodeURIComponent(id)}/dedupe-v1`, {
+      method: 'PUT',
+      body: JSON.stringify({ dedupe_v1_suffix: enabled }),
+    })
   },
   async deleteProvider(id: string): Promise<void> {
     await request(`/providers/${encodeURIComponent(id)}`, { method: 'DELETE' })

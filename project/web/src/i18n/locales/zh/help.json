@@ -39,7 +39,7 @@
     "settings": {
       "id": "系统设置",
       "title": "系统设置",
-      "description": "BaseURL、汇率、备份与用量查询"
+      "description": "Base URL、汇率、备份与用量查询"
     }
   }
 }

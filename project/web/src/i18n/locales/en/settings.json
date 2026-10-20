@@ -60,16 +60,16 @@
     "testSuccess": "Connected: 1 USD = {{rate}} CNY"
   },
   "baseUrl": {
-    "pageDescription": "Append a source tag after the BaseURL to distinguish request sources; recognized automatically",
-    "cardDescription": "Configure the system's public BaseURL for Agent software integration",
+    "pageDescription": "Append a source tag after the Base URL to distinguish request sources; recognized automatically",
+    "cardDescription": "Configure the system's public Base URL for Agent software integration",
     "copyFailed": "Copy failed",
     "saveFailed": "Failed to save settings",
     "originLabel": "Domain",
-    "originHint": "The domain (including scheme and port) of the system's public BaseURL. Used to generate proxy configs and for managed \"Follow system\"; defaults to the current web page domain. Change it to the public address in tunnel/reverse-proxy scenarios.",
+    "originHint": "The domain (including scheme and port) of the system's public Base URL. Used to generate proxy configs and for managed \"Follow system\"; defaults to the current web page domain. Change it to the public address in tunnel/reverse-proxy scenarios.",
     "suffixLabel": "Suffix",
-    "finalUrlLabel": "Final BaseURL",
+    "finalUrlLabel": "Final Base URL",
     "sourcesCardTitle": "Source markers",
-    "sourcesCardDescription": "Add a suffix after the BaseURL to tag each request's source, so usage logs can be grouped and filtered.",
+    "sourcesCardDescription": "Add a suffix after the Base URL to tag each request's source, so usage logs can be grouped and filtered.",
     "sourceExampleLabel": "For example",
     "sourceExampleNotePrefix": "Appears as ",
     "sourceExampleNoteSuffix": " in the Source column of usage logs.",
@@ -92,7 +92,7 @@
     "modeLabel": "Recovery mode",
     "intervalLabel": "Auto-recovery polling interval (minutes)",
     "timedMinutesLabel": "Auto-recovery duration (minutes)",
-    "probeHint": "Polling interval: 0 = off; ≥ 60 recommended; default 60. Probe recovery validates against disable rules (first character/speed/keyword); if the rule was deleted, it only tests connectivity.",
+    "probeHint": "Polling interval: 0 = off; ≥ 60 recommended; default 60. Recovery probes are re-validated against the failover rule that disabled the entity (TTFB/speed/keywords); if the rule was deleted, only connectivity is tested.",
     "timedHint": "After disabling, recovery happens automatically when the countdown reaches zero; the countdown starts from the moment of disabling, and after switching to this mode it starts immediately from the save time.",
     "cardTitle": "Auto Recovery",
     "cardDescription": "Periodically checks disabled items; automatically clears them once the upstream recovers.",
@@ -105,11 +105,11 @@
     "colTime": "Time",
     "colDimension": "Dimension",
     "colValue": "Value",
-    "colRule": "Disable rule",
+    "colRule": "Failover rule",
     "colCountdown": "Time remaining",
     "colRetryCount": "Upstream test count",
     "dimensionKey": "Key",
-    "dimensionBaseUrl": "BaseURL",
+    "dimensionBaseUrl": "Base URL",
     "dimensionProvider": "Provider",
     "extendedSuffix": "{{text}} (extended)",
     "testUpstream": "Test upstream",
@@ -298,6 +298,6 @@
     "saveFailed": "Failed to save channel affinity configuration"
   },
   "page": {
-    "baseUrlDescription": "Configure the public BaseURL; a suffix tags where each request came from"
+    "baseUrlDescription": "Configure the public Base URL; a suffix tags where each request came from"
   }
 }

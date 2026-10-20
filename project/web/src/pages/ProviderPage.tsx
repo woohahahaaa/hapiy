@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBod
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { collectDeclaredEndpoints, seedModelEndpointsFromProvider } from '@/lib/provider-endpoints'
+import { joinModelListUrl, pickFetchModelKey } from '@/lib/provider-fetch'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Separator } from '@/components/ui/separator'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -42,10 +43,13 @@ type ProviderFormProps = {
   readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
   // 恢复单条被自动禁用的 base URL / key（只恢复这一条，不碰同维度的其他条目）。
   readonly onResetDisableValue: (dimension: 'base_url' | 'key', value: string) => void
+  // 获取模型弹窗里切换 /v1 去重后，同步外层 providers 列表，保证重新打开
+  // 弹窗时读到的是刚保存的值（而不是打开页面的旧快照）。
+  readonly onProviderPreferenceUpdated: (id: string, dedupeV1Suffix: boolean) => void
 }
 
 const emptyProvider: ProviderInput = {
-  name: '', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false,
+  name: '', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false, dedupeV1Suffix: true,
 }
 
 // emptyProviderModel builds the serializable form of a model row with all
@@ -170,6 +174,14 @@ export function ProviderPage() {
     navigate('/', { state: { addProviderId: provider.id, addProviderName: provider.name } })
   }
 
+  // 获取模型弹窗切换 /v1 去重后会立即写回后端；同步列表快照，保证关闭
+  // 再打开供应商时读到刚保存的值。
+  const handleProviderPreferenceUpdated = (id: string, dedupeV1Suffix: boolean) => {
+    setProviders((current) => current.map((provider) => (
+      provider.id === id ? { ...provider, dedupeV1Suffix } : provider
+    )))
+  }
+
   const handleResetDisableDimension = async (provider: Provider, dimension: 'provider' | 'base_url' | 'key') => {
     const reset = await runMutation(() => dashboardApi.resetProviderDisableDimension(provider.id, dimension))
     if (reset) toast(t('toast.disableReset'))
@@ -287,7 +299,17 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
-             <ProviderForm provider={editing} onSave={handleSave} isSaving={isSaving} useKey={useKey} onUseKeyChange={setUseKey} disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null} onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }} onResetDisableValue={(dimension, value) => { if (editing) void handleResetDisableValue(editing, dimension, value) }} />
+             <ProviderForm
+               provider={editing}
+               onSave={handleSave}
+               isSaving={isSaving}
+               useKey={useKey}
+               onUseKeyChange={setUseKey}
+               disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null}
+               onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }}
+               onResetDisableValue={(dimension, value) => { if (editing) void handleResetDisableValue(editing, dimension, value) }}
+               onProviderPreferenceUpdated={handleProviderPreferenceUpdated}
+             />
           </DialogContent>
         </Dialog>
 
@@ -456,7 +478,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue }: ProviderFormProps) {
+function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
   const [form, setForm] = useState<ProviderInput>(() => provider ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) } : emptyProvider)
   // Per-key remarks as a parallel array aligned with form.keys (array instead
@@ -472,6 +494,7 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
   const [isFetchDialogOpen, setIsFetchDialogOpen] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isFetching, setIsFetching] = useState(false)
+  const [dedupeSaving, setDedupeSaving] = useState(false)
   const [fetchedModels, setFetchedModels] = useState<readonly FetchedModel[] | null>(null)
   const [priceError, setPriceError] = useState(false)
   const [priceErrorPos, setPriceErrorPos] = useState<{ left: number; top: number } | null>(null)
@@ -694,17 +717,37 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
       return
     }
     setEndpointOverride(draft === '' ? null : draft)
-    const fullUrl = `${baseUrl.replace(/\/+$/, '')}${endpoint}`
+    const fullUrl = joinModelListUrl(baseUrl, endpoint, form.dedupeV1Suffix)
+    const key = useKey ? pickFetchModelKey(form.keys, disableStatus?.keys) : undefined
     setFetchError(null)
     setIsFetching(true)
     try {
-      const models = await dashboardApi.fetchModelsFromEndpoint(fullUrl, useKey ? form.keys[0] : undefined)
+      const models = await dashboardApi.fetchModelsFromEndpoint(fullUrl, key)
       const sorted = [...models].sort((a, b) => a.id.localeCompare(b.id))
       setFetchedModels(sorted)
     } catch (error) {
       setFetchError(toErrorMessage(error))
     } finally {
       setIsFetching(false)
+    }
+  }
+
+  // 弹窗里的 /v1 去重开关：已有供应商立即写回后端（只改这一个字段），
+  // 新建供应商先改本地表单、随「保存」一起落库。
+  const handleDedupeV1SuffixChange = async (next: boolean) => {
+    if (form.dedupeV1Suffix === next) return
+    const previous = form.dedupeV1Suffix
+    setForm((current) => ({ ...current, dedupeV1Suffix: next }))
+    if (!provider) return
+    setDedupeSaving(true)
+    try {
+      await dashboardApi.setProviderDedupeV1Suffix(provider.id, next)
+      onProviderPreferenceUpdated(provider.id, next)
+    } catch (error) {
+      setForm((current) => ({ ...current, dedupeV1Suffix: previous }))
+      setFetchError(toErrorMessage(error))
+    } finally {
+      setDedupeSaving(false)
     }
   }
 
@@ -899,6 +942,9 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
           onEndpointChange={setEndpointDraft}
           useKey={useKey}
           onUseKeyChange={onUseKeyChange}
+          dedupeV1Suffix={form.dedupeV1Suffix}
+          dedupeSaving={dedupeSaving}
+          onDedupeV1SuffixChange={(next) => void handleDedupeV1SuffixChange(next)}
           fetching={isFetching}
           error={fetchError}
           models={fetchedModels}
@@ -1254,6 +1300,9 @@ type FetchModelDialogProps = {
   readonly onEndpointChange: (value: string) => void
   readonly useKey: boolean
   readonly onUseKeyChange: (next: boolean) => void
+  readonly dedupeV1Suffix: boolean
+  readonly dedupeSaving: boolean
+  readonly onDedupeV1SuffixChange: (next: boolean) => void
   readonly fetching: boolean
   readonly error: string | null
   readonly models: readonly FetchedModel[] | null
@@ -1263,7 +1312,7 @@ type FetchModelDialogProps = {
   readonly onConfirm: (ids: readonly string[], replace?: boolean) => void
 }
 
-function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, fetching, error, models, existingIds, onFetch, onClose, onConfirm }: FetchModelDialogProps) {
+function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, dedupeV1Suffix, dedupeSaving, onDedupeV1SuffixChange, fetching, error, models, existingIds, onFetch, onClose, onConfirm }: FetchModelDialogProps) {
   const { t } = useTranslation('provider')
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [saving, setSaving] = useState(false)
@@ -1327,6 +1376,17 @@ function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, 
             <FieldLabel htmlFor="model-list-endpoint">{t('dialog.endpointPathLabel')}</FieldLabel>
             <Input id="model-list-endpoint" value={endpoint} onChange={(event) => onEndpointChange(event.target.value)} placeholder="/v1/models" />
           </Field>
+          <div className="flex flex-col gap-1">
+            <label className="flex cursor-pointer items-center gap-2">
+              <Checkbox
+                checked={dedupeV1Suffix}
+                disabled={dedupeSaving}
+                onCheckedChange={(checked) => onDedupeV1SuffixChange(checked === true)}
+              />
+              <span className="text-foreground">{t('dialog.dedupeV1Suffix')}</span>
+            </label>
+            <p className="text-xs text-muted-foreground">{t('dialog.dedupeV1SuffixHint')}</p>
+          </div>
           <label className="flex cursor-pointer items-center gap-2">
             <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
             <span className="text-foreground">{t('dialog.endpointUseKey')}</span>

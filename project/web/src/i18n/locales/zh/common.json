@@ -82,7 +82,7 @@
     "agentConfig": "接管配置文件",
     "settings": "系统设置",
     "advancedQuery": "高级查询",
-    "baseUrl": "BaseURL",
+    "baseUrl": "Base URL",
     "general": "获取模型列表",
     "billing": "币种汇率",
     "tokenUsage": "获取token用量",

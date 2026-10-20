@@ -40,7 +40,7 @@
     "settings": {
       "id": "settings",
       "title": "Settings",
-      "description": "BaseURL, currency rates, backups and usage fields"
+      "description": "Base URL, currency rates, backups and usage fields"
     }
   }
 }

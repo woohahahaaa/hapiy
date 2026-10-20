@@ -531,6 +531,52 @@ func TestRelayWithFailover_belowThreshold_doesNotDisable(t *testing.T) {
 	}
 }
 
+func TestRelayWithFailover_frequencyThresholdGatesTransfer(t *testing.T) {
+	// 命中阈值控制动作本身：未达阈值时连转移都不发生。
+	db := newRelayTestDB(t, &model.Provider{}, &model.FailoverHitCounter{}, &model.AutoDisableState{})
+	failing := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	working := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer working.Close()
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	plan := &ExecutionPlan{
+		Provider: provider,
+		BaseURLs: []string{failing.URL, working.URL},
+		Keys:     []string{"key"},
+		FailoverRules: []*model.FailoverRule{{
+			Condition:            "timeout",
+			MatchPatterns:        []string{"可用预算已用尽"},
+			Dimension:            model.FailoverDimensionBaseURL,
+			AutoDisable:          false,
+			DisableThreshold:     2,
+			DisableWindowMinutes: 5,
+		}},
+	}
+
+	// 第一次命中：未达阈值，不转移，直接返回错误。
+	if _, err := engine.relayWithFailover(context.Background(), plan, &RelayRequest{BaseURLIndex: 0}); err == nil {
+		t.Fatal("first hit should not transfer before reaching the hit threshold")
+	}
+	// 第二次命中：达到阈值，按「仅跳过」动作转移到下一个 Base URL。
+	resp, err := engine.relayWithFailover(context.Background(), plan, &RelayRequest{BaseURLIndex: 0})
+	if err != nil {
+		t.Fatalf("second hit should transfer: %v", err)
+	}
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected the working base URL response, got %+v", resp)
+	}
+	_ = resp.Body.Close()
+	if engine.isDisabled(provider.ID, model.FailoverDimensionBaseURL, failing.URL) {
+		t.Fatal("skip-only action must not disable the failing base URL")
+	}
+}
+
 func TestRelayWithFailover_countsFailuresOnRotatedKeys(t *testing.T) {
 	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{})
 	upstream := failingServer(t, http.StatusTooManyRequests, "usage limit reached")
@@ -553,7 +599,8 @@ func TestRelayWithFailover_countsFailuresOnRotatedKeys(t *testing.T) {
 		}},
 	}
 
-	for i := 0; i < 3; i++ {
+	// 每个 Key 都要先各自命中两次：key-1 两次后转移，key-2 再两次。
+	for i := 0; i < 4; i++ {
 		_, _ = engine.relayWithFailover(context.Background(), plan, &RelayRequest{})
 	}
 

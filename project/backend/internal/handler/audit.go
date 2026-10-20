@@ -29,6 +29,7 @@ var auditSkips = map[string]struct{}{
 var auditLabels = map[string]string{
 	"POST /v1/dashboard/providers":                     "新建供应商",
 	"PUT /v1/dashboard/providers/:id":                  "修改供应商",
+	"PUT /v1/dashboard/providers/:id/dedupe-v1":        "修改供应商 /v1 去重设置",
 	"DELETE /v1/dashboard/providers/:id":               "删除供应商",
 	"POST /v1/dashboard/providers/:id/toggle":          "启用/停用供应商",
 	"POST /v1/dashboard/providers/:id/workflow-toggle": "切换供应商工作流",

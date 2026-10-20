@@ -39,19 +39,19 @@
     "rewriteRules": "改写规则"
   },
   "failover": {
-    "description": "主供应商失败时自动转移到备选供应商",
+    "description": "请求失败或命中条件时，按维度自动转移到下一个候选",
     "recoveryTab": "自动恢复",
     "empty": "暂无故障转移规则，点击「添加规则」创建第一条",
     "notSet": "未设置",
     "notEnabled": "未启用",
-    "unlimitedWindow": "不限",
+    "unlimitedWindow": "不限时间",
     "windowMinutes": "{{count}}分钟",
     "thresholdValue": "{{count}}次 / {{window}}",
     "columns": {
       "dimension": "转移维度",
-      "trigger": "触发字段",
+      "trigger": "触发关键词",
       "ttfb": "首字超时",
-      "threshold": "禁用阈值"
+      "threshold": "命中阈值"
     },
     "dimensions": {
       "baseUrl": "Base URL",
@@ -62,27 +62,27 @@
     "form": {
       "dimension": "转移维度",
       "selectDimension": "选择转移维度",
-      "dimensionHint": "请求失败时，将按该维度进行故障转移。",
-      "autoDisable": "自动禁用",
-      "autoDisablePlaceholder": "是否自动禁用",
-      "yes": "是",
-      "no": "否",
-      "autoDisableYesHint": "选「是」：转移候选用尽后，将出问题的{{target}}标记为禁用（受下方禁用阈值约束）。",
-      "autoDisableNoHint": "选「否」：每次只转移到下一个候选，不会自动禁用。",
-      "patternsLabel": "上游报错字段包含以下关键词时自动触发",
+      "dimensionHint": "命中条件后先累计次数，达到命中阈值才按该维度转移到下一个候选。",
+      "autoDisable": "执行动作",
+      "autoDisablePlaceholder": "选择执行动作",
+      "yes": "跳过并禁用",
+      "no": "仅跳过",
+      "autoDisableYesHint": "选「跳过并禁用」：同一对象在窗口期内命中达到阈值后，先转移到下一个候选，再把它禁用。",
+      "autoDisableNoHint": "选「仅跳过」：同一对象在窗口期内命中达到阈值后，只转移到下一个候选，不禁用。",
+      "patternsLabel": "上游报错包含以下关键词时计一次命中",
       "patternsPlaceholder": "每行一个关键词或错误码\n429\nrate_limit_exceeded\ninsufficient_quota",
-      "patternsHint": "每行一个；任一行出现在上游报错内容中即触发转移。留空则仅按下方条件触发。",
+      "patternsHint": "每行一个；任一行出现在上游报错内容中即计一次命中。留空则只看下方条件。",
       "speedLabel": "速度限制（Token/s）",
-      "speedHint": "填0表示不限制；填大于0表示请求全程速度（总Token ÷ 含建连的总耗时）低于N Token/s也算一次失败，计入禁用阈值（与匹配字段OR关系）。",
+      "speedHint": "填0表示不限制；填大于0时，请求全程速度（总Token ÷ 含建连的总耗时）低于N Token/s也算一次命中（与匹配关键词OR关系），达到命中阈值后执行上方动作。",
       "ttfbLabel": "首字超时（秒）",
-      "ttfbHint": "填0表示不启用此条件；填大于0表示首字响应超过N秒也会触发转移（与匹配字段OR关系）。",
-      "thresholdLabel": "禁用阈值",
+      "ttfbHint": "填0表示不启用此条件；填大于0时，首字响应超过N秒也算一次命中（与匹配关键词OR关系）。",
+      "thresholdLabel": "命中阈值",
       "thresholdEvery": "每",
       "thresholdWindowSuffix": "分钟命中",
-      "thresholdTimesSuffix": "次则禁用",
-      "windowAria": "命中时间窗口（分钟）",
-      "thresholdAria": "禁用前命中次数",
-      "thresholdHint": "窗口期内连续命中N次才禁用。窗口填0表示不限时间；次数填1等于「一次就禁」。"
+      "thresholdTimesSuffix": "次就执行",
+      "windowAria": "命中统计窗口（分钟）",
+      "thresholdAria": "触发动作的命中次数",
+      "thresholdHint": "同一对象在窗口期内命中N次就执行上方的动作。窗口填0表示不限时间；次数填1表示第一次命中就执行。"
     }
   },
   "response": {

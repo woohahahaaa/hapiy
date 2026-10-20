@@ -593,7 +593,7 @@ function FailoverForm({ rule, onSave, saving }: { rule: FailoverRule | null; onS
             </Select>
           </div>
           <p className="text-xs text-muted-foreground">
-            {t('failover.form.autoDisableYesHint', { target: form.dimension === 'key' ? 'Key' : form.dimension === 'provider' ? t('failover.dimensions.provider') : 'BaseURL' })}
+            {t('failover.form.autoDisableYesHint')}
           </p>
           <p className="text-xs text-muted-foreground">{t('failover.form.autoDisableNoHint')}</p>
         </Field>

@@ -283,6 +283,7 @@ func runServe() {
 			dashboardAuthed.POST("/disabled-records/:id/extend-countdown", handler.ExtendDisabledRecordCountdown(db))
 			dashboardAuthed.GET("/providers/:id", handler.GetProvider(db))
 			dashboardAuthed.PUT("/providers/:id", handler.UpdateProvider(db, engine))
+			dashboardAuthed.PUT("/providers/:id/dedupe-v1", handler.SetProviderDedupeV1Suffix(db))
 			dashboardAuthed.DELETE("/providers/:id", handler.DeleteProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/toggle", handler.ToggleProvider(db, engine))
 			dashboardAuthed.POST("/providers/:id/workflow-toggle", handler.ToggleWorkflow(db, engine))

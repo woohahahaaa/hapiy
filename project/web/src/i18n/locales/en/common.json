@@ -82,7 +82,7 @@
     "agentConfig": "Takeover Config Files",
     "settings": "Settings",
     "advancedQuery": "Advanced Query",
-    "baseUrl": "BaseURL",
+    "baseUrl": "Base URL",
     "general": "Get Model List",
     "billing": "Currency & Rates",
     "tokenUsage": "Get Token Usage",

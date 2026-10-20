@@ -48,8 +48,14 @@ type Provider struct {
 	Priority        int       `gorm:"default:0" json:"priority"`
 	AutoBan         bool      `gorm:"default:true" json:"auto_ban"`
 	Group           string    `gorm:"default:''" json:"group"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	// DedupeV1Suffix controls the "From upstream fetch models" URL builder:
+	// when enabled and the Base URL path already ends with /v1, the model
+	// list path's leading /v1 is dropped so the final URL has one /v1.
+	// Pointer so a new provider can persist an explicit false despite the
+	// column default; nil on create falls back to true.
+	DedupeV1Suffix *bool     `gorm:"default:true" json:"dedupe_v1_suffix"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (p *Provider) BeforeCreate(tx *gorm.DB) error {
@@ -283,9 +289,9 @@ type FailoverRule struct {
 	// 0 disables the speed check.
 	SpeedLimit int `gorm:"default:0" json:"speed_limit"`
 
-	// DisableThreshold counts rule hits before auto-disable fires;
-	// 0 preserves legacy "disable on first match" behavior. DisableWindowMinutes
-	// is the rolling window for those hits; 0 disables the time check.
+	// DisableThreshold counts rule hits before the rule's action runs;
+	// 0 preserves legacy "run on first match" behavior. DisableWindowMinutes
+	// is the fixed window for those hits; 0 disables the time check.
 	DisableThreshold     int `gorm:"default:0" json:"disable_threshold"`
 	DisableWindowMinutes int `gorm:"default:0" json:"disable_window_minutes"`
 }
@@ -319,7 +325,7 @@ func (r *FailoverRule) SingleAction() (string, bool) {
 // failover payload existed. The action sequence is fixed and persisted in this
 // order so runtime behavior remains deterministic. DisableThreshold is
 // clamped to >= 1 so legacy rows with the default 0 are treated as the
-// "disable on first match" baseline.
+// "run the action on first match" baseline.
 func (r *FailoverRule) Normalize() {
 	if r.Dimension == "" && len(r.Actions) == 0 {
 		r.Actions = []FailoverAction{
@@ -448,11 +454,11 @@ func (s *AutoDisableState) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// FailoverHitCounter tracks consecutive rule matches for one
+// FailoverHitCounter tracks rule matches for one
 // (provider_id, dimension, value) triple so the relay engine can decide
 // when a rule's DisableThreshold has been reached inside its
-// DisableWindowMinutes. Rows are dropped on success or manual restore
-// to keep the table free of stale state.
+// DisableWindowMinutes. Rows are dropped when the action succeeds or on
+// manual restore to keep the table free of stale state.
 type FailoverHitCounter struct {
 	ID         string    `gorm:"primaryKey;type:uuid" json:"id"`
 	ProviderID string    `gorm:"not null;uniqueIndex:idx_fhc_provider_dim_value" json:"provider_id"`
