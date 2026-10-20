@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -146,7 +147,7 @@ func getProvider(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, getPro
 // ── list_models ──
 
 type listModelsIn struct {
-	IncludeDisabled bool `json:"include_disabled,omitempty" jsonschema:"包含已停用供应商提供的模型"`
+	IncludeDisabled bool   `json:"include_disabled,omitempty" jsonschema:"包含已停用供应商提供的模型"`
 	Contains        string `json:"contains,omitempty" jsonschema:"只返回名称包含该子串的模型"`
 }
 
@@ -347,7 +348,7 @@ func getUsageStats(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, usag
 		to := strings.TrimSpace(in.To)
 		if from == "" && to == "" {
 			var counter model.UsageCounter
-			if err := db.First(&counter, "id = ?", 1).Error; err != nil && err != gorm.ErrRecordNotFound {
+			if err := db.First(&counter, "id = ?", 1).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return nil, usageStatsOut{}, err
 			}
 			return nil, buildUsageStats(usageStatsOut{
@@ -423,9 +424,6 @@ func getUsageStats(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, usag
 }
 
 func buildUsageStats(in usageStatsOut) usageStatsOut {
-	if in.SuccessCount > 0 {
-		in.AvgLatencyMs = 0
-	}
 	denom := in.PromptTokens
 	if cacheable := in.CacheHitTokens + in.CacheMissTokens; cacheable > denom {
 		denom = cacheable
@@ -558,13 +556,13 @@ func listDisabledChannels(db *gorm.DB) func(context.Context, *mcp.CallToolReques
 // ── list_agent_configs ──
 
 type agentConfigEntry struct {
-	ID          string `json:"id"`
-	RecordName  string `json:"record_name"`
-	AgentType   string `json:"agent_type"`
-	Mode        string `json:"mode" jsonschema:"local 或 ssh"`
-	TargetOS    string `json:"target_os"`
-	Path        string `json:"path"`
-	UpdatedAt   string `json:"updated_at"`
+	ID         string `json:"id"`
+	RecordName string `json:"record_name"`
+	AgentType  string `json:"agent_type"`
+	Mode       string `json:"mode" jsonschema:"local 或 ssh"`
+	TargetOS   string `json:"target_os"`
+	Path       string `json:"path"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 type listAgentConfigsOut struct {

@@ -19,6 +19,7 @@ import (
 	"github.com/hapiy/hapiy/internal/config"
 	"github.com/hapiy/hapiy/internal/daemon"
 	"github.com/hapiy/hapiy/internal/handler"
+	mcpserver "github.com/hapiy/hapiy/internal/mcp"
 	"github.com/hapiy/hapiy/internal/middleware"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
@@ -257,6 +258,12 @@ func runServe() {
 		c.JSON(200, common.Global().Snapshot())
 	})
 
+	// MCP endpoint (Streamable HTTP). It carries its own auth: the MCP key
+	// generated in 设置 → 其他 → MCP, not the dashboard session. A disabled
+	// endpoint answers 404 so an unconfigured install looks like it has no
+	// MCP route at all.
+	r.Any(mcpserver.EndpointPath, mcpserver.Handler(db, version.Version))
+
 	// API v1 routes
 	v1 := r.Group("/v1")
 	{
@@ -419,6 +426,11 @@ func runServe() {
 			dashboardAuthed.GET("/update", updateCtl.StatusHandler())
 			dashboardAuthed.POST("/update/check", updateCtl.CheckHandler())
 			dashboardAuthed.POST("/update/apply", updateCtl.ApplyHandler())
+
+			// MCP endpoint settings (设置 → 其他 → MCP)
+			dashboardAuthed.GET("/mcp", mcpserver.StatusHandler(db))
+			dashboardAuthed.PUT("/mcp", mcpserver.UpdateHandler(db))
+			dashboardAuthed.POST("/mcp/key", mcpserver.RotateKeyHandler(db))
 		}
 
 		// Relay endpoints (token auth). Every POST under /v1 is accepted by a

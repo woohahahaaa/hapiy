@@ -1365,7 +1365,7 @@ function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, 
               </div>
             </>
           ) : (
-            <Button disabled={fetching} onClick={onFetch}>
+            <Button disabled={fetching || dedupeSaving} onClick={onFetch}>
               {fetching ? <AppIcon name="progress_activity" data-icon="inline-start" className="animate-spin" /> : <AppIcon name="refresh" data-icon="inline-start" />}
               {t('actions.fetchModels')}
             </Button>
