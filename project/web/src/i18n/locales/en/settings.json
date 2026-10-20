@@ -84,7 +84,17 @@
   "other": {
     "title": "Enable Agent Takeover",
     "pageDescription": "When enabled, the sidebar shows the \"Agent Takeover\" entry for managing takeover files and rules",
-    "toggleDescription": "When enabled, the sidebar shows the \"Agent Takeover\" entry (config files, rules, etc.).\nWhen disabled, the entry is hidden from the sidebar."
+    "toggleDescription": "When enabled, the sidebar shows the \"Agent Takeover\" entry (config files, rules, etc.).\nWhen disabled, the entry is hidden from the sidebar.",
+    "mcpTitle": "MCP Server",
+    "mcpDescription": "Expose hapiy's read-only data (providers, models, usage, request logs, topology, managed configs) to MCP-capable AI tools.\nWhile disabled, /mcp answers 404.",
+    "mcpEndpoint": "Endpoint",
+    "mcpKey": "Access key",
+    "mcpKeyEmpty": "Not generated yet; enabling the switch creates one",
+    "mcpCopy": "Copy",
+    "mcpCopied": "Copied",
+    "mcpRotate": "Regenerate",
+    "mcpRotateHint": "Regenerating invalidates the old key immediately; connected clients must be updated.",
+    "mcpClients": "Client setup (opencode / Claude Code) is documented under \"MCP server\" in the help pages."
   },
   "recovery": {
     "modeProbe": "Test upstream recovery",

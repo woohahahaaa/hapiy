@@ -404,6 +404,13 @@ export type SystemSetting = {
   readonly value: string
 }
 
+// McpStatus is the MCP endpoint state from 设置 → 其他 → MCP: whether the
+// endpoint is open and the Bearer key clients must present.
+export type McpStatus = {
+  readonly enabled: boolean
+  readonly apiKey: string
+}
+
 export type BackupModule =
   | 'topology'
   | 'providers'
@@ -1138,6 +1145,16 @@ function parseSystemSetting(value: unknown): SystemSetting {
   }
 }
 
+function parseMcpStatus(value: unknown): McpStatus {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('mcp') }), null)
+  }
+  return {
+    enabled: readBoolean(value.enabled, 'mcp.enabled'),
+    apiKey: readString(value.api_key, 'mcp.apiKey'),
+  }
+}
+
 function parseBackupRecord(value: unknown): BackupRecord {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('backup') }), null)
@@ -1346,7 +1363,7 @@ function parseProvider(value: unknown): Provider {
     status: readBoolean(value.status, 'provider.status'),
     autoDisabled: readBoolean(value.auto_disabled, 'provider.auto_disabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'provider.workflow_enabled'),
-    dedupeV1Suffix: value.dedupe_v1_suffix === undefined
+    dedupeV1Suffix: value.dedupe_v1_suffix === undefined || value.dedupe_v1_suffix === null
       ? true
       : readBoolean(value.dedupe_v1_suffix, 'provider.dedupe_v1_suffix'),
   }
@@ -2998,6 +3015,18 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ key, value }),
     }))
+  },
+  async getMcpStatus(): Promise<McpStatus> {
+    return parseMcpStatus(await request('/mcp'))
+  },
+  async updateMcpStatus(enabled: boolean): Promise<McpStatus> {
+    return parseMcpStatus(await request('/mcp', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }))
+  },
+  async rotateMcpKey(): Promise<McpStatus> {
+    return parseMcpStatus(await request('/mcp/key', { method: 'POST' }))
   },
   async refreshExchangeRate(): Promise<number> {
     const body = await request('/exchange-rate/refresh', { method: 'POST' })

@@ -1387,10 +1387,13 @@ function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, 
             </label>
             <p className="text-xs text-muted-foreground">{t('dialog.dedupeV1SuffixHint')}</p>
           </div>
-          <label className="flex cursor-pointer items-center gap-2">
-            <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
-            <span className="text-foreground">{t('dialog.endpointUseKey')}</span>
-          </label>
+          <div className="flex flex-col gap-1">
+            <label className="flex cursor-pointer items-center gap-2">
+              <Checkbox checked={useKey} onCheckedChange={(checked) => onUseKeyChange(checked === true)} />
+              <span className="text-foreground">{t('dialog.endpointUseKey')}</span>
+            </label>
+            <p className="text-xs text-muted-foreground">{t('dialog.endpointUseKeyHint')}</p>
+          </div>
           <Separator />
           {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
           {models && (

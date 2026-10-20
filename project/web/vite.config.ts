@@ -67,6 +67,9 @@ export default defineConfig({
       },
       "/v1": "http://localhost:8080",
       "/metrics": "http://localhost:8080",
+      // MCP 端点在后端（:8080）。生产环境前后端同源、不经过这条代理；
+      // dev 下不加就会落到 Vite 的 SPA fallback，MCP 客户端拿到 HTML。
+      "/mcp": "http://localhost:8080",
     },
   },
   resolve: {

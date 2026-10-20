@@ -84,7 +84,17 @@
   "other": {
     "title": "开启接管Agent",
     "pageDescription": "开启后侧边栏显示「接管Agent」入口，管理接管文件与规则",
-    "toggleDescription": "开启后侧边栏显示“接管Agent”入口（含配置文件、管理规则等）。\n关闭后侧边栏隐藏该入口。"
+    "toggleDescription": "开启后侧边栏显示“接管Agent”入口（含配置文件、管理规则等）。\n关闭后侧边栏隐藏该入口。",
+    "mcpTitle": "MCP 服务",
+    "mcpDescription": "把 hapiy 的只读数据（供应商、模型、用量、请求日志、转发拓扑、托管配置）开放给支持 MCP 的 AI 工具。\n关闭时 /mcp 直接返回 404。",
+    "mcpEndpoint": "服务地址",
+    "mcpKey": "访问 Key",
+    "mcpKeyEmpty": "尚未生成；开启开关时会自动创建",
+    "mcpCopy": "复制",
+    "mcpCopied": "已复制",
+    "mcpRotate": "重新生成",
+    "mcpRotateHint": "重新生成后旧 Key 立即失效，已接入的客户端需要同步更新。",
+    "mcpClients": "客户端配置（opencode / Claude Code）见帮助文档「MCP 服务」。"
   },
   "recovery": {
     "modeProbe": "测试上游恢复",
