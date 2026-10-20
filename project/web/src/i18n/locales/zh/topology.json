@@ -39,7 +39,7 @@
     "responseModify": "响应改写",
     "concurrency": "并发控制",
     "autoSwitch": "故障转移",
-    "logOutput": "日志抓取"
+    "logOutput": "请求抓取"
   },
   "toolbar": {
     "undo": "撤销",
@@ -53,7 +53,8 @@
     "boxSelectOn": "框选模式已开启，点击拖拽框选节点",
     "addNode": "添加节点",
     "autoLayout": "自动布局",
-    "fitAll": "最大化显示全部节点"
+    "fitAll": "最大化显示全部节点",
+    "resizeActiveRequests": "调整活跃请求卡片高度"
   },
   "delete": {
     "title": "确认删除",
@@ -63,12 +64,12 @@
     "confirm": "确认删除"
   },
   "menu": {
-    "addFullWorkflow": "添加完整工作流",
-    "addEntry": "添加请求入口",
-    "addProviderSlot": "添加供应商插槽",
-    "addSlot": "添加{{slot}}插槽",
+    "addFullWorkflow": "添加 完整工作流",
+    "addEntry": "添加 请求入口",
+    "addProviderSlot": "添加 供应商插槽",
+    "addSlot": "添加 {{slot}}插槽",
     "addSwitch": "添加 条件开关",
-    "addEmergencyWorkflow": "添加应急供应商"
+    "addEmergencyWorkflow": "添加 应急供应商"
   },
   "colors": {
     "title": "模型节点色值",

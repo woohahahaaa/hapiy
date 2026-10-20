@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
-import { PageHeader } from '@/components/wooh/PageHeader'
 import { UsageLogDetailDialog } from '@/components/wooh/UsageLogDetailDialog'
 
 import { Button } from '@/components/ui/button'
@@ -181,7 +180,7 @@ function retentionLabel(minutes: number, t: TFunction): string {
   return t('monitor.retention.label', { retention: formatRetention(minutes, t) })
 }
 
-function ActiveRequestsSection() {
+export function ActiveRequestsSection() {
   const { t } = useTranslation('logs')
   const [requests, setRequests] = useState<readonly ActiveRequest[]>([])
   const [config, setConfig] = useState<ActiveRequestConfig | null>(null)
@@ -396,19 +395,5 @@ function ActiveRequestsSection() {
         }}
       />
     </section>
-  )
-}
-
-export function MonitorPage() {
-  const { t } = useTranslation('logs')
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        description={t('page.activity.description')}
-      />
-      <div className="flex-1 overflow-auto p-6">
-        <ActiveRequestsSection />
-      </div>
-    </div>
   )
 }

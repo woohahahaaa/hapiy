@@ -66,10 +66,10 @@
   },
   "nav": {
     "topology": "Topology",
-    "monitor": "Monitor",
+    "monitor": "Logs",
     "activity": "Activity",
     "logs": "Usage Logs",
-    "capture": "Log Capture",
+    "capture": "Request Capture",
     "llmConfig": "Models",
     "token": "Tokens",
     "provider": "Providers",

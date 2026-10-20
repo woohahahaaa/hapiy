@@ -35,6 +35,7 @@ import { FlatCanvasMenu } from '@/components/wooh/topology/FlatCanvasMenu'
 import { FlowColorsPanel } from '@/components/wooh/topology/FlowColorsPanel'
 import { TopologyVersionsModal } from '@/components/wooh/TopologyVersionsModal'
 import { ExecutorDebug } from '@/components/wooh/node/executor-debug'
+import { ActiveRequestsSection } from '@/components/wooh/ActiveRequestsSection'
 import { DEBUG_FLOW_LIGHTS_KEY, DEBUG_NODE_INFO_KEY } from '@/components/wooh/DebugSettings'
 import { dashboardApi, type ActiveRequest, type FlatNode, type FlatTopology, type FlatWire, type LayoutSnapshot, type Provider, type ProviderDisableStatus, type ProviderStrategy } from '@/lib/dashboard-api'
 import { NodeEdge } from '@/components/wooh/node/edge'
@@ -309,6 +310,15 @@ function externallyDisabledSlotIds(topology: FlatTopology): Set<string> {
   return disabled
 }
 
+// 首页下方「活动请求」卡片高度（px）跟主题、表格列宽一样存后端 settings：
+// 换浏览器 / 换设备打开仍是用户拖过的位置。
+const ACTIVE_REQUESTS_HEIGHT_SETTING_KEY = 'topology_active_requests_height'
+const ACTIVE_REQUESTS_DEFAULT_HEIGHT = 300
+const ACTIVE_REQUESTS_MIN_HEIGHT = 140
+const TOPOLOGY_MIN_HEIGHT = 200
+const SPLITTER_HEIGHT_PX = 8 // h-2
+const SPLIT_CHROME_PX = SPLITTER_HEIGHT_PX
+
 export function TopologyPage() {
   const { t } = useTranslation('topology')
   const location = useLocation()
@@ -322,6 +332,68 @@ export function TopologyPage() {
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // 拓扑卡片 + 活动请求卡片的上下分割：只记住下面卡片的像素高度，上面占用剩余空间。
+  const [activeRequestsHeight, setActiveRequestsHeight] = useState(ACTIVE_REQUESTS_DEFAULT_HEIGHT)
+  const [splitInnerHeight, setSplitInnerHeight] = useState(0)
+  const splitContainerRef = useRef<HTMLDivElement | null>(null)
+  const splitDragRef = useRef<{ startY: number; startHeight: number; lastHeight: number } | null>(null)
+  const maxActiveRequestsHeight = splitInnerHeight > 0
+    ? Math.max(ACTIVE_REQUESTS_MIN_HEIGHT, splitInnerHeight - SPLIT_CHROME_PX - TOPOLOGY_MIN_HEIGHT)
+    : Number.POSITIVE_INFINITY
+  const effectiveActiveRequestsHeight = Math.max(
+    ACTIVE_REQUESTS_MIN_HEIGHT,
+    Math.min(activeRequestsHeight, maxActiveRequestsHeight),
+  )
+  const clampActiveRequestsHeight = useCallback(
+    (height: number) => Math.max(ACTIVE_REQUESTS_MIN_HEIGHT, Math.min(height, maxActiveRequestsHeight)),
+    [maxActiveRequestsHeight],
+  )
+
+  useEffect(() => {
+    const el = splitContainerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      const styles = getComputedStyle(el)
+      const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+      setSplitInnerHeight(el.clientHeight - paddingY)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loading, error])
+
+  const handleSplitterPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    splitDragRef.current = { startY: e.clientY, startHeight: effectiveActiveRequestsHeight, lastHeight: effectiveActiveRequestsHeight }
+  }, [effectiveActiveRequestsHeight])
+
+  const handleSplitterPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = splitDragRef.current
+    if (!drag) return
+    const next = clampActiveRequestsHeight(drag.startHeight - (e.clientY - drag.startY))
+    drag.lastHeight = next
+    setActiveRequestsHeight(next)
+  }, [clampActiveRequestsHeight])
+
+  const handleSplitterPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = splitDragRef.current
+    if (!drag) return
+    splitDragRef.current = null
+    void dashboardApi.updateSetting(ACTIVE_REQUESTS_HEIGHT_SETTING_KEY, String(Math.round(drag.lastHeight))).catch(() => {})
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+  }, [])
+
+  const handleSplitterKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    const delta = e.key === 'ArrowUp' ? 24 : -24
+    const next = clampActiveRequestsHeight(effectiveActiveRequestsHeight + delta)
+    setActiveRequestsHeight(next)
+    void dashboardApi.updateSetting(ACTIVE_REQUESTS_HEIGHT_SETTING_KEY, String(Math.round(next))).catch(() => {})
+  }, [clampActiveRequestsHeight, effectiveActiveRequestsHeight])
+
   const [tp, setTp] = useState<FlatTopology | null>(null)
   const tpRef = useRef<FlatTopology | null>(null)
   const beginFlowIsolationRef = useRef<() => void>(() => {})
@@ -1226,6 +1298,10 @@ export function TopologyPage() {
       setDirty(false)
       setFlowLightDebug(settings.find((s) => s.key === DEBUG_FLOW_LIGHTS_KEY)?.value === 'true')
       setNodeInfoDebug(settings.find((s) => s.key === DEBUG_NODE_INFO_KEY)?.value === 'true')
+      const storedActiveHeight = Number(settings.find((s) => s.key === ACTIVE_REQUESTS_HEIGHT_SETTING_KEY)?.value)
+      if (Number.isFinite(storedActiveHeight) && storedActiveHeight > 0) {
+        setActiveRequestsHeight(storedActiveHeight)
+      }
       const stored = settings.find((s) => s.key === FLOW_COLORS_SETTING_KEY)
       if (stored) {
         try {
@@ -2119,8 +2195,12 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         }
       />
       <div
+        ref={splitContainerRef}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4"
+      >
+      <div
         ref={setContainerEl}
-        className="relative flex-1 overflow-hidden"
+        className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
         onContextMenu={(e) => {
           if ('ontouchstart' in window) e.preventDefault()
         }}
@@ -2305,6 +2385,33 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
             </DialogScrollBody>
           </DialogContent>
         </Dialog>
+      </div>
+      {/* 上下拖动：下面卡片高度即用户拖出来的像素值，松开后写入后端 settings。 */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('toolbar.resizeActiveRequests')}
+        aria-valuemin={ACTIVE_REQUESTS_MIN_HEIGHT}
+        aria-valuemax={Number.isFinite(maxActiveRequestsHeight) ? Math.round(maxActiveRequestsHeight) : undefined}
+        aria-valuenow={Math.round(effectiveActiveRequestsHeight)}
+        tabIndex={0}
+        onPointerDown={handleSplitterPointerDown}
+        onPointerMove={handleSplitterPointerMove}
+        onPointerUp={handleSplitterPointerUp}
+        onPointerCancel={handleSplitterPointerUp}
+        onKeyDown={handleSplitterKeyDown}
+        className="group flex h-2 shrink-0 cursor-row-resize touch-none select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <span className="h-1 w-10 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50 group-active:bg-muted-foreground/70" />
+      </div>
+      <div
+        className="shrink-0 overflow-hidden rounded-xl border border-border bg-card"
+        style={{ height: effectiveActiveRequestsHeight }}
+      >
+        <div className="h-full overflow-auto p-4">
+          <ActiveRequestsSection />
+        </div>
+      </div>
       </div>
     </div>
   )

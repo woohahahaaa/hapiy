@@ -167,7 +167,7 @@
     "moduleAgent": "Agent takeover",
     "moduleSettings": "System settings",
     "moduleUsage": "Usage records",
-    "moduleLogs": "Log capture",
+    "moduleLogs": "Request capture",
     "frequencyLabel": "Automatic backup frequency",
     "frequencyNever": "Never",
     "frequencyDaily": "Daily",

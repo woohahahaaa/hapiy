@@ -3,7 +3,6 @@ import { lazy, Suspense } from 'react'
 import { AppShell } from '@/layouts/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
 import { TopologyPage } from '@/pages/TopologyPage'
-import { MonitorPage } from '@/pages/MonitorPage'
 import { LogsPage } from '@/pages/LogsPage'
 import { LogCapturePage } from '@/pages/LogCapturePage'
 import { ProviderPage } from '@/pages/ProviderPage'
@@ -51,7 +50,7 @@ function App() {
                 <AppShell>
                   <Routes>
                     <Route path="/" element={<TopologyPage />} />
-                    <Route path="/monitor" element={<MonitorPage />} />
+                    <Route path="/monitor" element={<Navigate to="/" replace />} />
                     <Route path="/logs" element={<LogsPage />} />
                     <Route path="/logs/capture" element={<LogCapturePage />} />
                     <Route path="/provider" element={<ProviderPage />} />

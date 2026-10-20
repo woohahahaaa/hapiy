@@ -64,7 +64,7 @@
     "responseModify": "响应改写",
     "concurrency": "并发控制",
     "autoSwitch": "故障转移",
-    "logOutput": "日志抓取"
+    "logOutput": "请求抓取"
   },
   "slotDefs": {
     "provider": "供应商",
@@ -72,7 +72,7 @@
     "responseModify": "响应改写",
     "concurrency": "并发控制",
     "autoSwitch": "故障转移",
-    "logOutput": "日志抓取",
+    "logOutput": "请求抓取",
     "placeholderRequestModify": "选择改写规则",
     "placeholderResponseModify": "选择响应改写规则",
     "placeholderConcurrency": "选择并发规则",
@@ -95,8 +95,8 @@
   "logOutput": {
     "prefixLabel": "日志前缀",
     "prefixPlaceholder": "请输入日志前缀",
-    "recordRequest": "记录请求",
-    "recordResponse": "记录响应"
+    "recordRequest": "抓取请求",
+    "recordResponse": "抓取响应"
   },
   "entry": {
     "requestEntryFallback": "请求入口",

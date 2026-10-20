@@ -32,9 +32,9 @@
       "description": "改写、并发控制、故障转移与渠道亲和"
     },
     "monitor": {
-      "id": "监控",
-      "title": "监控",
-      "description": "活动请求、使用记录与日志抓取"
+      "id": "日志",
+      "title": "日志",
+      "description": "活动请求、使用记录与请求抓取"
     },
     "settings": {
       "id": "系统设置",

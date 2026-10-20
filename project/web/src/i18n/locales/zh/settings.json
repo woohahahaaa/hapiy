@@ -167,7 +167,7 @@
     "moduleAgent": "接管Agent",
     "moduleSettings": "系统设置",
     "moduleUsage": "使用记录",
-    "moduleLogs": "日志抓取",
+    "moduleLogs": "请求抓取",
     "frequencyLabel": "自动备份频率",
     "frequencyNever": "从不",
     "frequencyDaily": "每天",

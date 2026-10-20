@@ -18,7 +18,7 @@ export interface NodeExecutorLogOutputItemProps extends SlotItemDragProps {
   onAutoClose?: () => void
 }
 
-// 日志抓取业务条目：日志前缀 + 记录请求/响应开关。
+// 请求抓取业务条目：日志前缀 + 抓取请求/响应开关。
 export function NodeExecutorLogOutputItem({
   entry,
   onChange,

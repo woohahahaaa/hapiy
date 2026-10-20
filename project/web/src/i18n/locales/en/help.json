@@ -33,9 +33,9 @@
       "description": "Rewrite, concurrency, failover and channel affinity"
     },
     "monitor": {
-      "id": "monitor",
-      "title": "Monitor",
-      "description": "Active requests, usage logs and log capture"
+      "id": "logs",
+      "title": "Logs",
+      "description": "Active requests, usage logs and request capture"
     },
     "settings": {
       "id": "settings",

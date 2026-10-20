@@ -65,7 +65,7 @@
     "responseModify": "Response Rewrite",
     "concurrency": "Concurrency",
     "autoSwitch": "Failover",
-    "logOutput": "Log Capture"
+    "logOutput": "Request Capture"
   },
   "slotDefs": {
     "provider": "Provider",
@@ -73,7 +73,7 @@
     "responseModify": "Response Rewrite",
     "concurrency": "Concurrency",
     "autoSwitch": "Failover",
-    "logOutput": "Log Capture",
+    "logOutput": "Request Capture",
     "placeholderRequestModify": "Select rewrite rule",
     "placeholderResponseModify": "Select response rewrite rule",
     "placeholderConcurrency": "Select concurrency rule",
@@ -96,8 +96,8 @@
   "logOutput": {
     "prefixLabel": "Log prefix",
     "prefixPlaceholder": "Enter log prefix",
-    "recordRequest": "Record requests",
-    "recordResponse": "Record responses"
+    "recordRequest": "Capture requests",
+    "recordResponse": "Capture responses"
   },
   "entry": {
     "requestEntryFallback": "Request entry",

@@ -39,7 +39,7 @@
     "responseModify": "Response Rewrite",
     "concurrency": "Concurrency",
     "autoSwitch": "Failover",
-    "logOutput": "Log Capture"
+    "logOutput": "Request Capture"
   },
   "toolbar": {
     "undo": "Undo",
@@ -53,7 +53,8 @@
     "boxSelectOn": "Box select is on; drag to select nodes",
     "addNode": "Add node",
     "autoLayout": "Auto layout",
-    "fitAll": "Fit all nodes"
+    "fitAll": "Fit all nodes",
+    "resizeActiveRequests": "Resize active requests panel"
   },
   "delete": {
     "title": "Confirm Delete",

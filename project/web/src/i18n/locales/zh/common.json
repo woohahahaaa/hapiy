@@ -66,10 +66,10 @@
   },
   "nav": {
     "topology": "转发拓扑",
-    "monitor": "监控",
+    "monitor": "日志",
     "activity": "活动监视",
     "logs": "使用记录",
-    "capture": "日志抓取",
+    "capture": "请求抓取",
     "llmConfig": "模型接入",
     "token": "令牌",
     "provider": "供应商",

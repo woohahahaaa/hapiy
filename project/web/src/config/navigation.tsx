@@ -29,7 +29,6 @@ export const navigation: NavItem[] = [
     labelKey: 'nav.monitor',
     icon: <AppIcon name="monitoring" />,
     children: [
-      { id: 'activity', labelKey: 'nav.activity', href: '/monitor' },
       { id: 'logs', labelKey: 'nav.logs', href: '/logs' },
       { id: 'capture', labelKey: 'nav.capture', href: '/logs/capture' },
     ],
