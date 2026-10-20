@@ -43,6 +43,7 @@ hapiy 是面向应用、Agent 和团队的自托管 AI 网关。它把各家模�
 | 用量与成本 | 令牌与额度、用量记录、费用统计 |
 | 监控与排障 | 活动监视、使用记录、请求/响应原文抓取 |
 | Agent 接管 | 接管 AI 编程工具配置（本机或 SSH），写入 hapiy 地址与 Key |
+| MCP 服务 | 把供应商、模型、用量、请求日志、拓扑以只读 MCP 工具开放给 AI 工具 |
 
 数据存本地 SQLite，单进程部署。
 
@@ -91,6 +92,28 @@ curl http://<hapiy 地址>/v1/chat/completions \
 ```
 
 客户端接入只需两处：BaseURL 填 `http(s)://<hapiy 地址>/v1`，API Key 换成令牌页生成的 `hk-` Key。完整说明见站内「帮助」（`/help`）。
+
+---
+
+## 🔌 MCP 服务
+
+hapiy 自带一个只读的 MCP（Model Context Protocol）端点，AI 工具可以直接查询供应商、模型、用量、请求日志和转发拓扑。
+
+1. 打开「设置 → 其他 → MCP 服务」，开启开关；系统自动生成 `hm-` 开头的 Key。
+2. 复制页面上的地址（`http://<hapiy 地址>/mcp`）和 Key。
+3. 在客户端里加上这个 remote MCP 服务，带 `Authorization: Bearer <Key>` 头：
+
+```sh
+# opencode
+opencode mcp add hapiy --url http://<hapiy 地址>/mcp \
+  --header 'Authorization=Bearer {env:HAPIY_MCP_KEY}'
+
+# Claude Code
+claude mcp add --transport http hapiy http://<hapiy 地址>/mcp \
+  --header "Authorization: Bearer <Key>"
+```
+
+工具全部只读，不会改任何配置；上游 Key 和令牌只返回末尾 4 位。关闭开关后 `/mcp` 返回 404。工具清单和更多客户端写法见站内「帮助 → MCP 服务」。
 
 ---
 

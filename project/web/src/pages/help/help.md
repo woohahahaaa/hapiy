@@ -148,7 +148,7 @@ curl http://<hapiy地址>/v1/chat/completions \
   - 单独设置价格：输入/缓存写入/缓存读取/输出四项（每1M Token），必须以 `$` 或 `¥` 开头，符号决定该模型的计费币种；
   - 从models.dev同步：选一个参考供应商，自动同步参考价格，可再填倍率（支持 `1/2` 这样的分数）；
   - 不设置：按0计费。
-- **从上游获取模型**：弹窗顶部可填「模型列表接口」路径（拼在第一个 Base URL 后面）并勾选是否传入第一个Key，点「获取」拉取上游模型；拉取后可「全选/全不选」，选择「添加」（合并去重）或「清空已有并添加」（整体替换）。接口设置只作用于本次拉取，不会保存到供应商（全局默认值在「系统设置 → 高级查询 → 获取模型列表」里改）。
+- **从上游获取模型**：弹窗顶部可填「模型列表接口」路径（拼在第一个 Base URL 后面），勾选是否传入 Key（优先使用未禁用的 Key，全部禁用时用第一个非空 Key），以及是否「自动去重 /v1 后缀」（Base URL 已以 `/v1` 结尾时不再重复 `/v1`；该开关保存在供应商上，下次打开沿用）。点「获取」拉取上游模型；拉取后可「全选/全不选」，选择「添加」（合并去重）或「清空已有并添加」（整体替换）。接口路径只作用于本次拉取，不会保存到供应商（全局默认值在「系统设置 → 高级查询 → 获取模型列表」里改）。
 
 页面上没有「测试连接」按钮，验证连通性直接用「从上游获取模型」。
 
@@ -300,6 +300,50 @@ Authorization: Bearer hk-xxxxxxxx
 
 「接管Agent」入口默认隐藏在侧边栏之外，需要在「系统设置 → 开启接管Agent」（地址 `/settings/other`）里打开开关。打开后**刷新页面**，侧边栏才会出现入口。开关只控制菜单显示，不影响功能本身。
 
+## MCP 服务
+
+hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开放给支持 MCP 的 AI 工具，让 Agent 直接查询供应商、模型、用量、请求日志和转发拓扑。工具全部只读，不会修改任何配置。
+
+### 开启
+
+「设置 → 其他 → MCP 服务」打开开关，系统会自动生成一把 `hm-` 开头的访问 Key。页面上可以复制服务地址和 Key；点「重新生成」会让旧 Key 立即失效。
+
+- 服务地址固定为 `<hapiy 地址>/mcp`，走 Streamable HTTP；
+- 关闭开关后该地址返回 404；
+- 每次请求都要带 `Authorization: Bearer <Key>`。
+
+### 可用工具
+
+| 工具 | 作用 |
+| --- | --- |
+| `list_providers` | 供应商列表（端点、模型、启用状态、权重），不含上游 Key |
+| `get_provider` | 单个供应商详情，上游 Key 只显示末尾 4 位 |
+| `list_models` | 可调用模型及其供应商、端点 |
+| `query_logs` | 按模型/供应商/令牌/状态/时间筛选请求日志 |
+| `get_usage_stats` | 请求数、Token、费用、缓存命中率、平均延迟 |
+| `get_topology` | 转发拓扑的节点与连线 |
+| `list_disabled_channels` | 当前被禁用的渠道 |
+| `list_agent_configs` | 被接管的 Agent 配置文件记录（不含内容） |
+
+### 接入客户端
+
+opencode：
+
+```sh
+opencode mcp add hapiy --url http://<hapiy 地址>/mcp \
+  --header 'Authorization=Bearer {env:HAPIY_MCP_KEY}'
+opencode mcp list
+```
+
+Claude Code：
+
+```sh
+claude mcp add --transport http hapiy http://<hapiy 地址>/mcp \
+  --header "Authorization: Bearer <Key>"
+```
+
+其他支持 remote MCP 的客户端，填同一个地址并加 `Authorization: Bearer <Key>` 头即可。Key 建议放环境变量，不要写进配置文件。
+
 ## 系统设置
 
 ### Base URL
@@ -357,6 +401,7 @@ Authorization: Bearer hk-xxxxxxxx
 
 - 「Debug」菜单只在开发模式下显示，生产构建不可见。
 - 「开启接管Agent」页面见上文章节。
+- 「MCP 服务」把只读数据开放给 MCP 客户端，见上文章节。
 
 ## 用户资料
 

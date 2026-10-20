@@ -148,7 +148,7 @@ Form fields for creating/editing:
   - Set a price: four fields (input / cache write / cache read / output, per 1M token) that must start with `$` or `¥`; the symbol sets the model's billing currency;
   - Sync from models.dev: choose a reference provider, sync the reference price and optionally set a multiplier (fractions such as `1/2` are supported);
   - Not set: billed as 0.
-- **Fetch models from upstream**: a dialog whose top field takes the "Model list endpoint" path (appended to the first Base URL) plus a checkbox for sending the first Key; click "Fetch" to pull the upstream models, then "Select all / Deselect all" and choose "Add" (merge and dedupe) or "Clear existing and add" (replace all). The endpoint settings only apply to this fetch and are not saved on the provider (change the global default under "Settings → Advanced Query → Get Model List").
+- **Fetch models from upstream**: a dialog whose top field takes the "Model list endpoint" path (appended to the first Base URL), a checkbox for sending a Key (the first non-disabled Key; when all are disabled, the first non-empty Key), and a "Dedupe /v1 suffix" checkbox (when the Base URL already ends with `/v1`, the path won't repeat `/v1`; this choice is stored on the provider and reused next time). Click "Fetch" to pull the upstream models, then "Select all / Deselect all" and choose "Add" (merge and dedupe) or "Clear existing and add" (replace all). The endpoint path only applies to this fetch and is not saved on the provider (change the global default under "Settings → Advanced Query → Get Model List").
 
 There is no "Test connection" button; verify connectivity with "Fetch models from upstream".
 
@@ -300,6 +300,50 @@ The "Takeover Config Files" page manages the config file records:
 
 The "Agent Takeover" entry is hidden from the sidebar by default; turn it on under "Settings → Agent Takeover" (the `/settings/other` page). **Reload the page** afterwards and the entry appears. The switch only controls the menu entry, not the feature.
 
+## MCP server
+
+hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the topology directly. Every tool is read-only; nothing here changes configuration.
+
+### Enable it
+
+Open "Settings → Other → MCP server" and turn the switch on. A key starting with `hm-` is generated automatically. The page lets you copy the endpoint and the key; "Regenerate" invalidates the previous key immediately.
+
+- The endpoint is always `<hapiy address>/mcp` over Streamable HTTP;
+- while the switch is off the path answers 404;
+- every request must carry `Authorization: Bearer <key>`.
+
+### Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `list_providers` | Providers with endpoints, models, status and weight; never upstream keys |
+| `get_provider` | One provider in detail; upstream keys are masked to the last 4 characters |
+| `list_models` | Callable models plus their providers and endpoints |
+| `query_logs` | Request logs filtered by model/provider/token/status/time |
+| `get_usage_stats` | Requests, tokens, cost, cache hit rate, average latency |
+| `get_topology` | Nodes and wires of the forwarding topology |
+| `list_disabled_channels` | Channels currently disabled |
+| `list_agent_configs` | Managed agent config file records (contents excluded) |
+
+### Connect a client
+
+opencode:
+
+```sh
+opencode mcp add hapiy --url http://<hapiy address>/mcp \
+  --header 'Authorization=Bearer {env:HAPIY_MCP_KEY}'
+opencode mcp list
+```
+
+Claude Code:
+
+```sh
+claude mcp add --transport http hapiy http://<hapiy address>/mcp \
+  --header "Authorization: Bearer <key>"
+```
+
+Any other client that supports remote MCP works the same way: the same URL plus an `Authorization: Bearer <key>` header. Keep the key in an environment variable rather than the config file.
+
 ## Settings
 
 ### Base URL
@@ -357,6 +401,7 @@ Currency and rate only affect records created afterwards; existing records keep 
 
 - The "Debug" menu is only visible in development builds.
 - The "Agent Takeover" switch is described above.
+- "MCP server" exposes read-only data to MCP clients; see the section above.
 
 ## Profile
 

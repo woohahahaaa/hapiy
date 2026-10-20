@@ -223,10 +223,10 @@ cd project/backend && ./scripts/backup-db.sh          # 备份（先做 sqlite �
 | 组件 | 需要的工具 |
 |---|---|
 | 前端 | `pnpm` ≥ 9、Node 22 |
-| 后端 | Go ≥ 1.22 |
+| 后端 | Go ≥ 1.23（MCP SDK 要求，`go.mod` 已声明 1.23.0） |
 | 数据库 | `sqlite3` CLI（仅在用户授权下做人工排查时使用） |
 
-> *Tools required: pnpm + Node 22 for the web app, Go 1.22+ for the backend, and sqlite3 CLI only for user-authorised manual inspection.*
+> *Tools required: pnpm + Node 22 for the web app, Go 1.23+ for the backend (the MCP SDK requires it), and sqlite3 CLI only for user-authorised manual inspection.*
 
 ---
 
