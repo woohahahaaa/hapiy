@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
+import { UsageStatsSection } from '@/components/wooh/UsageStatsSection'
 import {
   Dialog,
   DialogContent,
@@ -393,6 +394,7 @@ export function LogsPage() {
         status={total > 0 ? t('page.recordCount', { count: total }) : undefined}
       />
       <div className="p-6">
+        <UsageStatsSection />
         <DataTable
           id="logs"
           columns={columns}
