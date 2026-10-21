@@ -41,7 +41,7 @@
     "macPathLabel": "Mac default path",
     "macPathPlaceholder": "e.g. ~/.config/opencode/opencode.json",
     "macPathHint": "Supports ~ and $HOME",
-    "jsonPathsGroup": "Provider & model recommendation config",
+    "jsonPathsGroup": "Provider & model recommendation table",
     "providerPathLabel": "provider gjson path",
     "providerPathPlaceholder": "e.g. provider",
     "modelPathLabel": "model gjson path",
@@ -51,12 +51,12 @@
     "modelsContainerPlaceholder": "Select format",
     "containerArray": "Array [{\"id\": ...}] (openclaw)",
     "containerObject": "Object map {\"model ID\": {...}} (opencode)",
-    "modelsContainerHint": "Determines how models are written into the config file during managed sync. Array items each carry an ID; object keys are model names. Choosing wrong will make the agent fail startup validation",
+    "modelsContainerHint": "Determines how models are written into the config file during managed sync. Array items each carry an ID; object keys are model names. A wrong choice makes the agent fail startup validation",
     "commonLabel": "Common config (common)",
     "commonHint": "Field recommendations that are independent of the request protocol / SDK. Each row is one field: path / scope (provider|model) / recommended action (set / skip / delete) / recommended value / value shape (op / sep / allowed-values whitelist) / required / description. It uses the same \"value + shape\" rules as the rest of the page; fully blank rows are dropped on save. To edit the JSON directly, use \"Switch to JSON edit mode\" at the bottom left."
   },
   "jsonMode": {
-    "hint": "The whole dialog as JSONC (name / paths / model info fields / common config / Endpoint rules protocols). The top and every block carry // comment lines so another Agent can make sense of it; comments do not affect saving. Validation runs before saving and before switching back to the table; invalid JSONC can be neither saved nor restored to a table."
+    "hint": "The whole dialog as JSONC (name / paths / model info fields / common config / Endpoint rules protocols). The top and every block carry // comment lines so another Agent can make sense of it; comments do not affect saving. Validation runs before saving and before switching back to the table; invalid JSONC can be neither saved nor converted back to a table."
   },
   "errors": {
     "loadFailed": "Failed to load",

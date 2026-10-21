@@ -142,8 +142,10 @@
     },
     "retention": {
       "immediate": "Remove immediately after completion",
-      "seconds": "{{count}} seconds",
-      "minutes": "{{count}} minutes",
+      "seconds_one": "{{count}} second",
+      "seconds_other": "{{count}} seconds",
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes",
       "label": "Show active requests within {{retention}}",
       "unknown": "Retention unknown",
       "setTooltip": "Set retention time",

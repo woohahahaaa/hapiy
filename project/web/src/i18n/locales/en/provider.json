@@ -43,8 +43,8 @@
     "syncTitle": "Sync price settings",
     "syncConfirm": "Confirm sync",
     "syncing": "Syncing…",
-    "syncQuestion": "Sync the current price settings of model \"{{model}}\" to the same-named models of other providers?",
-    "syncDetail": "The price mode, reference provider, price snapshot and multiplier are written to the same-named models of other providers.",
+    "syncQuestion": "Sync the current price settings of model \"{{model}}\" to models with the same name in other providers?",
+    "syncDetail": "The price mode, reference provider, price snapshot and multiplier are written to models with the same name in other providers.",
     "deleteTitle": "Confirm deletion",
     "deleteDescription": "Provider \"{{name}}\" and all of its channel configurations will be deleted. This cannot be undone."
   },
@@ -124,8 +124,8 @@
     "bulkVendorless_one": "Skipped {{count}} model: no official reference provider found on models.dev",
     "bulkVendorless_other": "Skipped {{count}} models: no official reference provider found on models.dev",
     "noAutoModels": "No models available for automatic setup",
-    "synced_one": "Synced to the same-named model of {{count}} other provider",
-    "synced_other": "Synced to the same-named models of {{count}} other providers"
+    "synced_one": "Synced to the model with the same name in {{count}} other provider",
+    "synced_other": "Synced to models with the same name in {{count}} other providers"
   },
   "rateRules": {
     "hint": "Rules are matched from top to bottom by priority; matching stops at the first hit",
