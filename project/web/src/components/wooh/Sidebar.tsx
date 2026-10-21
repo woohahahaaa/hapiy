@@ -9,7 +9,7 @@ import { LanguageToggle } from '@/components/wooh/LanguageToggle'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { VersionDialog } from '@/components/wooh/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/wooh/OtherSettings'
-import { AGENT_DOCK_SPLITTER_WIDTH, useAgentDock } from '@/components/wooh/agent-dock-context'
+import { useAgentDock } from '@/components/wooh/agent-dock-context'
 import { i18n } from '@/i18n/i18n'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { useUpdateStatus } from '@/lib/update'
@@ -273,10 +273,7 @@ export function AppSidebar() {
   const [versionOpen, setVersionOpen] = useState(false)
   const { status: updateStatus } = useUpdateStatus()
   const updateAvailable = Boolean(updateStatus?.available)
-  // 对话面板在侧边栏左侧，侧边栏是 fixed 定位，需要按面板宽度（含分隔条）
-  // 整体右移，才能和它自己的占位 gap 对齐。
-  const { width: dockWidth, dragging: dockDragging, openDock } = useAgentDock()
-  const sidebarLeft = dockWidth > 0 ? dockWidth + AGENT_DOCK_SPLITTER_WIDTH : 0
+  const { width: dockWidth, openDock } = useAgentDock()
   // 移动端浮层始终是展开形态，只有桌面端折叠成图标栏。
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
@@ -338,10 +335,8 @@ export function AppSidebar() {
     <SidebarRoot
       collapsible="icon"
       variant="inset"
-      style={{ left: sidebarLeft }}
       className={cn(
-        dockDragging && 'md:transition-none!',
-        // 对话面板出现时给侧边栏本身也描一圈边，避免中间这一列看起来是“裸”的。
+        // 对话面板出现时给侧边栏本身也描一圈边，避免这一列看起来是“裸”的。
         dockWidth > 0 &&
           'md:[&>[data-slot=sidebar-inner]]:rounded-xl md:[&>[data-slot=sidebar-inner]]:border md:[&>[data-slot=sidebar-inner]]:border-border',
       )}
