@@ -124,26 +124,11 @@ function scoreMatch(model: ModelsDevModel, needle: string): number {
   return -1
 }
 
-// isVersionSuffixMatch reports whether the longer value is the shorter one
-// plus a pure numeric version/date suffix. This bridges official renames like
-// "deepseek-v4.1-flash" (user) ↔ "DeepSeek V4.1 Flash 1017" (models.dev)
-// without matching different tiers such as "gpt-4o" ↔ "gpt-4o-mini" or
-// "deepseek-v4-flash" ↔ "deepseek-v4-flash-vision-exp" (letter suffix).
-function isVersionSuffixMatch(a: string, b: string): boolean {
-  if (!a || !b) return false
-  if (a === b) return true
-  const longer = a.length > b.length ? a : b
-  const shorter = a.length > b.length ? b : a
-  if (!longer.startsWith(shorter)) return false
-  return /^\d+$/.test(longer.slice(shorter.length))
-}
-
 // Models.dev publishes the same model under different id shapes: some
 // providers use "provider/model", others the bare model id. A stored model
 // name therefore matches both the exact id/name and a fully-qualified id
 // whose trailing segment is the model name. 归一化（去连字符/空格）后同样
-// 兜底匹配，见 normalizeModelKey；纯数字版本/日期后缀（如 1017、20241022）
-// 也视为同一模型，避免官方改名后匹配不上。
+// 兜底匹配，见 normalizeModelKey。
 function modelKeyMatches(id: string, name: string, needle: string): boolean {
   if (id === needle || name === needle) return true
   if (id.endsWith(`/${needle}`)) return true
@@ -151,8 +136,7 @@ function modelKeyMatches(id: string, name: string, needle: string): boolean {
   const nname = normalizeModelKey(name)
   const nneedle = normalizeModelKey(needle)
   if (nid === nneedle || nname === nneedle) return true
-  if (nid.endsWith(`/${nneedle}`)) return true
-  return isVersionSuffixMatch(nid, nneedle) || isVersionSuffixMatch(nname, nneedle)
+  return nid.endsWith(`/${nneedle}`)
 }
 
 export function searchModelsDevModels(

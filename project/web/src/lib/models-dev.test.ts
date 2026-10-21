@@ -246,31 +246,6 @@ describe('findModelsDevProviderRow', () => {
   })
 })
 
-describe('model version suffix aliases', () => {
-  const models: readonly ModelsDevModel[] = [
-    makeModel({ id: 'deepseek-flash', name: 'DeepSeek V4.1 Flash 1017', providerName: 'DeepSeek', providerId: 'deepseek' }),
-    makeModel({ id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', providerName: 'DeepSeek', providerId: 'deepseek' }),
-    makeModel({ id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision Exp', providerName: 'DeepSeek', providerId: 'deepseek' }),
-    makeModel({ id: 'gpt-4o', name: 'GPT-4o', providerName: 'OpenAI', providerId: 'openai' }),
-    makeModel({ id: 'gpt-4o-mini', name: 'GPT-4o mini', providerName: 'OpenAI', providerId: 'openai' }),
-  ]
-
-  it('matches a pure numeric release suffix on the official name', () => {
-    expect(findModelsDevProviderRow(models, 'deepseek-v4.1-flash', 'DeepSeek')?.id).toBe('deepseek-flash')
-    expect(resolveModelsDevReference(models, 'deepseek-v4.1-flash')?.row.providerName).toBe('DeepSeek')
-  })
-
-  it('does not match letter suffixes or different tiers', () => {
-    expect(findModelsDevProviderRow(models, 'deepseek-v4-flash', 'DeepSeek')?.id).toBe('deepseek-v4-flash')
-    const otherTiers: readonly ModelsDevModel[] = [
-      makeModel({ id: 'gpt-4o-mini', name: 'GPT-4o mini', providerName: 'OpenAI Mini', providerId: 'openai-mini' }),
-      makeModel({ id: 'deepseek-v4-flash-vision-exp', name: 'DeepSeek V4 Flash Vision Exp', providerName: 'DeepSeek Vision', providerId: 'deepseek-vision' }),
-    ]
-    expect(providersForModel(otherTiers, 'gpt-4o')).toEqual([])
-    expect(providersForModel(otherTiers, 'deepseek-v4-flash')).toEqual([])
-  })
-})
-
 describe('normalizeProviderKey', () => {
   it('keeps only letters and digits, case-insensitively', () => {
     expect(normalizeProviderKey('OpenCode Go')).toBe('opencodego')
