@@ -75,7 +75,7 @@ curl http://<hapiy address>/v1/chat/completions \
   -d '{"model":"your-model-name","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the topology shows the animated path the request took, "Monitor → Activity" has the live request list, and "Usage Logs" shows this call's latency and token usage.
+`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the topology shows the animated path the request took, "Log Center → Activity" has the live request list, and "Usage Logs" shows this call's latency and token usage.
 
 ### When a call fails
 
