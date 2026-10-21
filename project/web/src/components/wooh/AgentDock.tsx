@@ -225,8 +225,10 @@ export function AgentDockSplitter() {
       }}
       className="group hidden w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
     >
-      {/* 与转发规则页的分隔条一致：1 个单位的粗度 + 40 的握把长度，hover/active 同色。 */}
-      <span className="h-10 w-1 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50 group-active:bg-muted-foreground/70" />
+      {/* 与转发规则页的分隔条同规格（4px 粗、40px 长、8px 热区），但底色用
+          muted-foreground：面板停在外壳的 sidebar 底色上，bg-border 在这里
+          几乎看不见，看起来就像只在 hover 时才出现。 */}
+      <span className="h-10 w-1 rounded-full bg-muted-foreground/45 transition-colors group-hover:bg-muted-foreground/65 group-active:bg-muted-foreground/80" />
     </div>
   )
 }
