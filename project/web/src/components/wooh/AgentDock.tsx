@@ -1,14 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSidebar } from '@/components/ui/sidebar'
 import { AgentPanel } from '@/components/wooh/AgentPanel'
 import type { AgentChatMessage } from '@/components/wooh/AgentPanel'
+import {
+  AGENT_DOCK_SPLITTER_WIDTH,
+  AGENT_DOCK_STORAGE_KEY,
+  AgentDockContext,
+  useAgentDock,
+} from '@/components/wooh/agent-dock-context'
+import type { AgentDockContextValue } from '@/components/wooh/agent-dock-context'
 
-// 对话面板宽度只存在本机浏览器里（每个浏览器各自一份），不进后端设置。
-export const AGENT_DOCK_STORAGE_KEY = 'agent_dock_width'
-// 分隔条宽度（px）。侧边菜单是 fixed 定位，左侧偏移量要把这段宽度算进去。
-export const AGENT_DOCK_SPLITTER_WIDTH = 8
 const DEFAULT_DOCK_WIDTH = 360
 const KEYBOARD_STEP = 24
 
@@ -38,26 +41,6 @@ function readStoredWidth(): number {
 
 function clockNow(): string {
   return new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
-type AgentDockContextValue = {
-  readonly width: number
-  readonly maxWidth: number
-  readonly dragging: boolean
-  readonly messages: readonly AgentChatMessage[]
-  readonly sending: boolean
-  readonly setWidth: (next: number) => void
-  readonly setDragging: (next: boolean) => void
-  readonly openDock: () => void
-  readonly send: (text: string) => void
-}
-
-const AgentDockContext = createContext<AgentDockContextValue | null>(null)
-
-export function useAgentDock(): AgentDockContextValue {
-  const value = useContext(AgentDockContext)
-  if (!value) throw new Error('useAgentDock must be used inside AgentDockProvider')
-  return value
 }
 
 // AgentDockProvider owns the width (persisted per browser), the drag state and
@@ -185,7 +168,7 @@ export function AgentDock() {
     <div className="hidden min-h-0 shrink-0 p-2 pr-0 md:flex" style={{ width }}>
       <AgentPanel
         className="h-full"
-        title="hapiy"
+        title="Agent"
         subtitle={t('subtitle')}
         messages={messages}
         onSend={send}

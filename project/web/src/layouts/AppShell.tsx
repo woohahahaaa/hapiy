@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { AgentDock, AgentDockProvider, AgentDockSplitter, useAgentDock } from '@/components/wooh/AgentDock'
+import { AgentDock, AgentDockProvider, AgentDockSplitter } from '@/components/wooh/AgentDock'
+import { useAgentDock } from '@/components/wooh/agent-dock-context'
 import { AppSidebar } from '@/components/wooh/Sidebar'
 
 interface AppShellProps {
