@@ -1,7 +1,7 @@
 {
   "preview": {
-    "noAction": "No actions",
-    "summary": "{{rules}} rules · {{actions}} actions"
+    "noAction": "No action",
+    "summary": "Rules: {{rules}} · Actions: {{actions}}"
   },
   "unknown": {
     "title": "Unknown policy type",
@@ -44,10 +44,11 @@
     "recoveryTab": "Auto Recovery",
     "empty": "No failover rules yet. Click \"Add rule\" to create the first one",
     "notSet": "Not set",
-    "notEnabled": "Disabled",
+    "notEnabled": "Off",
     "unlimitedWindow": "any time",
     "windowMinutes": "{{count}} min",
-    "thresholdValue": "{{count}} hits / {{window}}",
+    "thresholdValue_one": "{{count}} hit / {{window}}",
+    "thresholdValue_other": "{{count}} hits / {{window}}",
     "columns": {
       "dimension": "Failover dimension",
       "trigger": "Trigger keywords",

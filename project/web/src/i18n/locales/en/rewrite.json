@@ -68,7 +68,7 @@
     "prefix": "Starts with prefix",
     "suffix": "Ends with suffix",
     "eq": "Equals",
-    "neq": "Not equals",
+    "neq": "Does not equal",
     "gt": "Greater than",
     "gte": "Greater than or equal",
     "lt": "Less than",
@@ -89,7 +89,7 @@
   },
   "convention": {
     "refHint": "No quotes → variable: header or gjson path",
-    "crossDomainHint": "Cross-domain: prefix header. or body.",
+    "crossDomainHint": "Cross-domain: add a header. or body. prefix",
     "literalHint": "true/false/null/number → JSON literal",
     "stringHint": "Quoted → fixed string, content inside quotes",
     "hashHint": "hash(path) → stable id from the content"

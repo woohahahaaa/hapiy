@@ -7,7 +7,7 @@
     "endpoints": "Endpoints",
     "models": "Models",
     "status": "Status",
-    "failover": "Auto-disabled",
+    "failover": "Auto-disable status",
     "actions": "Actions"
   },
   "list": {
@@ -62,7 +62,7 @@
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
     "deleteEndpointAria": "Delete Endpoint",
-    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path used above to switch to it, or type one and leave the field to apply it — clearing it and leaving the field means unrestricted.",
+    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path in the dropdown to switch to it, or type one and leave the field to apply it — clearing it and leaving the field means unrestricted.",
     "modelNamePlaceholder": "Model name"
   },
   "price": {

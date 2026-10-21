@@ -85,7 +85,7 @@
   "clear": {
     "confirmTitle": "Clear everything under the current filters. Continue?",
     "description": "This cannot be undone. Cleared records cannot be recovered.",
-    "filtered": "Clear current page",
+    "filtered": "Clear filtered results",
     "all": "Clear all",
     "filteredDone_one": "Cleared {{count}} record",
     "filteredDone_other": "Cleared {{count}} records",
@@ -129,7 +129,7 @@
       "outcomeClientDisconnected": "Client disconnected",
       "outcomeUpstreamError": "Upstream error",
       "outcomeNoProvider": "No provider available",
-      "outcomeConcurrency": "Concurrency limit",
+      "outcomeConcurrency": "Concurrency limit exceeded",
       "outcomeParseError": "Parse error",
       "outcomeKilled": "Killed",
       "outcomeFinished": "Finished"
@@ -213,9 +213,9 @@
   },
   "dateRange": {
     "all": "All",
-    "lastMonth": "Last month",
-    "lastWeek": "Last week",
-    "lastDay": "Last day",
+    "lastMonth": "Last 30 days",
+    "lastWeek": "Last 7 days",
+    "lastDay": "Last 24 hours",
     "today": "Today",
     "start": "Start",
     "to": "to",

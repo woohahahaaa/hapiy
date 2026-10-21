@@ -168,7 +168,7 @@
     "pageDescription": "选择需要备份的模块，自动与手动备份都按当前选择执行。",
     "paramsTitle": "备份参数",
     "contentTitle": "备份内容",
-    "contentHint": "勾选需要备份的模块；使用记录和日志默认不勾选。保存后，自动与手动备份都按这份选择执行。",
+    "contentHint": "勾选需要备份的模块；使用记录和请求抓取默认不勾选。保存后，自动与手动备份都按这份选择执行。",
     "noChangeHint": "和上次相比，内容没有变化时不重复生成备份文件，只记录一条“和上次无差异”。",
     "moduleTopology": "转发拓扑",
     "moduleProviders": "供应商",

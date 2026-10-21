@@ -94,7 +94,7 @@
     "mcpCopied": "Copied",
     "mcpRotate": "Regenerate",
     "mcpRotateHint": "Regenerating invalidates the old key immediately; connected clients must be updated.",
-    "mcpClients": "Client setup (opencode / Claude Code) is documented under \"MCP server\" in the help pages."
+    "mcpClients": "Client setup (opencode / Claude Code) is documented under \"MCP Server\" in the help docs."
   },
   "recovery": {
     "modeProbe": "Test upstream recovery",
@@ -107,7 +107,7 @@
     "cardTitle": "Auto Recovery",
     "cardDescription": "Periodically checks disabled items; automatically clears them once the upstream recovers.",
     "recordsTitle": "Records Pending Recovery ({{count}})",
-    "recordsDescription": "Disabled records where the upstream is still failing and can be manually tested; removed from the list after recovery.",
+    "recordsDescription": "Disabled records whose upstream is still failing; you can test the upstream manually. They are removed from the list after recovery.",
     "recordsEmpty": "No records pending recovery",
     "handlerButtonTitle": "Saves the request at the moment of disabling, then simplifies and stores it per the JSON rules",
     "handlerButton": "Test Method",
@@ -168,7 +168,7 @@
     "pageDescription": "Choose the modules to back up; both automatic and manual backups follow the current selection.",
     "paramsTitle": "Backup parameters",
     "contentTitle": "Backup contents",
-    "contentHint": "Check the modules to back up; usage records and logs are unchecked by default. The saved selection applies to both automatic and manual backups.",
+    "contentHint": "Check the modules to back up; usage logs and request captures are unchecked by default. The saved selection applies to both automatic and manual backups.",
     "noChangeHint": "Compared with the last backup, when nothing has changed no new file is written — only a “no changes” record is kept.",
     "moduleTopology": "Topology",
     "moduleProviders": "Providers",
@@ -176,7 +176,7 @@
     "modulePolicy": "Request handling rules",
     "moduleAgent": "Agent takeover",
     "moduleSettings": "System settings",
-    "moduleUsage": "Usage records",
+    "moduleUsage": "Usage logs",
     "moduleLogs": "Request capture",
     "frequencyLabel": "Automatic backup frequency",
     "frequencyNever": "Never",

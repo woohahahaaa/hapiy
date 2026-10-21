@@ -34,7 +34,7 @@
     },
     "monitor": {
       "id": "logs",
-      "title": "Logs",
+      "title": "Log Center",
       "description": "Active requests, usage logs and request capture"
     },
     "settings": {

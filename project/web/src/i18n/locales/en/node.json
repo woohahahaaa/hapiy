@@ -87,7 +87,7 @@
   },
   "concurrency": {
     "every": "Every",
-    "minutesAtMost": "minute(s), at most",
+    "minutesAtMost": "min, up to",
     "items": "requests",
     "windowAria": "Time window (minutes)",
     "limitAria": "Concurrency limit (requests)",

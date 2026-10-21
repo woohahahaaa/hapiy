@@ -81,7 +81,7 @@
     "fieldsMustBeArray": "Fields must be written as a JSON array, one recommendation field object per item",
     "commonMustBeArray": "The common config must be a JSON array",
     "endpointRuleMissingName": "Endpoint rule #{{n}}: missing rule name",
-    "endpointRuleTagsEmpty": "Endpoint rule \"{{name}}\": induction scope is empty (endpoint_tags required)",
+    "endpointRuleTagsEmpty": "Endpoint rule \"{{name}}\": match terms are empty (endpoint_tags required)",
     "endpointRuleFieldsParseFailed": "Endpoint rule \"{{name}}\": failed to parse the field JSON: ",
     "modelInfoPathRequired": "Please fill in a path for \"{{label}}\" first",
     "dialogNameRequired": "Missing name (rule name)",
@@ -134,12 +134,12 @@
   "endpointRules": {
     "title": "Endpoint rules (per SDK, one rule per card)",
     "add": "Add Endpoint rule",
-    "hint": "One rule per endpoint: put endpoint match terms in the induction scope (comma-separated). A term containing * is a wildcard (* matches any run of characters, case-insensitive, e.g. *completion* hits both /v1/chat/completions and the bare /chat/completion); a term without * must equal the endpoint exactly (e.g. responses). A rule applies when any term matches, and order is priority. Private config uses a \"value + shape\" table: each row is a recommended field (path / scope / recommended action / recommended value / op / sep / allowed-values whitelist), scope (provider|model) / required / recommended (null = recommend not filling). For example, to pick which SDK npm uses, fill key=npm, recommended value={\"@ai-sdk/openai-compatible\"} and tick required. To edit the JSON directly, use \"Switch to JSON edit mode\" at the bottom left of the dialog.",
+    "hint": "One rule per endpoint: put endpoint match terms in the match scope (comma-separated). A term containing * is a wildcard (* matches any run of characters, case-insensitive, e.g. *completion* hits both /v1/chat/completions and the bare /chat/completion); a term without * must equal the endpoint exactly (e.g. responses). A rule applies when any term matches, and earlier rules take priority. Private config uses a \"value + shape\" table: each row is a recommended field (path / scope / recommended action / recommended value / op / sep / allowed-values whitelist), scope (provider|model) / required / recommended (null = recommend not filling). For example, to pick which SDK npm uses, fill key=npm, recommended value={\"@ai-sdk/openai-compatible\"} and tick required. To edit the JSON directly, use \"Switch to JSON edit mode\" at the bottom left of the dialog.",
     "empty": "No Endpoint rules yet. Click \"Add Endpoint rule\" at the top right to create one.",
     "index": "Endpoint rule {{n}}",
     "nameLabel": "Rule name",
     "namePlaceholder": "e.g. OpenAI-compatible Chat Completions",
-    "tagsLabel": "Induction scope (endpoint match terms, comma-separated; * = wildcard, none = exact)",
+    "tagsLabel": "Match terms (endpoint match phrases, comma-separated; * = wildcard, none = exact)",
     "tagsPlaceholder": "e.g. *completion*, *responses*, *message*",
     "privateLabel": "Private config (this endpoint's field recommendation table)"
   },
@@ -164,7 +164,7 @@
     "modelNotFound": "No model info found on models.dev",
     "selectSupplierFirst": "Select a reference provider first",
     "alreadyCompliant": "— Already matches recommendation",
-    "moreItems": "…and {{count}} more",
+    "moreItems": "…{{count}} items in total",
     "toast": {
       "officialApplied": "All models set to their official reference provider (those without one use the first candidate)",
       "officialAlready": "All models already use their best reference provider",

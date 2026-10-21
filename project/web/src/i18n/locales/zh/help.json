@@ -33,7 +33,7 @@
     },
     "monitor": {
       "id": "日志",
-      "title": "日志",
+      "title": "日志中心",
       "description": "活动请求、使用记录与请求抓取"
     },
     "settings": {

@@ -145,7 +145,7 @@
     "authKey": "Private key",
     "passwordLabel": "Password",
     "sshPasswordPlaceholder": "SSH password",
-    "passwordUnchangedPlaceholder": "Enter a new value to change it, otherwise leave it",
+    "passwordUnchangedPlaceholder": "Enter a new value to change it; leave blank to keep the current one",
     "privateKeyLabel": "Private key content",
     "jumpMode": "Jump host mode",
     "jumpHostLabel": "Jump host (with port)",
@@ -247,7 +247,7 @@
   "diffView": {
     "staleSupplier": "Outdated (the previously selected reference provider is no longer a candidate; not applied)",
     "unsetSupplier": "No reference provider set (model base fields not applied)",
-    "andMoreModels": "…and {{count}} more models",
+    "andMoreModels": "…{{count}} models in total",
     "beforeAfter_one": "Current content → after applying recommendation ({{count}} change)",
     "beforeAfter_other": "Current content → after applying recommendation ({{count}} changes)"
   },
@@ -312,7 +312,7 @@
     "removeTitle": "Remove {{name}}",
     "providerDisabled": " (disabled)",
     "providerMeta": "{{models}} models · {{endpoints}} endpoints",
-    "noneMergeHint": "Matched an existing group “{{endpoint}}”{{suffixHint}}; saving with this empty will auto-merge",
+    "noneMergeHint": "Matched an existing group “{{endpoint}}”{{suffixHint}}; leave this blank and save to merge automatically",
     "noneMergeSuffixPart": " (suffix {{suffix}})"
   },
   "versions": {

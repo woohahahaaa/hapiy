@@ -30,7 +30,7 @@
   "node": {
     "entry": "Request Entry",
     "emergencyEntry": "Emergency Request Entry",
-    "providerSlot": "Providers",
+    "providerSlot": "Provider",
     "switch": "Switch",
     "slotFallback": "Slot"
   },
@@ -107,7 +107,7 @@
     "formatFailed": "Format failed: invalid JSON",
     "saving": "Saving…",
     "saveConfirmTitle": "Save JSON",
-    "saveConfirmDescription": "You modified the JSON content. Save it to the backend? The ID fields are strongly bound to data associated by ID, such as usage records and history. Changing any ID may cause these records to stop matching. Please confirm you understand this risk.",
+    "saveConfirmDescription": "You modified the JSON content. Save it to the backend? The ID fields are strongly bound to data associated by ID, such as usage logs and version history. Changing any ID may cause these records to stop matching. Please confirm you understand this risk.",
     "reconsider": "Let me reconsider",
     "confirmSave": "Confirm Save",
     "topLevelArray": "The JSON top level must be an array",
