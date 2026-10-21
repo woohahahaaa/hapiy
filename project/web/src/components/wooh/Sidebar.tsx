@@ -9,12 +9,14 @@ import { LanguageToggle } from '@/components/wooh/LanguageToggle'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { VersionDialog } from '@/components/wooh/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/wooh/OtherSettings'
+import { AGENT_DOCK_SPLITTER_WIDTH, useAgentDock } from '@/components/wooh/AgentDock'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { useUpdateStatus } from '@/lib/update'
 import { isPathActive, navigation, type NavItem } from '@/config/navigation'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
