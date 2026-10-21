@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AgentDock, AgentDockProvider, AgentDockSplitter } from '@/components/wooh/AgentDock'
 import { useAgentDock } from '@/components/wooh/agent-dock-context'
@@ -19,7 +20,11 @@ function ShellBody({ children }: AppShellProps) {
           fixed + inset 覆盖浏览器可视框，pointer-events-none 不挡交互 */}
       <div className="pointer-events-none fixed inset-0 z-[60] ring-1 ring-border/80 ring-inset" aria-hidden="true" />
       <AppSidebar />
-      <SidebarInset className="overflow-hidden">{children}</SidebarInset>
+      {/* 面板打开时去掉内容卡右侧的 8px 外边距，让「内容卡 → 分隔条」的
+          视觉缝隙和转发规则页的分隔条一样是 8px。 */}
+      <SidebarInset className={cn('overflow-hidden', width > 0 && 'md:mr-0!')}>
+        {children}
+      </SidebarInset>
       {/* 拖到 0 的那一下仍然保留分隔条，否则指针捕获会随面板卸载而丢失。 */}
       {(width > 0 || dragging) && <AgentDockSplitter />}
       {width > 0 && <AgentDock />}

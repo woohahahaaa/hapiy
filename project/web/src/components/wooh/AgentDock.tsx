@@ -12,6 +12,8 @@ import {
 import type { AgentDockContextValue } from '@/components/wooh/agent-dock-context'
 
 const DEFAULT_DOCK_WIDTH = 360
+// 低于这个宽度就不显示了：拖过阈值直接收到 0，避免留一条夹不紧的窄缝。
+const MIN_DOCK_WIDTH = 320
 const KEYBOARD_STEP = 24
 
 // 侧边栏展开宽度与 AppShell 的 `--sidebar-width: calc(var(--spacing) * 64)`
@@ -30,7 +32,9 @@ function readStoredWidth(): number {
     const raw = window.localStorage.getItem(AGENT_DOCK_STORAGE_KEY)
     if (raw === null) return DEFAULT_DOCK_WIDTH
     const value = Number(raw)
-    return Number.isFinite(value) && value >= 0 ? Math.round(value) : DEFAULT_DOCK_WIDTH
+    if (!Number.isFinite(value) || value < 0) return DEFAULT_DOCK_WIDTH
+    const rounded = Math.round(value)
+    return rounded > 0 && rounded < MIN_DOCK_WIDTH ? 0 : rounded
   } catch {
     return DEFAULT_DOCK_WIDTH
   }
@@ -59,7 +63,7 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
   // Remember the last visible width so the sidebar button restores it rather
   // than always snapping back to the default.
   useEffect(() => {
-    if (width > 0) lastNonZero.current = width
+    if (width >= MIN_DOCK_WIDTH) lastNonZero.current = width
   }, [width])
 
   useEffect(() => {
@@ -77,7 +81,9 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
 
   const setWidth = useCallback(
     (next: number) => {
-      const clamped = Math.max(0, Math.min(Math.round(next), maxWidth))
+      const limited = Math.max(0, Math.min(Math.round(next), maxWidth))
+      // 小于最小宽度视为要关掉，而不是留一条窄缝。
+      const clamped = limited > 0 && limited < MIN_DOCK_WIDTH ? 0 : limited
       setWidthState(clamped)
       try {
         window.localStorage.setItem(AGENT_DOCK_STORAGE_KEY, String(clamped))
@@ -93,7 +99,7 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
   const visibleWidth = Math.max(0, Math.min(width, maxWidth))
 
   const openDock = useCallback(() => {
-    setWidth(Math.max(lastNonZero.current, Math.round(remToPx(12))))
+    setWidth(Math.max(lastNonZero.current, MIN_DOCK_WIDTH))
   }, [setWidth])
 
   const send = useCallback(
@@ -217,9 +223,10 @@ export function AgentDockSplitter() {
         event.preventDefault()
         setWidth(width + (event.key === 'ArrowLeft' ? KEYBOARD_STEP : -KEYBOARD_STEP))
       }}
-      className="group hidden w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
+      className="group hidden w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
     >
-      <span className="h-16 w-1 rounded-full bg-muted-foreground/35 transition-colors group-hover:bg-muted-foreground/65 group-active:bg-muted-foreground/80" />
+      {/* 与转发规则页的分隔条一致：1 个单位的粗度 + 40 的握把长度，hover/active 同色。 */}
+      <span className="h-10 w-1 rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50 group-active:bg-muted-foreground/70" />
     </div>
   )
 }
