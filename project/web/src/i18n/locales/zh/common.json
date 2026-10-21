@@ -66,7 +66,7 @@
   },
   "nav": {
     "topology": "转发规则",
-    "monitor": "日志",
+    "monitor": "日志中心",
     "activity": "活动监视",
     "logs": "使用记录",
     "capture": "请求抓取",
