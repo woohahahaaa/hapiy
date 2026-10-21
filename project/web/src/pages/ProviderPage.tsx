@@ -26,10 +26,10 @@ import type { Provider, ProviderDisableStatus, ProviderInput, ProviderModel, Mod
 import {
   findModelsDevProviderRow,
   isModelsDevLab,
-  labProviderIdForModel,
   loadModelsDevModels,
   providersForModel,
   refreshModelsDevModels,
+  resolveModelsDevReference,
   type ModelsDevModel,
 } from '@/lib/models-dev'
 
@@ -568,10 +568,9 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
     }
   }
 
-  // 一键把模型匹配到官方（lab）参考供应商并同步价格（按弹窗当前 UI 状态
-  // 判断，未保存也生效）。官方厂商由模型名推断，models.dev 有它的官方源
-  // 就用官方源；推断不出官方厂商 / 官方源没有该模型时退回模型当前的参考
-  // 供应商。scope='reference' 只处理价格模式为「从 models.dev 同步」的
+  // 一键把模型匹配到参考供应商并同步价格（按弹窗当前 UI 状态判断，未保存
+  // 也生效）。参考厂商顺序全系统统一为：当前供应商 → 官方（lab）→ 已保存
+  // → 候选。scope='reference' 只处理价格模式为「从 models.dev 同步」的
   // 模型；scope='all' 处理全部模型（含手动单独设置价格的模型）。
   const applyModelsDevPricesForAll = async (scope: 'all' | 'reference') => {
     setBulkRefSetting(true)
@@ -579,20 +578,18 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
     try {
       const fresh = await refreshModelsDevModels()
       setRefSnapshot(fresh)
+      const ownProviderNames = form.name.trim() ? [form.name] : []
       let filled = 0
       let vendorlessKept = 0
       const next = form.models.map((model) => {
         // 参考模式以外（手动价格 / 不设置）的模型在 reference 范围下跳过。
         if (scope === 'reference' && model.referenceProvider === null) return model
-        // 官方（lab）源优先；没有官方源时退回当前参考供应商。
-        const lab = labProviderIdForModel(model.model) ?? ''
-        const stored = model.referenceProvider !== null && model.referenceProvider.trim() !== ''
-          ? model.referenceProvider
-          : ''
-        const row = (lab !== '' ? findModelsDevProviderRow(fresh, model.model, lab) : null)
-          ?? (stored !== '' ? findModelsDevProviderRow(fresh, model.model, stored) : null)
-        if (!row) {
-          // 既没有官方源也没有参考供应商：保留现状（参考模式或按 0 计费）。
+        const picked = resolveModelsDevReference(fresh, model.model, {
+          ownProviderNames,
+          storedSupplier: model.referenceProvider,
+        })
+        if (!picked) {
+          // 当前供应商 / 官方 / 已保存 / 候选都没有：保留现状。
           vendorlessKept++
           return model
         }
@@ -600,8 +597,8 @@ function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disa
         return {
           ...model,
           prices: null,
-          referenceProvider: row.providerName,
-          referencePrices: refPricesOf(row),
+          referenceProvider: picked.supplier,
+          referencePrices: refPricesOf(picked.row),
           referenceAt: new Date().toISOString(),
         }
       })

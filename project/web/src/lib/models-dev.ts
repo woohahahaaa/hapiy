@@ -95,6 +95,14 @@ function normalizeModelKey(value: string): string {
   return value.trim().toLowerCase().replace(/[-\s]/g, '')
 }
 
+// normalizeProviderKey 是供应商名的宽松归一化：去掉空格、括号、连字符、
+// 点号等所有非字母数字字符，只保留 Unicode 字母与数字，并统一小写。
+// 例：OpenCode Go / opencode go / opencodego / opencode(go) 都变成
+// "opencodego"；中文供应商名保留汉字，不会退化成空串。
+export function normalizeProviderKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
 function scoreMatch(model: ModelsDevModel, needle: string): number {
   const id = model.id.toLowerCase()
   const name = model.name.toLowerCase()
@@ -258,8 +266,10 @@ export function isModelsDevLab(modelValue: string, providerId: string): boolean 
 
 // First models.dev row matching (modelValue, supplier) for refilling prices.
 // supplier 可以是 providerName（用户手动选择时存的）或 providerId（自动
-// 推断官方厂商时 labProviderIdForModel 返回的是 provider_id），两者在去掉
-// 连字符/空格后都可匹配（如 "moonshotai" ↔ "Moonshot AI"）。
+// 推断官方厂商时 labProviderIdForModel 返回的是 provider_id）。两者都走
+// normalizeProviderKey：括号/空格/连字符/点号全部忽略，只保留字母数字，
+// 所以 "opencode go"、"opencodego"、"opencode(go)"、"OpenCode Go" 都能
+// 命中同一条 models.dev 供应商记录。
 export function findModelsDevProviderRow(
   models: readonly ModelsDevModel[],
   modelValue: string,
@@ -267,15 +277,76 @@ export function findModelsDevProviderRow(
 ): ModelsDevModel | null {
   const needle = modelValue.trim().toLowerCase()
   if (!needle) return null
-  const nsupplier = normalizeModelKey(supplier)
-  const found = models.find(
-    (model) =>
-      modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle) &&
-      (model.providerName.toLowerCase() === supplier.toLowerCase() ||
-        normalizeModelKey(model.providerName) === nsupplier ||
-        normalizeModelKey(model.providerId) === nsupplier),
-  )
+  const nsupplier = normalizeProviderKey(supplier)
+  if (!nsupplier) return null
+  const found = models.find((model) => {
+    if (!modelKeyMatches(model.id.toLowerCase(), model.name.toLowerCase(), needle)) return false
+    const providerName = normalizeProviderKey(model.providerName)
+    const providerID = normalizeProviderKey(model.providerId)
+    return (providerName !== '' && providerName === nsupplier)
+      || (providerID !== '' && providerID === nsupplier)
+  })
   return found ?? null
+}
+
+export type ModelsDevReferenceSource = 'own-provider' | 'official' | 'stored' | 'candidate'
+
+export type ModelsDevReference = {
+  readonly row: ModelsDevModel
+  readonly supplier: string
+  readonly source: ModelsDevReferenceSource
+}
+
+// resolveModelsDevReference is the single reference-picking rule used by the
+// provider one-click price fill and every agent "apply recommendations" flow.
+// Order:
+//  1. the current provider's own models.dev row (gateway-specific prices);
+//  2. the official lab inferred from the model name;
+//  3. the previously stored/manual reference supplier;
+//  4. the first candidate (official first, then provider name alphabetically,
+//     because models.dev exposes no popularity rank).
+// Names are compared through normalizeProviderKey, so punctuation and
+// spacing differences never block a match.
+export function resolveModelsDevReference(
+  models: readonly ModelsDevModel[],
+  modelValue: string,
+  options: {
+    readonly ownProviderNames?: readonly string[]
+    readonly storedSupplier?: string | null
+    readonly allowCandidateFallback?: boolean
+  } = {},
+): ModelsDevReference | null {
+  const needle = modelValue.trim()
+  if (!needle) return null
+  const match = (supplier: string): ModelsDevModel | null => {
+    if (!supplier.trim()) return null
+    return findModelsDevProviderRow(models, needle, supplier)
+  }
+
+  for (const own of options.ownProviderNames ?? []) {
+    const row = match(own)
+    if (row) return { row, supplier: row.providerName, source: 'own-provider' }
+  }
+
+  const lab = labProviderIdForModel(needle)
+  if (lab) {
+    const row = match(lab)
+    if (row) return { row, supplier: row.providerName, source: 'official' }
+  }
+
+  if (options.storedSupplier) {
+    const row = match(options.storedSupplier)
+    if (row) return { row, supplier: row.providerName, source: 'stored' }
+  }
+
+  if (options.allowCandidateFallback !== false) {
+    const candidate = providersForModel(models, needle)[0]
+    if (candidate) {
+      const row = match(candidate.providerName)
+      if (row) return { row, supplier: row.providerName, source: 'candidate' }
+    }
+  }
+  return null
 }
 
 // resetModelsDevCache drops the module-level snapshot so the next
