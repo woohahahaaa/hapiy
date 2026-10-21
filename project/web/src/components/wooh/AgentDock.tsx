@@ -167,7 +167,7 @@ export function AgentDock() {
   return (
     <div className="hidden min-h-0 shrink-0 p-2 pr-0 md:flex" style={{ width }}>
       <AgentPanel
-        className="h-full"
+        className="h-full w-full"
         title="Agent"
         subtitle={t('subtitle')}
         messages={messages}
