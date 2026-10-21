@@ -53,7 +53,7 @@
     "addRow": "Add row",
     "fetchModels": "Fetch models from upstream",
     "bulkPrice": "Set the models.dev providers to reference in one click",
-    "bulkPriceTitle": "Match models to their official (lab) models.dev reference provider and sync prices in one click: the official source wins; when it does not carry the model, the current reference provider is kept. With the all-models scope, manually priced models are turned into reference mode too."
+    "bulkPriceTitle": "Match models to a reference provider and sync prices in one click: current provider → official (lab) → saved → candidate. With the all-models scope, manually priced models are turned into reference mode too."
   },
   "form": {
     "apiKeys": "API Keys",
@@ -119,10 +119,10 @@
   "toast": {
     "disableReset": "Failover disabled state restored",
     "snapshotUpdated": "Price snapshot updated from models.dev",
-    "bulkFilled_one": "Matched a reference provider and synced prices for {{count}} model (official lab first)",
-    "bulkFilled_other": "Matched a reference provider and synced prices for {{count}} models (official lab first)",
-    "bulkVendorless_one": "Skipped {{count}} model: no official reference provider found on models.dev",
-    "bulkVendorless_other": "Skipped {{count}} models: no official reference provider found on models.dev",
+    "bulkFilled_one": "Matched a reference provider and synced prices for {{count}} model (current provider first)",
+    "bulkFilled_other": "Matched a reference provider and synced prices for {{count}} models (current provider first)",
+    "bulkVendorless_one": "Skipped {{count}} model: no usable reference provider found on models.dev",
+    "bulkVendorless_other": "Skipped {{count}} models: no usable reference provider found on models.dev",
     "noAutoModels": "No models available for automatic setup",
     "synced_one": "Synced to the model with the same name in {{count}} other provider",
     "synced_other": "Synced to models with the same name in {{count}} other providers"

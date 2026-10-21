@@ -20,7 +20,7 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { filterValues } from '@/lib/agent-model-info'
-import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
+import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, resolveModelsDevReference, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
@@ -326,7 +326,7 @@ export function AgentModelInfoMatchDialog({
 
   // 参考供应商预填：优先使用上次持久化的选择（同样会校验候选有效，
   // 若上次的参考厂商这次已不在候选则留空让用户重新选择）；没有上次
-  // 选择时才取每个模型首个候选（与旧逻辑一致）。
+  // 选择时走全系统统一规则：当前供应商 → 官方 → 已保存 → 候选。
   useEffect(() => {
     if (!open) return
     let changed = false
@@ -343,8 +343,11 @@ export function AgentModelInfoMatchDialog({
           }
           continue
         }
-        if (candidates.length > 0) {
-          next[m.id] = candidates[0].providerName
+        const picked = resolveModelsDevReference(snapshot ?? [], m.id, {
+          ownProviderNames: [p.provider_id],
+        })
+        if (picked) {
+          next[m.id] = picked.supplier
           changed = true
         }
       }
@@ -353,17 +356,20 @@ export function AgentModelInfoMatchDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, snapshot, providers, persistedSources])
 
-  // 一键官方：所有模型设为官方（lab）参考厂商；模型没有官方来源时
-  // 取其候选列表第一个（官方优先排序后的首位，即字母序第一个）。
+  // 一键设置参考供应商：统一按当前供应商 → 官方（lab）→ 已保存 → 候选
+  // 的顺序选择；候选本身按官方优先、再按 provider 名称字母序。
   const applyOfficialToAll = () => {
     if (snapshot === null) return
     let changed = false
     const next: Record<string, string> = { ...supplierByModelId }
     for (const p of providers) {
       for (const m of p.models) {
-        const c = providersForModel(snapshot, m.id)
-        if (c.length === 0) continue
-        next[m.id] = c[0].providerName
+        const picked = resolveModelsDevReference(snapshot, m.id, {
+          ownProviderNames: [p.provider_id],
+          storedSupplier: supplierByModelId[m.id],
+        })
+        if (!picked) continue
+        next[m.id] = picked.supplier
         if (supplierByModelId[m.id] !== next[m.id]) changed = true
       }
     }

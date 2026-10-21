@@ -39,7 +39,7 @@ import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { modelInfoChangesFor } from '@/lib/agent-model-info'
 import { configFormatForPath, stringifyConfigValue, type AgentConfigFormat } from '@/lib/agent-config-format'
 import { collectManagedBlockNames } from '@/lib/managed-block-names'
-import { loadModelsDevModels, providersForModel } from '@/lib/models-dev'
+import { loadModelsDevModels, resolveModelsDevReference } from '@/lib/models-dev'
 import { diffLines, type Change } from 'diff'
 
 type DiffStatus = 'ok' | 'missing' | 'mismatch'
@@ -698,9 +698,9 @@ for (const p of summary?.providers ?? []) {
   }
 
   // 预览差异：对所有非托管供应商 + 模型套用一次"推荐配置"（推荐模板 +
-  // 每模型从其持久化参考供应商（无则候选第一）拉取的 4 基础字段），返回的
-  // content 与当前内容（liveContent ?? 文件原文）并排 diff 显示。切
-  // 换供应商/模型保持状态，再次点击或任何编辑取消。
+  // 每模型按统一规则 当前供应商 → 官方 → 已保存 → 候选 选出的参考供应商
+  // 拉取 4 基础字段），返回的 content 与当前内容（liveContent ?? 文件原文）
+  // 并排 diff 显示。切换供应商/模型保持状态，再次点击或任何编辑取消。
   const handlePreviewDiff = async () => {
     if (!record || !summary) return
     if (diffPreviewing) {
@@ -733,22 +733,16 @@ for (const p of summary?.providers ?? []) {
         checked[p.provider_id] = []
         let perModel: Record<string, Record<string, unknown>> | null = null
         for (const m of p.models) {
-          // 参考供应商：优先用上次持久化选择，否则候选第一。
-          let supplier = ''
-          let stale = false
+          // 参考供应商：统一按 当前供应商 → 官方 → 已保存 → 候选 选择。
           const persisted = sources[p.provider_id]?.[m.id]
-          const candidates = providersForModel(models ?? [], m.id)
-          if (persisted?.mode === 'self' && persisted.self_supplier) {
-            if (candidates.some((x) => x.providerName === persisted.self_supplier)) {
-              supplier = persisted.self_supplier
-            } else {
-              stale = true // 持久化参考厂商已失效：留空，备注提示
-            }
-          } else {
-            supplier = candidates[0]?.providerName ?? ''
-          }
+          const persistedSupplier = persisted?.mode === 'self' ? persisted.self_supplier : undefined
+          const picked = resolveModelsDevReference(models ?? [], m.id, {
+            ownProviderNames: [p.provider_id],
+            storedSupplier: persistedSupplier,
+          })
+          const supplier = picked?.supplier ?? ''
           if (!supplier) {
-            if (!stale) unset.push({ provider: p.provider_id, model: m.id, stale })
+            unset.push({ provider: p.provider_id, model: m.id, stale: false })
             continue
           }
           const changes = modelInfoChangesFor(m.config, m.id, supplier, models ?? [], modelInfoFields)

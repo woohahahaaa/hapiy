@@ -27,7 +27,7 @@ import {
 import { toast } from '@/components/ui/toast'
 import { RemovableTag } from '@/components/wooh/tag'
 import { dashboardApi, type AgentConfigFile, type EndpointRuleMap, type ManagedAgentGroup, type ManagedProviderOption, type ManagedProviderView, type Token } from '@/lib/dashboard-api'
-import { isModelsDevLab, loadModelsDevModels, providersForModel, type ModelsDevModel } from '@/lib/models-dev'
+import { isModelsDevLab, loadModelsDevModels, providersForModel, resolveModelsDevReference, type ModelsDevModel } from '@/lib/models-dev'
 import { deriveManagedEndpointGroups, type ManagedEndpointGroup } from '@/lib/managed-endpoint-groups'
 
 interface ManagedProviderDialogProps {
@@ -229,8 +229,9 @@ export function ManagedProviderDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferredGroups])
 
-  // First candidate prefilled once a group's model sources are empty:
-  // the first models.dev supplier for the model, else nothing.
+  // Prefill once a group's model sources are empty: keep the persisted
+  // source when present, otherwise use the shared reference rule
+  // (current provider → official → saved → candidate).
   const ensurePrefill = (g: ManagedEndpointGroup) => {
     setSourceByEndpoint((prev) => {
       const next = { ...(prev[g.endpoint] ?? {}) }
@@ -243,9 +244,11 @@ export function ManagedProviderDialog({
           changed = true
           continue
         }
-        const c = providersForModel(snapshot ?? [], m)
-        if (c.length > 0) {
-          next[m] = c[0].providerName
+        const picked = resolveModelsDevReference(snapshot ?? [], m, {
+          ownProviderNames: g.providerNames,
+        })
+        if (picked) {
+          next[m] = picked.supplier
           changed = true
         }
       }
@@ -265,8 +268,8 @@ export function ManagedProviderDialog({
     return out
   }
 
-  // 一键官方：所有模型设为官方（lab）参考厂商；模型没有官方来源时
-  // 取其候选列表第一个（官方优先排序后的首位，即字母序第一个）。
+  // 一键设置参考供应商：统一按当前供应商 → 官方（lab）→ 已保存 → 候选
+  // 的顺序选择；候选本身按官方优先、再按 provider 名称字母序。
   const applyOfficialToAll = () => {
     if (snapshot === null) return
     setSourceByEndpoint((prev) => {
@@ -275,9 +278,12 @@ export function ManagedProviderDialog({
       for (const g of groups) {
         const cur: Record<string, string> = {}
         for (const m of g.modelNames) {
-          const c = providersForModel(snapshot, m)
-          if (c.length === 0) continue
-          cur[m] = c[0].providerName
+          const picked = resolveModelsDevReference(snapshot, m, {
+            ownProviderNames: g.providerNames,
+            storedSupplier: prev[g.endpoint]?.[m],
+          })
+          if (!picked) continue
+          cur[m] = picked.supplier
           if ((prev[g.endpoint] ?? {})[m] !== cur[m]) changed = true
         }
         next[g.endpoint] = cur

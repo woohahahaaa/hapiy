@@ -52,7 +52,7 @@
     "addRow": "添加一行",
     "fetchModels": "从上游获取模型",
     "bulkPrice": "一键设置要参考的models.dev供应商",
-    "bulkPriceTitle": "一键把模型匹配到官方（lab）参考供应商并同步价格：官方源优先，官方源没有该模型时保留现有参考供应商。选「所有模型」时，手动单独设置价格的模型也会一并设为参考供应商。"
+    "bulkPriceTitle": "一键把模型匹配到参考供应商并同步价格：当前供应商 → 官方（lab）→ 已保存 → 候选。选「所有模型」时，手动单独设置价格的模型也会一并设为参考供应商。"
   },
   "form": {
     "apiKeys": "API Keys",
@@ -118,8 +118,8 @@
   "toast": {
     "disableReset": "已恢复故障转移禁用状态",
     "snapshotUpdated": "已从models.dev更新价格快照",
-    "bulkFilled": "已为{{count}}个模型匹配参考供应商并同步价格（官方lab优先）",
-    "bulkVendorless": "{{count}}个模型未在models.dev找到官方参考供应商，未自动设置",
+    "bulkFilled": "已为{{count}}个模型匹配参考供应商并同步价格（当前供应商优先）",
+    "bulkVendorless": "{{count}}个模型未在models.dev找到可用的参考供应商，未自动设置",
     "noAutoModels": "没有可自动设置的模型",
     "synced": "已同步到{{count}}个其他供应商的同名模型"
   },

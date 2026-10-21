@@ -147,7 +147,7 @@
     "title": "使用推荐配置",
     "emptyProviders": "该配置文件下没有可配置的供应商",
     "checkedCount": "已勾选{{checked}} / {{total}}项",
-    "officialTitle": "把全部模型设为官方（lab）参考供应商；没有官方来源的取其候选列表第一个",
+    "officialTitle": "按当前供应商 → 官方（lab）→ 已保存 → 候选的顺序，为全部模型设置参考供应商",
     "officialButton": "批量设置参考供应商",
     "checkAllAria": "全选",
     "checkProviderAria": "勾选供应商{{name}}",
@@ -166,7 +166,7 @@
     "alreadyCompliant": "— 已符合推荐",
     "moreItems": "…等{{count}}项",
     "toast": {
-      "officialApplied": "已把全部模型设为官方参考供应商（无官方的取候选第一个）",
+      "officialApplied": "已按统一规则设置参考供应商（当前供应商 → 官方 → 已保存 → 候选）",
       "officialAlready": "模型均已是最佳参考供应商",
       "saveSupplierFailed": "保存参考供应商选择失败",
       "noChanges": "没有可应用的变更（勾选项均已符合推荐）",

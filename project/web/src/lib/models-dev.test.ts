@@ -4,7 +4,9 @@ import {
   findModelsDevProviderRow,
   isModelsDevLab,
   labProviderIdForModel,
+  normalizeProviderKey,
   providersForModel,
+  resolveModelsDevReference,
   searchModelsDevModels,
   type ModelsDevModel,
 } from './models-dev'
@@ -232,6 +234,66 @@ describe('findModelsDevProviderRow', () => {
 
   it('returns null for an unmatched model value', () => {
     expect(findModelsDevProviderRow(models, 'claude', 'DeepSeek')).toBeNull()
+  })
+
+  it('ignores spaces, parentheses, hyphens and case in provider names', () => {
+    const opencode: readonly ModelsDevModel[] = [
+      makeModel({ id: 'hy3', name: 'Hy3', providerName: 'OpenCode Go', providerId: 'opencode-go' }),
+    ]
+    for (const supplier of ['opencode go', 'opencodego', 'opencode(go)', 'OpenCode Go']) {
+      expect(findModelsDevProviderRow(opencode, 'hy3', supplier)?.providerId).toBe('opencode-go')
+    }
+  })
+})
+
+describe('normalizeProviderKey', () => {
+  it('keeps only letters and digits, case-insensitively', () => {
+    expect(normalizeProviderKey('OpenCode Go')).toBe('opencodego')
+    expect(normalizeProviderKey('opencode go')).toBe('opencodego')
+    expect(normalizeProviderKey('opencode(go)')).toBe('opencodego')
+    expect(normalizeProviderKey('  OpenCode-Go  ')).toBe('opencodego')
+  })
+
+  it('keeps Chinese letters and digits', () => {
+    expect(normalizeProviderKey('智谱 AI（中国）')).toBe('智谱ai中国')
+  })
+})
+
+describe('resolveModelsDevReference', () => {
+  const models: readonly ModelsDevModel[] = [
+    makeModel({ id: 'hy3', name: 'Hy3', providerName: 'OpenCode Go', providerId: 'opencode-go' }),
+    makeModel({ id: 'hy3', name: 'Hy3', providerName: 'AIHubMix', providerId: 'aihubmix' }),
+    makeModel({ id: 'glm-5.3', name: 'GLM-5.3', providerName: 'Zhipu AI', providerId: 'zhipuai' }),
+    makeModel({ id: 'glm-5.3', name: 'GLM-5.3', providerName: 'OpenCode Go', providerId: 'opencode-go' }),
+  ]
+
+  it('prefers the current provider over the official lab', () => {
+    const picked = resolveModelsDevReference(models, 'glm-5.3', { ownProviderNames: ['opencode(go)'] })
+    expect(picked?.source).toBe('own-provider')
+    expect(picked?.row.providerId).toBe('opencode-go')
+  })
+
+  it('falls back to the official lab when the current provider does not carry the model', () => {
+    const picked = resolveModelsDevReference(models, 'glm-5.3', { ownProviderNames: ['unknown'] })
+    expect(picked?.source).toBe('official')
+    expect(picked?.row.providerId).toBe('zhipuai')
+  })
+
+  it('uses the stored supplier when no current/official match exists', () => {
+    const picked = resolveModelsDevReference(models, 'hy3', { storedSupplier: 'AIHubMix' })
+    expect(picked?.source).toBe('stored')
+    expect(picked?.row.providerId).toBe('aihubmix')
+  })
+
+  it('falls back to the first candidate when nothing else matches', () => {
+    const picked = resolveModelsDevReference(models, 'hy3')
+    expect(picked?.source).toBe('candidate')
+    expect(picked?.row.providerId).toBe('aihubmix')
+  })
+
+  it('returns null when nothing matches or candidate fallback is disabled', () => {
+    expect(resolveModelsDevReference(models, 'hy3', { allowCandidateFallback: false })).toBeNull()
+    expect(resolveModelsDevReference(models, 'claude')).toBeNull()
   })
 })
 
