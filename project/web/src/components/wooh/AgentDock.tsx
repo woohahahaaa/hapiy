@@ -41,9 +41,8 @@ function clockNow(): string {
 }
 
 // AgentDockProvider owns the width (persisted per browser), the drag state and
-// the conversation. It also enforces the layout rule: as soon as the area to
-// the right of the panel is narrower than the expanded sidebar, the sidebar
-// collapses to icons.
+// the conversation. The panel sits on the right edge, so the width only eats
+// into the content area — the sidebar keeps its place.
 export function AgentDockProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation('agentPanel')
   const [width, setWidthState] = useState<number>(readStoredWidth)
@@ -170,7 +169,7 @@ export function AgentDock() {
   )
 }
 
-// AgentDockSplitter is the drag handle between the panel and the sidebar.
+// AgentDockSplitter is the drag handle on the panel's left edge.
 export function AgentDockSplitter() {
   const { t } = useTranslation('agentPanel')
   const { width, maxWidth, setWidth, setDragging } = useAgentDock()
