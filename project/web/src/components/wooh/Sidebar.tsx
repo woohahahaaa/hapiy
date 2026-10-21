@@ -339,7 +339,12 @@ export function AppSidebar() {
       collapsible="icon"
       variant="inset"
       style={{ left: sidebarLeft }}
-      className={dockDragging ? 'md:transition-none!' : undefined}
+      className={cn(
+        dockDragging && 'md:transition-none!',
+        // 对话面板出现时给侧边栏本身也描一圈边，避免中间这一列看起来是“裸”的。
+        dockWidth > 0 &&
+          'md:[&>[data-slot=sidebar-inner]]:rounded-xl md:[&>[data-slot=sidebar-inner]]:border md:[&>[data-slot=sidebar-inner]]:border-border',
+      )}
     >
       <SidebarHeader>
         {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}

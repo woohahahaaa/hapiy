@@ -227,7 +227,7 @@ export function AgentDockSplitter() {
       }}
       className="group hidden w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
     >
-      <span className="h-10 w-px rounded-full bg-border transition-colors group-hover:bg-muted-foreground/50 group-active:bg-muted-foreground/70" />
+      <span className="h-16 w-1 rounded-full bg-muted-foreground/35 transition-colors group-hover:bg-muted-foreground/65 group-active:bg-muted-foreground/80" />
     </div>
   )
 }
