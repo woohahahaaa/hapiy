@@ -38,8 +38,8 @@ export const navigation: NavItem[] = [
     labelKey: 'nav.llmConfig',
     icon: <AppIcon name="layers" />,
     children: [
-      { id: 'token', labelKey: 'nav.token', href: '/token' },
       { id: 'provider', labelKey: 'nav.provider', href: '/provider' },
+      { id: 'token', labelKey: 'nav.token', href: '/token' },
     ],
   },
   {
