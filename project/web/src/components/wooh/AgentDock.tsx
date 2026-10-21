@@ -106,12 +106,10 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
     [maxWidth],
   )
 
-  // 视口变窄时把已经超出的宽度收回来。
-  useEffect(() => {
-    if (width > maxWidth) setWidthState(maxWidth)
-  }, [width, maxWidth])
-
-  const occupied = width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0
+  // 视口变窄时按可用上限显示，但不改写用户存下来的宽度：窗口再变宽时
+  // 面板会回到原来的宽度。
+  const visibleWidth = Math.max(0, Math.min(width, maxWidth))
+  const occupied = visibleWidth > 0 ? visibleWidth + AGENT_DOCK_SPLITTER_WIDTH : 0
   const rightWidth = Math.max(0, viewportWidth - occupied)
 
   // 右侧整体窄于展开状态的侧边栏时，直接收起。只跟随宽度变化触发，
@@ -160,8 +158,18 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => clearTimeout(replyTimer.current), [])
 
   const value = useMemo<AgentDockContextValue>(
-    () => ({ width, maxWidth, dragging, messages, sending, setWidth, setDragging, openDock, send }),
-    [width, maxWidth, dragging, messages, sending, setWidth, openDock, send],
+    () => ({
+      width: visibleWidth,
+      maxWidth,
+      dragging,
+      messages,
+      sending,
+      setWidth,
+      setDragging,
+      openDock,
+      send,
+    }),
+    [visibleWidth, maxWidth, dragging, messages, sending, setWidth, openDock, send],
   )
 
   return <AgentDockContext.Provider value={value}>{children}</AgentDockContext.Provider>

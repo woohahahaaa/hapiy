@@ -4,5 +4,10 @@
   "placeholder": "Type a message. Enter to send, Shift+Enter for a new line",
   "send": "Send",
   "typing": "Typing…",
-  "empty": "No messages yet — say hello"
+  "empty": "No messages yet — say hello",
+  "chat": "Chat",
+  "subtitle": "Chat",
+  "open": "Open chat",
+  "resize": "Resize the chat panel",
+  "notWired": "The chat backend is not wired yet. The next step is /v1/chat/completions; this message is a placeholder."
 }

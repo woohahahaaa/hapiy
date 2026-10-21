@@ -10,6 +10,7 @@ import { AppIcon } from '@/components/wooh/AppIcon'
 import { VersionDialog } from '@/components/wooh/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/wooh/OtherSettings'
 import { AGENT_DOCK_SPLITTER_WIDTH, useAgentDock } from '@/components/wooh/AgentDock'
+import { i18n } from '@/i18n/i18n'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { useUpdateStatus } from '@/lib/update'
 import { isPathActive, navigation, type NavItem } from '@/config/navigation'
@@ -272,6 +273,10 @@ export function AppSidebar() {
   const [versionOpen, setVersionOpen] = useState(false)
   const { status: updateStatus } = useUpdateStatus()
   const updateAvailable = Boolean(updateStatus?.available)
+  // 对话面板在侧边栏左侧，侧边栏是 fixed 定位，需要按面板宽度（含分隔条）
+  // 整体右移，才能和它自己的占位 gap 对齐。
+  const { width: dockWidth, dragging: dockDragging, openDock } = useAgentDock()
+  const sidebarLeft = dockWidth > 0 ? dockWidth + AGENT_DOCK_SPLITTER_WIDTH : 0
   // 移动端浮层始终是展开形态，只有桌面端折叠成图标栏。
   const collapsed = state === 'collapsed' && !isMobile
   const showLabel = !collapsed
@@ -330,7 +335,12 @@ export function AppSidebar() {
     ))
 
   return (
-    <SidebarRoot collapsible="icon" variant="inset">
+    <SidebarRoot
+      collapsible="icon"
+      variant="inset"
+      style={{ left: sidebarLeft }}
+      className={dockDragging ? 'md:transition-none!' : undefined}
+    >
       <SidebarHeader>
         {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}
         <div
@@ -371,6 +381,18 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      {!isMobile && dockWidth === 0 && (
+        <SidebarFooter>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton tooltip={i18n.t('agentPanel:open')} onClick={openDock}>
+                <AppIcon name="chat" />
+                <span>{i18n.t('agentPanel:chat')}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      )}
       <SidebarRail />
       <VersionDialog open={versionOpen} onOpenChange={setVersionOpen} />
     </SidebarRoot>
