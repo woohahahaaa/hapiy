@@ -65,7 +65,7 @@
     "second": "Second"
   },
   "nav": {
-    "topology": "Topology",
+    "topology": "Forwarding Rules",
     "monitor": "Logs",
     "activity": "Activity",
     "logs": "Usage Logs",

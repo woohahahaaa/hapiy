@@ -65,7 +65,7 @@
     "second": "秒"
   },
   "nav": {
-    "topology": "转发拓扑",
+    "topology": "转发规则",
     "monitor": "日志",
     "activity": "活动监视",
     "logs": "使用记录",
