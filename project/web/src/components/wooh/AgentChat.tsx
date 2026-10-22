@@ -16,6 +16,7 @@ import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashboard-api'
 import { dispatchUIAction } from '@/lib/ui-actions'
+import { useAgentDock } from '@/components/wooh/agent-dock-context'
 
 const AUTO_PROVIDER = 'auto'
 
@@ -31,6 +32,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
   const navigate = useNavigate()
   const location = useLocation()
+  const { rightCollapsed, expandRight } = useAgentDock()
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
@@ -47,7 +49,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
         if (cancelled) return
         setModels(nextModels)
         setThreads(nextThreads)
-        setSelectedModel((current) => current || nextModels[0]?.model || '')
       })
       .catch((error: unknown) => {
         if (!cancelled) toast(errorMessage(error, t('sendFailed')))
@@ -145,7 +146,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="shrink-0 text-xs text-muted-foreground">{t('modelLabel')}</span>
               <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
-                <SelectTrigger className="h-6 w-fit max-w-full min-w-0 shrink-0 px-2 text-xs" aria-label={t('modelLabel')}>
+                <SelectTrigger className="w-fit max-w-full min-w-0 shrink-0" aria-label={t('modelLabel')}>
                   <SelectValue placeholder={t('modelPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -157,28 +158,43 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 </SelectContent>
               </Select>
 
-              <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">{t('providerLabel')}</span>
-              <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
-                <SelectTrigger className="h-6 w-fit max-w-full min-w-0 shrink-0 px-2 text-xs" aria-label={t('providerLabel')}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={AUTO_PROVIDER}>{t('providerAuto')}</SelectItem>
-                  {providerOptions.map((provider) => (
-                    <SelectItem key={provider.id} value={provider.id}>
-                      {provider.name}
-                      {provider.autoDisabled ? ` ${t('providerDisabledSuffix')}` : ''}
-                      {provider.workflowEnabled ? '' : ` ${t('providerNoTopologySuffix')}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {selectedModel && (
+                <>
+                  <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">{t('providerLabel')}</span>
+                  <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
+                    <SelectTrigger className="w-fit max-w-full min-w-0 shrink-0" aria-label={t('providerLabel')}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={AUTO_PROVIDER}>{t('providerAuto')}</SelectItem>
+                      {providerOptions.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id}>
+                          {provider.name}
+                          {provider.autoDisabled ? ` ${t('providerDisabledSuffix')}` : ''}
+                          {provider.workflowEnabled ? '' : ` ${t('providerNoTopologySuffix')}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
             </div>
           }
           initialMessages={initialMessages}
           onSend={handleSend}
           actions={
             <>
+              {rightCollapsed && (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t('expandRight')}
+                  title={t('expandRight')}
+                  onClick={expandRight}
+                >
+                  <AppIcon name="view_sidebar" />
+                </Button>
+              )}
               <Button size="icon-sm" variant="ghost" aria-label={t('newChat')} onClick={startNewThread}>
                 <AppIcon name="add" />
               </Button>

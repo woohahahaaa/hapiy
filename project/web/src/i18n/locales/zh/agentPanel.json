@@ -24,5 +24,6 @@
   "providerDisabledSuffix": "(已禁用)",
   "providerNoTopologySuffix": "(未接入拓扑)",
   "selectModelFirst": "先选择一个模型",
-  "sendFailed": "发送失败"
+  "sendFailed": "发送失败",
+  "expandRight": "显示菜单和页面"
 }
