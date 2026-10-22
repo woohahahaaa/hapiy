@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSidebar } from '@/components/ui/sidebar'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { AgentChat } from '@/components/wooh/AgentChat'
@@ -21,7 +20,6 @@ const KEYBOARD_STEP = 24
 // 和 ui/sidebar 的 SIDEBAR_WIDTH_ICON 对齐：
 //   展开 = 16rem；收起（variant=inset）= 2.5rem 图标 + 1.5rem 内边距 = 4rem。
 const SIDEBAR_EXPANDED_REM = 16
-const SIDEBAR_COLLAPSED_REM = 4
 
 function remToPx(rem: number): number {
   if (typeof window === 'undefined') return rem * 16
@@ -47,19 +45,11 @@ function readStoredWidth(): number {
 // the conversation. The panel sits on the right edge, so the width only eats
 // into the content area — the sidebar keeps its place.
 export function AgentDockProvider({ children }: { children: ReactNode }) {
-  const { setOpen } = useSidebar()
   const [width, setWidthState] = useState<number>(readStoredWidth)
   const [dragging, setDragging] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth,
   )
-  const lastNonZero = useRef(width > 0 ? width : DEFAULT_DOCK_WIDTH)
-
-  // Remember the last visible width so the sidebar button restores it rather
-  // than always snapping back to the default.
-  useEffect(() => {
-    if (width >= MIN_DOCK_WIDTH) lastNonZero.current = width
-  }, [width])
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth)
@@ -67,17 +57,17 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // 面板在最左边，右侧至少留出「收起后的侧边栏」宽度。
-  const maxWidth = Math.max(
-    0,
-    viewportWidth - remToPx(SIDEBAR_COLLAPSED_REM) - AGENT_DOCK_SPLITTER_WIDTH,
-  )
+  // 面板最宽可以铺满整行（此时右侧整体被折叠）。
+  const maxWidth = Math.max(0, viewportWidth - AGENT_DOCK_SPLITTER_WIDTH)
+  const expandedPx = remToPx(SIDEBAR_EXPANDED_REM)
 
   const setWidth = useCallback(
     (next: number) => {
       const limited = Math.max(0, Math.min(Math.round(next), maxWidth))
       // 小于最小宽度视为要关掉，而不是留一条窄缝。
-      const clamped = limited > 0 && limited < MIN_DOCK_WIDTH ? 0 : limited
+      let clamped = limited > 0 && limited < MIN_DOCK_WIDTH ? 0 : limited
+      // 右侧剩下的宽度已经放不下展开的侧边栏：整块折叠，面板铺满。
+      if (clamped > 0 && maxWidth - clamped < expandedPx) clamped = maxWidth
       setWidthState(clamped)
       try {
         window.localStorage.setItem(AGENT_DOCK_STORAGE_KEY, String(clamped))
@@ -85,24 +75,23 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
         // 隐私模式下 localStorage 可能不可写，宽度仍按内存值生效。
       }
     },
-    [maxWidth],
+    [maxWidth, expandedPx],
   )
 
   // 视口变窄时按可用上限显示，但不改写用户存下来的宽度：窗口再变宽时
   // 面板会回到原来的宽度。
   const visibleWidth = Math.max(0, Math.min(width, maxWidth))
 
-  const rightWidth = Math.max(0, viewportWidth - (visibleWidth > 0 ? visibleWidth + AGENT_DOCK_SPLITTER_WIDTH : 0))
+  const rightCollapsed = visibleWidth > 0 && maxWidth - visibleWidth < expandedPx
 
-  // 右侧整体窄于展开状态的侧边栏时直接收起。只跟随宽度变化触发，用户手动
-  // 展开不会立刻被打回，直到下一次拖动改变可用宽度。
-  useEffect(() => {
-    if (rightWidth > 0 && rightWidth < remToPx(SIDEBAR_EXPANDED_REM)) setOpen(false)
-  }, [rightWidth, setOpen])
+  // 展开左边或右边时统一按 50/50，且给右侧至少留出展开侧边栏的宽度。
+  const openHalf = useCallback(() => {
+    const half = Math.round((viewportWidth - AGENT_DOCK_SPLITTER_WIDTH) / 2)
+    setWidth(Math.max(MIN_DOCK_WIDTH, Math.min(half, maxWidth - expandedPx)))
+  }, [setWidth, viewportWidth, maxWidth, expandedPx])
 
-  const openDock = useCallback(() => {
-    setWidth(Math.max(lastNonZero.current, MIN_DOCK_WIDTH))
-  }, [setWidth])
+  const openDock = openHalf
+  const expandRight = openHalf
 
 
   const value = useMemo<AgentDockContextValue>(
@@ -113,8 +102,10 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
       setWidth,
       setDragging,
       openDock,
+      rightCollapsed,
+      expandRight,
     }),
-    [visibleWidth, maxWidth, dragging, setWidth, setDragging, openDock],
+    [visibleWidth, maxWidth, dragging, setWidth, setDragging, openDock, rightCollapsed, expandRight],
   )
 
   return <AgentDockContext.Provider value={value}>{children}</AgentDockContext.Provider>

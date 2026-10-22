@@ -12,6 +12,10 @@ export type AgentDockContextValue = {
   readonly setWidth: (next: number) => void
   readonly setDragging: (next: boolean) => void
   readonly openDock: () => void
+  /** True when the panel has pushed the sidebar + page off screen. */
+  readonly rightCollapsed: boolean
+  /** Restores the sidebar + page at a 50/50 split. */
+  readonly expandRight: () => void
 }
 
 export const AgentDockContext = createContext<AgentDockContextValue | null>(null)
