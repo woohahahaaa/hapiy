@@ -56,7 +56,14 @@ function Demo({ dark, empty }: { dark: boolean; empty: boolean }) {
           <AgentThread
             key={`${key}-${empty}`}
             title="Agent"
-            subtitle="gpt-5 · 自动（按拓扑）"
+            controls={
+              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">模型</span>
+                <div className="h-6 truncate rounded-md border border-border px-2 text-xs leading-6">gpt-5</div>
+                <span className="text-xs text-muted-foreground">供应商</span>
+                <div className="h-6 truncate rounded-md border border-border px-2 text-xs leading-6">自动（按拓扑）</div>
+              </div>
+            }
             initialMessages={empty ? [] : seed}
             onSend={async (text) => {
               await wait(700)
