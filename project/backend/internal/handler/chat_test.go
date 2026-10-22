@@ -289,3 +289,73 @@ func TestSendChatMessageRejectsADisabledFixedProvider(t *testing.T) {
 		t.Fatalf("disabled provider must be rejected, got %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestSendChatMessageRunsMCPToolCalls(t *testing.T) {
+	var (
+		requests int
+		second   []map[string]any
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var body struct {
+			Messages []map[string]any `json:"messages"`
+			Tools    []map[string]any `json:"tools"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if requests == 1 && len(body.Tools) == 0 {
+			t.Errorf("first request must carry MCP tools")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"list_providers","arguments":"{}"}}]}}]}`))
+			return
+		}
+		second = body.Messages
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"网关里现在没有供应商。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"现在有哪些供应商？","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if requests != 2 {
+		t.Fatalf("expected a second upstream call after the tool result, got %d", requests)
+	}
+	toolSeen := false
+	for _, message := range second {
+		if message["role"] != "tool" {
+			continue
+		}
+		toolSeen = true
+		if message["tool_call_id"] != "call_1" {
+			t.Fatalf("tool_call_id = %v", message["tool_call_id"])
+		}
+		content, _ := message["content"].(string)
+		if !strings.Contains(content, "providers") {
+			t.Fatalf("tool result not forwarded: %q", content)
+		}
+	}
+	if !toolSeen {
+		t.Fatalf("the tool result was not appended to the conversation: %+v", second)
+	}
+	if !strings.Contains(rec.Body.String(), "现在没有供应商") {
+		t.Fatalf("unexpected final reply: %s", rec.Body.String())
+	}
+}
