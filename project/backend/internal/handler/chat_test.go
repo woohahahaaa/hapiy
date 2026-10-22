@@ -359,3 +359,70 @@ func TestSendChatMessageRunsMCPToolCalls(t *testing.T) {
 		t.Fatalf("unexpected final reply: %s", rec.Body.String())
 	}
 }
+
+func TestSendChatMessageQueuesUIActions(t *testing.T) {
+	var requests int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			var body struct {
+				Tools []map[string]any `json:"tools"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			foundUI := false
+			for _, tool := range body.Tools {
+				fn, _ := tool["function"].(map[string]any)
+				if fn != nil && fn["name"] == "ui_open_provider_dialog" {
+					foundUI = true
+				}
+			}
+			if !foundUI {
+				t.Errorf("ui_open_provider_dialog missing from tools")
+			}
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"ui_1","type":"function","function":{"name":"ui_open_provider_dialog","arguments":"{\"provider_name\":\"Backup-GPT\"}"}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"已经打开供应商编辑弹窗，改完点保存。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"帮我改一下 Backup-GPT","model":"test-model","provider_id":"","page_context":"/logs"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			UIActions []struct {
+				Type    string         `json:"type"`
+				Payload map[string]any `json:"payload"`
+			} `json:"ui_actions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data.UIActions) != 1 {
+		t.Fatalf("expected one UI action, got %+v", payload.Data.UIActions)
+	}
+	action := payload.Data.UIActions[0]
+	if action.Type != "open_provider_dialog" || action.Payload["provider_name"] != "Backup-GPT" {
+		t.Fatalf("unexpected action: %+v", action)
+	}
+}

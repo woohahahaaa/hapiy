@@ -132,12 +132,7 @@ export function ProviderPage() {
         }
       }
       if (!target) return
-      setEditing({
-        ...target,
-        weight: typeof payload.weight === 'number' ? payload.weight : target.weight,
-        priority: typeof payload.priority === 'number' ? payload.priority : target.priority,
-        status: typeof payload.status === 'boolean' ? payload.status : target.status,
-      })
+      setEditing(target)
       setIsDialogOpen(true)
     })()
   })

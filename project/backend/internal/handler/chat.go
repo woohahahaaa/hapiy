@@ -494,15 +494,12 @@ func chatUITools() []map[string]any {
 			"type": "function",
 			"function": map[string]any{
 				"name":        "ui_open_provider_dialog",
-				"description": "在控制台右侧打开供应商编辑弹窗，可预填权重、优先级和启用状态。用于“帮我改供应商 X”的操作，用户确认后再保存。",
+				"description": "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
 				"parameters": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
 						"provider_id":   map[string]any{"type": "string", "description": "供应商 id，已知时优先传"},
 						"provider_name": map[string]any{"type": "string", "description": "供应商名称，id 未知时用名称匹配"},
-						"weight":        map[string]any{"type": "integer", "description": "预填权重"},
-						"priority":      map[string]any{"type": "integer", "description": "预填优先级"},
-						"status":        map[string]any{"type": "boolean", "description": "预填启用状态"},
 					},
 				},
 			},
