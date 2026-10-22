@@ -57,11 +57,11 @@ function Demo({ dark, empty }: { dark: boolean; empty: boolean }) {
             key={`${key}-${empty}`}
             title="Agent"
             controls={
-              <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">模型</span>
-                <div className="h-6 truncate rounded-md border border-border px-2 text-xs leading-6">gpt-5</div>
-                <span className="text-xs text-muted-foreground">供应商</span>
-                <div className="h-6 truncate rounded-md border border-border px-2 text-xs leading-6">自动（按拓扑）</div>
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 text-xs text-muted-foreground">模型</span>
+                <div className="h-6 w-24 shrink-0 truncate rounded-md border border-border px-2 text-xs leading-6">gpt-5</div>
+                <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">供应商</span>
+                <div className="h-6 w-28 shrink-0 truncate rounded-md border border-border px-2 text-xs leading-6">自动（按拓扑）</div>
               </div>
             }
             initialMessages={empty ? [] : seed}

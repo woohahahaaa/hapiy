@@ -129,10 +129,10 @@ export function AgentChat({ className }: { readonly className?: string }) {
           key={sessionKey}
           title={activeThread?.title || 'Agent'}
           controls={
-            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">{t('modelLabel')}</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="shrink-0 text-xs text-muted-foreground">{t('modelLabel')}</span>
               <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
-                <SelectTrigger className="h-6 min-w-0 flex-1 px-2 text-xs" aria-label={t('modelLabel')}>
+                <SelectTrigger className="h-6 w-24 min-w-0 shrink-0 px-2 text-xs" aria-label={t('modelLabel')}>
                   <SelectValue placeholder={t('modelPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -144,9 +144,9 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 </SelectContent>
               </Select>
 
-              <span className="text-xs text-muted-foreground">{t('providerLabel')}</span>
+              <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">{t('providerLabel')}</span>
               <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
-                <SelectTrigger className="h-6 min-w-0 flex-1 px-2 text-xs" aria-label={t('providerLabel')}>
+                <SelectTrigger className="h-6 w-28 min-w-0 shrink-0 px-2 text-xs" aria-label={t('providerLabel')}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
