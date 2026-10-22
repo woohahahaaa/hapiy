@@ -91,24 +91,22 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
   return (
     <ComposerPrimitive.Root
       className={cn(
-        'flex w-full flex-col',
+        'flex w-full items-end gap-2 bg-card',
         centered
-          ? 'rounded-2xl border border-border bg-card p-2 shadow-sm'
-          : 'rounded-xl bg-muted/60 p-1.5',
+          ? 'rounded-3xl border border-border p-2 pl-4 shadow-sm'
+          : 'rounded-3xl border border-border p-2 pl-3',
       )}
     >
       <ComposerPrimitive.Input
         placeholder={t('placeholder')}
         rows={1}
-        className="min-h-9 w-full resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-6 outline-none placeholder:text-muted-foreground"
       />
-      <div className="flex justify-end px-1 pb-1">
-        <ComposerPrimitive.Send asChild>
-          <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
-            <AppIcon name="expand_less" size={16} />
-          </Button>
-        </ComposerPrimitive.Send>
-      </div>
+      <ComposerPrimitive.Send asChild>
+        <Button size="icon" className="size-9 shrink-0 rounded-full" aria-label={t('send')}>
+          <AppIcon name="expand_less" size={18} />
+        </Button>
+      </ComposerPrimitive.Send>
     </ComposerPrimitive.Root>
   )
 }
@@ -193,13 +191,9 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-6 py-8">
-              <AgentAvatar size={48} />
-              <div className="flex flex-col items-center gap-1 text-center">
-                <span className="text-base font-medium">{t('greeting')}</span>
-                <span className="text-xs text-muted-foreground">{t('empty')}</span>
-              </div>
-              <div className="w-full max-w-sm">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
+              <h2 className="text-center text-2xl font-semibold tracking-tight">{t('greeting')}</h2>
+              <div className="w-full max-w-xl">
                 <Composer centered />
               </div>
             </div>
