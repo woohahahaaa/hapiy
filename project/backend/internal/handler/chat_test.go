@@ -70,7 +70,7 @@ func upstreamProvider(t *testing.T, db *gorm.DB, id, name, baseURL string, statu
 		WorkflowEnabled: workflow,
 		BaseURLs:        `["` + baseURL + `"]`,
 		Keys:            `["sk-test"]`,
-		Endpoints:       `["/v1/chat/completions"]`,
+		Endpoints:       `[{"pathSuffix":"/v1/chat/completions"}]`,
 		Models:          `[{"model":"test-model","endpoints":["/v1/chat/completions"]}]`,
 	}
 	if err := db.Create(&provider).Error; err != nil {

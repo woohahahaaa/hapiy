@@ -406,6 +406,49 @@ export type SystemSetting = {
 
 // McpStatus is the MCP endpoint state from 设置 → 其他 → MCP: whether the
 // endpoint is open and the Bearer key clients must present.
+
+// ── Console chat (Agent panel) ──
+export type ChatProviderOption = {
+  readonly id: string
+  readonly name: string
+  readonly autoDisabled: boolean
+  readonly workflowEnabled: boolean
+  readonly status: boolean
+}
+
+export type ChatModelOption = {
+  readonly model: string
+  readonly providers: readonly ChatProviderOption[]
+}
+
+export type ChatThread = {
+  readonly id: string
+  readonly title: string
+  readonly model: string
+  readonly providerId: string
+  readonly archived: boolean
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export type ChatMessageRecord = {
+  readonly id: string
+  readonly threadId: string
+  readonly role: 'user' | 'assistant'
+  readonly content: string
+  readonly model: string
+  readonly providerId: string
+  readonly providerName: string
+  readonly error: string
+  readonly createdAt: string
+}
+
+export type ChatThreadResult = {
+  readonly thread: ChatThread
+  readonly userMessage: ChatMessageRecord
+  readonly assistantMessage: ChatMessageRecord
+}
+
 export type McpStatus = {
   readonly enabled: boolean
   readonly apiKey: string
@@ -1142,6 +1185,74 @@ function parseSystemSetting(value: unknown): SystemSetting {
   return {
     key: readString(value.key, 'setting.key'),
     value: readString(value.value, 'setting.value'),
+  }
+}
+
+
+function parseChatProviderOption(value: unknown): ChatProviderOption {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  return {
+    id: readString(value.id, 'chat.provider.id'),
+    name: readString(value.name, 'chat.provider.name'),
+    autoDisabled: readBoolean(value.auto_disabled, 'chat.provider.autoDisabled'),
+    workflowEnabled: readBoolean(value.workflow_enabled, 'chat.provider.workflowEnabled'),
+    status: readBoolean(value.status, 'chat.provider.status'),
+  }
+}
+
+function parseChatModelOption(value: unknown): ChatModelOption {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  return {
+    model: readString(value.model, 'chat.model'),
+    providers: Array.isArray(value.providers) ? value.providers.map(parseChatProviderOption) : [],
+  }
+}
+
+function parseChatThread(value: unknown): ChatThread {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  return {
+    id: readString(value.id, 'chat.thread.id'),
+    title: readString(value.title, 'chat.thread.title'),
+    model: readString(value.model, 'chat.thread.model'),
+    providerId: readString(value.provider_id, 'chat.thread.providerId'),
+    archived: readBoolean(value.archived, 'chat.thread.archived'),
+    createdAt: readString(value.created_at, 'chat.thread.createdAt'),
+    updatedAt: readString(value.updated_at, 'chat.thread.updatedAt'),
+  }
+}
+
+function parseChatMessage(value: unknown): ChatMessageRecord {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  const role = readString(value.role, 'chat.message.role')
+  return {
+    id: readString(value.id, 'chat.message.id'),
+    threadId: readString(value.thread_id, 'chat.message.threadId'),
+    role: role === 'assistant' ? 'assistant' : 'user',
+    content: readString(value.content, 'chat.message.content'),
+    model: readString(value.model, 'chat.message.model'),
+    providerId: readString(value.provider_id, 'chat.message.providerId'),
+    providerName: readString(value.provider_name, 'chat.message.providerName'),
+    error: readString(value.error, 'chat.message.error'),
+    createdAt: readString(value.created_at, 'chat.message.createdAt'),
+  }
+}
+
+function parseChatThreadResult(value: unknown): ChatThreadResult {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  return {
+    thread: parseChatThread(value.thread),
+    userMessage: parseChatMessage(value.user_message),
+    assistantMessage: parseChatMessage(value.assistant_message),
   }
 }
 
@@ -3014,6 +3125,44 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     return parseSystemSetting(await request('/settings', {
       method: 'PUT',
       body: JSON.stringify({ key, value }),
+    }))
+  },
+
+  // ── Console chat ──
+  async getChatModels(): Promise<readonly ChatModelOption[]> {
+    const data = await request('/chat/models')
+    return (Array.isArray(data) ? data : []).map(parseChatModelOption)
+  },
+  async listChatThreads(): Promise<readonly ChatThread[]> {
+    const data = await request('/chat/threads')
+    return (Array.isArray(data) ? data : []).map(parseChatThread)
+  },
+  async createChatThread(input: { model: string; providerId: string }): Promise<ChatThread> {
+    return parseChatThread(await request('/chat/threads', {
+      method: 'POST',
+      body: JSON.stringify({ model: input.model, provider_id: input.providerId }),
+    }))
+  },
+  async updateChatThread(id: string, patch: { title?: string; archived?: boolean }): Promise<ChatThread> {
+    return parseChatThread(await request(`/chat/threads/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }))
+  },
+  async deleteChatThread(id: string): Promise<void> {
+    await request(`/chat/threads/${id}`, { method: 'DELETE' })
+  },
+  async listChatMessages(id: string): Promise<readonly ChatMessageRecord[]> {
+    const data = await request(`/chat/threads/${id}/messages`)
+    return (Array.isArray(data) ? data : []).map(parseChatMessage)
+  },
+  async sendChatMessage(
+    id: string,
+    input: { content: string; model: string; providerId: string },
+  ): Promise<ChatThreadResult> {
+    return parseChatThreadResult(await request(`/chat/threads/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content: input.content, model: input.model, provider_id: input.providerId }),
     }))
   },
   async getMcpStatus(): Promise<McpStatus> {

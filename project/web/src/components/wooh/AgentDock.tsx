@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import { AgentPanel } from '@/components/wooh/AgentPanel'
-import type { AgentChatMessage } from '@/components/wooh/AgentPanel'
+import { AgentChat } from '@/components/wooh/AgentChat'
 import {
   AGENT_DOCK_SPLITTER_WIDTH,
   AGENT_DOCK_STORAGE_KEY,
@@ -41,25 +40,16 @@ function readStoredWidth(): number {
   }
 }
 
-function clockNow(): string {
-  return new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
 // AgentDockProvider owns the width (persisted per browser), the drag state and
 // the conversation. The panel sits on the right edge, so the width only eats
 // into the content area — the sidebar keeps its place.
 export function AgentDockProvider({ children }: { children: ReactNode }) {
-  const { t } = useTranslation('agentPanel')
   const [width, setWidthState] = useState<number>(readStoredWidth)
   const [dragging, setDragging] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth,
   )
-  const [messages, setMessages] = useState<readonly AgentChatMessage[]>([])
-  const [sending, setSending] = useState(false)
   const lastNonZero = useRef(width > 0 ? width : DEFAULT_DOCK_WIDTH)
-  const replyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const seq = useRef(0)
 
   // Remember the last visible width so the sidebar button restores it rather
   // than always snapping back to the default.
@@ -103,54 +93,17 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
     setWidth(Math.max(lastNonZero.current, MIN_DOCK_WIDTH))
   }, [setWidth])
 
-  const send = useCallback(
-    (text: string) => {
-      const trimmed = text.trim()
-      if (!trimmed) return
-      seq.current += 1
-      const id = seq.current
-      const createdAt = clockNow()
-      setMessages((current) => [
-        ...current,
-        { id: `u-${id}`, role: 'user', content: trimmed, createdAt },
-      ])
-      setSending(true)
-      clearTimeout(replyTimer.current)
-      // TODO: 接入真实对话后端（/v1/chat/completions 流式）。在那之前只回一条
-      // 明确的提示，不伪造模型输出。
-      replyTimer.current = setTimeout(() => {
-        setMessages((current) => [
-          ...current,
-          {
-            id: `a-${id}`,
-            role: 'agent',
-            author: 'hapiy',
-            content: t('notWired'),
-            error: true,
-            createdAt: clockNow(),
-          },
-        ])
-        setSending(false)
-      }, 450)
-    },
-    [t],
-  )
-
-  useEffect(() => () => clearTimeout(replyTimer.current), [])
 
   const value = useMemo<AgentDockContextValue>(
     () => ({
       width: visibleWidth,
       maxWidth,
       dragging,
-      messages,
-      sending,
       setWidth,
       setDragging,
       openDock,
-      send,
     }),
-    [visibleWidth, maxWidth, dragging, messages, sending, setWidth, openDock, send],
+    [visibleWidth, maxWidth, dragging, setWidth, setDragging, openDock],
   )
 
   return <AgentDockContext.Provider value={value}>{children}</AgentDockContext.Provider>
@@ -159,8 +112,7 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
 // AgentDock renders the panel itself. Mobile keeps the existing layout: the
 // dock is desktop-only for now.
 export function AgentDock() {
-  const { t } = useTranslation('agentPanel')
-  const { width, dragging, messages, sending, send } = useAgentDock()
+  const { width, dragging } = useAgentDock()
 
   // 收起/展开时整条（分隔条 + 面板）一起做宽度过渡；拖动过程中关掉过渡，
   // 否则面板会追着指针慢半拍。
@@ -174,14 +126,7 @@ export function AgentDock() {
     >
       {(width > 0 || dragging) && <AgentDockSplitter />}
       <div className="min-h-0 min-w-0 p-2 pl-0" style={{ width }}>
-        <AgentPanel
-          className="h-full w-full"
-          title="Agent"
-          subtitle={t('subtitle')}
-          messages={messages}
-          onSend={send}
-          sending={sending}
-        />
+        <AgentChat className="h-full w-full" />
       </div>
     </div>
   )

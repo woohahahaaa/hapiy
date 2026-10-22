@@ -360,7 +360,8 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			"provider_id": providerID,
 		}
 		if strings.TrimSpace(thread.Title) == "" {
-			updates["title"] = chatTitle(content)
+			thread.Title = chatTitle(content)
+			updates["title"] = thread.Title
 		}
 		if err := db.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Create(&userMessage).Error; err != nil {
