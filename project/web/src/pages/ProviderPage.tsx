@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/wooh/tooltip'
 import { toast } from '@/components/ui/toast'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
+import { useUIAction } from '@/lib/ui-actions'
 import { i18n } from '@/i18n/i18n'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
@@ -111,6 +112,35 @@ export function ProviderPage() {
   const [useKey, setUseKey] = useState(true)
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [deleting, setDeleting] = useState<Provider | null>(null)
+
+  // Console-chat agent: open the provider editor with the requested fields
+  // pre-filled. The agent never saves on its own; the operator confirms here.
+  useUIAction('open_provider_dialog', (payload) => {
+    const targetId = typeof payload.provider_id === 'string' ? payload.provider_id.trim() : ''
+    const targetName = typeof payload.provider_name === 'string' ? payload.provider_name.trim() : ''
+    const matches = (provider: Provider) =>
+      (targetId !== '' && provider.id === targetId) ||
+      (targetName !== '' && provider.name === targetName)
+    void (async () => {
+      let target = providers.find(matches)
+      if (!target) {
+        try {
+          const all = await dashboardApi.listProviders({ limit: 500, offset: 0 })
+          target = all.providers.find(matches)
+        } catch {
+          return
+        }
+      }
+      if (!target) return
+      setEditing({
+        ...target,
+        weight: typeof payload.weight === 'number' ? payload.weight : target.weight,
+        priority: typeof payload.priority === 'number' ? payload.priority : target.priority,
+        status: typeof payload.status === 'boolean' ? payload.status : target.status,
+      })
+      setIsDialogOpen(true)
+    })()
+  })
 
   const loadProviders = useCallback(async () => {
     setIsLoading(true)
@@ -300,6 +330,7 @@ export function ProviderPage() {
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
              <ProviderForm
+               key={editing?.id ?? 'new'}
                provider={editing}
                onSave={handleSave}
                isSaving={isSaving}

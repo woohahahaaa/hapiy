@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
@@ -14,6 +15,7 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashboard-api'
+import { dispatchUIAction } from '@/lib/ui-actions'
 
 const AUTO_PROVIDER = 'auto'
 
@@ -27,6 +29,8 @@ function errorMessage(error: unknown, fallback: string): string {
 // bypasses it. Rendering/state live in AgentThread (assistant-ui primitives).
 export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
+  const navigate = useNavigate()
+  const location = useLocation()
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
@@ -116,7 +120,16 @@ export function AgentChat({ className }: { readonly className?: string }) {
       content: text,
       model: selectedModel,
       providerId,
+      pageContext: location.pathname,
     })
+    // Apply the console actions the agent asked for. Navigating first lets a
+    // page that is not mounted yet pick the action up from the queue.
+    for (const action of result.uiActions) {
+      if (action.type === 'open_provider_dialog') {
+        if (location.pathname !== '/provider') navigate('/provider')
+        dispatchUIAction({ type: action.type, payload: action.payload })
+      }
+    }
     setActiveThread(result.thread)
     setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
     return result.assistantMessage.content
