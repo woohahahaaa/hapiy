@@ -1,7 +1,7 @@
 {
   "you": "你",
   "agent": "Agent",
-  "placeholder": "输入消息，回车发送，Shift+回车换行",
+  "placeholder": "输入消息…",
   "send": "发送",
   "typing": "正在输入…",
   "empty": "还没有消息，先打个招呼吧",

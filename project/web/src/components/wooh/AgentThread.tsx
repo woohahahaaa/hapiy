@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
 
 const markdownClass =
-  'text-sm leading-relaxed [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
+  'text-[15px] leading-relaxed [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
   '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-4 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-4 ' +
   '[&_li]:my-0.5 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-background/60 ' +
   '[&_pre]:p-2 [&_code]:font-mono [&_code]:text-xs [&_a]:underline [&_a]:underline-offset-2 ' +
@@ -75,7 +75,7 @@ function MessageRow({
         {outgoing ? <UserAvatar /> : <AgentAvatar size={28} className="mt-0.5 shrink-0" />}
         <div
           className={cn(
-            'min-w-0 max-w-[80%] rounded-2xl px-3 py-2',
+            'min-w-0 max-w-[80%] rounded-2xl px-4 py-2.5',
             outgoing ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
           )}
         >
@@ -100,10 +100,10 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
       <ComposerPrimitive.Input
         placeholder={t('placeholder')}
         rows={1}
-        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm leading-6 outline-none placeholder:text-muted-foreground"
+        className="min-h-11 flex-1 resize-none bg-transparent px-1 py-3 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
       />
       <ComposerPrimitive.Send asChild>
-        <Button size="icon" className="size-9 shrink-0 rounded-full" aria-label={t('send')}>
+        <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
           <AppIcon name="expand_less" size={18} />
         </Button>
       </ComposerPrimitive.Send>
@@ -191,9 +191,9 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
-              <h2 className="text-center text-2xl font-semibold tracking-tight">{t('greeting')}</h2>
-              <div className="w-full max-w-xl">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6 py-10">
+              <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greeting')}</h2>
+              <div className="w-full max-w-2xl">
                 <Composer centered />
               </div>
             </div>
