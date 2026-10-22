@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSidebar } from '@/components/ui/sidebar'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { AgentChat } from '@/components/wooh/AgentChat'
@@ -16,9 +17,11 @@ const DEFAULT_DOCK_WIDTH = 360
 const MIN_DOCK_WIDTH = 320
 const KEYBOARD_STEP = 24
 
-// 侧边栏展开宽度与 AppShell 的 `--sidebar-width: calc(var(--spacing) * 64)`
-// 对齐（16rem）。右侧面板再宽也不盖住侧边栏。
+// 侧边栏尺寸与 AppShell 的 `--sidebar-width: calc(var(--spacing) * 64)`
+// 和 ui/sidebar 的 SIDEBAR_WIDTH_ICON 对齐：
+//   展开 = 16rem；收起（variant=inset）= 2.5rem 图标 + 1.5rem 内边距 = 4rem。
 const SIDEBAR_EXPANDED_REM = 16
+const SIDEBAR_COLLAPSED_REM = 4
 
 function remToPx(rem: number): number {
   if (typeof window === 'undefined') return rem * 16
@@ -44,6 +47,7 @@ function readStoredWidth(): number {
 // the conversation. The panel sits on the right edge, so the width only eats
 // into the content area — the sidebar keeps its place.
 export function AgentDockProvider({ children }: { children: ReactNode }) {
+  const { setOpen } = useSidebar()
   const [width, setWidthState] = useState<number>(readStoredWidth)
   const [dragging, setDragging] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -63,11 +67,10 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // 面板在最右边，上限是「视口 - 展开的侧边栏 - 分隔条」：拖到头时内容区
-  // 被盖完，但侧边栏始终可用。
+  // 面板在最左边，右侧至少留出「收起后的侧边栏」宽度。
   const maxWidth = Math.max(
     0,
-    viewportWidth - remToPx(SIDEBAR_EXPANDED_REM) - AGENT_DOCK_SPLITTER_WIDTH,
+    viewportWidth - remToPx(SIDEBAR_COLLAPSED_REM) - AGENT_DOCK_SPLITTER_WIDTH,
   )
 
   const setWidth = useCallback(
@@ -88,6 +91,14 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
   // 视口变窄时按可用上限显示，但不改写用户存下来的宽度：窗口再变宽时
   // 面板会回到原来的宽度。
   const visibleWidth = Math.max(0, Math.min(width, maxWidth))
+
+  const rightWidth = Math.max(0, viewportWidth - (visibleWidth > 0 ? visibleWidth + AGENT_DOCK_SPLITTER_WIDTH : 0))
+
+  // 右侧整体窄于展开状态的侧边栏时直接收起。只跟随宽度变化触发，用户手动
+  // 展开不会立刻被打回，直到下一次拖动改变可用宽度。
+  useEffect(() => {
+    if (rightWidth > 0 && rightWidth < remToPx(SIDEBAR_EXPANDED_REM)) setOpen(false)
+  }, [rightWidth, setOpen])
 
   const openDock = useCallback(() => {
     setWidth(Math.max(lastNonZero.current, MIN_DOCK_WIDTH))
@@ -124,10 +135,10 @@ export function AgentDock() {
       )}
       style={{ width: width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0 }}
     >
-      {(width > 0 || dragging) && <AgentDockSplitter />}
-      <div className="min-h-0 min-w-0 p-2 pl-0" style={{ width }}>
+      <div className="min-h-0 min-w-0 p-2 pr-0" style={{ width }}>
         <AgentChat className="h-full w-full" />
       </div>
+      {(width > 0 || dragging) && <AgentDockSplitter />}
     </div>
   )
 }
@@ -156,8 +167,8 @@ export function AgentDockSplitter() {
       onPointerMove={(event) => {
         const current = drag.current
         if (!current) return
-        // 面板在右侧：指针往左拖变大。
-        setWidth(current.startWidth + (current.startX - event.clientX))
+        // 面板在左侧：指针往右拖变大。
+        setWidth(current.startWidth + (event.clientX - current.startX))
       }}
       onPointerUp={(event) => {
         if (!drag.current) return
@@ -178,7 +189,7 @@ export function AgentDockSplitter() {
       onKeyDown={(event) => {
         if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
         event.preventDefault()
-        setWidth(width + (event.key === 'ArrowLeft' ? KEYBOARD_STEP : -KEYBOARD_STEP))
+        setWidth(width + (event.key === 'ArrowRight' ? KEYBOARD_STEP : -KEYBOARD_STEP))
       }}
       className="group hidden w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
     >
