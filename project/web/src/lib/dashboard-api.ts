@@ -443,10 +443,18 @@ export type ChatMessageRecord = {
   readonly createdAt: string
 }
 
+// ChatUIAction is one console action the agent asked for (open a dialog,
+// prefill fields). Applied by the page that owns the action.
+export type ChatUIAction = {
+  readonly type: string
+  readonly payload: Readonly<Record<string, unknown>>
+}
+
 export type ChatThreadResult = {
   readonly thread: ChatThread
   readonly userMessage: ChatMessageRecord
   readonly assistantMessage: ChatMessageRecord
+  readonly uiActions: readonly ChatUIAction[]
 }
 
 export type McpStatus = {
@@ -1245,6 +1253,14 @@ function parseChatMessage(value: unknown): ChatMessageRecord {
   }
 }
 
+function parseChatUIAction(value: unknown): ChatUIAction {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  const payload = isRecord(value.payload) ? value.payload : {}
+  return { type: readString(value.type, 'chat.uiAction.type'), payload }
+}
+
 function parseChatThreadResult(value: unknown): ChatThreadResult {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
@@ -1253,6 +1269,7 @@ function parseChatThreadResult(value: unknown): ChatThreadResult {
     thread: parseChatThread(value.thread),
     userMessage: parseChatMessage(value.user_message),
     assistantMessage: parseChatMessage(value.assistant_message),
+    uiActions: Array.isArray(value.ui_actions) ? value.ui_actions.map(parseChatUIAction) : [],
   }
 }
 
@@ -3158,11 +3175,16 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async sendChatMessage(
     id: string,
-    input: { content: string; model: string; providerId: string },
+    input: { content: string; model: string; providerId: string; pageContext?: string },
   ): Promise<ChatThreadResult> {
     return parseChatThreadResult(await request(`/chat/threads/${id}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content: input.content, model: input.model, provider_id: input.providerId }),
+      body: JSON.stringify({
+        content: input.content,
+        model: input.model,
+        provider_id: input.providerId,
+        page_context: input.pageContext ?? '',
+      }),
     }))
   },
   async getMcpStatus(): Promise<McpStatus> {
