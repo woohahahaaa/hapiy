@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { AgentDock, AgentDockProvider, AgentDockSplitter } from '@/components/wooh/AgentDock'
+import { AgentDock, AgentDockProvider } from '@/components/wooh/AgentDock'
 import { useAgentDock } from '@/components/wooh/agent-dock-context'
 import { AppSidebar } from '@/components/wooh/Sidebar'
 
@@ -12,7 +12,7 @@ interface AppShellProps {
 // ShellBody lays the chat panel out to the right of the content: sidebar,
 // page, splitter, panel. Persistence and sizing live in AgentDockProvider.
 function ShellBody({ children }: AppShellProps) {
-  const { width, dragging } = useAgentDock()
+  const { width } = useAgentDock()
 
   return (
     <div className="flex h-svh w-full overflow-hidden">
@@ -25,9 +25,7 @@ function ShellBody({ children }: AppShellProps) {
       <SidebarInset className={cn('overflow-hidden', width > 0 && 'md:mr-0!')}>
         {children}
       </SidebarInset>
-      {/* 拖到 0 的那一下仍然保留分隔条，否则指针捕获会随面板卸载而丢失。 */}
-      {(width > 0 || dragging) && <AgentDockSplitter />}
-      {width > 0 && <AgentDock />}
+      <AgentDock />
     </div>
   )
 }

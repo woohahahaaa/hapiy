@@ -86,6 +86,58 @@ export function AgentPanel({
   const labelFor = (message: AgentChatMessage) =>
     message.author ?? (message.role === 'user' ? (userLabel ?? t('you')) : (agentLabel ?? t('agent')))
 
+  const empty = messages.length === 0
+
+  // 同一条输入框用在两个位置：有消息时贴在底部，空会话时浮在正中间。
+  const composer = (standalone: boolean) => (
+    <form
+      className={standalone ? 'border-t border-border p-3' : 'w-full'}
+      onSubmit={(event) => {
+        event.preventDefault()
+        submit()
+      }}
+    >
+      <div
+        className={cn(
+          'flex items-end gap-2',
+          standalone
+            ? 'rounded-xl bg-muted/60 p-1.5'
+            : 'rounded-2xl border border-border bg-card p-2 shadow-sm',
+        )}
+      >
+        <Textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey) return
+            // IME composition (Chinese/Japanese input) must not send on Enter.
+            if (event.nativeEvent.isComposing) return
+            event.preventDefault()
+            submit()
+          }}
+          placeholder={placeholder ?? t('placeholder')}
+          disabled={disabled}
+          rows={1}
+          aria-label={placeholder ?? t('placeholder')}
+          className="min-h-9 border-transparent bg-transparent py-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
+        />
+        <Button
+          type="submit"
+          size="icon"
+          className="size-8 shrink-0 rounded-full"
+          disabled={!canSend}
+          aria-label={t('send')}
+        >
+          <AppIcon
+            name={sending ? 'progress_activity' : 'expand_less'}
+            size={16}
+            className={cn(sending && 'animate-spin')}
+          />
+        </Button>
+      </div>
+    </form>
+  )
+
   return (
     <section
       className={cn(
@@ -105,110 +157,83 @@ export function AgentPanel({
         {actions && <div className="ms-auto flex shrink-0 items-center gap-1">{actions}</div>}
       </header>
 
-      <div
-        ref={listRef}
-        role="log"
-        aria-live="polite"
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
-      >
-        {messages.length === 0 && (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center text-xs text-muted-foreground">
-            <AppIcon name="chat" size={20} />
-            <span>{emptyHint ?? t('empty')}</span>
+      {empty ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-6 py-8">
+          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <AppIcon name="robot" size={22} />
+          </span>
+          <div className="flex flex-col items-center gap-1 text-center">
+            <span className="text-base font-medium">{t('greeting')}</span>
+            <span className="text-xs text-muted-foreground">{emptyHint ?? t('empty')}</span>
           </div>
-        )}
-
-        {messages.map((message) => {
-          const outgoing = message.role === 'user'
-          return (
-            <div key={message.id} className="flex min-w-0 flex-col gap-1">
-              <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-                <span className="truncate font-medium text-foreground/80">{labelFor(message)}</span>
-                {message.createdAt && <span className="ms-auto shrink-0 tabular-nums">{message.createdAt}</span>}
-              </div>
-
-              <div className={cn('flex min-w-0 items-start gap-2', outgoing && 'flex-row-reverse')}>
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-                  {message.avatarUrl ? (
-                    <img src={message.avatarUrl} alt="" className="size-full object-cover" />
-                  ) : (
-                    <AppIcon name={outgoing ? 'person' : 'robot'} size={14} />
-                  )}
-                </span>
-
-                <div className={cn('flex min-w-0 max-w-[80%] flex-col gap-1.5', outgoing && 'items-end')}>
-                  <div
-                    className={cn(
-                      'min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap',
-                      outgoing ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
-                      message.error && 'border border-destructive/40 bg-destructive/10 text-destructive',
-                    )}
-                  >
-                    {message.pending ? (
-                      <span className="inline-flex items-center gap-1" aria-label={t('typing')}>
-                        <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.2s]" />
-                        <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.1s]" />
-                        <span className="size-1.5 animate-bounce rounded-full bg-current" />
-                      </span>
-                    ) : (
-                      message.content
-                    )}
+          <div className="w-full max-w-sm">{composer(false)}</div>
+        </div>
+      ) : (
+        <>
+          <div
+            ref={listRef}
+            role="log"
+            aria-live="polite"
+            className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+          >
+            {messages.map((message) => {
+              const outgoing = message.role === 'user'
+              return (
+                <div key={message.id} className="flex min-w-0 flex-col gap-1">
+                  <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+                    <span className="truncate font-medium text-foreground/80">{labelFor(message)}</span>
+                    {message.createdAt && <span className="ms-auto shrink-0 tabular-nums">{message.createdAt}</span>}
                   </div>
 
-                  {message.attachments?.map((attachment) => (
-                    <div
-                      key={attachment.name}
-                      className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs"
-                    >
-                      <AppIcon name="description" size={14} className="shrink-0 text-muted-foreground" />
-                      <span className="truncate">{attachment.name}</span>
-                      {attachment.size && (
-                        <span className="shrink-0 text-muted-foreground">{attachment.size}</span>
+                  <div className={cn('flex min-w-0 items-start gap-2', outgoing && 'flex-row-reverse')}>
+                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
+                      {message.avatarUrl ? (
+                        <img src={message.avatarUrl} alt="" className="size-full object-cover" />
+                      ) : (
+                        <AppIcon name={outgoing ? 'person' : 'robot'} size={14} />
                       )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+                    </span>
 
-      <form
-        className="border-t border-border p-3"
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit()
-        }}
-      >
-        <div className="flex items-end gap-2 rounded-xl bg-muted/60 p-1.5">
-          <Textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey) return
-              // IME composition (Chinese/Japanese input) must not send on Enter.
-              if (event.nativeEvent.isComposing) return
-              event.preventDefault()
-              submit()
-            }}
-            placeholder={placeholder ?? t('placeholder')}
-            disabled={disabled}
-            rows={1}
-            aria-label={placeholder ?? t('placeholder')}
-            className="min-h-9 border-transparent bg-transparent py-2 shadow-none focus-visible:border-transparent focus-visible:ring-0 dark:bg-transparent"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            className="size-8 shrink-0 rounded-full"
-            disabled={!canSend}
-            aria-label={t('send')}
-          >
-            <AppIcon name={sending ? 'progress_activity' : 'expand_less'} size={16} className={cn(sending && 'animate-spin')} />
-          </Button>
-        </div>
-      </form>
+                    <div className={cn('flex min-w-0 max-w-[80%] flex-col gap-1.5', outgoing && 'items-end')}>
+                      <div
+                        className={cn(
+                          'min-w-0 rounded-2xl px-3 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap',
+                          outgoing ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
+                          message.error && 'border border-destructive/40 bg-destructive/10 text-destructive',
+                        )}
+                      >
+                        {message.pending ? (
+                          <span className="inline-flex items-center gap-1" aria-label={t('typing')}>
+                            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.2s]" />
+                            <span className="size-1.5 animate-bounce rounded-full bg-current [animation-delay:-0.1s]" />
+                            <span className="size-1.5 animate-bounce rounded-full bg-current" />
+                          </span>
+                        ) : (
+                          message.content
+                        )}
+                      </div>
+
+                      {message.attachments?.map((attachment) => (
+                        <div
+                          key={attachment.name}
+                          className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-background/60 px-2 py-1.5 text-xs"
+                        >
+                          <AppIcon name="description" size={14} className="shrink-0 text-muted-foreground" />
+                          <span className="truncate">{attachment.name}</span>
+                          {attachment.size && (
+                            <span className="shrink-0 text-muted-foreground">{attachment.size}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          {composer(true)}
+        </>
+      )}
     </section>
   )
 }

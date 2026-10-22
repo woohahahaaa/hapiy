@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { AgentPanel } from '@/components/wooh/AgentPanel'
 import type { AgentChatMessage } from '@/components/wooh/AgentPanel'
 import {
@@ -159,18 +160,29 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
 // dock is desktop-only for now.
 export function AgentDock() {
   const { t } = useTranslation('agentPanel')
-  const { width, messages, sending, send } = useAgentDock()
+  const { width, dragging, messages, sending, send } = useAgentDock()
 
+  // 收起/展开时整条（分隔条 + 面板）一起做宽度过渡；拖动过程中关掉过渡，
+  // 否则面板会追着指针慢半拍。
   return (
-    <div className="hidden min-h-0 shrink-0 p-2 pl-0 md:flex" style={{ width }}>
-      <AgentPanel
-        className="h-full w-full"
-        title="Agent"
-        subtitle={t('subtitle')}
-        messages={messages}
-        onSend={send}
-        sending={sending}
-      />
+    <div
+      className={cn(
+        'hidden min-h-0 shrink-0 overflow-hidden md:flex',
+        !dragging && 'transition-[width] duration-200 ease-linear',
+      )}
+      style={{ width: width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0 }}
+    >
+      <AgentDockSplitter />
+      <div className="min-h-0 min-w-0 p-2 pl-0" style={{ width }}>
+        <AgentPanel
+          className="h-full w-full"
+          title="Agent"
+          subtitle={t('subtitle')}
+          messages={messages}
+          onSend={send}
+          sending={sending}
+        />
+      </div>
     </div>
   )
 }
