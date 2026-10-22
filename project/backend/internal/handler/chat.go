@@ -247,9 +247,10 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 		var req struct {
-			Content    string `json:"content"`
-			Model      string `json:"model"`
-			ProviderID string `json:"provider_id"`
+			Content     string `json:"content"`
+			Model       string `json:"model"`
+			ProviderID  string `json:"provider_id"`
+			PageContext string `json:"page_context"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -288,6 +289,13 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			messages = append(messages, map[string]interface{}{"role": message.Role, "content": content})
 		}
 		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
+		if page := strings.TrimSpace(req.PageContext); page != "" {
+			messages = append([]map[string]interface{}{{
+				"role": "system",
+				"content": "用户当前在控制台页面 " + page + "。需要操作界面（打开弹窗、预填参数）时使用 ui_ 开头的工具；" +
+					"改配置先打开界面让用户确认，不要假设已经保存。",
+			}}, messages...)
+		}
 
 		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
 		defer cancel()
@@ -305,7 +313,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 MCP 工具失败: " + err.Error()})
 			return
 		}
-		toolDefs := make([]map[string]any, 0, len(listed))
+		toolDefs := make([]map[string]any, 0, len(listed)+1)
 		for _, tool := range listed {
 			toolDefs = append(toolDefs, map[string]any{
 				"type": "function",
@@ -316,6 +324,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				},
 			})
 		}
+		toolDefs = append(toolDefs, chatUITools()...)
 
 		conversation := messages
 		buildBody := func() map[string]interface{} {
@@ -353,6 +362,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
+		uiActions := make([]chatUIAction, 0)
 		reply := ""
 		for step := 0; step < chatMaxToolSteps; step++ {
 			relayReq.Body = buildBody()
@@ -392,12 +402,22 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				if strings.TrimSpace(call.Function.Arguments) != "" {
 					_ = json.Unmarshal([]byte(call.Function.Arguments), &arguments)
 				}
-				result, callErr := runner.Call(ctx, call.Function.Name, arguments)
 				var payload string
-				if callErr != nil {
-					payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
+				if strings.HasPrefix(call.Function.Name, "ui_") {
+					// UI tools are not executed here: they are queued for the
+					// frontend, which applies them after the reply arrives.
+					uiActions = append(uiActions, chatUIAction{
+						Type:    strings.TrimPrefix(call.Function.Name, "ui_"),
+						Payload: arguments,
+					})
+					payload = `{"ok":true,"note":"action queued for the console UI"}`
 				} else {
-					payload = hapiymcp.MarshalToolResult(result)
+					result, callErr := runner.Call(ctx, call.Function.Name, arguments)
+					if callErr != nil {
+						payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
+					} else {
+						payload = hapiymcp.MarshalToolResult(result)
+					}
 				}
 				conversation = append(conversation, map[string]any{
 					"role":         "tool",
@@ -452,7 +472,41 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			"thread":            thread,
 			"user_message":      userMessage,
 			"assistant_message": assistantMessage,
+			"ui_actions":        uiActions,
 		}})
+	}
+}
+
+// chatUIAction is one frontend action the model asked for (open a dialog,
+// prefill fields). The console applies it after the reply arrives, so the
+// agent never writes configuration on its own.
+type chatUIAction struct {
+	Type    string         `json:"type"`
+	Payload map[string]any `json:"payload"`
+}
+
+// chatUITools declares the UI actions exposed to the model. Keep this list
+// small and explicit: every entry is a capability the model can trigger in the
+// console, and the frontend must have a matching handler.
+func chatUITools() []map[string]any {
+	return []map[string]any{
+		{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "ui_open_provider_dialog",
+				"description": "在控制台右侧打开供应商编辑弹窗，可预填权重、优先级和启用状态。用于“帮我改供应商 X”的操作，用户确认后再保存。",
+				"parameters": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"provider_id":   map[string]any{"type": "string", "description": "供应商 id，已知时优先传"},
+						"provider_name": map[string]any{"type": "string", "description": "供应商名称，id 未知时用名称匹配"},
+						"weight":        map[string]any{"type": "integer", "description": "预填权重"},
+						"priority":      map[string]any{"type": "integer", "description": "预填优先级"},
+						"status":        map[string]any{"type": "boolean", "description": "预填启用状态"},
+					},
+				},
+			},
+		},
 	}
 }
 
