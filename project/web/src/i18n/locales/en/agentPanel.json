@@ -10,5 +10,19 @@
   "open": "Open chat",
   "resize": "Resize the chat panel",
   "notWired": "The chat backend is not wired yet. The next step is /v1/chat/completions; this message is a placeholder.",
-  "greeting": "How can I help?"
+  "greeting": "How can I help?",
+  "newChat": "New chat",
+  "history": "History",
+  "noThreads": "No conversations yet",
+  "untitled": "Untitled",
+  "deleteThread": "Delete conversation",
+  "deleteConfirm": "Delete this conversation and its messages?",
+  "modelLabel": "Model",
+  "providerLabel": "Provider",
+  "modelPlaceholder": "Select a model",
+  "providerAuto": "Auto (topology)",
+  "providerDisabledSuffix": "(disabled)",
+  "providerNoTopologySuffix": "(not in topology)",
+  "selectModelFirst": "Pick a model first",
+  "sendFailed": "Failed to send"
 }

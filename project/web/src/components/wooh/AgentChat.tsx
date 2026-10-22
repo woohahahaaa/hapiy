@@ -18,6 +18,10 @@ import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashb
 
 const AUTO_PROVIDER = 'auto'
 
+// DisplayMessage adds the optimistic/pending flags the panel needs on top of
+// the persisted record shape.
+type DisplayMessage = ChatMessageRecord & { readonly pending?: boolean }
+
 function formatClock(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
@@ -37,7 +41,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
-  const [messages, setMessages] = useState<readonly ChatMessageRecord[]>([])
+  const [messages, setMessages] = useState<readonly DisplayMessage[]>([])
   const [selectedModel, setSelectedModel] = useState('')
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
   const [sending, setSending] = useState(false)
@@ -70,13 +74,13 @@ export function AgentChat({ className }: { readonly className?: string }) {
     [modelOptions, selectedModel],
   )
 
-  // Keep the provider inside the new model's list; otherwise fall back to 自动.
-  useEffect(() => {
-    if (selectedProvider === AUTO_PROVIDER) return
-    if (!providerOptions.some((provider) => provider.id === selectedProvider)) {
-      setSelectedProvider(AUTO_PROVIDER)
-    }
-  }, [providerOptions, selectedProvider])
+  // Keep the provider inside the model's list; an id that no longer exists
+  // falls back to 自动 without mutating state during render.
+  const effectiveProvider =
+    selectedProvider === AUTO_PROVIDER ||
+    providerOptions.some((provider) => provider.id === selectedProvider)
+      ? selectedProvider
+      : AUTO_PROVIDER
 
   const openThread = async (thread: ChatThread) => {
     setActiveThread(thread)
@@ -118,8 +122,26 @@ export function AgentChat({ className }: { readonly className?: string }) {
       toast(t('selectModelFirst'))
       return
     }
-    const providerId = selectedProvider === AUTO_PROVIDER ? '' : selectedProvider
+    const providerId = effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider
+    const stamp = new Date().toISOString()
+    const userId = `local-user-${stamp}`
+    const assistantId = `local-assistant-${stamp}`
+    const base = {
+      threadId: activeThread?.id ?? '',
+      model: selectedModel,
+      providerId,
+      providerName: '',
+      error: '',
+      createdAt: stamp,
+    }
     setSending(true)
+    // Show the turn immediately; the persisted records replace it once the
+    // upstream answers (or turn into an error bubble when it fails).
+    setMessages((current) => [
+      ...current,
+      { ...base, id: userId, role: 'user', content: text },
+      { ...base, id: assistantId, role: 'assistant', content: '', pending: true },
+    ])
     try {
       let thread = activeThread
       if (!thread) {
@@ -132,38 +154,23 @@ export function AgentChat({ className }: { readonly className?: string }) {
         model: selectedModel,
         providerId,
       })
-      setMessages((current) => [...current, result.userMessage, result.assistantMessage])
+      setMessages((current) => [
+        ...current.filter((message) => message.id !== userId && message.id !== assistantId),
+        result.userMessage,
+        result.assistantMessage,
+      ])
       setActiveThread(result.thread)
       setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
     } catch (error) {
       const message = errorMessage(error, t('sendFailed'))
       toast(message)
-      const stamp = new Date().toISOString()
-      setMessages((current) => [
-        ...current,
-        {
-          id: `local-user-${stamp}`,
-          threadId: activeThread?.id ?? '',
-          role: 'user',
-          content: text,
-          model: selectedModel,
-          providerId,
-          providerName: '',
-          error: '',
-          createdAt: stamp,
-        },
-        {
-          id: `local-error-${stamp}`,
-          threadId: activeThread?.id ?? '',
-          role: 'assistant',
-          content: message,
-          model: selectedModel,
-          providerId,
-          providerName: '',
-          error: 'failed',
-          createdAt: stamp,
-        },
-      ])
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === assistantId
+            ? { ...item, pending: false, error: 'failed', content: message }
+            : item,
+        ),
+      )
     } finally {
       setSending(false)
     }
@@ -176,12 +183,13 @@ export function AgentChat({ className }: { readonly className?: string }) {
     author: message.role === 'assistant' ? message.providerName || 'hapiy' : undefined,
     createdAt: formatClock(message.createdAt),
     error: Boolean(message.error),
+    pending: message.pending === true,
   }))
 
   const providerLabel =
-    selectedProvider === AUTO_PROVIDER
+    effectiveProvider === AUTO_PROVIDER
       ? t('providerAuto')
-      : providerOptions.find((provider) => provider.id === selectedProvider)?.name ?? selectedProvider
+      : providerOptions.find((provider) => provider.id === effectiveProvider)?.name ?? effectiveProvider
 
   return (
     <div className={className}>
@@ -200,7 +208,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
             </SelectContent>
           </Select>
 
-          <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+          <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
             <SelectTrigger className="h-8 min-w-0 flex-1" aria-label={t('providerLabel')}>
               <SelectValue />
             </SelectTrigger>

@@ -10,5 +10,19 @@
   "open": "打开对话",
   "resize": "调整对话面板宽度",
   "notWired": "对话后端还没接入。下一步会直接走 /v1/chat/completions；这条提示只是占位。",
-  "greeting": "有什么可以帮你？"
+  "greeting": "有什么可以帮你？",
+  "newChat": "新对话",
+  "history": "历史会话",
+  "noThreads": "还没有历史会话",
+  "untitled": "未命名会话",
+  "deleteThread": "删除会话",
+  "deleteConfirm": "删除这个会话？聊天记录会一起删掉。",
+  "modelLabel": "模型",
+  "providerLabel": "供应商",
+  "modelPlaceholder": "选择模型",
+  "providerAuto": "自动（按拓扑）",
+  "providerDisabledSuffix": "(已禁用)",
+  "providerNoTopologySuffix": "(未接入拓扑)",
+  "selectModelFirst": "先选择一个模型",
+  "sendFailed": "发送失败"
 }
