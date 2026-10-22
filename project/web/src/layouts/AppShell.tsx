@@ -10,7 +10,6 @@ interface AppShellProps {
 // ShellBody lays the chat panel out to the left of the sidebar: panel,
 // splitter, sidebar, page. Persistence and sizing live in AgentDockProvider.
 function ShellBody({ children }: AppShellProps) {
-
   return (
     <div className="flex h-svh w-full overflow-hidden">
       {/* 视口四周内描边：与侧边栏/内容区分割线同色（border-border），

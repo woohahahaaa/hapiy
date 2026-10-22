@@ -143,7 +143,7 @@ export function AgentDock() {
   )
 }
 
-// AgentDockSplitter is the drag handle on the panel's left edge.
+// AgentDockSplitter is the drag handle on the panel's right edge.
 export function AgentDockSplitter() {
   const { t } = useTranslation('agentPanel')
   const { width, maxWidth, setWidth, setDragging } = useAgentDock()
