@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AgentAvatar } from '@/components/wooh/AgentAvatar'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -147,9 +148,7 @@ export function AgentPanel({
       aria-label={title ?? t('agent')}
     >
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-          <AppIcon name="robot" size={18} />
-        </span>
+        <AgentAvatar size={36} className="shrink-0" />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium">{title ?? t('agent')}</span>
           {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
@@ -159,9 +158,7 @@ export function AgentPanel({
 
       {empty ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-6 py-8">
-          <span className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <AppIcon name="robot" size={22} />
-          </span>
+          <AgentAvatar size={48} />
           <div className="flex flex-col items-center gap-1 text-center">
             <span className="text-base font-medium">{t('greeting')}</span>
             <span className="text-xs text-muted-foreground">{emptyHint ?? t('empty')}</span>
@@ -186,13 +183,17 @@ export function AgentPanel({
                   </div>
 
                   <div className={cn('flex min-w-0 items-start gap-2', outgoing && 'flex-row-reverse')}>
-                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-                      {message.avatarUrl ? (
-                        <img src={message.avatarUrl} alt="" className="size-full object-cover" />
-                      ) : (
-                        <AppIcon name={outgoing ? 'person' : 'robot'} size={14} />
-                      )}
-                    </span>
+                    {!outgoing && !message.avatarUrl ? (
+                      <AgentAvatar size={28} className="mt-0.5 shrink-0" />
+                    ) : (
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
+                        {message.avatarUrl ? (
+                          <img src={message.avatarUrl} alt="" className="size-full object-cover" />
+                        ) : (
+                          <AppIcon name="person" size={14} />
+                        )}
+                      </span>
+                    )}
 
                     <div className={cn('flex min-w-0 max-w-[80%] flex-col gap-1.5', outgoing && 'items-end')}>
                       <div
