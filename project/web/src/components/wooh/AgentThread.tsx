@@ -127,7 +127,9 @@ function lastUserText(messages: readonly ThreadMessage[]): string {
 
 export type AgentThreadProps = {
   readonly title: string
-  readonly subtitle: string
+  readonly subtitle?: string
+  /** Extra header content under the title (model/provider selectors). */
+  readonly controls?: ReactNode
   readonly initialMessages: readonly ChatMessageRecord[]
   /** Sends the turn through the backend; resolves with the assistant text. */
   readonly onSend: (text: string) => Promise<string>
@@ -137,7 +139,7 @@ export type AgentThreadProps = {
 // AgentThread is the ChatGPT-style transcript + composer, built on
 // assistant-ui primitives. The backend stays the source of truth: history is
 // passed in as initialMessages and each run is sent through onSend.
-export function AgentThread({ title, subtitle, initialMessages, onSend, actions }: AgentThreadProps) {
+export function AgentThread({ title, subtitle, controls, initialMessages, onSend, actions }: AgentThreadProps) {
   const { t } = useTranslation('agentPanel')
   const sendRef = useRef(onSend)
   useEffect(() => {
@@ -183,13 +185,16 @@ export function AgentThread({ title, subtitle, initialMessages, onSend, actions 
         className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground"
         aria-label={title}
       >
-        <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <AgentAvatar size={36} className="shrink-0" />
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-medium">{title}</span>
-            {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
+        <header className="flex flex-col gap-2 border-b border-border px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <AgentAvatar size={36} className="shrink-0" />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{title}</span>
+              {subtitle && <span className="truncate text-xs text-muted-foreground">{subtitle}</span>}
+            </div>
+            {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
           </div>
-          {actions && <div className="ms-auto flex shrink-0 items-center gap-1">{actions}</div>}
+          {controls && <div className="min-w-0">{controls}</div>}
         </header>
 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">

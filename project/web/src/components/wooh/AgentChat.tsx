@@ -122,49 +122,46 @@ export function AgentChat({ className }: { readonly className?: string }) {
     return result.assistantMessage.content
   }
 
-  const providerLabel =
-    effectiveProvider === AUTO_PROVIDER
-      ? t('providerAuto')
-      : providerOptions.find((provider) => provider.id === effectiveProvider)?.name ?? effectiveProvider
-
   return (
     <div className={className}>
       <div className="flex h-full min-h-0 flex-col gap-2">
-        <div className="flex shrink-0 items-center gap-2">
-          <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
-            <SelectTrigger className="h-8 min-w-0 flex-1" aria-label={t('modelLabel')}>
-              <SelectValue placeholder={t('modelPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((entry) => (
-                <SelectItem key={entry.model} value={entry.model}>
-                  {entry.model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
-            <SelectTrigger className="h-8 min-w-0 flex-1" aria-label={t('providerLabel')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={AUTO_PROVIDER}>{t('providerAuto')}</SelectItem>
-              {providerOptions.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.name}
-                  {provider.autoDisabled ? ` ${t('providerDisabledSuffix')}` : ''}
-                  {provider.workflowEnabled ? '' : ` ${t('providerNoTopologySuffix')}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         <AgentThread
           key={sessionKey}
           title={activeThread?.title || 'Agent'}
-          subtitle={`${selectedModel || '—'} · ${providerLabel}`}
+          controls={
+            <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">{t('modelLabel')}</span>
+              <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
+                <SelectTrigger className="h-6 min-w-0 flex-1 px-2 text-xs" aria-label={t('modelLabel')}>
+                  <SelectValue placeholder={t('modelPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((entry) => (
+                    <SelectItem key={entry.model} value={entry.model}>
+                      {entry.model}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <span className="text-xs text-muted-foreground">{t('providerLabel')}</span>
+              <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
+                <SelectTrigger className="h-6 min-w-0 flex-1 px-2 text-xs" aria-label={t('providerLabel')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={AUTO_PROVIDER}>{t('providerAuto')}</SelectItem>
+                  {providerOptions.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      {provider.name}
+                      {provider.autoDisabled ? ` ${t('providerDisabledSuffix')}` : ''}
+                      {provider.workflowEnabled ? '' : ` ${t('providerNoTopologySuffix')}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          }
           initialMessages={initialMessages}
           onSend={handleSend}
           actions={
