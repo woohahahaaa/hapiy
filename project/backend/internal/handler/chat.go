@@ -8,13 +8,16 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/affinity"
+	hapiymcp "github.com/hapiy/hapiy/internal/mcp"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/version"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +29,7 @@ const (
 	chatHistoryLimit      = 40
 	chatRequestTimeout    = 3 * time.Minute
 	chatMaxResponseBytes  = 8 << 20
+	chatMaxToolSteps      = 6
 	chatDefaultTitleRunes = 40
 )
 
@@ -285,11 +289,45 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
 
-		body := map[string]interface{}{
-			"model":    modelName,
-			"messages": messages,
-			"stream":   false,
+		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
+		defer cancel()
+
+		// Expose the MCP tools to the model: the console agent is meant to
+		// inspect and operate hapiy through the same tool surface /mcp serves.
+		runner, err := hapiymcp.NewToolRunner(ctx, db, version.Version)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化 MCP 工具失败: " + err.Error()})
+			return
 		}
+		defer runner.Close()
+		listed, err := runner.Tools(ctx)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 MCP 工具失败: " + err.Error()})
+			return
+		}
+		toolDefs := make([]map[string]any, 0, len(listed))
+		for _, tool := range listed {
+			toolDefs = append(toolDefs, map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        tool.Name,
+					"description": tool.Description,
+					"parameters":  tool.InputSchema,
+				},
+			})
+		}
+
+		conversation := messages
+		buildBody := func() map[string]interface{} {
+			return map[string]interface{}{
+				"model":       modelName,
+				"messages":    conversation,
+				"stream":      false,
+				"tools":       toolDefs,
+				"tool_choice": "auto",
+			}
+		}
+		body := buildBody()
 		bodyBytes, err := json.Marshal(body)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -315,28 +353,61 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
-		defer cancel()
-		resp, err := engine.RelayRequest(ctx, plan, &relayReq)
-		if err != nil {
-			status := http.StatusBadGateway
-			message := err.Error()
-			if resp != nil && resp.Body != nil {
-				_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-				_ = resp.Body.Close()
+		reply := ""
+		for step := 0; step < chatMaxToolSteps; step++ {
+			relayReq.Body = buildBody()
+			resp, relayErr := engine.RelayRequest(ctx, plan, &relayReq)
+			if relayErr != nil {
+				if resp != nil && resp.Body != nil {
+					_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+					_ = resp.Body.Close()
+				}
+				c.JSON(http.StatusBadGateway, gin.H{"error": relayErr.Error()})
+				return
 			}
-			c.JSON(status, gin.H{"error": message})
-			return
+			raw, readErr := io.ReadAll(io.LimitReader(resp.Body, chatMaxResponseBytes))
+			_ = resp.Body.Close()
+			if readErr != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": "读取上游响应失败: " + readErr.Error()})
+				return
+			}
+			message, parseErr := parseChatResponse(raw)
+			if parseErr != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": parseErr.Error()})
+				return
+			}
+			if len(message.ToolCalls) == 0 {
+				reply = message.Text
+				break
+			}
+			// Echo the assistant turn with its tool calls, then append one
+			// tool result per call, and let the model continue.
+			conversation = append(conversation, map[string]any{
+				"role":       "assistant",
+				"content":    message.Content,
+				"tool_calls": message.ToolCalls,
+			})
+			for _, call := range message.ToolCalls {
+				arguments := map[string]any{}
+				if strings.TrimSpace(call.Function.Arguments) != "" {
+					_ = json.Unmarshal([]byte(call.Function.Arguments), &arguments)
+				}
+				result, callErr := runner.Call(ctx, call.Function.Name, arguments)
+				var payload string
+				if callErr != nil {
+					payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
+				} else {
+					payload = hapiymcp.MarshalToolResult(result)
+				}
+				conversation = append(conversation, map[string]any{
+					"role":         "tool",
+					"tool_call_id": call.ID,
+					"content":      payload,
+				})
+			}
 		}
-		defer resp.Body.Close()
-		raw, err := io.ReadAll(io.LimitReader(resp.Body, chatMaxResponseBytes))
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "读取上游响应失败: " + err.Error()})
-			return
-		}
-		reply, err := chatCompletionText(raw)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		if strings.TrimSpace(reply) == "" {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "工具调用次数过多或上游没有返回文本回复"})
 			return
 		}
 
@@ -428,44 +499,68 @@ func dispatchChatRequest(db *gorm.DB, engine *relay.Engine, modelName, providerI
 	return plan, plan.Provider, nil
 }
 
-// chatCompletionText extracts the assistant text from an OpenAI-compatible
-// response. Content may be a plain string or an array of {type,text} parts.
-func chatCompletionText(raw []byte) (string, error) {
+// chatToolCall mirrors the OpenAI tool_calls entry.
+type chatToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+// chatResponseMessage is one upstream assistant turn: text, or tool calls.
+type chatResponseMessage struct {
+	Text      string
+	Content   json.RawMessage
+	ToolCalls []chatToolCall
+}
+
+func parseChatResponse(raw []byte) (chatResponseMessage, error) {
 	var parsed struct {
 		Choices []struct {
 			Message struct {
-				Content json.RawMessage `json:"content"`
+				Content   json.RawMessage `json:"content"`
+				ToolCalls []chatToolCall  `json:"tool_calls"`
 			} `json:"message"`
 			Text string `json:"text"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", fmt.Errorf("解析上游响应失败: %w", err)
+		return chatResponseMessage{}, fmt.Errorf("解析上游响应失败: %w", err)
 	}
 	if len(parsed.Choices) == 0 {
-		return "", errors.New("上游没有返回任何结果")
+		return chatResponseMessage{}, errors.New("上游没有返回任何结果")
 	}
 	choice := parsed.Choices[0]
-	if len(choice.Message.Content) > 0 {
-		var text string
-		if err := json.Unmarshal(choice.Message.Content, &text); err == nil {
-			return text, nil
-		}
-		var parts []struct {
-			Text string `json:"text"`
-		}
-		if err := json.Unmarshal(choice.Message.Content, &parts); err == nil {
-			var builder strings.Builder
-			for _, part := range parts {
-				builder.WriteString(part.Text)
-			}
-			return builder.String(), nil
-		}
+	text, _ := messageText(choice.Message.Content)
+	if text == "" {
+		text = choice.Text
 	}
-	if choice.Text != "" {
-		return choice.Text, nil
+	return chatResponseMessage{Text: text, Content: choice.Message.Content, ToolCalls: choice.Message.ToolCalls}, nil
+}
+
+// messageText reads the assistant text from a content value that may be a
+// plain string or an array of {type,text} parts.
+func messageText(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
 	}
-	return "", errors.New("上游回复是空的")
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text, nil
+	}
+	var parts []struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		var builder strings.Builder
+		for _, part := range parts {
+			builder.WriteString(part.Text)
+		}
+		return builder.String(), nil
+	}
+	return "", nil
 }
 
 func chatTitle(content string) string {
