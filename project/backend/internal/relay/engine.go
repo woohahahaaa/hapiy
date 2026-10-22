@@ -70,6 +70,22 @@ func (e *Engine) GetPlan(providerID string) (*ExecutionPlan, error) {
 	return plan, nil
 }
 
+// PlanForProvider compiles an execution plan for one provider on demand and
+// returns it without publishing it to the shared maps. Unlike the startup
+// plans it ignores the workflow switch: callers that target a provider
+// explicitly (the in-console chat panel) bypass the topology on purpose.
+func (e *Engine) PlanForProvider(providerID string) (*ExecutionPlan, error) {
+	var provider model.Provider
+	if err := e.db.First(&provider, "id = ?", providerID).Error; err != nil {
+		return nil, err
+	}
+	plan := &ExecutionPlan{ID: provider.ID, Provider: &provider}
+	if err := e.populatePlan(e.db, plan); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
 // OwnModel is one entry of the aggregated model list served at
 // /v1/models. OwnedBy mirrors the configured provider name so OpenAI-
 // compatible clients can display it directly.

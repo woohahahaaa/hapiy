@@ -72,6 +72,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&AgentConfigVersion{},
 		&ManagedAgentProvider{},
 		&AgentModelConfigSource{},
+		&ChatThread{},
+		&ChatMessage{},
 		&BackupRecord{},
 	)
 }

@@ -431,6 +431,16 @@ func runServe() {
 			dashboardAuthed.GET("/mcp", mcpserver.StatusHandler(db))
 			dashboardAuthed.PUT("/mcp", mcpserver.UpdateHandler(db))
 			dashboardAuthed.POST("/mcp/key", mcpserver.RotateKeyHandler(db))
+
+			// Console chat (Agent panel): threads live per account, replies go
+			// through the relay engine (auto = topology, fixed = that provider).
+			dashboardAuthed.GET("/chat/models", handler.ChatModels(db))
+			dashboardAuthed.GET("/chat/threads", handler.ListChatThreads(db))
+			dashboardAuthed.POST("/chat/threads", handler.CreateChatThread(db))
+			dashboardAuthed.PATCH("/chat/threads/:id", handler.UpdateChatThread(db))
+			dashboardAuthed.DELETE("/chat/threads/:id", handler.DeleteChatThread(db))
+			dashboardAuthed.GET("/chat/threads/:id/messages", handler.ListChatMessages(db))
+			dashboardAuthed.POST("/chat/threads/:id/messages", handler.SendChatMessage(db, engine))
 		}
 
 		// Relay endpoints (token auth). Every POST under /v1 is accepted by a
