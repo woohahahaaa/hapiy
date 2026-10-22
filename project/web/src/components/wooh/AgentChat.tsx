@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AgentThread } from '@/components/wooh/AgentThread'
 import { AppIcon } from '@/components/wooh/AppIcon'
-import { AgentPanel } from '@/components/wooh/AgentPanel'
-import type { AgentChatMessage } from '@/components/wooh/AgentPanel'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -18,33 +17,23 @@ import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashb
 
 const AUTO_PROVIDER = 'auto'
 
-// DisplayMessage adds the optimistic/pending flags the panel needs on top of
-// the persisted record shape.
-type DisplayMessage = ChatMessageRecord & { readonly pending?: boolean }
-
-function formatClock(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-}
-
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof DashboardApiError ? error.message : fallback
 }
 
-// AgentChat is the data layer + panel for the console chat: model/provider
-// selection, account-scoped thread history and sending through
-// /v1/dashboard/chat. Replies are produced by the relay engine, so "自动" goes
-// through the topology while a fixed provider bypasses it.
+// AgentChat is the console chat: model/provider selection, account-scoped
+// history and sending through /v1/dashboard/chat. Replies are produced by the
+// relay engine, so "自动" goes through the topology while a fixed provider
+// bypasses it. Rendering/state live in AgentThread (assistant-ui primitives).
 export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
-  const [messages, setMessages] = useState<readonly DisplayMessage[]>([])
+  const [initialMessages, setInitialMessages] = useState<readonly ChatMessageRecord[]>([])
+  const [sessionKey, setSessionKey] = useState('new:0')
   const [selectedModel, setSelectedModel] = useState('')
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
-  const [sending, setSending] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
 
   useEffect(() => {
@@ -74,8 +63,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
     [modelOptions, selectedModel],
   )
 
-  // Keep the provider inside the model's list; an id that no longer exists
-  // falls back to 自动 without mutating state during render.
   const effectiveProvider =
     selectedProvider === AUTO_PROVIDER ||
     providerOptions.some((provider) => provider.id === selectedProvider)
@@ -88,16 +75,20 @@ export function AgentChat({ className }: { readonly className?: string }) {
     setSelectedProvider(thread.providerId || AUTO_PROVIDER)
     setHistoryOpen(false)
     try {
-      setMessages(await dashboardApi.listChatMessages(thread.id))
+      const records = await dashboardApi.listChatMessages(thread.id)
+      setInitialMessages(records)
+      setSessionKey(thread.id)
     } catch (error) {
       toast(errorMessage(error, t('sendFailed')))
-      setMessages([])
+      setInitialMessages([])
+      setSessionKey(thread.id)
     }
   }
 
   const startNewThread = () => {
     setActiveThread(null)
-    setMessages([])
+    setInitialMessages([])
+    setSessionKey(`new:${Date.now()}`)
     setHistoryOpen(false)
   }
 
@@ -112,79 +103,24 @@ export function AgentChat({ className }: { readonly className?: string }) {
     }
   }
 
-  const handleModelChange = (value: string) => {
-    setSelectedModel(value)
-    setSelectedProvider(AUTO_PROVIDER)
-  }
-
-  const handleSend = async (text: string) => {
-    if (!selectedModel) {
-      toast(t('selectModelFirst'))
-      return
-    }
+  const handleSend = async (text: string): Promise<string> => {
+    if (!selectedModel) throw new Error(t('selectModelFirst'))
     const providerId = effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider
-    const stamp = new Date().toISOString()
-    const userId = `local-user-${stamp}`
-    const assistantId = `local-assistant-${stamp}`
-    const base = {
-      threadId: activeThread?.id ?? '',
+    let thread = activeThread
+    if (!thread) {
+      thread = await dashboardApi.createChatThread({ model: selectedModel, providerId })
+      setActiveThread(thread)
+      setThreads((current) => [thread!, ...current])
+    }
+    const result = await dashboardApi.sendChatMessage(thread.id, {
+      content: text,
       model: selectedModel,
       providerId,
-      providerName: '',
-      error: '',
-      createdAt: stamp,
-    }
-    setSending(true)
-    // Show the turn immediately; the persisted records replace it once the
-    // upstream answers (or turn into an error bubble when it fails).
-    setMessages((current) => [
-      ...current,
-      { ...base, id: userId, role: 'user', content: text },
-      { ...base, id: assistantId, role: 'assistant', content: '', pending: true },
-    ])
-    try {
-      let thread = activeThread
-      if (!thread) {
-        thread = await dashboardApi.createChatThread({ model: selectedModel, providerId })
-        setActiveThread(thread)
-        setThreads((current) => [thread!, ...current])
-      }
-      const result = await dashboardApi.sendChatMessage(thread.id, {
-        content: text,
-        model: selectedModel,
-        providerId,
-      })
-      setMessages((current) => [
-        ...current.filter((message) => message.id !== userId && message.id !== assistantId),
-        result.userMessage,
-        result.assistantMessage,
-      ])
-      setActiveThread(result.thread)
-      setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
-    } catch (error) {
-      const message = errorMessage(error, t('sendFailed'))
-      toast(message)
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === assistantId
-            ? { ...item, pending: false, error: 'failed', content: message }
-            : item,
-        ),
-      )
-    } finally {
-      setSending(false)
-    }
+    })
+    setActiveThread(result.thread)
+    setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
+    return result.assistantMessage.content
   }
-
-  const panelMessages: readonly AgentChatMessage[] = messages.map((message) => ({
-    id: message.id,
-    role: message.role === 'assistant' ? 'agent' : 'user',
-    content: message.content,
-    author: message.role === 'assistant' ? message.providerName || 'hapiy' : undefined,
-    createdAt: formatClock(message.createdAt),
-    error: Boolean(message.error),
-    pending: message.pending === true,
-  }))
 
   const providerLabel =
     effectiveProvider === AUTO_PROVIDER
@@ -195,7 +131,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
     <div className={className}>
       <div className="flex h-full min-h-0 flex-col gap-2">
         <div className="flex shrink-0 items-center gap-2">
-          <Select value={selectedModel || undefined} onValueChange={handleModelChange}>
+          <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
             <SelectTrigger className="h-8 min-w-0 flex-1" aria-label={t('modelLabel')}>
               <SelectValue placeholder={t('modelPlaceholder')} />
             </SelectTrigger>
@@ -225,13 +161,12 @@ export function AgentChat({ className }: { readonly className?: string }) {
           </Select>
         </div>
 
-        <AgentPanel
-          className="min-h-0 flex-1"
+        <AgentThread
+          key={sessionKey}
           title={activeThread?.title || 'Agent'}
           subtitle={`${selectedModel || '—'} · ${providerLabel}`}
-          messages={panelMessages}
-          onSend={(text) => void handleSend(text)}
-          sending={sending}
+          initialMessages={initialMessages}
+          onSend={handleSend}
           actions={
             <>
               <Button size="icon-sm" variant="ghost" aria-label={t('newChat')} onClick={startNewThread}>
