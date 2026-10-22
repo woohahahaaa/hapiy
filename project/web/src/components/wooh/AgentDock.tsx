@@ -172,7 +172,7 @@ export function AgentDock() {
       )}
       style={{ width: width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0 }}
     >
-      <AgentDockSplitter />
+      {(width > 0 || dragging) && <AgentDockSplitter />}
       <div className="min-h-0 min-w-0 p-2 pl-0" style={{ width }}>
         <AgentPanel
           className="h-full w-full"

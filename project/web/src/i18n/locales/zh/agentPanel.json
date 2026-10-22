@@ -9,5 +9,6 @@
   "subtitle": "对话",
   "open": "打开对话",
   "resize": "调整对话面板宽度",
-  "notWired": "对话后端还没接入。下一步会直接走 /v1/chat/completions；这条提示只是占位。"
+  "notWired": "对话后端还没接入。下一步会直接走 /v1/chat/completions；这条提示只是占位。",
+  "greeting": "有什么可以帮你？"
 }

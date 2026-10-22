@@ -9,5 +9,6 @@
   "subtitle": "Chat",
   "open": "Open chat",
   "resize": "Resize the chat panel",
-  "notWired": "The chat backend is not wired yet. The next step is /v1/chat/completions; this message is a placeholder."
+  "notWired": "The chat backend is not wired yet. The next step is /v1/chat/completions; this message is a placeholder.",
+  "greeting": "How can I help?"
 }
