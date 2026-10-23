@@ -91,7 +91,7 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
   return (
     <ComposerPrimitive.Root
       className={cn(
-        'flex w-full items-end gap-2 bg-card',
+        'flex w-full items-center gap-2 bg-card',
         centered
           ? 'rounded-3xl border border-border p-2 pl-4 shadow-sm'
           : 'rounded-3xl border border-border p-2 pl-3',
@@ -104,7 +104,7 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
       />
       <ComposerPrimitive.Send asChild>
         <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
-          <AppIcon name="expand_less" size={18} />
+          <AppIcon name="expand_less" size={20} strokeWidth={5} />
         </Button>
       </ComposerPrimitive.Send>
     </ComposerPrimitive.Root>
