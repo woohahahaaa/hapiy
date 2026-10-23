@@ -1,7 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AgentDock, AgentDockProvider } from '@/components/wooh/AgentDock'
-import { useAgentDock } from '@/components/wooh/agent-dock-context'
 import { AppSidebar } from '@/components/wooh/Sidebar'
 
 interface AppShellProps {
@@ -14,15 +13,16 @@ interface AppShellProps {
 // full row); the expand button restores a 50/50 split. Persistence and
 // sizing live in AgentDockProvider.
 function ShellBody({ children }: AppShellProps) {
-  const { rightCollapsed } = useAgentDock()
   return (
     <div className="flex h-svh w-full overflow-hidden">
       {/* 视口四周内描边：与侧边栏/内容区分割线同色（border-border），
           fixed + inset 覆盖浏览器可视框，pointer-events-none 不挡交互 */}
       <div className="pointer-events-none fixed inset-0 z-[60] ring-1 ring-border/80 ring-inset" aria-hidden="true" />
       <AgentDock />
-      {!rightCollapsed && <AppSidebar />}
-      {!rightCollapsed && <SidebarInset className="overflow-hidden">{children}</SidebarInset>}
+      {/* 右侧始终挂载：折叠时由面板铺满把侧边栏和页面推出视口，
+          靠宽度过渡完成收放，不卸载、不闪。 */}
+      <AppSidebar />
+      <SidebarInset className="overflow-hidden">{children}</SidebarInset>
     </div>
   )
 }

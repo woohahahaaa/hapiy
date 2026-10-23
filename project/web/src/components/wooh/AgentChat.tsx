@@ -32,7 +32,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
   const navigate = useNavigate()
   const location = useLocation()
-  const { rightCollapsed, expandRight } = useAgentDock()
+  const { rightCollapsed, expandRight, maxWidth, setWidth } = useAgentDock()
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
@@ -225,12 +225,14 @@ export function AgentChat({ className }: { readonly className?: string }) {
                   </div>
                 </PopoverContent>
               </Popover>
-              {rightCollapsed && (
-                <Button size="sm" variant="secondary" onClick={expandRight}>
-                  <AppIcon name="view_sidebar" />
-                  <span>{t('expandRight')}</span>
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => (rightCollapsed ? expandRight() : setWidth(maxWidth))}
+              >
+                <AppIcon name="view_sidebar" />
+                <span>{rightCollapsed ? t('showConsole') : t('hideConsole')}</span>
+              </Button>
             </>
           }
         />

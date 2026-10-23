@@ -25,5 +25,6 @@
   "providerNoTopologySuffix": "(未接入拓扑)",
   "selectModelFirst": "先选择一个模型",
   "sendFailed": "发送失败",
-  "expandRight": "显示菜单和页面"
+  "showConsole": "显示控制台",
+  "hideConsole": "隐藏控制台"
 }

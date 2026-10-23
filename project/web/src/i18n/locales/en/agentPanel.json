@@ -25,5 +25,6 @@
   "providerNoTopologySuffix": "(not in topology)",
   "selectModelFirst": "Pick a model first",
   "sendFailed": "Failed to send",
-  "expandRight": "Show menu and page"
+  "showConsole": "Show console",
+  "hideConsole": "Hide console"
 }
