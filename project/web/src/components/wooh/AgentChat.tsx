@@ -184,12 +184,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
           onSend={handleSend}
           actions={
             <>
-              {rightCollapsed && (
-                <Button size="sm" variant="outline" onClick={expandRight}>
-                  <AppIcon name="view_sidebar" />
-                  <span>{t('expandRight')}</span>
-                </Button>
-              )}
               <Button size="icon-sm" variant="ghost" aria-label={t('newChat')} onClick={startNewThread}>
                 <AppIcon name="add" />
               </Button>
@@ -231,6 +225,12 @@ export function AgentChat({ className }: { readonly className?: string }) {
                   </div>
                 </PopoverContent>
               </Popover>
+              {rightCollapsed && (
+                <Button size="sm" variant="secondary" onClick={expandRight}>
+                  <AppIcon name="view_sidebar" />
+                  <span>{t('expandRight')}</span>
+                </Button>
+              )}
             </>
           }
         />
