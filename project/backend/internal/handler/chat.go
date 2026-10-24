@@ -206,13 +206,20 @@ func ListChatMessages(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// chatProviderOption is one selectable provider for a model.
+// chatProviderOption is one selectable provider for a model. The disable
+// counters let the picker show what is auto-disabled (e.g. "Key 3/4") without
+// exposing the key values themselves.
 type chatProviderOption struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	AutoDisabled  bool   `json:"auto_disabled"`
-	WorkflowOn    bool   `json:"workflow_enabled"`
-	StatusEnabled bool   `json:"status"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	AutoDisabled     bool   `json:"auto_disabled"`
+	WorkflowOn       bool   `json:"workflow_enabled"`
+	StatusEnabled    bool   `json:"status"`
+	ProviderDisabled bool   `json:"provider_disabled"`
+	DisabledBaseURLs int    `json:"disabled_base_urls"`
+	TotalBaseURLs    int    `json:"total_base_urls"`
+	DisabledKeys     int    `json:"disabled_keys"`
+	TotalKeys        int    `json:"total_keys"`
 }
 
 // chatModelOption is one selectable model plus the providers that declare it.
@@ -242,12 +249,18 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 		}
 		byModel := map[string][]chatProviderOption{}
 		for _, provider := range providers {
+			disable := summarizeDisables(provider, statesByProvider[provider.ID])
 			option := chatProviderOption{
-				ID:            provider.ID,
-				Name:          provider.Name,
-				AutoDisabled:  providerUnavailable(provider, statesByProvider[provider.ID]),
-				WorkflowOn:    provider.WorkflowEnabled,
-				StatusEnabled: provider.Status,
+				ID:               provider.ID,
+				Name:             provider.Name,
+				AutoDisabled:     disable.unavailable(),
+				WorkflowOn:       provider.WorkflowEnabled,
+				StatusEnabled:    provider.Status,
+				ProviderDisabled: disable.ProviderDisabled,
+				DisabledBaseURLs: disable.DisabledBaseURLs,
+				TotalBaseURLs:    disable.TotalBaseURLs,
+				DisabledKeys:     disable.DisabledKeys,
+				TotalKeys:        disable.TotalKeys,
 			}
 			for _, name := range parseProviderModelNames(provider.Models) {
 				byModel[name] = append(byModel[name], option)
@@ -262,44 +275,58 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// providerUnavailable mirrors relay's providerDisabled: the provider cannot
-// serve when it is auto-disabled as a whole, or when every configured key (or
-// every base URL) is auto-disabled. Key-level rows alone must not mark it
-// unavailable while another key still works.
-func providerUnavailable(provider model.Provider, states []model.AutoDisableState) bool {
-	if len(states) == 0 {
-		return false
+// chatDisableSummary counts the auto-disabled channels of one provider. The
+// provider is unusable only when it is disabled as a whole or every configured
+// key (or base URL) is disabled; a partial key disable stays selectable.
+type chatDisableSummary struct {
+	ProviderDisabled bool
+	DisabledBaseURLs int
+	TotalBaseURLs    int
+	DisabledKeys     int
+	TotalKeys        int
+}
+
+func (s chatDisableSummary) unavailable() bool {
+	if s.ProviderDisabled {
+		return true
 	}
-	disabledKeys := map[string]bool{}
-	disabledBaseURLs := map[string]bool{}
+	if s.TotalKeys > 0 && s.DisabledKeys == s.TotalKeys {
+		return true
+	}
+	return s.TotalBaseURLs > 0 && s.DisabledBaseURLs == s.TotalBaseURLs
+}
+
+func summarizeDisables(provider model.Provider, states []model.AutoDisableState) chatDisableSummary {
+	keys := parseStringArray(provider.Keys)
+	baseURLs := parseStringArray(provider.BaseURLs)
+	keySet := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		keySet[key] = true
+	}
+	baseURLSet := make(map[string]bool, len(baseURLs))
+	for _, baseURL := range baseURLs {
+		baseURLSet[baseURL] = true
+	}
+	summary := chatDisableSummary{TotalBaseURLs: len(baseURLs), TotalKeys: len(keys)}
 	for _, state := range states {
 		switch state.Dimension {
 		case model.FailoverDimensionProvider:
 			if state.Value == provider.ID {
-				return true
+				summary.ProviderDisabled = true
 			}
 		case model.FailoverDimensionKey:
-			disabledKeys[state.Value] = true
+			// Count only configured values: a stale row for a removed key must
+			// not make the provider look worse than it is.
+			if keySet[state.Value] {
+				summary.DisabledKeys++
+			}
 		case model.FailoverDimensionBaseURL:
-			disabledBaseURLs[state.Value] = true
+			if baseURLSet[state.Value] {
+				summary.DisabledBaseURLs++
+			}
 		}
 	}
-	keys := parseStringArray(provider.Keys)
-	if len(keys) > 0 && allValuesIn(keys, disabledKeys) {
-		return true
-	}
-	baseURLs := parseStringArray(provider.BaseURLs)
-	return len(baseURLs) > 0 && allValuesIn(baseURLs, disabledBaseURLs)
-}
-
-// allValuesIn reports whether every value is present in set.
-func allValuesIn(values []string, set map[string]bool) bool {
-	for _, value := range values {
-		if !set[value] {
-			return false
-		}
-	}
-	return true
+	return summary
 }
 
 // chatUIAction is one frontend action the model asked for (open a dialog,

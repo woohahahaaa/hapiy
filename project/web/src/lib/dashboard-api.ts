@@ -414,6 +414,11 @@ export type ChatProviderOption = {
   readonly autoDisabled: boolean
   readonly workflowEnabled: boolean
   readonly status: boolean
+  readonly providerDisabled: boolean
+  readonly disabledBaseURLs: number
+  readonly totalBaseURLs: number
+  readonly disabledKeys: number
+  readonly totalKeys: number
 }
 
 export type ChatModelOption = {
@@ -1214,6 +1219,11 @@ function parseChatProviderOption(value: unknown): ChatProviderOption {
     autoDisabled: readBoolean(value.auto_disabled, 'chat.provider.autoDisabled'),
     workflowEnabled: readBoolean(value.workflow_enabled, 'chat.provider.workflowEnabled'),
     status: readBoolean(value.status, 'chat.provider.status'),
+    providerDisabled: readBoolean(value.provider_disabled, 'chat.provider.providerDisabled'),
+    disabledBaseURLs: readNumber(value.disabled_base_urls, 'chat.provider.disabledBaseURLs'),
+    totalBaseURLs: readNumber(value.total_base_urls, 'chat.provider.totalBaseURLs'),
+    disabledKeys: readNumber(value.disabled_keys, 'chat.provider.disabledKeys'),
+    totalKeys: readNumber(value.total_keys, 'chat.provider.totalKeys'),
   }
 }
 

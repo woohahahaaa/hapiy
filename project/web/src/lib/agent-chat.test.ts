@@ -7,8 +7,8 @@ const models: readonly ChatModelOption[] = [
   {
     model: 'deepseek',
     providers: [
-      { id: 'p1', name: 'One', autoDisabled: false, workflowEnabled: true, status: true },
-      { id: 'p2', name: 'Two', autoDisabled: false, workflowEnabled: true, status: true },
+      { id: 'p1', name: 'One', autoDisabled: false, workflowEnabled: true, status: true, providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 0, totalKeys: 1 },
+      { id: 'p2', name: 'Two', autoDisabled: false, workflowEnabled: true, status: true, providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 0, totalKeys: 1 },
     ],
   },
   { model: 'gpt', providers: [] },

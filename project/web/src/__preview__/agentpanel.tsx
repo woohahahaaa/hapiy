@@ -63,14 +63,23 @@ function Demo({ dark, empty }: { dark: boolean; empty: boolean }) {
                   {
                     model: 'DeepSeek',
                     providers: [
-                      { id: 'p1', name: 'opencode go', autoDisabled: false, workflowEnabled: true, status: true },
-                      { id: 'p2', name: 'Backup-GPT', autoDisabled: true, workflowEnabled: true, status: true },
+                      {
+                        id: 'p1', name: 'opencode go', autoDisabled: false, workflowEnabled: true, status: true,
+                        providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 3, totalKeys: 4,
+                      },
+                      {
+                        id: 'p2', name: 'Backup-GPT', autoDisabled: true, workflowEnabled: true, status: true,
+                        providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 4, totalKeys: 4,
+                      },
                     ],
                   },
                   {
                     model: 'gpt-5',
                     providers: [
-                      { id: 'p3', name: 'OpenAI', autoDisabled: false, workflowEnabled: true, status: true },
+                      {
+                        id: 'p3', name: 'OpenAI', autoDisabled: false, workflowEnabled: true, status: true,
+                        providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 0, totalKeys: 1,
+                      },
                     ],
                   },
                 ]}

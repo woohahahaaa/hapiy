@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { computeProviderAvailability, formatAutoDisableSummary, fullyDisabledEntries } from './provider-availability'
+import {
+  computeProviderAvailability,
+  formatAutoDisableSummary,
+  formatDisableCountsSummary,
+  fullyDisabledEntries,
+} from './provider-availability'
 
 describe('fullyDisabledEntries', () => {
   it('空映射不算禁用', () => {
@@ -161,5 +166,27 @@ describe('formatAutoDisableSummary', () => {
       baseURLCount: 2,
       keyCount: 3,
     })).toBe('故障转移：Base URL 2/2、Key 1/3')
+  })
+})
+
+describe('formatDisableCountsSummary', () => {
+  const base = { providerDisabled: false, disabledBaseURLs: 0, totalBaseURLs: 1, disabledKeys: 0, totalKeys: 4 }
+
+  it('没有任何禁用条目时不写备注', () => {
+    expect(formatDisableCountsSummary(base)).toBeNull()
+  })
+
+  it('仅部分 key 禁用时显示 key n/n', () => {
+    expect(formatDisableCountsSummary({ ...base, disabledKeys: 3 })).toBe('Key 3/4')
+  })
+
+  it('多维度同时有禁用时按分数列出', () => {
+    expect(formatDisableCountsSummary({
+      providerDisabled: true,
+      disabledBaseURLs: 1,
+      totalBaseURLs: 2,
+      disabledKeys: 3,
+      totalKeys: 4,
+    })).toBe('供应商1/1、Base URL 1/2、Key 3/4')
   })
 })

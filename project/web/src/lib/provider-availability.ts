@@ -67,3 +67,27 @@ export function formatAutoDisableSummary(input: {
 
   return items.length > 0 ? i18n.t('lib:availability.summary', { items: items.join(i18n.t('lib:availability.join')) }) : null
 }
+
+// formatDisableCountsSummary is the counts-based variant for callers whose API
+// returns only disabled/total per dimension (the Agent provider list). No
+// disabled entry means no note at all.
+export function formatDisableCountsSummary(input: {
+  readonly providerDisabled: boolean
+  readonly disabledBaseURLs: number
+  readonly totalBaseURLs: number
+  readonly disabledKeys: number
+  readonly totalKeys: number
+}): string | null {
+  const items = [
+    input.providerDisabled
+      ? i18n.t('lib:availability.providerItem', { count: 1, total: 1 })
+      : null,
+    input.disabledBaseURLs > 0
+      ? i18n.t('lib:availability.baseUrlItem', { count: input.disabledBaseURLs, total: input.totalBaseURLs })
+      : null,
+    input.disabledKeys > 0
+      ? i18n.t('lib:availability.keyItem', { count: input.disabledKeys, total: input.totalKeys })
+      : null,
+  ].filter((item): item is string => item !== null)
+  return items.length > 0 ? items.join(i18n.t('lib:availability.join')) : null
+}

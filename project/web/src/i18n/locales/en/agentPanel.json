@@ -21,7 +21,6 @@
   "providerLabel": "Provider",
   "modelPlaceholder": "Select a model",
   "providerAuto": "Auto (topology)",
-  "providerDisabledSuffix": "(disabled)",
   "providerNoTopologySuffix": "(not in topology)",
   "selectModelFirst": "Pick a model first",
   "sendFailed": "Failed to send",

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import { formatDisableCountsSummary } from '@/lib/provider-availability'
 import type { ChatModelOption } from '@/lib/dashboard-api'
 
 export type AgentModelSelection = {
@@ -115,30 +116,31 @@ export function AgentModelPicker({ models, model, providerId, onChange }: AgentM
                 {providers.length === 0 && (
                   <div className="px-2 py-2 text-xs text-muted-foreground">{t('noProviders')}</div>
                 )}
-                {providers.map((provider) => (
-                  <button
-                    key={provider.id}
-                    type="button"
-                    disabled={provider.autoDisabled}
-                    onClick={() => commitProvider(provider.id)}
-                    className={cn(
-                      'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
-                      providerId === provider.id && 'bg-muted font-medium',
-                    )}
-                  >
-                    <span className="truncate">{provider.name}</span>
-                    {provider.autoDisabled && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {t('providerDisabledSuffix')}
-                      </span>
-                    )}
-                    {!provider.workflowEnabled && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {t('providerNoTopologySuffix')}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                {providers.map((provider) => {
+                  const disableNote = formatDisableCountsSummary(provider)
+                  return (
+                    <button
+                      key={provider.id}
+                      type="button"
+                      disabled={provider.autoDisabled}
+                      onClick={() => commitProvider(provider.id)}
+                      className={cn(
+                        'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
+                        providerId === provider.id && 'bg-muted font-medium',
+                      )}
+                    >
+                      <span className="truncate">{provider.name}</span>
+                      {disableNote && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">{disableNote}</span>
+                      )}
+                      {!provider.workflowEnabled && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {t('providerNoTopologySuffix')}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
