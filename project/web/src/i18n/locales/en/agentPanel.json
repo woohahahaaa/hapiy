@@ -28,5 +28,6 @@
   "showConsole": "Show console",
   "hideConsole": "Hide console",
   "providerAutoShort": "Auto",
-  "noProviders": "No providers available"
+  "noProviders": "No providers available",
+  "expandAgent": "Open Agent chat"
 }

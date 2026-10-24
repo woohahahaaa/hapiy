@@ -7,6 +7,7 @@ import { version as appVersion } from '../../../package.json'
 import { ModeToggle } from '@/components/wooh/ModeToggle'
 import { LanguageToggle } from '@/components/wooh/LanguageToggle'
 import { AppIcon } from '@/components/wooh/AppIcon'
+import { Button } from '@/components/ui/button'
 import { VersionDialog } from '@/components/wooh/VersionDialog'
 import { AGENT_ENABLED_SETTING_KEY } from '@/components/wooh/OtherSettings'
 import { AGENT_DOCK_SPLITTER_WIDTH, useAgentDock } from '@/components/wooh/agent-dock-context'
@@ -17,7 +18,6 @@ import { isPathActive, navigation, type NavItem } from '@/config/navigation'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -381,24 +381,30 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
+        <div className={showLabel ? 'px-2 pt-2' : 'flex justify-center px-1 pt-2'}>
+          {showLabel ? (
+            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={openDock}>
+              <AppIcon name="chat" />
+              <span>{i18n.t('agentPanel:expandAgent')}</span>
+            </Button>
+          ) : (
+            <Button
+              size="icon-sm"
+              variant="secondary"
+              onClick={openDock}
+              aria-label={i18n.t('agentPanel:expandAgent')}
+              title={i18n.t('agentPanel:expandAgent')}
+            >
+              <AppIcon name="chat" />
+            </Button>
+          )}
+        </div>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(visibleNavigation)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      {!isMobile && dockWidth === 0 && (
-        <SidebarFooter>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip={i18n.t('agentPanel:open')} onClick={openDock}>
-                <AppIcon name="chat" />
-                <span>{i18n.t('agentPanel:chat')}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarFooter>
-      )}
       <SidebarRail />
       <VersionDialog open={versionOpen} onOpenChange={setVersionOpen} />
     </SidebarRoot>

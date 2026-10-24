@@ -28,5 +28,6 @@
   "showConsole": "显示控制台",
   "hideConsole": "隐藏控制台",
   "providerAutoShort": "自动",
-  "noProviders": "没有可用供应商"
+  "noProviders": "没有可用供应商",
+  "expandAgent": "展开Agent对话"
 }
