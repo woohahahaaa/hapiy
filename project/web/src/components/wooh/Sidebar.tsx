@@ -381,16 +381,28 @@ export function AppSidebar() {
             </button>
           </div>
           <div className={showLabel ? 'flex items-center gap-1.5' : 'flex flex-col items-center gap-1'}>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
-              onClick={toggleChat}
-              aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
-              title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
-            >
-              <AppIcon name="chat" />
-            </Button>
+            {showLabel ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+                onClick={toggleChat}
+              >
+                <AppIcon name="chat" />
+                <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
+              </Button>
+            ) : (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+                onClick={toggleChat}
+                aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+                title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+              >
+                <AppIcon name="chat" />
+              </Button>
+            )}
             <SidebarTrigger size="icon" />
           </div>
         </div>
