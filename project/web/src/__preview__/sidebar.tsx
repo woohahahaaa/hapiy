@@ -10,6 +10,9 @@ import { AgentDockProvider } from '@/components/wooh/AgentDock'
 import { AppSidebar } from '@/components/wooh/Sidebar'
 import { ThemeProvider } from '@/components/wooh/theme-provider'
 
+// 预览里不渲染对话面板，把持久化的宽度清零，否则侧边栏会被 left 偏移推走。
+window.localStorage.setItem('agent_dock_width', '0')
+
 const providerStyle = {
   '--sidebar-width': 'calc(var(--spacing) * 64)',
   '--header-height': 'calc(var(--spacing) * 12)',

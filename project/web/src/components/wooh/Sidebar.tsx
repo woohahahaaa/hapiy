@@ -350,15 +350,14 @@ export function AppSidebar() {
         // 对话面板出现时给侧边栏本身也描一圈边，避免这一列看起来是“裸”的。
         dockWidth > 0 &&
           'md:[&>[data-slot=sidebar-inner]]:rounded-xl md:[&>[data-slot=sidebar-inner]]:ring-1 md:[&>[data-slot=sidebar-inner]]:ring-inset md:[&>[data-slot=sidebar-inner]]:ring-border',
-        // 展开态收紧左侧留白；折叠成图标栏时必须保持左右对称，否则整列图标会偏。
-        dockWidth > 0 && state !== 'collapsed' && 'pl-1!',
+        dockWidth > 0 && 'pl-1!',
       )}
     >
       <SidebarHeader>
         {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}
         <div
           className={
-            showLabel ? 'relative -top-0.5 flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
+            showLabel ? 'flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
           }
         >
           <div className="flex items-center gap-1.5">
