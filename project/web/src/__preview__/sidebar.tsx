@@ -8,6 +8,7 @@ import '@/i18n/i18n'
 import { SidebarProvider } from '@/components/ui/sidebar'
 import { AgentDockProvider } from '@/components/wooh/AgentDock'
 import { AppSidebar } from '@/components/wooh/Sidebar'
+import { ThemeProvider } from '@/components/wooh/theme-provider'
 
 const providerStyle = {
   '--sidebar-width': 'calc(var(--spacing) * 64)',
@@ -21,11 +22,13 @@ function Panel({ open, label }: { open: boolean; label: string }) {
       {/* transform 让 fixed 的侧边栏相对这个盒子定位，两份才能并排。 */}
       <div className="relative h-[680px] w-72 overflow-hidden bg-sidebar" style={{ transform: 'translateZ(0)' }}>
         <MemoryRouter>
-          <SidebarProvider defaultOpen={open} style={providerStyle}>
-            <AgentDockProvider>
-              <AppSidebar />
-            </AgentDockProvider>
-          </SidebarProvider>
+          <ThemeProvider>
+            <SidebarProvider defaultOpen={open} style={providerStyle}>
+              <AgentDockProvider>
+                <AppSidebar />
+              </AgentDockProvider>
+            </SidebarProvider>
+          </ThemeProvider>
         </MemoryRouter>
       </div>
     </div>
