@@ -91,6 +91,9 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
   return (
     <ComposerPrimitive.Root
       className={cn(
+        // The send button is bottom-aligned. One line of input is exactly the
+        // button height (40px: 24px line-height + py-2), so a single line reads
+        // as vertically centred while a grown box puts the button bottom-right.
         'flex w-full items-end gap-2 bg-card',
         centered
           ? 'rounded-3xl border border-border p-2 pl-4 shadow-sm'
@@ -100,7 +103,7 @@ function Composer({ centered = false }: { readonly centered?: boolean }) {
       <ComposerPrimitive.Input
         placeholder={t('placeholder')}
         rows={1}
-        className="min-h-11 flex-1 resize-none bg-transparent px-1 py-3 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
+        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
       />
       <ComposerPrimitive.Send asChild>
         <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
