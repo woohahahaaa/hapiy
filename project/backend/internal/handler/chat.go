@@ -236,16 +236,16 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		disabled := make(map[string]bool, len(states))
+		statesByProvider := make(map[string][]model.AutoDisableState, len(states))
 		for _, state := range states {
-			disabled[state.ProviderID] = true
+			statesByProvider[state.ProviderID] = append(statesByProvider[state.ProviderID], state)
 		}
 		byModel := map[string][]chatProviderOption{}
 		for _, provider := range providers {
 			option := chatProviderOption{
 				ID:            provider.ID,
 				Name:          provider.Name,
-				AutoDisabled:  disabled[provider.ID],
+				AutoDisabled:  providerUnavailable(provider, statesByProvider[provider.ID]),
 				WorkflowOn:    provider.WorkflowEnabled,
 				StatusEnabled: provider.Status,
 			}
