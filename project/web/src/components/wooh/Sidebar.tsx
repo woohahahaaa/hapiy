@@ -18,6 +18,7 @@ import { isPathActive, navigation, type NavItem } from '@/config/navigation'
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarHeader,
@@ -380,25 +381,6 @@ export function AppSidebar() {
             </button>
           </div>
           <div className={showLabel ? 'flex items-center gap-1.5' : 'flex flex-col items-center gap-1'}>
-            {showLabel && <LanguageToggle size="icon" />}
-            {showLabel && <ModeToggle size="icon" />}
-            <SidebarTrigger size="icon" />
-          </div>
-        </div>
-      </SidebarHeader>
-      <SidebarContent>
-        <div className={showLabel ? 'px-2 pt-2' : 'flex justify-center px-1 pt-2'}>
-          {showLabel ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="justify-start gap-2 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
-              onClick={toggleChat}
-            >
-              <AppIcon name="chat" />
-              <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
-            </Button>
-          ) : (
             <Button
               size="icon"
               variant="ghost"
@@ -409,14 +391,23 @@ export function AppSidebar() {
             >
               <AppIcon name="chat" />
             </Button>
-          )}
+            <SidebarTrigger size="icon" />
+          </div>
         </div>
+      </SidebarHeader>
+      <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>{renderItems(visibleNavigation)}</SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className={showLabel ? 'flex items-center gap-1.5 px-1' : 'flex flex-col items-center gap-1'}>
+          <LanguageToggle size="icon" />
+          <ModeToggle size="icon" />
+        </div>
+      </SidebarFooter>
       <SidebarRail />
       <VersionDialog open={versionOpen} onOpenChange={setVersionOpen} />
     </SidebarRoot>
