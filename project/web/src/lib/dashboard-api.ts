@@ -431,6 +431,13 @@ export type ChatThread = {
   readonly updatedAt: string
 }
 
+// ChatPreference is the model chosen when the account last started a new
+// conversation; the panel uses it as the default for the next one.
+export type ChatPreference = {
+  readonly model: string
+  readonly providerId: string
+}
+
 export type ChatMessageRecord = {
   readonly id: string
   readonly threadId: string
@@ -1232,6 +1239,16 @@ function parseChatThread(value: unknown): ChatThread {
     archived: readBoolean(value.archived, 'chat.thread.archived'),
     createdAt: readString(value.created_at, 'chat.thread.createdAt'),
     updatedAt: readString(value.updated_at, 'chat.thread.updatedAt'),
+  }
+}
+
+function parseChatPreference(value: unknown): ChatPreference {
+  if (!isRecord(value)) {
+    throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+  }
+  return {
+    model: readString(value.model, 'chat.preference.model'),
+    providerId: readString(value.provider_id, 'chat.preference.providerId'),
   }
 }
 
@@ -3154,16 +3171,27 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const data = await request('/chat/threads')
     return (Array.isArray(data) ? data : []).map(parseChatThread)
   },
+  async getChatPreferences(): Promise<ChatPreference> {
+    return parseChatPreference(await request('/chat/preferences'))
+  },
   async createChatThread(input: { model: string; providerId: string }): Promise<ChatThread> {
     return parseChatThread(await request('/chat/threads', {
       method: 'POST',
       body: JSON.stringify({ model: input.model, provider_id: input.providerId }),
     }))
   },
-  async updateChatThread(id: string, patch: { title?: string; archived?: boolean }): Promise<ChatThread> {
+  async updateChatThread(
+    id: string,
+    patch: { title?: string; archived?: boolean; model?: string; providerId?: string },
+  ): Promise<ChatThread> {
     return parseChatThread(await request(`/chat/threads/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(patch),
+      body: JSON.stringify({
+        title: patch.title,
+        archived: patch.archived,
+        model: patch.model,
+        provider_id: patch.providerId,
+      }),
     }))
   },
   async deleteChatThread(id: string): Promise<void> {

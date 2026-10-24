@@ -143,6 +143,66 @@ func TestChatThreadsAreScopedToTheAccount(t *testing.T) {
 	}
 }
 
+func TestChatPreferenceTracksTheModelAThreadStartedWith(t *testing.T) {
+	db := newChatTestDB(t)
+	router := newChatRouter(db, relay.NewEngine(db), "alice")
+
+	readPreference := func(r http.Handler) model.ChatPreference {
+		t.Helper()
+		rec := doJSON(t, r, http.MethodGet, "/chat/preferences", "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("preferences status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var payload struct {
+			Data model.ChatPreference `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		return payload.Data
+	}
+
+	if got := readPreference(router); got.Model != "" || got.ProviderID != "" {
+		t.Fatalf("new account must have no preference, got %+v", got)
+	}
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"model-a","provider_id":"p1"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := readPreference(router); got.Model != "model-a" || got.ProviderID != "p1" {
+		t.Fatalf("preference after first thread = %+v", got)
+	}
+
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	// Switching models inside an existing thread must not rewrite the default
+	// for the next new conversation.
+	if rec := doJSON(t, router, http.MethodPatch, "/chat/threads/"+created.Data.ID, `{"model":"model-c"}`); rec.Code != http.StatusOK {
+		t.Fatalf("patch status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := readPreference(router); got.Model != "model-a" {
+		t.Fatalf("thread model change leaked into preference: %+v", got)
+	}
+
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"model-b"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := readPreference(router); got.Model != "model-b" || got.ProviderID != "" {
+		t.Fatalf("preference after second thread = %+v", got)
+	}
+
+	bob := newChatRouter(db, relay.NewEngine(db), "bob")
+	if got := readPreference(bob); got.Model != "" {
+		t.Fatalf("another account must keep its own preference, got %+v", got)
+	}
+}
+
 func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	var seenModel string
 	var seenSession string
