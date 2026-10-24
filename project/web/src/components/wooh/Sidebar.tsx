@@ -275,7 +275,12 @@ export function AppSidebar() {
   const updateAvailable = Boolean(updateStatus?.available)
   // 对话面板在最左边，侧边栏是 fixed 定位，要按面板宽度（含分隔条）
   // 整体右移，才能和它自己的占位 gap 对齐。
-  const { width: dockWidth, dragging: dockDragging, openDock } = useAgentDock()
+  const { width: dockWidth, dragging: dockDragging, openDock, setWidth } = useAgentDock()
+  const chatOpen = dockWidth > 0
+  const toggleChat = () => {
+    if (chatOpen) setWidth(0)
+    else openDock()
+  }
   const sidebarLeft = dockWidth > 0 ? dockWidth + AGENT_DOCK_SPLITTER_WIDTH : 0
   // 移动端浮层始终是展开形态，只有桌面端折叠成图标栏。
   const collapsed = state === 'collapsed' && !isMobile
@@ -383,17 +388,17 @@ export function AppSidebar() {
       <SidebarContent>
         <div className={showLabel ? 'px-2 pt-2' : 'flex justify-center px-1 pt-2'}>
           {showLabel ? (
-            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={openDock}>
+            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={toggleChat}>
               <AppIcon name="chat" />
-              <span>{i18n.t('agentPanel:expandAgent')}</span>
+              <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
             </Button>
           ) : (
             <Button
               size="icon-sm"
               variant="secondary"
-              onClick={openDock}
-              aria-label={i18n.t('agentPanel:expandAgent')}
-              title={i18n.t('agentPanel:expandAgent')}
+              onClick={toggleChat}
+              aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+              title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
             >
               <AppIcon name="chat" />
             </Button>

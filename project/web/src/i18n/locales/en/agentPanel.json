@@ -29,5 +29,6 @@
   "hideConsole": "Hide console",
   "providerAutoShort": "Auto",
   "noProviders": "No providers available",
-  "expandAgent": "Open Agent chat"
+  "expandAgent": "Open Agent chat",
+  "collapseAgent": "Close Agent chat"
 }
