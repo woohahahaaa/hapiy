@@ -262,6 +262,46 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// providerUnavailable mirrors relay's providerDisabled: the provider cannot
+// serve when it is auto-disabled as a whole, or when every configured key (or
+// every base URL) is auto-disabled. Key-level rows alone must not mark it
+// unavailable while another key still works.
+func providerUnavailable(provider model.Provider, states []model.AutoDisableState) bool {
+	if len(states) == 0 {
+		return false
+	}
+	disabledKeys := map[string]bool{}
+	disabledBaseURLs := map[string]bool{}
+	for _, state := range states {
+		switch state.Dimension {
+		case model.FailoverDimensionProvider:
+			if state.Value == provider.ID {
+				return true
+			}
+		case model.FailoverDimensionKey:
+			disabledKeys[state.Value] = true
+		case model.FailoverDimensionBaseURL:
+			disabledBaseURLs[state.Value] = true
+		}
+	}
+	keys := parseStringArray(provider.Keys)
+	if len(keys) > 0 && allValuesIn(keys, disabledKeys) {
+		return true
+	}
+	baseURLs := parseStringArray(provider.BaseURLs)
+	return len(baseURLs) > 0 && allValuesIn(baseURLs, disabledBaseURLs)
+}
+
+// allValuesIn reports whether every value is present in set.
+func allValuesIn(values []string, set map[string]bool) bool {
+	for _, value := range values {
+		if !set[value] {
+			return false
+		}
+	}
+	return true
+}
+
 // chatUIAction is one frontend action the model asked for (open a dialog,
 // prefill fields). The console applies it after the reply arrives, so the
 // agent never writes configuration on its own.
@@ -531,14 +571,13 @@ func resolveChatEndpoint(db *gorm.DB, engine *relay.Engine, modelName, providerI
 			if !plan.AllowsPath(modelName, endpoint.Path) {
 				continue
 			}
-			baseURL := ""
-			if len(plan.BaseURLs) > 0 {
-				baseURL = plan.BaseURLs[0]
+			baseURLIndex := engine.FirstEnabledIndex(providerID, model.FailoverDimensionBaseURL, plan.BaseURLs, -1)
+			keyIndex := engine.FirstEnabledIndex(providerID, model.FailoverDimensionKey, plan.Keys, -1)
+			if baseURLIndex < 0 || keyIndex < 0 {
+				return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的 Key 或 BaseURL 已全部禁用", provider.Name)
 			}
-			key := ""
-			if len(plan.Keys) > 0 {
-				key = plan.Keys[0]
-			}
+			baseURL := plan.BaseURLs[baseURLIndex]
+			key := plan.Keys[keyIndex]
 			if baseURL == "" || key == "" {
 				return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 缺少 BaseURL 或 Key", provider.Name)
 			}

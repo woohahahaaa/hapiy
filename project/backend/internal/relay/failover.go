@@ -825,6 +825,14 @@ func splitPathSegments(p string) []string {
 	return strings.Split(p, "/")
 }
 
+// FirstEnabledIndex returns the first index in values that is not
+// auto-disabled for the dimension, preferring requested when it is still
+// enabled; -1 when every value is disabled. Exported for the console chat,
+// which resolves its own channel outside the relay.
+func (e *Engine) FirstEnabledIndex(providerID, dimension string, values []string, requested int) int {
+	return e.firstEnabledIndex(providerID, dimension, values, requested)
+}
+
 func (e *Engine) firstEnabledIndex(providerID, dimension string, values []string, requested int) int {
 	if requested >= 0 && requested < len(values) && !e.isDisabled(providerID, dimension, values[requested]) {
 		return requested

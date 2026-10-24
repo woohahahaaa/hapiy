@@ -585,3 +585,89 @@ func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
 		t.Fatalf("unexpected body: %s", rec.Body.String())
 	}
 }
+
+func chatModelProviders(t *testing.T, db *gorm.DB) []chatProviderOption {
+	t.Helper()
+	rec := doJSON(t, newChatRouter(db, relay.NewEngine(db), "alice"), http.MethodGet, "/chat/models", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Data []chatModelOption `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data) != 1 {
+		t.Fatalf("unexpected models: %+v", payload.Data)
+	}
+	return payload.Data[0].Providers
+}
+
+func TestChatModelsKeepsProviderAvailableWhileOneKeyWorks(t *testing.T) {
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	if err := db.Model(&model.Provider{}).Where("id = ?", "p1").
+		Update("keys", `["sk-a","sk-b"]`).Error; err != nil {
+		t.Fatal(err)
+	}
+	disable := func(dimension, value string) {
+		t.Helper()
+		if err := db.Create(&model.AutoDisableState{
+			ProviderID: "p1", Dimension: dimension, Value: value, Disabled: true,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	disable(model.FailoverDimensionKey, "sk-a")
+	providers := chatModelProviders(t, db)
+	if len(providers) != 1 || providers[0].AutoDisabled {
+		t.Fatalf("one disabled key must not disable the provider: %+v", providers)
+	}
+
+	disable(model.FailoverDimensionKey, "sk-b")
+	providers = chatModelProviders(t, db)
+	if len(providers) != 1 || !providers[0].AutoDisabled {
+		t.Fatalf("every key disabled must disable the provider: %+v", providers)
+	}
+}
+
+func TestChatModelsKeepsProviderAvailableWhenOnlyKeysAreDisabled(t *testing.T) {
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	if err := db.Create(&model.AutoDisableState{
+		ProviderID: "p1", Dimension: model.FailoverDimensionKey, Value: "sk-test", Disabled: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	providers := chatModelProviders(t, db)
+	if len(providers) != 1 || !providers[0].AutoDisabled {
+		t.Fatalf("a single-key provider with that key disabled is unavailable: %+v", providers)
+	}
+}
+
+func TestResolveChatEndpointSkipsAutoDisabledKeys(t *testing.T) {
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	if err := db.Model(&model.Provider{}).Where("id = ?", "p1").
+		Update("keys", `["sk-dead","sk-live"]`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&model.AutoDisableState{
+		ProviderID: "p1", Dimension: model.FailoverDimensionKey, Value: "sk-dead", Disabled: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	_, baseURL, key, _, err := resolveChatEndpoint(db, relay.NewEngine(db), "test-model", "p1", "session")
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if baseURL != "http://127.0.0.1:1" {
+		t.Fatalf("base URL = %q", baseURL)
+	}
+	if key != "sk-live" {
+		t.Fatalf("key = %q, want the first enabled key", key)
+	}
+}
