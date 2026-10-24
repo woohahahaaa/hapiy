@@ -388,14 +388,20 @@ export function AppSidebar() {
       <SidebarContent>
         <div className={showLabel ? 'px-2 pt-2' : 'flex justify-center px-1 pt-2'}>
           {showLabel ? (
-            <Button size="sm" variant="secondary" className="w-full justify-start gap-2" onClick={toggleChat}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="w-full justify-start gap-2 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+              onClick={toggleChat}
+            >
               <AppIcon name="chat" />
               <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
             </Button>
           ) : (
             <Button
               size="icon-sm"
-              variant="secondary"
+              variant="ghost"
+              className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
               onClick={toggleChat}
               aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
               title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
