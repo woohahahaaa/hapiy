@@ -26,5 +26,7 @@
   "selectModelFirst": "Pick a model first",
   "sendFailed": "Failed to send",
   "showConsole": "Show console",
-  "hideConsole": "Hide console"
+  "hideConsole": "Hide console",
+  "providerAutoShort": "Auto",
+  "noProviders": "No providers available"
 }

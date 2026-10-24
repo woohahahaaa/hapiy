@@ -26,5 +26,7 @@
   "selectModelFirst": "先选择一个模型",
   "sendFailed": "发送失败",
   "showConsole": "显示控制台",
-  "hideConsole": "隐藏控制台"
+  "hideConsole": "隐藏控制台",
+  "providerAutoShort": "自动",
+  "noProviders": "没有可用供应商"
 }
