@@ -39,6 +39,7 @@
     "baseUrlItem": "Base URL {{count}}/{{total}}",
     "keyItem": "Key {{count}}/{{total}}",
     "summary": "故障转移：{{items}}",
+    "disabledItems": "禁用 {{items}}",
     "join": "、"
   }
 }

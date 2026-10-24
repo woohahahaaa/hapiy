@@ -39,6 +39,7 @@
     "baseUrlItem": "Base URL {{count}}/{{total}}",
     "keyItem": "Key {{count}}/{{total}}",
     "summary": "Failover: {{items}}",
+    "disabledItems": "Disabled: {{items}}",
     "join": ", "
   }
 }

@@ -89,5 +89,6 @@ export function formatDisableCountsSummary(input: {
       ? i18n.t('lib:availability.keyItem', { count: input.disabledKeys, total: input.totalKeys })
       : null,
   ].filter((item): item is string => item !== null)
-  return items.length > 0 ? items.join(i18n.t('lib:availability.join')) : null
+  if (items.length === 0) return null
+  return i18n.t('lib:availability.disabledItems', { items: items.join(i18n.t('lib:availability.join')) })
 }

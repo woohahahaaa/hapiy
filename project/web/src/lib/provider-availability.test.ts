@@ -177,7 +177,7 @@ describe('formatDisableCountsSummary', () => {
   })
 
   it('仅部分 key 禁用时显示 key n/n', () => {
-    expect(formatDisableCountsSummary({ ...base, disabledKeys: 3 })).toBe('Key 3/4')
+    expect(formatDisableCountsSummary({ ...base, disabledKeys: 3 })).toBe('禁用 Key 3/4')
   })
 
   it('多维度同时有禁用时按分数列出', () => {
@@ -187,6 +187,6 @@ describe('formatDisableCountsSummary', () => {
       totalBaseURLs: 2,
       disabledKeys: 3,
       totalKeys: 4,
-    })).toBe('供应商1/1、Base URL 1/2、Key 3/4')
+    })).toBe('禁用 供应商1/1、Base URL 1/2、Key 3/4')
   })
 })

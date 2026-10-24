@@ -3230,7 +3230,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         provider_id: input.providerId,
         page_context: input.pageContext ?? '',
       }),
-    }))
+    }, CHAT_TIMEOUT_MS))
   },
   async getMcpStatus(): Promise<McpStatus> {
     return parseMcpStatus(await request('/mcp'))
