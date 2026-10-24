@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
@@ -791,4 +792,21 @@ func createChatTestThread(t *testing.T, router *gin.Engine) string {
 		t.Fatal(err)
 	}
 	return created.Data.ID
+}
+
+func TestTruncateChatToolResultKeepsRunesWhole(t *testing.T) {
+	payload := strings.Repeat("供", 40)
+	got := truncateChatToolResult(payload, 10)
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncation split a rune: %q", got)
+	}
+	if len(got) >= len(payload) {
+		t.Fatalf("payload was not truncated: %q", got)
+	}
+	if !strings.HasSuffix(got, "已截断)") {
+		t.Fatalf("truncation marker missing: %q", got)
+	}
+	if short := "abc"; truncateChatToolResult(short, 10) != short {
+		t.Fatalf("short payload must pass through unchanged")
+	}
 }
