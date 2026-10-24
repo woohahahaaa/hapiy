@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/affinity"
@@ -26,13 +27,31 @@ import (
 // relay engine, so a reply goes through the same provider, rewrite, failover
 // and affinity machinery as external clients.
 const (
-	chatPath              = "/v1/chat/completions"
-	chatHistoryLimit      = 40
-	chatRequestTimeout    = 3 * time.Minute
-	chatMaxResponseBytes  = 8 << 20
-	chatMaxToolSteps      = 6
+	chatPath         = "/v1/chat/completions"
+	chatHistoryLimit = 40
+	// chatRequestTimeout is the wall clock of one turn. The tool loop is free
+	// (no small step cap), so time is what bounds a runaway task — not a
+	// count of steps.
+	chatRequestTimeout   = 30 * time.Minute
+	chatMaxResponseBytes = 8 << 20
+	// A free loop appends every tool result to the next request, so unbounded
+	// output — not the step count — is what actually kills a long turn
+	// (context overflow). One result is cut at chatToolResultMaxBytes, and a
+	// turn stops opening new steps once the sum passes chatToolBudgetMaxBytes.
+	chatToolResultMaxBytes = 32 << 10
+	chatToolBudgetMaxBytes = 512 << 10
+	// chatWrapUpTimeout is the text-only call that summarises a turn stopped
+	// by a safety valve.
+	chatWrapUpTimeout     = 2 * time.Minute
 	chatDefaultTitleRunes = 40
 )
+
+const chatWrapUpPrompt = "本轮的工具调用步数或输出预算已用尽。不要再调用任何工具，直接用文字回答：已经完成了哪些操作、还有哪些没做完、建议用户下一步怎么做。"
+
+// chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when
+// the model stops calling tools, the way a coding agent works. Tests lower it
+// to force the valve without burning 200 upstream calls.
+var chatMaxToolSteps = 200
 
 // chatUser returns the dashboard account the request belongs to (the session
 // middleware stores the username under user_id).
@@ -439,6 +458,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		uiActions := make([]chatUIAction, 0)
 		reply := ""
 		var usage chatproto.Result
+		toolBytes := 0
 		for step := 0; step < chatMaxToolSteps; step++ {
 			result, completeErr := chatproto.Complete(ctx, chatproto.Request{
 				Endpoint:  endpoint,
@@ -450,10 +470,18 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				SessionID: thread.ID,
 			})
 			if completeErr != nil {
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					c.JSON(http.StatusGatewayTimeout, gin.H{"error": "本轮已超过 " + chatRequestTimeout.String() + " 上限，工具调用被中止"})
+					return
+				}
 				c.JSON(http.StatusBadGateway, gin.H{"error": completeErr.Error()})
 				return
 			}
-			usage = result
+			// Every step is a separate upstream call, so the turn's usage is
+			// the sum, not the last step's.
+			usage.PromptTokens += result.PromptTokens
+			usage.CompletionTokens += result.CompletionTokens
+			usage.TotalTokens += result.TotalTokens
 			if len(result.ToolCalls) == 0 {
 				reply = result.Text
 				break
@@ -483,15 +511,43 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 						payload = hapiymcp.MarshalToolResult(value)
 					}
 				}
+				payload = truncateChatToolResult(payload, chatToolResultMaxBytes)
+				toolBytes += len(payload)
 				messages = append(messages, chatproto.Message{
 					Role:       "tool",
 					ToolCallID: call.ID,
 					Content:    payload,
 				})
 			}
+			if toolBytes >= chatToolBudgetMaxBytes {
+				break
+			}
 		}
 		if strings.TrimSpace(reply) == "" {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "工具调用次数过多或上游没有返回文本回复"})
+			// The loop stopped on a safety valve (step count or tool output
+			// budget) while the model was still working. Ask for a text-only
+			// wrap-up so the user learns what happened instead of a bare error.
+			wrapCtx, cancelWrap := context.WithTimeout(ctx, chatWrapUpTimeout)
+			defer cancelWrap()
+			final, finalErr := chatproto.Complete(wrapCtx, chatproto.Request{
+				Endpoint:  endpoint,
+				BaseURL:   baseURL,
+				Key:       apiKey,
+				Model:     modelName,
+				Messages:  append(messages, chatproto.Message{Role: "user", Content: chatWrapUpPrompt}),
+				SessionID: thread.ID,
+			})
+			if finalErr != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": "本轮没有正常结束: " + finalErr.Error()})
+				return
+			}
+			usage.PromptTokens += final.PromptTokens
+			usage.CompletionTokens += final.CompletionTokens
+			usage.TotalTokens += final.TotalTokens
+			reply = final.Text
+		}
+		if strings.TrimSpace(reply) == "" {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "上游没有返回文本回复"})
 			return
 		}
 
@@ -812,6 +868,19 @@ func chatTitle(content string) string {
 		runes = runes[:chatDefaultTitleRunes]
 	}
 	return string(runes)
+}
+
+// truncateChatToolResult cuts one tool result on a rune boundary so a single
+// long listing cannot push the next request past the model's context window.
+func truncateChatToolResult(payload string, maxBytes int) string {
+	if len(payload) <= maxBytes {
+		return payload
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(payload[cut]) {
+		cut--
+	}
+	return payload[:cut] + "\n…(结果过长，已截断)"
 }
 
 func firstNonEmptyString(values ...string) string {

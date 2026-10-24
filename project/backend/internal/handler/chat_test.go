@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -679,4 +680,115 @@ func TestResolveChatEndpointSkipsAutoDisabledKeys(t *testing.T) {
 	if key != "sk-live" {
 		t.Fatalf("key = %q, want the first enabled key", key)
 	}
+}
+
+// A console turn is a free loop: it ends when the model stops calling tools,
+// not after a fixed handful of steps. Eight tool rounds is well past the old
+// six-step cap, which used to answer with 502.
+func TestSendChatMessageLoopsUntilTheModelStopsCallingTools(t *testing.T) {
+	const toolRounds = 8
+	var requests int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests <= toolRounds {
+			_, _ = fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_%d","type":"function","function":{"name":"list_providers","arguments":"{}"}}]}}]}`, requests)
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"供应商已经看完了。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+	threadID := createChatTestThread(t, router)
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
+		`{"content":"把供应商都过一遍","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if requests != toolRounds+1 {
+		t.Fatalf("upstream calls = %d, want %d", requests, toolRounds+1)
+	}
+	if !strings.Contains(rec.Body.String(), "供应商已经看完了") {
+		t.Fatalf("final reply missing: %s", rec.Body.String())
+	}
+}
+
+// When the runaway valve trips, the turn must still produce a text reply: a
+// tools-disabled wrap-up call summarises what happened instead of a 502.
+func TestSendChatMessageWrapsUpWhenTheToolStepValveTrips(t *testing.T) {
+	previous := chatMaxToolSteps
+	chatMaxToolSteps = 2
+	t.Cleanup(func() { chatMaxToolSteps = previous })
+
+	var (
+		requests   int
+		wrapUpSeen bool
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var body struct {
+			Messages []map[string]any `json:"messages"`
+			Tools    []map[string]any `json:"tools"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		if len(body.Tools) == 0 {
+			for _, message := range body.Messages {
+				if content, ok := message["content"].(string); ok && strings.Contains(content, "不要再调用任何工具") {
+					wrapUpSeen = true
+				}
+			}
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"前两步已经完成，剩下的请稍后继续。"}}]}`))
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_%d","type":"function","function":{"name":"list_providers","arguments":"{}"}}]}}]}`, requests)
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+	threadID := createChatTestThread(t, router)
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
+		`{"content":"一直查下去","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !wrapUpSeen {
+		t.Fatalf("the wrap-up request must carry the no-more-tools prompt")
+	}
+	if requests != 3 {
+		t.Fatalf("upstream calls = %d, want 2 tool rounds + 1 wrap-up", requests)
+	}
+	if !strings.Contains(rec.Body.String(), "剩下的请稍后继续") {
+		t.Fatalf("wrap-up reply missing: %s", rec.Body.String())
+	}
+}
+
+func createChatTestThread(t *testing.T, router *gin.Engine) string {
+	t.Helper()
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create thread status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	return created.Data.ID
 }

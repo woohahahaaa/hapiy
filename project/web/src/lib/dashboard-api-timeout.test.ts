@@ -54,9 +54,9 @@ describe('dashboard request timeouts', () => {
     await expect(pending).rejects.not.toThrow(/signal is aborted/)
   })
 
-  // 一轮对话里后端要跑模型 + 最多 6 步工具调用（后端上限 3 分钟）。默认
-  // 8s 会在中途掐断，而中断的请求连服务端 context 一起取消，多步写操作会
-  // 半途而废（建供应商就踩到过）。这里锁定发送消息拿到更宽的超时。
+  // 一轮对话是自由循环：后端跑到模型不再调工具为止，只受 30 分钟墙钟约束，
+  // 默认 8s 会在中途掐断，而中断的请求连服务端 context 一起取消，多步写操作
+  // 会半途而废（建供应商就踩到过）。这里锁定发送消息拿到更宽的超时。
   it('lets a chat turn outlive the default 8s', async () => {
     const signals = stubFetchThatAbortsOnSignal()
     vi.useFakeTimers()
@@ -69,7 +69,7 @@ describe('dashboard request timeouts', () => {
     await vi.advanceTimersByTimeAsync(9000)
     expect(signals[0].aborted).toBe(false)
 
-    await vi.advanceTimersByTimeAsync(190000)
+    await vi.advanceTimersByTimeAsync(1980000)
     expect(signals[0].aborted).toBe(true)
   })
 })
