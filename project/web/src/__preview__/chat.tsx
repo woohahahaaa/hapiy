@@ -108,7 +108,7 @@ mock.sendChatMessage = async () => {
 function Measure() {
   const [data, setData] = useState('')
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
+    const timer = setTimeout(() => {
       const picker = [...document.querySelectorAll('button[aria-label]')]
         .map((button) => button.getAttribute('aria-label') ?? '')
         .find((label) => label.startsWith('deepseek-') || label.startsWith('gpt-')) ?? ''
@@ -118,8 +118,8 @@ function Measure() {
         hasThreadOne: document.body.innerText.includes('hello from thread one'),
         hasThreadTwo: document.body.innerText.includes('hello from thread two'),
       }))
-    })
-    return () => cancelAnimationFrame(raf)
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [])
   return <pre id="measure">{data}</pre>
 }
