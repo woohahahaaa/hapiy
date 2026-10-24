@@ -32,6 +32,17 @@ func (t *ChatThread) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ChatPreference remembers the model chosen when the account last started a
+// new conversation, so the next new conversation defaults to it. It is
+// deliberately separate from ChatThread.Model: switching models inside an
+// existing thread must not change what the next new conversation starts with.
+type ChatPreference struct {
+	UserID     string    `gorm:"primaryKey" json:"-"`
+	Model      string    `gorm:"not null;default:''" json:"model"`
+	ProviderID string    `gorm:"not null;default:''" json:"provider_id"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 // ChatMessage is one turn inside a ChatThread.
 type ChatMessage struct {
 	ID       string `gorm:"primaryKey;type:uuid" json:"id"`

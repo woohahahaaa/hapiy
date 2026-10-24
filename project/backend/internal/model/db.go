@@ -74,6 +74,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&AgentModelConfigSource{},
 		&ChatThread{},
 		&ChatMessage{},
+		&ChatPreference{},
 		&BackupRecord{},
 	)
 }

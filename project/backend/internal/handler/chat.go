@@ -84,7 +84,33 @@ func CreateChatThread(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		// Remember the model this conversation started with; it becomes the
+		// default for the account's next new conversation. Best-effort: a
+		// failure only affects that default, so the thread still succeeds.
+		if thread.Model != "" {
+			preference := model.ChatPreference{
+				UserID:     thread.UserID,
+				Model:      thread.Model,
+				ProviderID: thread.ProviderID,
+			}
+			_ = db.Save(&preference).Error
+		}
 		c.JSON(http.StatusOK, gin.H{"data": thread})
+	}
+}
+
+// ChatPreferences serves GET /v1/dashboard/chat/preferences. The panel reads
+// it when it opens a new conversation: the stored model wins while it is still
+// offered, otherwise the client falls back to the first available model.
+func ChatPreferences(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		preference := model.ChatPreference{UserID: chatUser(c)}
+		err := db.Where("user_id = ?", preference.UserID).First(&preference).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": preference})
 	}
 }
 

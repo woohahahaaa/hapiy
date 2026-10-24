@@ -35,6 +35,7 @@ func newChatRouter(db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
 		c.Next()
 	})
 	r.GET("/chat/models", ChatModels(db))
+	r.GET("/chat/preferences", ChatPreferences(db))
 	r.GET("/chat/threads", ListChatThreads(db))
 	r.POST("/chat/threads", CreateChatThread(db))
 	r.PATCH("/chat/threads/:id", UpdateChatThread(db))
