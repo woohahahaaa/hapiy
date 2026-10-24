@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/affinity"
+	"github.com/hapiy/hapiy/internal/chatproto"
 	hapiymcp "github.com/hapiy/hapiy/internal/mcp"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
@@ -235,9 +235,18 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+// chatUIAction is one frontend action the model asked for (open a dialog,
+// prefill fields). The console applies it after the reply arrives, so the
+// agent never writes configuration on its own.
+type chatUIAction struct {
+	Type    string         `json:"type"`
+	Payload map[string]any `json:"payload"`
+}
+
 // SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. It
-// dispatches the conversation through the relay engine, persists the user and
-// assistant turns, and returns both.
+// resolves the model's endpoint (chat completions / Responses / Anthropic),
+// runs the conversation through the matching protocol adapter, executes MCP
+// tool calls, and persists the user and assistant turns.
 func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user := chatUser(c)
@@ -280,28 +289,33 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if len(history) > chatHistoryLimit {
 			history = history[len(history)-chatHistoryLimit:]
 		}
-		messages := make([]map[string]interface{}, 0, len(history)+1)
+		messages := make([]chatproto.Message, 0, len(history)+2)
+		if page := strings.TrimSpace(req.PageContext); page != "" {
+			messages = append(messages, chatproto.Message{
+				Role: "system",
+				Content: "用户当前在控制台页面 " + page + "。需要操作界面（打开弹窗、预填参数）时使用 ui_ 开头的工具；" +
+					"改配置先打开界面让用户确认，不要假设已经保存。",
+			})
+		}
 		for _, message := range history {
-			content := strings.TrimSpace(message.Content)
-			if content == "" {
+			text := strings.TrimSpace(message.Content)
+			if text == "" {
 				continue
 			}
-			messages = append(messages, map[string]interface{}{"role": message.Role, "content": content})
+			messages = append(messages, chatproto.Message{Role: message.Role, Content: text})
 		}
-		messages = append(messages, map[string]interface{}{"role": "user", "content": content})
-		if page := strings.TrimSpace(req.PageContext); page != "" {
-			messages = append([]map[string]interface{}{{
-				"role": "system",
-				"content": "用户当前在控制台页面 " + page + "。需要操作界面（打开弹窗、预填参数）时使用 ui_ 开头的工具；" +
-					"改配置先打开界面让用户确认，不要假设已经保存。",
-			}}, messages...)
-		}
+		messages = append(messages, chatproto.Message{Role: "user", Content: content})
 
 		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
 		defer cancel()
 
-		// Expose the MCP tools to the model: the console agent is meant to
-		// inspect and operate hapiy through the same tool surface /mcp serves.
+		endpoint, baseURL, apiKey, provider, resolveErr := resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
+		if resolveErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
+			return
+		}
+
+		// Expose the MCP tools to the model through the same registry /mcp uses.
 		runner, err := hapiymcp.NewToolRunner(ctx, db, version.Version)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化 MCP 工具失败: " + err.Error()})
@@ -313,116 +327,69 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取 MCP 工具失败: " + err.Error()})
 			return
 		}
-		toolDefs := make([]map[string]any, 0, len(listed)+1)
+		tools := make([]chatproto.Tool, 0, len(listed))
 		for _, tool := range listed {
-			toolDefs = append(toolDefs, map[string]any{
-				"type": "function",
-				"function": map[string]any{
-					"name":        tool.Name,
-					"description": tool.Description,
-					"parameters":  tool.InputSchema,
-				},
-			})
-		}
-		toolDefs = append(toolDefs, chatUITools()...)
-
-		conversation := messages
-		buildBody := func() map[string]interface{} {
-			return map[string]interface{}{
-				"model":       modelName,
-				"messages":    conversation,
-				"stream":      false,
-				"tools":       toolDefs,
-				"tool_choice": "auto",
+			schema, marshalErr := json.Marshal(tool.InputSchema)
+			if marshalErr != nil {
+				continue
 			}
+			tools = append(tools, chatproto.Tool{Name: tool.Name, Description: tool.Description, Schema: schema})
 		}
-		body := buildBody()
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		relayReq := relay.RelayRequest{
-			RequestID:  c.GetString("request_id"),
-			UserID:     user,
-			TokenName:  "chat",
-			IP:         c.ClientIP(),
-			Model:      modelName,
-			Messages:   messages,
-			Stream:     false,
-			Body:       body,
-			Headers:    map[string]string{"X-Session-Id": thread.ID},
-			Path:       chatPath,
-			SourceMark: "__console",
-		}
-
-		plan, provider, dispatchErr := dispatchChatRequest(db, engine, modelName, providerID, &relayReq, bodyBytes)
-		if dispatchErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": dispatchErr.Error()})
-			return
-		}
+		tools = append(tools, chatproto.Tool{
+			Name:        "ui_open_provider_dialog",
+			Description: "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"provider_id":{"type":"string","description":"供应商 id，已知时优先传"},"provider_name":{"type":"string","description":"供应商名称，id 未知时用名称匹配"}}}`),
+		})
 
 		uiActions := make([]chatUIAction, 0)
 		reply := ""
 		for step := 0; step < chatMaxToolSteps; step++ {
-			relayReq.Body = buildBody()
-			resp, relayErr := engine.RelayRequest(ctx, plan, &relayReq)
-			if relayErr != nil {
-				if resp != nil && resp.Body != nil {
-					_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-					_ = resp.Body.Close()
-				}
-				c.JSON(http.StatusBadGateway, gin.H{"error": relayErr.Error()})
+			result, completeErr := chatproto.Complete(ctx, chatproto.Request{
+				Endpoint:  endpoint,
+				BaseURL:   baseURL,
+				Key:       apiKey,
+				Model:     modelName,
+				Messages:  messages,
+				Tools:     tools,
+				SessionID: thread.ID,
+			})
+			if completeErr != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": completeErr.Error()})
 				return
 			}
-			raw, readErr := io.ReadAll(io.LimitReader(resp.Body, chatMaxResponseBytes))
-			_ = resp.Body.Close()
-			if readErr != nil {
-				c.JSON(http.StatusBadGateway, gin.H{"error": "读取上游响应失败: " + readErr.Error()})
-				return
-			}
-			message, parseErr := parseChatResponse(raw)
-			if parseErr != nil {
-				c.JSON(http.StatusBadGateway, gin.H{"error": parseErr.Error()})
-				return
-			}
-			if len(message.ToolCalls) == 0 {
-				reply = message.Text
+			if len(result.ToolCalls) == 0 {
+				reply = result.Text
 				break
 			}
-			// Echo the assistant turn with its tool calls, then append one
-			// tool result per call, and let the model continue.
-			conversation = append(conversation, map[string]any{
-				"role":       "assistant",
-				"content":    message.Content,
-				"tool_calls": message.ToolCalls,
+			messages = append(messages, chatproto.Message{
+				Role:      "assistant",
+				Content:   result.Text,
+				ToolCalls: result.ToolCalls,
 			})
-			for _, call := range message.ToolCalls {
+			for _, call := range result.ToolCalls {
 				arguments := map[string]any{}
-				if strings.TrimSpace(call.Function.Arguments) != "" {
-					_ = json.Unmarshal([]byte(call.Function.Arguments), &arguments)
+				if strings.TrimSpace(call.Arguments) != "" {
+					_ = json.Unmarshal([]byte(call.Arguments), &arguments)
 				}
 				var payload string
-				if strings.HasPrefix(call.Function.Name, "ui_") {
-					// UI tools are not executed here: they are queued for the
-					// frontend, which applies them after the reply arrives.
+				if strings.HasPrefix(call.Name, "ui_") {
 					uiActions = append(uiActions, chatUIAction{
-						Type:    strings.TrimPrefix(call.Function.Name, "ui_"),
+						Type:    strings.TrimPrefix(call.Name, "ui_"),
 						Payload: arguments,
 					})
 					payload = `{"ok":true,"note":"action queued for the console UI"}`
 				} else {
-					result, callErr := runner.Call(ctx, call.Function.Name, arguments)
+					value, callErr := runner.Call(ctx, call.Name, arguments)
 					if callErr != nil {
 						payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
 					} else {
-						payload = hapiymcp.MarshalToolResult(result)
+						payload = hapiymcp.MarshalToolResult(value)
 					}
 				}
-				conversation = append(conversation, map[string]any{
-					"role":         "tool",
-					"tool_call_id": call.ID,
-					"content":      payload,
+				messages = append(messages, chatproto.Message{
+					Role:       "tool",
+					ToolCallID: call.ID,
+					Content:    payload,
 				})
 			}
 		}
@@ -477,34 +444,130 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	}
 }
 
-// chatUIAction is one frontend action the model asked for (open a dialog,
-// prefill fields). The console applies it after the reply arrives, so the
-// agent never writes configuration on its own.
-type chatUIAction struct {
-	Type    string         `json:"type"`
-	Payload map[string]any `json:"payload"`
+// resolveChatEndpoint picks the endpoint, base URL and key for one chat turn.
+// An empty providerID means 自动: try the model's declared endpoints in
+// protocol order and let the topology dispatch pick a provider for each.
+func resolveChatEndpoint(db *gorm.DB, engine *relay.Engine, modelName, providerID, sessionID string) (chatproto.Endpoint, string, string, *model.Provider, error) {
+	if providerID != "" {
+		var provider model.Provider
+		if err := db.First(&provider, "id = ?", providerID).Error; err != nil {
+			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("找不到供应商")
+		}
+		if !provider.Status {
+			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 已停用", provider.Name)
+		}
+		plan, err := engine.PlanForProvider(providerID)
+		if err != nil {
+			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("编译供应商 %s 失败: %w", provider.Name, err)
+		}
+		endpoints := chatproto.Resolve(plan.Provider, modelName)
+		if len(endpoints) == 0 {
+			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的模型 %s 没有可用的聊天端点", provider.Name, modelName)
+		}
+		for _, endpoint := range endpoints {
+			if !plan.AllowsPath(modelName, endpoint.Path) {
+				continue
+			}
+			baseURL := ""
+			if len(plan.BaseURLs) > 0 {
+				baseURL = plan.BaseURLs[0]
+			}
+			key := ""
+			if len(plan.Keys) > 0 {
+				key = plan.Keys[0]
+			}
+			if baseURL == "" || key == "" {
+				return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 缺少 BaseURL 或 Key", provider.Name)
+			}
+			return endpoint, baseURL, key, plan.Provider, nil
+		}
+		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的模型 %s 没有可用的聊天端点", provider.Name, modelName)
+	}
+
+	paths := autoChatPaths(db, modelName)
+	var lastErr error
+	for _, path := range paths {
+		protocol, ok := chatproto.Detect(path)
+		if !ok {
+			continue
+		}
+		result, err := engine.Dispatch(modelName, path, &affinity.Request{
+			Model:   modelName,
+			Path:    path,
+			Headers: map[string]string{"X-Session-Id": sessionID},
+		})
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		baseURL := ""
+		if result.BaseURLIndex >= 0 && result.BaseURLIndex < len(result.Plan.BaseURLs) {
+			baseURL = result.Plan.BaseURLs[result.BaseURLIndex]
+		} else if len(result.Plan.BaseURLs) > 0 {
+			baseURL = result.Plan.BaseURLs[0]
+		}
+		key := ""
+		if result.KeyIndex >= 0 && result.KeyIndex < len(result.Plan.Keys) {
+			key = result.Plan.Keys[result.KeyIndex]
+		} else if len(result.Plan.Keys) > 0 {
+			key = result.Plan.Keys[0]
+		}
+		if baseURL == "" || key == "" {
+			lastErr = fmt.Errorf("供应商 %s 缺少 BaseURL 或 Key", result.Provider.Name)
+			continue
+		}
+		return chatproto.Endpoint{Path: path, Protocol: protocol}, baseURL, key, result.Provider, nil
+	}
+	if lastErr != nil {
+		return chatproto.Endpoint{}, "", "", nil, lastErr
+	}
+	return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("没有供应商支持模型 %s 的聊天端点", modelName)
 }
 
-// chatUITools declares the UI actions exposed to the model. Keep this list
-// small and explicit: every entry is a capability the model can trigger in the
-// console, and the frontend must have a matching handler.
-func chatUITools() []map[string]any {
-	return []map[string]any{
-		{
-			"type": "function",
-			"function": map[string]any{
-				"name":        "ui_open_provider_dialog",
-				"description": "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
-				"parameters": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"provider_id":   map[string]any{"type": "string", "description": "供应商 id，已知时优先传"},
-						"provider_name": map[string]any{"type": "string", "description": "供应商名称，id 未知时用名称匹配"},
-					},
-				},
-			},
-		},
+// autoChatPaths returns the candidate endpoint paths for 自动 dispatch: the
+// default chat path plus every endpoint declared by an enabled provider,
+// ordered chat -> responses -> anthropic.
+func autoChatPaths(db *gorm.DB, modelName string) []string {
+	seen := map[string]bool{}
+	paths := make([]string, 0, 4)
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" || seen[path] {
+			return
+		}
+		seen[path] = true
+		paths = append(paths, path)
 	}
+	add("/v1/chat/completions")
+	var providers []model.Provider
+	if err := db.Where("status = ? AND workflow_enabled = ?", true, true).Find(&providers).Error; err == nil {
+		for i := range providers {
+			for _, endpoint := range chatproto.Resolve(&providers[i], modelName) {
+				add(endpoint.Path)
+			}
+		}
+	}
+	rank := func(path string) int {
+		protocol, ok := chatproto.Detect(path)
+		if !ok {
+			return 9
+		}
+		switch protocol {
+		case chatproto.ProtocolChat:
+			return 0
+		case chatproto.ProtocolResponses:
+			return 1
+		case chatproto.ProtocolAnthropic:
+			return 2
+		}
+		return 3
+	}
+	for i := 1; i < len(paths); i++ {
+		for j := i; j > 0 && rank(paths[j]) < rank(paths[j-1]); j-- {
+			paths[j], paths[j-1] = paths[j-1], paths[j]
+		}
+	}
+	return paths
 }
 
 // dispatchChatRequest resolves the execution plan: an empty providerID means

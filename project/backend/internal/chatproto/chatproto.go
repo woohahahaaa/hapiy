@@ -309,7 +309,10 @@ func resultFromResponse(resp *schemas.BifrostChatResponse) Result {
 	}
 	message := choice.ChatNonStreamResponseChoice.Message
 	result.Text = chatMessageText(message)
-	for _, call := range message.ToolCalls {
+	if message.ChatAssistantMessage == nil {
+		return result
+	}
+	for _, call := range message.ChatAssistantMessage.ToolCalls {
 		name := ""
 		if call.Function.Name != nil {
 			name = *call.Function.Name
