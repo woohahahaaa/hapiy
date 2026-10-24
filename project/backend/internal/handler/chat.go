@@ -17,6 +17,7 @@ import (
 	hapiymcp "github.com/hapiy/hapiy/internal/mcp"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/version"
 	"gorm.io/gorm"
 )
@@ -249,6 +250,7 @@ type chatUIAction struct {
 // tool calls, and persists the user and assistant turns.
 func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		start := time.Now()
 		user := chatUser(c)
 		thread, err := loadChatThread(db, c.Param("id"), user)
 		if err != nil {
@@ -343,6 +345,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		uiActions := make([]chatUIAction, 0)
 		reply := ""
+		var usage chatproto.Result
 		for step := 0; step < chatMaxToolSteps; step++ {
 			result, completeErr := chatproto.Complete(ctx, chatproto.Request{
 				Endpoint:  endpoint,
@@ -357,6 +360,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				c.JSON(http.StatusBadGateway, gin.H{"error": completeErr.Error()})
 				return
 			}
+			usage = result
 			if len(result.ToolCalls) == 0 {
 				reply = result.Text
 				break
@@ -435,6 +439,39 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 		thread.Model = modelName
 		thread.ProviderID = providerID
+
+		// Usage record for the built-in agent: no token, source 内置Agent.
+		logEntry := model.Log{
+			UserID:           user,
+			TokenName:        "",
+			ProviderName:     provider.Name,
+			ModelName:        modelName,
+			Source:           "内置Agent",
+			Status:           "success",
+			IP:               c.ClientIP(),
+			RequestID:        c.GetString("request_id"),
+			UseTime:          int(time.Since(start).Milliseconds()),
+			PromptTokens:     usage.PromptTokens,
+			CompletionTokens: usage.CompletionTokens,
+		}
+		if usage.PromptTokens+usage.CompletionTokens > 0 {
+			logEntry.Quota, logEntry.Currency = computeQuota(db, quotaRequest{
+				provider:  provider,
+				modelName: modelName,
+				usage: &relay.UsageInfo{
+					PromptTokens:     usage.PromptTokens,
+					CompletionTokens: usage.CompletionTokens,
+					TotalTokens:      usage.TotalTokens,
+				},
+			})
+			if logEntry.Currency == "" {
+				logEntry.Currency = service.GetBillingCurrency(db)
+			}
+		}
+		if writer := service.Logs(); writer != nil {
+			writer.Write(&logEntry)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"thread":            thread,
 			"user_message":      userMessage,
