@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         agentpanel: "agentpanel.html",
         sidebar: "sidebar.html",
+        shell: "shell.html",
       },
     },
   },
