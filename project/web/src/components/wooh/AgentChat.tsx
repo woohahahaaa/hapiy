@@ -2,16 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
+import { AgentModelPicker } from '@/components/wooh/AgentModelPicker'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
 import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashboard-api'
@@ -143,42 +137,15 @@ export function AgentChat({ className }: { readonly className?: string }) {
           key={sessionKey}
           title={activeThread?.title || 'Agent'}
           controls={
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="shrink-0 text-xs text-muted-foreground">{t('modelLabel')}</span>
-              <Select value={selectedModel || undefined} onValueChange={setSelectedModel}>
-                <SelectTrigger className="w-fit max-w-full min-w-0 shrink-0" aria-label={t('modelLabel')}>
-                  <SelectValue placeholder={t('modelPlaceholder')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {modelOptions.map((entry) => (
-                    <SelectItem key={entry.model} value={entry.model}>
-                      {entry.model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {selectedModel && (
-                <>
-                  <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">{t('providerLabel')}</span>
-                  <Select value={effectiveProvider} onValueChange={setSelectedProvider}>
-                    <SelectTrigger className="w-fit max-w-full min-w-0 shrink-0" aria-label={t('providerLabel')}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={AUTO_PROVIDER}>{t('providerAuto')}</SelectItem>
-                      {providerOptions.map((provider) => (
-                        <SelectItem key={provider.id} value={provider.id}>
-                          {provider.name}
-                          {provider.autoDisabled ? ` ${t('providerDisabledSuffix')}` : ''}
-                          {provider.workflowEnabled ? '' : ` ${t('providerNoTopologySuffix')}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </>
-              )}
-            </div>
+            <AgentModelPicker
+              models={modelOptions}
+              model={selectedModel}
+              providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
+              onChange={({ model, providerId }) => {
+                setSelectedModel(model)
+                setSelectedProvider(providerId || AUTO_PROVIDER)
+              }}
+            />
           }
           initialMessages={initialMessages}
           onSend={handleSend}

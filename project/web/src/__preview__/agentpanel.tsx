@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import '@/index.css'
 import '@/i18n/i18n'
 import { AgentThread } from '@/components/wooh/AgentThread'
+import { AgentModelPicker } from '@/components/wooh/AgentModelPicker'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
 
 function record(
@@ -57,12 +58,26 @@ function Demo({ dark, empty }: { dark: boolean; empty: boolean }) {
             key={`${key}-${empty}`}
             title="Agent"
             controls={
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span className="shrink-0 text-xs text-muted-foreground">模型</span>
-                <div className="h-8 w-fit max-w-full shrink-0 truncate rounded-md border border-border px-2 text-xs leading-8">gpt-5</div>
-                <span className="ms-1.5 shrink-0 text-xs text-muted-foreground">供应商</span>
-                <div className="h-8 w-fit max-w-full shrink-0 truncate rounded-md border border-border px-2 text-xs leading-8">自动（按拓扑）</div>
-              </div>
+              <AgentModelPicker
+                models={[
+                  {
+                    model: 'DeepSeek',
+                    providers: [
+                      { id: 'p1', name: 'opencode go', autoDisabled: false, workflowEnabled: true, status: true },
+                      { id: 'p2', name: 'Backup-GPT', autoDisabled: true, workflowEnabled: true, status: true },
+                    ],
+                  },
+                  {
+                    model: 'gpt-5',
+                    providers: [
+                      { id: 'p3', name: 'OpenAI', autoDisabled: false, workflowEnabled: true, status: true },
+                    ],
+                  },
+                ]}
+                model="DeepSeek"
+                providerId="p1"
+                onChange={() => {}}
+              />
             }
             initialMessages={empty ? [] : seed}
             onSend={async (text) => {
