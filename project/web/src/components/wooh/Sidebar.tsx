@@ -385,10 +385,9 @@ export function AppSidebar() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="gap-1.5 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+                className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
                 onClick={toggleChat}
               >
-                <AppIcon name="chat" />
                 <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
               </Button>
             ) : (

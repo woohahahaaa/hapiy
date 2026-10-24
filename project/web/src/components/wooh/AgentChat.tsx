@@ -197,7 +197,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 variant="secondary"
                 onClick={() => (rightCollapsed ? expandRight() : setWidth(maxWidth))}
               >
-                <AppIcon name="view_sidebar" />
                 <span>{rightCollapsed ? t('showConsole') : t('hideConsole')}</span>
               </Button>
             </>
