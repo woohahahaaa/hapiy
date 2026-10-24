@@ -1916,6 +1916,13 @@ const REQUEST_TIMEOUT_MS = 8000
 // 来自用户手动点开的弹窗，给足时间。
 const AGENT_FILE_TIMEOUT_MS = 120000
 
+// CHAT_TIMEOUT_MS is the cap for one console-chat turn. The backend runs the
+// model plus up to 6 MCP tool steps and allows 3 minutes（handler/chat.go 的
+// chatRequestTimeout）；默认 8s 会在中途掐断，客户端的中断还会连带取消服务端
+// 的 context，把「建供应商」这类多步操作做成半途而废。多留 10s 让后端自己的
+// 超时先返回。
+const CHAT_TIMEOUT_MS = 190000
+
 // RequestTimeoutError marks a fetch we aborted ourselves because the timeout
 // elapsed. Without it the browser's raw AbortError text（"signal is aborted
 // without reason"）gets shown as 无法连接后端 —— 其实后端没挂，只是这次请求

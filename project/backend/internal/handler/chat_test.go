@@ -625,11 +625,17 @@ func TestChatModelsKeepsProviderAvailableWhileOneKeyWorks(t *testing.T) {
 	if len(providers) != 1 || providers[0].AutoDisabled {
 		t.Fatalf("one disabled key must not disable the provider: %+v", providers)
 	}
+	if providers[0].DisabledKeys != 1 || providers[0].TotalKeys != 2 || providers[0].ProviderDisabled {
+		t.Fatalf("disable counters must describe the partial state: %+v", providers[0])
+	}
 
 	disable(model.FailoverDimensionKey, "sk-b")
 	providers = chatModelProviders(t, db)
 	if len(providers) != 1 || !providers[0].AutoDisabled {
 		t.Fatalf("every key disabled must disable the provider: %+v", providers)
+	}
+	if providers[0].DisabledKeys != 2 || providers[0].TotalKeys != 2 {
+		t.Fatalf("disable counters must describe the full state: %+v", providers[0])
 	}
 }
 
@@ -644,6 +650,9 @@ func TestChatModelsKeepsProviderAvailableWhenOnlyKeysAreDisabled(t *testing.T) {
 	providers := chatModelProviders(t, db)
 	if len(providers) != 1 || !providers[0].AutoDisabled {
 		t.Fatalf("a single-key provider with that key disabled is unavailable: %+v", providers)
+	}
+	if providers[0].DisabledKeys != 1 || providers[0].TotalKeys != 1 || providers[0].ProviderDisabled {
+		t.Fatalf("unexpected counters: %+v", providers[0])
 	}
 }
 
