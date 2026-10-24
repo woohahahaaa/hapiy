@@ -426,3 +426,101 @@ func TestSendChatMessageQueuesUIActions(t *testing.T) {
 		t.Fatalf("unexpected action: %+v", action)
 	}
 }
+
+func TestSendChatMessageDetectsBareChatPath(t *testing.T) {
+	var seenPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"bare path ok"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	provider := model.Provider{
+		ID:              "bare",
+		Name:            "Bare",
+		Status:          true,
+		WorkflowEnabled: true,
+		BaseURLs:        `["` + upstream.URL + `/v1"]`,
+		Keys:            `["sk-test"]`,
+		Endpoints:       `[]`,
+		Models:          `[{"model":"test-model","endpoints":["/chat/completions"]}]`,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatal(err)
+	}
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"hi","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenPath != "/v1/chat/completions" {
+		t.Fatalf("upstream path = %q (base /v1 + declared /chat/completions)", seenPath)
+	}
+	if !strings.Contains(rec.Body.String(), "bare path ok") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+}
+
+func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
+	var seenPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"r1","object":"response","created_at":1,"model":"test-model","status":"completed","output":[{"type":"message","id":"m1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"responses ok"}]}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	provider := model.Provider{
+		ID:              "resp",
+		Name:            "Responses",
+		Status:          true,
+		WorkflowEnabled: true,
+		BaseURLs:        `["` + upstream.URL + `"]`,
+		Keys:            `["sk-test"]`,
+		Endpoints:       `[]`,
+		Models:          `[{"model":"test-model","endpoints":["/v1/responses"]}]`,
+	}
+	if err := db.Create(&provider).Error; err != nil {
+		t.Fatal(err)
+	}
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"hi","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenPath != "/v1/responses" {
+		t.Fatalf("upstream path = %q", seenPath)
+	}
+	if !strings.Contains(rec.Body.String(), "responses ok") {
+		t.Fatalf("unexpected body: %s", rec.Body.String())
+	}
+}
