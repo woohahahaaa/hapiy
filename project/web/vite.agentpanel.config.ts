@@ -14,6 +14,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         agentpanel: "agentpanel.html",
+        sidebar: "sidebar.html",
       },
     },
   },
