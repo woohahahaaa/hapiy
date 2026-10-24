@@ -399,7 +399,7 @@ export function AppSidebar() {
             </Button>
           ) : (
             <Button
-              size="icon-sm"
+              size="icon"
               variant="ghost"
               className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
               onClick={toggleChat}

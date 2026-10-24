@@ -25,10 +25,10 @@
   "providerNoTopologySuffix": "(not in topology)",
   "selectModelFirst": "Pick a model first",
   "sendFailed": "Failed to send",
-  "showConsole": "Show console",
-  "hideConsole": "Hide console",
+  "showConsole": "Expand management panel",
+  "hideConsole": "Collapse management panel",
   "providerAutoShort": "Auto",
   "noProviders": "No providers available",
-  "expandAgent": "Open Agent chat",
-  "collapseAgent": "Close Agent chat"
+  "expandAgent": "Expand Agent panel",
+  "collapseAgent": "Collapse Agent panel"
 }

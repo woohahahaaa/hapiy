@@ -25,10 +25,10 @@
   "providerNoTopologySuffix": "(未接入拓扑)",
   "selectModelFirst": "先选择一个模型",
   "sendFailed": "发送失败",
-  "showConsole": "显示控制台",
-  "hideConsole": "隐藏控制台",
+  "showConsole": "展开管理面板",
+  "hideConsole": "收起管理面板",
   "providerAutoShort": "自动",
   "noProviders": "没有可用供应商",
-  "expandAgent": "展开Agent对话",
-  "collapseAgent": "收起Agent对话"
+  "expandAgent": "展开Agent面板",
+  "collapseAgent": "收起Agent面板"
 }
