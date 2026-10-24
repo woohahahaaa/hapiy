@@ -391,7 +391,7 @@ export function AppSidebar() {
             <Button
               size="sm"
               variant="ghost"
-              className="w-full justify-start gap-2 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+              className="justify-start gap-2 border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
               onClick={toggleChat}
             >
               <AppIcon name="chat" />
