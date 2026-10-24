@@ -358,7 +358,7 @@ export function AppSidebar() {
         {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}
         <div
           className={
-            showLabel ? 'relative -top-0.5 flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
+            showLabel ? 'relative -top-[5px] flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
           }
         >
           <div className="flex items-center gap-1.5">
