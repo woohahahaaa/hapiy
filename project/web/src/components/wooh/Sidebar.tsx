@@ -340,6 +340,46 @@ export function AppSidebar() {
       />
     ))
 
+  const logoButton = (
+    <button
+      type="button"
+      onClick={() => setVersionOpen(true)}
+      title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
+      className={cn(
+        showLabel
+          ? 'relative -mx-1 cursor-pointer rounded-md px-1 font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+          : 'relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+      )}
+    >
+      {collapsed ? 'h' : 'hapiy'}
+      {showLabel && updateAvailable && (
+        <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success" />
+      )}
+    </button>
+  )
+
+  const chatButton = showLabel ? (
+    <Button
+      size="sm"
+      variant="ghost"
+      className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+      onClick={toggleChat}
+    >
+      <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
+    </Button>
+  ) : (
+    <Button
+      size="icon"
+      variant="ghost"
+      className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+      onClick={toggleChat}
+      aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+      title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+    >
+      <AppIcon name="chat" />
+    </Button>
+  )
+
   return (
     <SidebarRoot
       collapsible="icon"
@@ -355,56 +395,25 @@ export function AppSidebar() {
       )}
     >
       <SidebarHeader>
-        {/* 顶部一行：左边 logo、右边语言/深浅/折叠——与预览页 /p 一致 */}
-        <div
-          className={
-            showLabel ? 'relative -top-[5px] flex items-center justify-between gap-2 py-2 pl-2' : 'flex flex-col items-center justify-center gap-1 py-1'
-          }
-        >
-          <div className="flex items-center gap-1.5">
-            {/* 移动端：菜单开关固定在左侧，与页面头部同一位置、同为三横线图标 */}
-            {isMobile && <SidebarTrigger icon="menu" />}
-            <button
-              type="button"
-              onClick={() => setVersionOpen(true)}
-              title={updateAvailable ? t('update.tooltip') : `hapiy v${updateStatus?.current || appVersion}`}
-              className={cn(
-                showLabel
-                  ? 'relative -mx-1 cursor-pointer rounded-md px-1 font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                  : 'relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md font-hapiy-logo text-2xl leading-none text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-              )}
-            >
-              {collapsed ? 'h' : 'hapiy'}
-              {showLabel && updateAvailable && (
-                <span aria-hidden className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-success" />
-              )}
-            </button>
+        {showLabel ? (
+          <div className="relative -top-[5px] flex items-center justify-between gap-2 py-2 pl-2">
+            <div className="flex items-center gap-1.5">
+              {/* 移动端：菜单开关固定在左侧，与页面头部同一位置、同为三横线图标 */}
+              {isMobile && <SidebarTrigger icon="menu" />}
+              {logoButton}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {chatButton}
+              <SidebarTrigger size="icon" />
+            </div>
           </div>
-          <div className={showLabel ? 'flex items-center gap-1.5' : 'flex flex-col items-center gap-1'}>
-            {showLabel ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
-                onClick={toggleChat}
-              >
-                <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
-              </Button>
-            ) : (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
-                onClick={toggleChat}
-                aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
-                title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
-              >
-                <AppIcon name="chat" />
-              </Button>
-            )}
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-1 py-1">
+            {chatButton}
             <SidebarTrigger size="icon" />
+            {logoButton}
           </div>
-        </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
