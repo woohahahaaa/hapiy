@@ -332,6 +332,10 @@ hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开
 | `set_provider_dedupe_v1` | 拉取模型列表时去掉重复的 `/v1` |
 | `reset_provider_disable` | 恢复自动禁用的渠道（单条或整个维度） |
 | `reset_all_provider_disable` | 按维度恢复全部供应商的自动禁用状态 |
+| `list_disabled_records` | 待恢复的自动禁用记录（Key 只显示尾号） |
+| `replay_disabled_record` | 重放记录里的请求探测上游，通过才恢复 |
+| `restore_disabled_record` | 不探测，直接恢复该记录 |
+| `extend_disabled_record_countdown` | 推迟定时恢复的倒计时 |
 
 ### 接入客户端
 

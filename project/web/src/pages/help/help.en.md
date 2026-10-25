@@ -332,6 +332,10 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 | `set_provider_dedupe_v1` | Dedupe the `/v1` suffix when fetching models |
 | `reset_provider_disable` | Clear one automatic disable or a whole dimension |
 | `reset_all_provider_disable` | Clear one disable dimension across all providers |
+| `list_disabled_records` | Pending auto-disable records (keys masked) |
+| `replay_disabled_record` | Replay the captured request upstream, restore only on success |
+| `restore_disabled_record` | Restore the channel without probing upstream |
+| `extend_disabled_record_countdown` | Push a timed-recovery deadline back |
 
 ### Connect a client
 

@@ -145,14 +145,15 @@ func TestListToolsExposesTheDocumentedSurface(t *testing.T) {
 		"get_usage_stats", "get_topology", "list_disabled_channels", "list_agent_configs",
 		"create_provider", "update_provider", "delete_provider", "set_provider_status",
 		"set_provider_workflow", "set_provider_dedupe_v1", "reset_provider_disable",
-		"reset_all_provider_disable",
+		"reset_all_provider_disable", "list_disabled_records", "replay_disabled_record",
+		"restore_disabled_record", "extend_disabled_record_countdown",
 	} {
 		if !got[want] {
 			t.Errorf("missing tool %q", want)
 		}
 	}
-	if len(got) != 16 {
-		t.Errorf("expected 16 tools, got %d: %v", len(got), got)
+	if len(got) != 20 {
+		t.Errorf("expected 20 tools, got %d: %v", len(got), got)
 	}
 }
 

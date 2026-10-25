@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -172,5 +173,81 @@ func TestDeleteProviderToolRemovesTheRow(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("provider still present: %d", count)
+	}
+}
+
+func TestListDisabledRecordsMasksKeys(t *testing.T) {
+	db := newTestDB(t)
+	session := connect(t, db)
+
+	out := callTool(t, session, "list_disabled_records", map[string]any{})
+	if total := out["total"].(float64); total != 1 {
+		t.Fatalf("expected the backfilled key record, got total=%v", total)
+	}
+	record := out["records"].([]any)[0].(map[string]any)
+	if record["provider_name"] != "OpenAI" {
+		t.Fatalf("provider name missing: %+v", record)
+	}
+	if record["dimension"] != "key" || record["value"] != "****1234" {
+		t.Fatalf("key value must be masked: %+v", record)
+	}
+	raw, _ := json.Marshal(out)
+	if strings.Contains(string(raw), "sk-secret-openai-1234") {
+		t.Fatalf("list_disabled_records leaked the upstream key: %s", raw)
+	}
+}
+
+func TestRestoreDisabledRecordToolClearsState(t *testing.T) {
+	db := newTestDB(t)
+	session := connect(t, db)
+
+	out := callTool(t, session, "list_disabled_records", map[string]any{})
+	id := out["records"].([]any)[0].(map[string]any)["id"].(string)
+
+	callTool(t, session, "restore_disabled_record", map[string]any{"id": id})
+
+	var state model.AutoDisableState
+	if err := db.First(&state, "provider_id = ? AND dimension = ?", "p-openai", model.FailoverDimensionKey).Error; err != nil {
+		t.Fatal(err)
+	}
+	if state.Disabled {
+		t.Fatal("disable state still active after restore")
+	}
+	var records int64
+	if err := db.Model(&model.DisabledRecord{}).Count(&records).Error; err != nil {
+		t.Fatal(err)
+	}
+	if records != 0 {
+		t.Fatalf("record not removed: %d", records)
+	}
+}
+
+func TestExtendDisabledRecordCountdownToolShiftsDeadline(t *testing.T) {
+	db := newTestDB(t)
+	session := connect(t, db)
+	record := model.DisabledRecord{
+		ProviderID: "p-openai",
+		Dimension:  model.FailoverDimensionBaseURL,
+		Value:      "https://api.openai.com/v1",
+		DisabledAt: time.Now().Add(-time.Hour),
+	}
+	if err := db.Create(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	out := callTool(t, session, "extend_disabled_record_countdown", map[string]any{
+		"id":      record.ID,
+		"minutes": 90,
+	})
+	if out["extended"] != true {
+		t.Fatalf("unexpected result: %+v", out)
+	}
+	var stored model.DisabledRecord
+	if err := db.First(&stored, "id = ?", record.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	shift := stored.DisabledAt.Sub(record.DisabledAt)
+	if shift < 89*time.Minute || shift > 91*time.Minute {
+		t.Fatalf("countdown shifted by %v, want ~90m", shift)
 	}
 }
