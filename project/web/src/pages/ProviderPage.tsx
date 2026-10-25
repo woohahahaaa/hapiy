@@ -38,6 +38,10 @@ type ProviderFormProps = {
   readonly provider: Provider | null
   // draft pre-fills a create (provider === null) with agent-supplied fields.
   readonly draft: ProviderInput | null
+  // autoClose replays the tail of an agent write: the dialog is open on the
+  // saved record, then a short saving state and close, as if 保存 was clicked.
+  readonly autoClose: boolean
+  readonly onAutoClose: () => void
   readonly onSave: (provider: ProviderInput) => void
   readonly isSaving: boolean
   readonly useKey: boolean
@@ -118,6 +122,9 @@ export function ProviderPage() {
   // separate from `editing` because only `editing` decides create vs update.
   const [draft, setDraft] = useState<ProviderInput | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // True while the dialog shows a write the agent already performed: it closes
+  // itself after a beat instead of waiting for a save click.
+  const [autoCloseDialog, setAutoCloseDialog] = useState(false)
   // Row the agent just touched; flashes briefly so the change is visible even
   // when the operator is looking at the chat panel.
   const [highlightId, setHighlightId] = useState('')
@@ -151,6 +158,7 @@ export function ProviderPage() {
       }
       if (!target) return
       setDraft(null)
+      setAutoCloseDialog(false)
       setEditing(target)
       setIsDialogOpen(true)
     })()
@@ -163,6 +171,7 @@ export function ProviderPage() {
     if (!next) return
     setEditing(null)
     setDraft(next)
+    setAutoCloseDialog(false)
     setIsDialogOpen(true)
   })
 
@@ -188,6 +197,7 @@ export function ProviderPage() {
         if (!target) return
         setEditing(target)
         setDraft(null)
+        setAutoCloseDialog(true)
         setIsDialogOpen(true)
       } catch {
         // The refreshed table still shows the saved row.
@@ -200,6 +210,13 @@ export function ProviderPage() {
     if (name !== '') toast(t('toast.agentDeleted', { name }))
     void loadProviders()
   })
+
+  const closeAgentReplay = useCallback(() => {
+    // Let the dialog play its close animation; the field state is cleared by
+    // onOpenChange once it is actually closed.
+    setIsDialogOpen(false)
+    setAutoCloseDialog(false)
+  }, [])
 
   const flashProvider = useCallback((providerId: string) => {
     setHighlightId(providerId)
@@ -257,6 +274,7 @@ export function ProviderPage() {
       await loadProviders()
       setEditing(null)
       setDraft(null)
+      setAutoCloseDialog(false)
       setIsDialogOpen(false)
       // 新建的供应商默认不在拓扑里，只有接入拓扑后请求才会真的路由到它。
       if (!target) setCreatedProvider(saved)
@@ -361,7 +379,7 @@ export function ProviderPage() {
       render: (_, provider) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? t('common:action.disable') : t('common:action.enable')}</Button>
-          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setAutoCloseDialog(false); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
         </div>
       ),
@@ -391,19 +409,28 @@ export function ProviderPage() {
           onRetry={() => void loadProviders()}
           actions={(
             <>
-              <Button size="sm" onClick={() => { setEditing(null); setDraft(null); setIsDialogOpen(true) }} disabled={isSaving}>
+              <Button size="sm" onClick={() => { setEditing(null); setDraft(null); setAutoCloseDialog(false); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />{t('list.add')}
               </Button>
             </>
           )}
         />
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) {
+            setAutoCloseDialog(false)
+            setEditing(null)
+            setDraft(null)
+          }
+        }}>
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
              <ProviderForm
                key={editing?.id ?? (draft ? `new:${draft.name}` : 'new')}
                provider={editing}
                draft={draft}
+               autoClose={autoCloseDialog}
+               onAutoClose={closeAgentReplay}
                onSave={handleSave}
                isSaving={isSaving}
                useKey={useKey}
@@ -581,8 +608,25 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, draft, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
+function ProviderForm({ provider, draft, autoClose, onAutoClose, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
+  // Replay the agent's save: show the saved record, flash the saving state,
+  // then close. Any interaction cancels it so the operator can take over.
+  const [replaySaving, setReplaySaving] = useState(false)
+  const replayTimers = useRef<number[]>([])
+  const cancelReplay = useCallback(() => {
+    for (const timer of replayTimers.current) window.clearTimeout(timer)
+    replayTimers.current = []
+    setReplaySaving(false)
+  }, [])
+  useEffect(() => {
+    if (!autoClose) return
+    replayTimers.current = [
+      window.setTimeout(() => setReplaySaving(true), 1100),
+      window.setTimeout(onAutoClose, 1700),
+    ]
+    return cancelReplay
+  }, [autoClose, cancelReplay, onAutoClose])
   const [form, setForm] = useState<ProviderInput>(() => provider
     ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) }
     : draft ?? emptyProvider)
@@ -935,10 +979,16 @@ function ProviderForm({ provider, draft, onSave, isSaving, useKey, onUseKeyChang
     <>
       <DialogScrollBody footer={
         <>
-          <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>{isSaving ? t('actions.saving') : t('common:action.save')}</Button>
+          <Button
+            disabled={isSaving || replaySaving || !form.name.trim()}
+            onPointerDown={cancelReplay}
+            onClick={handleSave}
+          >
+            {isSaving || replaySaving ? t('actions.saving') : t('common:action.save')}
+          </Button>
         </>
       }>
-        <FieldGroup>
+        <FieldGroup onPointerDown={cancelReplay} onKeyDown={cancelReplay}>
       {disableStatus?.provider && (
         <div className="rounded-lg border border-border bg-muted p-3">
           <div className="flex items-center gap-1.5 text-xs text-warning">

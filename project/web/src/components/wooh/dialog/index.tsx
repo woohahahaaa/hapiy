@@ -119,7 +119,9 @@ function DialogContent({
   scrollFooter?: boolean
 }) {
   const contained = useDialogHost() !== null
-  const sizeClass = width === 'full' && height === 'full'
+  const fullBleed = width === 'full'
+  const fullScreen = fullBleed && height === 'full'
+  const sizeClass = fullScreen
     ? contained
       ? '!w-full !max-w-none !h-full !max-h-none !inset-0 !translate-x-0 !translate-y-0'
       : '!w-screen !max-w-none !h-screen !max-h-none !inset-0 !translate-x-0 !translate-y-0'
@@ -132,10 +134,13 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-xs/relaxed text-popover-foreground border border-border duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-          contained && "absolute !max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)]",
           sizeClass,
           bare && 'rounded-none border-0 p-0 !gap-0',
           scrollFooter && 'flex max-h-[85vh] flex-col overflow-hidden',
+          contained && 'absolute',
+          contained && fullBleed && !fullScreen && '!w-full',
+          contained && !fullBleed && '!max-w-[calc(100%-2rem)]',
+          contained && !fullScreen && '!max-h-[calc(100%-2rem)]',
           className,
         )}
         style={{ minHeight, ...style }}
