@@ -86,7 +86,7 @@
     "pageDescription": "When enabled, the sidebar shows the \"Agent Takeover\" entry for managing takeover files and rules",
     "toggleDescription": "When enabled, the sidebar shows the \"Agent Takeover\" entry (config files, rules, etc.).\nWhen disabled, the entry is hidden from the sidebar.",
     "mcpTitle": "MCP Server",
-    "mcpDescription": "Expose hapiy's read-only data (providers, models, usage, request logs, topology, managed configs) to MCP-capable AI tools.\nWhile disabled, /mcp answers 404.",
+    "mcpDescription": "Expose hapiy gateway data (providers, models, usage, request logs, topology, managed configs) to MCP-capable AI tools; provider configuration is writable.\nWhile disabled, /mcp answers 404.",
     "mcpEndpoint": "Endpoint",
     "mcpKey": "Access key",
     "mcpKeyEmpty": "Not generated yet; enabling the switch creates one",

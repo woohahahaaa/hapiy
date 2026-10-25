@@ -631,7 +631,7 @@ func listAgentConfigs(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, s
 	}
 }
 
-// registerTools wires every read-only tool into the server.
+// registerTools wires the read tools and the provider write tools into the server.
 func registerTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_providers",

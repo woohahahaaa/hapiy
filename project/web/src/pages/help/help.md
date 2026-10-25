@@ -302,7 +302,7 @@ Authorization: Bearer hk-xxxxxxxx
 
 ## MCP 服务
 
-hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开放给支持 MCP 的 AI 工具，让 Agent 直接查询供应商、模型、用量、请求日志和转发拓扑。工具全部只读，不会修改任何配置。
+hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开放给支持 MCP 的 AI 工具，让 Agent 直接查询供应商、模型、用量、请求日志和转发拓扑，也可以新建、修改、删除供应商并恢复被自动禁用的渠道。上游 Key 只会以末尾 4 位返回；用户名和密码永远不开放。
 
 ### 开启
 
@@ -317,13 +317,21 @@ hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开
 | 工具 | 作用 |
 | --- | --- |
 | `list_providers` | 供应商列表（端点、模型、启用状态、权重），不含上游 Key |
-| `get_provider` | 单个供应商详情，上游 Key 只显示末尾 4 位 |
+| `get_provider` | 单个供应商详情：Base URL、每个模型的端点、Key 尾号与备注 |
 | `list_models` | 可调用模型及其供应商、端点 |
 | `query_logs` | 按模型/供应商/令牌/状态/时间筛选请求日志 |
 | `get_usage_stats` | 请求数、Token、费用、缓存命中率、平均延迟 |
 | `get_topology` | 转发拓扑的节点与连线 |
 | `list_disabled_channels` | 当前被禁用的渠道 |
 | `list_agent_configs` | 被接管的 Agent 配置文件记录（不含内容） |
+| `create_provider` | 新建供应商（名称必填，其余字段可留空） |
+| `update_provider` | 修改供应商，只改传入的字段 |
+| `delete_provider` | 删除供应商（不可恢复） |
+| `set_provider_status` | 启用 / 停用供应商 |
+| `set_provider_workflow` | 启用 / 停用供应商工作流开关 |
+| `set_provider_dedupe_v1` | 拉取模型列表时去掉重复的 `/v1` |
+| `reset_provider_disable` | 恢复自动禁用的渠道（单条或整个维度） |
+| `reset_all_provider_disable` | 按维度恢复全部供应商的自动禁用状态 |
 
 ### 接入客户端
 

@@ -302,7 +302,7 @@ The "Agent Takeover" entry is hidden from the sidebar by default; turn it on und
 
 ## MCP server
 
-hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the topology directly. Every tool is read-only; nothing here changes configuration.
+hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the topology directly, and can also create, update and delete providers or clear automatic disables. Upstream keys are only ever returned as their last 4 characters; usernames and passwords are never exposed.
 
 ### Enable it
 
@@ -317,13 +317,21 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 | Tool | Purpose |
 | --- | --- |
 | `list_providers` | Providers with endpoints, models, status and weight; never upstream keys |
-| `get_provider` | One provider in detail; upstream keys are masked to the last 4 characters |
+| `get_provider` | One provider in detail: base URLs, per-model endpoints, masked keys and notes |
 | `list_models` | Callable models plus their providers and endpoints |
 | `query_logs` | Request logs filtered by model/provider/token/status/time |
 | `get_usage_stats` | Requests, tokens, cost, cache hit rate, average latency |
 | `get_topology` | Nodes and wires of the forwarding topology |
 | `list_disabled_channels` | Channels currently disabled |
 | `list_agent_configs` | Managed agent config file records (contents excluded) |
+| `create_provider` | Create a provider (name required, every other field optional) |
+| `update_provider` | Patch a provider; only the fields passed change |
+| `delete_provider` | Delete a provider (irreversible) |
+| `set_provider_status` | Enable or disable a provider |
+| `set_provider_workflow` | Enable or disable a provider workflow |
+| `set_provider_dedupe_v1` | Dedupe the `/v1` suffix when fetching models |
+| `reset_provider_disable` | Clear one automatic disable or a whole dimension |
+| `reset_all_provider_disable` | Clear one disable dimension across all providers |
 
 ### Connect a client
 

@@ -407,8 +407,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if page := strings.TrimSpace(req.PageContext); page != "" {
 			messages = append(messages, chatproto.Message{
 				Role: "system",
-				Content: "用户当前在控制台页面 " + page + "。需要操作界面（打开弹窗、预填参数）时使用 ui_ 开头的工具；" +
-					"改配置先打开界面让用户确认，不要假设已经保存。",
+				Content: "用户当前在控制台页面 " + page + "。查询用只读工具；改配置直接调用对应的写工具，调用成功后如实汇报，" +
+					"不要假设没有调用过的操作已经保存。删除供应商等不可恢复操作先向用户确认。" +
+					"需要用户亲自填写敏感字段时，用 ui_ 开头的工具打开界面并预填。",
 			})
 		}
 		for _, message := range history {
