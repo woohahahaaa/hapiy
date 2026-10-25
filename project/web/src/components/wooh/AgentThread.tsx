@@ -16,6 +16,13 @@ import type { ChatModelAdapter, ThreadMessage, ThreadMessageLike } from '@assist
 import { AgentAvatar } from '@/components/wooh/AgentAvatar'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
 
@@ -45,42 +52,81 @@ function TypingDots() {
   )
 }
 
-function UserAvatar() {
-  return (
-    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-muted-foreground">
-      <AppIcon name="person" size={14} />
-    </span>
-  )
+// messageText flattens the text parts so the copy action works for both the
+// user's own turns and the assistant's markdown reply.
+function messageText(message: ThreadMessage): string {
+  return message.content
+    .filter((part) => part.type === 'text')
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('')
 }
 
 function MessageRow({
   role,
   createdAt,
+  message,
 }: {
   readonly role: 'user' | 'assistant' | 'system'
   readonly createdAt: Date
+  readonly message: ThreadMessage
 }) {
   const { t } = useTranslation('agentPanel')
   const outgoing = role === 'user'
   const time = createdAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   const label = outgoing ? t('you') : t('agent')
 
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(messageText(message))
+      toast(t('copied'))
+    } catch {
+      toast(t('copyFailed'))
+    }
+  }
+
   return (
-    <MessagePrimitive.Root className="mb-4 flex min-w-0 flex-col gap-1">
-      <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+    <MessagePrimitive.Root className="group mb-4 flex min-w-0 flex-col gap-1">
+      <div
+        className={cn(
+          'flex w-full items-center gap-2 px-1 text-xs text-muted-foreground',
+          outgoing && 'justify-end',
+        )}
+      >
         <span className="truncate font-medium text-foreground/80">{label}</span>
-        <span className="ms-auto shrink-0 tabular-nums">{time}</span>
+        <span className={cn('shrink-0 tabular-nums', !outgoing && 'ms-auto')}>{time}</span>
       </div>
-      <div className={cn('flex min-w-0 items-start gap-2', outgoing && 'flex-row-reverse')}>
-        {outgoing ? <UserAvatar /> : <AgentAvatar size={28} className="mt-0.5 shrink-0" />}
+      <div
+        className={cn(
+          'flex min-w-0 max-w-[80%] flex-col',
+          outgoing ? 'items-end self-end' : 'items-start self-start',
+        )}
+      >
         <div
           className={cn(
-            'min-w-0 max-w-[80%] rounded-2xl px-4 py-2.5',
+            'min-w-0 rounded-2xl px-4 py-2.5',
             outgoing ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
           )}
         >
           <MessagePrimitive.Parts components={{ Text: AssistantText }} />
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              aria-label={t('messageActions')}
+              className="mt-1 shrink-0 text-muted-foreground opacity-100 transition-opacity data-[state=open]:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+            >
+              <AppIcon name="more_horiz" size={14} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-32">
+            <DropdownMenuItem onSelect={() => void copy()}>
+              <AppIcon name="content_copy" size={14} />
+              <span>{t('copy')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </MessagePrimitive.Root>
   )
@@ -205,7 +251,9 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
           <AuiIf condition={(state) => !state.thread.isEmpty}>
             <ThreadPrimitive.Viewport className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
               <ThreadPrimitive.Messages>
-                {({ message }) => <MessageRow role={message.role} createdAt={message.createdAt} />}
+                {({ message }) => (
+                  <MessageRow role={message.role} createdAt={message.createdAt} message={message} />
+                )}
               </ThreadPrimitive.Messages>
             </ThreadPrimitive.Viewport>
             <div className="border-t border-border p-3">
