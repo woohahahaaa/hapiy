@@ -117,7 +117,7 @@ function MessageRow({
               aria-label={t('messageActions')}
               className="mt-1 shrink-0 text-muted-foreground"
             >
-              <AppIcon name="more_horiz" size={14} />
+              <AppIcon name="more_horiz" size={16} />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-32">
