@@ -622,8 +622,8 @@ function ProviderForm({ provider, draft, autoClose, onAutoClose, onSave, isSavin
   useEffect(() => {
     if (!autoClose) return
     replayTimers.current = [
-      window.setTimeout(() => setReplaySaving(true), 1100),
-      window.setTimeout(onAutoClose, 1700),
+      window.setTimeout(() => setReplaySaving(true), 1500),
+      window.setTimeout(onAutoClose, 2400),
     ]
     return cancelReplay
   }, [autoClose, cancelReplay, onAutoClose])
