@@ -554,21 +554,43 @@ func TestSendChatMessageQueuesCreateProviderDraft(t *testing.T) {
 	}
 }
 
-// A provider write made through MCP must also drive the console: the chat
-// response carries a provider_changed action and the same action is published
-// live over the dashboard event stream.
-func TestSendChatMessageMirrorsProviderWritesToTheConsole(t *testing.T) {
-	var requests int
+// A provider write is not executed by the backend for the console agent: the
+// tool call becomes a ui_ action, the console walks the user path and reports
+// back, and only then does the tool return to the model.
+func TestSendChatMessageRunsProviderWritesThroughTheConsole(t *testing.T) {
+	var (
+		requests  int
+		sawUI     bool
+		sawDirect bool
+	)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		w.Header().Set("Content-Type", "application/json")
 		if requests == 1 {
-			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"create_provider","arguments":"{\"name\":\"agent-test\",\"base_urls\":[\"https://example.com/v1\"]}"}}]}}]}`))
+			var body struct {
+				Tools []map[string]any `json:"tools"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			for _, tool := range body.Tools {
+				fn, _ := tool["function"].(map[string]any)
+				switch fn["name"] {
+				case "ui_create_provider":
+					sawUI = true
+				case "create_provider":
+					sawDirect = true
+				}
+			}
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"ui_create_provider","arguments":"{\\"name\\":\\"agent-test\\"}"}}]}}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"供应商 agent-test 已经建好了。"}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"控制台已经完成创建。"}}]}`))
 	}))
 	defer upstream.Close()
+
+	if !strings.Contains(`ui_create_provider`, "ui_") {
+		t.Fatal("unreachable")
+	}
+	_ = sawDirect
 
 	db := newChatTestDB(t)
 	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
@@ -577,54 +599,74 @@ func TestSendChatMessageMirrorsProviderWritesToTheConsole(t *testing.T) {
 		t.Fatal(err)
 	}
 	router := newChatRouter(db, engine, "alice")
+	router.POST("/chat/ui-actions/:id/result", CompleteChatUIAction())
 	threadID := createChatTestThread(t, router)
 
 	events, cancel := dashboardEventsHub.subscribe()
 	defer cancel()
 
-	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
-		`{"content":"帮我建一个叫 agent-test 的供应商","model":"test-model","provider_id":""}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-	}
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
+			`{"content":"帮我建一个叫 agent-test 的供应商","model":"test-model","provider_id":""}`)
+	}()
 
-	var payload struct {
-		Data struct {
-			UIActions []chatUIAction `json:"ui_actions"`
-		} `json:"data"`
+	var event hubEvent
+	select {
+	case event = <-events:
+	case <-time.After(3 * time.Second):
+		t.Fatal("no chat_ui_action event was published")
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+	if event.event != "chat_ui_action" {
+		t.Fatalf("event type = %q", event.event)
+	}
+	var frame struct {
+		ThreadID string `json:"thread_id"`
+		Action   struct {
+			ID      string         `json:"id"`
+			Type    string         `json:"type"`
+			Payload map[string]any `json:"payload"`
+		} `json:"action"`
+	}
+	if err := json.Unmarshal([]byte(event.data), &frame); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Data.UIActions) != 1 {
-		t.Fatalf("expected one UI action, got %+v", payload.Data.UIActions)
+	if frame.ThreadID != threadID || frame.Action.Type != "create_provider" || frame.Action.ID == "" {
+		t.Fatalf("unexpected action frame: %+v", frame)
 	}
-	action := payload.Data.UIActions[0]
-	if action.Type != "provider_changed" || action.Payload["created"] != true {
-		t.Fatalf("unexpected action: %+v", action)
+	if frame.Action.Payload["request_id"] != frame.Action.ID {
+		t.Fatalf("request_id must carry the action id: %+v", frame.Action.Payload)
 	}
-	if action.ID == "" {
-		t.Fatalf("action must carry a dedupe id")
+
+	// The backend must not have written anything yet: the console owns the
+	// operation until it reports back.
+	var count int64
+	if err := db.Model(&model.Provider{}).Where("name = ?", "agent-test").Count(&count).Error; err != nil {
+		t.Fatal(err)
 	}
-	if action.Payload["provider_id"] == "" || action.Payload["provider_id"] == nil {
-		t.Fatalf("action must point at the created provider: %+v", action.Payload)
+	if count != 0 {
+		t.Fatalf("provider was created before the console confirmed")
+	}
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/ui-actions/"+frame.Action.ID+"/result",
+		`{"ok":true,"message":"界面已保存","data":{"provider_id":"p-new"}}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("result status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	select {
-	case event := <-events:
-		if event.event != "chat_ui_action" {
-			t.Fatalf("event type = %q", event.event)
-		}
-		if !strings.Contains(event.data, "agent-test") && !strings.Contains(event.data, `"created":true`) {
-			t.Fatalf("event payload does not describe the write: %s", event.data)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("no live chat_ui_action event was published")
+	case rec = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("chat request did not finish after the console result")
 	}
-
-	var stored model.Provider
-	if err := db.First(&stored, "name = ?", "agent-test").Error; err != nil {
-		t.Fatalf("provider was not created: %v", err)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "控制台已经完成创建") {
+		t.Fatalf("unexpected reply: %s", rec.Body.String())
+	}
+	if !sawUI || sawDirect {
+		t.Fatalf("chat tools must expose ui_create_provider only (ui=%v direct=%v)", sawUI, sawDirect)
 	}
 }
 

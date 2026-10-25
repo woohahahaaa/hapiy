@@ -442,6 +442,7 @@ func runServe() {
 			dashboardAuthed.DELETE("/chat/threads/:id", handler.DeleteChatThread(db))
 			dashboardAuthed.GET("/chat/threads/:id/messages", handler.ListChatMessages(db))
 			dashboardAuthed.POST("/chat/threads/:id/messages", handler.SendChatMessage(db, engine))
+			dashboardAuthed.POST("/chat/ui-actions/:id/result", handler.CompleteChatUIAction())
 		}
 
 		// Relay endpoints (token auth). Every POST under /v1 is accepted by a

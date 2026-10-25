@@ -48,6 +48,24 @@ const (
 
 const chatWrapUpPrompt = "本轮的工具调用步数或输出预算已用尽。不要再调用任何工具，直接用文字回答：已经完成了哪些操作、还有哪些没做完、建议用户下一步怎么做。"
 
+// chatUIWriteTools are exposed to the console agent as ui_* actions instead of
+// direct MCP writes: the console performs the normal user path (navigate, open
+// the dialog, fill, save/confirm) and reports the outcome back. External MCP
+// clients keep the direct tools; the chat deliberately does not see them.
+var chatUIWriteTools = map[string]bool{
+	"create_provider":                  true,
+	"update_provider":                  true,
+	"delete_provider":                  true,
+	"set_provider_status":              true,
+	"set_provider_workflow":            true,
+	"set_provider_dedupe_v1":           true,
+	"reset_provider_disable":           true,
+	"reset_all_provider_disable":       true,
+	"restore_disabled_record":          true,
+	"replay_disabled_record":           true,
+	"extend_disabled_record_countdown": true,
+}
+
 // chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when
 // the model stops calling tools, the way a coding agent works. Tests lower it
 // to force the valve without burning 200 upstream calls.
@@ -370,75 +388,6 @@ func pushChatUIAction(user, threadID string, action chatUIAction) {
 	})
 }
 
-// chatUIActionForTool maps a successful provider mutation to the console
-// action that mirrors it. The payload tells the provider page whether to open
-// the editor (create/edit, so the operator sees the saved values) or just
-// refresh and flash the row (toggles, resets).
-func chatUIActionForTool(name string, value any) (string, map[string]any, bool) {
-	result, ok := value.(map[string]any)
-	if !ok {
-		return "", nil, false
-	}
-	providerID := toolResultString(result, "provider", "id")
-	switch name {
-	case "create_provider":
-		if providerID == "" {
-			return "", nil, false
-		}
-		return "provider_changed", map[string]any{
-			"provider_id": providerID,
-			"name":        toolResultString(result, "provider", "name"),
-			"created":     true,
-		}, true
-	case "update_provider":
-		if providerID == "" {
-			return "", nil, false
-		}
-		return "provider_changed", map[string]any{
-			"provider_id": providerID,
-			"name":        toolResultString(result, "provider", "name"),
-			"edited":      true,
-		}, true
-	case "set_provider_status", "set_provider_workflow", "set_provider_dedupe_v1":
-		if providerID == "" {
-			return "", nil, false
-		}
-		return "provider_changed", map[string]any{"provider_id": providerID}, true
-	case "reset_provider_disable":
-		if providerID = toolResultString(result, "provider"); providerID == "" {
-			return "", nil, false
-		}
-		return "provider_changed", map[string]any{"provider_id": providerID}, true
-	case "replay_disabled_record", "extend_disabled_record_countdown":
-		if providerID = toolResultString(result, "record", "provider_id"); providerID == "" {
-			return "", nil, false
-		}
-		return "provider_changed", map[string]any{"provider_id": providerID}, true
-	case "restore_disabled_record", "reset_all_provider_disable":
-		return "provider_changed", map[string]any{}, true
-	case "delete_provider":
-		return "provider_deleted", map[string]any{
-			"provider_id": toolResultString(result, "id"),
-			"name":        toolResultString(result, "name"),
-		}, true
-	}
-	return "", nil, false
-}
-
-// toolResultString walks nested maps in a tool's structured output.
-func toolResultString(value map[string]any, path ...string) string {
-	var current any = value
-	for _, key := range path {
-		record, ok := current.(map[string]any)
-		if !ok {
-			return ""
-		}
-		current = record[key]
-	}
-	text, _ := current.(string)
-	return strings.TrimSpace(text)
-}
-
 // SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. It
 // resolves the model's endpoint (chat completions / Responses / Anthropic),
 // runs the conversation through the matching protocol adapter, executes MCP
@@ -490,9 +439,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if page := strings.TrimSpace(req.PageContext); page != "" {
 			messages = append(messages, chatproto.Message{
 				Role: "system",
-				Content: "用户当前在控制台页面 " + page + "。查询用只读工具；改配置直接调用对应的写工具，调用成功后如实汇报，" +
-					"不要假设没有调用过的操作已经保存。删除供应商等不可恢复操作先向用户确认。" +
-					"需要用户亲自填写敏感字段时，用 ui_ 开头的工具打开界面并预填。",
+				Content: "用户当前在控制台页面 " + page + "。查询用只读工具；所有写操作（新建/修改/删除/启停/恢复）调用 ui_ 开头的执行工具，" +
+					"由控制台按用户操作路径完成并返回结果，不要走直连写工具。汇报时以界面返回的结果为准，不要假设没有返回结果的操作已经完成。" +
+					"需要用户亲自填写敏感字段时，用 ui_open_provider_dialog / ui_create_provider_dialog 打开界面并预填。",
 			})
 		}
 		for _, message := range history {
@@ -529,6 +478,16 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		for _, tool := range listed {
 			schema, marshalErr := json.Marshal(tool.InputSchema)
 			if marshalErr != nil {
+				continue
+			}
+			if chatUIWriteTools[tool.Name] {
+				// Same schema and arguments, different execution path: the
+				// console runs it as a user would.
+				tools = append(tools, chatproto.Tool{
+					Name:        "ui_" + tool.Name,
+					Description: tool.Description + "（由控制台界面按用户操作路径执行，完成后返回结果）",
+					Schema:      schema,
+				})
 				continue
 			}
 			tools = append(tools, chatproto.Tool{Name: tool.Name, Description: tool.Description, Schema: schema})
@@ -596,21 +555,39 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				}
 				var payload string
 				if strings.HasPrefix(call.Name, "ui_") {
-					action := nextAction(strings.TrimPrefix(call.Name, "ui_"), arguments)
+					actionType := strings.TrimPrefix(call.Name, "ui_")
+					action := nextAction(actionType, arguments)
+					if chatUIWriteTools[actionType] {
+						arguments["request_id"] = action.ID
+					}
 					uiActions = append(uiActions, action)
 					pushChatUIAction(user, thread.ID, action)
-					payload = `{"ok":true,"note":"action queued for the console UI"}`
+					if chatUIWriteTools[actionType] {
+						// Block until the console has walked the user path and
+						// reported the outcome, so the model cannot claim a
+						// result the UI has not produced.
+						result, waitErr := awaitChatUIAction(ctx, user, action.ID)
+						switch {
+						case waitErr != nil:
+							payload = `{"error":` + strconv.Quote(waitErr.Error()) + `}`
+						case !result.OK:
+							payload = `{"error":` + strconv.Quote(firstNonEmptyString(result.Message, "界面执行失败")) + `}`
+						default:
+							payload = hapiymcp.MarshalToolResult(result)
+						}
+					} else {
+						payload = `{"ok":true,"note":"action queued for the console UI"}`
+					}
+				} else if chatUIWriteTools[call.Name] {
+					// Safety net: the direct write tools are not advertised to
+					// the chat, and must not be callable even if hallucinated.
+					payload = `{"error":"该操作必须通过控制台界面执行，请调用对应的 ui_ 工具"}`
 				} else {
 					value, callErr := runner.Call(ctx, call.Name, arguments)
 					if callErr != nil {
 						payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
 					} else {
 						payload = hapiymcp.MarshalToolResult(value)
-						if actionType, actionPayload, ok := chatUIActionForTool(call.Name, value); ok {
-							action := nextAction(actionType, actionPayload)
-							uiActions = append(uiActions, action)
-							pushChatUIAction(user, thread.ID, action)
-						}
 					}
 				}
 				payload = truncateChatToolResult(payload, chatToolResultMaxBytes)
