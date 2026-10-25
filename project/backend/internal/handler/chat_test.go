@@ -18,6 +18,19 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// nonSystemMessages drops the identity prompt so tests can assert the
+// conversation itself.
+func nonSystemMessages(messages []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(messages))
+	for _, message := range messages {
+		if message["role"] == "system" {
+			continue
+		}
+		out = append(out, message)
+	}
+	return out
+}
+
 func newChatTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -254,7 +267,13 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	if seenSession != created.Data.ID {
 		t.Fatalf("session header = %q, want thread id %q", seenSession, created.Data.ID)
 	}
-	if len(seenMessages) != 1 || seenMessages[0]["content"] != "你好" {
+	if len(seenMessages) < 1 || seenMessages[0]["role"] != "system" {
+		t.Fatalf("identity prompt missing: %+v", seenMessages)
+	}
+	if identity, _ := seenMessages[0]["content"].(string); !strings.Contains(identity, "hapiy") {
+		t.Fatalf("unexpected identity prompt: %q", identity)
+	}
+	if turns := nonSystemMessages(seenMessages); len(turns) != 1 || turns[0]["content"] != "你好" {
 		t.Fatalf("unexpected messages sent upstream: %+v", seenMessages)
 	}
 
@@ -284,10 +303,11 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("second send status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if len(seenMessages) != 3 {
+	turns := nonSystemMessages(seenMessages)
+	if len(turns) != 3 {
 		t.Fatalf("history not sent: %+v", seenMessages)
 	}
-	if seenMessages[0]["role"] != "user" || seenMessages[1]["role"] != "assistant" || seenMessages[2]["content"] != "继续" {
+	if turns[0]["role"] != "user" || turns[1]["role"] != "assistant" || turns[2]["content"] != "继续" {
 		t.Fatalf("unexpected history: %+v", seenMessages)
 	}
 
