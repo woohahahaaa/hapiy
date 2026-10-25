@@ -86,6 +86,15 @@ func chatUIToolSchema(name string, schema json.RawMessage) json.RawMessage {
 	return trimmed
 }
 
+// chatHiddenTools are write tools the console has no user-path equivalent for
+// yet. The chat must not see the direct version either, otherwise the model
+// would take exactly the shortcut the console follow-along forbids.
+var chatHiddenTools = map[string]bool{
+	"restore_disabled_record":          true,
+	"replay_disabled_record":           true,
+	"extend_disabled_record_countdown": true,
+}
+
 // chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when
 // the model stops calling tools, the way a coding agent works. Tests lower it
 // to force the valve without burning 200 upstream calls.
@@ -500,6 +509,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			if marshalErr != nil {
 				continue
 			}
+			if chatHiddenTools[tool.Name] {
+				continue
+			}
 			if chatUIWriteTools[tool.Name] {
 				// Same schema and arguments, different execution path: the
 				// console runs it as a user would.
@@ -577,16 +589,20 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				if strings.HasPrefix(call.Name, "ui_") {
 					actionType := strings.TrimPrefix(call.Name, "ui_")
 					action := nextAction(actionType, arguments)
+					var waiter chan chatUIActionResult
 					if chatUIWriteTools[actionType] {
 						arguments["request_id"] = action.ID
+						// Register before publishing: the console may answer
+						// as soon as it receives the event.
+						waiter = registerChatUIAction(user, action.ID)
 					}
 					uiActions = append(uiActions, action)
 					pushChatUIAction(user, thread.ID, action)
-					if chatUIWriteTools[actionType] {
+					if waiter != nil {
 						// Block until the console has walked the user path and
 						// reported the outcome, so the model cannot claim a
 						// result the UI has not produced.
-						result, waitErr := awaitChatUIAction(ctx, user, action.ID)
+						result, waitErr := awaitChatUIAction(ctx, action.ID, waiter)
 						switch {
 						case waitErr != nil:
 							payload = `{"error":` + strconv.Quote(waitErr.Error()) + `}`
@@ -720,11 +736,23 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			writer.Write(&logEntry)
 		}
 
+		// Write actions are executed while the turn runs (the console reports
+		// back before the tool returns), so replaying them from the final
+		// response would execute them a second time. Only dialog-only actions
+		// travel with the response as a fallback for a dropped event stream.
+		responseActions := make([]chatUIAction, 0, len(uiActions))
+		for _, action := range uiActions {
+			if chatUIWriteTools[action.Type] {
+				continue
+			}
+			responseActions = append(responseActions, action)
+		}
+
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{
 			"thread":            thread,
 			"user_message":      userMessage,
 			"assistant_message": assistantMessage,
-			"ui_actions":        uiActions,
+			"ui_actions":        responseActions,
 		}})
 	}
 }

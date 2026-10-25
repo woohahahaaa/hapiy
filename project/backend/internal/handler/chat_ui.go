@@ -33,16 +33,22 @@ type chatUIActionWaiter struct {
 // reports the outcome (or the timeout fires).
 var chatUIActionWaiters sync.Map
 
+// registerChatUIAction must run before the action is published, otherwise a
+// very fast console could report back before the waiter exists.
+func registerChatUIAction(user, id string) chan chatUIActionResult {
+	ch := make(chan chatUIActionResult, 1)
+	chatUIActionWaiters.Store(id, &chatUIActionWaiter{user: user, ch: ch})
+	return ch
+}
+
 // awaitChatUIAction blocks until the console reports the action result.
-func awaitChatUIAction(ctx context.Context, user, id string) (chatUIActionResult, error) {
-	waiter := &chatUIActionWaiter{user: user, ch: make(chan chatUIActionResult, 1)}
-	chatUIActionWaiters.Store(id, waiter)
+func awaitChatUIAction(ctx context.Context, id string, ch chan chatUIActionResult) (chatUIActionResult, error) {
 	defer chatUIActionWaiters.Delete(id)
 
 	timer := time.NewTimer(chatUIResultTimeout)
 	defer timer.Stop()
 	select {
-	case result := <-waiter.ch:
+	case result := <-ch:
 		return result, nil
 	case <-timer.C:
 		return chatUIActionResult{}, errors.New("控制台没有在 " + chatUIResultTimeout.String() + " 内确认操作结果")

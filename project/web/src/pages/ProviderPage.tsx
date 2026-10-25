@@ -280,7 +280,7 @@ export function ProviderPage() {
       setDeleting(target)
       // Read the confirmation before confirming it, then run the same handler
       // the button uses.
-      window.setTimeout(() => { void runDeleteRef.current() }, 900)
+      window.setTimeout(() => { void runDeleteRef.current() }, 1200)
     })()
   })
 
