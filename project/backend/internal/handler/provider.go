@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	providerops "github.com/hapiy/hapiy/internal/provider"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
@@ -98,24 +100,14 @@ func CreateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-
-		var count int64
-		if err := db.Model(&model.Provider{}).Where("name = ?", provider.Name).Count(&count).Error; err != nil {
+		if err := providerops.Create(db, engine, &provider); err != nil {
+			if errors.Is(err, providerops.ErrNameTaken) {
+				respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if count > 0 {
-			respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
-			return
-		}
-
-		if err := db.Create(&provider).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		engine.LoadProviders()
-
 		c.JSON(http.StatusCreated, gin.H{"data": provider})
 	}
 }
@@ -134,22 +126,14 @@ func UpdateProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			return
 		}
 
-		var count int64
-		if err := db.Model(&model.Provider{}).Where("name = ?", provider.Name).Where("id <> ?", id).Count(&count).Error; err != nil {
+		if err := providerops.Update(db, engine, &provider); err != nil {
+			if errors.Is(err, providerops.ErrNameTaken) {
+				respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if count > 0 {
-			respondError(c, http.StatusConflict, "PROVIDER_NAME_EXISTS", "供应商名称已存在")
-			return
-		}
-
-		if err := db.Save(&provider).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		engine.InvalidatePlan(provider.ID)
 
 		if err := fillAutoDisabled(db, []model.Provider{provider}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -173,12 +157,11 @@ func SetProviderDedupeV1Suffix(db *gorm.DB) gin.HandlerFunc {
 			respondError(c, http.StatusBadRequest, "REQUEST_BODY_INVALID", "请求体格式错误")
 			return
 		}
-		var provider model.Provider
-		if err := db.First(&provider, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
-			return
-		}
-		if err := db.Model(&provider).Update("dedupe_v1_suffix", body.Enabled).Error; err != nil {
+		if err := providerops.SetDedupeV1(db, id, body.Enabled); err != nil {
+			if errors.Is(err, providerops.ErrNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -189,34 +172,25 @@ func SetProviderDedupeV1Suffix(db *gorm.DB) gin.HandlerFunc {
 func DeleteProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
-		if err := db.Delete(&model.Provider{}, "id = ?", id).Error; err != nil {
+		if err := providerops.Delete(db, engine, id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-
-		engine.LoadProviders()
-
 		c.JSON(http.StatusOK, gin.H{"message": "provider deleted"})
 	}
 }
 
 func ToggleProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.Param("id")
-		var provider model.Provider
-		if err := db.First(&provider, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
-			return
-		}
-
-		provider.Status = !provider.Status
-		if err := db.Save(&provider).Error; err != nil {
+		provider, err := providerops.ToggleStatus(db, engine, c.Param("id"))
+		if err != nil {
+			if errors.Is(err, providerops.ErrNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-
-		engine.LoadProviders()
-
 		c.JSON(http.StatusOK, gin.H{"data": provider})
 	}
 }
@@ -226,36 +200,18 @@ func ToggleProvider(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 // Only one workflow per provider name may be enabled at a time.
 func ToggleWorkflow(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.Param("id")
-		var provider model.Provider
-		if err := db.First(&provider, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
-			return
-		}
-
-		next := !provider.WorkflowEnabled
-		if next {
-			var count int64
-			if err := db.Model(&model.Provider{}).
-				Where("name = ? AND id <> ? AND workflow_enabled = ?", provider.Name, provider.ID, true).
-				Count(&count).Error; err != nil {
+		provider, err := providerops.ToggleWorkflow(db, engine, c.Param("id"))
+		if err != nil {
+			switch {
+			case errors.Is(err, providerops.ErrNotFound):
+				c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			case errors.Is(err, providerops.ErrWorkflowTaken):
+				respondError(c, http.StatusConflict, "PROVIDER_WORKFLOW_ALREADY_ENABLED", err.Error())
+			default:
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
 			}
-			if count > 0 {
-				respondError(c, http.StatusConflict, "PROVIDER_WORKFLOW_ALREADY_ENABLED", "当前已有一个同名供应商的工作流在启用，请先将另一个关闭")
-				return
-			}
-		}
-
-		provider.WorkflowEnabled = next
-		if err := db.Save(&provider).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-
-		engine.LoadProviders()
-
 		c.JSON(http.StatusOK, gin.H{"data": provider})
 	}
 }
