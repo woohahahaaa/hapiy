@@ -337,6 +337,10 @@ hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开
 | `restore_disabled_record` | 不探测，直接恢复该记录 |
 | `extend_disabled_record_countdown` | 推迟定时恢复的倒计时 |
 
+### 控制台跟随
+
+内置聊天 Agent 修改供应商时，右侧控制台会实时跟着跳：新建 / 修改会打开编辑弹窗展示已保存的值，启停 / 恢复会刷新并高亮对应行，删除会刷新列表。动作通过 `/v1/dashboard/events` 实时下发，最终回复里也会带同一份动作，连接中断也不会漏掉结果。
+
 ### 接入客户端
 
 opencode：
