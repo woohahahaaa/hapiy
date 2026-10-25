@@ -490,6 +490,69 @@ func TestSendChatMessageQueuesUIActions(t *testing.T) {
 	}
 }
 
+// The agent cannot create a provider on its own (no write tool by design), so
+// it must be able to open the create dialog with the name already filled in.
+func TestSendChatMessageQueuesCreateProviderDraft(t *testing.T) {
+	var requests int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			var body struct {
+				Tools []map[string]any `json:"tools"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			found := false
+			for _, tool := range body.Tools {
+				fn, _ := tool["function"].(map[string]any)
+				if fn != nil && fn["name"] == "ui_create_provider_dialog" {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("ui_create_provider_dialog missing from tools")
+			}
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"ui_1","type":"function","function":{"name":"ui_create_provider_dialog","arguments":"{\"name\":\"test\"}"}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"已经打开新建供应商弹窗，名称填好了 test，确认后点保存。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+	threadID := createChatTestThread(t, router)
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
+		`{"content":"帮我建一个叫 test 的供应商，其他留空","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Data struct {
+			UIActions []struct {
+				Type    string         `json:"type"`
+				Payload map[string]any `json:"payload"`
+			} `json:"ui_actions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data.UIActions) != 1 {
+		t.Fatalf("expected one UI action, got %+v", payload.Data.UIActions)
+	}
+	action := payload.Data.UIActions[0]
+	if action.Type != "create_provider_dialog" || action.Payload["name"] != "test" {
+		t.Fatalf("unexpected action: %+v", action)
+	}
+}
+
 func TestSendChatMessageDetectsBareChatPath(t *testing.T) {
 	var seenPath string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

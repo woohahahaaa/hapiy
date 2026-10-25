@@ -115,7 +115,7 @@ function MessageRow({
               size="icon-xs"
               variant="ghost"
               aria-label={t('messageActions')}
-              className="mt-1 shrink-0 text-muted-foreground opacity-100 transition-opacity data-[state=open]:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              className="mt-1 shrink-0 text-muted-foreground"
             >
               <AppIcon name="more_horiz" size={14} />
             </Button>

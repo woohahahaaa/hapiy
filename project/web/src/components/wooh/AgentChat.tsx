@@ -14,6 +14,9 @@ import { dispatchUIAction } from '@/lib/ui-actions'
 import { useAgentDock } from '@/components/wooh/agent-dock-context'
 
 const AUTO_PROVIDER = 'auto'
+// Actions that need the provider page mounted: one targets an existing
+// provider, the other opens the create dialog with the fields pre-filled.
+const PROVIDER_DIALOG_ACTIONS = new Set(['open_provider_dialog', 'create_provider_dialog'])
 // sessionStorage survives a reload but dies with the tab, which is exactly the
 // lifetime of "the conversation this tab is in".
 const ACTIVE_THREAD_KEY = 'agent_active_thread'
@@ -170,7 +173,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
     // Apply the console actions the agent asked for. Navigating first lets a
     // page that is not mounted yet pick the action up from the queue.
     for (const action of result.uiActions) {
-      if (action.type === 'open_provider_dialog') {
+      if (PROVIDER_DIALOG_ACTIONS.has(action.type)) {
         if (location.pathname !== '/provider') navigate('/provider')
         dispatchUIAction({ type: action.type, payload: action.payload })
       }

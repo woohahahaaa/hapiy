@@ -454,6 +454,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Description: "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
 			Schema:      json.RawMessage(`{"type":"object","properties":{"provider_id":{"type":"string","description":"供应商 id，已知时优先传"},"provider_name":{"type":"string","description":"供应商名称，id 未知时用名称匹配"}}}`),
 		})
+		tools = append(tools, chatproto.Tool{
+			Name:        "ui_create_provider_dialog",
+			Description: "在控制台打开“新建供应商”弹窗并预填给定字段，由用户确认后保存。供应商还不存在、需要新建时用它；不要声称已经保存。",
+			Schema:      json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"新供应商名称，必填；其余字段留空由用户填写"}},"required":["name"]}`),
+		})
 
 		uiActions := make([]chatUIAction, 0)
 		reply := ""

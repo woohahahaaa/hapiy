@@ -36,6 +36,8 @@ import {
 
 type ProviderFormProps = {
   readonly provider: Provider | null
+  // draft pre-fills a create (provider === null) with agent-supplied fields.
+  readonly draft: ProviderInput | null
   readonly onSave: (provider: ProviderInput) => void
   readonly isSaving: boolean
   readonly useKey: boolean
@@ -51,6 +53,15 @@ type ProviderFormProps = {
 
 const emptyProvider: ProviderInput = {
   name: '', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false, dedupeV1Suffix: true,
+}
+
+// providerDraftFromUIAction turns the agent's create-provider payload into the
+// form's starting value. Only the name comes from the agent: keys and upstream
+// addresses stay for the operator to type.
+export function providerDraftFromUIAction(payload: Readonly<Record<string, unknown>>): ProviderInput | null {
+  const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+  if (name === '') return null
+  return { ...emptyProvider, name }
 }
 
 // emptyProviderModel builds the serializable form of a model row with all
@@ -103,6 +114,9 @@ export function ProviderPage() {
   const [offset, setOffset] = usePersistedState('providers.offset', 0)
   const [limit, setLimit] = usePersistedState('providers.limit', 50)
   const [editing, setEditing] = useState<Provider | null>(null)
+  // Draft is the pre-filled form for a provider that does not exist yet. It is
+  // separate from `editing` because only `editing` decides create vs update.
+  const [draft, setDraft] = useState<ProviderInput | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   // 新建成功后询问是否接入转发拓扑；非空即弹窗。
   const [createdProvider, setCreatedProvider] = useState<Provider | null>(null)
@@ -132,9 +146,20 @@ export function ProviderPage() {
         }
       }
       if (!target) return
+      setDraft(null)
       setEditing(target)
       setIsDialogOpen(true)
     })()
+  })
+
+  // Console-chat agent: open the create dialog with the name pre-filled. Still
+  // the operator who saves — the agent has no write path of its own.
+  useUIAction('create_provider_dialog', (payload) => {
+    const next = providerDraftFromUIAction(payload)
+    if (!next) return
+    setEditing(null)
+    setDraft(next)
+    setIsDialogOpen(true)
   })
 
   const loadProviders = useCallback(async () => {
@@ -182,6 +207,7 @@ export function ProviderPage() {
         : await dashboardApi.createProvider(provider)
       await loadProviders()
       setEditing(null)
+      setDraft(null)
       setIsDialogOpen(false)
       // 新建的供应商默认不在拓扑里，只有接入拓扑后请求才会真的路由到它。
       if (!target) setCreatedProvider(saved)
@@ -286,7 +312,7 @@ export function ProviderPage() {
       render: (_, provider) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? t('common:action.disable') : t('common:action.enable')}</Button>
-          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
         </div>
       ),
@@ -315,7 +341,7 @@ export function ProviderPage() {
           onRetry={() => void loadProviders()}
           actions={(
             <>
-              <Button size="sm" onClick={() => { setEditing(null); setIsDialogOpen(true) }} disabled={isSaving}>
+              <Button size="sm" onClick={() => { setEditing(null); setDraft(null); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />{t('list.add')}
               </Button>
             </>
@@ -325,8 +351,9 @@ export function ProviderPage() {
           <DialogContent width="md" scrollFooter>
             <DialogHeader><DialogTitle>{editing ? t('dialog.editProvider') : t('list.add')}</DialogTitle></DialogHeader>
              <ProviderForm
-               key={editing?.id ?? 'new'}
+               key={editing?.id ?? (draft ? `new:${draft.name}` : 'new')}
                provider={editing}
+               draft={draft}
                onSave={handleSave}
                isSaving={isSaving}
                useKey={useKey}
@@ -504,9 +531,11 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
+function ProviderForm({ provider, draft, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
-  const [form, setForm] = useState<ProviderInput>(() => provider ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) } : emptyProvider)
+  const [form, setForm] = useState<ProviderInput>(() => provider
+    ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) }
+    : draft ?? emptyProvider)
   // Per-key remarks as a parallel array aligned with form.keys (array instead
   // of a key→note map so editing a key text keeps its note). Converted back to
   // the stored key→note map on save.
