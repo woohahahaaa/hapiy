@@ -339,7 +339,7 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 
 ### Console follow-along
 
-When the built-in chat agent changes providers, the console follows live: create/update opens the editor on the saved values, enable/disable and recovery flash the affected row, and delete refreshes the list. Actions stream over `/v1/dashboard/events`; the final reply carries the same actions, so a dropped stream still leaves the page correct.
+The built-in chat agent writes through the same path a person would: create/update opens the real editor, fills it in and clicks save; delete opens the confirmation dialog and confirms it; every step is at least 0.3s apart. The console reports the outcome back to the agent. External MCP clients still use the direct tools.
 
 ### Connect a client
 

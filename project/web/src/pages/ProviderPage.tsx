@@ -1153,7 +1153,9 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
   autoSaveRef.current = handleSave
   useEffect(() => {
     if (!autoSave) return
-    const timer = window.setTimeout(() => { autoSaveRef.current() }, AGENT_STEP_GAP_MS)
+    // Long enough to read the filled form before the save lands; the minimum
+    // gap between two simulated steps is AGENT_STEP_GAP_MS (0.3s).
+    const timer = window.setTimeout(() => { autoSaveRef.current() }, AGENT_STEP_GAP_MS * 3)
     return () => window.clearTimeout(timer)
   }, [autoSave])
 

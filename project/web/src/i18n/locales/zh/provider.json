@@ -121,10 +121,7 @@
     "bulkFilled": "已为{{count}}个模型匹配参考供应商并同步价格（当前供应商优先）",
     "bulkVendorless": "{{count}}个模型未在models.dev找到可用的参考供应商，未自动设置",
     "noAutoModels": "没有可自动设置的模型",
-    "synced": "已同步到{{count}}个其他供应商的同名模型",
-    "agentCreated": "Agent 已创建供应商「{{name}}」，弹窗里是已保存的值",
-    "agentUpdated": "Agent 已修改供应商「{{name}}」，弹窗里是已保存的值",
-    "agentDeleted": "Agent 已删除供应商「{{name}}」"
+    "synced": "已同步到{{count}}个其他供应商的同名模型"
   },
   "rateRules": {
     "hint": "规则从上到下按优先级匹配，命中第一条后停止",

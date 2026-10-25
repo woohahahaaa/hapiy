@@ -125,10 +125,7 @@
     "bulkVendorless_other": "Skipped {{count}} models: no usable reference provider found on models.dev",
     "noAutoModels": "No models available for automatic setup",
     "synced_one": "Synced to the model with the same name in {{count}} other provider",
-    "synced_other": "Synced to models with the same name in {{count}} other providers",
-    "agentCreated": "The agent created provider \"{{name}}\"; the dialog shows the saved values",
-    "agentUpdated": "The agent updated provider \"{{name}}\"; the dialog shows the saved values",
-    "agentDeleted": "The agent deleted provider \"{{name}}\""
+    "synced_other": "Synced to models with the same name in {{count}} other providers"
   },
   "rateRules": {
     "hint": "Rules are matched from top to bottom by priority; matching stops at the first hit",
