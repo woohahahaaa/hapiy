@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { i18n } from '@/i18n/i18n'
-import { providerDraftFromUIAction, ProviderValueList } from './ProviderPage'
+import { providerDraftFromAgentCreate, providerDraftFromUIAction, ProviderValueList } from './ProviderPage'
 
 // 被自动禁用的条目：只在该条下面追加一行「当前 X 已禁用」备注 + 「直接恢复」文字按钮，
 // 未禁用的条目不受影响（两个 key 禁用就是两行备注）。
@@ -80,5 +80,30 @@ describe('providerDraftFromUIAction 新建供应商预填', () => {
     expect(providerDraftFromUIAction({})).toBeNull()
     expect(providerDraftFromUIAction({ name: '   ' })).toBeNull()
     expect(providerDraftFromUIAction({ name: 42 })).toBeNull()
+  })
+})
+
+describe('providerDraftFromAgentCreate 控制台执行载荷', () => {
+  it('把 Agent 的字段映射到表单，其他项保持默认', () => {
+    const draft = providerDraftFromAgentCreate({
+      name: 'test',
+      base_urls: ['https://api.example.com/v1'],
+      keys: ['sk-1'],
+      models: ['m1'],
+      endpoints: ['/v1/chat/completions'],
+      dedupe_v1_suffix: false,
+    })
+    expect(draft?.name).toBe('test')
+    expect(draft?.baseUrls).toEqual(['https://api.example.com/v1'])
+    expect(draft?.keys).toEqual(['sk-1'])
+    expect(draft?.models.map((model) => model.model)).toEqual(['m1'])
+    expect(draft?.endpoints).toEqual([{ pathSuffix: '/v1/chat/completions' }])
+    expect(draft?.dedupeV1Suffix).toBe(false)
+    expect(draft?.status).toBe(true)
+  })
+
+  it('没有名称就拒绝', () => {
+    expect(providerDraftFromAgentCreate({})).toBeNull()
+    expect(providerDraftFromAgentCreate({ name: '  ' })).toBeNull()
   })
 })

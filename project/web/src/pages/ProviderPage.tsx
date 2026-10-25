@@ -97,7 +97,7 @@ function agentStringArray(value: unknown): readonly string[] {
 // providerDraftFromAgentCreate maps the chat's create payload to the form. The
 // console then saves it through the normal dialog, so the agent never writes
 // directly on this path.
-function providerDraftFromAgentCreate(payload: Readonly<Record<string, unknown>>): ProviderInput | null {
+export function providerDraftFromAgentCreate(payload: Readonly<Record<string, unknown>>): ProviderInput | null {
   const name = typeof payload.name === 'string' ? payload.name.trim() : ''
   if (name === '') return null
   return {

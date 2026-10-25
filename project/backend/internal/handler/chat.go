@@ -468,9 +468,10 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		if page := strings.TrimSpace(req.PageContext); page != "" {
 			messages = append(messages, chatproto.Message{
 				Role: "system",
-				Content: "用户当前在控制台页面 " + page + "。查询用只读工具；所有写操作（新建/修改/删除/启停/恢复）调用 ui_ 开头的执行工具，" +
-					"由控制台按用户操作路径完成并返回结果，不要走直连写工具。汇报时以界面返回的结果为准，不要假设没有返回结果的操作已经完成。" +
-					"需要用户亲自填写敏感字段时，用 ui_open_provider_dialog / ui_create_provider_dialog 打开界面并预填。",
+				Content: "用户当前在控制台页面 " + page + "。查询用只读工具；所有写操作（新建/修改/删除/启停/恢复）一律调用 ui_ 执行工具" +
+					"（ui_create_provider、ui_update_provider、ui_delete_provider、ui_set_provider_*、ui_reset_*），由控制台按用户操作路径完成并返回结果，" +
+					"不要走直连写工具。汇报时以界面返回的结果为准，不要假设没有返回结果的操作已经完成。" +
+					"只有用户明确说要自己填写 Key 时，才用 ui_open_provider_dialog / ui_create_provider_dialog 打开界面预填。",
 			})
 		}
 		for _, message := range history {
