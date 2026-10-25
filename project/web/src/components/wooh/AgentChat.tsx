@@ -20,8 +20,14 @@ const AUTO_PROVIDER = 'auto'
 const PROVIDER_ACTIONS = new Set([
   'open_provider_dialog',
   'create_provider_dialog',
-  'provider_changed',
-  'provider_deleted',
+  'create_provider',
+  'update_provider',
+  'delete_provider',
+  'set_provider_status',
+  'set_provider_workflow',
+  'set_provider_dedupe_v1',
+  'reset_provider_disable',
+  'reset_all_provider_disable',
 ])
 // sessionStorage survives a reload but dies with the tab, which is exactly the
 // lifetime of "the conversation this tab is in".

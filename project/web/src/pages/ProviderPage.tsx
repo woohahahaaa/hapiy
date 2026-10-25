@@ -24,7 +24,7 @@ import { agentPause, reportAgentAction, AGENT_STEP_GAP_MS } from '@/lib/agent-pa
 import { i18n } from '@/i18n/i18n'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderDisableStatus, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
+import type { Provider, ProviderDisableStatus, ProviderDisableDimension, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
 import {
   findModelsDevProviderRow,
   isModelsDevLab,
@@ -114,23 +114,24 @@ function providerDraftFromAgentCreate(payload: Readonly<Record<string, unknown>>
 // providerWithAgentPatch applies only the fields the agent sent, leaving the
 // rest of the record untouched.
 function providerWithAgentPatch(provider: Provider, payload: Readonly<Record<string, unknown>>): Provider {
-  const next: Provider = { ...provider }
-  if (typeof payload.name === 'string' && payload.name.trim() !== '') next.name = payload.name.trim()
-  if (Array.isArray(payload.base_urls)) next.baseUrls = agentStringArray(payload.base_urls)
+  type ProviderPatch = { -readonly [K in keyof Provider]?: Provider[K] }
+  const patch: ProviderPatch = {}
+  if (typeof payload.name === 'string' && payload.name.trim() !== '') patch.name = payload.name.trim()
+  if (Array.isArray(payload.base_urls)) patch.baseUrls = agentStringArray(payload.base_urls)
   if (Array.isArray(payload.keys)) {
-    next.keys = agentStringArray(payload.keys)
-    next.keyNotes = {}
+    patch.keys = agentStringArray(payload.keys)
+    patch.keyNotes = {}
   }
   if (Array.isArray(payload.models)) {
-    next.models = agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) }))
+    patch.models = agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) }))
   }
   if (Array.isArray(payload.endpoints)) {
-    next.endpoints = agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix }))
+    patch.endpoints = agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix }))
   }
-  if (typeof payload.status === 'boolean') next.status = payload.status
-  if (typeof payload.workflow_enabled === 'boolean') next.workflowEnabled = payload.workflow_enabled
-  if (typeof payload.dedupe_v1_suffix === 'boolean') next.dedupeV1Suffix = payload.dedupe_v1_suffix
-  return next
+  if (typeof payload.status === 'boolean') patch.status = payload.status
+  if (typeof payload.workflow_enabled === 'boolean') patch.workflowEnabled = payload.workflow_enabled
+  if (typeof payload.dedupe_v1_suffix === 'boolean') patch.dedupeV1Suffix = payload.dedupe_v1_suffix
+  return { ...provider, ...patch }
 }
 
 // refPricesOf converts a models.dev row's per-1M-token USD prices into the
@@ -211,7 +212,7 @@ export function ProviderPage() {
       }
       if (!target) return
       setDraft(null)
-      setAutoCloseDialog(false)
+      setAgentSaveReport('')
       setEditing(target)
       setIsDialogOpen(true)
     })()
@@ -224,7 +225,7 @@ export function ProviderPage() {
     if (!next) return
     setEditing(null)
     setDraft(next)
-    setAutoCloseDialog(false)
+    setAgentSaveReport('')
     setIsDialogOpen(true)
   })
 
@@ -622,6 +623,9 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open)
           if (!open) {
+            // A chat-opened dialog closed by the operator cancels the action;
+            // tell the waiting tool instead of letting it time out.
+            reportAgentAction(agentSaveReport, { ok: false, message: '用户关闭了弹窗' })
             setAgentSaveReport('')
             setEditing(null)
             setDraft(null)
@@ -649,7 +653,12 @@ export function ProviderPage() {
         <ConfirmDeleteDialog
           open={deleting !== null}
           onOpenChange={(open) => {
-            if (!open) setDeleting(null)
+            if (!open) {
+              setDeleting(null)
+              deleteTargetRef.current = null
+              reportAgentAction(deleteReportRef.current, { ok: false, message: '用户取消了删除' })
+              deleteReportRef.current = ''
+            }
           }}
           title={t('dialog.deleteTitle')}
           description={t('dialog.deleteDescription', { name: deleting?.name ?? '' })}
