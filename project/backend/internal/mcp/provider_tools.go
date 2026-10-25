@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
 	providerops "github.com/hapiy/hapiy/internal/provider"
@@ -60,6 +61,26 @@ func registerProviderWriteTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine
 		Name:        "reset_all_provider_disable",
 		Description: "按维度恢复全部供应商的自动禁用状态（等价于控制台的“恢复全部 BaseURL / 全部 Key / provider 行”）。",
 	}, resetAllProviderDisable(db, engine))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_disabled_records",
+		Description: "列出待恢复的自动禁用记录：供应商、维度、被禁用的值（Key 只显示尾号）、错误信息、重试次数、禁用时间。",
+	}, listDisabledRecords(db))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "replay_disabled_record",
+		Description: "用记录里保存的请求重放一次上游探测，探测通过才恢复该渠道。会真实发起上游请求，可能耗时数秒。",
+	}, replayDisabledRecord(db, engine))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "restore_disabled_record",
+		Description: "不探测上游，直接清除该禁用记录并恢复对应渠道。",
+	}, restoreDisabledRecord(db, engine))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "extend_disabled_record_countdown",
+		Description: "把定时恢复的倒计时往后延 minutes 分钟，用于推迟一次自动恢复。",
+	}, extendDisabledRecordCountdown(db))
 }
 
 // ── shared input / output ──
@@ -389,4 +410,155 @@ func resetAllProviderDisable(db *gorm.DB, engine *relay.Engine) func(context.Con
 		}
 		return nil, resetAllProviderDisableOut{OK: true, Dimension: dimension}, nil
 	}
+}
+
+// ── disabled records ──
+
+type disabledRecordEntry struct {
+	ID           string `json:"id"`
+	ProviderID   string `json:"provider_id"`
+	ProviderName string `json:"provider_name"`
+	Dimension    string `json:"dimension" jsonschema:"provider / base_url / key"`
+	Value        string `json:"value" jsonschema:"Key 维度只显示末尾 4 位"`
+	BaseURL      string `json:"base_url,omitempty"`
+	Model        string `json:"model,omitempty"`
+	ErrorMessage string `json:"error_message,omitempty"`
+	RuleName     string `json:"rule_name,omitempty"`
+	DisabledAt   string `json:"disabled_at"`
+	LastRetryAt  string `json:"last_retry_at,omitempty"`
+	RetryCount   int    `json:"retry_count"`
+}
+
+type listDisabledRecordsOut struct {
+	Records []disabledRecordEntry `json:"records"`
+	Total   int                   `json:"total"`
+}
+
+type replayDisabledRecordOut struct {
+	OK       bool                `json:"ok"`
+	Resolved bool                `json:"resolved"`
+	Record   disabledRecordEntry `json:"record"`
+}
+
+type restoreDisabledRecordOut struct {
+	OK bool   `json:"ok"`
+	ID string `json:"id"`
+}
+
+type extendDisabledRecordOut struct {
+	OK       bool                `json:"ok"`
+	Extended bool                `json:"extended"`
+	Record   disabledRecordEntry `json:"record"`
+}
+
+func recordEntry(r model.DisabledRecord, providerName string) disabledRecordEntry {
+	value := r.Value
+	if r.Dimension == model.FailoverDimensionKey {
+		value = maskKey(value)
+	}
+	entry := disabledRecordEntry{
+		ID:           r.ID,
+		ProviderID:   r.ProviderID,
+		ProviderName: providerName,
+		Dimension:    r.Dimension,
+		Value:        value,
+		BaseURL:      r.BaseURL,
+		Model:        r.Model,
+		ErrorMessage: r.ErrorMessage,
+		RuleName:     r.RuleName,
+		DisabledAt:   r.DisabledAt.Format(time.RFC3339),
+		RetryCount:   r.RetryCount,
+	}
+	if r.LastRetryAt != nil {
+		entry.LastRetryAt = r.LastRetryAt.Format(time.RFC3339)
+	}
+	return entry
+}
+
+func providerNames(db *gorm.DB, ids []string) map[string]string {
+	names := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return names
+	}
+	var rows []model.Provider
+	if err := db.Select("id", "name").Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return names
+	}
+	for _, p := range rows {
+		names[p.ID] = p.Name
+	}
+	return names
+}
+
+func listDisabledRecords(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, listDisabledRecordsOut, error) {
+	return func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listDisabledRecordsOut, error) {
+		rows, err := providerops.ListPendingRecords(db)
+		if err != nil {
+			return nil, listDisabledRecordsOut{}, err
+		}
+		ids := make([]string, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.ProviderID)
+		}
+		names := providerNames(db, ids)
+		out := listDisabledRecordsOut{Records: make([]disabledRecordEntry, 0, len(rows)), Total: len(rows)}
+		for _, row := range rows {
+			out.Records = append(out.Records, recordEntry(row, names[row.ProviderID]))
+		}
+		return nil, out, nil
+	}
+}
+
+type disabledRecordIDIn struct {
+	ID string `json:"id" jsonschema:"记录 id，可从 list_disabled_records 获取"`
+}
+
+func replayDisabledRecord(db *gorm.DB, engine *relay.Engine) func(context.Context, *mcp.CallToolRequest, disabledRecordIDIn) (*mcp.CallToolResult, replayDisabledRecordOut, error) {
+	return func(_ context.Context, _ *mcp.CallToolRequest, in disabledRecordIDIn) (*mcp.CallToolResult, replayDisabledRecordOut, error) {
+		record, resolved, err := providerops.ReplayRecord(db, engine, in.ID)
+		if err != nil {
+			return nil, replayDisabledRecordOut{}, err
+		}
+		return nil, replayDisabledRecordOut{
+			OK:       true,
+			Resolved: resolved,
+			Record:   recordEntry(*record, displayProviderName(db, record.ProviderID)),
+		}, nil
+	}
+}
+
+func restoreDisabledRecord(db *gorm.DB, engine *relay.Engine) func(context.Context, *mcp.CallToolRequest, disabledRecordIDIn) (*mcp.CallToolResult, restoreDisabledRecordOut, error) {
+	return func(_ context.Context, _ *mcp.CallToolRequest, in disabledRecordIDIn) (*mcp.CallToolResult, restoreDisabledRecordOut, error) {
+		if err := providerops.RestoreRecordDirectly(db, engine, in.ID); err != nil {
+			return nil, restoreDisabledRecordOut{}, err
+		}
+		return nil, restoreDisabledRecordOut{OK: true, ID: in.ID}, nil
+	}
+}
+
+type extendDisabledRecordIn struct {
+	ID      string `json:"id" jsonschema:"记录 id"`
+	Minutes int    `json:"minutes" jsonschema:"往后延的分钟数，必须为正"`
+}
+
+func extendDisabledRecordCountdown(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, extendDisabledRecordIn) (*mcp.CallToolResult, extendDisabledRecordOut, error) {
+	return func(_ context.Context, _ *mcp.CallToolRequest, in extendDisabledRecordIn) (*mcp.CallToolResult, extendDisabledRecordOut, error) {
+		record, extended, err := providerops.ExtendRecordCountdown(db, in.ID, in.Minutes)
+		if err != nil {
+			return nil, extendDisabledRecordOut{}, err
+		}
+		return nil, extendDisabledRecordOut{
+			OK:       true,
+			Extended: extended,
+			Record:   recordEntry(*record, displayProviderName(db, record.ProviderID)),
+		}, nil
+	}
+}
+
+func displayProviderName(db *gorm.DB, providerID string) string {
+	var p model.Provider
+	if err := db.First(&p, "id = ?", providerID).Error; err != nil {
+		return ""
+	}
+	return p.Name
 }
