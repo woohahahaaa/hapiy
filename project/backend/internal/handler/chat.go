@@ -53,17 +53,14 @@ const chatWrapUpPrompt = "本轮的工具调用步数或输出预算已用尽。
 // the dialog, fill, save/confirm) and reports the outcome back. External MCP
 // clients keep the direct tools; the chat deliberately does not see them.
 var chatUIWriteTools = map[string]bool{
-	"create_provider":                  true,
-	"update_provider":                  true,
-	"delete_provider":                  true,
-	"set_provider_status":              true,
-	"set_provider_workflow":            true,
-	"set_provider_dedupe_v1":           true,
-	"reset_provider_disable":           true,
-	"reset_all_provider_disable":       true,
-	"restore_disabled_record":          true,
-	"replay_disabled_record":           true,
-	"extend_disabled_record_countdown": true,
+	"create_provider":            true,
+	"update_provider":            true,
+	"delete_provider":            true,
+	"set_provider_status":        true,
+	"set_provider_workflow":      true,
+	"set_provider_dedupe_v1":     true,
+	"reset_provider_disable":     true,
+	"reset_all_provider_disable": true,
 }
 
 // chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when

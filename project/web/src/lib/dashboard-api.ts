@@ -3235,6 +3235,18 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       }),
     }, CHAT_TIMEOUT_MS))
   },
+  // reportChatUIAction tells the backend how a console-executed chat action
+  // ended. The chat's tool call is blocked until this arrives, so the agent
+  // reports what the UI actually did instead of what it hoped would happen.
+  async reportChatUIAction(
+    id: string,
+    result: { ok: boolean; message?: string; data?: Readonly<Record<string, unknown>> },
+  ): Promise<void> {
+    await request(`/chat/ui-actions/${encodeURIComponent(id)}/result`, {
+      method: 'POST',
+      body: JSON.stringify(result),
+    })
+  },
   async getMcpStatus(): Promise<McpStatus> {
     return parseMcpStatus(await request('/mcp'))
   },

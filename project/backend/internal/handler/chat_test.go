@@ -580,17 +580,12 @@ func TestSendChatMessageRunsProviderWritesThroughTheConsole(t *testing.T) {
 					sawDirect = true
 				}
 			}
-			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"ui_create_provider","arguments":"{\\"name\\":\\"agent-test\\"}"}}]}}]}`))
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"ui_create_provider","arguments":"{\"name\":\"agent-test\"}"}}]}}]}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"控制台已经完成创建。"}}]}`))
 	}))
 	defer upstream.Close()
-
-	if !strings.Contains(`ui_create_provider`, "ui_") {
-		t.Fatal("unreachable")
-	}
-	_ = sawDirect
 
 	db := newChatTestDB(t)
 	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
