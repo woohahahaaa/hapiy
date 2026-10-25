@@ -14,7 +14,6 @@
   "open": "Open chat",
   "resize": "Resize the chat panel",
   "notWired": "The chat backend is not wired yet. The next step is /v1/chat/completions; this message is a placeholder.",
-  "greeting": "How can I help?",
   "newChat": "New chat",
   "history": "History",
   "noThreads": "No conversations yet",
@@ -33,5 +32,8 @@
   "providerAutoShort": "Auto",
   "noProviders": "No providers available",
   "expandAgent": "Expand Agent panel",
-  "collapseAgent": "Collapse Agent panel"
+  "collapseAgent": "Collapse Agent panel",
+  "greetingTitle": "I'm the built-in assistant for hapiy",
+  "greetingGateway": "hapiy is a self-hosted AI gateway: it funnels multiple model providers into one endpoint and manages routing, failover, usage and cost, and it can also take over AI coding-tool configuration.",
+  "greetingService": "Skip the docs — just describe what you need. I'll tell you whether hapiy can do it, and for anything it can, I'll carry it out in the panel on the right the way you would."
 }

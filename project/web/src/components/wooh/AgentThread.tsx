@@ -241,7 +241,13 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-6 py-10">
-              <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greeting')}</h2>
+              <div className="w-full max-w-xl">
+                <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
+                <div className="mt-4 space-y-2 text-left text-sm leading-6 text-muted-foreground">
+                  <p>{t('greetingGateway')}</p>
+                  <p>{t('greetingService')}</p>
+                </div>
+              </div>
               <div className="w-full max-w-2xl">
                 <Composer centered />
               </div>

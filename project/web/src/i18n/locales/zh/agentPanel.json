@@ -14,7 +14,6 @@
   "open": "打开对话",
   "resize": "调整对话面板宽度",
   "notWired": "对话后端还没接入。下一步会直接走 /v1/chat/completions；这条提示只是占位。",
-  "greeting": "有什么可以帮你？",
   "newChat": "新对话",
   "history": "历史会话",
   "noThreads": "还没有历史会话",
@@ -33,5 +32,8 @@
   "providerAutoShort": "自动",
   "noProviders": "没有可用供应商",
   "expandAgent": "展开Agent面板",
-  "collapseAgent": "收起Agent面板"
+  "collapseAgent": "收起Agent面板",
+  "greetingTitle": "我是 hapiy 的内置助手",
+  "greetingGateway": "hapiy 是一个自托管 AI 网关：把多家模型供应商汇成一个入口，统一做路由、故障转移、用量和成本管理，也能接管 AI 编程工具的配置。",
+  "greetingService": "你不用读帮助文档，直接描述需求就行——我先告诉你系统能不能实现；能做的，我会在右侧面板里按真实操作帮你完成。"
 }
