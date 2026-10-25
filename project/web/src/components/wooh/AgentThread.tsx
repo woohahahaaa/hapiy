@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
 
 const markdownClass =
-  'text-[15px] leading-relaxed [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
+  'text-xs leading-5 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
   '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-4 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-4 ' +
   '[&_li]:my-0.5 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-background/60 ' +
   '[&_pre]:p-2 [&_code]:font-mono [&_code]:text-xs [&_a]:underline [&_a]:underline-offset-2 ' +
