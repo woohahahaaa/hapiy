@@ -3,9 +3,11 @@
 // The endpoint is mounted at /mcp (Streamable HTTP, stateless JSON responses).
 // It stays closed until the operator turns it on in 设置 → 其他 → MCP; every
 // request must then carry the generated key as `Authorization: Bearer ...`.
-// Tools are read-only: agents can inspect providers, models, usage, request
-// logs, the forwarding topology and the managed agent configs, but nothing in
-// this package writes to the database or the relay engine.
+// Tools read gateway data (providers, models, usage, request logs, topology,
+// managed agent configs) and, since the provider write tools were added, can
+// also change provider configuration. Every mutation goes through
+// internal/provider — the same operations the dashboard handlers use — so
+// validation, relay engine refresh and channel event logging stay identical.
 package mcp
 
 import (
@@ -17,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
@@ -33,26 +36,24 @@ const (
 	EndpointPath = "/mcp"
 )
 
-// ServerInstructions are handed to clients during initialize. They describe
-// the gateway and, more importantly, tell the agent that nothing here mutates
-// configuration.
-const ServerInstructions = `hapiy 是自托管 AI 网关。这里的工具只能读取网关数据：供应商、可用模型、用量统计、请求日志、转发拓扑、被托管的 Agent 配置文件。不会修改任何配置；需要改配置时提示用户到 hapiy 控制台操作。时间参数一律使用 RFC3339。`
+// ServerInstructions are handed to clients during initialize.
+const ServerInstructions = `hapiy 是自托管 AI 网关。工具可以读取供应商、可用模型、用量统计、请求日志、转发拓扑、被托管的 Agent 配置文件，也可以修改供应商配置（新建、修改、删除、启停、恢复自动禁用）。修改前先读取现状确认目标，删除类操作不可恢复。上游 Key 只会以尾号形式返回。时间参数一律使用 RFC3339。`
 
 // NewServer builds the MCP server with every tool registered.
-func NewServer(db *gorm.DB, version string) *mcp.Server {
+func NewServer(db *gorm.DB, engine *relay.Engine, version string) *mcp.Server {
 	s := mcp.NewServer(
 		&mcp.Implementation{Name: "hapiy", Version: version},
 		&mcp.ServerOptions{Instructions: ServerInstructions},
 	)
-	registerTools(s, db)
+	registerTools(s, db, engine)
 	return s
 }
 
 // Handler returns the gin handler for EndpointPath. A single server instance
 // is shared by all requests (the transport is stateless, so every request
 // carries its own session data).
-func Handler(db *gorm.DB, version string) gin.HandlerFunc {
-	srv := NewServer(db, version)
+func Handler(db *gorm.DB, engine *relay.Engine, version string) gin.HandlerFunc {
+	srv := NewServer(db, engine, version)
 	stream := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true},

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/topology"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
@@ -631,7 +632,7 @@ func listAgentConfigs(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, s
 }
 
 // registerTools wires every read-only tool into the server.
-func registerTools(s *mcp.Server, db *gorm.DB) {
+func registerTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_providers",
 		Description: "列出网关里的供应商及其端点、模型、启用状态和权重。不会返回上游 Key。",
@@ -671,6 +672,8 @@ func registerTools(s *mcp.Server, db *gorm.DB) {
 		Name:        "list_agent_configs",
 		Description: "列出被接管的 Agent 配置文件记录（类型、路径、本地或 SSH），不返回文件内容。",
 	}, listAgentConfigs(db))
+
+	registerProviderWriteTools(s, db, engine)
 }
 
 // ── helpers ──

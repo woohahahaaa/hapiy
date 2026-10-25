@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -92,7 +93,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 
 func connect(t *testing.T, db *gorm.DB) *mcp.ClientSession {
 	t.Helper()
-	srv := NewServer(db, "test")
+	srv := NewServer(db, relay.NewEngine(db), "test")
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	if _, err := srv.Connect(context.Background(), serverTransport, nil); err != nil {
 		t.Fatal(err)
@@ -126,7 +127,7 @@ func callTool(t *testing.T, session *mcp.ClientSession, name string, args any) m
 	return out
 }
 
-func TestListToolsExposesReadOnlySurface(t *testing.T) {
+func TestListToolsExposesTheDocumentedSurface(t *testing.T) {
 	session := connect(t, newTestDB(t))
 	res, err := session.ListTools(context.Background(), nil)
 	if err != nil {
@@ -142,13 +143,16 @@ func TestListToolsExposesReadOnlySurface(t *testing.T) {
 	for _, want := range []string{
 		"list_providers", "get_provider", "list_models", "query_logs",
 		"get_usage_stats", "get_topology", "list_disabled_channels", "list_agent_configs",
+		"create_provider", "update_provider", "delete_provider", "set_provider_status",
+		"set_provider_workflow", "set_provider_dedupe_v1", "reset_provider_disable",
+		"reset_all_provider_disable",
 	} {
 		if !got[want] {
 			t.Errorf("missing tool %q", want)
 		}
 	}
-	if len(got) != 8 {
-		t.Errorf("expected 8 tools, got %d: %v", len(got), got)
+	if len(got) != 16 {
+		t.Errorf("expected 16 tools, got %d: %v", len(got), got)
 	}
 }
 
@@ -179,6 +183,24 @@ func TestListProvidersHidesKeys(t *testing.T) {
 	hints, _ := provider["key_hints"].([]any)
 	if len(hints) != 1 || hints[0] != "****1234" {
 		t.Fatalf("expected masked key hint, got %v", hints)
+	}
+	urls, _ := provider["base_urls"].([]any)
+	if len(urls) != 1 || urls[0] != "https://api.openai.com/v1" {
+		t.Fatalf("base urls must be readable (they are not secrets): %v", urls)
+	}
+	detailed, _ := provider["models_detail"].([]any)
+	if len(detailed) != 2 {
+		t.Fatalf("models_detail = %+v", detailed)
+	}
+	firstModel := detailed[0].(map[string]any)
+	if firstModel["model"] != "gpt-4o" {
+		t.Fatalf("models_detail order/content = %+v", firstModel)
+	}
+	if paths, _ := firstModel["endpoints"].([]any); len(paths) != 1 || paths[0] != "/v1/chat/completions" {
+		t.Fatalf("per-model endpoints = %+v", paths)
+	}
+	if provider["dedupe_v1_suffix"] != true {
+		t.Fatalf("dedupe_v1_suffix = %v", provider["dedupe_v1_suffix"])
 	}
 }
 

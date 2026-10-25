@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
 )
@@ -19,8 +20,8 @@ type ToolRunner struct {
 }
 
 // NewToolRunner connects a client to a fresh server bound to db.
-func NewToolRunner(ctx context.Context, db *gorm.DB, version string) (*ToolRunner, error) {
-	server := NewServer(db, version)
+func NewToolRunner(ctx context.Context, db *gorm.DB, engine *relay.Engine, version string) (*ToolRunner, error) {
+	server := NewServer(db, engine, version)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	if _, err := server.Connect(ctx, serverTransport, nil); err != nil {
 		return nil, fmt.Errorf("connect mcp server: %w", err)

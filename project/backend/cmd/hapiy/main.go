@@ -262,7 +262,7 @@ func runServe() {
 	// generated in 设置 → 其他 → MCP, not the dashboard session. A disabled
 	// endpoint answers 404 so an unconfigured install looks like it has no
 	// MCP route at all.
-	r.Any(mcpserver.EndpointPath, mcpserver.Handler(db, version.Version))
+	r.Any(mcpserver.EndpointPath, mcpserver.Handler(db, engine, version.Version))
 
 	// API v1 routes
 	v1 := r.Group("/v1")

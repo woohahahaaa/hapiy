@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hapiy/hapiy/internal/relay"
 	"gorm.io/gorm"
 )
 
@@ -16,7 +17,7 @@ func newTestServer(t *testing.T, db *gorm.DB) *httptest.Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Any(EndpointPath, Handler(db, "1.0.0"))
+	r.Any(EndpointPath, Handler(db, relay.NewEngine(db), "1.0.0"))
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return srv

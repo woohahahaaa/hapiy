@@ -430,7 +430,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		// Expose the MCP tools to the model through the same registry /mcp uses.
-		runner, err := hapiymcp.NewToolRunner(ctx, db, version.Version)
+		runner, err := hapiymcp.NewToolRunner(ctx, db, engine, version.Version)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化 MCP 工具失败: " + err.Error()})
 			return
