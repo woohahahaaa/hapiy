@@ -87,9 +87,65 @@ type getProviderIn struct {
 	ID   string `json:"id,omitempty" jsonschema:"供应商 id（与 name 二选一）"`
 }
 
+type providerModelDetail struct {
+	Model     string   `json:"model"`
+	Endpoints []string `json:"endpoints" jsonschema:"该模型允许的请求路径；空数组表示不限"`
+}
+
 type providerDetail struct {
 	providerSummary
-	KeyHints []string `json:"key_hints" jsonschema:"每个上游 Key 仅显示末尾 4 位，完整 Key 不对外暴露"`
+	KeyHints       []string              `json:"key_hints" jsonschema:"每个上游 Key 仅显示末尾 4 位，完整 Key 不对外暴露"`
+	BaseURLs       []string              `json:"base_urls" jsonschema:"上游 Base URL 列表（非密钥）"`
+	KeyNotes       map[string]string     `json:"key_notes,omitempty" jsonschema:"Key 备注，键同样只显示末尾 4 位"`
+	ModelsDetailed []providerModelDetail `json:"models_detail" jsonschema:"每个模型的端点限制"`
+	DedupeV1Suffix bool                  `json:"dedupe_v1_suffix"`
+	AutoBan        bool                  `json:"auto_ban"`
+}
+
+// providerDetailOf renders a provider for tool output: upstream keys never
+// leave this function unmasked, including the key_notes map keys.
+func providerDetailOf(p model.Provider, autoDisabled bool) providerDetail {
+	models := providerModelNames(p.Models)
+	endpoints := perModelEndpoints(p.Models)
+	detailed := make([]providerModelDetail, 0, len(models))
+	for _, name := range models {
+		detailed = append(detailed, providerModelDetail{Model: name, Endpoints: dedupeSorted(endpoints[name])})
+	}
+	notes := make(map[string]string)
+	if strings.TrimSpace(p.KeyNotes) != "" {
+		var raw map[string]string
+		if err := json.Unmarshal([]byte(p.KeyNotes), &raw); err == nil {
+			for key, note := range raw {
+				if strings.TrimSpace(note) != "" {
+					notes[maskKey(key)] = note
+				}
+			}
+		}
+	}
+	dedupe := p.DedupeV1Suffix == nil || *p.DedupeV1Suffix
+	return providerDetail{
+		providerSummary: providerSummary{
+			ID:              p.ID,
+			Name:            p.Name,
+			Status:          p.Status,
+			AutoDisabled:    autoDisabled,
+			WorkflowEnabled: p.WorkflowEnabled,
+			Endpoints:       parseStringArray(p.Endpoints),
+			Models:          models,
+			ModelCount:      len(models),
+			BaseURLCount:    len(parseStringArray(p.BaseURLs)),
+			KeyCount:        len(parseStringArray(p.Keys)),
+			Weight:          p.Weight,
+			Priority:        p.Priority,
+			Group:           p.Group,
+		},
+		KeyHints:       maskKeys(parseStringArray(p.Keys)),
+		BaseURLs:       parseStringArray(p.BaseURLs),
+		KeyNotes:       notes,
+		ModelsDetailed: detailed,
+		DedupeV1Suffix: dedupe,
+		AutoBan:        p.AutoBan,
+	}
 }
 
 type getProviderOut struct {
@@ -121,26 +177,7 @@ func getProvider(db *gorm.DB) func(context.Context, *mcp.CallToolRequest, getPro
 		if err != nil {
 			return nil, getProviderOut{}, err
 		}
-		models := providerModelNames(row.Models)
-		summary := providerSummary{
-			ID:              row.ID,
-			Name:            row.Name,
-			Status:          row.Status,
-			AutoDisabled:    disabled[row.ID],
-			WorkflowEnabled: row.WorkflowEnabled,
-			Endpoints:       parseStringArray(row.Endpoints),
-			Models:          models,
-			ModelCount:      len(models),
-			BaseURLCount:    len(parseStringArray(row.BaseURLs)),
-			KeyCount:        len(parseStringArray(row.Keys)),
-			Weight:          row.Weight,
-			Priority:        row.Priority,
-			Group:           row.Group,
-		}
-		return nil, getProviderOut{Provider: providerDetail{
-			providerSummary: summary,
-			KeyHints:        maskKeys(parseStringArray(row.Keys)),
-		}}, nil
+		return nil, getProviderOut{Provider: providerDetailOf(row, disabled[row.ID])}, nil
 	}
 }
 

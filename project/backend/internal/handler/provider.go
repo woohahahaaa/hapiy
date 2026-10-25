@@ -8,7 +8,6 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	providerops "github.com/hapiy/hapiy/internal/provider"
 	"github.com/hapiy/hapiy/internal/relay"
-	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -253,44 +252,27 @@ func ListProviderDisableStatus(db *gorm.DB) gin.HandlerFunc {
 
 func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.Param("id")
-		var provider model.Provider
-		if err := db.First(&provider, "id = ?", id).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
-			return
-		}
 		var req resetProviderDisableRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		id := c.Param("id")
+		if err := providerops.ResetDisableValue(db, engine, id, req.Dimension, req.Value); err != nil {
+			switch {
+			case errors.Is(err, providerops.ErrNotFound):
+				c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			case errors.Is(err, providerops.ErrValueRequired), errors.Is(err, providerops.ErrDimension):
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
 		if req.Dimension == model.FailoverDimensionProvider {
-			req.Value = provider.ID
+			req.Value = id
 		}
-		if req.Value == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "value is required for base_url and key"})
-			return
-		}
-		stateResult := db.Model(&model.AutoDisableState{}).
-			Where("provider_id = ? AND dimension = ? AND value = ?", provider.ID, req.Dimension, req.Value).
-			Update("disabled", false)
-		if stateResult.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
-			return
-		}
-		// Manual restore only clears the exact restored entity: drop the
-		// matching pending record so it stops showing in the recovery list.
-		if err := db.Where("provider_id = ? AND dimension = ? AND value = ?",
-			provider.ID, req.Dimension, req.Value).
-			Delete(&model.DisabledRecord{}).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		if stateResult.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, req.Value), "操作: 恢复供应商 "+service.DimensionLabel(req.Dimension)+" 的单个禁用条目")
-		}
-		engine.LoadProviders()
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": provider.ID, "dimension": req.Dimension, "value": req.Value}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension, "value": req.Value}})
 	}
 }
 
@@ -309,25 +291,14 @@ func ResetProviderDisableDimension(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		stateResult := db.Model(&model.AutoDisableState{}).
-			Where("provider_id = ? AND dimension = ?", id, req.Dimension).
-			Update("disabled", false)
-		if stateResult.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
+		if err := providerops.ResetDisableDimension(db, engine, id, req.Dimension); err != nil {
+			if errors.Is(err, providerops.ErrDimension) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		// Manual dimension restore drops every pending record of this
-		// provider+dimension (they no longer represent an active disable).
-		delResult := db.Where("provider_id = ? AND dimension = ?", id, req.Dimension).
-			Delete(&model.DisabledRecord{})
-		if delResult.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": delResult.Error.Error()})
-			return
-		}
-		if stateResult.RowsAffected > 0 || delResult.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, providerDisplayName(db, id), service.ChannelEventMessage(req.Dimension, ""), "操作: 重置供应商 "+service.DimensionLabel(req.Dimension)+" 维度禁用状态")
-		}
-		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension}})
 	}
 }
@@ -346,17 +317,14 @@ func ResetAllProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.Handle
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		stateResult := db.Model(&model.AutoDisableState{}).
-			Where("dimension = ?", req.Dimension).
-			Update("disabled", false)
-		if stateResult.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": stateResult.Error.Error()})
+		if err := providerops.ResetAllDisable(db, engine, req.Dimension); err != nil {
+			if errors.Is(err, providerops.ErrDimension) {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		if stateResult.RowsAffected > 0 {
-			service.LogEvent(service.LogSourceChannelRecoveredManual, "", "重置全部 "+service.DimensionLabel(req.Dimension)+" 禁用状态", "操作: 重置全部 "+service.DimensionLabel(req.Dimension)+" 维度禁用状态")
-		}
-		engine.LoadProviders()
 		c.JSON(http.StatusOK, gin.H{"data": gin.H{"dimension": req.Dimension}})
 	}
 }
