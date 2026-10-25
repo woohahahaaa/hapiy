@@ -11,6 +11,7 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	providerops "github.com/hapiy/hapiy/internal/provider"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
 )
@@ -182,6 +183,7 @@ func createProvider(db *gorm.DB, engine *relay.Engine) func(context.Context, *mc
 		if err := providerops.Create(db, engine, p); err != nil {
 			return nil, providerMutationOut{}, err
 		}
+		auditMCP("新建供应商")
 		out := mutationOut(db, p)
 		return nil, out, nil
 	}
@@ -251,6 +253,7 @@ func updateProvider(db *gorm.DB, engine *relay.Engine) func(context.Context, *mc
 		if err := providerops.Update(db, engine, p); err != nil {
 			return nil, providerMutationOut{}, err
 		}
+		auditMCP("修改供应商")
 		out := mutationOut(db, p)
 		return nil, out, nil
 	}
@@ -297,6 +300,7 @@ func deleteProvider(db *gorm.DB, engine *relay.Engine) func(context.Context, *mc
 		if err := providerops.Delete(db, engine, p.ID); err != nil {
 			return nil, deleteProviderOut{}, err
 		}
+		auditMCP("删除供应商")
 		return nil, deleteProviderOut{OK: true, ID: p.ID, Name: p.Name}, nil
 	}
 }
@@ -318,6 +322,7 @@ func setProviderStatus(db *gorm.DB, engine *relay.Engine) func(context.Context, 
 		if err != nil {
 			return nil, providerMutationOut{}, err
 		}
+		auditMCP("启用/停用供应商")
 		out := mutationOut(db, updated)
 		return nil, out, nil
 	}
@@ -338,6 +343,7 @@ func setProviderWorkflow(db *gorm.DB, engine *relay.Engine) func(context.Context
 		if err != nil {
 			return nil, providerMutationOut{}, err
 		}
+		auditMCP("切换供应商工作流")
 		out := mutationOut(db, updated)
 		return nil, out, nil
 	}
@@ -357,6 +363,7 @@ func setProviderDedupeV1(db *gorm.DB, engine *relay.Engine) func(context.Context
 		if err := providerops.SetDedupeV1(db, p.ID, in.Enabled); err != nil {
 			return nil, providerMutationOut{}, err
 		}
+		auditMCP("修改供应商 /v1 去重设置")
 		reloaded, err := resolveProvider(db, p.ID)
 		if err != nil {
 			return nil, providerMutationOut{}, err
@@ -547,6 +554,9 @@ func extendDisabledRecordCountdown(db *gorm.DB) func(context.Context, *mcp.CallT
 		if err != nil {
 			return nil, extendDisabledRecordOut{}, err
 		}
+		if extended {
+			auditMCP("延长禁用记录倒计时")
+		}
 		return nil, extendDisabledRecordOut{
 			OK:       true,
 			Extended: extended,
@@ -561,4 +571,11 @@ func displayProviderName(db *gorm.DB, providerID string) string {
 		return ""
 	}
 	return p.Name
+}
+
+// auditMCP records a 系统管理 row for a mutation an MCP client performed. The
+// dashboard gets the same rows from AuditSystemAdmin; MCP calls never pass
+// through that middleware, so each write tool logs here instead.
+func auditMCP(action string) {
+	service.LogEvent(service.LogSourceSystemAdmin, "", "MCP · "+action, "")
 }
