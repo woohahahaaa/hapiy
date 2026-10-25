@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
@@ -7,16 +7,22 @@ import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from '@/components/ui/toast'
-import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { ChatMessageRecord, ChatModelOption, ChatThread } from '@/lib/dashboard-api'
+import { apiBaseUrl, dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
+import type { ChatMessageRecord, ChatModelOption, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
 import { pickDefaultModel } from '@/lib/agent-chat'
 import { dispatchUIAction } from '@/lib/ui-actions'
+import { parseChatUIActionEvent } from '@/lib/chat-follow'
 import { useAgentDock } from '@/components/wooh/agent-dock-context'
 
 const AUTO_PROVIDER = 'auto'
-// Actions that need the provider page mounted: one targets an existing
-// provider, the other opens the create dialog with the fields pre-filled.
-const PROVIDER_DIALOG_ACTIONS = new Set(['open_provider_dialog', 'create_provider_dialog'])
+// Actions handled by the provider page: dialogs the agent opens, plus the
+// mirror of writes it already made (navigate + refresh + show the result).
+const PROVIDER_ACTIONS = new Set([
+  'open_provider_dialog',
+  'create_provider_dialog',
+  'provider_changed',
+  'provider_deleted',
+])
 // sessionStorage survives a reload but dies with the tab, which is exactly the
 // lifetime of "the conversation this tab is in".
 const ACTIVE_THREAD_KEY = 'agent_active_thread'
@@ -29,6 +35,26 @@ function errorMessage(error: unknown, fallback: string): string {
 // history and sending through /v1/dashboard/chat. Replies are produced by the
 // relay engine, so "自动" goes through the topology while a fixed provider
 // bypasses it. Rendering/state live in AgentThread (assistant-ui primitives).
+// openChatActionStream subscribes to the dashboard SSE endpoint for the
+// duration of one chat turn. A missing EventSource (old browser) simply means
+// no live following; the final response still applies every action.
+function openChatActionStream(
+  threadId: string,
+  onAction: (action: ChatUIAction) => void,
+): EventSource | null {
+  if (typeof EventSource === 'undefined') return null
+  const source = new EventSource(`${apiBaseUrl}/v1/dashboard/events`, { withCredentials: true })
+  source.addEventListener('chat_ui_action', (event) => {
+    const parsed = parseChatUIActionEvent((event as MessageEvent).data)
+    if (!parsed || parsed.threadId !== threadId) return
+    onAction(parsed.action)
+  })
+  // EventSource reconnects forever on a failing endpoint; the final response
+  // remains the fallback, so stop retrying.
+  source.onerror = () => source.close()
+  return source
+}
+
 export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
   const navigate = useNavigate()
@@ -43,6 +69,8 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
   const [preference, setPreference] = useState({ model: '', providerId: '' })
   const [historyOpen, setHistoryOpen] = useState(false)
+  // The live action stream for the turn in flight (one connection per send).
+  const followRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -95,6 +123,10 @@ export function AgentChat({ className }: { readonly className?: string }) {
       cancelled = true
     }
   }, [t])
+
+  useEffect(() => () => {
+    followRef.current?.close()
+  }, [])
 
   const modelOptions = useMemo(() => {
     if (!selectedModel || models.some((entry) => entry.model === selectedModel)) return models
@@ -164,23 +196,39 @@ export function AgentChat({ className }: { readonly className?: string }) {
       setThreads((current) => [thread!, ...current])
       window.sessionStorage.setItem(ACTIVE_THREAD_KEY, thread.id)
     }
-    const result = await dashboardApi.sendChatMessage(thread.id, {
-      content: text,
-      model: selectedModel,
-      providerId,
-      pageContext: location.pathname,
-    })
-    // Apply the console actions the agent asked for. Navigating first lets a
-    // page that is not mounted yet pick the action up from the queue.
-    for (const action of result.uiActions) {
-      if (PROVIDER_DIALOG_ACTIONS.has(action.type)) {
-        if (location.pathname !== '/provider') navigate('/provider')
-        dispatchUIAction({ type: action.type, payload: action.payload })
+    // Follow the turn live: the backend publishes one chat_ui_action event per
+    // tool call, so the page navigates and updates while the agent is still
+    // working. The final response repeats the same actions (same ids), so a
+    // dropped stream still leaves the UI correct.
+    const seen = new Set<string>()
+    const applyAction = (action: ChatUIAction) => {
+      if (action.id) {
+        if (seen.has(action.id)) return
+        seen.add(action.id)
       }
+      if (!PROVIDER_ACTIONS.has(action.type)) return
+      if (location.pathname !== '/provider') navigate('/provider')
+      dispatchUIAction({ type: action.type, payload: action.payload })
     }
-    setActiveThread(result.thread)
-    setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
-    return result.assistantMessage.content
+    followRef.current?.close()
+    followRef.current = openChatActionStream(thread.id, applyAction)
+    try {
+      const result = await dashboardApi.sendChatMessage(thread.id, {
+        content: text,
+        model: selectedModel,
+        providerId,
+        pageContext: location.pathname,
+      })
+      // Navigating first lets a page that is not mounted yet pick the queued
+      // action up when it mounts.
+      for (const action of result.uiActions) applyAction(action)
+      setActiveThread(result.thread)
+      setThreads((current) => [result.thread, ...current.filter((item) => item.id !== result.thread.id)])
+      return result.assistantMessage.content
+    } finally {
+      followRef.current?.close()
+      followRef.current = null
+    }
   }
 
   return (

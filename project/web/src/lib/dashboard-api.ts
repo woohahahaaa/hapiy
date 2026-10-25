@@ -458,6 +458,8 @@ export type ChatMessageRecord = {
 // ChatUIAction is one console action the agent asked for (open a dialog,
 // prefill fields). Applied by the page that owns the action.
 export type ChatUIAction = {
+  // id dedupes the live SSE copy and the copy returned in the final response.
+  readonly id?: string
   readonly type: string
   readonly payload: Readonly<Record<string, unknown>>
 }
@@ -1280,12 +1282,13 @@ function parseChatMessage(value: unknown): ChatMessageRecord {
   }
 }
 
-function parseChatUIAction(value: unknown): ChatUIAction {
+export function parseChatUIAction(value: unknown): ChatUIAction {
   if (!isRecord(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
   }
   const payload = isRecord(value.payload) ? value.payload : {}
-  return { type: readString(value.type, 'chat.uiAction.type'), payload }
+  const id = typeof value.id === 'string' && value.id !== '' ? value.id : undefined
+  return { ...(id ? { id } : {}), type: readString(value.type, 'chat.uiAction.type'), payload }
 }
 
 function parseChatThreadResult(value: unknown): ChatThreadResult {

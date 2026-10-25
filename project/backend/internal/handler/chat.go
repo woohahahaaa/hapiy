@@ -352,8 +352,81 @@ func summarizeDisables(provider model.Provider, states []model.AutoDisableState)
 // prefill fields). The console applies it after the reply arrives, so the
 // agent never writes configuration on its own.
 type chatUIAction struct {
+	// ID dedupes the same action arriving twice: once over the live dashboard
+	// event stream while the turn runs, and once in the final response.
+	ID      string         `json:"id,omitempty"`
 	Type    string         `json:"type"`
 	Payload map[string]any `json:"payload"`
+}
+
+// pushChatUIAction publishes one action to the dashboard SSE hub so the console
+// can follow the agent while the turn is still running. External MCP clients
+// never see this: it is emitted by the chat handler, not by the MCP server.
+func pushChatUIAction(user, threadID string, action chatUIAction) {
+	dashboardEventsHub.publish("chat_ui_action", map[string]any{
+		"thread_id": threadID,
+		"user":      user,
+		"action":    action,
+	})
+}
+
+// chatUIActionForTool maps a successful provider mutation to the console
+// action that mirrors it. The payload tells the provider page whether to open
+// the editor (create/edit, so the operator sees the saved values) or just
+// refresh and flash the row (toggles, resets).
+func chatUIActionForTool(name string, value any) (string, map[string]any, bool) {
+	result, ok := value.(map[string]any)
+	if !ok {
+		return "", nil, false
+	}
+	providerID := toolResultString(result, "provider", "id")
+	switch name {
+	case "create_provider":
+		if providerID == "" {
+			return "", nil, false
+		}
+		return "provider_changed", map[string]any{"provider_id": providerID, "created": true}, true
+	case "update_provider":
+		if providerID == "" {
+			return "", nil, false
+		}
+		return "provider_changed", map[string]any{"provider_id": providerID, "edited": true}, true
+	case "set_provider_status", "set_provider_workflow", "set_provider_dedupe_v1":
+		if providerID == "" {
+			return "", nil, false
+		}
+		return "provider_changed", map[string]any{"provider_id": providerID}, true
+	case "reset_provider_disable":
+		if providerID = toolResultString(result, "provider"); providerID == "" {
+			return "", nil, false
+		}
+		return "provider_changed", map[string]any{"provider_id": providerID}, true
+	case "replay_disabled_record", "extend_disabled_record_countdown":
+		if providerID = toolResultString(result, "record", "provider_id"); providerID == "" {
+			return "", nil, false
+		}
+		return "provider_changed", map[string]any{"provider_id": providerID}, true
+	case "restore_disabled_record", "reset_all_provider_disable":
+		return "provider_changed", map[string]any{}, true
+	case "delete_provider":
+		id := toolResultString(result, "id")
+		return "provider_deleted", map[string]any{"provider_id": id}, true
+	}
+	return "", nil, false
+}
+
+// toolResultString walks nested maps in a tool's structured output.
+func toolResultString(value map[string]any, path ...string) string {
+	var current any = value
+	for _, key := range path {
+		record, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current = record[key]
+	}
+	text, _ := current.(string)
+	return strings.TrimSpace(text)
 }
 
 // SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. It
@@ -462,6 +535,15 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		})
 
 		uiActions := make([]chatUIAction, 0)
+		actionSeq := 0
+		nextAction := func(actionType string, payload map[string]any) chatUIAction {
+			actionSeq++
+			return chatUIAction{
+				ID:      fmt.Sprintf("%s-%d-%d", thread.ID, start.UnixNano(), actionSeq),
+				Type:    actionType,
+				Payload: payload,
+			}
+		}
 		reply := ""
 		var usage chatproto.Result
 		toolBytes := 0
@@ -504,10 +586,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				}
 				var payload string
 				if strings.HasPrefix(call.Name, "ui_") {
-					uiActions = append(uiActions, chatUIAction{
-						Type:    strings.TrimPrefix(call.Name, "ui_"),
-						Payload: arguments,
-					})
+					action := nextAction(strings.TrimPrefix(call.Name, "ui_"), arguments)
+					uiActions = append(uiActions, action)
+					pushChatUIAction(user, thread.ID, action)
 					payload = `{"ok":true,"note":"action queued for the console UI"}`
 				} else {
 					value, callErr := runner.Call(ctx, call.Name, arguments)
@@ -515,6 +596,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 						payload = `{"error":` + strconv.Quote(callErr.Error()) + `}`
 					} else {
 						payload = hapiymcp.MarshalToolResult(value)
+						if actionType, actionPayload, ok := chatUIActionForTool(call.Name, value); ok {
+							action := nextAction(actionType, actionPayload)
+							uiActions = append(uiActions, action)
+							pushChatUIAction(user, thread.ID, action)
+						}
 					}
 				}
 				payload = truncateChatToolResult(payload, chatToolResultMaxBytes)

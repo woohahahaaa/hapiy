@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -550,6 +551,80 @@ func TestSendChatMessageQueuesCreateProviderDraft(t *testing.T) {
 	action := payload.Data.UIActions[0]
 	if action.Type != "create_provider_dialog" || action.Payload["name"] != "test" {
 		t.Fatalf("unexpected action: %+v", action)
+	}
+}
+
+// A provider write made through MCP must also drive the console: the chat
+// response carries a provider_changed action and the same action is published
+// live over the dashboard event stream.
+func TestSendChatMessageMirrorsProviderWritesToTheConsole(t *testing.T) {
+	var requests int
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"create_provider","arguments":"{\"name\":\"agent-test\",\"base_urls\":[\"https://example.com/v1\"]}"}}]}}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"供应商 agent-test 已经建好了。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+	threadID := createChatTestThread(t, router)
+
+	events, cancel := dashboardEventsHub.subscribe()
+	defer cancel()
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
+		`{"content":"帮我建一个叫 agent-test 的供应商","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var payload struct {
+		Data struct {
+			UIActions []chatUIAction `json:"ui_actions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data.UIActions) != 1 {
+		t.Fatalf("expected one UI action, got %+v", payload.Data.UIActions)
+	}
+	action := payload.Data.UIActions[0]
+	if action.Type != "provider_changed" || action.Payload["created"] != true {
+		t.Fatalf("unexpected action: %+v", action)
+	}
+	if action.ID == "" {
+		t.Fatalf("action must carry a dedupe id")
+	}
+	if action.Payload["provider_id"] == "" || action.Payload["provider_id"] == nil {
+		t.Fatalf("action must point at the created provider: %+v", action.Payload)
+	}
+
+	select {
+	case event := <-events:
+		if event.event != "chat_ui_action" {
+			t.Fatalf("event type = %q", event.event)
+		}
+		if !strings.Contains(event.data, "agent-test") && !strings.Contains(event.data, `"created":true`) {
+			t.Fatalf("event payload does not describe the write: %s", event.data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no live chat_ui_action event was published")
+	}
+
+	var stored model.Provider
+	if err := db.First(&stored, "name = ?", "agent-test").Error; err != nil {
+		t.Fatalf("provider was not created: %v", err)
 	}
 }
 

@@ -118,6 +118,10 @@ export function ProviderPage() {
   // separate from `editing` because only `editing` decides create vs update.
   const [draft, setDraft] = useState<ProviderInput | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  // Row the agent just touched; flashes briefly so the change is visible even
+  // when the operator is looking at the chat panel.
+  const [highlightId, setHighlightId] = useState('')
+  const highlightTimer = useRef<number | null>(null)
   // 新建成功后询问是否接入转发拓扑；非空即弹窗。
   const [createdProvider, setCreatedProvider] = useState<Provider | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -152,8 +156,8 @@ export function ProviderPage() {
     })()
   })
 
-  // Console-chat agent: open the create dialog with the name pre-filled. Still
-  // the operator who saves — the agent has no write path of its own.
+  // Console-chat agent: open the create dialog with the name pre-filled. Used
+  // when the operator still has to fill the sensitive fields.
   useUIAction('create_provider_dialog', (payload) => {
     const next = providerDraftFromUIAction(payload)
     if (!next) return
@@ -161,6 +165,44 @@ export function ProviderPage() {
     setDraft(next)
     setIsDialogOpen(true)
   })
+
+  // Console-chat agent: mirror a provider write it already performed. Create
+  // and edit open the editor on the saved record (the operator sees exactly
+  // what the agent wrote); toggles and resets refresh and flash the row.
+  useUIAction('provider_changed', (payload) => {
+    const providerId = typeof payload.provider_id === 'string' ? payload.provider_id : ''
+    const showEditor = payload.created === true || payload.edited === true
+    void (async () => {
+      await loadProviders()
+      if (providerId === '') return
+      flashProvider(providerId)
+      if (!showEditor) return
+      try {
+        const all = await dashboardApi.listProviders({ limit: 500, offset: 0 })
+        const target = all.providers.find((item) => item.id === providerId)
+        if (!target) return
+        setEditing(target)
+        setDraft(null)
+        setIsDialogOpen(true)
+      } catch {
+        // The refreshed table still shows the saved row.
+      }
+    })()
+  })
+
+  useUIAction('provider_deleted', () => {
+    void loadProviders()
+  })
+
+  const flashProvider = useCallback((providerId: string) => {
+    setHighlightId(providerId)
+    if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current)
+    highlightTimer.current = window.setTimeout(() => setHighlightId(''), 2500)
+  }, [])
+
+  useEffect(() => () => {
+    if (highlightTimer.current !== null) window.clearTimeout(highlightTimer.current)
+  }, [])
 
   const loadProviders = useCallback(async () => {
     setIsLoading(true)
@@ -338,6 +380,7 @@ export function ProviderPage() {
           onOffsetChange={setOffset}
           onLimitChange={setLimit}
           emptyText={t('list.empty')}
+          rowClassName={(provider) => (provider.id === highlightId ? 'bg-primary/10' : '')}
           onRetry={() => void loadProviders()}
           actions={(
             <>
