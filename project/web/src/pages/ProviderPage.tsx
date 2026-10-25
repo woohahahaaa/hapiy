@@ -171,7 +171,12 @@ export function ProviderPage() {
   // what the agent wrote); toggles and resets refresh and flash the row.
   useUIAction('provider_changed', (payload) => {
     const providerId = typeof payload.provider_id === 'string' ? payload.provider_id : ''
-    const showEditor = payload.created === true || payload.edited === true
+    const name = typeof payload.name === 'string' ? payload.name : ''
+    const created = payload.created === true
+    const showEditor = created || payload.edited === true
+    if (name !== '') {
+      toast(created ? t('toast.agentCreated', { name }) : t('toast.agentUpdated', { name }))
+    }
     void (async () => {
       await loadProviders()
       if (providerId === '') return
@@ -190,7 +195,9 @@ export function ProviderPage() {
     })()
   })
 
-  useUIAction('provider_deleted', () => {
+  useUIAction('provider_deleted', (payload) => {
+    const name = typeof payload.name === 'string' ? payload.name : ''
+    if (name !== '') toast(t('toast.agentDeleted', { name }))
     void loadProviders()
   })
 

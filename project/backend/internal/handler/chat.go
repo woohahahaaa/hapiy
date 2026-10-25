@@ -385,12 +385,20 @@ func chatUIActionForTool(name string, value any) (string, map[string]any, bool) 
 		if providerID == "" {
 			return "", nil, false
 		}
-		return "provider_changed", map[string]any{"provider_id": providerID, "created": true}, true
+		return "provider_changed", map[string]any{
+			"provider_id": providerID,
+			"name":        toolResultString(result, "provider", "name"),
+			"created":     true,
+		}, true
 	case "update_provider":
 		if providerID == "" {
 			return "", nil, false
 		}
-		return "provider_changed", map[string]any{"provider_id": providerID, "edited": true}, true
+		return "provider_changed", map[string]any{
+			"provider_id": providerID,
+			"name":        toolResultString(result, "provider", "name"),
+			"edited":      true,
+		}, true
 	case "set_provider_status", "set_provider_workflow", "set_provider_dedupe_v1":
 		if providerID == "" {
 			return "", nil, false
@@ -409,8 +417,10 @@ func chatUIActionForTool(name string, value any) (string, map[string]any, bool) 
 	case "restore_disabled_record", "reset_all_provider_disable":
 		return "provider_changed", map[string]any{}, true
 	case "delete_provider":
-		id := toolResultString(result, "id")
-		return "provider_deleted", map[string]any{"provider_id": id}, true
+		return "provider_deleted", map[string]any{
+			"provider_id": toolResultString(result, "id"),
+			"name":        toolResultString(result, "name"),
+		}, true
 	}
 	return "", nil, false
 }
