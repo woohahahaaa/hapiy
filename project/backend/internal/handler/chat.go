@@ -63,6 +63,29 @@ var chatUIWriteTools = map[string]bool{
 	"reset_all_provider_disable": true,
 }
 
+// chatUIToolSchema drops fields the provider dialog does not expose (weight,
+// priority, group). The console cannot set them through the form, so the model
+// must not believe it can.
+func chatUIToolSchema(name string, schema json.RawMessage) json.RawMessage {
+	if name != "create_provider" && name != "update_provider" {
+		return schema
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(schema, &doc); err != nil {
+		return schema
+	}
+	if props, ok := doc["properties"].(map[string]any); ok {
+		delete(props, "weight")
+		delete(props, "priority")
+		delete(props, "group")
+	}
+	trimmed, err := json.Marshal(doc)
+	if err != nil {
+		return schema
+	}
+	return trimmed
+}
+
 // chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when
 // the model stops calling tools, the way a coding agent works. Tests lower it
 // to force the valve without burning 200 upstream calls.
@@ -483,7 +506,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				tools = append(tools, chatproto.Tool{
 					Name:        "ui_" + tool.Name,
 					Description: tool.Description + "（由控制台界面按用户操作路径执行，完成后返回结果）",
-					Schema:      schema,
+					Schema:      chatUIToolSchema(tool.Name, schema),
 				})
 				continue
 			}

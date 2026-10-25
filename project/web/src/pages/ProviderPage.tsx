@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { toast } from '@/components/ui/toast'
 import { ConfirmDeleteDialog } from '@/pages/AgentConfigPage'
 import { useUIAction } from '@/lib/ui-actions'
+import { agentPause, reportAgentAction, AGENT_STEP_GAP_MS } from '@/lib/agent-pacing'
 import { i18n } from '@/i18n/i18n'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
@@ -38,10 +39,10 @@ type ProviderFormProps = {
   readonly provider: Provider | null
   // draft pre-fills a create (provider === null) with agent-supplied fields.
   readonly draft: ProviderInput | null
-  // autoClose replays the tail of an agent write: the dialog is open on the
-  // saved record, then a short saving state and close, as if 保存 was clicked.
-  readonly autoClose: boolean
-  readonly onAutoClose: () => void
+  // autoSave is set when a chat action opened the dialog: the form submits
+  // itself after the same pause a person would take, through the normal save
+  // handler, so the write goes through the UI path.
+  readonly autoSave: boolean
   readonly onSave: (provider: ProviderInput) => void
   readonly isSaving: boolean
   readonly useKey: boolean
@@ -84,6 +85,54 @@ function emptyProviderModel(model = ''): ProviderModel {
   }
 }
 
+function agentRequestID(payload: Readonly<Record<string, unknown>>): string {
+  return typeof payload.request_id === 'string' ? payload.request_id : ''
+}
+
+function agentStringArray(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item !== '')
+}
+
+// providerDraftFromAgentCreate maps the chat's create payload to the form. The
+// console then saves it through the normal dialog, so the agent never writes
+// directly on this path.
+function providerDraftFromAgentCreate(payload: Readonly<Record<string, unknown>>): ProviderInput | null {
+  const name = typeof payload.name === 'string' ? payload.name.trim() : ''
+  if (name === '') return null
+  return {
+    ...emptyProvider,
+    name,
+    baseUrls: agentStringArray(payload.base_urls),
+    keys: agentStringArray(payload.keys),
+    endpoints: agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix })),
+    models: agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) })),
+    dedupeV1Suffix: payload.dedupe_v1_suffix !== false,
+  }
+}
+
+// providerWithAgentPatch applies only the fields the agent sent, leaving the
+// rest of the record untouched.
+function providerWithAgentPatch(provider: Provider, payload: Readonly<Record<string, unknown>>): Provider {
+  const next: Provider = { ...provider }
+  if (typeof payload.name === 'string' && payload.name.trim() !== '') next.name = payload.name.trim()
+  if (Array.isArray(payload.base_urls)) next.baseUrls = agentStringArray(payload.base_urls)
+  if (Array.isArray(payload.keys)) {
+    next.keys = agentStringArray(payload.keys)
+    next.keyNotes = {}
+  }
+  if (Array.isArray(payload.models)) {
+    next.models = agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) }))
+  }
+  if (Array.isArray(payload.endpoints)) {
+    next.endpoints = agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix }))
+  }
+  if (typeof payload.status === 'boolean') next.status = payload.status
+  if (typeof payload.workflow_enabled === 'boolean') next.workflowEnabled = payload.workflow_enabled
+  if (typeof payload.dedupe_v1_suffix === 'boolean') next.dedupeV1Suffix = payload.dedupe_v1_suffix
+  return next
+}
+
 // refPricesOf converts a models.dev row's per-1M-token USD prices into the
 // stored read-only snapshot shape.
 function refPricesOf(row: { readonly inputPrice: number; readonly outputPrice: number; readonly cacheWritePrice: number; readonly cacheReadPrice: number }): ModelReferencePrices {
@@ -122,9 +171,9 @@ export function ProviderPage() {
   // separate from `editing` because only `editing` decides create vs update.
   const [draft, setDraft] = useState<ProviderInput | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  // True while the dialog shows a write the agent already performed: it closes
-  // itself after a beat instead of waiting for a save click.
-  const [autoCloseDialog, setAutoCloseDialog] = useState(false)
+  // Non-empty while a chat action opened the dialog: the form saves itself and
+  // reports this id back to the waiting tool call.
+  const [agentSaveReport, setAgentSaveReport] = useState('')
   // Row the agent just touched; flashes briefly so the change is visible even
   // when the operator is looking at the chat panel.
   const [highlightId, setHighlightId] = useState('')
@@ -137,6 +186,10 @@ export function ProviderPage() {
   const [useKey, setUseKey] = useState(true)
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [deleting, setDeleting] = useState<Provider | null>(null)
+  // The delete dialog can be opened by the agent, which confirms it itself
+  // after the same pause a person would take to read it.
+  const deleteTargetRef = useRef<Provider | null>(null)
+  const deleteReportRef = useRef('')
 
   // Console-chat agent: open the provider editor with the requested fields
   // pre-filled. The agent never saves on its own; the operator confirms here.
@@ -175,48 +228,117 @@ export function ProviderPage() {
     setIsDialogOpen(true)
   })
 
-  // Console-chat agent: mirror a provider write it already performed. Create
-  // and edit open the editor on the saved record (the operator sees exactly
-  // what the agent wrote); toggles and resets refresh and flash the row.
-  useUIAction('provider_changed', (payload) => {
-    const providerId = typeof payload.provider_id === 'string' ? payload.provider_id : ''
-    const name = typeof payload.name === 'string' ? payload.name : ''
-    const created = payload.created === true
-    const showEditor = created || payload.edited === true
-    if (name !== '') {
-      toast(created ? t('toast.agentCreated', { name }) : t('toast.agentUpdated', { name }))
+  // Console-chat agent: every write walks the same path a person would take.
+  // Create/update open the real editor and auto-submit; delete opens the real
+  // confirmation; toggles and resets run the same API the row buttons call.
+  useUIAction('create_provider', (payload) => {
+    const requestId = agentRequestID(payload)
+    const next = providerDraftFromAgentCreate(payload)
+    if (!next) {
+      reportAgentAction(requestId, { ok: false, message: '缺少供应商名称' })
+      return
     }
     void (async () => {
-      await loadProviders()
-      if (providerId === '') return
-      flashProvider(providerId)
-      if (!showEditor) return
-      try {
-        const all = await dashboardApi.listProviders({ limit: 500, offset: 0 })
-        const target = all.providers.find((item) => item.id === providerId)
-        if (!target) return
-        setEditing(target)
-        setDraft(null)
-        setAutoCloseDialog(true)
-        setIsDialogOpen(true)
-      } catch {
-        // The refreshed table still shows the saved row.
-      }
+      await agentPause()
+      setEditing(null)
+      setDraft(next)
+      setAgentSaveReport(requestId)
+      setIsDialogOpen(true)
     })()
   })
 
-  useUIAction('provider_deleted', (payload) => {
-    const name = typeof payload.name === 'string' ? payload.name : ''
-    if (name !== '') toast(t('toast.agentDeleted', { name }))
-    void loadProviders()
+  useUIAction('update_provider', (payload) => {
+    const requestId = agentRequestID(payload)
+    const ref = typeof payload.provider === 'string' ? payload.provider : ''
+    void (async () => {
+      await agentPause()
+      const target = await findProviderSafely(ref)
+      if (!target) {
+        reportAgentAction(requestId, { ok: false, message: '找不到供应商' })
+        return
+      }
+      setEditing(providerWithAgentPatch(target, payload))
+      setDraft(null)
+      setAgentSaveReport(requestId)
+      setIsDialogOpen(true)
+    })()
   })
 
-  const closeAgentReplay = useCallback(() => {
-    // Let the dialog play its close animation; the field state is cleared by
-    // onOpenChange once it is actually closed.
-    setIsDialogOpen(false)
-    setAutoCloseDialog(false)
-  }, [])
+  useUIAction('delete_provider', (payload) => {
+    const requestId = agentRequestID(payload)
+    const ref = typeof payload.provider === 'string' ? payload.provider : ''
+    void (async () => {
+      await agentPause()
+      const target = await findProviderSafely(ref)
+      if (!target) {
+        reportAgentAction(requestId, { ok: false, message: '找不到供应商' })
+        return
+      }
+      deleteTargetRef.current = target
+      deleteReportRef.current = requestId
+      setDeleting(target)
+      // Read the confirmation before confirming it, then run the same handler
+      // the button uses.
+      window.setTimeout(() => { void runDeleteRef.current() }, 900)
+    })()
+  })
+
+  useUIAction('set_provider_status', (payload) => {
+    void runAgentProviderOp(payload, async (target) => {
+      const enabled = payload.enabled === true
+      if (target.status === enabled) return { message: '状态未变化' }
+      await dashboardApi.toggleProvider(target.id)
+      return { message: enabled ? '已启用' : '已停用' }
+    })
+  })
+
+  useUIAction('set_provider_workflow', (payload) => {
+    void runAgentProviderOp(payload, async (target) => {
+      const enabled = payload.enabled === true
+      if (target.workflowEnabled === enabled) return { message: '工作流状态未变化' }
+      await dashboardApi.toggleWorkflow(target.id)
+      return { message: enabled ? '已启用工作流' : '已停用工作流' }
+    })
+  })
+
+  useUIAction('set_provider_dedupe_v1', (payload) => {
+    void runAgentProviderOp(payload, async (target) => {
+      const enabled = payload.enabled === true
+      await dashboardApi.setProviderDedupeV1Suffix(target.id, enabled)
+      return { message: enabled ? '已开启 /v1 去重' : '已关闭 /v1 去重' }
+    })
+  })
+
+  useUIAction('reset_provider_disable', (payload) => {
+    const dimension = typeof payload.dimension === 'string' ? payload.dimension : ''
+    const value = typeof payload.value === 'string' ? payload.value : ''
+    void runAgentProviderOp(payload, async (target) => {
+      if (dimension === 'provider' || value !== '') {
+        await dashboardApi.resetProviderDisableStatus(target.id, {
+          dimension: dimension as ProviderDisableDimension,
+          value,
+        })
+      } else {
+        await dashboardApi.resetProviderDisableDimension(target.id, dimension as ProviderDisableDimension)
+      }
+      return { message: '已恢复禁用状态' }
+    })
+  })
+
+  useUIAction('reset_all_provider_disable', (payload) => {
+    const requestId = agentRequestID(payload)
+    const dimension = typeof payload.dimension === 'string' ? payload.dimension : ''
+    void (async () => {
+      await agentPause()
+      try {
+        await dashboardApi.resetAllProviderDisableStatus(dimension as ProviderDisableDimension)
+        await loadProviders()
+        reportAgentAction(requestId, { ok: true, message: '已按维度恢复全部禁用状态' })
+      } catch (error) {
+        reportAgentAction(requestId, { ok: false, message: toErrorMessage(error) })
+      }
+    })()
+  })
 
   const flashProvider = useCallback((providerId: string) => {
     setHighlightId(providerId)
@@ -248,6 +370,48 @@ export function ProviderPage() {
 
   useEffect(() => { void loadProviders() }, [loadProviders])
 
+  const findProviderSafely = useCallback(async (ref: string): Promise<Provider | null> => {
+    const needle = ref.trim()
+    if (needle === '') return null
+    const local = providers.find((item) => item.id === needle || item.name === needle)
+    if (local) return local
+    try {
+      const all = await dashboardApi.listProviders({ limit: 500, offset: 0 })
+      return all.providers.find((item) => item.id === needle || item.name === needle) ?? null
+    } catch {
+      return null
+    }
+  }, [providers])
+
+  // runAgentProviderOp is the shared tail of the row-level chat actions: pause
+  // like a person reaching for the control, run the same request the button
+  // would, refresh, flash the row and report the outcome to the chat.
+  const runAgentProviderOp = useCallback(async (
+    payload: Readonly<Record<string, unknown>>,
+    operation: (target: Provider) => Promise<{ message: string }>,
+  ) => {
+    const requestId = agentRequestID(payload)
+    const ref = typeof payload.provider === 'string' ? payload.provider : ''
+    await agentPause()
+    const target = await findProviderSafely(ref)
+    if (!target) {
+      reportAgentAction(requestId, { ok: false, message: '找不到供应商' })
+      return
+    }
+    try {
+      const result = await operation(target)
+      await loadProviders()
+      flashProvider(target.id)
+      reportAgentAction(requestId, {
+        ok: true,
+        message: result.message,
+        data: { provider_id: target.id },
+      })
+    } catch (error) {
+      reportAgentAction(requestId, { ok: false, message: toErrorMessage(error) })
+    }
+  }, [findProviderSafely, flashProvider, loadProviders])
+
   const runMutation = async (operation: () => Promise<unknown>) => {
     setIsSaving(true)
     setError(null)
@@ -265,6 +429,8 @@ export function ProviderPage() {
 
   const handleSave = async (provider: ProviderInput) => {
     const target = editing
+    const reportId = agentSaveReport
+    setAgentSaveReport('')
     setIsSaving(true)
     setError(null)
     try {
@@ -272,18 +438,56 @@ export function ProviderPage() {
         ? await dashboardApi.updateProvider(target.id, provider)
         : await dashboardApi.createProvider(provider)
       await loadProviders()
+      flashProvider(saved.id)
       setEditing(null)
       setDraft(null)
-      setAutoCloseDialog(false)
       setIsDialogOpen(false)
+      reportAgentAction(reportId, {
+        ok: true,
+        message: target ? '供应商已保存' : '供应商已创建',
+        data: { provider_id: saved.id, name: saved.name },
+      })
       // 新建的供应商默认不在拓扑里，只有接入拓扑后请求才会真的路由到它。
       if (!target) setCreatedProvider(saved)
     } catch (error) {
-      setError(toErrorMessage(error))
+      const message = toErrorMessage(error)
+      setError(message)
+      reportAgentAction(reportId, { ok: false, message })
     } finally {
       setIsSaving(false)
     }
   }
+
+  // runDelete is the one confirmation handler: the dialog button and the
+  // agent-driven auto-confirm both go through it, and the ref guard keeps a
+  // timer from firing after a manual click (or vice versa).
+  const runDelete = async () => {
+    const provider = deleteTargetRef.current
+    if (!provider) return
+    deleteTargetRef.current = null
+    const reportId = deleteReportRef.current
+    deleteReportRef.current = ''
+    setDeleting(null)
+    setIsSaving(true)
+    setError(null)
+    try {
+      await dashboardApi.deleteProvider(provider.id)
+      await loadProviders()
+      reportAgentAction(reportId, {
+        ok: true,
+        message: '供应商已删除',
+        data: { provider_id: provider.id, name: provider.name },
+      })
+    } catch (error) {
+      const message = toErrorMessage(error)
+      setError(message)
+      reportAgentAction(reportId, { ok: false, message })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+  const runDeleteRef = useRef(runDelete)
+  runDeleteRef.current = runDelete
 
   const handleAddToTopology = () => {
     const provider = createdProvider
@@ -379,8 +583,8 @@ export function ProviderPage() {
       render: (_, provider) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? t('common:action.disable') : t('common:action.enable')}</Button>
-          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setAutoCloseDialog(false); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
-          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => setDeleting(provider)}><AppIcon name="delete" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setAgentSaveReport(''); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { deleteTargetRef.current = provider; deleteReportRef.current = ''; setDeleting(provider) }}><AppIcon name="delete" /></Button>
         </div>
       ),
     },
@@ -409,7 +613,7 @@ export function ProviderPage() {
           onRetry={() => void loadProviders()}
           actions={(
             <>
-              <Button size="sm" onClick={() => { setEditing(null); setDraft(null); setAutoCloseDialog(false); setIsDialogOpen(true) }} disabled={isSaving}>
+              <Button size="sm" onClick={() => { setEditing(null); setDraft(null); setAgentSaveReport(''); setIsDialogOpen(true) }} disabled={isSaving}>
                 <AppIcon name="add" data-icon="inline-start" />{t('list.add')}
               </Button>
             </>
@@ -418,7 +622,7 @@ export function ProviderPage() {
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open)
           if (!open) {
-            setAutoCloseDialog(false)
+            setAgentSaveReport('')
             setEditing(null)
             setDraft(null)
           }
@@ -429,8 +633,7 @@ export function ProviderPage() {
                key={editing?.id ?? (draft ? `new:${draft.name}` : 'new')}
                provider={editing}
                draft={draft}
-               autoClose={autoCloseDialog}
-               onAutoClose={closeAgentReplay}
+               autoSave={agentSaveReport !== ''}
                onSave={handleSave}
                isSaving={isSaving}
                useKey={useKey}
@@ -451,13 +654,7 @@ export function ProviderPage() {
           title={t('dialog.deleteTitle')}
           description={t('dialog.deleteDescription', { name: deleting?.name ?? '' })}
           busy={isSaving}
-          onConfirm={() => {
-            if (deleting) {
-              const provider = deleting
-              setDeleting(null)
-              void runMutation(() => dashboardApi.deleteProvider(provider.id))
-            }
-          }}
+          onConfirm={() => { void runDeleteRef.current() }}
         />
 
         <Dialog
@@ -608,25 +805,8 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, draft, autoClose, onAutoClose, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
+function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
-  // Replay the agent's save: show the saved record, flash the saving state,
-  // then close. Any interaction cancels it so the operator can take over.
-  const [replaySaving, setReplaySaving] = useState(false)
-  const replayTimers = useRef<number[]>([])
-  const cancelReplay = useCallback(() => {
-    for (const timer of replayTimers.current) window.clearTimeout(timer)
-    replayTimers.current = []
-    setReplaySaving(false)
-  }, [])
-  useEffect(() => {
-    if (!autoClose) return
-    replayTimers.current = [
-      window.setTimeout(() => setReplaySaving(true), 1500),
-      window.setTimeout(onAutoClose, 2400),
-    ]
-    return cancelReplay
-  }, [autoClose, cancelReplay, onAutoClose])
   const [form, setForm] = useState<ProviderInput>(() => provider
     ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) }
     : draft ?? emptyProvider)
@@ -958,6 +1138,16 @@ function ProviderForm({ provider, draft, autoClose, onAutoClose, onSave, isSavin
     onSave({ ...form, name: form.name.trim(), baseUrls, keys, keyNotes: notes, endpoints, models })
   }
 
+  // Chat-driven dialog: pause like a person reaching for the button, then run
+  // the real save path. The parent reports the result to the waiting tool.
+  const autoSaveRef = useRef(handleSave)
+  autoSaveRef.current = handleSave
+  useEffect(() => {
+    if (!autoSave) return
+    const timer = window.setTimeout(() => { autoSaveRef.current() }, AGENT_STEP_GAP_MS)
+    return () => window.clearTimeout(timer)
+  }, [autoSave])
+
   const handleConfirmAddModels = (ids: readonly string[], replace?: boolean) => {
     const additions: ProviderModel[] = ids.map((id) => ({ ...emptyProviderModel(id) }))
     if (replace) {
@@ -979,16 +1169,12 @@ function ProviderForm({ provider, draft, autoClose, onAutoClose, onSave, isSavin
     <>
       <DialogScrollBody footer={
         <>
-          <Button
-            disabled={isSaving || replaySaving || !form.name.trim()}
-            onPointerDown={cancelReplay}
-            onClick={handleSave}
-          >
-            {isSaving || replaySaving ? t('actions.saving') : t('common:action.save')}
+          <Button disabled={isSaving || !form.name.trim()} onClick={handleSave}>
+            {isSaving ? t('actions.saving') : t('common:action.save')}
           </Button>
         </>
       }>
-        <FieldGroup onPointerDown={cancelReplay} onKeyDown={cancelReplay}>
+        <FieldGroup>
       {disableStatus?.provider && (
         <div className="rounded-lg border border-border bg-muted p-3">
           <div className="flex items-center gap-1.5 text-xs text-warning">
