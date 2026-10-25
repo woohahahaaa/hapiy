@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { AppIcon } from "@/components/wooh/AppIcon"
 import { i18n } from "@/i18n/i18n"
+import { useDialogHost } from "./host"
 
 const WIDTH_MAP: Record<string, string> = {
   // 固定目标宽度，但 max-w 始终以视口为上限（留 2rem 边距），窄屏时收缩、永不超屏。
@@ -37,9 +38,19 @@ function DialogTrigger({
 }
 
 function DialogPortal({
+  container,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+  // Portalled into the management panel when the console layout provides it,
+  // so dialogs never cover the agent chat / sidebar. Explicit callers win.
+  const host = useDialogHost()
+  return (
+    <DialogPrimitive.Portal
+      data-slot="dialog-portal"
+      container={container ?? host ?? undefined}
+      {...props}
+    />
+  )
 }
 
 function DialogClose({
@@ -68,11 +79,13 @@ function DialogOverlay({
   className,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+  const contained = useDialogHost() !== null
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
         "fixed inset-0 isolate z-50 bg-black/40 duration-100 supports-backdrop-filter:backdrop-blur-xs data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+        contained && "absolute",
         className
       )}
       {...props}
@@ -105,8 +118,11 @@ function DialogContent({
    * 交由 DialogScrollBody 内部滚动，DialogFooter 作为兄弟被钉在底部。 */
   scrollFooter?: boolean
 }) {
+  const contained = useDialogHost() !== null
   const sizeClass = width === 'full' && height === 'full'
-    ? '!w-screen !max-w-none !h-screen !max-h-none !inset-0 !translate-x-0 !translate-y-0'
+    ? contained
+      ? '!w-full !max-w-none !h-full !max-h-none !inset-0 !translate-x-0 !translate-y-0'
+      : '!w-screen !max-w-none !h-screen !max-h-none !inset-0 !translate-x-0 !translate-y-0'
     : `${WIDTH_MAP[width] ?? ''} ${HEIGHT_MAP[height] ?? ''}`
 
   return (
@@ -116,6 +132,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-xs/relaxed text-popover-foreground border border-border duration-100 outline-none sm:max-w-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
+          contained && "absolute !max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)]",
           sizeClass,
           bare && 'rounded-none border-0 p-0 !gap-0',
           scrollFooter && 'flex max-h-[85vh] flex-col overflow-hidden',
