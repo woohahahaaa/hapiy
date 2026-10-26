@@ -12,6 +12,7 @@ import {
   useLocalRuntime,
 } from '@assistant-ui/react'
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown'
+import type { Components } from 'react-markdown'
 import type { ChatModelAdapter, ThreadMessage, ThreadMessageLike } from '@assistant-ui/react'
 import { AgentAvatar } from '@/components/wooh/AgentAvatar'
 import { AppIcon } from '@/components/wooh/AppIcon'
@@ -31,7 +32,22 @@ const markdownClass =
   '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-4 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-4 ' +
   '[&_li]:my-0.5 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-background/60 ' +
   '[&_pre]:p-2 [&_code]:font-mono [&_code]:text-xs [&_a]:underline [&_a]:underline-offset-2 ' +
-  '[&_blockquote]:border-s-2 [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground'
+  '[&_blockquote]:border-s-2 [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground ' +
+  '[&_table]:w-full [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs ' +
+  '[&_thead]:bg-muted/60 ' +
+  '[&_th]:border-b [&_th]:border-border [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:align-middle [&_th]:font-medium ' +
+  '[&_td]:border-b [&_td]:border-border/60 [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top ' +
+  '[&_tbody_tr:last-child_td]:border-b-0 [&_tbody_tr:nth-child(even)]:bg-muted/20'
+
+// markdownComponents wraps wide tables in a scroll container so a gateway
+// listing cannot stretch the chat column or drop its borders.
+const markdownComponents: Components = {
+  table: ({ node: _node, ...props }) => (
+    <div className="my-2 w-full overflow-x-auto rounded-lg border border-border">
+      <table {...props} />
+    </div>
+  ),
+}
 
 // AssistantText renders markdown once tokens arrive and the typing dots while
 // the reply is still empty (our backend answers in one shot, so the bubble
@@ -39,7 +55,13 @@ const markdownClass =
 function AssistantText() {
   const text = useAuiState((s) => (s.part?.type === 'text' ? s.part.text : ''))
   if (!text) return <TypingDots />
-  return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className={markdownClass} />
+  return (
+    <MarkdownTextPrimitive
+      remarkPlugins={[remarkGfm]}
+      className={markdownClass}
+      components={markdownComponents}
+    />
+  )
 }
 
 function TypingDots() {
