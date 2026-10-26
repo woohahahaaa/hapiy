@@ -1828,23 +1828,39 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   // New nodes have no layout-snapshot record, so without an explicit position
   // they all fall back to the same hardcoded default and stack on top of each
-  // other. Place each fresh node in a new row below every existing node,
-  // left-aligned to the workflow area, so the addition is immediately visible.
+  // other. Place each fresh node in a new row below every existing node, so the
+  // addition is immediately visible. alignTo 'leftmostEntry' lines the new row
+  // up with the leftmost request entry instead of the generic left edge.
   const placeNewNodes = useCallback(
-    (placements: ReadonlyArray<{ id: string; width: number }>) => {
+    (
+      placements: ReadonlyArray<{ id: string; width: number }>,
+      options?: { readonly alignTo?: 'leftmostEntry' },
+    ) => {
       const layout = layoutSnapshotRef.current
+      const sizes = sizesRef.current
       let maxBottom = 0
       let hasLayout = false
-      for (const pos of Object.values(layout)) {
+      for (const [id, pos] of Object.entries(layout)) {
         hasLayout = true
-        const bottom = pos.y + topologyConfig.fallbackNodeSize.height
+        // Measured heights include provider child cards, so a tall slot cannot
+        // be overlapped by the next row.
+        const height = sizes.get(id)?.height ?? topologyConfig.fallbackNodeSize.height
+        const bottom = pos.y + height
         if (bottom > maxBottom) maxBottom = bottom
       }
       const baseY = hasLayout ? maxBottom + topologyConfig.layout.rowGap : topologyConfig.initialPositions.slot.y
 
       let startX = topologyConfig.initialPositions.provider.x
-      for (const [id, pos] of Object.entries(layout)) {
-        if (!id.startsWith('model-') && pos.x < startX) startX = pos.x
+      if (options?.alignTo === 'leftmostEntry') {
+        const entryXs = (tpRef.current?.nodes ?? [])
+          .filter(isRequestEntry)
+          .map((node) => layout[node.id]?.x)
+          .filter((x): x is number => typeof x === 'number')
+        if (entryXs.length > 0) startX = Math.min(...entryXs)
+      } else {
+        for (const [id, pos] of Object.entries(layout)) {
+          if (!id.startsWith('model-') && pos.x < startX) startX = pos.x
+        }
       }
 
       const next = { ...layout }
@@ -1856,7 +1872,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       }
       persistLayoutSnapshot(next)
     },
-    [persistLayoutSnapshot],
+    [persistLayoutSnapshot, sizesRef],
   )
 
   const handleAddEntry = useCallback(() => {
@@ -2073,17 +2089,18 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
       toast(t('toast.providerAlreadyAdded', { name: pending.name }))
       return
     }
-    if (sameFlatTopology(cur, result.topology)) return
     commitHistory(cur)
     beginFlowIsolationRef.current()
     setTopology(result.topology)
     markDirty()
-    if (result.kind === 'workflowCreated') {
-      placeNewNodes([
+    // 新工作流单独占一行，横坐标对齐现有最左边的请求入口。
+    placeNewNodes(
+      [
         { id: result.entryId, width: topologyConfig.fallbackNodeSize.width },
         { id: result.slotId, width: topologyConfig.render.slot.shellMinWidth },
-      ])
-    }
+      ],
+      { alignTo: 'leftmostEntry' },
+    )
     toast(t('toast.providerAdded', { name: pending.name }))
   }, [t, commitHistory, setTopology, markDirty, placeNewNodes])
 

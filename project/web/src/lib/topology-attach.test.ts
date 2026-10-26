@@ -17,25 +17,27 @@ const wire = (source: string, target: string): FlatWire => ({ source, target })
 const tp = (nodes: FlatNode[], wires: FlatWire[]): FlatTopology => ({ nodes, wires })
 
 describe('attachProviderToTopology', () => {
-  it('appends the card to the first provider slot reachable from an enabled entry', () => {
+  it('creates a new workflow instead of reusing an existing provider slot', () => {
     const base = tp(
       [entry('entry-a'), pslot('pslot-a'), prov('prov-1', 'alpha', 'p-alpha'), rewriteSlot('rm-a')],
       [wire('entry-a', 'pslot-a'), wire('pslot-a', 'prov-1'), wire('prov-1', 'rm-a')],
     )
     const result = attachProviderToTopology(base, { id: 'p-beta', name: 'beta' }, '入口')
-    expect(result.kind).toBe('attached')
-    if (result.kind !== 'attached') return
+    expect(result.kind).toBe('workflowCreated')
+    if (result.kind !== 'workflowCreated') return
 
-    const { nodes, wires } = result.topology
-    const card = nodes.find((n) => n.kind === 'provider' && n.providerId === 'p-beta')
+    const { topology, entryId, slotId } = result
+    const card = topology.nodes.find((n) => n.kind === 'provider' && n.providerId === 'p-beta')
     expect(card).toBeDefined()
     expect(card!.enabled).toBe(true)
-    // 插到现有卡片之后，且归属同一个供应商插槽
-    expect(nodes.map((n) => n.id)).toEqual(['entry-a', 'pslot-a', 'prov-1', card!.id, 'rm-a'])
-    expect(wires).toContainEqual(wire('pslot-a', 'prov-1'))
-    expect(wires).toContainEqual(wire('prov-1', 'rm-a'))
-    // 新卡作为休眠备选，也要接上插槽的下游
-    expect(wires).toContainEqual(wire(card!.id, 'rm-a'))
+    // 原有节点和连线原样保留
+    expect(topology.nodes.slice(0, base.nodes.length)).toEqual(base.nodes)
+    expect(topology.wires.slice(0, base.wires.length)).toEqual(base.wires)
+    // 新供应商待在自己的工作流里：入口 → 供应商插槽 → 供应商卡
+    expect(topology.wires).toContainEqual(wire(entryId, slotId))
+    expect(topology.wires).toContainEqual(wire(slotId, card!.id))
+    // 没有挂到别人的插槽上
+    expect(topology.wires).not.toContainEqual(wire('pslot-a', card!.id))
   })
 
   it('skips slots reachable only from disabled entries', () => {
