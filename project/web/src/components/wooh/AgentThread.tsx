@@ -248,7 +248,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
                     key={key}
                     prompt={t(key)}
                     send
-                    className="max-w-full rounded-2xl border border-border bg-background px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                    className="max-w-full whitespace-normal rounded-2xl border border-border bg-background px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
                   >
                     {t(key)}
                   </ThreadPrimitive.Suggestion>
