@@ -33,11 +33,12 @@
   "noProviders": "No providers available",
   "expandAgent": "Expand Agent panel",
   "collapseAgent": "Collapse Agent panel",
-  "greetingTitle": "Hi, what can I help you with?",
+  "greetingTitle": "Hi, I'm hapiy's built-in assistant",
   "suggestion1": "What can hapiy do?",
   "suggestion2": "Which providers and models are configured?",
   "suggestion3": "Which channels are disabled?",
   "suggestion4": "Create a provider called test",
   "suggestion5": "How much have I used and spent so far?",
-  "suggestedLabel": "Suggested"
+  "suggestedLabel": "Suggested",
+  "greetingSubtitle": "Just describe what you need and I'll configure hapiy for you — no need to read the complex docs."
 }

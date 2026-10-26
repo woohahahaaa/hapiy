@@ -33,11 +33,12 @@
   "noProviders": "没有可用供应商",
   "expandAgent": "展开Agent面板",
   "collapseAgent": "收起Agent面板",
-  "greetingTitle": "你好，有什么可以帮你",
+  "greetingTitle": "你好，我是 hapiy 内置助手",
   "suggestion1": "hapiy 可以做什么？",
   "suggestion2": "现在有哪些供应商和模型？",
   "suggestion3": "哪些渠道被禁用了？",
   "suggestion4": "帮我建一个叫 test 的供应商",
   "suggestion5": "现在用了多少、花了多少？",
-  "suggestedLabel": "为你推荐"
+  "suggestedLabel": "为你推荐",
+  "greetingSubtitle": "你可以直接说出需求，让我帮你配置 hapiy，而不用读复杂的帮助文档"
 }

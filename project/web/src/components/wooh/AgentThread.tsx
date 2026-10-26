@@ -226,7 +226,10 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 items-center justify-center px-4">
-                <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
+                <div className="max-w-lg text-center">
+                  <h2 className="text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">{t('greetingSubtitle')}</p>
+                </div>
               </div>
               <div className="mx-auto w-full max-w-2xl px-4 pb-2">
                 <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
