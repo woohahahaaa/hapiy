@@ -160,27 +160,39 @@ function MessageRow({
   )
 }
 
-function Composer({ toolbar }: { readonly toolbar?: ReactNode }) {
+function Composer({
+  toolbar,
+  controls,
+}: {
+  readonly toolbar?: ReactNode
+  readonly controls?: ReactNode
+}) {
   const { t } = useTranslation('agentPanel')
   return (
     <ComposerPrimitive.Root
       className={
-        // Row is centre-aligned: the toggle sits beside the send button and
-        // both stay vertically centred while a grown input makes the box taller.
-        'flex w-full items-center gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
+        // Two rows in one box: the input grows upward, while the tool row keeps
+        // the mode switch, model/thinking chips and the send button in a fixed
+        // line at the bottom.
+        'flex w-full flex-col rounded-2xl border border-border bg-background p-2 shadow-sm'
       }
     >
       <ComposerPrimitive.Input
         placeholder={t('placeholder')}
         rows={1}
-        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
+        className="min-h-10 w-full resize-none bg-transparent px-2 py-1.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
       />
-      {toolbar && <div className="flex shrink-0 items-center">{toolbar}</div>}
-      <ComposerPrimitive.Send asChild>
-        <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
-          <AppIcon name="expand_less" size={16} strokeWidth={5} />
-        </Button>
-      </ComposerPrimitive.Send>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">{toolbar}</div>
+        <div className="flex shrink-0 items-center gap-1">
+          {controls}
+          <ComposerPrimitive.Send asChild>
+            <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
+              <AppIcon name="expand_less" size={16} strokeWidth={5} />
+            </Button>
+          </ComposerPrimitive.Send>
+        </div>
+      </div>
     </ComposerPrimitive.Root>
   )
 }
@@ -272,7 +284,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
       >
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
           <AgentAvatar size={36} className="shrink-0" />
-          {controls && <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{controls}</div>}
+          <div className="flex min-w-0 flex-1" />
           {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
         </header>
 
@@ -284,9 +296,10 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                   <h2 className="text-[28px] leading-tight font-semibold tracking-tight">
                     <GreetingTitle text={t('greetingTitle')} />
                   </h2>
-                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{t('greetingSubtitle')}</p>
-                  <div className="mt-6">
-                    <div className="mb-2 text-sm text-muted-foreground">{t('suggestedLabel')}</div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    {t('greetingSubtitle')} {t('suggestedLabel')}
+                  </p>
+                  <div className="mt-4">
                     <div className="flex flex-wrap justify-center gap-2">
                       {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
                         <ThreadPrimitive.Suggestion

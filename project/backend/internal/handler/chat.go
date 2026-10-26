@@ -100,6 +100,15 @@ var chatHiddenTools = map[string]bool{
 // full console agent, which can carry out writes through the ui_ actions.
 const chatModeChat = "chat"
 
+// chatReasoningEfforts is the set of thinking levels the composer may send.
+// Empty is the provider default and is always allowed.
+var chatReasoningEfforts = map[string]bool{
+	"":       true,
+	"low":    true,
+	"medium": true,
+	"high":   true,
+}
+
 // chatReadOnlyTools is the whitelist a chat-mode turn may use. Everything not
 // listed here — provider writes, disabled-record actions, the ui_ follow-along
 // actions — is withheld from the model and refused if it invents a call.
@@ -459,12 +468,20 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			// Mode is "chat" for a read-only turn; empty means the full
 			// execute-capable console agent.
 			Mode string `json:"mode"`
+			// ReasoningEffort is the per-turn thinking level; empty keeps the
+			// provider/model default.
+			ReasoningEffort string `json:"reasoning_effort"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 		readOnly := strings.TrimSpace(req.Mode) == chatModeChat
+		reasoningEffort := strings.ToLower(strings.TrimSpace(req.ReasoningEffort))
+		if !chatReasoningEfforts[reasoningEffort] {
+			respondError(c, http.StatusBadRequest, "CHAT_REASONING_INVALID", "思考程度不支持")
+			return
+		}
 		content := strings.TrimSpace(req.Content)
 		if content == "" {
 			respondError(c, http.StatusBadRequest, "CHAT_CONTENT_REQUIRED", "消息不能为空")
@@ -596,13 +613,14 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		toolBytes := 0
 		for step := 0; step < chatMaxToolSteps; step++ {
 			result, completeErr := chatproto.Complete(ctx, chatproto.Request{
-				Endpoint:  endpoint,
-				BaseURL:   baseURL,
-				Key:       apiKey,
-				Model:     modelName,
-				Messages:  messages,
-				Tools:     tools,
-				SessionID: thread.ID,
+				Endpoint:        endpoint,
+				BaseURL:         baseURL,
+				Key:             apiKey,
+				Model:           modelName,
+				Messages:        messages,
+				Tools:           tools,
+				SessionID:       thread.ID,
+				ReasoningEffort: reasoningEffort,
 			})
 			if completeErr != nil {
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -695,12 +713,13 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			wrapCtx, cancelWrap := context.WithTimeout(ctx, chatWrapUpTimeout)
 			defer cancelWrap()
 			final, finalErr := chatproto.Complete(wrapCtx, chatproto.Request{
-				Endpoint:  endpoint,
-				BaseURL:   baseURL,
-				Key:       apiKey,
-				Model:     modelName,
-				Messages:  append(messages, chatproto.Message{Role: "user", Content: chatWrapUpPrompt}),
-				SessionID: thread.ID,
+				Endpoint:        endpoint,
+				BaseURL:         baseURL,
+				Key:             apiKey,
+				Model:           modelName,
+				Messages:        append(messages, chatproto.Message{Role: "user", Content: chatWrapUpPrompt}),
+				SessionID:       thread.ID,
+				ReasoningEffort: reasoningEffort,
 			})
 			if finalErr != nil {
 				c.JSON(http.StatusBadGateway, gin.H{"error": "本轮没有正常结束: " + finalErr.Error()})

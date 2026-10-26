@@ -44,6 +44,12 @@
   "suggestion3": "Which channels are disabled?",
   "suggestion4": "Create a provider called test",
   "suggestion5": "How much have I used and spent so far?",
-  "suggestedLabel": "You can ask",
+  "suggestedLabel": "You can ask:",
+  "thinkingLabel": "Thinking level",
+  "thinkingDefault": "Default",
+  "thinkingLow": "Low",
+  "thinkingMedium": "Medium",
+  "thinkingHigh": "High",
+  "thinkingHint": "Higher levels let the model think for longer",
   "greetingSubtitle": "Just describe what you need and I'll configure hapiy for you — no need to read the complex docs."
 }

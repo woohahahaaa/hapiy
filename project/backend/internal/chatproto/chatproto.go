@@ -127,6 +127,9 @@ type Request struct {
 	Messages  []Message
 	Tools     []Tool
 	SessionID string
+	// ReasoningEffort is the turn's thinking level ("low"/"medium"/"high");
+	// empty leaves the provider default in place.
+	ReasoningEffort string
 }
 
 // Result is the assistant turn after protocol translation.
@@ -254,6 +257,10 @@ func buildChatRequest(req Request) (*schemas.BifrostChatRequest, error) {
 	}
 
 	params := &schemas.ChatParameters{}
+	if req.ReasoningEffort != "" {
+		effort := req.ReasoningEffort
+		params.Reasoning = &schemas.ChatReasoning{Effort: &effort}
+	}
 	if len(req.Tools) > 0 {
 		tools := make([]schemas.ChatTool, 0, len(req.Tools))
 		for _, tool := range req.Tools {

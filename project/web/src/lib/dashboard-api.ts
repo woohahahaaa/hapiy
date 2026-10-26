@@ -412,6 +412,10 @@ export type SystemSetting = {
 // lookups only, 'execute' may carry out changes through the console UI.
 export type ChatSendMode = 'chat' | 'execute'
 
+// ChatReasoningEffort is the turn's thinking level. '' keeps the provider
+// default; the other values are forwarded as reasoning.effort upstream.
+export type ChatReasoningEffort = '' | 'low' | 'medium' | 'high'
+
 export type ChatProviderOption = {
   readonly id: string
   readonly name: string
@@ -3234,6 +3238,8 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       pageContext?: string
       /** 'chat' keeps the turn read-only; anything else may execute. */
       mode?: ChatSendMode
+      /** '' or omitted keeps the provider default thinking level. */
+      reasoningEffort?: ChatReasoningEffort
     },
   ): Promise<ChatThreadResult> {
     return parseChatThreadResult(await request(`/chat/threads/${id}/messages`, {
@@ -3244,6 +3250,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         provider_id: input.providerId,
         page_context: input.pageContext ?? '',
         mode: input.mode === 'chat' ? 'chat' : '',
+        reasoning_effort: input.reasoningEffort ?? '',
       }),
     }, CHAT_TIMEOUT_MS))
   },

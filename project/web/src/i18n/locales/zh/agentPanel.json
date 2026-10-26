@@ -44,6 +44,12 @@
   "suggestion3": "哪些渠道被禁用了？",
   "suggestion4": "帮我建一个叫 test 的供应商",
   "suggestion5": "现在用了多少、花了多少？",
-  "suggestedLabel": "你可以问",
+  "suggestedLabel": "你可以问：",
+  "thinkingLabel": "思考程度",
+  "thinkingDefault": "默认",
+  "thinkingLow": "低",
+  "thinkingMedium": "中",
+  "thinkingHigh": "高",
+  "thinkingHint": "档位越高，模型思考越久",
   "greetingSubtitle": "你可以直接说出需求，让我帮你配置 hapiy，而不用读复杂的帮助文档"
 }
