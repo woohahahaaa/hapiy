@@ -34,6 +34,6 @@
   "expandAgent": "展开Agent面板",
   "collapseAgent": "收起Agent面板",
   "greetingTitle": "我是 hapiy 的内置助手",
-  "greetingGateway": "hapiy 是一个自托管 AI 网关：把多家模型供应商汇成一个入口，统一做路由、故障转移、用量和成本管理，也能接管 AI 编程工具的配置。",
-  "greetingService": "你不用读帮助文档，直接描述需求就行——我先告诉你系统能不能实现；能做的，我会在右侧面板里按真实操作帮你完成。"
+  "greetingGateway": "hapiy 是自托管 AI 网关：多家模型供应商汇成一个入口，统一路由、容错、用量和成本。",
+  "greetingService": "直接说需求，不用读文档；能做的，我在右侧面板按真实操作帮你完成。"
 }

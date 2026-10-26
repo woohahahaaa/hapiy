@@ -34,6 +34,6 @@
   "expandAgent": "Expand Agent panel",
   "collapseAgent": "Collapse Agent panel",
   "greetingTitle": "I'm the built-in assistant for hapiy",
-  "greetingGateway": "hapiy is a self-hosted AI gateway: it funnels multiple model providers into one endpoint and manages routing, failover, usage and cost, and it can also take over AI coding-tool configuration.",
-  "greetingService": "Skip the docs — just describe what you need. I'll tell you whether hapiy can do it, and for anything it can, I'll carry it out in the panel on the right the way you would."
+  "greetingGateway": "hapiy is a self-hosted AI gateway: many providers behind one endpoint, with routing, failover, usage and cost in one place.",
+  "greetingService": "Just describe what you need — I'll check whether hapiy can do it and carry it out in the panel on the right."
 }
