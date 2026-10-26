@@ -190,15 +190,26 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
 
   const chatModel = useMemo<ChatModelAdapter>(
     () => ({
-      async run({ messages }) {
+      async *run({ messages, abortSignal }) {
         const text = lastUserText(messages)
-        if (!text.trim()) return { content: [] }
+        if (!text.trim()) return
         try {
           const reply = await sendRef.current(text)
-          return { content: [{ type: 'text', text: reply }] }
+          // Typewriter effect: the backend answers in one shot, so grow the
+          // assistant message over a few hundred frames instead of dropping the
+          // whole block in at once. Long replies use bigger steps so the total
+          // reveal stays under ~4s.
+          const chars = Array.from(reply)
+          const step = Math.max(1, Math.ceil(chars.length / 200))
+          for (let end = step; end < chars.length; end += step) {
+            if (abortSignal.aborted) return
+            yield { content: [{ type: 'text', text: chars.slice(0, end).join('') }] }
+            await new Promise((resolve) => setTimeout(resolve, 18))
+          }
+          yield { content: [{ type: 'text', text: reply }] }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
-          return {
+          yield {
             content: [{ type: 'text', text: `⚠ ${message}` }],
             status: { type: 'incomplete', reason: 'error' },
           }
