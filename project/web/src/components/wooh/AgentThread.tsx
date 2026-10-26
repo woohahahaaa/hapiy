@@ -240,22 +240,26 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
-              <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
-              <div className="flex w-full max-w-md flex-col items-start gap-2">
-                {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
-                  <ThreadPrimitive.Suggestion
-                    key={key}
-                    prompt={t(key)}
-                    send
-                    className="max-w-full whitespace-normal rounded-2xl border border-border bg-background px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
-                  >
-                    {t(key)}
-                  </ThreadPrimitive.Suggestion>
-                ))}
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-6 py-10">
+                <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
+                <div className="flex w-full max-w-md flex-col items-start gap-2">
+                  {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
+                    <ThreadPrimitive.Suggestion
+                      key={key}
+                      prompt={t(key)}
+                      send
+                      className="max-w-full whitespace-normal rounded-2xl border border-border bg-background px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                    >
+                      {t(key)}
+                    </ThreadPrimitive.Suggestion>
+                  ))}
+                </div>
               </div>
-              <div className="w-full max-w-2xl">
-                <Composer centered />
+              {/* Same bottom bar as an active conversation: the input never
+                  moves between the empty and filled states. */}
+              <div className="border-t border-border p-3">
+                <Composer />
               </div>
             </div>
           </AuiIf>
