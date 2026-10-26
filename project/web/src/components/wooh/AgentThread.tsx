@@ -63,17 +63,13 @@ function messageText(message: ThreadMessage): string {
 
 function MessageRow({
   role,
-  createdAt,
   message,
 }: {
   readonly role: 'user' | 'assistant' | 'system'
-  readonly createdAt: Date
   readonly message: ThreadMessage
 }) {
   const { t } = useTranslation('agentPanel')
   const outgoing = role === 'user'
-  const time = createdAt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  const label = outgoing ? t('you') : t('agent')
 
   const copy = async () => {
     try {
@@ -85,66 +81,54 @@ function MessageRow({
   }
 
   return (
-    <MessagePrimitive.Root className="group mb-4 flex min-w-0 flex-col gap-1">
+    <MessagePrimitive.Root
+      className={cn(
+        'group mb-5 flex min-w-0 flex-col',
+        outgoing ? 'items-end' : 'items-start',
+      )}
+    >
       <div
         className={cn(
-          'flex w-full items-center gap-2 px-1 text-xs text-muted-foreground',
-          outgoing && 'justify-end',
+          'min-w-0',
+          outgoing
+            ? 'max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-foreground'
+            : 'w-full text-foreground',
         )}
       >
-        <span className="truncate font-medium text-foreground/80">{label}</span>
-        <span className={cn('shrink-0 tabular-nums', !outgoing && 'ms-auto')}>{time}</span>
+        <MessagePrimitive.Parts components={{ Text: AssistantText }} />
       </div>
-      <div
-        className={cn(
-          'flex min-w-0 max-w-[80%] flex-col',
-          outgoing ? 'items-end self-end' : 'items-start self-start',
-        )}
-      >
-        <div
-          className={cn(
-            'min-w-0 rounded-2xl px-4 py-2.5',
-            outgoing ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
-          )}
-        >
-          <MessagePrimitive.Parts components={{ Text: AssistantText }} />
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="icon-xs"
-              variant="ghost"
-              aria-label={t('messageActions')}
-              className="mt-1 shrink-0 text-muted-foreground"
-            >
-              <AppIcon name="more_horiz" size={16} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem onSelect={() => void copy()}>
-              <AppIcon name="content_copy" size={14} />
-              <span>{t('copy')}</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon-xs"
+            variant="ghost"
+            aria-label={t('messageActions')}
+            className="mt-1 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          >
+            <AppIcon name="more_horiz" size={16} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-32">
+          <DropdownMenuItem onSelect={() => void copy()}>
+            <AppIcon name="content_copy" size={14} />
+            <span>{t('copy')}</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </MessagePrimitive.Root>
   )
 }
 
-function Composer({ centered = false }: { readonly centered?: boolean }) {
+function Composer() {
   const { t } = useTranslation('agentPanel')
   return (
     <ComposerPrimitive.Root
-      className={cn(
+      className={
         // The send button is bottom-aligned. One line of input is exactly the
         // button height (40px: 24px line-height + py-2), so a single line reads
         // as vertically centred while a grown box puts the button bottom-right.
-        'flex w-full items-end gap-2 bg-card',
-        centered
-          ? 'rounded-3xl border border-border p-2 pl-4 shadow-sm'
-          : 'rounded-3xl border border-border p-2 pl-3',
-      )}
+        'flex w-full items-end gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
+      }
     >
       <ComposerPrimitive.Input
         placeholder={t('placeholder')}
@@ -241,24 +225,25 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-3 py-10">
+              <div className="flex min-h-0 flex-1 items-center justify-center px-3">
                 <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
-                <div className="flex w-full max-w-2xl flex-col items-start gap-2">
+              </div>
+              <div className="mx-auto w-full max-w-2xl px-3 pb-2">
+                <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
+                <div className="flex flex-col items-start gap-2">
                   {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
                     <ThreadPrimitive.Suggestion
                       key={key}
                       prompt={t(key)}
                       send
-                      className="max-w-full whitespace-normal rounded-2xl border border-border bg-background px-4 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+                      className="max-w-full whitespace-normal rounded-lg border border-border bg-background px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
                     >
                       {t(key)}
                     </ThreadPrimitive.Suggestion>
                   ))}
                 </div>
               </div>
-              {/* Same bottom bar as an active conversation: the input never
-                  moves between the empty and filled states. */}
-              <div className="border-t border-border p-3">
+              <div className="p-3 pt-0">
                 <div className="mx-auto w-full max-w-2xl">
                   <Composer />
                 </div>
@@ -271,12 +256,12 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
               <div className="mx-auto w-full max-w-2xl">
                 <ThreadPrimitive.Messages>
                   {({ message }) => (
-                    <MessageRow role={message.role} createdAt={message.createdAt} message={message} />
+                    <MessageRow role={message.role} message={message} />
                   )}
                 </ThreadPrimitive.Messages>
               </div>
             </ThreadPrimitive.Viewport>
-            <div className="border-t border-border p-3">
+            <div className="p-3">
               <div className="mx-auto w-full max-w-2xl">
                 <Composer />
               </div>

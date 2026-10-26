@@ -38,5 +38,6 @@
   "suggestion2": "Which providers and models are configured?",
   "suggestion3": "Which channels are disabled?",
   "suggestion4": "Create a provider called test",
-  "suggestion5": "How much have I used and spent so far?"
+  "suggestion5": "How much have I used and spent so far?",
+  "suggestedLabel": "Suggested"
 }
