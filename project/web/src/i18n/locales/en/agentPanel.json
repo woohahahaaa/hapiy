@@ -33,7 +33,10 @@
   "noProviders": "No providers available",
   "expandAgent": "Expand Agent panel",
   "collapseAgent": "Collapse Agent panel",
-  "greetingTitle": "I'm the built-in assistant for hapiy",
-  "greetingGateway": "hapiy is an AI relay: models from different providers (DeepSeek, Claude, GPT and more) all go through one endpoint, with requests routed, lines switched automatically, and usage and cost in one place.",
-  "greetingService": "You don't need the manual — just say what you want. I'll tell you if hapiy can do it, and if it can, I'll walk through it on the right, step by step."
+  "greetingTitle": "Hi, what can I help you with?",
+  "suggestion1": "What can hapiy do?",
+  "suggestion2": "Which providers and models are configured?",
+  "suggestion3": "Which channels are disabled?",
+  "suggestion4": "Create a provider called test",
+  "suggestion5": "How much have I used and spent so far?"
 }

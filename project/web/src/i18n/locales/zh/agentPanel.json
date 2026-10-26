@@ -33,7 +33,10 @@
   "noProviders": "没有可用供应商",
   "expandAgent": "展开Agent面板",
   "collapseAgent": "收起Agent面板",
-  "greetingTitle": "我是 hapiy 的内置助手",
-  "greetingGateway": "hapiy 是一个 AI 中转站：把 DeepSeek、Claude、GPT 等各家模型接到同一个入口，统一分配请求、自动切换线路，还能看用量和花费。",
-  "greetingService": "你不用看说明书，直接说想做什么；我先告诉你能不能做，能做的就在右边按真实操作一步步帮你完成，你能看到每一步。"
+  "greetingTitle": "你好，有什么可以帮你",
+  "suggestion1": "hapiy 可以做什么？",
+  "suggestion2": "现在有哪些供应商和模型？",
+  "suggestion3": "哪些渠道被禁用了？",
+  "suggestion4": "帮我建一个叫 test 的供应商",
+  "suggestion5": "现在用了多少、花了多少？"
 }
