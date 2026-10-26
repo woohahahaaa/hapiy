@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>首次配置 · hapiy</title>
+<style>
+  /* 单文件静态预览：样式和交互全部内联，双击打开即可，不需要起服务。
+     颜色取自控制台主题，深浅色跟随右下角的预览开关。 */
+  :root {
+    --bg: #ffffff;
+    --fg: #18181b;
+    --card: #ffffff;
+    --border: #e4e4e7;
+    --border-soft: rgba(228, 228, 231, 0.6);
+    --muted: #f4f4f5;
+    --muted-fg: #71717a;
+    --primary: #18181b;
+    --primary-fg: #fafafa;
+    --destructive: #e7000b;
+    --warning: #b45309;
+    --ring: rgba(24, 24, 27, 0.12);
+    --shadow: 0 1px 2px rgba(24, 24, 27, 0.06), 0 8px 24px rgba(24, 24, 27, 0.04);
+    --dot: rgba(228, 228, 231, 0.9);
+  }
+  html.dark {
+    --bg: #09090b;
+    --fg: #fafafa;
+    --card: #121214;
+    --border: #27272a;
+    --border-soft: rgba(39, 39, 42, 0.7);
+    --muted: #27272a;
+    --muted-fg: #a1a1aa;
+    --primary: #fafafa;
+    --primary-fg: #18181b;
+    --destructive: #ff6467;
+    --warning: #fbbf24;
+    --ring: rgba(250, 250, 250, 0.14);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(0, 0, 0, 0.45);
+    --dot: rgba(39, 39, 42, 0.9);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    background-color: var(--bg);
+    background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 0);
+    background-size: 22px 22px;
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  button { font: inherit; color: inherit; }
+  .page { display: flex; min-height: 100vh; flex-direction: column; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 24px;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand-logo {
+    display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 9px;
+    background: var(--primary); color: var(--primary-fg);
+    font-size: 14px; font-weight: 600;
+  }
+  .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand-badge {
+    padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--card); color: var(--muted-fg); font-size: 10px;
+  }
+  .linkish { border: 0; background: none; color: var(--muted-fg); font-size: 12px; cursor: pointer; }
+  .linkish:hover { color: var(--fg); }
+  main { display: flex; flex: 1; justify-content: center; align-items: flex-start; padding: 16px 16px 112px; }
+  .shell { width: 100%; max-width: 576px; }
+  .intro { margin-bottom: 24px; }
+  h1 { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; }
+  .intro p { margin: 8px 0 0; font-size: 14px; line-height: 1.6; color: var(--muted-fg); }
+
+  .card { border: 1px solid var(--border); border-radius: 16px; background: var(--card); box-shadow: var(--shadow); overflow: hidden; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+  .card-body { padding: 24px; }
+  .step-count { font-size: 11px; color: var(--muted-fg); white-space: nowrap; }
+
+  .steps { display: flex; align-items: center; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  .step { display: flex; align-items: center; gap: 8px; }
+  .step + .step::before { content: ""; width: 40px; height: 1px; background: var(--border); margin-inline-end: 2px; }
+  .step.done + .step::before { background: var(--primary); }
+  .step-dot {
+    display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: 11px; font-weight: 500; color: var(--muted-fg);
+  }
+  .step.active .step-dot { border-color: var(--primary); color: var(--fg); }
+  .step.done .step-dot { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+  .step-label { font-size: 12px; color: var(--muted-fg); }
+  .step.active .step-label { color: var(--fg); font-weight: 500; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+  .field:last-of-type { margin-bottom: 0; }
+  .field > label { font-size: 12px; font-weight: 500; }
+  .field .optional { font-weight: 400; color: var(--muted-fg); }
+  .input {
+    width: 100%; height: 40px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: transparent; color: var(--fg); font-size: 14px; outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .input::placeholder { color: var(--muted-fg); }
+  .input:focus { border-color: var(--fg); box-shadow: 0 0 0 3px var(--ring); }
+  .input.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+  .with-btn { position: relative; }
+  .with-btn .input { padding-inline-end: 64px; }
+  .reveal {
+    position: absolute; inset-inline-end: 8px; top: 50%; transform: translateY(-50%);
+    height: 26px; padding: 0 8px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--muted-fg); font-size: 11px; cursor: pointer;
+  }
+  .reveal:hover { background: var(--muted); color: var(--fg); }
+  .hint { margin: 0; font-size: 11px; line-height: 1.7; color: var(--muted-fg); }
+  .hint code { padding: 1px 4px; border-radius: 4px; background: var(--muted); font-size: 11px; }
+
+  .presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; color: var(--muted-fg); }
+  .preset {
+    padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px;
+    background: transparent; color: var(--muted-fg); font-size: 11px; cursor: pointer;
+  }
+  .preset:hover { background: var(--muted); color: var(--fg); }
+
+  .alert { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-top: 20px; border: 1px solid; border-radius: 12px; font-size: 12px; }
+  .alert svg { flex-shrink: 0; margin-top: 2px; }
+  .alert-title { font-weight: 500; }
+  .alert-body { margin-top: 2px; line-height: 1.6; opacity: .9; }
+  .alert.error { border-color: color-mix(in oklab, var(--destructive) 30%, transparent); background: color-mix(in oklab, var(--destructive) 5%, transparent); color: var(--destructive); }
+  .alert.warning { border-color: color-mix(in oklab, var(--warning) 30%, transparent); background: color-mix(in oklab, var(--warning) 6%, transparent); color: var(--warning); }
+
+  .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .foot-actions { display: flex; align-items: center; gap: 12px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: 9px;
+    background: transparent; font-size: 12px; font-weight: 500; white-space: nowrap;
+    cursor: pointer; transition: background .15s, opacity .15s, border-color .15s;
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.primary { background: var(--primary); color: var(--primary-fg); }
+  .btn.primary:not(:disabled):hover { opacity: .88; }
+  .btn.ghost { color: var(--muted-fg); }
+  .btn.ghost:not(:disabled):hover { background: var(--muted); color: var(--fg); }
+  .btn.outline { border-color: var(--border); background: var(--card); }
+  .btn.outline:not(:disabled):hover { background: var(--muted); }
+  .btn.lg { height: 36px; padding: 0 14px; font-size: 12px; }
+  .btn.primary .count { color: color-mix(in oklab, var(--primary-fg) 70%, transparent); }
+
+  .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-inline-end-color: transparent; border-radius: 999px; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .provider-strip {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px;
+    background: color-mix(in oklab, var(--muted) 32%, transparent); font-size: 12px;
+  }
+  .provider-strip .name { font-weight: 500; }
+  .provider-strip .url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-fg); font-size: 11px; }
+  .badge { margin-inline-start: auto; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted-fg); font-size: 11px; }
+
+  .list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 20px; font-size: 12px; color: var(--muted-fg); }
+  .list-head b { color: var(--fg); font-weight: 500; }
+  .mini { height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted-fg); font-size: 11px; cursor: pointer; }
+  .mini:hover { background: var(--muted); color: var(--fg); }
+
+  .search { position: relative; margin-top: 12px; }
+  .search svg { position: absolute; inset-inline-start: 10px; top: 50%; transform: translateY(-50%); color: var(--muted-fg); pointer-events: none; }
+  .search .input { height: 36px; padding-inline-start: 32px; font-size: 12px; }
+
+  .model-list { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden auto; max-height: 256px; }
+  .model-row {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border-soft);
+    background: transparent; text-align: left; font-size: 12px; cursor: pointer;
+  }
+  .model-row:last-child { border-bottom: 0; }
+  .model-row:hover { background: color-mix(in oklab, var(--muted) 55%, transparent); }
+  .model-row.on { background: color-mix(in oklab, var(--primary) 5%, transparent); }
+  .box {
+    display: grid; place-items: center; width: 16px; height: 16px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: 5px; color: transparent;
+  }
+  .model-row.on .box { border-color: var(--primary); background: var(--primary); color: var(--primary-fg); }
+  .model-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .model-tag { flex-shrink: 0; color: var(--muted-fg); font-size: 10px; }
+  .empty { padding: 24px; text-align: center; font-size: 12px; color: var(--muted-fg); }
+
+  .selected-box { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in oklab, var(--muted) 25%, transparent); }
+  .selected-box:empty { display: none; }
+
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); font-size: 11px; }
+  .tag button { display: grid; place-items: center; width: 16px; height: 16px; border: 0; border-radius: 999px; background: transparent; color: var(--muted-fg); cursor: pointer; }
+  .tag button:hover { background: var(--muted); color: var(--fg); }
+
+  .manual-row { display: flex; gap: 8px; margin-top: 16px; }
+  .manual-row .input { height: 36px; font-size: 12px; }
+  .manual-row .btn { height: 36px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .tags:empty { display: none; }
+
+  .done { display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 16px 0; text-align: center; }
+  .done-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 999px; background: color-mix(in oklab, var(--primary) 10%, transparent); color: var(--primary); }
+  .done h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  .done p { margin: 4px 0 0; font-size: 12px; color: var(--muted-fg); }
+  .summary { width: 100%; border: 1px solid var(--border); border-radius: 12px; text-align: left; font-size: 12px; }
+  .summary-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border-soft); }
+  .summary-row:last-child { border-bottom: 0; align-items: flex-start; }
+  .summary-row .k { color: var(--muted-fg); flex-shrink: 0; }
+  .summary-row .v { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .summary-row .v.mono { font-weight: 400; font-size: 11px; }
+  .summary-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+  .summary-tags span { padding: 1px 8px; border-radius: 999px; background: var(--muted); font-size: 11px; }
+  .done-actions { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; }
+
+  .footnote { margin-top: 16px; text-align: center; font-size: 11px; color: var(--muted-fg); }
+
+  .preview-controls {
+    position: fixed; inset-inline-end: 16px; bottom: 16px; z-index: 50;
+    width: 240px; padding: 12px; border: 1px solid var(--border); border-radius: 12px;
+    background: color-mix(in oklab, var(--card) 95%, transparent); box-shadow: var(--shadow);
+    backdrop-filter: blur(8px); font-size: 12px;
+  }
+  .preview-controls .title { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 11px; font-weight: 500; color: var(--muted-fg); }
+  .segmented { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; border-radius: 9px; background: var(--muted); }
+  .segmented button { height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--muted-fg); font-size: 11px; cursor: pointer; }
+  .segmented button.on { background: var(--card); color: var(--fg); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .theme-toggle { width: 100%; height: 26px; margin-top: 8px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--muted-fg); font-size: 11px; cursor: pointer; }
+  .theme-toggle:hover { background: var(--muted); color: var(--fg); }
+
+  [hidden] { display: none !important; }
+
+  @media (max-width: 640px) {
+    header { padding: 16px; }
+    main { padding: 0 12px 96px; }
+    h1 { font-size: 21px; }
+    .card-head { padding: 14px 16px; }
+    .card-body { padding: 18px 16px; }
+    .step + .step::before { width: 20px; }
+    .step-label { display: none; }
+    .preview-controls { inset-inline: 12px; width: auto; }
+    .card-foot { flex-wrap: wrap; }
+    .foot-actions { margin-inline-start: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">
+      <span class="brand-logo">h</span>
+      <span class="brand-name">hapiy</span>
+      <span class="brand-badge">首次配置</span>
+    </div>
+    <button class="linkish" id="skip">跳过，稍后配置</button>
+  </header>
+
+  <main>
+    <div class="shell">
+      <div class="intro">
+        <h1>把第一个模型接进来</h1>
+        <p>hapiy 至少要有一个供应商和一个模型才能开始转发请求。填好这两项，大约一分钟。</p>
+      </div>
+
+      <section class="card">
+        <div class="card-head">
+          <ol class="steps" id="steps">
+            <li class="step active" data-step="1"><span class="step-dot" aria-hidden="true">1</span><span class="step-label">连接供应商</span></li>
+            <li class="step" data-step="2"><span class="step-dot" aria-hidden="true">2</span><span class="step-label">选择模型</span></li>
+          </ol>
+          <span class="step-count" id="stepCount">第 1 / 2 步</span>
+        </div>
+
+        <div class="card-body">
+          <!-- 第一步：供应商 -->
+          <div id="step1">
+            <div class="field">
+              <label for="providerName">供应商名称 <span class="optional">（可选）</span></label>
+              <input class="input" id="providerName" autocomplete="off" placeholder="DeepSeek 官方" />
+            </div>
+
+            <div class="field">
+              <label for="baseUrl">Base URL</label>
+              <input class="input mono" id="baseUrl" value="https://api.deepseek.com/v1" spellcheck="false" autocomplete="off" placeholder="https://api.deepseek.com/v1" />
+              <div class="presets">
+                <span>常用：</span>
+                <button class="preset" data-url="https://api.deepseek.com/v1">DeepSeek</button>
+                <button class="preset" data-url="https://api.openai.com/v1">OpenAI</button>
+                <button class="preset" data-url="https://openrouter.ai/api/v1">OpenRouter</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="apiKey">API Key</label>
+              <div class="with-btn">
+                <input class="input mono" id="apiKey" type="password" placeholder="sk-…" spellcheck="false" autocomplete="off" />
+                <button class="reveal" id="revealKey" type="button">显示</button>
+              </div>
+              <p class="hint">填到 <code>/v1</code> 这一级即可，不要带 <code>/chat/completions</code>。Key 只保存在本机。</p>
+            </div>
+
+            <div class="alert error" id="fetchError" hidden>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/></svg>
+              <div>
+                <div class="alert-title">自动获取模型失败</div>
+                <div class="alert-body" id="fetchErrorBody"></div>
+              </div>
+            </div>
+
+            <div class="card-foot">
+              <button class="btn ghost lg" id="manualFromStep1" type="button">手动填模型</button>
+              <button class="btn primary lg" id="fetchModels" type="button">获取模型
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 第二步：模型 -->
+          <div id="step2" hidden>
+            <div class="provider-strip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted-fg)"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+              <span class="name" id="providerNameEcho">api.deepseek.com</span>
+              <span class="url mono" id="baseUrlEcho"></span>
+              <span class="badge">OpenAI 兼容</span>
+            </div>
+
+            <div class="alert warning" id="manualError" hidden>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg>
+              <div>
+                <div class="alert-title">自动获取失败，改为手动填写</div>
+                <div class="alert-body" id="manualErrorBody"></div>
+              </div>
+            </div>
+
+            <div id="listMode">
+              <div class="list-head">
+                <span>已获取 <b id="modelCount">0</b> 个模型，选择要启用的</span>
+                <span>
+                  <button class="mini" id="selectAll" type="button">全选</button>
+                  <button class="mini" id="clearAll" type="button">清空</button>
+                </span>
+              </div>
+              <div class="search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                <input class="input" id="modelSearch" placeholder="搜索模型" autocomplete="off" />
+              </div>
+              <div class="model-list" id="modelList"></div>
+              <div class="selected-box" id="selectedBox"></div>
+            </div>
+
+            <div id="manualMode" hidden>
+              <div class="manual-row">
+                <input class="input mono" id="manualInput" placeholder="deepseek-chat" autocomplete="off" />
+                <button class="btn outline" id="addModel" type="button">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  添加
+                </button>
+              </div>
+              <p class="hint" style="margin-top: 12px">回车或逗号添加，模型名要和控制台上游的写法完全一致。</p>
+              <div class="tags" id="manualTags"></div>
+            </div>
+
+            <div class="card-foot">
+              <button class="btn ghost lg" id="backToStep1" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                上一步
+              </button>
+              <div class="foot-actions">
+                <button class="linkish" id="toManual" type="button">列表里没有？手动填</button>
+                <button class="btn primary lg" id="finish" type="button">完成配置 <span class="count" id="finishCount"></span></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 完成 -->
+          <div id="step3" hidden>
+            <div class="done">
+              <span class="done-icon">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.5 2.4 4.6-5"/></svg>
+              </span>
+              <div>
+                <h2>配置完成</h2>
+                <p>hapiy 已经可以转发请求了，接下来可以在控制台继续加供应商或调整拓扑。</p>
+              </div>
+              <div class="summary">
+                <div class="summary-row"><span class="k">供应商</span><span class="v" id="sumName"></span></div>
+                <div class="summary-row"><span class="k">Base URL</span><span class="v mono" id="sumUrl"></span></div>
+                <div class="summary-row"><span class="k">模型</span><span class="summary-tags" id="sumModels"></span></div>
+              </div>
+              <div class="done-actions">
+                <button class="btn ghost" id="restart" type="button">重新体验</button>
+                <button class="btn primary lg" type="button">进入控制台
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p class="footnote">Key 只保存在本机的 hapiy 配置里，不会上传到任何第三方。</p>
+    </div>
+  </main>
+
+  <div class="preview-controls">
+    <div class="title">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      预览控制（仅本地，不会保存）
+    </div>
+    <div class="segmented">
+      <button id="modeSuccess" class="on" type="button">获取成功</button>
+      <button id="modeFailure" type="button">获取失败</button>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">切换深色 / 浅色</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const state = {
+    step: 1,
+    mode: 'success',   // success | failure
+    name: '',
+    baseUrl: 'https://api.deepseek.com/v1',
+    key: '',
+    fetched: null,     // string[]
+    manual: false,
+    error: '',
+    selected: [],
+    query: '',
+  }
+
+  const $ = (id) => document.getElementById(id)
+  const el = {
+    steps: $('steps'), stepCount: $('stepCount'),
+    step1: $('step1'), step2: $('step2'), step3: $('step3'),
+    name: $('providerName'), baseUrl: $('baseUrl'), key: $('apiKey'), reveal: $('revealKey'),
+    fetchError: $('fetchError'), fetchErrorBody: $('fetchErrorBody'),
+    fetchBtn: $('fetchModels'), manualFromStep1: $('manualFromStep1'),
+    pEcho: $('providerNameEcho'), uEcho: $('baseUrlEcho'),
+    manualError: $('manualError'), manualErrorBody: $('manualErrorBody'),
+    listMode: $('listMode'), manualMode: $('manualMode'),
+    count: $('modelCount'), search: $('modelSearch'), list: $('modelList'), selectedBox: $('selectedBox'),
+    manualInput: $('manualInput'), addModel: $('addModel'), manualTags: $('manualTags'),
+    back: $('backToStep1'), toManual: $('toManual'), finish: $('finish'), finishCount: $('finishCount'),
+    sumName: $('sumName'), sumUrl: $('sumUrl'), sumModels: $('sumModels'),
+    restart: $('restart'), skip: $('skip'),
+    modeSuccess: $('modeSuccess'), modeFailure: $('modeFailure'), themeToggle: $('themeToggle'),
+  }
+
+  const iconCheck = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>'
+  const iconClose = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>'
+
+  const hostOf = (value) => {
+    try { return new URL(value).host || value } catch { return (value || '').replace(/^https?:\/\//, '').split('/')[0] || '未命名供应商' }
+  }
+
+  // mockModels 按 Base URL 猜一个厂商，返回合理的模型名，方便看列表、搜索和多选。
+  const mockModels = (value) => {
+    const url = (value || '').toLowerCase()
+    if (url.includes('deepseek')) return ['deepseek-chat', 'deepseek-reasoner']
+    if (url.includes('openai')) return ['gpt-4o', 'gpt-4o-mini', 'o3-mini']
+    if (url.includes('openrouter')) return ['anthropic/claude-sonnet-4.5', 'google/gemini-2.5-pro', 'deepseek/deepseek-chat']
+    if (url.includes('anthropic') || url.includes('claude')) return ['claude-sonnet-4-5', 'claude-haiku-4-5']
+    return ['gpt-4o-mini', 'deepseek-chat', 'qwen-max']
+  }
+
+  const providerName = () => state.name.trim() || hostOf(state.baseUrl)
+
+  function renderSteps() {
+    const done = state.step > 2
+    el.steps.querySelectorAll('.step').forEach((node) => {
+      const id = Number(node.dataset.step)
+      node.classList.toggle('done', done || state.step > id)
+      node.classList.toggle('active', !done && state.step === id)
+      const dot = node.querySelector('.step-dot')
+      dot.innerHTML = done || state.step > id ? iconCheck : String(id)
+    })
+    el.stepCount.textContent = state.step < 3 ? `第 ${state.step} / 2 步` : ''
+    el.stepCount.hidden = state.step === 3
+    el.step1.hidden = state.step !== 1
+    el.step2.hidden = state.step !== 2
+    el.step3.hidden = state.step !== 3
+  }
+
+  function renderStep1() {
+    el.fetchError.hidden = !state.error
+    el.fetchErrorBody.textContent = state.error
+      ? `${state.error}。可以重试，或者直接进入下一步手动填写模型名称。`
+      : ''
+    el.fetchBtn.disabled = !(state.baseUrl.trim() && state.key.trim()) || el.fetchBtn.dataset.busy === '1'
+    if (el.fetchBtn.dataset.busy !== '1') {
+      el.fetchBtn.innerHTML = '获取模型 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>'
+    }
+    el.manualFromStep1.textContent = state.error ? '手动填模型' : '手动填模型'
+  }
+
+  function renderStep2() {
+    el.pEcho.textContent = providerName()
+    el.uEcho.textContent = state.baseUrl
+    el.manualError.hidden = !state.error
+    el.manualErrorBody.textContent = state.error
+      ? `${state.error}。在下面输入模型名，按回车或逗号添加，也可以返回上一步重试。`
+      : ''
+    el.listMode.hidden = state.manual
+    el.manualMode.hidden = !state.manual
+    el.toManual.hidden = state.manual
+    el.count.textContent = String((state.fetched || []).length)
+    el.finish.disabled = state.selected.length === 0
+    el.finishCount.textContent = state.selected.length ? `（${state.selected.length}）` : ''
+    renderModelList()
+    renderSelected()
+    renderManualTags()
+  }
+
+  function renderModelList() {
+    const q = state.query.trim().toLowerCase()
+    const items = (state.fetched || []).filter((model) => !q || model.toLowerCase().includes(q))
+    if (!state.fetched) { el.list.innerHTML = ''; return }
+    if (items.length === 0) {
+      el.list.innerHTML = '<div class="empty">没有匹配的模型</div>'
+      return
+    }
+    el.list.innerHTML = items.map((model) => {
+      const on = state.selected.includes(model)
+      return `<button type="button" class="model-row${on ? ' on' : ''}" data-model="${escapeAttr(model)}" aria-pressed="${on}">
+        <span class="box">${iconCheck}</span>
+        <span class="model-name mono">${escapeHtml(model)}</span>
+        <span class="model-tag">chat</span>
+      </button>`
+    }).join('')
+  }
+
+  function renderSelected() {
+    el.selectedBox.innerHTML = (!state.manual && state.selected.length)
+      ? state.selected.map((model) => tag(model)).join('')
+      : ''
+  }
+
+  function renderManualTags() {
+    el.manualTags.innerHTML = state.selected.map((model) => tag(model)).join('')
+  }
+
+  function tag(model) {
+    return `<span class="tag mono">${escapeHtml(model)}<button type="button" data-remove="${escapeAttr(model)}" aria-label="移除 ${escapeAttr(model)}">${iconClose}</button></span>`
+  }
+
+  function renderStep3() {
+    el.sumName.textContent = providerName()
+    el.sumUrl.textContent = state.baseUrl
+    el.sumModels.innerHTML = state.selected.map((model) => `<span class="mono">${escapeHtml(model)}</span>`).join('')
+  }
+
+  function render() {
+    renderSteps()
+    if (state.step === 1) renderStep1()
+    if (state.step === 2) renderStep2()
+    if (state.step === 3) renderStep3()
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
+  }
+  const escapeAttr = escapeHtml
+
+  async function fetchModels() {
+    if (!state.baseUrl.trim() || !state.key.trim()) return
+    el.fetchBtn.dataset.busy = '1'
+    el.fetchBtn.disabled = true
+    el.fetchBtn.innerHTML = '<span class="spinner"></span> 正在获取模型…'
+    state.error = ''
+    el.fetchError.hidden = true
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    delete el.fetchBtn.dataset.busy
+    if (state.mode === 'failure' || state.baseUrl.toLowerCase().includes('fail')) {
+      state.error = '上游返回 401：Key 无效，或该供应商不提供 /models 接口'
+      renderStep1()
+      return
+    }
+    state.fetched = mockModels(state.baseUrl)
+    state.manual = false
+    state.selected = [state.fetched[0]]
+    state.step = 2
+    render()
+  }
+
+  // ── 第一步事件 ──
+  el.name.addEventListener('input', () => { state.name = el.name.value })
+  el.baseUrl.addEventListener('input', () => { state.baseUrl = el.baseUrl.value; renderStep1() })
+  el.key.addEventListener('input', () => { state.key = el.key.value; renderStep1() })
+  el.key.addEventListener('keydown', (event) => { if (event.key === 'Enter') void fetchModels() })
+  el.reveal.addEventListener('click', () => {
+    const show = el.key.type === 'password'
+    el.key.type = show ? 'text' : 'password'
+    el.reveal.textContent = show ? '隐藏' : '显示'
+  })
+  document.querySelectorAll('.preset').forEach((node) => {
+    node.addEventListener('click', () => { state.baseUrl = node.dataset.url; el.baseUrl.value = state.baseUrl; renderStep1() })
+  })
+  el.fetchBtn.addEventListener('click', () => void fetchModels())
+  el.manualFromStep1.addEventListener('click', () => {
+    state.manual = true
+    state.error = ''
+    state.step = 2
+    render()
+  })
+
+  // ── 第二步事件 ──
+  el.search.addEventListener('input', () => { state.query = el.search.value; renderModelList() })
+  el.selectAll.addEventListener('click', () => {
+    const q = state.query.trim().toLowerCase()
+    const visible = (state.fetched || []).filter((model) => !q || model.toLowerCase().includes(q))
+    state.selected = Array.from(new Set([...state.selected, ...visible]))
+    renderStep2()
+  })
+  el.clearAll.addEventListener('click', () => { state.selected = []; renderStep2() })
+  el.list.addEventListener('click', (event) => {
+    const row = event.target.closest('.model-row')
+    if (!row) return
+    const model = row.dataset.model
+    state.selected = state.selected.includes(model)
+      ? state.selected.filter((item) => item !== model)
+      : [...state.selected, model]
+    renderStep2()
+  })
+  const removeFrom = (target) => {
+    const id = target.closest('[data-remove]')?.dataset.remove
+    if (!id) return
+    state.selected = state.selected.filter((item) => item !== id)
+    renderStep2()
+  }
+  el.selectedBox.addEventListener('click', (event) => removeFrom(event.target))
+  el.manualTags.addEventListener('click', (event) => removeFrom(event.target))
+
+  const addDraft = () => {
+    const value = el.manualInput.value.trim()
+    if (!value) return
+    if (!state.selected.includes(value)) state.selected = [...state.selected, value]
+    el.manualInput.value = ''
+    renderStep2()
+    el.manualInput.focus()
+  }
+  el.addModel.addEventListener('click', addDraft)
+  el.manualInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); addDraft() }
+  })
+  el.toManual.addEventListener('click', () => { state.manual = true; renderStep2() })
+  el.back.addEventListener('click', () => { state.step = 1; render() })
+  el.finish.addEventListener('click', () => { if (state.selected.length) { state.step = 3; render() } })
+
+  // ── 完成 / 重置 ──
+  el.restart.addEventListener('click', () => {
+    state.step = 1
+    state.name = ''
+    state.baseUrl = ''
+    state.key = ''
+    state.fetched = null
+    state.manual = false
+    state.error = ''
+    state.selected = []
+    state.query = ''
+    el.name.value = ''
+    el.baseUrl.value = ''
+    el.key.value = ''
+    el.manualInput.value = ''
+    el.search.value = ''
+    el.reveal.textContent = '显示'
+    el.key.type = 'password'
+    render()
+  })
+  el.skip.addEventListener('click', () => {
+    state.step = 1
+    render()
+  })
+
+  // ── 预览控制 ──
+  const setMode = (mode) => {
+    state.mode = mode
+    el.modeSuccess.classList.toggle('on', mode === 'success')
+    el.modeFailure.classList.toggle('on', mode === 'failure')
+  }
+  el.modeSuccess.addEventListener('click', () => setMode('success'))
+  el.modeFailure.addEventListener('click', () => setMode('failure'))
+  el.themeToggle.addEventListener('click', () => document.documentElement.classList.toggle('dark'))
+
+  render()
+})()
+</script>
+</body>
+</html>
