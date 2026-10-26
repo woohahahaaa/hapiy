@@ -2,9 +2,9 @@
 
 Agent 只能通过 MCP 工具操作 hapiy，不直接读写数据库。写工具统一走 `internal/provider` 等共享操作层，和仪表盘 handler 使用同一套校验、relay 引擎刷新与渠道事件日志。用户名、密码永久不开放。
 
-## 已开放（20）
+## 已开放（21）
 
-### 只读（8）
+### 只读（9）
 
 | 工具 | 覆盖 |
 | --- | --- |
@@ -16,6 +16,7 @@ Agent 只能通过 MCP 工具操作 hapiy，不直接读写数据库。写工具
 | `get_topology` | 拓扑节点与连线 |
 | `list_disabled_channels` | 当前自动禁用的渠道 |
 | `list_agent_configs` | 接管配置记录（仅元数据） |
+| `web_search` | 联网搜索公开网页；优先自建 SearXNG，未配置时抓取 Bing |
 
 ### 供应商写入（8）
 

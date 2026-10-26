@@ -94,7 +94,12 @@
     "mcpCopied": "已复制",
     "mcpRotate": "重新生成",
     "mcpRotateHint": "重新生成后旧 Key 立即失效，已接入的客户端需要同步更新。",
-    "mcpClients": "客户端配置（opencode / Claude Code）见帮助文档「MCP 服务」。"
+    "mcpClients": "客户端配置（opencode / Claude Code）见帮助文档「MCP 服务」。",
+    "webSearchTitle": "联网搜索",
+    "webSearchDescription": "Agent 需要外部资料时用它搜索网页。填 SearXNG 地址优先走自建实例；留空则直接抓取 Bing。",
+    "webSearchPlaceholder": "http://192.168.31.150:8081/search",
+    "webSearchSaved": "已保存搜索地址",
+    "webSearchSaveFailed": "保存搜索地址失败"
   },
   "recovery": {
     "modeProbe": "测试上游恢复",

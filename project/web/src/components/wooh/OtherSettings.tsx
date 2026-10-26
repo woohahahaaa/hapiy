@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { SecretValue } from '@/components/wooh/SecretValue'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
@@ -151,6 +152,8 @@ function McpSection() {
 export function OtherSettings() {
   const { t } = useTranslation('settings')
   const [agentEnabled, setAgentEnabled] = useState(false)
+  const [searchUrl, setSearchUrl] = useState('')
+  const [searchSaving, setSearchSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -160,6 +163,7 @@ export function OtherSettings() {
       .then((settings) => {
         if (cancelled) return
         setAgentEnabled(settings.find((s) => s.key === AGENT_ENABLED_SETTING_KEY)?.value === 'true')
+        setSearchUrl(settings.find((s) => s.key === 'web_search_url')?.value ?? '')
       })
       .catch(() => {})
       .finally(() => {
@@ -177,6 +181,15 @@ export function OtherSettings() {
     void dashboardApi.updateSetting(AGENT_ENABLED_SETTING_KEY, String(next)).catch(() => {})
   }
 
+  const saveSearchUrl = () => {
+    setSearchSaving(true)
+    void dashboardApi
+      .updateSetting('web_search_url', searchUrl.trim())
+      .then(() => toast(t('other.webSearchSaved')))
+      .catch(() => toast(t('other.webSearchSaveFailed')))
+      .finally(() => setSearchSaving(false))
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-xl border border-border bg-card p-4">
@@ -188,6 +201,22 @@ export function OtherSettings() {
         />
       </div>
       <McpSection />
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="text-sm font-medium">{t('other.webSearchTitle')}</div>
+        <div className="mt-2 whitespace-pre-line text-xs text-muted-foreground">
+          {t('other.webSearchDescription')}
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Input
+            value={searchUrl}
+            onChange={(event) => setSearchUrl(event.target.value)}
+            placeholder={t('other.webSearchPlaceholder')}
+          />
+          <Button size="sm" onClick={saveSearchUrl} disabled={searchSaving}>
+            {t('common:action.save')}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

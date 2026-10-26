@@ -324,6 +324,7 @@ hapiy 可以把网关数据以 MCP（Model Context Protocol）服务的形式开
 | `get_topology` | 转发拓扑的节点与连线 |
 | `list_disabled_channels` | 当前被禁用的渠道 |
 | `list_agent_configs` | 被接管的 Agent 配置文件记录（不含内容） |
+| `web_search` | 联网搜索公开网页（优先自建 SearXNG，未配置时抓取 Bing） |
 | `create_provider` | 新建供应商（名称必填，其余字段可留空） |
 | `update_provider` | 修改供应商，只改传入的字段 |
 | `delete_provider` | 删除供应商（不可恢复） |

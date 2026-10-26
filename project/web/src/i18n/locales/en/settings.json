@@ -94,7 +94,12 @@
     "mcpCopied": "Copied",
     "mcpRotate": "Regenerate",
     "mcpRotateHint": "Regenerating invalidates the old key immediately; connected clients must be updated.",
-    "mcpClients": "Client setup (opencode / Claude Code) is documented under \"MCP Server\" in the help docs."
+    "mcpClients": "Client setup (opencode / Claude Code) is documented under \"MCP Server\" in the help docs.",
+    "webSearchTitle": "Web search",
+    "webSearchDescription": "Used by the agent for external information. Set a SearXNG endpoint to use your own instance; leave it empty to query Bing directly.",
+    "webSearchPlaceholder": "http://192.168.31.150:8081/search",
+    "webSearchSaved": "Search endpoint saved",
+    "webSearchSaveFailed": "Failed to save the search endpoint"
   },
   "recovery": {
     "modeProbe": "Test upstream recovery",

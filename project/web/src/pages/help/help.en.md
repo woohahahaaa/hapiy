@@ -324,6 +324,7 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 | `get_topology` | Nodes and wires of the forwarding topology |
 | `list_disabled_channels` | Channels currently disabled |
 | `list_agent_configs` | Managed agent config file records (contents excluded) |
+| `web_search` | Search public web pages (self-hosted SearXNG when configured, Bing otherwise) |
 | `create_provider` | Create a provider (name required, every other field optional) |
 | `update_provider` | Patch a provider; only the fields passed change |
 | `delete_provider` | Delete a provider (irreversible) |
