@@ -37,7 +37,7 @@ const (
 )
 
 // ServerInstructions are handed to clients during initialize.
-const ServerInstructions = `hapiy 是自托管 AI 网关。工具可以读取供应商、可用模型、用量统计、请求日志、转发拓扑、被托管的 Agent 配置文件，也可以修改供应商配置（新建、修改、删除、启停、恢复自动禁用）。修改前先读取现状确认目标，删除类操作不可恢复。上游 Key 只会以尾号形式返回。时间参数一律使用 RFC3339。`
+const ServerInstructions = `hapiy 是自托管 AI 网关。工具可以读取供应商、可用模型、用量统计、请求日志、转发拓扑、被托管的 Agent 配置文件，也可以修改供应商配置（新建、修改、删除、启停、恢复自动禁用），还能用 web_search 联网搜索公开网页。修改前先读取现状确认目标，删除类操作不可恢复。上游 Key 只会以尾号形式返回。时间参数一律使用 RFC3339。`
 
 // NewServer builds the MCP server with every tool registered.
 func NewServer(db *gorm.DB, engine *relay.Engine, version string) *mcp.Server {

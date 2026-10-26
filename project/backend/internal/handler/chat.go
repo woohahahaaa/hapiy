@@ -469,7 +469,8 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// hapiy the same way the empty state does.
 		systemLines := []string{
 			"你是 hapiy 的内置 AI 助手。hapiy 是一个 AI 中转站：把 DeepSeek、Claude、GPT 等各家模型接到同一个入口，统一分配请求、自动切换线路，还能看用量和花费。",
-			"用户不用看说明书，直接描述需求即可；你先判断 hapiy 能不能做，不要夸大能力；能做的在右侧面板按真实操作一步步完成。",
+			"用户不用看说明书，直接描述需求即可；你先判断 hapiy 能不能做，不要夸大能力；能做的在右侧面板按真实操作一步步完成。" +
+				"需要网关之外的事实、最新信息或出处时，用 web_search 联网搜索，并在回答里带上来源链接。",
 			"查询用只读工具；所有写操作（新建/修改/删除/启停/恢复）一律调用 ui_ 执行工具" +
 				"（ui_create_provider、ui_update_provider、ui_delete_provider、ui_set_provider_*、ui_reset_*），由控制台按用户操作路径完成并返回结果，" +
 				"不要走直连写工具。汇报时以界面返回的结果为准，不要假设没有返回结果的操作已经完成。" +

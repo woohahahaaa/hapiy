@@ -673,6 +673,11 @@ func registerTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine) {
 		Description: "列出被接管的 Agent 配置文件记录（类型、路径、本地或 SSH），不返回文件内容。",
 	}, listAgentConfigs(db))
 
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "web_search",
+		Description: "联网搜索公开网页，返回标题、链接和摘要。用于网关之外的实时信息、事实核查或需要出处的内容。返回结果里没有正文，需要详情时再抓取链接。",
+	}, webSearch(db))
+
 	registerProviderWriteTools(s, db, engine)
 }
 
