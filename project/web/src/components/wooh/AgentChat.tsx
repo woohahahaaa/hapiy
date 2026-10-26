@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
 import { AgentModelPicker } from '@/components/wooh/AgentModelPicker'
+import { AgentModeToggle } from '@/components/wooh/AgentModeToggle'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from '@/components/ui/toast'
 import { apiBaseUrl, dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { ChatMessageRecord, ChatModelOption, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
+import type { ChatMessageRecord, ChatModelOption, ChatSendMode, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
 import { pickDefaultModel } from '@/lib/agent-chat'
 import { dispatchUIAction } from '@/lib/ui-actions'
 import { parseChatUIActionEvent } from '@/lib/chat-follow'
@@ -32,6 +33,13 @@ const PROVIDER_ACTIONS = new Set([
 // sessionStorage survives a reload but dies with the tab, which is exactly the
 // lifetime of "the conversation this tab is in".
 const ACTIVE_THREAD_KEY = 'agent_active_thread'
+// The permission level the composer is on. Remembered per tab, like the active
+// thread, so a reload keeps the user in the safer read-only mode.
+const CHAT_MODE_KEY = 'agent_chat_mode'
+
+function readStoredMode(): ChatSendMode {
+  return window.sessionStorage.getItem(CHAT_MODE_KEY) === 'chat' ? 'chat' : 'execute'
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof DashboardApiError ? error.message : fallback
@@ -75,6 +83,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
   const [preference, setPreference] = useState({ model: '', providerId: '' })
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [mode, setMode] = useState<ChatSendMode>(readStoredMode)
   // The live action stream for the turn in flight (one connection per send).
   const followRef = useRef<EventSource | null>(null)
 
@@ -189,6 +198,11 @@ export function AgentChat({ className }: { readonly className?: string }) {
     }
   }
 
+  const changeMode = (next: ChatSendMode) => {
+    setMode(next)
+    window.sessionStorage.setItem(CHAT_MODE_KEY, next)
+  }
+
   const handleSend = async (text: string): Promise<string> => {
     if (!selectedModel) throw new Error(t('selectModelFirst'))
     const providerId = effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider
@@ -224,6 +238,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
         model: selectedModel,
         providerId,
         pageContext: location.pathname,
+        mode,
       })
       // Navigating first lets a page that is not mounted yet pick the queued
       // action up when it mounts.
@@ -267,6 +282,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
           }
           initialMessages={initialMessages}
           onSend={handleSend}
+          composerToolbar={<AgentModeToggle mode={mode} onChange={changeMode} />}
           actions={
             <>
               <Button size="icon-sm" variant="ghost" aria-label={t('newChat')} onClick={startNewThread}>

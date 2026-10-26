@@ -444,6 +444,88 @@ func TestSendChatMessageRunsMCPToolCalls(t *testing.T) {
 	}
 }
 
+func TestSendChatMessageChatModeIsReadOnly(t *testing.T) {
+	var (
+		requests int
+		second   []map[string]any
+	)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		var body struct {
+			Messages []map[string]any `json:"messages"`
+			Tools    []map[string]any `json:"tools"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		if requests == 1 {
+			names := make([]string, 0, len(body.Tools))
+			for _, tool := range body.Tools {
+				fn, _ := tool["function"].(map[string]any)
+				name, _ := fn["name"].(string)
+				names = append(names, name)
+				if strings.HasPrefix(name, "ui_") || name == "create_provider" || name == "delete_provider" {
+					t.Errorf("chat mode must not advertise a write tool, got %q", name)
+				}
+			}
+			if !containsString(names, "list_providers") {
+				t.Errorf("chat mode lost the read tools: %v", names)
+			}
+			// Hallucinate a write the model was never offered.
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"ui_create_provider","arguments":"{\"name\":\"x\"}"}}]}}]}`))
+			return
+		}
+		second = body.Messages
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"聊天模式不能改配置，请切到执行模式。"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"帮我建一个供应商","model":"test-model","mode":"chat"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	refused := false
+	for _, message := range second {
+		if message["role"] != "tool" {
+			continue
+		}
+		content, _ := message["content"].(string)
+		if strings.Contains(content, "聊天模式") {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Fatalf("a write tool call in chat mode must be refused, got %+v", second)
+	}
+	if len(second) == 0 {
+		t.Fatalf("expected a second upstream call after the refused tool call")
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSendChatMessageQueuesUIActions(t *testing.T) {
 	var requests int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -95,6 +95,27 @@ var chatHiddenTools = map[string]bool{
 	"extend_disabled_record_countdown": true,
 }
 
+// chatModeChat is the read-only turn: the model may look things up and answer,
+// but cannot change any state. Any other value (including empty) keeps the
+// full console agent, which can carry out writes through the ui_ actions.
+const chatModeChat = "chat"
+
+// chatReadOnlyTools is the whitelist a chat-mode turn may use. Everything not
+// listed here — provider writes, disabled-record actions, the ui_ follow-along
+// actions — is withheld from the model and refused if it invents a call.
+var chatReadOnlyTools = map[string]bool{
+	"list_providers":         true,
+	"get_provider":           true,
+	"list_models":            true,
+	"query_logs":             true,
+	"get_usage_stats":        true,
+	"get_topology":           true,
+	"list_disabled_channels": true,
+	"list_disabled_records":  true,
+	"list_agent_configs":     true,
+	"web_search":             true,
+}
+
 // chatMaxToolSteps is a runaway valve, not the normal exit: the loop ends when
 // the model stops calling tools, the way a coding agent works. Tests lower it
 // to force the valve without burning 200 upstream calls.
@@ -435,11 +456,15 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Model       string `json:"model"`
 			ProviderID  string `json:"provider_id"`
 			PageContext string `json:"page_context"`
+			// Mode is "chat" for a read-only turn; empty means the full
+			// execute-capable console agent.
+			Mode string `json:"mode"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		readOnly := strings.TrimSpace(req.Mode) == chatModeChat
 		content := strings.TrimSpace(req.Content)
 		if content == "" {
 			respondError(c, http.StatusBadRequest, "CHAT_CONTENT_REQUIRED", "消息不能为空")
@@ -475,6 +500,13 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				"（ui_create_provider、ui_update_provider、ui_delete_provider、ui_set_provider_*、ui_reset_*），由控制台按用户操作路径完成并返回结果，" +
 				"不要走直连写工具。汇报时以界面返回的结果为准，不要假设没有返回结果的操作已经完成。" +
 				"只有用户明确说要自己填写 Key 时，才用 ui_open_provider_dialog / ui_create_provider_dialog 打开界面预填。",
+		}
+		if readOnly {
+			// Chat mode overrides the write instructions above: it must answer
+			// from read-only lookups and hand any change back to the user.
+			systemLines = append(systemLines,
+				"当前处于「聊天模式」：这是只读模式，只能查询和回答，不能新建、修改、删除、启停或恢复任何配置；"+
+					"不要调用任何写工具，也不要声称已经完成改动。用户要求改动时，说明需要切换到「执行模式」后再操作。")
 		}
 		if page := strings.TrimSpace(req.PageContext); page != "" {
 			systemLines = append([]string{"用户当前在控制台页面 " + page + "。"}, systemLines...)
@@ -519,6 +551,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			if chatHiddenTools[tool.Name] {
 				continue
 			}
+			// Chat mode only sees read-only lookups: no ui_ write actions and
+			// no direct writes, so the model cannot even propose one.
+			if readOnly && !chatReadOnlyTools[tool.Name] {
+				continue
+			}
 			if chatUIWriteTools[tool.Name] {
 				// Same schema and arguments, different execution path: the
 				// console runs it as a user would.
@@ -531,16 +568,18 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 			tools = append(tools, chatproto.Tool{Name: tool.Name, Description: tool.Description, Schema: schema})
 		}
-		tools = append(tools, chatproto.Tool{
-			Name:        "ui_open_provider_dialog",
-			Description: "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
-			Schema:      json.RawMessage(`{"type":"object","properties":{"provider_id":{"type":"string","description":"供应商 id，已知时优先传"},"provider_name":{"type":"string","description":"供应商名称，id 未知时用名称匹配"}}}`),
-		})
-		tools = append(tools, chatproto.Tool{
-			Name:        "ui_create_provider_dialog",
-			Description: "在控制台打开“新建供应商”弹窗并预填给定字段，由用户确认后保存。供应商还不存在、需要新建时用它；不要声称已经保存。",
-			Schema:      json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"新供应商名称，必填；其余字段留空由用户填写"}},"required":["name"]}`),
-		})
+		if !readOnly {
+			tools = append(tools, chatproto.Tool{
+				Name:        "ui_open_provider_dialog",
+				Description: "在控制台右侧打开供应商编辑弹窗并定位到该供应商，由用户确认后保存。用于“帮我改供应商 X”的操作。",
+				Schema:      json.RawMessage(`{"type":"object","properties":{"provider_id":{"type":"string","description":"供应商 id，已知时优先传"},"provider_name":{"type":"string","description":"供应商名称，id 未知时用名称匹配"}}}`),
+			})
+			tools = append(tools, chatproto.Tool{
+				Name:        "ui_create_provider_dialog",
+				Description: "在控制台打开“新建供应商”弹窗并预填给定字段，由用户确认后保存。供应商还不存在、需要新建时用它；不要声称已经保存。",
+				Schema:      json.RawMessage(`{"type":"object","properties":{"name":{"type":"string","description":"新供应商名称，必填；其余字段留空由用户填写"}},"required":["name"]}`),
+			})
+		}
 
 		uiActions := make([]chatUIAction, 0)
 		actionSeq := 0
@@ -593,7 +632,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 					_ = json.Unmarshal([]byte(call.Arguments), &arguments)
 				}
 				var payload string
-				if strings.HasPrefix(call.Name, "ui_") {
+				if readOnly && !chatReadOnlyTools[call.Name] {
+					// Safety net: chat mode never runs a write, even if the
+					// model invents a tool it was not offered.
+					payload = `{"error":"当前是聊天模式（只读），不能执行写操作；请让用户切换到执行模式后再试"}`
+				} else if strings.HasPrefix(call.Name, "ui_") {
 					actionType := strings.TrimPrefix(call.Name, "ui_")
 					action := nextAction(actionType, arguments)
 					var waiter chan chatUIActionResult

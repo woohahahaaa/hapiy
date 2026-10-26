@@ -141,7 +141,7 @@ function MessageRow({
   )
 }
 
-function Composer() {
+function Composer({ toolbar }: { readonly toolbar?: ReactNode }) {
   const { t } = useTranslation('agentPanel')
   return (
     <ComposerPrimitive.Root
@@ -149,19 +149,22 @@ function Composer() {
         // The send button is bottom-aligned. One line of input is exactly the
         // button height (40px: 24px line-height + py-2), so a single line reads
         // as vertically centred while a grown box puts the button bottom-right.
-        'flex w-full items-end gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
+        'flex w-full flex-col gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
       }
     >
-      <ComposerPrimitive.Input
-        placeholder={t('placeholder')}
-        rows={1}
-        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
-      />
-      <ComposerPrimitive.Send asChild>
-        <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
-          <AppIcon name="expand_less" size={20} strokeWidth={5} />
-        </Button>
-      </ComposerPrimitive.Send>
+      <div className="flex w-full items-end gap-2">
+        <ComposerPrimitive.Input
+          placeholder={t('placeholder')}
+          rows={1}
+          className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
+        />
+        <ComposerPrimitive.Send asChild>
+          <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
+            <AppIcon name="expand_less" size={20} strokeWidth={5} />
+          </Button>
+        </ComposerPrimitive.Send>
+      </div>
+      {toolbar && <div className="flex items-center gap-1.5 px-0.5 pb-0.5">{toolbar}</div>}
     </ComposerPrimitive.Root>
   )
 }
@@ -186,13 +189,15 @@ export type AgentThreadProps = {
   readonly initialMessages: readonly ChatMessageRecord[]
   /** Sends the turn through the backend; resolves with the assistant text. */
   readonly onSend: (text: string) => Promise<string>
+  /** Rendered under the input on both composers (the chat/execute switch). */
+  readonly composerToolbar?: ReactNode
   readonly actions?: ReactNode
 }
 
 // AgentThread is the ChatGPT-style transcript + composer, built on
 // assistant-ui primitives. The backend stays the source of truth: history is
 // passed in as initialMessages and each run is sent through onSend.
-export function AgentThread({ title, controls, initialMessages, onSend, actions }: AgentThreadProps) {
+export function AgentThread({ title, controls, initialMessages, onSend, composerToolbar, actions }: AgentThreadProps) {
   const { t } = useTranslation('agentPanel')
   const sendRef = useRef(onSend)
   useEffect(() => {
@@ -281,7 +286,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
               </div>
               <div className="px-4 pb-3">
                 <div className="mx-auto w-full max-w-2xl">
-                  <Composer />
+                  <Composer toolbar={composerToolbar} />
                 </div>
               </div>
             </div>
@@ -299,7 +304,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
             </ThreadPrimitive.Viewport>
             <div className="px-4 py-3">
               <div className="mx-auto w-full max-w-2xl">
-                <Composer />
+                <Composer toolbar={composerToolbar} />
               </div>
             </div>
           </AuiIf>

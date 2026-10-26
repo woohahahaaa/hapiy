@@ -408,6 +408,10 @@ export type SystemSetting = {
 // endpoint is open and the Bearer key clients must present.
 
 // ── Console chat (Agent panel) ──
+// ChatSendMode is the turn's permission level: 'chat' answers from read-only
+// lookups only, 'execute' may carry out changes through the console UI.
+export type ChatSendMode = 'chat' | 'execute'
+
 export type ChatProviderOption = {
   readonly id: string
   readonly name: string
@@ -3223,7 +3227,14 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async sendChatMessage(
     id: string,
-    input: { content: string; model: string; providerId: string; pageContext?: string },
+    input: {
+      content: string
+      model: string
+      providerId: string
+      pageContext?: string
+      /** 'chat' keeps the turn read-only; anything else may execute. */
+      mode?: ChatSendMode
+    },
   ): Promise<ChatThreadResult> {
     return parseChatThreadResult(await request(`/chat/threads/${id}/messages`, {
       method: 'POST',
@@ -3232,6 +3243,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         model: input.model,
         provider_id: input.providerId,
         page_context: input.pageContext ?? '',
+        mode: input.mode === 'chat' ? 'chat' : '',
       }),
     }, CHAT_TIMEOUT_MS))
   },
