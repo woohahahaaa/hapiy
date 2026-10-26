@@ -44,14 +44,19 @@ for (const asset of assets) {
   const file = path.join(outDir, asset.slice(1))
   const content = await readFile(file, 'utf8').catch(() => null)
   if (content === null) continue
+  // 用函数替换，避免内联代码里的 $&、$` 等被当成替换模式展开。
   if (asset.endsWith('.css')) {
-    html = html.replace(`<link rel="stylesheet" crossorigin href="${asset}">`, `<style>\n${content}\n</style>`)
+    html = html.replace(`<link rel="stylesheet" crossorigin href="${asset}">`, () => `<style>\n${content}\n</style>`)
   } else if (asset.endsWith('.js')) {
     html = html.replace(
       `<script type="module" crossorigin src="${asset}"></script>`,
-      `<script type="module">\n${content}\n</script>`,
+      () => `<script type="module">\n${content}\n</script>`,
     )
   }
+}
+
+if (/(?:src|href)="\/assets\//.test(html)) {
+  throw new Error('still referencing /assets after inlining')
 }
 
 await writeFile(target, html)
