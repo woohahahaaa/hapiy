@@ -320,6 +320,83 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	}
 }
 
+func TestSendChatMessageForwardsReasoningEffort(t *testing.T) {
+	var seenEffort string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			// OpenAI-compatible chat completions carries the level in the flat
+			// reasoning_effort field.
+			ReasoningEffort string `json:"reasoning_effort"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		seenEffort = body.ReasoningEffort
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"深入分析","model":"test-model","provider_id":"","reasoning_effort":"high"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenEffort != "high" {
+		t.Fatalf("upstream reasoning.effort = %q, want high", seenEffort)
+	}
+
+	// The default level must not send the field at all.
+	seenEffort = "unset"
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"普通问题","model":"test-model","provider_id":""}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenEffort != "" {
+		t.Fatalf("default level must omit reasoning.effort, got %q", seenEffort)
+	}
+}
+
+func TestSendChatMessageRejectsUnknownReasoningEffort(t *testing.T) {
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"你好","model":"test-model","provider_id":"","reasoning_effort":"bogus"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "CHAT_REASONING_INVALID") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
 func TestSendChatMessageToFixedProviderBypassesWorkflow(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

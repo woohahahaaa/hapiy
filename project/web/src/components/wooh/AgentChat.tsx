@@ -4,12 +4,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
 import { AgentModelPicker } from '@/components/wooh/AgentModelPicker'
 import { AgentModeToggle } from '@/components/wooh/AgentModeToggle'
+import { AgentThinkingPicker } from '@/components/wooh/AgentThinkingPicker'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from '@/components/ui/toast'
 import { apiBaseUrl, dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { ChatMessageRecord, ChatModelOption, ChatSendMode, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
+import type { ChatMessageRecord, ChatModelOption, ChatReasoningEffort, ChatSendMode, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
 import { pickDefaultModel } from '@/lib/agent-chat'
 import { dispatchUIAction } from '@/lib/ui-actions'
 import { parseChatUIActionEvent } from '@/lib/chat-follow'
@@ -36,9 +37,17 @@ const ACTIVE_THREAD_KEY = 'agent_active_thread'
 // The permission level the composer is on. Remembered per tab, like the active
 // thread, so a reload keeps the user in the safer read-only mode.
 const CHAT_MODE_KEY = 'agent_chat_mode'
+// Thinking level follows the same tab lifetime as the mode: a reload keeps the
+// level the user picked, a new tab starts at the provider default.
+const CHAT_THINKING_KEY = 'agent_thinking_level'
 
 function readStoredMode(): ChatSendMode {
   return window.sessionStorage.getItem(CHAT_MODE_KEY) === 'chat' ? 'chat' : 'execute'
+}
+
+function readStoredThinking(): ChatReasoningEffort {
+  const stored = window.sessionStorage.getItem(CHAT_THINKING_KEY)
+  return stored === 'low' || stored === 'medium' || stored === 'high' ? stored : ''
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -84,6 +93,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [preference, setPreference] = useState({ model: '', providerId: '' })
   const [historyOpen, setHistoryOpen] = useState(false)
   const [mode, setMode] = useState<ChatSendMode>(readStoredMode)
+  const [thinking, setThinking] = useState<ChatReasoningEffort>(readStoredThinking)
   // The live action stream for the turn in flight (one connection per send).
   const followRef = useRef<EventSource | null>(null)
 
@@ -203,6 +213,11 @@ export function AgentChat({ className }: { readonly className?: string }) {
     window.sessionStorage.setItem(CHAT_MODE_KEY, next)
   }
 
+  const changeThinking = (next: ChatReasoningEffort) => {
+    setThinking(next)
+    window.sessionStorage.setItem(CHAT_THINKING_KEY, next)
+  }
+
   const handleSend = async (text: string): Promise<string> => {
     if (!selectedModel) throw new Error(t('selectModelFirst'))
     const providerId = effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider
@@ -239,6 +254,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
         providerId,
         pageContext: location.pathname,
         mode,
+        reasoningEffort: thinking,
       })
       // Navigating first lets a page that is not mounted yet pick the queued
       // action up when it mounts.
@@ -259,26 +275,29 @@ export function AgentChat({ className }: { readonly className?: string }) {
           key={sessionKey}
           title={activeThread?.title || 'Agent'}
           controls={
-            <AgentModelPicker
-              models={modelOptions}
-              model={selectedModel}
-              providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
-              onChange={({ model, providerId }) => {
-                setSelectedModel(model)
-                setSelectedProvider(providerId || AUTO_PROVIDER)
-                if (!activeThread) return
-                // Remember the choice on the thread itself so switching back
-                // to it (or refreshing) restores the same model.
-                const next = { ...activeThread, model, providerId }
-                setActiveThread(next)
-                setThreads((current) => current.map((item) => (item.id === next.id ? next : item)))
-                void dashboardApi
-                  .updateChatThread(activeThread.id, { model, providerId })
-                  .catch((error: unknown) => {
-                    toast(errorMessage(error, t('sendFailed')))
-                  })
-              }}
-            />
+            <>
+              <AgentModelPicker
+                models={modelOptions}
+                model={selectedModel}
+                providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
+                onChange={({ model, providerId }) => {
+                  setSelectedModel(model)
+                  setSelectedProvider(providerId || AUTO_PROVIDER)
+                  if (!activeThread) return
+                  // Remember the choice on the thread itself so switching back
+                  // to it (or refreshing) restores the same model.
+                  const next = { ...activeThread, model, providerId }
+                  setActiveThread(next)
+                  setThreads((current) => current.map((item) => (item.id === next.id ? next : item)))
+                  void dashboardApi
+                    .updateChatThread(activeThread.id, { model, providerId })
+                    .catch((error: unknown) => {
+                      toast(errorMessage(error, t('sendFailed')))
+                    })
+                }}
+              />
+              <AgentThinkingPicker effort={thinking} onChange={changeThinking} />
+            </>
           }
           initialMessages={initialMessages}
           onSend={handleSend}

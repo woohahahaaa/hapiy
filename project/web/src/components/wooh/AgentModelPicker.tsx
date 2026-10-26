@@ -65,14 +65,14 @@ export function AgentModelPicker({ models, model, providerId, onChange }: AgentM
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-8 w-fit max-w-full items-center gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-xs whitespace-nowrap transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 dark:hover:bg-input/50"
+          className="flex h-7 max-w-[220px] items-center gap-1 rounded-md px-2 text-xs whitespace-nowrap text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50"
           aria-label={triggerLabel}
         >
+          <AppIcon name="setting" size={14} className="shrink-0" />
           <span className={cn('truncate', !model && 'text-muted-foreground')}>{triggerLabel}</span>
-          <AppIcon name="expand_more" size={16} className="shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-0">
+      <PopoverContent align="end" className="w-auto p-0">
         <div className="flex">
           <div className="w-52 shrink-0 p-1">
             <div className="px-2 py-1 text-[11px] text-muted-foreground">{t('modelLabel')}</div>

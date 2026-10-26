@@ -212,7 +212,7 @@ function lastUserText(messages: readonly ThreadMessage[]): string {
 export type AgentThreadProps = {
   /** Used as the accessible name only; the header shows the avatar. */
   readonly title: string
-  /** Header content to the right of the avatar (model/provider selectors). */
+  /** Composer controls on the right of the tool row (model/thinking chips). */
   readonly controls?: ReactNode
   readonly initialMessages: readonly ChatMessageRecord[]
   /** Sends the turn through the backend; resolves with the assistant text. */
@@ -317,7 +317,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
               </div>
               <div className="px-4 pb-3">
                 <div className="mx-auto w-full max-w-2xl">
-                  <Composer toolbar={composerToolbar} />
+                  <Composer toolbar={composerToolbar} controls={controls} />
                 </div>
               </div>
             </div>
@@ -335,7 +335,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
             </ThreadPrimitive.Viewport>
             <div className="px-4 py-3">
               <div className="mx-auto w-full max-w-2xl">
-                <Composer toolbar={composerToolbar} />
+                <Composer toolbar={composerToolbar} controls={controls} />
               </div>
             </div>
           </AuiIf>
