@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import remarkGfm from 'remark-gfm'
@@ -26,6 +26,25 @@ import {
 import { toast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
+
+// Brand word in the greeting uses the logo face, everything else stays in the UI font.
+const brandWord = 'hapiy'
+
+function GreetingTitle({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(hapiy)/i).map((part, index) =>
+        part.toLowerCase() === brandWord ? (
+          <span key={index} className="font-hapiy-logo text-[1.35em] font-normal">
+            {part}
+          </span>
+        ) : (
+          <Fragment key={index}>{part}</Fragment>
+        ),
+      )}
+    </>
+  )
+}
 
 const markdownClass =
   'text-sm leading-6 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
@@ -262,10 +281,12 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 items-center justify-center px-4">
                 <div className="w-full max-w-lg text-center">
-                  <h2 className="text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
-                  <p className="mt-3 text-xs leading-5 text-muted-foreground">{t('greetingSubtitle')}</p>
+                  <h2 className="text-[28px] leading-tight font-semibold tracking-tight">
+                    <GreetingTitle text={t('greetingTitle')} />
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">{t('greetingSubtitle')}</p>
                   <div className="mt-6">
-                    <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
+                    <div className="mb-2 text-sm text-muted-foreground">{t('suggestedLabel')}</div>
                     <div className="flex flex-wrap justify-center gap-2">
                       {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
                         <ThreadPrimitive.Suggestion
