@@ -28,12 +28,12 @@ import { cn } from '@/lib/utils'
 import type { ChatMessageRecord } from '@/lib/dashboard-api'
 
 const markdownClass =
-  'text-xs leading-5 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
+  'text-sm leading-6 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 ' +
   '[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-4 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-4 ' +
   '[&_li]:my-0.5 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-background/60 ' +
   '[&_pre]:p-2 [&_code]:font-mono [&_code]:text-xs [&_a]:underline [&_a]:underline-offset-2 ' +
   '[&_blockquote]:border-s-2 [&_blockquote]:ps-3 [&_blockquote]:text-muted-foreground ' +
-  '[&_table]:w-full [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs ' +
+  '[&_table]:w-full [&_table]:min-w-full [&_table]:border-collapse ' +
   '[&_thead]:bg-muted/60 ' +
   '[&_th]:border-b [&_th]:border-border [&_th]:px-2 [&_th]:py-1.5 [&_th]:text-left [&_th]:align-middle [&_th]:font-medium ' +
   '[&_td]:border-b [&_td]:border-border/60 [&_td]:px-2 [&_td]:py-1.5 [&_td]:align-top ' +
@@ -146,25 +146,22 @@ function Composer({ toolbar }: { readonly toolbar?: ReactNode }) {
   return (
     <ComposerPrimitive.Root
       className={
-        // The send button is bottom-aligned. One line of input is exactly the
-        // button height (40px: 24px line-height + py-2), so a single line reads
-        // as vertically centred while a grown box puts the button bottom-right.
-        'flex w-full flex-col gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
+        // Row is centre-aligned: the toggle sits beside the send button and
+        // both stay vertically centred while a grown input makes the box taller.
+        'flex w-full items-center gap-2 rounded-2xl border border-border bg-background p-2 pl-3 shadow-sm'
       }
     >
-      <div className="flex w-full items-end gap-2">
-        <ComposerPrimitive.Input
-          placeholder={t('placeholder')}
-          rows={1}
-          className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
-        />
-        <ComposerPrimitive.Send asChild>
-          <Button size="icon" className="size-10 shrink-0 rounded-full" aria-label={t('send')}>
-            <AppIcon name="expand_less" size={20} strokeWidth={5} />
-          </Button>
-        </ComposerPrimitive.Send>
-      </div>
-      {toolbar && <div className="flex items-center gap-1.5 px-0.5 pb-0.5">{toolbar}</div>}
+      <ComposerPrimitive.Input
+        placeholder={t('placeholder')}
+        rows={1}
+        className="min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-[15px] leading-6 outline-none placeholder:text-muted-foreground"
+      />
+      {toolbar && <div className="flex shrink-0 items-center">{toolbar}</div>}
+      <ComposerPrimitive.Send asChild>
+        <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
+          <AppIcon name="expand_less" size={16} strokeWidth={5} />
+        </Button>
+      </ComposerPrimitive.Send>
     </ComposerPrimitive.Root>
   )
 }
