@@ -13,7 +13,8 @@
     "check:i18n": "node scripts/check-i18n-keys.mjs",
     "icons:build": "node scripts/icons-build.mjs",
     "icons:check": "node scripts/icons-build.mjs --check",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:onboarding-preview": "node scripts/build-onboarding-preview.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "0.15.30",
