@@ -266,7 +266,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                   <p className="mt-3 text-xs leading-5 text-muted-foreground">{t('greetingSubtitle')}</p>
                   <div className="mt-6">
                     <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
-                    <div className="flex flex-col items-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
                         <ThreadPrimitive.Suggestion
                           key={key}
