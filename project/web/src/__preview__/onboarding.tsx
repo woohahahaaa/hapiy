@@ -103,7 +103,7 @@ function Alert({
     <div
       role="alert"
       className={cn(
-        'flex gap-2.5 rounded-xl border px-3 py-2.5 text-xs',
+        'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs',
         error ? 'border-destructive/30 bg-destructive/5 text-destructive' : 'border-warning/30 bg-warning/5 text-warning',
       )}
     >

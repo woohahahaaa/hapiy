@@ -261,24 +261,24 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="flex min-h-0 flex-1 items-center justify-center px-4">
-                <div className="max-w-lg text-center">
+                <div className="w-full max-w-lg text-center">
                   <h2 className="text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
                   <p className="mt-3 text-xs leading-5 text-muted-foreground">{t('greetingSubtitle')}</p>
-                </div>
-              </div>
-              <div className="mx-auto w-full max-w-2xl px-4 pb-2">
-                <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
-                <div className="flex flex-col items-start gap-2">
-                  {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
-                    <ThreadPrimitive.Suggestion
-                      key={key}
-                      prompt={t(key)}
-                      send
-                      className="max-w-full whitespace-normal rounded-lg border border-border bg-background px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
-                    >
-                      {t(key)}
-                    </ThreadPrimitive.Suggestion>
-                  ))}
+                  <div className="mt-6">
+                    <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
+                    <div className="flex flex-col items-center gap-2">
+                      {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
+                        <ThreadPrimitive.Suggestion
+                          key={key}
+                          prompt={t(key)}
+                          send
+                          className="max-w-full whitespace-normal rounded-lg border border-border bg-background px-3 py-2 text-center text-sm text-foreground transition-colors hover:bg-accent"
+                        >
+                          {t(key)}
+                        </ThreadPrimitive.Suggestion>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div className="px-4 pb-3">
