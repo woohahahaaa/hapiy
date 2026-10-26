@@ -1,7 +1,7 @@
 {
   "you": "我",
   "agent": "Agent",
-  "placeholder": "输入消息…",
+  "placeholder": "发消息…",
   "send": "发送",
   "typing": "正在输入…",
   "messageActions": "消息操作",

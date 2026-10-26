@@ -225,10 +225,10 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 items-center justify-center px-3">
+              <div className="flex min-h-0 flex-1 items-center justify-center px-4">
                 <h2 className="text-center text-[28px] leading-tight font-semibold tracking-tight">{t('greetingTitle')}</h2>
               </div>
-              <div className="mx-auto w-full max-w-2xl px-3 pb-2">
+              <div className="mx-auto w-full max-w-2xl px-4 pb-2">
                 <div className="mb-2 text-xs text-muted-foreground">{t('suggestedLabel')}</div>
                 <div className="flex flex-col items-start gap-2">
                   {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
@@ -243,7 +243,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
                   ))}
                 </div>
               </div>
-              <div className="p-3 pt-0">
+              <div className="px-4 pb-3">
                 <div className="mx-auto w-full max-w-2xl">
                   <Composer />
                 </div>
@@ -261,7 +261,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, actions 
                 </ThreadPrimitive.Messages>
               </div>
             </ThreadPrimitive.Viewport>
-            <div className="p-3">
+            <div className="px-4 py-3">
               <div className="mx-auto w-full max-w-2xl">
                 <Composer />
               </div>
