@@ -1,4 +1,4 @@
-// AgentAvatar is the chat identity mark: a black disc with "Agent" set in the
+// AgentAvatar is the chat identity mark: a black disc with "hi" set in the
 // hapiy logo face (Cookie), shipped inline as SVG so the webfont applies.
 // Inline rather than a file: an <img> SVG cannot use the page's loaded font.
 export function AgentAvatar({
@@ -15,7 +15,7 @@ export function AgentAvatar({
       viewBox="0 0 48 48"
       className={className}
       role="img"
-      aria-label="Agent"
+      aria-label="hi"
     >
       <circle cx="24" cy="24" r="23.25" fill="#0a0a0a" stroke="rgba(255,255,255,0.16)" strokeWidth="1.5" />
       <text
@@ -25,10 +25,10 @@ export function AgentAvatar({
         dominantBaseline="middle"
         fill="#ffffff"
         fontFamily="Cookie, cursive"
-        fontSize="19"
+        fontSize="24"
         letterSpacing="-0.3"
       >
-        Agent
+        hi
       </text>
     </svg>
   )
