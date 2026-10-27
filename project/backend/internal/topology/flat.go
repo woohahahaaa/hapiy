@@ -635,11 +635,58 @@ func providerChildren(t *Topology, slotID string) []FlatNode {
 // its bound provider must be present and Status-enabled, the node's own
 // mini-switch must be on, and it must support the model (and path).
 func providerEligible(refs map[string]ProviderRef, node FlatNode, model, path string) bool {
+	ref, ok := providerUsable(refs, node)
+	return ok && providerSupports(ref, model, path)
+}
+
+// providerUsable reports whether a wired provider node may serve requests at
+// all: the node switch, the provider's status and workflow switches are on and
+// the provider is not auto-disabled.
+func providerUsable(refs map[string]ProviderRef, node FlatNode) (ProviderRef, bool) {
 	ref, ok := refs[refKey(node)]
 	if !ok || !ref.Status || ref.Disabled || !node.Enabled || !ref.Enabled || !ref.Workflow {
-		return false
+		return ProviderRef{}, false
 	}
-	return providerSupports(ref, model, path)
+	return ref, true
+}
+
+// ReachableProviderIDs returns the configured provider IDs the current wiring
+// can route to: every provider reachable from an enabled request entry whose
+// node and provider switches are on. Model and endpoint filters are not
+// applied; the console chat picker uses this to stop offering providers the
+// topology has dropped.
+func ReachableProviderIDs(t *Topology, refs map[string]ProviderRef) map[string]bool {
+	out := make(map[string]bool)
+	if t == nil {
+		return out
+	}
+	for _, entry := range activeRequestEntries(t) {
+		cur := outgoing(t, entry.ID)
+		visited := map[string]bool{entry.ID: true}
+		for cur != "" && !visited[cur] {
+			visited[cur] = true
+			node, ok := nodeByID(t, cur)
+			if !ok {
+				break
+			}
+			switch node.Kind {
+			case KindSlot:
+				if node.SlotType == "provider" {
+					for _, child := range providerChildren(t, node.ID) {
+						if ref, ok := providerUsable(refs, child); ok {
+							out[ref.ID] = true
+						}
+					}
+				}
+			case KindProvider:
+				if ref, ok := providerUsable(refs, node); ok {
+					out[ref.ID] = true
+				}
+			}
+			cur = outgoing(t, cur)
+		}
+	}
+	return out
 }
 
 func validStrategy(s string) bool {

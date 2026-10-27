@@ -106,8 +106,7 @@ func (e *Engine) allValuesDisabled(providerID, dimension string, values []string
 // wiring: it walks the active request entries, gathers eligible providers that
 // support the model (and path, when a provider declares paths), then applies
 // the entry weights. If no provider is eligible it returns an error.
-func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string) (*topology.EligibleProvider, error) {
-	if tp == nil || len(tp.Nodes) == 0 {
+func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string) (*topology.EligibleProvider, error) {	if tp == nil || len(tp.Nodes) == 0 {
 		return nil, fmt.Errorf("flat topology is empty")
 	}
 	refs := e.buildFlatProviderRefs()

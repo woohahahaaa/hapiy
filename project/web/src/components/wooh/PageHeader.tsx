@@ -20,7 +20,7 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
   const heading = title ?? (navLabelKey ? t(navLabelKey) : '')
 
   return (
-    <div className="bg-card">
+    <div>
       <div className="px-4 py-3 md:px-6 md:py-4">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
