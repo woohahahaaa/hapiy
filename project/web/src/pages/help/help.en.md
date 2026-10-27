@@ -17,7 +17,7 @@ A request's full journey: the client calls hapiy with `Authorization: Bearer hk-
 
 hapiy is mainly about solving the problems agents hit while calling models: slow upstreams, rate limits, upstream errors, client bugs, and costs that don't add up. There's a lot here, so hapiy is not a zero-learning-cost product—run through the typical scenarios below first and the rest gets easier.
 
-We're also building a built-in agent: eventually you won't need to understand these settings at all—just let it handle them for you.
+We're also building a built-in assistant: eventually you won't need to understand these settings at all—just let it handle them for you.
 
 ## Typical scenarios
 
@@ -340,7 +340,7 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 
 ### Console follow-along
 
-The built-in chat agent writes through the same path a person would: create/update opens the real editor, fills it in and clicks save; delete opens the confirmation dialog and confirms it; every step is at least 0.3s apart. The console reports the outcome back to the agent. External MCP clients still use the direct tools.
+The built-in assistant writes through the same path a person would: create/update opens the real editor, fills it in and clicks save; delete opens the confirmation dialog and confirms it; every step is at least 0.3s apart. The console reports the outcome back to the assistant. External MCP clients still use the direct tools.
 
 ### Connect a client
 

@@ -832,7 +832,7 @@ func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, pro
 	entry := model.Log{
 		UserID:           user,
 		ModelName:        modelName,
-		Source:           "内置Agent",
+		Source:           service.LogSourceAgent,
 		Status:           status,
 		IP:               c.ClientIP(),
 		RequestID:        c.GetString("request_id"),
