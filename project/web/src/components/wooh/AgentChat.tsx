@@ -153,6 +153,34 @@ export function AgentChat({ className }: { readonly className?: string }) {
     followRef.current?.close()
   }, [])
 
+  // The picker only lists providers the current topology routes to, so it has
+  // to be refetched after leaving a page that edits providers or the wiring
+  // (and when the tab regains focus). Otherwise the panel keeps offering a
+  // model the topology already dropped until the whole app is reloaded.
+  useEffect(() => {
+    let cancelled = false
+    void dashboardApi
+      .getChatModels()
+      .then((next) => {
+        if (!cancelled) setModels(next)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [location.pathname])
+
+  useEffect(() => {
+    const refresh = () => {
+      void dashboardApi
+        .getChatModels()
+        .then((next) => setModels(next))
+        .catch(() => {})
+    }
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
+  }, [])
+
   const modelOptions = useMemo(() => {
     if (!selectedModel || models.some((entry) => entry.model === selectedModel)) return models
     return [{ model: selectedModel, providers: [] }, ...models]
