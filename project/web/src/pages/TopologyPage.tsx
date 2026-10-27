@@ -1751,37 +1751,43 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     const handler = (event: KeyboardEvent) => {
       const el = event.target as HTMLElement | null
       const inEditable = !!el && !!el.closest('input, textarea, select, [contenteditable="true"]')
+      // A real text selection (for example in the agent panel next to the
+      // canvas) owns the clipboard: let the browser copy it instead of
+      // treating Cmd/Ctrl+C as "copy nodes".
+      const text = window.getSelection()?.toString() ?? ''
+      const selectingText = text.trim().length > 0
+      const ownsKeyboard = inEditable || selectingText
       const mod = event.ctrlKey || event.metaKey
       const key = event.key.toLowerCase()
 
       if (mod && key === 'z') {
-        if (inEditable) return
+        if (ownsKeyboard) return
         event.preventDefault()
         if (event.shiftKey) handleRedo()
         else handleUndo()
         return
       }
       if (mod && key === 'y') {
-        if (inEditable) return
+        if (ownsKeyboard) return
         event.preventDefault()
         handleRedo()
         return
       }
       if (mod && key === 'c') {
-        if (inEditable) return
+        if (ownsKeyboard) return
         event.preventDefault()
         handleCopy()
         return
       }
       if (mod && key === 'v') {
-        if (inEditable) return
+        if (ownsKeyboard) return
         event.preventDefault()
         handlePaste()
         return
       }
 
       if (event.key !== 'Delete' && event.key !== 'Backspace') return
-      if (inEditable) return
+      if (ownsKeyboard) return
       const topLevelIds = selectionRef.current.nodes.filter(
         (n) => n.type === 'requestEntry' || n.type === 'slot' || n.type === 'switch',
       )
