@@ -298,8 +298,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
                     {t('greetingSubtitle')}
-                  </p>
-                  <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                    <br />
                     {t('suggestedLabel')}
                   </p>
                   <div className="mt-2">
