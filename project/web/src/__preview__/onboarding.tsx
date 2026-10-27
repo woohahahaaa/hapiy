@@ -661,7 +661,7 @@ function OnboardingPreview() {
           <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight">先接入一个模型</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              接入至少一个模型，hapiy 就能开始转发请求，同时激活内置助手：之后要加供应商、调拓扑、看用量，直接跟它说就行，不用自己翻设置。
+              接入至少一个模型，hapiy 就能开始转发请求，同时激活内置助手：之后要加供应商、改拓扑、看用量，直接跟它说就行，不用自己翻设置。
             </p>
           </div>
 
