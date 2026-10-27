@@ -16,7 +16,7 @@ export function AgentModeToggle({ mode, onChange }: AgentModeToggleProps) {
   const execute = mode === 'execute'
 
   return (
-    <label className="flex cursor-pointer items-center gap-2 pl-1">
+    <label className="flex h-7 cursor-pointer items-center gap-2 rounded-lg bg-muted px-2">
       <span className="text-[11px] whitespace-nowrap text-muted-foreground">
         {t('modeLabel')}
       </span>
@@ -26,6 +26,7 @@ export function AgentModeToggle({ mode, onChange }: AgentModeToggleProps) {
         onCheckedChange={(checked) => onChange(checked ? 'execute' : 'chat')}
         title={execute ? t('modeExecuteHint') : t('modeChatHint')}
         aria-label={t('modeLabel')}
+        className="rounded-[3px] [&_[data-slot=switch-thumb]]:rounded-[2px]"
       />
     </label>
   )

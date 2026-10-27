@@ -65,7 +65,7 @@ export function AgentModelPicker({ models, model, providerId, onChange }: AgentM
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-7 max-w-[220px] items-center gap-1 rounded-md px-2 text-xs whitespace-nowrap text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50"
+          className="flex h-7 max-w-[220px] items-center gap-1 rounded-lg bg-muted px-2 text-xs whitespace-nowrap text-muted-foreground transition-colors outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50"
           aria-label={triggerLabel}
         >
           <AppIcon name="setting" size={14} className="shrink-0" />
