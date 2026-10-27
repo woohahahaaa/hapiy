@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

@@ -564,6 +564,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		endpoint, baseURL, apiKey, provider, resolveErr := resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
 		if resolveErr != nil {
+			writeChatLog(c, db, user, start, nil, modelName, chatproto.Result{}, "failed", resolveErr.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
 			return
 		}
@@ -644,11 +645,15 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				ReasoningEffort: reasoningEffort,
 			})
 			if completeErr != nil {
+				message := completeErr.Error()
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-					c.JSON(http.StatusGatewayTimeout, gin.H{"error": "本轮已超过 " + chatRequestTimeout.String() + " 上限，工具调用被中止"})
+					message = "本轮已超过 " + chatRequestTimeout.String() + " 上限，工具调用被中止"
+					writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+					c.JSON(http.StatusGatewayTimeout, gin.H{"error": message})
 					return
 				}
-				c.JSON(http.StatusBadGateway, gin.H{"error": completeErr.Error()})
+				writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
 			// Every step is a separate upstream call, so the turn's usage is
@@ -743,7 +748,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				ReasoningEffort: reasoningEffort,
 			})
 			if finalErr != nil {
-				c.JSON(http.StatusBadGateway, gin.H{"error": "本轮没有正常结束: " + finalErr.Error()})
+				message := "本轮没有正常结束: " + finalErr.Error()
+				writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
 			usage.PromptTokens += final.PromptTokens
@@ -752,6 +759,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			reply = final.Text
 		}
 		if strings.TrimSpace(reply) == "" {
+			writeChatLog(c, db, user, start, provider, modelName, usage, "failed", "上游没有返回文本回复")
 			c.JSON(http.StatusBadGateway, gin.H{"error": "上游没有返回文本回复"})
 			return
 		}
@@ -794,37 +802,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		thread.Model = modelName
 		thread.ProviderID = providerID
 
-		// Usage record for the built-in agent: no token, source 内置Agent.
-		logEntry := model.Log{
-			UserID:           user,
-			TokenName:        "",
-			ProviderName:     provider.Name,
-			ModelName:        modelName,
-			Source:           "内置Agent",
-			Status:           "success",
-			IP:               c.ClientIP(),
-			RequestID:        c.GetString("request_id"),
-			UseTime:          int(time.Since(start).Milliseconds()),
-			PromptTokens:     usage.PromptTokens,
-			CompletionTokens: usage.CompletionTokens,
-		}
-		if usage.PromptTokens+usage.CompletionTokens > 0 {
-			logEntry.Quota, logEntry.Currency = computeQuota(db, quotaRequest{
-				provider:  provider,
-				modelName: modelName,
-				usage: &relay.UsageInfo{
-					PromptTokens:     usage.PromptTokens,
-					CompletionTokens: usage.CompletionTokens,
-					TotalTokens:      usage.TotalTokens,
-				},
-			})
-			if logEntry.Currency == "" {
-				logEntry.Currency = service.GetBillingCurrency(db)
-			}
-		}
-		if writer := service.Logs(); writer != nil {
-			writer.Write(&logEntry)
-		}
+		writeChatLog(c, db, user, start, provider, modelName, usage, "success", "")
 
 		// Write actions are executed while the turn runs (the console reports
 		// back before the tool returns), so replaying them from the final
@@ -844,6 +822,44 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			"assistant_message": assistantMessage,
 			"ui_actions":        responseActions,
 		}})
+	}
+}
+
+// writeChatLog records one console-chat turn in 使用记录. Successful turns carry
+// the summed usage of every tool step; failed turns are recorded too, so a
+// request that never produced a reply still shows up instead of vanishing.
+func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, provider *model.Provider, modelName string, usage chatproto.Result, status, errorMessage string) {
+	entry := model.Log{
+		UserID:           user,
+		ModelName:        modelName,
+		Source:           "内置Agent",
+		Status:           status,
+		IP:               c.ClientIP(),
+		RequestID:        c.GetString("request_id"),
+		UseTime:          int(time.Since(start).Milliseconds()),
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		ErrorMessage:     errorMessage,
+	}
+	if provider != nil {
+		entry.ProviderName = provider.Name
+	}
+	if provider != nil && usage.PromptTokens+usage.CompletionTokens > 0 {
+		entry.Quota, entry.Currency = computeQuota(db, quotaRequest{
+			provider:  provider,
+			modelName: modelName,
+			usage: &relay.UsageInfo{
+				PromptTokens:     usage.PromptTokens,
+				CompletionTokens: usage.CompletionTokens,
+				TotalTokens:      usage.TotalTokens,
+			},
+		})
+		if entry.Currency == "" {
+			entry.Currency = service.GetBillingCurrency(db)
+		}
+	}
+	if writer := service.Logs(); writer != nil {
+		writer.Write(&entry)
 	}
 }
 
