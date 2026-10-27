@@ -50,5 +50,7 @@
   "thinkingMedium": "中",
   "thinkingHigh": "高",
   "thinkingHint": "档位越高，模型思考越久",
-  "greetingSubtitle": "你可以直接说出需求，让我帮你配置 hapiy，而不用读复杂的帮助文档"
+  "greetingSubtitle": "你可以直接说出需求，让我帮你配置 hapiy，而不用读复杂的帮助文档",
+  "modelUnavailable": "模型不可用",
+  "modelUnavailableHint": "该模型已不在当前拓扑的可用列表里，请重新选择"
 }

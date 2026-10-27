@@ -308,6 +308,8 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 models={modelOptions}
                 model={selectedModel}
                 providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
+                unavailable={modelUnavailable}
+                onRefresh={refreshModels}
                 onChange={({ model, providerId }) => {
                   setSelectedModel(model)
                   setSelectedProvider(providerId || AUTO_PROVIDER)

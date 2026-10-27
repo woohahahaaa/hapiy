@@ -187,7 +187,7 @@ function Composer({
         <div className="flex shrink-0 items-center gap-1.5">
           {controls}
           <ComposerPrimitive.Send asChild>
-            <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
+            <Button size="icon-sm" className="shrink-0 rounded-full" aria-label={t('send')}>
               <AppIcon name="expand_less" size={16} strokeWidth={5} />
             </Button>
           </ComposerPrimitive.Send>
