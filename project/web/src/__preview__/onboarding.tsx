@@ -39,12 +39,12 @@ function hostOf(baseUrl: string): string {
   }
 }
 
-async function fetchModels(baseUrl: string, apiKey: string, mode: PreviewMode): Promise<readonly string[]> {
+async function fetchModels(baseUrl: string, mode: PreviewMode): Promise<readonly string[]> {
   await new Promise((resolve) => setTimeout(resolve, 900))
-  if (mode === 'failure' || baseUrl.toLowerCase().includes('fail')) {
+  // 预览页不校验内容：填了就当作可用，只保留「预览控制」里的失败演示。
+  if (mode === 'failure') {
     throw new Error('上游返回 401：Key 无效，或该供应商不提供 /models 接口')
   }
-  if (!apiKey.trim()) throw new Error('请先填写 API Key')
   return mockModels(baseUrl)
 }
 
@@ -143,15 +143,15 @@ function ProviderStep({
   const [showKey, setShowKey] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const baseUrlOk = /^https?:\/\/\S+$/i.test(baseUrl.trim())
-  const canFetch = baseUrlOk && apiKey.trim().length > 0 && !busy
+  // 预览页不挑内容：两个框都有字就能点，随便填什么都当通过。
+  const canFetch = baseUrl.trim().length > 0 && apiKey.trim().length > 0 && !busy
 
   const runFetch = async () => {
     if (!canFetch) return
     setBusy(true)
     onError('')
     try {
-      const models = await fetchModels(baseUrl.trim(), apiKey, mode)
+      const models = await fetchModels(baseUrl.trim(), mode)
       onFetched(models)
     } catch (err) {
       onError(err instanceof Error ? err.message : '获取模型列表失败')
@@ -659,9 +659,9 @@ function OnboardingPreview() {
       <main className="flex flex-1 items-start justify-center px-4 pt-4 pb-28">
         <div className="w-full max-w-xl">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight">把第一个模型接进来</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">先接入一个模型</h1>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              hapiy 至少要有一个供应商和一个模型才能开始转发请求。填好这两项，大约一分钟。
+              接入至少一个模型，hapiy 就能开始转发请求，同时激活内置助手：之后要加供应商、调拓扑、看用量，直接跟它说就行，不用自己翻设置。
             </p>
           </div>
 
