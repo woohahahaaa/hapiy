@@ -434,7 +434,7 @@ func runServe() {
 
 			// Console chat (Agent panel): threads live per account, replies go
 			// through the relay engine (auto = topology, fixed = that provider).
-			dashboardAuthed.GET("/chat/models", handler.ChatModels(db))
+			dashboardAuthed.GET("/chat/models", handler.ChatModels(db, engine))
 			dashboardAuthed.GET("/chat/preferences", handler.ChatPreferences(db))
 			dashboardAuthed.GET("/chat/threads", handler.ListChatThreads(db))
 			dashboardAuthed.POST("/chat/threads", handler.CreateChatThread(db))

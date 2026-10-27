@@ -50,7 +50,7 @@ func newChatRouter(db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
 		c.Set("user_id", user)
 		c.Next()
 	})
-	r.GET("/chat/models", ChatModels(db))
+	r.GET("/chat/models", ChatModels(db, engine))
 	r.GET("/chat/preferences", ChatPreferences(db))
 	r.GET("/chat/threads", ListChatThreads(db))
 	r.POST("/chat/threads", CreateChatThread(db))
@@ -126,6 +126,63 @@ func TestChatModelsListsEnabledProviders(t *testing.T) {
 	}
 	if providers[0].Name != "Alpha" || providers[1].Name != "Beta" {
 		t.Fatalf("providers must be sorted by name: %+v", providers)
+	}
+}
+
+func TestChatModelsFollowsTheTopology(t *testing.T) {
+	db := newChatTestDB(t)
+	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	upstreamProvider(t, db, "p2", "Beta", "http://127.0.0.1:1", true, true)
+
+	tp := &topology.Topology{
+		Nodes: []topology.FlatNode{
+			{ID: "entry-1", Kind: topology.KindRequestEntry, Name: "入口", Enabled: true, Weight: 1},
+			{ID: "pslot-1", Kind: topology.KindSlot, SlotType: "provider", Enabled: true},
+			{ID: "prov-1", Kind: topology.KindProvider, Name: "Alpha", ProviderID: "p1", Enabled: true},
+		},
+		Wires: []topology.Wire{
+			{Source: "entry-1", Target: "pslot-1"},
+			{Source: "pslot-1", Target: "prov-1"},
+		},
+	}
+	if err := topology.NewStore(db).Save(tp); err != nil {
+		t.Fatal(err)
+	}
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := doJSON(t, newChatRouter(db, engine, "alice"), http.MethodGet, "/chat/models", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		Data []chatModelOption `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data) != 1 {
+		t.Fatalf("unexpected models: %+v", payload.Data)
+	}
+	providers := payload.Data[0].Providers
+	if len(providers) != 1 || providers[0].Name != "Alpha" {
+		t.Fatalf("only the wired provider may be offered, got %+v", providers)
+	}
+
+	// Switch the provider card off in the topology: it must drop out of the
+	// picker even though the provider record is still enabled.
+	tp.Nodes[2].Enabled = false
+	if err := topology.NewStore(db).Save(tp); err != nil {
+		t.Fatal(err)
+	}
+	rec = doJSON(t, newChatRouter(db, engine, "alice"), http.MethodGet, "/chat/models", "")
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data) != 0 {
+		t.Fatalf("a switched-off card must not offer models: %+v", payload.Data)
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/service"
+	"github.com/hapiy/hapiy/internal/topology"
 	"github.com/hapiy/hapiy/internal/version"
 	"gorm.io/gorm"
 )
@@ -325,9 +326,11 @@ type chatModelOption struct {
 }
 
 // ChatModels serves GET /v1/dashboard/chat/models. The list is the union of
-// models declared by enabled providers; the first provider option in the UI is
-// "自动", which dispatches through the topology.
-func ChatModels(db *gorm.DB) gin.HandlerFunc {
+// models declared by enabled providers the current topology can route to; the
+// first provider option in the UI is "自动", which dispatches through the
+// topology. An empty topology (fresh install, nothing wired yet) keeps the full
+// list, where picking a provider explicitly still works.
+func ChatModels(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var providers []model.Provider
 		if err := db.Where("status = ?", true).Order("name asc").Find(&providers).Error; err != nil {
@@ -343,8 +346,26 @@ func ChatModels(db *gorm.DB) gin.HandlerFunc {
 		for _, state := range states {
 			statesByProvider[state.ProviderID] = append(statesByProvider[state.ProviderID], state)
 		}
+		reachable := map[string]bool{}
+		filterByTopology := false
+		if tp, err := topology.NewStore(db).Load(); err == nil {
+			reachable = engine.ReachableProviderIDs(tp)
+			// A topology that already wires providers owns the picker even when
+			// all of them are switched off (an honest empty list beats offering
+			// models no request entry can reach). A fresh install has no provider
+			// nodes yet and keeps the full list.
+			for _, node := range tp.Nodes {
+				if node.Kind == topology.KindProvider {
+					filterByTopology = true
+					break
+				}
+			}
+		}
 		byModel := map[string][]chatProviderOption{}
 		for _, provider := range providers {
+			if filterByTopology && !reachable[provider.ID] {
+				continue
+			}
 			disable := summarizeDisables(provider, statesByProvider[provider.ID])
 			option := chatProviderOption{
 				ID:               provider.ID,
