@@ -13,6 +13,7 @@ import {
   type HandleType,
   type FinalConnectionState,
   type ReactFlowInstance,
+  getNodesBounds,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { AppIcon } from '@/components/wooh/AppIcon'
@@ -318,6 +319,8 @@ const ACTIVE_REQUESTS_MIN_HEIGHT = 140
 const TOPOLOGY_MIN_HEIGHT = 200
 const SPLITTER_HEIGHT_PX = 8 // h-2
 const SPLIT_CHROME_PX = SPLITTER_HEIGHT_PX
+// 画布宽度稳定后重新居中的等待时间（ms）：要盖过面板收起/展开的 200ms 过渡。
+const VIEW_RECENTER_DEBOUNCE_MS = 300
 
 export function TopologyPage() {
   const { t } = useTranslation('topology')
@@ -515,6 +518,15 @@ export function TopologyPage() {
   const layoutSnapshotRef = useRef(layoutSnapshot)
   layoutSnapshotRef.current = layoutSnapshot
   const [setContainerEl, sizesRef] = useReactFlowNodeSizes()
+  // ReactFlow 容器元素同时交给尺寸测量 hook 和宽度变化观察器使用。
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null)
+  const setCanvasContainer = useCallback(
+    (el: HTMLDivElement | null) => {
+      canvasContainerRef.current = el
+      setContainerEl(el)
+    },
+    [setContainerEl],
+  )
 
   const canvas: FlatCanvas | null = useMemo(() => (tp ? canvasFromFlat(tp.nodes, tp.wires) : null), [tp])
 
@@ -1826,6 +1838,43 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
     rfInstanceRef.current?.fitView({ padding: 0.05, minZoom: 0.01, maxZoom: 64, duration: 300 })
   }, [])
 
+  // 右侧管理面板拖动/收起或窗口宽度变化后，画布宽度会变。等宽度稳定再把节点
+  // 整体移到视口中心（保持当前缩放，不打断用户的工作比例）；只响应宽度变化，
+  // 上下分割条改变高度时不触发。
+  const recenterViewOnResize = useCallback(() => {
+    const instance = rfInstanceRef.current
+    if (!instance) return
+    const currentNodes = instance.getNodes()
+    if (currentNodes.length === 0) return
+    const bounds = getNodesBounds(currentNodes)
+    instance.setCenter(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2, {
+      zoom: instance.getZoom(),
+      duration: 200,
+    })
+  }, [])
+
+  useEffect(() => {
+    const el = canvasContainerRef.current
+    if (!el) return
+    let lastWidth = Math.round(el.clientWidth)
+    let timer: number | null = null
+    const observer = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width ?? el.clientWidth)
+      if (width === lastWidth) return
+      lastWidth = width
+      if (timer !== null) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = null
+        recenterViewOnResize()
+      }, VIEW_RECENTER_DEBOUNCE_MS)
+    })
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [loading, error, recenterViewOnResize])
+
   // New nodes have no layout-snapshot record, so without an explicit position
   // they all fall back to the same hardcoded default and stack on top of each
   // other. Place each fresh node in a new row below every existing node, so the
@@ -2216,7 +2265,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
         className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 md:p-4"
       >
       <div
-        ref={setContainerEl}
+        ref={setCanvasContainer}
         className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
         onContextMenu={(e) => {
           if ('ontouchstart' in window) e.preventDefault()
