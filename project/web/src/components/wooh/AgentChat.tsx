@@ -375,13 +375,10 @@ export function AgentChat({ className }: { readonly className?: string }) {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => (rightCollapsed ? expandRight() : setWidth(maxWidth))}
+                onClick={() => (rightCollapsed ? expandRight() : setWidth(0))}
               >
-                <AppIcon
-                  name={rightCollapsed ? 'menu_fold' : 'menu_unfold'}
-                  data-icon="inline-start"
-                />
-                <span>{rightCollapsed ? t('showConsole') : t('hideConsole')}</span>
+                <AppIcon name="menu_fold" data-icon="inline-start" />
+                <span>{rightCollapsed ? t('showConsole') : t('collapseAgent')}</span>
               </Button>
             </>
           }

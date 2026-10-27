@@ -276,10 +276,20 @@ export function AppSidebar() {
   const updateAvailable = Boolean(updateStatus?.available)
   // 对话面板在最左边，侧边栏是 fixed 定位，要按面板宽度（含分隔条）
   // 整体右移，才能和它自己的占位 gap 对齐。
-  const { width: dockWidth, dragging: dockDragging, openDock, setWidth } = useAgentDock()
-  const chatOpen = dockWidth > 0
+  const {
+    width: dockWidth,
+    dragging: dockDragging,
+    openDock,
+    setWidth,
+    maxWidth,
+    rightCollapsed,
+  } = useAgentDock()
+  // 管理面板的按钮：两个面板都在时收起管理面板（助手面板铺满），管理面板单独
+  // 存在时反过来展开助手面板。
+  const bothOpen = dockWidth > 0 && !rightCollapsed
+  const chatButtonLabel = i18n.t(bothOpen ? 'agentPanel:hideConsole' : 'agentPanel:expandAgent')
   const toggleChat = () => {
-    if (chatOpen) setWidth(0)
+    if (bothOpen) setWidth(maxWidth)
     else openDock()
   }
   const sidebarLeft = dockWidth > 0 ? dockWidth + AGENT_DOCK_SPLITTER_WIDTH : 0
@@ -365,8 +375,8 @@ export function AppSidebar() {
       className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
       onClick={toggleChat}
     >
-      <AppIcon name={chatOpen ? 'menu_fold' : 'menu_unfold'} data-icon="inline-start" />
-      <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
+      <AppIcon name="menu_unfold" data-icon="inline-start" />
+      <span>{chatButtonLabel}</span>
     </Button>
   ) : (
     <Button
@@ -374,10 +384,10 @@ export function AppSidebar() {
       variant="ghost"
       className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
       onClick={toggleChat}
-      aria-label={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
-      title={i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}
+      aria-label={chatButtonLabel}
+      title={chatButtonLabel}
     >
-      <AppIcon name="chat" />
+      <AppIcon name="menu_unfold" />
     </Button>
   )
 
