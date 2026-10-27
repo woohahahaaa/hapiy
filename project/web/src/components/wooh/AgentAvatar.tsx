@@ -17,7 +17,7 @@ export function AgentAvatar({
       role="img"
       aria-label="hi"
     >
-      <circle cx="24" cy="24" r="23.25" fill="#0a0a0a" stroke="rgba(255,255,255,0.16)" strokeWidth="1.5" />
+      <circle cx="24" cy="24" r="23.5" fill="#0a0a0a" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
       <text
         x="24"
         y="26"
