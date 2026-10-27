@@ -102,11 +102,21 @@ func (e *Engine) allValuesDisabled(providerID, dimension string, values []string
 	return count >= int64(len(values))
 }
 
+// ReachableProviderIDs reports which configured providers the stored topology
+// can route to right now. The console chat uses it to keep its model picker in
+// sync with the wiring: a provider that is no longer attached (or whose card,
+// workflow switch or status is off) cannot serve a request and must not be
+// offered.
+func (e *Engine) ReachableProviderIDs(tp *topology.Topology) map[string]bool {
+	return topology.ReachableProviderIDs(tp, e.buildFlatProviderRefs())
+}
+
 // SelectByFlatTopology chooses a provider for a request using the flat topology
 // wiring: it walks the active request entries, gathers eligible providers that
 // support the model (and path, when a provider declares paths), then applies
 // the entry weights. If no provider is eligible it returns an error.
-func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string) (*topology.EligibleProvider, error) {	if tp == nil || len(tp.Nodes) == 0 {
+func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string) (*topology.EligibleProvider, error) {
+	if tp == nil || len(tp.Nodes) == 0 {
 		return nil, fmt.Errorf("flat topology is empty")
 	}
 	refs := e.buildFlatProviderRefs()

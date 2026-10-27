@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { findNavLabelKey } from '@/config/navigation'
 
@@ -44,7 +43,6 @@ export function PageHeader({ title, description, status, actions }: PageHeaderPr
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
         </div>
       </div>
-      <Separator className="bg-border/60" />
     </div>
   )
 }
