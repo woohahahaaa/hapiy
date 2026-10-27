@@ -36,8 +36,9 @@ export function AgentThinkingPicker({ effort, onChange }: AgentThinkingPickerPro
           title={t('thinkingHint')}
           className="flex h-7 items-center gap-1 rounded-lg bg-muted px-2 text-xs whitespace-nowrap text-muted-foreground transition-colors outline-none hover:bg-muted/70 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring/50"
         >
-          <AppIcon name="brain" size={14} className="shrink-0" />
-          <span>{t(active.key)}</span>
+          <span className="whitespace-nowrap">
+            {t('thinkingLabelColon')} {t(active.key)}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-40 p-1">

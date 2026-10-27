@@ -44,6 +44,7 @@
   "suggestion5": "现在用了多少、花了多少？",
   "suggestedLabel": "你可以问：",
   "thinkingLabel": "思考程度",
+  "thinkingLabelColon": "思考程度:",
   "thinkingDefault": "默认",
   "thinkingLow": "低",
   "thinkingMedium": "中",

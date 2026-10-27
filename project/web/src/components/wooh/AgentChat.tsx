@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
@@ -155,36 +155,33 @@ export function AgentChat({ className }: { readonly className?: string }) {
 
   // The picker only lists providers the current topology routes to, so it has
   // to be refetched after leaving a page that edits providers or the wiring
-  // (and when the tab regains focus). Otherwise the panel keeps offering a
-  // model the topology already dropped until the whole app is reloaded.
-  useEffect(() => {
-    let cancelled = false
+  // (and when the tab regains focus). The picker also calls this on open, so
+  // the list it shows is always the current one.
+  const refreshModels = useCallback(() => {
     void dashboardApi
       .getChatModels()
-      .then((next) => {
-        if (!cancelled) setModels(next)
-      })
+      .then((next) => setModels(next))
       .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [location.pathname])
+  }, [])
 
   useEffect(() => {
-    const refresh = () => {
-      void dashboardApi
-        .getChatModels()
-        .then((next) => setModels(next))
-        .catch(() => {})
-    }
-    window.addEventListener('focus', refresh)
-    return () => window.removeEventListener('focus', refresh)
-  }, [])
+    refreshModels()
+  }, [location.pathname, refreshModels])
+
+  useEffect(() => {
+    window.addEventListener('focus', refreshModels)
+    return () => window.removeEventListener('focus', refreshModels)
+  }, [refreshModels])
 
   const modelOptions = useMemo(() => {
     if (!selectedModel || models.some((entry) => entry.model === selectedModel)) return models
     return [{ model: selectedModel, providers: [] }, ...models]
   }, [models, selectedModel])
+
+  // A historical thread keeps the model it was last used with. Once the
+  // topology stops offering it, the picker stays on that model but warns, so
+  // reopening the thread never silently switches models.
+  const modelUnavailable = selectedModel !== '' && !models.some((entry) => entry.model === selectedModel)
 
   const providerOptions = useMemo(
     () => modelOptions.find((entry) => entry.model === selectedModel)?.providers ?? [],
