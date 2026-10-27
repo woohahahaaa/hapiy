@@ -337,7 +337,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
               <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
                 <PopoverTrigger asChild>
                   <Button size="icon-sm" variant="ghost" aria-label={t('history')}>
-                    <AppIcon name="history" />
+                    <AppIcon name="calendar_dot" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72 p-1">
@@ -377,6 +377,10 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 variant="secondary"
                 onClick={() => (rightCollapsed ? expandRight() : setWidth(maxWidth))}
               >
+                <AppIcon
+                  name={rightCollapsed ? 'menu_fold' : 'menu_unfold'}
+                  data-icon="inline-start"
+                />
                 <span>{rightCollapsed ? t('showConsole') : t('hideConsole')}</span>
               </Button>
             </>

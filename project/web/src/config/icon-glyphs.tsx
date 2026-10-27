@@ -75,6 +75,23 @@ export const glyphs = {
       <path d="M30 41V42" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} />
     </>
   ),
+  "calendar-dot": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
+    <>
+      <rect x="4" y="4" width="40" height="40" rx="2" fill={c[1]} stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M4 14H44" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <line x1="44" y1="11" x2="44" y2="23" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M12 22H16" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M22 22H26" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M32 22H36" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M12 29H16" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M22 29H26" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M32 29H36" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M12 36H16" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M22 36H26" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M32 36H36" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <line x1="4" y1="11" x2="4" y2="23" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+    </>
+  ),
   "caution": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
     <>
       <path fillRule="evenodd" clipRule="evenodd" d="M24 5L2 43H46L24 5Z" fill={c[1]} stroke={c[0]} strokeWidth={strokeWidth} strokeLinejoin={strokeLinejoin} />
@@ -254,6 +271,24 @@ export const glyphs = {
       <path d="M5.81836 6.72729V14H13.0911" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
       <path d="M4 24C4 35.0457 12.9543 44 24 44V44C35.0457 44 44 35.0457 44 24C44 12.9543 35.0457 4 24 4C16.598 4 10.1351 8.02111 6.67677 13.9981" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
       <path d="M24.005 12L24.0038 24.0088L32.4832 32.4882" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+    </>
+  ),
+  "indent-left": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
+    <>
+      <path d="M6 9H42" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M19 19H42" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M19 29H42" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M11 19L6 24L11 29" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M6 39H42" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+    </>
+  ),
+  "indent-right": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
+    <>
+      <path d="M42 9H6" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M29 19H6" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M29 29H6" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M37 19L42 24L37 29" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M42 39H6" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
     </>
   ),
   "info": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (

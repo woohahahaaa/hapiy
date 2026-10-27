@@ -365,6 +365,7 @@ export function AppSidebar() {
       className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
       onClick={toggleChat}
     >
+      <AppIcon name={chatOpen ? 'menu_fold' : 'menu_unfold'} data-icon="inline-start" />
       <span>{i18n.t(chatOpen ? 'agentPanel:collapseAgent' : 'agentPanel:expandAgent')}</span>
     </Button>
   ) : (
