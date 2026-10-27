@@ -16,6 +16,10 @@ export type AgentModelPickerProps = {
   readonly model: string
   /** Empty string means 自动 (dispatch through the topology). */
   readonly providerId: string
+  /** The selected model is no longer offered by the current topology. */
+  readonly unavailable?: boolean
+  /** Called when the list opens, so the picker can refetch first. */
+  readonly onRefresh?: () => void
   readonly onChange: (next: AgentModelSelection) => void
 }
 
@@ -23,7 +27,7 @@ export type AgentModelPickerProps = {
 // choosing a model widens the panel with that model's providers, and the
 // trigger then reads "model-provider". Mirrors the Ant Design province/city
 // interaction instead of two independent selects.
-export function AgentModelPicker({ models, model, providerId, onChange }: AgentModelPickerProps) {
+export function AgentModelPicker({ models, model, providerId, unavailable = false, onRefresh, onChange }: AgentModelPickerProps) {
   const { t } = useTranslation('agentPanel')
   const [open, setOpen] = useState(false)
   const [draftModel, setDraftModel] = useState(model)
@@ -43,7 +47,12 @@ export function AgentModelPicker({ models, model, providerId, onChange }: AgentM
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    if (next) setDraftModel(model)
+    if (next) {
+      // The available list follows the topology; refresh before the operator
+      // picks so a just-dropped model cannot be chosen from a stale list.
+      onRefresh?.()
+      setDraftModel(model)
+    }
   }
 
   const handleModel = (nextModel: string) => {
