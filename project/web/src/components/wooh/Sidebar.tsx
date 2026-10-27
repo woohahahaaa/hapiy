@@ -372,10 +372,10 @@ export function AppSidebar() {
     <Button
       size="sm"
       variant="ghost"
-      className="border border-sidebar-border bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent/80"
+      className="h-8 border border-sidebar-border bg-sidebar-accent px-3 text-sidebar-foreground hover:bg-sidebar-accent/80"
       onClick={toggleChat}
     >
-      <AppIcon name="menu_unfold" data-icon="inline-start" />
+      <AppIcon name="menu_unfold" />
       <span>{chatButtonLabel}</span>
     </Button>
   ) : (
