@@ -212,12 +212,12 @@ function lastUserText(messages: readonly ThreadMessage[]): string {
 export type AgentThreadProps = {
   /** Used as the accessible name only; the header shows the avatar. */
   readonly title: string
-  /** Composer controls on the right of the tool row (model/thinking chips). */
+  /** Composer controls on the right of the tool row (chat/execute switch). */
   readonly controls?: ReactNode
   readonly initialMessages: readonly ChatMessageRecord[]
   /** Sends the turn through the backend; resolves with the assistant text. */
   readonly onSend: (text: string) => Promise<string>
-  /** Rendered under the input on both composers (the chat/execute switch). */
+  /** Rendered on the left of the tool row on both composers (model/thinking chips). */
   readonly composerToolbar?: ReactNode
   readonly actions?: ReactNode
 }
@@ -297,9 +297,12 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                     <GreetingTitle text={t('greetingTitle')} />
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    {t('greetingSubtitle')} {t('suggestedLabel')}
+                    {t('greetingSubtitle')}
                   </p>
-                  <div className="mt-4">
+                  <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                    {t('suggestedLabel')}
+                  </p>
+                  <div className="mt-2">
                     <div className="flex flex-wrap justify-center gap-2">
                       {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
                         <ThreadPrimitive.Suggestion

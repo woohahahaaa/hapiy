@@ -302,7 +302,10 @@ export function AgentChat({ className }: { readonly className?: string }) {
         <AgentThread
           key={sessionKey}
           title={activeThread?.title || 'Agent'}
-          controls={
+          controls={<AgentModeToggle mode={mode} onChange={changeMode} />}
+          initialMessages={initialMessages}
+          onSend={handleSend}
+          composerToolbar={
             <>
               <AgentModelPicker
                 models={modelOptions}
@@ -327,9 +330,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
               <AgentThinkingPicker effort={thinking} onChange={changeThinking} />
             </>
           }
-          initialMessages={initialMessages}
-          onSend={handleSend}
-          composerToolbar={<AgentModeToggle mode={mode} onChange={changeMode} />}
           actions={
             <>
               <Button size="icon-sm" variant="ghost" aria-label={t('newChat')} onClick={startNewThread}>
