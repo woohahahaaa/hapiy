@@ -184,7 +184,7 @@ function Composer({
       />
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">{toolbar}</div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1.5">
           {controls}
           <ComposerPrimitive.Send asChild>
             <Button size="icon" className="size-8 shrink-0 rounded-full" aria-label={t('send')}>
