@@ -385,18 +385,16 @@ func (r *FailoverRule) BeforeCreate(tx *gorm.DB) error {
 // request was disabled. Recovery probes use those recorded values instead
 // of cross-combining against other entries — the original request was the
 // one that reached (or tried to reach) the upstream, so its combo is the
-// only one with a meaningful failure context.
+// only one with a meaningful failure context. UpstreamURL is the exact URL
+// issued for that request; recovery replays it verbatim, and only rows
+// written before the column existed fall back to joining BaseURL with the
+// probe path.
 type DisabledRecord struct {
 	ID             string `gorm:"primaryKey;type:uuid" json:"id"`
 	ProviderID     string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"provider_id"`
 	Dimension      string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
 	Value          string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
 	BaseURL        string `gorm:"type:text" json:"base_url"`
-	// UpstreamURL is the exact URL issued for the request that triggered
-	// the disable (base URL + path, e.g. .../zen/go/v1/chat/completions).
-	// Recovery replays that URL verbatim so it never has to rebuild the
-	// path; rows written before this column existed fall back to joining
-	// BaseURL with the probe path.
 	UpstreamURL    string `gorm:"type:text" json:"upstream_url"`
 	Key            string `gorm:"type:text" json:"key"`
 	Model          string `gorm:"type:text" json:"model"`
