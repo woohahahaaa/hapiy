@@ -226,6 +226,10 @@ func UpdateChatThread(db *gorm.DB) gin.HandlerFunc {
 			Archived   *bool   `json:"archived"`
 			Model      *string `json:"model"`
 			ProviderID *string `json:"provider_id"`
+			// DirectEnabled switches the thread between topology routing and
+			// the manual channel in Direct; omitted leaves the mode alone.
+			DirectEnabled *bool            `json:"direct_enabled"`
+			Direct        *chatDirectInput `json:"direct"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -248,6 +252,26 @@ func UpdateChatThread(db *gorm.DB) gin.HandlerFunc {
 		}
 		if req.ProviderID != nil {
 			updates["provider_id"] = strings.TrimSpace(*req.ProviderID)
+		}
+		if req.DirectEnabled != nil {
+			if *req.DirectEnabled && req.Direct != nil {
+				baseURL := strings.TrimRight(strings.TrimSpace(req.Direct.BaseURL), "/")
+				endpoint := strings.TrimSpace(req.Direct.Endpoint)
+				if endpoint != "" && !strings.HasPrefix(endpoint, "/") {
+					endpoint = "/" + endpoint
+				}
+				updates["direct"] = true
+				updates["direct_provider"] = strings.TrimSpace(req.Direct.ProviderName)
+				updates["direct_base_url"] = baseURL
+				updates["direct_endpoint"] = endpoint
+				updates["direct_key"] = strings.TrimSpace(req.Direct.Key)
+			} else {
+				updates["direct"] = false
+				updates["direct_provider"] = ""
+				updates["direct_base_url"] = ""
+				updates["direct_endpoint"] = ""
+				updates["direct_key"] = ""
+			}
 		}
 		if len(updates) == 0 {
 			c.JSON(http.StatusOK, gin.H{"data": thread})

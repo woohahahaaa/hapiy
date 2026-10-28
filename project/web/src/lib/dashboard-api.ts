@@ -3231,7 +3231,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   },
   async updateChatThread(
     id: string,
-    patch: { title?: string; archived?: boolean; model?: string; providerId?: string },
+    patch: { title?: string; archived?: boolean; model?: string; providerId?: string; direct?: ChatDirectInput | null },
   ): Promise<ChatThread> {
     return parseChatThread(await request(`/chat/threads/${id}`, {
       method: 'PATCH',
@@ -3240,6 +3240,8 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         archived: patch.archived,
         model: patch.model,
         provider_id: patch.providerId,
+        direct_enabled: patch.direct === undefined ? undefined : patch.direct !== null,
+        direct: patch.direct ?? undefined,
       }),
     }))
   },

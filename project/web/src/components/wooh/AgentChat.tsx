@@ -377,7 +377,11 @@ export function AgentChat({ className }: { readonly className?: string }) {
                   setActiveThread(next)
                   setThreads((current) => current.map((item) => (item.id === next.id ? next : item)))
                   void dashboardApi
-                    .updateChatThread(activeThread.id, { model, providerId })
+                    .updateChatThread(activeThread.id, {
+                      model,
+                      providerId,
+                      direct: nextDirect ? { ...nextDirect, model } : null,
+                    })
                     .catch((error: unknown) => {
                       toast(errorMessage(error, t('sendFailed')))
                     })

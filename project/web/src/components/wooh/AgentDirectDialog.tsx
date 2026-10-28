@@ -48,29 +48,57 @@ export function AgentDirectDialog({
   readonly initialModel: string
   readonly onConfirm: (channel: AgentDirectChannel, model: string) => void
 }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open && (
+        <DirectForm
+          initial={initial}
+          initialModel={initialModel}
+          onClose={() => onOpenChange(false)}
+          onConfirm={onConfirm}
+        />
+      )}
+    </Dialog>
+  )
+}
+
+function DirectForm({
+  initial,
+  initialModel,
+  onClose,
+  onConfirm,
+}: {
+  readonly initial: AgentDirectChannel | null
+  readonly initialModel: string
+  readonly onClose: () => void
+  readonly onConfirm: (channel: AgentDirectChannel, model: string) => void
+}) {
   const { t } = useTranslation('agentPanel')
   const [providers, setProviders] = useState<readonly Provider[]>([])
-  const [loading, setLoading] = useState(false)
-  const [providerName, setProviderName] = useState('')
-  const [baseUrl, setBaseUrl] = useState('')
-  const [endpoint, setEndpoint] = useState('')
-  const [key, setKey] = useState('')
-  const [model, setModel] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [providerName, setProviderName] = useState(initial?.providerName ?? '')
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? '')
+  const [endpoint, setEndpoint] = useState(initial?.endpoint ?? '')
+  const [key, setKey] = useState(initial?.key ?? '')
+  const [model, setModel] = useState(initialModel)
 
   useEffect(() => {
-    if (!open) return
-    setProviderName(initial?.providerName ?? '')
-    setBaseUrl(initial?.baseUrl ?? '')
-    setEndpoint(initial?.endpoint ?? '')
-    setKey(initial?.key ?? '')
-    setModel(initialModel)
-    setLoading(true)
+    let cancelled = false
     void dashboardApi
       .listProviders({ limit: 500, offset: 0 })
-      .then(({ providers: next }) => setProviders(next))
-      .catch(() => setProviders([]))
-      .finally(() => setLoading(false))
-  }, [open, initial, initialModel])
+      .then(({ providers: next }) => {
+        if (!cancelled) setProviders(next)
+      })
+      .catch(() => {
+        if (!cancelled) setProviders([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const provider = useMemo(
     () => providers.find((entry) => entry.name === providerName) ?? null,
@@ -124,113 +152,107 @@ export function AgentDirectDialog({
       },
       model.trim(),
     )
-    onOpenChange(false)
+    onClose()
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width="sm">
-        <DialogHeader>
-          <DialogTitle>{t('directDialogTitle')}</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs leading-5 text-muted-foreground">{t('directDialogHint')}</p>
+    <DialogContent width="sm">
+      <DialogHeader>
+        <DialogTitle>{t('directDialogTitle')}</DialogTitle>
+      </DialogHeader>
+      <p className="text-xs leading-5 text-muted-foreground">{t('directDialogHint')}</p>
 
-        <div className="space-y-3">
-          <label className="block space-y-1">
-            <span className="text-[11px] text-muted-foreground">{t('directProvider')}</span>
-            <Input
-              list="agent-direct-providers"
-              value={providerName}
-              placeholder={t('directPickProvider')}
-              onChange={(event) => pickProvider(event.target.value)}
-            />
-            <datalist id="agent-direct-providers">
-              {providers.map((entry) => (
-                <option key={entry.id} value={entry.name} />
-              ))}
-            </datalist>
-          </label>
+      <div className="space-y-3">
+        <label className="block space-y-1">
+          <span className="text-[11px] text-muted-foreground">{t('directProvider')}</span>
+          <Input
+            list="agent-direct-providers"
+            value={providerName}
+            placeholder={t('directPickProvider')}
+            onChange={(event) => pickProvider(event.target.value)}
+          />
+          <datalist id="agent-direct-providers">
+            {providers.map((entry) => (
+              <option key={entry.id} value={entry.name} />
+            ))}
+          </datalist>
+        </label>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] text-muted-foreground">{t('directBaseUrl')}</span>
-            <Input
-              list="agent-direct-base-urls"
-              value={baseUrl}
-              placeholder="https://api.example.com/v1"
-              aria-invalid={!urlValid}
-              onChange={(event) => setBaseUrl(event.target.value)}
-            />
-            <datalist id="agent-direct-base-urls">
-              {(provider?.baseUrls ?? []).map((url) => (
-                <option key={url} value={url} />
-              ))}
-            </datalist>
-            {!urlValid && <span className="text-[11px] text-destructive">{t('directInvalidUrl')}</span>}
-          </label>
+        <label className="block space-y-1">
+          <span className="text-[11px] text-muted-foreground">{t('directBaseUrl')}</span>
+          <Input
+            list="agent-direct-base-urls"
+            value={baseUrl}
+            placeholder="https://api.example.com/v1"
+            aria-invalid={!urlValid}
+            onChange={(event) => setBaseUrl(event.target.value)}
+          />
+          <datalist id="agent-direct-base-urls">
+            {(provider?.baseUrls ?? []).map((url) => (
+              <option key={url} value={url} />
+            ))}
+          </datalist>
+          {!urlValid && <span className="text-[11px] text-destructive">{t('directInvalidUrl')}</span>}
+        </label>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] text-muted-foreground">{t('directEndpoint')}</span>
-            <Input
-              list="agent-direct-endpoints"
-              value={endpoint}
-              placeholder="/v1/chat/completions"
-              onChange={(event) => setEndpoint(event.target.value)}
-            />
-            <datalist id="agent-direct-endpoints">
-              {endpointOptions.map((path) => (
-                <option key={path} value={path} />
-              ))}
-            </datalist>
-          </label>
+        <label className="block space-y-1">
+          <span className="text-[11px] text-muted-foreground">{t('directEndpoint')}</span>
+          <Input
+            list="agent-direct-endpoints"
+            value={endpoint}
+            placeholder="/v1/chat/completions"
+            onChange={(event) => setEndpoint(event.target.value)}
+          />
+          <datalist id="agent-direct-endpoints">
+            {endpointOptions.map((path) => (
+              <option key={path} value={path} />
+            ))}
+          </datalist>
+        </label>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] text-muted-foreground">{t('directKey')}</span>
-            <Input
-              list="agent-direct-keys"
-              value={key}
-              placeholder="sk-…"
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(event) => setKey(event.target.value)}
-            />
-            <datalist id="agent-direct-keys">
-              {(provider?.keys ?? []).map((entry) => (
-                <option key={entry} value={entry} label={maskKey(entry)} />
-              ))}
-            </datalist>
-          </label>
+        <label className="block space-y-1">
+          <span className="text-[11px] text-muted-foreground">{t('directKey')}</span>
+          <Input
+            list="agent-direct-keys"
+            value={key}
+            placeholder="sk-…"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => setKey(event.target.value)}
+          />
+          <datalist id="agent-direct-keys">
+            {(provider?.keys ?? []).map((entry) => (
+              <option key={entry} value={entry} label={maskKey(entry)} />
+            ))}
+          </datalist>
+        </label>
 
-          <label className="block space-y-1">
-            <span className="text-[11px] text-muted-foreground">{t('directModel')}</span>
-            <Input
-              list="agent-direct-models"
-              value={model}
-              onChange={(event) => pickModel(event.target.value)}
-            />
-            <datalist id="agent-direct-models">
-              {models.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-          </label>
+        <label className="block space-y-1">
+          <span className="text-[11px] text-muted-foreground">{t('directModel')}</span>
+          <Input list="agent-direct-models" value={model} onChange={(event) => pickModel(event.target.value)} />
+          <datalist id="agent-direct-models">
+            {models.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+        </label>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <AppIcon name="loading_four" size={12} className="animate-spin" />
+          {t('directLoading')}
         </div>
+      )}
 
-        {loading && (
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <AppIcon name="loading_four" size={12} className="animate-spin" />
-            {t('directLoading')}
-          </div>
-        )}
-
-        <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-            {t('directCancel')}
-          </Button>
-          <Button size="sm" disabled={!canSubmit} onClick={submit}>
-            {t('directConfirm')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter>
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {t('directCancel')}
+        </Button>
+        <Button size="sm" disabled={!canSubmit} onClick={submit}>
+          {t('directConfirm')}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
   )
 }
