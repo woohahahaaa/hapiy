@@ -1,4 +1,4 @@
-package relay
+package publicfunction
 
 import "testing"
 
@@ -83,8 +83,8 @@ func TestJoinUpstreamPath(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := joinUpstreamPath(tc.base, tc.path); got != tc.want {
-				t.Fatalf("joinUpstreamPath(%q, %q) = %q, want %q", tc.base, tc.path, got, tc.want)
+			if got := JoinUpstreamPath(tc.base, tc.path); got != tc.want {
+				t.Fatalf("JoinUpstreamPath(%q, %q) = %q, want %q", tc.base, tc.path, got, tc.want)
 			}
 		})
 	}

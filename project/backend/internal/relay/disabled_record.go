@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/publicFunction"
 	"github.com/hapiy/hapiy/internal/service"
 )
 
@@ -301,7 +302,7 @@ func sanitizeReplayBody(raw []byte) []byte {
 // rewritten first (long user payloads become a short token); otherwise a
 // minimal self-built payload is used.
 func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.DisabledRecord) service.ProbeResult {
-	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
+	endpoint := publicfunction.JoinUpstreamPath(baseURL, "/v1/chat/completions")
 	if modelName == "" {
 		modelName = "test"
 	}

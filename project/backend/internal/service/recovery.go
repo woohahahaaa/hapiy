@@ -69,7 +69,7 @@ func probeChannel(baseURL, key, model string, maxTokens int) ProbeResult {
 		return ProbeResult{}
 	}
 
-	endpoint := strings.TrimRight(baseURL, "/") + "/v1/chat/completions"
+	endpoint := publicfunction.JoinUpstreamPath(baseURL, "/v1/chat/completions")
 	body := fmt.Sprintf(
 		`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":%d,"stream":false}`,
 		model,
