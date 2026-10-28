@@ -166,7 +166,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 	disableApplied := false
 	disableError := ""
 	if autoDisable {
-		if applyErr := e.applyFailoverAction(plan, req, dimension, rule, outcome); applyErr != nil {
+		if applyErr := e.applyFailoverAction(plan, req, dimension, rule, outcome, upstreamURLFromResp(resp)); applyErr != nil {
 			log.Printf("relay: applyFailoverAction %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 			disableError = applyErr.Error()
 		} else {
@@ -304,7 +304,7 @@ func failoverThreshold(rule *model.FailoverRule) int {
 // protects future requests: every enabled rule with a speed limit counts one
 // hit when the response speed (tokens/s over the full request, connect
 // included) falls below the limit.
-func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayRequest, elapsedMs, totalTokens int) {
+func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayRequest, elapsedMs, totalTokens int, upstreamURL string) {
 	if e == nil || e.db == nil || plan == nil || req == nil || elapsedMs <= 0 || totalTokens <= 0 {
 		return
 	}
@@ -332,7 +332,7 @@ func (e *Engine) RecordResponseSpeedOutcome(plan *ExecutionPlan, req *RelayReque
 			reason = joinReasons(reason, fmt.Sprintf("未达命中阈值（%d/%d）", hitCount, failoverThreshold(rule)))
 		case autoDisable:
 			outcome := upstreamOutcome{message: reason}
-			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome); err != nil {
+			if err := e.applyFailoverAction(plan, req, dimension, rule, outcome, upstreamURL); err != nil {
 				log.Printf("relay: applyFailoverAction(speed) %s/%s: %v", plan.Provider.ID, dimension, err)
 				status = service.RuleStatusFailed
 				reason = joinReasons(reason, "自动禁用失败："+err.Error())
@@ -550,7 +550,7 @@ func matchingFailoverRule(outcome upstreamOutcome, rules []*model.FailoverRule) 
 	return nil, false
 }
 
-func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dimension string, rule *model.FailoverRule, outcome upstreamOutcome) error {
+func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dimension string, rule *model.FailoverRule, outcome upstreamOutcome, upstreamURL string) error {
 	if plan.Provider == nil || e.db == nil {
 		return nil
 	}
@@ -570,10 +570,14 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 	if err := e.db.Where(model.AutoDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).Assign(state).FirstOrCreate(&state).Error; err != nil {
 		return err
 	}
-	// 记录当时实际用过的 (baseURL, key)，恢复探针用它，不做 harness 交叉。
+	// 记录当时实际用过的 (baseURL, key) 和完整 URL，恢复探针直接重放，
+	// 不再重新拼接路径（BaseURL 已带 /v1 时拼出 /v1/v1/... 会 404）。
 	usedBaseURL := pickIndex(plan.BaseURLs, req.BaseURLIndex)
 	usedKey := pickIndex(plan.Keys, req.KeyIndex)
-	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, req, "", rule)
+	if upstreamURL == "" {
+		upstreamURL = publicfunction.JoinUpstreamPath(usedBaseURL, req.Path)
+	}
+	e.saveDisabledRecord(plan.Provider.ID, dimension, value, usedBaseURL, usedKey, upstreamURL, req, "", rule)
 	service.LogEvent(service.LogSourceChannelDisabled, plan.Provider.Name, service.ChannelEventMessage(dimension, value), failoverEventDetail(rule, dimension, outcome))
 	return nil
 }
@@ -687,7 +691,7 @@ func (e *Engine) rotateKeyOrBaseURL(ctx context.Context, plan *ExecutionPlan, re
 					if autoDisable && rotatedDimension == dimension {
 						value := failoverActionValue(plan, &candidate, dimension)
 						if _, reached := e.recordFailoverHit(plan.Provider.ID, dimension, value, rule); reached && (disabledThisRequest == nil || !*disabledThisRequest) {
-							if applyErr := e.applyFailoverAction(plan, &candidate, dimension, rule, outcome); applyErr != nil {
+							if applyErr := e.applyFailoverAction(plan, &candidate, dimension, rule, outcome, upstreamURLFromResp(resp)); applyErr != nil {
 								log.Printf("relay: applyFailoverAction rotated %s/%s: %v", plan.Provider.ID, dimension, applyErr)
 							} else {
 								e.clearFailoverHit(plan.Provider.ID, dimension, value)
@@ -764,6 +768,16 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 		resp.ProviderKey = key
 	}
 	return resp, err
+}
+
+// upstreamURLFromResp returns the exact URL the engine issued to the
+// upstream, or "" when the call never got that far. DisabledRecord stores
+// it so recovery replays the same address instead of rebuilding it.
+func upstreamURLFromResp(resp *RelayResponse) string {
+	if resp == nil {
+		return ""
+	}
+	return resp.UpstreamURL
 }
 
 // FirstEnabledIndex returns the first index in values that is not

@@ -412,7 +412,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// before the log row is queued so the speed outcome lands in the
 		// same row's rule notes.
 		if totalTokens := logEntry.PromptTokens + logEntry.CompletionTokens; totalTokens > 0 && useTime > 0 {
-			engine.RecordResponseSpeedOutcome(plan, &relayReq, useTime, totalTokens)
+			engine.RecordResponseSpeedOutcome(plan, &relayReq, useTime, totalTokens, resp.UpstreamURL)
 		}
 
 		// 规则命中情况（请求改写/响应改写/故障转移 + 命中未生效原因）写在

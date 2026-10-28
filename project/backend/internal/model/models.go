@@ -392,6 +392,12 @@ type DisabledRecord struct {
 	Dimension      string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"dimension"`
 	Value          string `gorm:"not null;uniqueIndex:idx_dr_provider_dim_value" json:"value"`
 	BaseURL        string `gorm:"type:text" json:"base_url"`
+	// UpstreamURL is the exact URL issued for the request that triggered
+	// the disable (base URL + path, e.g. .../zen/go/v1/chat/completions).
+	// Recovery replays that URL verbatim so it never has to rebuild the
+	// path; rows written before this column existed fall back to joining
+	// BaseURL with the probe path.
+	UpstreamURL    string `gorm:"type:text" json:"upstream_url"`
 	Key            string `gorm:"type:text" json:"key"`
 	Model          string `gorm:"type:text" json:"model"`
 	RequestHeaders string `gorm:"type:text" json:"request_headers"`

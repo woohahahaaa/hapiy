@@ -79,7 +79,7 @@ func compactValue(v interface{}) interface{} {
 // a second disable of the same entity overwrites the previous row's
 // request snapshot and resets retry counters. The causing rule is
 // snapshotted (ID + name) so recovery can re-evaluate it.
-func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key string, req *RelayRequest, errMsg string, rule *model.FailoverRule) {
+func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key, upstreamURL string, req *RelayRequest, errMsg string, rule *model.FailoverRule) {
 	if e.db == nil || req == nil {
 		return
 	}
@@ -110,6 +110,7 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key s
 		Dimension:      dimension,
 		Value:          value,
 		BaseURL:        baseURL,
+		UpstreamURL:    upstreamURL,
 		Key:            key,
 		Model:          req.Model,
 		RequestHeaders: string(headersJSON),
@@ -302,7 +303,14 @@ func sanitizeReplayBody(raw []byte) []byte {
 // rewritten first (long user payloads become a short token); otherwise a
 // minimal self-built payload is used.
 func (e *Engine) replayProbe(baseURL, key, modelName string, record *model.DisabledRecord) service.ProbeResult {
-	endpoint := publicfunction.JoinUpstreamPath(baseURL, "/v1/chat/completions")
+	// 优先重放禁用瞬间记录的完整 URL；只有老数据没有该字段时才回退到拼接。
+	endpoint := ""
+	if record != nil {
+		endpoint = record.UpstreamURL
+	}
+	if endpoint == "" {
+		endpoint = publicfunction.JoinUpstreamPath(baseURL, "/v1/chat/completions")
+	}
 	if modelName == "" {
 		modelName = "test"
 	}
