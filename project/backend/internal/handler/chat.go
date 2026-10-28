@@ -564,9 +564,18 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 
 		endpoint, baseURL, apiKey, provider, resolveErr := resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
 		if resolveErr != nil {
-			writeChatLog(c, db, user, start, nil, modelName, chatproto.Result{}, "failed", resolveErr.Error())
+			writeChatLog(c, db, user, start, chatUpstream{}, modelName, chatproto.Result{}, "failed", resolveErr.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
 			return
+		}
+		// The turn keeps one resolved channel for all its tool steps, so the
+		// usage row can name the same provider key and URL the gateway path
+		// records for relayed requests.
+		upstream := chatUpstream{
+			provider: provider,
+			baseURL:  baseURL,
+			key:      apiKey,
+			url:      chatproto.UpstreamURL(baseURL, endpoint.Path),
 		}
 
 		// Expose the MCP tools to the model through the same registry /mcp uses.
@@ -648,11 +657,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				message := completeErr.Error()
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 					message = "本轮已超过 " + chatRequestTimeout.String() + " 上限，工具调用被中止"
-					writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+					writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
 					c.JSON(http.StatusGatewayTimeout, gin.H{"error": message})
 					return
 				}
-				writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+				writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
 				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
@@ -749,7 +758,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			})
 			if finalErr != nil {
 				message := "本轮没有正常结束: " + finalErr.Error()
-				writeChatLog(c, db, user, start, provider, modelName, usage, "failed", message)
+				writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
 				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
@@ -759,7 +768,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			reply = final.Text
 		}
 		if strings.TrimSpace(reply) == "" {
-			writeChatLog(c, db, user, start, provider, modelName, usage, "failed", "上游没有返回文本回复")
+			writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", "上游没有返回文本回复")
 			c.JSON(http.StatusBadGateway, gin.H{"error": "上游没有返回文本回复"})
 			return
 		}
@@ -802,7 +811,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		thread.Model = modelName
 		thread.ProviderID = providerID
 
-		writeChatLog(c, db, user, start, provider, modelName, usage, "success", "")
+		writeChatLog(c, db, user, start, upstream, modelName, usage, "success", "")
 
 		// Write actions are executed while the turn runs (the console reports
 		// back before the tool returns), so replaying them from the final
@@ -825,10 +834,29 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 	}
 }
 
+// chatUpstream is the provider channel one chat turn actually used. Empty
+// fields mean the turn never reached upstream (bad request, no route, all keys
+// disabled), matching the relay path's "empty until the upstream call" rule.
+type chatUpstream struct {
+	provider *model.Provider
+	baseURL  string
+	key      string
+	url      string
+}
+
 // writeChatLog records one console-chat turn in 使用记录. Successful turns carry
 // the summed usage of every tool step; failed turns are recorded too, so a
-// request that never produced a reply still shows up instead of vanishing.
-func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, provider *model.Provider, modelName string, usage chatproto.Result, status, errorMessage string) {
+// request that never produced a reply still shows up instead of vanishing. The
+// upstream channel travels with the row so the detail dialog can name the
+// provider key and URL that failed, not just the provider.
+func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, upstream chatUpstream, modelName string, usage chatproto.Result, status, errorMessage string) {
+	entry := chatLogEntry(c, db, user, start, upstream, modelName, usage, status, errorMessage)
+	if writer := service.Logs(); writer != nil {
+		writer.Write(&entry)
+	}
+}
+
+func chatLogEntry(c *gin.Context, db *gorm.DB, user string, start time.Time, upstream chatUpstream, modelName string, usage chatproto.Result, status, errorMessage string) model.Log {
 	entry := model.Log{
 		UserID:           user,
 		ModelName:        modelName,
@@ -840,13 +868,16 @@ func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, pro
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ErrorMessage:     errorMessage,
+		ProviderKey:      upstream.key,
+		ProviderBaseURL:  upstream.baseURL,
+		UpstreamURL:      upstream.url,
 	}
-	if provider != nil {
-		entry.ProviderName = provider.Name
+	if upstream.provider != nil {
+		entry.ProviderName = upstream.provider.Name
 	}
-	if provider != nil && usage.PromptTokens+usage.CompletionTokens > 0 {
+	if upstream.provider != nil && usage.PromptTokens+usage.CompletionTokens > 0 {
 		entry.Quota, entry.Currency = computeQuota(db, quotaRequest{
-			provider:  provider,
+			provider:  upstream.provider,
 			modelName: modelName,
 			usage: &relay.UsageInfo{
 				PromptTokens:     usage.PromptTokens,
@@ -858,9 +889,7 @@ func writeChatLog(c *gin.Context, db *gorm.DB, user string, start time.Time, pro
 			entry.Currency = service.GetBillingCurrency(db)
 		}
 	}
-	if writer := service.Logs(); writer != nil {
-		writer.Write(&entry)
-	}
+	return entry
 }
 
 // resolveChatEndpoint picks the endpoint, base URL and key for one chat turn.

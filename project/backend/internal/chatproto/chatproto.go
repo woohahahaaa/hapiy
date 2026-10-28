@@ -365,6 +365,13 @@ func bifrostErrorText(err *schemas.BifrostError) string {
 
 // joinURL appends the declared endpoint path to a provider base URL, dropping
 // a duplicated /v1 on either side (base ".../v1" + path "/v1/chat/completions").
+// UpstreamURL is the URL Complete issues for one resolved endpoint. The chat
+// handler records it in usage logs so a failed turn names the exact upstream
+// address, matching what the relay path already stores.
+func UpstreamURL(baseURL, path string) string {
+	return joinURL(baseURL, path)
+}
+
 func joinURL(baseURL, path string) string {
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	endpoint := strings.TrimSpace(path)

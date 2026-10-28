@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hapiy/hapiy/internal/chatproto"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
 	"github.com/hapiy/hapiy/internal/topology"
@@ -1204,6 +1205,37 @@ func createChatTestThread(t *testing.T, router *gin.Engine) string {
 		t.Fatal(err)
 	}
 	return created.Data.ID
+}
+
+func TestChatLogEntryCarriesUpstreamChannel(t *testing.T) {
+	db := newChatTestDB(t)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/chat/threads/x/messages", nil)
+	c.Set("request_id", "req-1")
+
+	provider := &model.Provider{Name: "Alpha"}
+	start := time.Now().Add(-120 * time.Millisecond)
+	entry := chatLogEntry(c, db, "alice", start, chatUpstream{
+		provider: provider,
+		baseURL:  "https://up.example/v1",
+		key:      "sk-test",
+		url:      "https://up.example/v1/chat/completions",
+	}, "test-model", chatproto.Result{}, "failed", "This API key has expired")
+
+	if entry.ProviderName != "Alpha" || entry.ProviderKey != "sk-test" ||
+		entry.ProviderBaseURL != "https://up.example/v1" ||
+		entry.UpstreamURL != "https://up.example/v1/chat/completions" {
+		t.Fatalf("upstream channel missing from log: %+v", entry)
+	}
+	if entry.Status != "failed" || entry.ErrorMessage != "This API key has expired" {
+		t.Fatalf("failure fields missing: %+v", entry)
+	}
+
+	// A turn that never reached upstream keeps those fields empty.
+	early := chatLogEntry(c, db, "alice", start, chatUpstream{}, "test-model", chatproto.Result{}, "failed", "no route")
+	if early.ProviderName != "" || early.ProviderKey != "" || early.ProviderBaseURL != "" || early.UpstreamURL != "" {
+		t.Fatalf("early failure must not name a channel: %+v", early)
+	}
 }
 
 func TestTruncateChatToolResultKeepsRunesWhole(t *testing.T) {
