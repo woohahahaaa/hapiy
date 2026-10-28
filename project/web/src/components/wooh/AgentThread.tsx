@@ -222,30 +222,9 @@ export type AgentThreadProps = {
   readonly actions?: ReactNode
 }
 
-// Empty-state prompts run simple → concrete: the first few answer "what is
-// this and how do I start", the rest walk the help doc's eight real-world
-// scenarios, one or two prompts each. Every prompt is shown at once; the list
-// scrolls inside the empty state instead of hiding entries behind a shuffle.
-const suggestions: readonly string[] = [
-  'intro1',
-  'intro2',
-  'intro3',
-  'intro4',
-  'suggestion1',
-  'suggestion2',
-  'suggestion3',
-  'suggestion4',
-  'suggestion5',
-  'suggestion6',
-  'suggestion7',
-  'suggestion8',
-  'suggestion9',
-  'suggestion10',
-  'suggestion11',
-  'suggestion12',
-  'suggestion13',
-  'suggestion14',
-]
+// Empty-state prompts: the four intro questions answer "what is this, how do
+// I start, how does it compare, how do I hook up my models".
+const suggestions: readonly string[] = ['intro1', 'intro2', 'intro3', 'intro4']
 
 // AgentThread is the ChatGPT-style transcript + composer, built on
 // assistant-ui primitives. The backend stays the source of truth: history is
