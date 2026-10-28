@@ -337,7 +337,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
               <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
                 <PopoverTrigger asChild>
                   <Button size="icon-sm" variant="ghost" aria-label={t('history')}>
-                    <AppIcon name="calendar_dot" />
+                    <AppIcon name="chat_history" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-72 p-1">

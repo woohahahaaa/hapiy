@@ -108,6 +108,15 @@ export const glyphs = {
       <path d="M13 33V24H35V33" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
     </>
   ),
+  "chat-history": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
+    <>
+      <path d="M42 20V9C42 7.34315 40.6569 6 39 6H9C7.34315 6 6 7.34315 6 9V39C6 40.6569 7.34315 42 9 42H20" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M14 16H34" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <path d="M14 24L20 24" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+      <circle cx="35.5" cy="35.5" r="8.5" fill={c[1]} stroke={c[0]} strokeWidth={strokeWidth} />
+      <path d="M35.5 32V35.5L37.97 37.97" stroke={c[2]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
+    </>
+  ),
   "check": ({ c, strokeWidth, strokeLinecap, strokeLinejoin }) => (
     <>
       <path d="M43 11L16.875 37L5 25.1818" stroke={c[0]} strokeWidth={strokeWidth} strokeLinecap={strokeLinecap} strokeLinejoin={strokeLinejoin} />
