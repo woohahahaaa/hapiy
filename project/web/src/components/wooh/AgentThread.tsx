@@ -222,42 +222,25 @@ export type AgentThreadProps = {
   readonly actions?: ReactNode
 }
 
-// The help doc's eight real-world scenarios, one or two prompts each. The dock
-// is usually ~360px wide, so the empty state shows five at a time and "shuffle"
-// walks the pool instead of stacking every prompt into a wall of buttons.
-const suggestionKeys = [
-  'suggestion1',
-  'suggestion2',
-  'suggestion3',
-  'suggestion4',
-  'suggestion5',
-  'suggestion6',
-  'suggestion7',
-  'suggestion8',
-  'suggestion9',
-  'suggestion10',
-  'suggestion11',
-  'suggestion12',
-  'suggestion13',
-  'suggestion14',
-] as const
-
-const suggestionsPerView = 5
+// Empty-state prompts run simple → concrete: the first page answers "what is
+// this and how do I start", the rest walk the help doc's eight real-world
+// scenarios, one or two prompts each. The dock is usually ~360px wide, so a
+// page holds only a handful and "shuffle" cycles the rest instead of stacking
+// every prompt into a wall of buttons.
+const suggestionPages: readonly (readonly string[])[] = [
+  ['intro1', 'intro2', 'intro3', 'intro4'],
+  ['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'],
+  ['suggestion6', 'suggestion7', 'suggestion8', 'suggestion9', 'suggestion10'],
+  ['suggestion11', 'suggestion12', 'suggestion13', 'suggestion14'],
+]
 
 // AgentThread is the ChatGPT-style transcript + composer, built on
 // assistant-ui primitives. The backend stays the source of truth: history is
 // passed in as initialMessages and each run is sent through onSend.
 export function AgentThread({ title, controls, initialMessages, onSend, composerToolbar, actions }: AgentThreadProps) {
   const { t } = useTranslation('agentPanel')
-  const [suggestionOffset, setSuggestionOffset] = useState(0)
-  const visibleSuggestions = useMemo(
-    () =>
-      Array.from(
-        { length: suggestionsPerView },
-        (_, index) => suggestionKeys[(suggestionOffset + index) % suggestionKeys.length],
-      ),
-    [suggestionOffset],
-  )
+  const [suggestionPage, setSuggestionPage] = useState(0)
+  const visibleSuggestions = suggestionPages[suggestionPage % suggestionPages.length]
   const sendRef = useRef(onSend)
   useEffect(() => {
     sendRef.current = onSend
@@ -347,9 +330,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                     </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        setSuggestionOffset((offset) => (offset + suggestionsPerView) % suggestionKeys.length)
-                      }
+                      onClick={() => setSuggestionPage((page) => (page + 1) % suggestionPages.length)}
                       className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
                     >
                       <AppIcon name="refresh" size={12} />
