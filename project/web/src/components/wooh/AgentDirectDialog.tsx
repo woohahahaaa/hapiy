@@ -16,11 +16,6 @@ export type AgentDirectChannel = {
   readonly key: string
 }
 
-function maskKey(key: string): string {
-  if (key.length <= 10) return key
-  return `${key.slice(0, 4)}…${key.slice(-4)}`
-}
-
 function normalizePath(path: string): string {
   const trimmed = path.trim()
   if (trimmed === '') return ''
@@ -222,7 +217,7 @@ function DirectForm({
           />
           <datalist id="agent-direct-keys">
             {(provider?.keys ?? []).map((entry) => (
-              <option key={entry} value={entry} label={maskKey(entry)} />
+              <option key={entry} value={entry} />
             ))}
           </datalist>
         </label>
