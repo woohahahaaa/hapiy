@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import remarkGfm from 'remark-gfm'
@@ -222,11 +222,42 @@ export type AgentThreadProps = {
   readonly actions?: ReactNode
 }
 
+// The help doc's eight real-world scenarios, one or two prompts each. The dock
+// is usually ~360px wide, so the empty state shows five at a time and "shuffle"
+// walks the pool instead of stacking every prompt into a wall of buttons.
+const suggestionKeys = [
+  'suggestion1',
+  'suggestion2',
+  'suggestion3',
+  'suggestion4',
+  'suggestion5',
+  'suggestion6',
+  'suggestion7',
+  'suggestion8',
+  'suggestion9',
+  'suggestion10',
+  'suggestion11',
+  'suggestion12',
+  'suggestion13',
+  'suggestion14',
+] as const
+
+const suggestionsPerView = 5
+
 // AgentThread is the ChatGPT-style transcript + composer, built on
 // assistant-ui primitives. The backend stays the source of truth: history is
 // passed in as initialMessages and each run is sent through onSend.
 export function AgentThread({ title, controls, initialMessages, onSend, composerToolbar, actions }: AgentThreadProps) {
   const { t } = useTranslation('agentPanel')
+  const [suggestionOffset, setSuggestionOffset] = useState(0)
+  const visibleSuggestions = useMemo(
+    () =>
+      Array.from(
+        { length: suggestionsPerView },
+        (_, index) => suggestionKeys[(suggestionOffset + index) % suggestionKeys.length],
+      ),
+    [suggestionOffset],
+  )
   const sendRef = useRef(onSend)
   useEffect(() => {
     sendRef.current = onSend
@@ -303,18 +334,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                   </p>
                   <div className="mt-2">
                     <div className="flex flex-wrap justify-center gap-2">
-                      {(
-                        [
-                          'suggestion1',
-                          'suggestion2',
-                          'suggestion3',
-                          'suggestion4',
-                          'suggestion5',
-                          'suggestion6',
-                          'suggestion7',
-                          'suggestion8',
-                        ] as const
-                      ).map((key) => (
+                      {visibleSuggestions.map((key) => (
                         <ThreadPrimitive.Suggestion
                           key={key}
                           prompt={t(key)}
@@ -325,6 +345,16 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                         </ThreadPrimitive.Suggestion>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSuggestionOffset((offset) => (offset + suggestionsPerView) % suggestionKeys.length)
+                      }
+                      className="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      <AppIcon name="refresh" size={12} />
+                      {t('shuffleSuggestions')}
+                    </button>
                   </div>
                 </div>
               </div>
