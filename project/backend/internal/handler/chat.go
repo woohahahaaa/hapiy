@@ -468,6 +468,54 @@ func pushChatUIAction(user, threadID string, action chatUIAction) {
 	})
 }
 
+// chatDirectInput is the picker's manual channel: one provider (for the label
+// and price lookup) plus an editable base URL, endpoint path, key and model.
+// Nothing here is read from the topology; the turn talks to exactly this
+// channel.
+type chatDirectInput struct {
+	ProviderID   string `json:"provider_id"`
+	ProviderName string `json:"provider_name"`
+	BaseURL      string `json:"base_url"`
+	Endpoint     string `json:"endpoint"`
+	Key          string `json:"key"`
+	Model        string `json:"model"`
+}
+
+// resolveDirectChat validates the manual channel and turns it into the same
+// endpoint/baseURL/key tuple the topology resolver returns.
+func resolveDirectChat(db *gorm.DB, in chatDirectInput) (chatproto.Endpoint, string, string, *model.Provider, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(in.BaseURL), "/")
+	key := strings.TrimSpace(in.Key)
+	endpointPath := strings.TrimSpace(in.Endpoint)
+	if endpointPath != "" && !strings.HasPrefix(endpointPath, "/") {
+		endpointPath = "/" + endpointPath
+	}
+	if baseURL == "" {
+		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("直连缺少 Base URL")
+	}
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("Base URL 必须以 http:// 或 https:// 开头")
+	}
+	if key == "" {
+		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("直连缺少 Key")
+	}
+	protocol, ok := chatproto.Detect(endpointPath)
+	if !ok {
+		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("端点路径不是聊天、Responses 或 Anthropic 接口")
+	}
+	var provider *model.Provider
+	if id := strings.TrimSpace(in.ProviderID); id != "" {
+		var found model.Provider
+		if err := db.First(&found, "id = ?", id).Error; err == nil {
+			provider = &found
+		}
+	}
+	if provider == nil {
+		provider = &model.Provider{Name: firstNonEmptyString(strings.TrimSpace(in.ProviderName), "直连")}
+	}
+	return chatproto.Endpoint{Path: endpointPath, Protocol: protocol}, baseURL, key, provider, nil
+}
+
 // SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. It
 // resolves the model's endpoint (chat completions / Responses / Anthropic),
 // runs the conversation through the matching protocol adapter, executes MCP
@@ -486,6 +534,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Model       string `json:"model"`
 			ProviderID  string `json:"provider_id"`
 			PageContext string `json:"page_context"`
+			// Direct pins this turn to one manually configured channel. When
+			// set it replaces topology routing entirely: base URL, endpoint
+			// path, key and model all come from the picker instead of the
+			// provider table.
+			Direct *chatDirectInput `json:"direct"`
 			// Mode is "chat" for a read-only turn; empty means the full
 			// execute-capable console agent.
 			Mode string `json:"mode"`
@@ -508,8 +561,15 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			respondError(c, http.StatusBadRequest, "CHAT_CONTENT_REQUIRED", "消息不能为空")
 			return
 		}
+		direct := req.Direct
 		modelName := firstNonEmptyString(strings.TrimSpace(req.Model), thread.Model)
+		if direct != nil && strings.TrimSpace(direct.Model) != "" {
+			modelName = strings.TrimSpace(direct.Model)
+		}
 		providerID := strings.TrimSpace(req.ProviderID)
+		if direct != nil && strings.TrimSpace(direct.ProviderID) != "" {
+			providerID = strings.TrimSpace(direct.ProviderID)
+		}
 		if providerID == "" {
 			providerID = thread.ProviderID
 		}
@@ -562,7 +622,18 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
 		defer cancel()
 
-		endpoint, baseURL, apiKey, provider, resolveErr := resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
+		var (
+			endpoint   chatproto.Endpoint
+			baseURL    string
+			apiKey     string
+			provider   *model.Provider
+			resolveErr error
+		)
+		if direct != nil {
+			endpoint, baseURL, apiKey, provider, resolveErr = resolveDirectChat(db, *direct)
+		} else {
+			endpoint, baseURL, apiKey, provider, resolveErr = resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
+		}
 		if resolveErr != nil {
 			writeChatLog(c, db, user, start, chatUpstream{}, modelName, chatproto.Result{}, "failed", resolveErr.Error())
 			c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
@@ -576,6 +647,30 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			baseURL:  baseURL,
 			key:      apiKey,
 			url:      chatproto.UpstreamURL(baseURL, endpoint.Path),
+		}
+
+		// Remember the channel before the upstream call: reopening a thread
+		// after a failed turn must keep the same choice instead of silently
+		// falling back to topology routing.
+		directProvider := ""
+		if direct != nil {
+			directProvider = firstNonEmptyString(strings.TrimSpace(direct.ProviderName), provider.Name)
+			if strings.TrimSpace(direct.ProviderID) != "" {
+				providerID = strings.TrimSpace(direct.ProviderID)
+			}
+		}
+		if err := db.Model(&model.ChatThread{}).Where("id = ?", thread.ID).Updates(map[string]any{
+			"model":           modelName,
+			"provider_id":     providerID,
+			"direct":          direct != nil,
+			"direct_provider": directProvider,
+			"direct_base_url": baseURLOrEmpty(direct, baseURL),
+			"direct_endpoint": directEndpointOrEmpty(direct, endpoint.Path),
+			"direct_key":      apiKeyOrEmpty(direct, apiKey),
+			"updated_at":      time.Now(),
+		}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
 		}
 
 		// Expose the MCP tools to the model through the same registry /mcp uses.

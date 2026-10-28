@@ -18,11 +18,19 @@ type ChatThread struct {
 	Title  string `gorm:"not null;default:''" json:"title"`
 	// Model and ProviderID are the last choice made in this thread; an empty
 	// ProviderID means "自动" (dispatch through the topology).
-	Model      string    `gorm:"not null;default:''" json:"model"`
-	ProviderID string    `gorm:"not null;default:''" json:"provider_id"`
-	Archived   bool      `gorm:"not null;default:false" json:"archived"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Model      string `gorm:"not null;default:''" json:"model"`
+	ProviderID string `gorm:"not null;default:''" json:"provider_id"`
+	// Direct marks a thread that bypasses topology routing and talks to one
+	// manually configured channel: a fixed base URL, endpoint path and key.
+	// The provider name is kept for the picker label only.
+	Direct         bool      `gorm:"not null;default:false" json:"direct"`
+	DirectProvider string    `gorm:"not null;default:''" json:"direct_provider"`
+	DirectBaseURL  string    `gorm:"not null;default:''" json:"direct_base_url"`
+	DirectEndpoint string    `gorm:"not null;default:''" json:"direct_endpoint"`
+	DirectKey      string    `gorm:"not null;default:''" json:"direct_key"`
+	Archived       bool      `gorm:"not null;default:false" json:"archived"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (t *ChatThread) BeforeCreate(tx *gorm.DB) error {
