@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AgentThread } from '@/components/wooh/AgentThread'
 import { AgentModelPicker } from '@/components/wooh/AgentModelPicker'
+import type { AgentDirectChannel } from '@/components/wooh/AgentDirectDialog'
 import { AgentModeToggle } from '@/components/wooh/AgentModeToggle'
 import { AgentThinkingPicker } from '@/components/wooh/AgentThinkingPicker'
 import { AppIcon } from '@/components/wooh/AppIcon'
@@ -90,6 +91,8 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [sessionKey, setSessionKey] = useState('new:0')
   const [selectedModel, setSelectedModel] = useState('')
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
+  // Set when the picker's 直连 dialog pins this thread to one manual channel.
+  const [direct, setDirect] = useState<AgentDirectChannel | null>(null)
   const [preference, setPreference] = useState({ model: '', providerId: '' })
   const [historyOpen, setHistoryOpen] = useState(false)
   const [mode, setMode] = useState<ChatSendMode>(readStoredMode)
@@ -124,6 +127,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
           const fallback = pickDefaultModel(nextModels, nextPreference)
           setSelectedModel(fallback.model)
           setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
+          setDirect(null)
           return
         }
         let records: readonly ChatMessageRecord[] = []
@@ -138,6 +142,17 @@ export function AgentChat({ className }: { readonly className?: string }) {
         setInitialMessages(records)
         setSelectedModel(restored.model || pickDefaultModel(nextModels, nextPreference).model)
         setSelectedProvider(restored.providerId || AUTO_PROVIDER)
+        setDirect(
+          restored.direct
+            ? {
+                providerId: restored.providerId,
+                providerName: restored.directProvider,
+                baseUrl: restored.directBaseUrl,
+                endpoint: restored.directEndpoint,
+                key: restored.directKey,
+              }
+            : null,
+        )
         setSessionKey(restored.id)
         window.sessionStorage.setItem(ACTIVE_THREAD_KEY, restored.id)
       })
@@ -181,7 +196,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   // A historical thread keeps the model it was last used with. Once the
   // topology stops offering it, the picker stays on that model but warns, so
   // reopening the thread never silently switches models.
-  const modelUnavailable = selectedModel !== '' && !models.some((entry) => entry.model === selectedModel)
+  const modelUnavailable = !direct && selectedModel !== '' && !models.some((entry) => entry.model === selectedModel)
 
   const providerOptions = useMemo(
     () => modelOptions.find((entry) => entry.model === selectedModel)?.providers ?? [],
@@ -198,6 +213,17 @@ export function AgentChat({ className }: { readonly className?: string }) {
     setActiveThread(thread)
     setSelectedModel(thread.model || pickDefaultModel(models, preference).model)
     setSelectedProvider(thread.providerId || AUTO_PROVIDER)
+    setDirect(
+      thread.direct
+        ? {
+            providerId: thread.providerId,
+            providerName: thread.directProvider,
+            baseUrl: thread.directBaseUrl,
+            endpoint: thread.directEndpoint,
+            key: thread.directKey,
+          }
+        : null,
+    )
     setHistoryOpen(false)
     window.sessionStorage.setItem(ACTIVE_THREAD_KEY, thread.id)
     try {
@@ -220,6 +246,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
     const fallback = pickDefaultModel(models, preference)
     setSelectedModel(fallback.model)
     setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
+    setDirect(null)
   }
 
   const removeThread = async (thread: ChatThread) => {

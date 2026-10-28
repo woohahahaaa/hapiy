@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
+import { AgentDirectDialog } from '@/components/wooh/AgentDirectDialog'
+import type { AgentDirectChannel } from '@/components/wooh/AgentDirectDialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { formatDisableCountsSummary } from '@/lib/provider-availability'
@@ -9,6 +11,8 @@ import type { ChatModelOption } from '@/lib/dashboard-api'
 export type AgentModelSelection = {
   readonly model: string
   readonly providerId: string
+  /** When set, the turn talks to this channel and skips topology routing. */
+  readonly direct?: AgentDirectChannel | null
 }
 
 export type AgentModelPickerProps = {
@@ -16,6 +20,8 @@ export type AgentModelPickerProps = {
   readonly model: string
   /** Empty string means 自动 (dispatch through the topology). */
   readonly providerId: string
+  /** Manual channel currently selected, if any. */
+  readonly direct?: AgentDirectChannel | null
   /** The selected model is no longer offered by the current topology. */
   readonly unavailable?: boolean
   /** Called when the list opens, so the picker can refetch first. */
@@ -27,9 +33,10 @@ export type AgentModelPickerProps = {
 // choosing a model widens the panel with that model's providers, and the
 // trigger then reads "model-provider". Mirrors the Ant Design province/city
 // interaction instead of two independent selects.
-export function AgentModelPicker({ models, model, providerId, unavailable = false, onRefresh, onChange }: AgentModelPickerProps) {
+export function AgentModelPicker({ models, model, providerId, direct = null, unavailable = false, onRefresh, onChange }: AgentModelPickerProps) {
   const { t } = useTranslation('agentPanel')
   const [open, setOpen] = useState(false)
+  const [directOpen, setDirectOpen] = useState(false)
   const [draftModel, setDraftModel] = useState(model)
 
   const providers = useMemo(
@@ -43,7 +50,11 @@ export function AgentModelPicker({ models, model, providerId, unavailable = fals
         ?.providers.find((provider) => provider.id === providerId)?.name ?? providerId)
     : t('providerAutoShort')
 
-  const triggerLabel = model ? `${model}-${providerLabel}` : t('modelPlaceholder')
+  const triggerLabel = direct
+    ? `${t('directPrefix')}${model}-${direct.providerName}`
+    : model
+      ? `${model}-${providerLabel}`
+      : t('modelPlaceholder')
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
@@ -70,7 +81,8 @@ export function AgentModelPicker({ models, model, providerId, unavailable = fals
   }
 
   return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
+    <>
+      <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -117,6 +129,22 @@ export function AgentModelPicker({ models, model, providerId, unavailable = fals
                   </button>
                 )
               })}
+              <div className="mt-1 border-t border-border pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    setDirectOpen(true)
+                  }}
+                  className={cn(
+                    'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted',
+                    direct && 'bg-muted font-medium',
+                  )}
+                >
+                  <AppIcon name="link" size={14} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate">{t('direct')}</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -167,6 +195,17 @@ export function AgentModelPicker({ models, model, providerId, unavailable = fals
           )}
         </div>
       </PopoverContent>
-    </Popover>
+      </Popover>
+      <AgentDirectDialog
+        open={directOpen}
+        onOpenChange={setDirectOpen}
+        initial={direct}
+        initialModel={model}
+        onConfirm={(channel, nextModel) => {
+          setDraftModel(nextModel)
+          onChange({ model: nextModel, providerId: channel.providerId, direct: channel })
+        }}
+      />
+    </>
   )
 }

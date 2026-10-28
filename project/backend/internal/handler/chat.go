@@ -653,8 +653,12 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// after a failed turn must keep the same choice instead of silently
 		// falling back to topology routing.
 		directProvider := ""
+		directBaseURL, directEndpoint, directKey := "", "", ""
 		if direct != nil {
 			directProvider = firstNonEmptyString(strings.TrimSpace(direct.ProviderName), provider.Name)
+			directBaseURL = baseURL
+			directEndpoint = endpoint.Path
+			directKey = apiKey
 			if strings.TrimSpace(direct.ProviderID) != "" {
 				providerID = strings.TrimSpace(direct.ProviderID)
 			}
@@ -664,9 +668,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			"provider_id":     providerID,
 			"direct":          direct != nil,
 			"direct_provider": directProvider,
-			"direct_base_url": baseURLOrEmpty(direct, baseURL),
-			"direct_endpoint": directEndpointOrEmpty(direct, endpoint.Path),
-			"direct_key":      apiKeyOrEmpty(direct, apiKey),
+			"direct_base_url": directBaseURL,
+			"direct_endpoint": directEndpoint,
+			"direct_key":      directKey,
 			"updated_at":      time.Now(),
 		}).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -905,6 +909,11 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 		thread.Model = modelName
 		thread.ProviderID = providerID
+		thread.Direct = direct != nil
+		thread.DirectProvider = directProvider
+		thread.DirectBaseURL = directBaseURL
+		thread.DirectEndpoint = directEndpoint
+		thread.DirectKey = directKey
 
 		writeChatLog(c, db, user, start, upstream, modelName, usage, "success", "")
 

@@ -439,9 +439,25 @@ export type ChatThread = {
   readonly title: string
   readonly model: string
   readonly providerId: string
+  /** Manual channel: when true the thread skips topology routing entirely. */
+  readonly direct: boolean
+  readonly directProvider: string
+  readonly directBaseUrl: string
+  readonly directEndpoint: string
+  readonly directKey: string
   readonly archived: boolean
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+// ChatDirectInput is the picker's manual channel for one turn.
+export type ChatDirectInput = {
+  readonly providerId: string
+  readonly providerName: string
+  readonly baseUrl: string
+  readonly endpoint: string
+  readonly key: string
+  readonly model: string
 }
 
 // ChatPreference is the model chosen when the account last started a new
@@ -1256,6 +1272,11 @@ function parseChatThread(value: unknown): ChatThread {
     title: readString(value.title, 'chat.thread.title'),
     model: readString(value.model, 'chat.thread.model'),
     providerId: readString(value.provider_id, 'chat.thread.providerId'),
+    direct: readBoolean(value.direct, 'chat.thread.direct'),
+    directProvider: readString(value.direct_provider, 'chat.thread.directProvider'),
+    directBaseUrl: readString(value.direct_base_url, 'chat.thread.directBaseUrl'),
+    directEndpoint: readString(value.direct_endpoint, 'chat.thread.directEndpoint'),
+    directKey: readString(value.direct_key, 'chat.thread.directKey'),
     archived: readBoolean(value.archived, 'chat.thread.archived'),
     createdAt: readString(value.created_at, 'chat.thread.createdAt'),
     updatedAt: readString(value.updated_at, 'chat.thread.updatedAt'),
@@ -3235,6 +3256,8 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       content: string
       model: string
       providerId: string
+      /** Manual channel; empty/undefined routes through the topology. */
+      direct?: ChatDirectInput
       pageContext?: string
       /** 'chat' keeps the turn read-only; anything else may execute. */
       mode?: ChatSendMode
@@ -3248,6 +3271,7 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         content: input.content,
         model: input.model,
         provider_id: input.providerId,
+        direct: input.direct ?? null,
         page_context: input.pageContext ?? '',
         mode: input.mode === 'chat' ? 'chat' : '',
         reasoning_effort: input.reasoningEffort ?? '',
