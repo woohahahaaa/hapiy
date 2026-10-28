@@ -1207,6 +1207,72 @@ func createChatTestThread(t *testing.T, router *gin.Engine) string {
 	return created.Data.ID
 }
 
+func TestSendChatMessageDirectChannelSkipsTopology(t *testing.T) {
+	var seenPath, seenAuth, seenModel string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		seenAuth = r.Header.Get("Authorization")
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		seenModel = body.Model
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"直连回复"}}]}`))
+	}))
+	defer upstream.Close()
+
+	db := newChatTestDB(t)
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(db, engine, "alice")
+
+	var created struct {
+		Data model.ChatThread `json:"data"`
+	}
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"manual-model"}`)
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	body := fmt.Sprintf(`{
+		"content":"你好",
+		"model":"manual-model",
+		"provider_id":"",
+		"direct":{
+			"provider_name":"Manual",
+			"base_url":%q,
+			"endpoint":"/custom/chat/completions",
+			"key":"manual-key",
+			"model":"manual-model"
+		}
+	}`, upstream.URL)
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenPath != "/custom/chat/completions" {
+		t.Fatalf("direct endpoint = %q", seenPath)
+	}
+	if seenAuth != "Bearer manual-key" {
+		t.Fatalf("direct key = %q", seenAuth)
+	}
+	if seenModel != "manual-model" {
+		t.Fatalf("direct model = %q", seenModel)
+	}
+
+	var stored model.ChatThread
+	if err := db.First(&stored, "id = ?", created.Data.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !stored.Direct || stored.DirectProvider != "Manual" || stored.DirectBaseURL != upstream.URL ||
+		stored.DirectEndpoint != "/custom/chat/completions" || stored.DirectKey != "manual-key" {
+		t.Fatalf("direct channel not persisted: %+v", stored)
+	}
+}
+
 func TestChatLogEntryCarriesUpstreamChannel(t *testing.T) {
 	db := newChatTestDB(t)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

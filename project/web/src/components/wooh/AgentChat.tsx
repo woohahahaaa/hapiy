@@ -272,13 +272,19 @@ export function AgentChat({ className }: { readonly className?: string }) {
 
   const handleSend = async (text: string): Promise<string> => {
     if (!selectedModel) throw new Error(t('selectModelFirst'))
-    const providerId = effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider
+    const directInput = direct ? { ...direct, model: selectedModel } : undefined
+    const providerId = direct
+      ? direct.providerId
+      : effectiveProvider === AUTO_PROVIDER
+        ? ''
+        : effectiveProvider
     let thread = activeThread
     if (!thread) {
       thread = await dashboardApi.createChatThread({ model: selectedModel, providerId })
       // The backend records this too; keep the local copy so a new chat in
-      // this tab defaults to the same model without a round-trip.
-      setPreference({ model: selectedModel, providerId })
+      // this tab defaults to the same model without a round-trip. A direct
+      // channel is per-thread, so it must not change the next chat's default.
+      if (!direct) setPreference({ model: selectedModel, providerId })
       setActiveThread(thread)
       setThreads((current) => [thread!, ...current])
       window.sessionStorage.setItem(ACTIVE_THREAD_KEY, thread.id)
@@ -304,6 +310,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
         content: text,
         model: selectedModel,
         providerId,
+        direct: directInput,
         pageContext: location.pathname,
         mode,
         reasoningEffort: thinking,
@@ -335,15 +342,38 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 models={modelOptions}
                 model={selectedModel}
                 providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
+                direct={direct}
                 unavailable={modelUnavailable}
                 onRefresh={refreshModels}
-                onChange={({ model, providerId }) => {
+                onChange={({ model, providerId, direct: nextDirect }) => {
                   setSelectedModel(model)
                   setSelectedProvider(providerId || AUTO_PROVIDER)
+                  setDirect(nextDirect ?? null)
                   if (!activeThread) return
                   // Remember the choice on the thread itself so switching back
-                  // to it (or refreshing) restores the same model.
-                  const next = { ...activeThread, model, providerId }
+                  // to it (or refreshing) restores the same model. The direct
+                  // channel is saved by the next turn, together with its key.
+                  const next: ChatThread = nextDirect
+                    ? {
+                        ...activeThread,
+                        model,
+                        providerId,
+                        direct: true,
+                        directProvider: nextDirect.providerName,
+                        directBaseUrl: nextDirect.baseUrl,
+                        directEndpoint: nextDirect.endpoint,
+                        directKey: nextDirect.key,
+                      }
+                    : {
+                        ...activeThread,
+                        model,
+                        providerId,
+                        direct: false,
+                        directProvider: '',
+                        directBaseUrl: '',
+                        directEndpoint: '',
+                        directKey: '',
+                      }
                   setActiveThread(next)
                   setThreads((current) => current.map((item) => (item.id === next.id ? next : item)))
                   void dashboardApi
