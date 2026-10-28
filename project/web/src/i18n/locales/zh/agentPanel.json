@@ -22,6 +22,7 @@
   "deleteConfirm": "删除这个会话？聊天记录会一起删掉。",
   "modelLabel": "模型",
   "providerLabel": "供应商",
+  "providerEmptyHint": "先选择模型",
   "modelPlaceholder": "选择模型",
   "providerAuto": "自动（按拓扑）",
   "providerNoTopologySuffix": "(未接入拓扑)",

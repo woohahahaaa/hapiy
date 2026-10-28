@@ -22,6 +22,7 @@
   "deleteConfirm": "Delete this conversation and its messages?",
   "modelLabel": "Model",
   "providerLabel": "Provider",
+  "providerEmptyHint": "Choose a model first",
   "modelPlaceholder": "Select a model",
   "providerAuto": "Auto (topology)",
   "providerNoTopologySuffix": "(not in topology)",

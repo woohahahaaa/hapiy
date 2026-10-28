@@ -148,51 +148,58 @@ export function AgentModelPicker({ models, model, providerId, direct = null, una
             </div>
           </div>
 
-          {draftModel && (
-            <div className="w-56 shrink-0 border-s border-border p-1">
-              <div className="px-2 py-1 text-[11px] text-muted-foreground">{t('providerLabel')}</div>
-              <div className="max-h-72 overflow-y-auto">
-                <button
-                  type="button"
-                  onClick={() => commitProvider('')}
-                  className={cn(
-                    'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted',
-                    providerId === '' && 'bg-muted font-medium',
+          {/* The provider column is always laid out, even before a model is
+              picked: the popover keeps one width, so choosing a model fills the
+              column instead of widening (and shifting) the whole panel. */}
+          <div className="w-56 shrink-0 border-s border-border p-1">
+            <div className="px-2 py-1 text-[11px] text-muted-foreground">{t('providerLabel')}</div>
+            <div className="max-h-72 overflow-y-auto">
+              {!draftModel ? (
+                <div className="px-2 py-2 text-xs text-muted-foreground">{t('providerEmptyHint')}</div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => commitProvider('')}
+                    className={cn(
+                      'flex w-full items-center rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted',
+                      providerId === '' && 'bg-muted font-medium',
+                    )}
+                  >
+                    {t('providerAuto')}
+                  </button>
+                  {providers.length === 0 && (
+                    <div className="px-2 py-2 text-xs text-muted-foreground">{t('noProviders')}</div>
                   )}
-                >
-                  {t('providerAuto')}
-                </button>
-                {providers.length === 0 && (
-                  <div className="px-2 py-2 text-xs text-muted-foreground">{t('noProviders')}</div>
-                )}
-                {providers.map((provider) => {
-                  const disableNote = formatDisableCountsSummary(provider)
-                  return (
-                    <button
-                      key={provider.id}
-                      type="button"
-                      disabled={provider.autoDisabled}
-                      onClick={() => commitProvider(provider.id)}
-                      className={cn(
-                        'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
-                        providerId === provider.id && 'bg-muted font-medium',
-                      )}
-                    >
-                      <span className="truncate">{provider.name}</span>
-                      {disableNote && (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">{disableNote}</span>
-                      )}
-                      {!provider.workflowEnabled && (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
-                          {t('providerNoTopologySuffix')}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+                  {providers.map((provider) => {
+                    const disableNote = formatDisableCountsSummary(provider)
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        disabled={provider.autoDisabled}
+                        onClick={() => commitProvider(provider.id)}
+                        className={cn(
+                          'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50',
+                          providerId === provider.id && 'bg-muted font-medium',
+                        )}
+                      >
+                        <span className="truncate">{provider.name}</span>
+                        {disableNote && (
+                          <span className="shrink-0 text-[10px] text-muted-foreground">{disableNote}</span>
+                        )}
+                        {!provider.workflowEnabled && (
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {t('providerNoTopologySuffix')}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </PopoverContent>
       </Popover>
