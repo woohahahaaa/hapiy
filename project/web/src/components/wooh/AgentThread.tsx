@@ -291,7 +291,7 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
         <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
           <AuiIf condition={(state) => state.thread.isEmpty}>
             <div className="flex min-h-0 flex-1 flex-col">
-              <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+              <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-4">
                 <div className="w-full max-w-lg text-center">
                   <h2 className="text-[28px] leading-tight font-semibold tracking-tight">
                     <GreetingTitle text={t('greetingTitle')} />
@@ -303,7 +303,18 @@ export function AgentThread({ title, controls, initialMessages, onSend, composer
                   </p>
                   <div className="mt-2">
                     <div className="flex flex-wrap justify-center gap-2">
-                      {(['suggestion1', 'suggestion2', 'suggestion3', 'suggestion4', 'suggestion5'] as const).map((key) => (
+                      {(
+                        [
+                          'suggestion1',
+                          'suggestion2',
+                          'suggestion3',
+                          'suggestion4',
+                          'suggestion5',
+                          'suggestion6',
+                          'suggestion7',
+                          'suggestion8',
+                        ] as const
+                      ).map((key) => (
                         <ThreadPrimitive.Suggestion
                           key={key}
                           prompt={t(key)}
