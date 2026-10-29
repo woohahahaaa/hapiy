@@ -181,33 +181,7 @@ func CreateChatThread(db *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		// Remember the model this conversation started with; it becomes the
-		// default for the account's next new conversation. Best-effort: a
-		// failure only affects that default, so the thread still succeeds.
-		if thread.Model != "" {
-			preference := model.ChatPreference{
-				UserID:     thread.UserID,
-				Model:      thread.Model,
-				ProviderID: thread.ProviderID,
-			}
-			_ = db.Save(&preference).Error
-		}
 		c.JSON(http.StatusOK, gin.H{"data": thread})
-	}
-}
-
-// ChatPreferences serves GET /v1/dashboard/chat/preferences. The panel reads
-// it when it opens a new conversation: the stored model wins while it is still
-// offered, otherwise the client falls back to the first available model.
-func ChatPreferences(db *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		preference := model.ChatPreference{UserID: chatUser(c)}
-		err := db.Where("user_id = ?", preference.UserID).First(&preference).Error
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{"data": preference})
 	}
 }
 
@@ -413,6 +387,37 @@ func ChatModels(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 		sort.Slice(models, func(i, j int) bool { return models[i].Model < models[j].Model })
 		c.JSON(http.StatusOK, gin.H{"data": models})
+	}
+}
+
+// ChatModelUsage serves GET /v1/dashboard/chat/model-usage. It ranks models by
+// how many requests the logs table recorded for them in the recent window
+// (default 2 days), most used first, so a new conversation can start on what
+// this installation actually uses. Event rows (auto-disable, recovery, admin)
+// carry no model name and are skipped by the empty-name filter.
+func ChatModelUsage(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		days := 2
+		if raw := strings.TrimSpace(c.Query("days")); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 30 {
+				days = parsed
+			}
+		}
+		since := time.Now().AddDate(0, 0, -days)
+		var rows []struct {
+			Model string `json:"model"`
+			Count int64  `json:"count"`
+		}
+		if err := db.Model(&model.Log{}).
+			Select("model_name AS model, COUNT(*) AS count").
+			Where("model_name != '' AND created_at >= ?", since).
+			Group("model_name").
+			Order("count DESC, model_name ASC").
+			Scan(&rows).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": rows, "total": len(rows)})
 	}
 }
 
