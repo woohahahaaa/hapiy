@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from '@/components/ui/toast'
 import { apiBaseUrl, dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { ChatMessageRecord, ChatModelOption, ChatReasoningEffort, ChatSendMode, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
+import type { ChatMessageRecord, ChatModelOption, ChatModelUsage, ChatReasoningEffort, ChatSendMode, ChatThread, ChatUIAction } from '@/lib/dashboard-api'
 import { pickDefaultModel } from '@/lib/agent-chat'
 import { dispatchUIAction } from '@/lib/ui-actions'
 import { parseChatUIActionEvent } from '@/lib/chat-follow'
@@ -93,7 +93,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
   // Set when the picker's 直连 dialog pins this thread to one manual channel.
   const [direct, setDirect] = useState<AgentDirectChannel | null>(null)
-  const [preference, setPreference] = useState({ model: '', providerId: '' })
+  const [usage, setUsage] = useState<readonly ChatModelUsage[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [mode, setMode] = useState<ChatSendMode>(readStoredMode)
   const [thinking, setThinking] = useState<ChatReasoningEffort>(readStoredThinking)
@@ -106,14 +106,14 @@ export function AgentChat({ className }: { readonly className?: string }) {
     void Promise.all([
       dashboardApi.getChatModels(),
       dashboardApi.listChatThreads(),
-      // A missing preference only changes which model a new chat starts on.
-      dashboardApi.getChatPreferences().catch(() => ({ model: '', providerId: '' })),
+      // A missing usage ranking only changes which model a new chat starts on.
+      dashboardApi.getChatModelUsage().catch(() => []),
     ])
-      .then(async ([nextModels, nextThreads, nextPreference]) => {
+      .then(async ([nextModels, nextThreads, nextUsage]) => {
         if (cancelled) return
         setModels(nextModels)
         setThreads(nextThreads)
-        setPreference(nextPreference)
+        setUsage(nextUsage)
 
         // Each tab restores the thread it was in. A tab that was closed has
         // no stored id, so it starts with an empty conversation.
@@ -124,7 +124,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
           // The stored thread was deleted (or belongs to another account):
           // drop the stale id instead of restoring a dead conversation.
           if (storedThreadId) window.sessionStorage.removeItem(ACTIVE_THREAD_KEY)
-          const fallback = pickDefaultModel(nextModels, nextPreference)
+          const fallback = pickDefaultModel(nextModels, nextUsage)
           setSelectedModel(fallback.model)
           setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
           setDirect(null)
@@ -140,7 +140,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
         if (cancelled) return
         setActiveThread(restored)
         setInitialMessages(records)
-        setSelectedModel(restored.model || pickDefaultModel(nextModels, nextPreference).model)
+        setSelectedModel(restored.model || pickDefaultModel(nextModels, nextUsage).model)
         setSelectedProvider(restored.providerId || AUTO_PROVIDER)
         setDirect(
           restored.direct
@@ -211,7 +211,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
 
   const openThread = async (thread: ChatThread) => {
     setActiveThread(thread)
-    setSelectedModel(thread.model || pickDefaultModel(models, preference).model)
+    setSelectedModel(thread.model || pickDefaultModel(models, usage).model)
     setSelectedProvider(thread.providerId || AUTO_PROVIDER)
     setDirect(
       thread.direct
@@ -243,7 +243,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
     setSessionKey(`new:${Date.now()}`)
     setHistoryOpen(false)
     window.sessionStorage.removeItem(ACTIVE_THREAD_KEY)
-    const fallback = pickDefaultModel(models, preference)
+    const fallback = pickDefaultModel(models, usage)
     setSelectedModel(fallback.model)
     setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
     setDirect(null)
@@ -281,10 +281,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
     let thread = activeThread
     if (!thread) {
       thread = await dashboardApi.createChatThread({ model: selectedModel, providerId })
-      // The backend records this too; keep the local copy so a new chat in
-      // this tab defaults to the same model without a round-trip. A direct
-      // channel is per-thread, so it must not change the next chat's default.
-      if (!direct) setPreference({ model: selectedModel, providerId })
       setActiveThread(thread)
       setThreads((current) => [thread!, ...current])
       window.sessionStorage.setItem(ACTIVE_THREAD_KEY, thread.id)

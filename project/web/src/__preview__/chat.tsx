@@ -94,12 +94,14 @@ const messages: Readonly<Record<string, readonly ChatMessageRecord[]>> = {
   ],
 }
 
-const preference =
+// gpt has no providers, so a usage ranking that puts it first must still skip
+// it and pick the first model with a usable channel.
+const usage =
   scenario === 'first'
-    ? { model: '', providerId: '' }
-    : scenario === 'restore-provider'
-      ? { model: 'deepseek', providerId: 'p1' }
-      : { model: 'gpt', providerId: '' }
+    ? []
+    : scenario === 'usage'
+      ? [{ model: 'deepseek', count: 12 }]
+      : [{ model: 'gpt', count: 9 }, { model: 'deepseek', count: 3 }]
 
 const storedThreadId = scenario === 'restore' ? 't1' : scenario === 'restore-provider' ? 't2' : ''
 if (storedThreadId) window.sessionStorage.setItem('agent_active_thread', storedThreadId)
@@ -108,7 +110,7 @@ else window.sessionStorage.removeItem('agent_active_thread')
 const mock = dashboardApi as unknown as Record<string, unknown>
 mock.getChatModels = async () => models
 mock.listChatThreads = async () => threads
-mock.getChatPreferences = async () => preference
+mock.getChatModelUsage = async () => usage
 mock.listChatMessages = async (id: string) => messages[id] ?? []
 mock.createChatThread = async (input: { model: string; providerId: string }) => ({
   ...threads[0],

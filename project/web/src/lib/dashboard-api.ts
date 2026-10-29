@@ -460,11 +460,11 @@ export type ChatDirectInput = {
   readonly model: string
 }
 
-// ChatPreference is the model chosen when the account last started a new
-// conversation; the panel uses it as the default for the next one.
-export type ChatPreference = {
+// ChatModelUsage is one row of the recent model ranking the panel uses to
+// choose a new conversation's default model.
+export type ChatModelUsage = {
   readonly model: string
-  readonly providerId: string
+  readonly count: number
 }
 
 export type ChatMessageRecord = {
@@ -1283,14 +1283,19 @@ function parseChatThread(value: unknown): ChatThread {
   }
 }
 
-function parseChatPreference(value: unknown): ChatPreference {
-  if (!isRecord(value)) {
+function parseChatModelUsage(value: unknown): readonly ChatModelUsage[] {
+  if (!Array.isArray(value)) {
     throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
   }
-  return {
-    model: readString(value.model, 'chat.preference.model'),
-    providerId: readString(value.provider_id, 'chat.preference.providerId'),
-  }
+  return value.map((item) => {
+    if (!isRecord(item)) {
+      throw new DashboardApiError(i18n.t('api:invalidField', { field: tField('chat') }), null)
+    }
+    return {
+      model: readString(item.model, 'chat.usage.model'),
+      count: readNumber(item.count, 'chat.usage.count'),
+    }
+  })
 }
 
 function parseChatMessage(value: unknown): ChatMessageRecord {
@@ -3220,8 +3225,8 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     const data = await request('/chat/threads')
     return (Array.isArray(data) ? data : []).map(parseChatThread)
   },
-  async getChatPreferences(): Promise<ChatPreference> {
-    return parseChatPreference(await request('/chat/preferences'))
+  async getChatModelUsage(): Promise<readonly ChatModelUsage[]> {
+    return parseChatModelUsage(await request('/chat/model-usage'))
   },
   async createChatThread(input: { model: string; providerId: string }): Promise<ChatThread> {
     return parseChatThread(await request('/chat/threads', {

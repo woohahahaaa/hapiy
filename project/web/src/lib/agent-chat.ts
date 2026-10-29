@@ -1,26 +1,29 @@
-import type { ChatModelOption } from '@/lib/dashboard-api'
+import type { ChatModelOption, ChatModelUsage } from '@/lib/dashboard-api'
 
 export type AgentModelChoice = {
   readonly model: string
   readonly providerId: string
 }
 
-// pickDefaultModel chooses the model for a new conversation: the model the
-// account used when it last started one, otherwise the first model in the
-// current list. A remembered provider survives only while the model still
-// offers it; an empty provider means 自动 (dispatch through the topology).
+// usable reports whether a model still has at least one channel the picker can
+// send through: the provider is not disabled as a whole, and its keys and base
+// URLs are not all disabled.
+function usable(entry: ChatModelOption): boolean {
+  return entry.providers.some((provider) => !provider.autoDisabled)
+}
+
+// pickDefaultModel chooses the model for a new conversation: the most used
+// model of the recent usage window that still has a usable channel, then the
+// first usable model in the list, then whatever the list offers. The provider
+// always starts on 自动 so the topology dispatches the request.
 export function pickDefaultModel(
   models: readonly ChatModelOption[],
-  preference: AgentModelChoice,
+  usage: readonly ChatModelUsage[],
 ): AgentModelChoice {
-  const remembered = models.find((entry) => entry.model === preference.model)
-  if (remembered) {
-    return {
-      model: remembered.model,
-      providerId: remembered.providers.some((provider) => provider.id === preference.providerId)
-        ? preference.providerId
-        : '',
-    }
+  for (const item of usage) {
+    const entry = models.find((candidate) => candidate.model === item.model)
+    if (entry && usable(entry)) return { model: entry.model, providerId: '' }
   }
-  return { model: models[0]?.model ?? '', providerId: '' }
+  const fallback = models.find(usable) ?? models[0]
+  return { model: fallback?.model ?? '', providerId: '' }
 }

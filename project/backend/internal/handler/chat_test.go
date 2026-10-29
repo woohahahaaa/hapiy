@@ -53,7 +53,7 @@ func newChatRouter(db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
 		c.Next()
 	})
 	r.GET("/chat/models", ChatModels(db, engine))
-	r.GET("/chat/preferences", ChatPreferences(db))
+	r.GET("/chat/model-usage", ChatModelUsage(db))
 	r.GET("/chat/threads", ListChatThreads(db))
 	r.POST("/chat/threads", CreateChatThread(db))
 	r.PATCH("/chat/threads/:id", UpdateChatThread(db))
@@ -218,63 +218,45 @@ func TestChatThreadsAreScopedToTheAccount(t *testing.T) {
 	}
 }
 
-func TestChatPreferenceTracksTheModelAThreadStartedWith(t *testing.T) {
+func TestChatModelUsageRanksRecentRequestsOnly(t *testing.T) {
 	db := newChatTestDB(t)
 	router := newChatRouter(db, relay.NewEngine(db), "alice")
 
-	readPreference := func(r http.Handler) model.ChatPreference {
-		t.Helper()
-		rec := doJSON(t, r, http.MethodGet, "/chat/preferences", "")
-		if rec.Code != http.StatusOK {
-			t.Fatalf("preferences status=%d body=%s", rec.Code, rec.Body.String())
-		}
-		var payload struct {
-			Data model.ChatPreference `json:"data"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-			t.Fatal(err)
-		}
-		return payload.Data
+	now := time.Now()
+	rows := []model.Log{
+		{ID: "l1", ModelName: "model-a", CreatedAt: now.Add(-1 * time.Hour)},
+		{ID: "l2", ModelName: "model-a", CreatedAt: now.Add(-2 * time.Hour)},
+		{ID: "l3", ModelName: "model-b", CreatedAt: now.Add(-3 * time.Hour)},
+		// Older than the two-day window: must not influence the ranking.
+		{ID: "l4", ModelName: "model-c", CreatedAt: now.Add(-72 * time.Hour)},
+		// Event rows carry no model name and must not show up at all.
+		{ID: "l5", ModelName: "", CreatedAt: now},
 	}
-
-	if got := readPreference(router); got.Model != "" || got.ProviderID != "" {
-		t.Fatalf("new account must have no preference, got %+v", got)
-	}
-
-	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"model-a","provider_id":"p1"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("create status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if got := readPreference(router); got.Model != "model-a" || got.ProviderID != "p1" {
-		t.Fatalf("preference after first thread = %+v", got)
-	}
-
-	var created struct {
-		Data model.ChatThread `json:"data"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+	if err := db.Create(&rows).Error; err != nil {
 		t.Fatal(err)
 	}
-	// Switching models inside an existing thread must not rewrite the default
-	// for the next new conversation.
-	if rec := doJSON(t, router, http.MethodPatch, "/chat/threads/"+created.Data.ID, `{"model":"model-c"}`); rec.Code != http.StatusOK {
-		t.Fatalf("patch status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if got := readPreference(router); got.Model != "model-a" {
-		t.Fatalf("thread model change leaked into preference: %+v", got)
-	}
 
-	rec = doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"model-b"}`)
+	rec := doJSON(t, router, http.MethodGet, "/chat/model-usage", "")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("second create status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("model usage status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if got := readPreference(router); got.Model != "model-b" || got.ProviderID != "" {
-		t.Fatalf("preference after second thread = %+v", got)
+	var payload struct {
+		Data []struct {
+			Model string `json:"model"`
+			Count int64  `json:"count"`
+		} `json:"data"`
 	}
-
-	bob := newChatRouter(db, relay.NewEngine(db), "bob")
-	if got := readPreference(bob); got.Model != "" {
-		t.Fatalf("another account must keep its own preference, got %+v", got)
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Data) != 2 {
+		t.Fatalf("usage rows=%+v, want only the two recent models", payload.Data)
+	}
+	if payload.Data[0].Model != "model-a" || payload.Data[0].Count != 2 {
+		t.Fatalf("most used row = %+v, want model-a twice", payload.Data[0])
+	}
+	if payload.Data[1].Model != "model-b" || payload.Data[1].Count != 1 {
+		t.Fatalf("second row = %+v, want model-b once", payload.Data[1])
 	}
 }
 
