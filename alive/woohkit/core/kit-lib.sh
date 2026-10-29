@@ -320,6 +320,7 @@ kit_go_universal() {
   msg "lipo -create -> $_gu_out"
   lipo -create "$_gu_tmpd/amd64" "$_gu_tmpd/arm64" -output "$_gu_out"
   rm -rf "$_gu_tmpd"
+  [ -s "$_gu_out" ] || die "lipo 没产出通用二进制：$_gu_out"
 }
 
 # ---------------------------------------------------------------------------
