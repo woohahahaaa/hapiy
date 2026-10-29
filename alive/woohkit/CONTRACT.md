@@ -18,16 +18,25 @@ woohkit 是一个「框架 + 规范」：通用逻辑（alive、release、安装
 
 ## 一、项目文件（都在项目里；sync/alive/release 只读不改）
 
-### 1.1 `<项目根>/alive/woohkit.json` — 身份与默认端口（项目自己定）
+### 1.1 `<项目根>/alive/woohkit.json` — 身份、端口与桌面壳外观（项目自己定）
 
 ```json
-{ "name": "MyApp", "id": "myapp", "defaultPort": 18799 }
+{
+  "name": "MyApp", "id": "myapp", "defaultPort": 18799,
+  "shell": { "glass": true, "frameless": true }
+}
 ```
 
 - `name`：显示名（消息、release 标题、桌面壳名）。简洁 ASCII。
 - `id`：slug，小写字母/数字/`_`/`-`，用作 `~/.<id>`、日志前缀、服务名。
 - `defaultPort`：1-65535 的公共端口。**不带 `--port` 时永远用它**；`--port N`
   只对当次运行生效，kit 不记忆、不覆盖、不写回。
+- `shell`（可选，桌面壳外观，见第五节）：`glass`（默认 `true`）毛玻璃背景 /
+  不透明主题色；`frameless`（默认 `true`）无边框顶部 / 系统原生标题栏；`url`
+  （默认空）外壳直接打开的地址（`http(s)://` 或 `file://`，比如线上版
+  `https://app.example.com/` 或本地单页），留空 = 打开本机服务
+  `http://127.0.0.1:<defaultPort>/`。写死在这里，每个项目自己定；改完重新构建
+  桌面壳（release 时打包 `INSTALL_DESKTOP=1` 的壳）才生效。
 
 ### 1.2 `scripts/project.sh` — 项目细节 + 钩子
 
@@ -59,7 +68,7 @@ gen` 按它重生成。
 | `theme` | `project.sh` 的 `SHELL_THEME`，再退 `#000000` | `theme_color` |
 | `background` | 同 `theme` | `background_color` |
 | `manifest` | 自动 | 是否生成 `manifest.webmanifest`；默认检测到 Next 的 `app/manifest.ts` 这类“由代码生成”的实现就跳过，显式 `true`/`false` 覆盖 |
-| `favicon` | 自动 | 同上（认 `app/favicon.ico`） |
+| `favicon` | 生成 | 默认总是生成；项目里有 `app/favicon.ico` / `src/app/favicon.ico`（Next 直接把它当站点图标服务）就覆盖那个文件，否则写静态目录；显式 `false` 不生成 |
 
 ## 二、alive 钩子
 
@@ -165,6 +174,23 @@ gen` 按它重生成。
 - 壳的行为：窗口只打开 `http://127.0.0.1:<端口>`（端口从 `<用户目录>/.<APP_ID>/port`
   读，读不到退回 `DEFAULT_PORT`）；外链交给系统浏览器。这些由 kit 保证，项目
   无需写任何壳代码。
+- **外观按项目配在 `alive/woohkit.json` 的 `shell` 块**（两个开关互相独立，
+  默认都 `true`；改完重新构建壳才生效）：
+  - `"glass"`：`true` 毛玻璃背景 / `false` 不透明主题色纯色。玻璃要**页面自己
+    用半透明背景**（`html, body { background: rgba(10, 2, 2, .35) }` 或透明
+    底色上铺半透明卡片）才看得见；体系上 macOS 全版本有（`NSVisualEffectView`，
+    Zen Browser 同款做法），Windows 只有 Win11 22H2+ 有（DWM Acrylic 系统
+    材质），更老的系统自动退回主题色纯色，不会黑屏。
+  - `"frameless"`：`true` 无边框顶部（macOS 只剩红绿灯、页面顶到红绿灯下面；
+    Windows 自绘标题条，右端最小化/最大化/关闭），`false` 系统原生标题栏
+    （macOS 带应用名，Windows 深色标题栏 + 系统按钮）。无边框时顶部 28px
+    （Windows 32px）是拖窗口区，**页面点不到那一带**；窗口边缘可拉伸、贴边
+    分屏/双击最大化照旧。
+  - `"url"`：默认 `""` = 打开本机 `http://127.0.0.1:<端口>/`；填了 `http(s)://`
+    地址就先打开它（线上版，如 `"https://or.hihy.me:6060/"`），也可以
+    `file://` 指向本地单页。**启动时会先探一次预设地址（4 秒）**：通了开它，
+    不通自动退回本机服务（本机没起就一直按原地址重试）；`file://` 不探测、
+    直接打开。预设那个站的同源导航留在窗口里，其它外链仍交给系统浏览器。
 
 ## 六、PWA（图标 / manifest / service worker 生成）
 
@@ -182,13 +208,19 @@ gen` 按它重生成。
 
 - 每个设置命令保存配置后**立即重生成**；`sw.js` 只在缺失时按 `pwa/sw.js` 模板
   生成一次（不覆盖你改过的），命令同时打印要贴进 `index.html` 的 `<head>` 片段。
-- 生成物（写进静态目录）：`icon-192.png`、`icon-512.png`、
-  `icon-maskable-512.png`、`apple-touch-icon.png`(180)、`favicon.ico`(16/32/48)、
-  `manifest.webmanifest`。`icon-512.png` 正好是桌面壳默认的 `SHELL_ICON`。
+- 生成物：`icon-192.png`、`icon-512.png`、`icon-maskable-512.png`、
+  `apple-touch-icon.png`(180)、`manifest.webmanifest` 与 `favicon.ico`(16/32/48)
+  写进静态目录；项目里存在 `app/favicon.ico` / `src/app/favicon.ico` 时 favicon
+  改覆盖那个文件（Next 直接服务它，写静态目录会被它盖住，浏览器里换不掉）。
+  `icon-512.png` 正好是桌面壳默认的 `SHELL_ICON`。
 - `logo` 接受任意路径：zip 会先解出里面的图，项目外的图自动拷成
-  `assets/logo.png`（源图留在项目里，以后 `gen` 可复现）。`manifest` / `favicon`
-  默认生成；检测到 Next 的 `app/manifest.ts` / `app/favicon.ico` 这类由代码生成的
-  实现时自动跳过（`pwa.json` 显式 `true`/`false` 覆盖）。
+  `assets/logo.png`（源图留在项目里，以后 `gen` 可复现）。`manifest` 默认生成；
+  检测到 Next 的 `app/manifest.ts` 这类由代码生成的实现时自动跳过（`pwa.json`
+  显式 `true`/`false` 覆盖）；`favicon` 总是生成，`"favicon": false` 可让工具
+  完全不碰它。
+- 项目里还留着 `app/icon.svg` / `src/app/icon.svg` 时 `gen` / `show` 会提示：
+  Chrome / Firefox 优先拿它当标签页图标，生成的 `favicon.ico` 轮不到——旧品牌
+  记得删掉或换成新的。
 - 圆角只作用于 any 图标：默认 22.5%（苹果 macOS / iOS 图标的比例，正圆弧逼近），
   `--round N%` 可调、`0` 是直角。maskable 自动：整幅不透明的图（插画/照片）直接
   满幅，带透明通道的图形标缩进 80% 安全区、居中放在背景色上；apple-touch 满幅方图

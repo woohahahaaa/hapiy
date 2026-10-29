@@ -10,6 +10,13 @@
 #   SHELL_BUNDLE_ID   bundle id，默认 dev.<APP_ID>.app
 #   SHELL_ICON        图标源 png，默认 <web|public>/public/icon-512.png
 #
+# 桌面壳外观（毛玻璃背景 / 无边框顶部 / 预设地址）不看 project.sh，看项目
+# alive/woohkit.json 的 shell 块（都可选，默认都 true / 空）：
+#   "shell": { "glass": true, "frameless": true, "url": "" }
+# glass=true：整窗 NSVisualEffectView 毛玻璃（页面半透明才看得见）；
+# frameless=true：隐藏标题栏只剩红绿灯，顶部 28px 是拖窗口区（页面点不到）；
+# url 填了（http(s):// 或 file://）就直接打开它，留空=打开本机服务。
+#
 # 依赖 swiftc（Xcode Command Line Tools）、lipo、sips、iconutil；产物为
 # arm64 + x86_64 通用二进制，末尾自动 ad-hoc 签名（本机运行无需开发者证书）。
 set -eu
@@ -26,6 +33,11 @@ kit_load_project_json "$ROOT"
 
 THEME="${SHELL_THEME:-#0a0202}"
 BUNDLE_ID="${SHELL_BUNDLE_ID:-dev.$APP_ID.app}"
+# 外观两个开关：来自 woohkit.json 的 shell 块（kit_load_project_json 导出 1/0）
+case "$SHELL_GLASS" in 1) GLASS=true ;; *) GLASS=false ;; esac
+case "$SHELL_FRAMELESS" in 1) FRAMELESS=true ;; *) FRAMELESS=false ;; esac
+# 预设地址（shell.url，留空=本机服务）；转义进 Swift 字符串字面量
+APP_URL_ESC=$(printf '%s' "$SHELL_URL" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 
 ICON=""
 for c in "${SHELL_ICON:-}" "$ROOT/web/public/icon-512.png" "$ROOT/public/icon-512.png"; do
@@ -58,6 +70,9 @@ let kPortRelPath = ".$APP_ID/port"
 let kThemeRed = $R
 let kThemeGreen = $G
 let kThemeBlue = $B
+let kGlass = $GLASS
+let kFrameless = $FRAMELESS
+let kAppUrl = "$APP_URL_ESC"
 EOF
 cp "$KIT_DIR/shell/macapp/Shell.swift" "$WORK/main.swift"
 

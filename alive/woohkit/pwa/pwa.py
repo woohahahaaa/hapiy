@@ -4,10 +4,13 @@
 # 入口是项目的 alive/pwa.sh（薄壳），本文件读：
 #   alive/woohkit.json  身份（name / id）
 #   alive/pwa.json      本工具的配置（logo / 圆角 / 标题 / 主题色 / 静态目录）
-# 把图标、manifest.webmanifest、sw.js 生成到项目的静态目录。
+# 把图标、manifest.webmanifest、sw.js 生成到项目的静态目录——favicon 例外：
+# 项目里有 app/favicon.ico / src/app/favicon.ico（框架直接服务它的约定位置）
+# 就覆盖那个文件，不然浏览器里换不掉。
 #
-# 边界：只写 alive/pwa.json 与静态目录里的生成物；绝不改 index.html；
-# 已存在的 sw.js 不覆盖。契约见 CONTRACT.md 第六节。
+# 边界：只写 alive/pwa.json、静态目录里的生成物，以及上面那个 favicon；绝不改
+# index.html 与 app/manifest.ts 这类代码；已存在的 sw.js 不覆盖。契约见
+# CONTRACT.md 第六节。
 
 import argparse
 import io
@@ -42,13 +45,19 @@ STATIC_CANDIDATES = ("web/public", "public", "app/public", "frontend/public", "s
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp")
 
-# manifest / favicon 由框架代码生成时的常见位置（存在就默认不重复生成，
-# pwa.json 里显式写 true/false 可覆盖）。
+# manifest 由框架代码生成时的常见位置（存在就默认不重复生成，pwa.json 里
+# 显式写 true/false 可覆盖）。favicon 不算：它只是静态图标，Next 这类框架把
+# app/favicon.ico 直接当站点图标服务——写别处会被它盖住，所以存在就覆盖它。
 FRAMEWORK_FILES = {
     "manifest": ("app/manifest.ts", "app/manifest.js",
                  "src/app/manifest.ts", "src/app/manifest.js"),
-    "favicon": ("app/favicon.ico", "src/app/favicon.ico"),
 }
+
+FAVICON_LOCATIONS = ("app/favicon.ico", "src/app/favicon.ico")
+
+# 文件式矢量图标（Next 约定，自动进 <head>）：Chrome / Firefox 会优先拿它当
+# 标签页图标——项目里还留着旧品牌的那张，favicon.ico 就永远轮不到。
+SVG_ICON_LOCATIONS = ("app/icon.svg", "src/app/icon.svg")
 
 
 def msg(text):
@@ -58,6 +67,10 @@ def msg(text):
 def die(text):
     sys.stderr.write("[pwa] %s\n" % text)
     sys.exit(1)
+
+
+def warn(text):
+    sys.stderr.write("[pwa] %s\n" % text)
 
 
 def rel(root, path):
@@ -141,6 +154,16 @@ def framework_generated(root, kind):
     return None
 
 
+def favicon_target(root, directory):
+    """favicon 写哪：框架约定的站点图标位置（app/favicon.ico）优先——在那儿
+    写才生效；没有就写静态目录。directory 为空时返回 None。"""
+    for rel_path in FAVICON_LOCATIONS:
+        path = os.path.join(root, rel_path)
+        if os.path.isfile(path):
+            return path
+    return os.path.join(directory, "favicon.ico") if directory else None
+
+
 def install_logo(root, given):
     """把 <图片> 落成项目里可复现的源图：zip 先解出里面的图，项目外的图拷进
     assets/logo.png；返回写进 pwa.json 的路径（相对项目根）。"""
@@ -190,19 +213,20 @@ def effective(root, cfg):
     name, app_id = load_identity(root)
     theme = norm_hex(cfg.get("theme") or os.environ.get("SHELL_THEME") or "#000000")
     title = cfg.get("title") or name
-    switches = {}
+    directory = find_dir(root, cfg)
+    # manifest 默认生成，检测到由代码生成的实现（app/manifest.ts）时跳过；
+    # favicon 总是生成（有 app/favicon.ico 就覆盖它），只有显式 false 才不生成。
     auto_off = {}
-    for kind in ("manifest", "favicon"):
-        if kind in cfg:
-            switches[kind] = bool(cfg[kind])
-            continue
-        who = framework_generated(root, kind)
-        switches[kind] = who is None
+    if "manifest" in cfg:
+        manifest_on = bool(cfg["manifest"])
+    else:
+        who = framework_generated(root, "manifest")
+        manifest_on = who is None
         if who:
-            auto_off[kind] = who
+            auto_off["manifest"] = who
     return {
         "app_id": app_id,
-        "dir": find_dir(root, cfg),
+        "dir": directory,
         "logo": cfg.get("logo"),
         "round": float(cfg["round"]) if "round" in cfg else DEFAULT_ROUND,
         "title": title,
@@ -210,8 +234,11 @@ def effective(root, cfg):
         "desc": cfg.get("desc") or "",
         "theme": theme,
         "background": norm_hex(cfg.get("background") or theme),
-        "manifest": switches["manifest"],
-        "favicon": switches["favicon"],
+        "manifest": manifest_on,
+        "favicon": bool(cfg["favicon"]) if "favicon" in cfg else True,
+        "favicon_path": favicon_target(root, directory),
+        "svg_icons": [p for p in SVG_ICON_LOCATIONS
+                      if os.path.isfile(os.path.join(root, p))],
         "auto_off": auto_off,
     }
 
@@ -271,7 +298,7 @@ def write_icons(src, directory, eff):
         rounded(src, size, eff["round"]).save(os.path.join(directory, "icon-%d.png" % size))
     if eff["favicon"]:
         rounded(src, FAVICON_SRC, eff["round"]).save(
-            os.path.join(directory, "favicon.ico"),
+            eff["favicon_path"],
             format="ICO",
             sizes=[(s, s) for s in FAVICON_SIZES],
         )
@@ -368,8 +395,10 @@ USAGE = """\
   ./alive/pwa.sh desc "一句话描述"
 
 配置记在 alive/pwa.json（也可以直接手改）；每条设置命令都会立即重生成。
-manifest / favicon 默认都生成；检测到 Next 的 app/manifest.ts / app/favicon.ico
-这类“由代码生成”的实现时自动跳过（pwa.json 里显式写 true/false 可覆盖）。
+manifest 默认生成；检测到 Next 的 app/manifest.ts 这类“由代码生成”的实现时自动
+跳过（pwa.json 里显式写 true/false 可覆盖）。favicon 总是生成：项目里有
+app/favicon.ico / src/app/favicon.ico（框架直接服务它）就覆盖那个文件，否则写
+静态目录；不想让工具管就写 "favicon": false。
 maskable：整幅不透明的图（插画/照片）直接满幅；带透明通道的图形标缩进 80% 安全区。
 生成物写进静态目录：icon-192.png、icon-512.png、icon-maskable-512.png、
 apple-touch-icon.png、favicon.ico、manifest.webmanifest、首次的 sw.js。
@@ -411,6 +440,13 @@ def cmd_gen(root, kit_dir, cfg):
     msg("静态目录 %s" % rel(root, directory))
     msg("logo %s（圆角 %s）" % (logo, fmt_round(eff["round"])))
     msg("生成 " + " ".join(made) + (" sw.js" if sw_written else "（sw.js 已存在，未覆盖）"))
+    if eff["favicon"] and os.path.abspath(eff["favicon_path"]) != os.path.abspath(
+            os.path.join(directory, "favicon.ico")):
+        msg("favicon.ico 写进 %s（框架直接服务它；不想让工具管就在 pwa.json 写 \"favicon\": false）"
+            % rel(root, eff["favicon_path"]))
+    for who in eff["svg_icons"]:
+        warn("%s 还在：Chrome / Firefox 优先用它当标签页图标，favicon.ico 轮不到——"
+             "旧品牌就删掉它，新品牌就换成新的" % who)
     for kind in ("manifest", "favicon"):
         if eff[kind]:
             continue
@@ -443,6 +479,12 @@ def cmd_show(root, cfg):
         who = eff["auto_off"].get(kind)
         why = ("由 %s 生成" % who) if who else ("pwa.json 的 %s=false" % kind)
         print("[pwa]      %-10s跳过（%s）" % (kind, why))
+    if eff["favicon"] and eff["dir"] and os.path.abspath(eff["favicon_path"]) != os.path.abspath(
+            os.path.join(eff["dir"], "favicon.ico")):
+        print("[pwa]      favicon   写进 %s（框架直接服务它）" % rel(root, eff["favicon_path"]))
+    for who in eff["svg_icons"]:
+        print("[pwa]      %s 还在——Chrome / Firefox 优先用它当标签页图标，"
+              "favicon.ico 轮不到" % who)
     if eff["dir"]:
         files = ["icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]
         if eff["favicon"]:

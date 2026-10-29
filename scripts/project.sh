@@ -119,9 +119,14 @@ RELEASE_REPO="woohahahaaa/hapiy"
 RELEASE_PLATFORMS="darwin-universal windows-amd64 linux-amd64 linux-arm64"
 
 INSTALL_EXTRA_DIR="webdist"
-INSTALL_DESKTOP=0
+INSTALL_DESKTOP=1                 # 装桌面 app（macOS 桌面 .app / Windows 桌面快捷方式）
+INSTALL_SHELL_DESC="hapiy 控制台"
 INSTALL_EXPORT_PORT_ENV=1
 INSTALL_HEALTH_PATH="/"
+
+# 桌面壳外观：底色取品牌色（图标主色压暗），图标用 web 里的 512。
+SHELL_THEME="#1e2b21"
+SHELL_ICON="$ROOT_DIR/project/web/public/icon-512.png"
 
 proj_version() {
   grep -o 'Version = "[^"]*"' "$ROOT_DIR/project/backend/internal/version/version.go" | head -1 | sed 's/Version = "//;s/"//'
@@ -138,9 +143,11 @@ proj_stage() {
   case "$platform" in
     darwin-universal)
       kit_go_universal "$BACKEND_DIR" "$dir/hapiy" ./cmd/hapiy
+      "$KIT_DIR/shell/macapp/build.sh" "$ROOT_DIR" "$dir"
       ;;
     windows-amd64)
       kit_go_build "$BACKEND_DIR" windows amd64 "$dir/hapiy.exe" ./cmd/hapiy
+      "$KIT_DIR/shell/winapp/build.sh" "$ROOT_DIR" "$dir/$APP_NAME"
       ;;
     linux-amd64)
       kit_go_build "$BACKEND_DIR" linux amd64 "$dir/hapiy" ./cmd/hapiy

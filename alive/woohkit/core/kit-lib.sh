@@ -16,9 +16,10 @@ die()  { printf '[%s] %s\n' "${APP_ID:-woohkit}" "$*" >&2; exit 1; }
 hook_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # kit_load_project_json <项目根目录> — 读项目的 alive/woohkit.json（项目自己声明
-# 的身份与默认端口：name / id / defaultPort），导出 APP_NAME / APP_ID /
-# DEFAULT_PORT。端口只认项目自己的值：--port 只当次生效（见 alive-core），
-# kit 不记忆、不覆盖。
+# 的身份、默认端口与桌面壳外观：name / id / defaultPort / shell{glass, frameless}），
+# 导出 APP_NAME / APP_ID / DEFAULT_PORT / SHELL_GLASS / SHELL_FRAMELESS。
+# 端口只认项目自己的值：--port 只当次生效（见 alive-core），kit 不记忆、不覆盖。
+# shell 块两个开关都给默认 true（无边框 + 毛玻璃）。
 kit_load_project_json() {
   _kit_json="$1/alive/woohkit.json"
   [ -f "$_kit_json" ] || die "missing alive/woohkit.json（需要 {name, id, defaultPort}，见 alive/woohkit/CONTRACT.md）"
@@ -46,6 +47,27 @@ try:
         raise ValueError
 except (TypeError, ValueError):
     errs.append("defaultPort（1-65535 的整数）")
+
+# 桌面壳外观（都可选，默认都开）：glass=毛玻璃背景，frameless=无边框顶部。
+# url 填了就打开这个网址（http/https/file 开头），留空=打开本机 http://127.0.0.1:<端口>/。
+shell = cfg.get("shell")
+if shell is None:
+    shell = {}
+if not isinstance(shell, dict):
+    errs.append("shell（可选对象：{glass: 布尔, frameless: 布尔, url: 字符串}）")
+    shell = {}
+glass = shell.get("glass", True)
+frameless = shell.get("frameless", True)
+url = shell.get("url", "")
+if not isinstance(glass, bool):
+    errs.append("shell.glass（布尔：true=毛玻璃背景，false=不透明主题色）")
+if not isinstance(frameless, bool):
+    errs.append("shell.frameless（布尔：true=无边框顶部，false=系统原生标题栏）")
+if not isinstance(url, str):
+    errs.append("shell.url（字符串：外壳打开的地址，留空=本机服务）")
+elif url and not re.match(r"^(https?|file)://\S+$", url):
+    errs.append("shell.url（要 http(s):// 或 file:// 开头的完整地址）")
+
 if errs:
     sys.stderr.write("woohkit.json 无效字段: %s\n" % "；".join(errs))
     sys.exit(1)
@@ -56,10 +78,13 @@ def q(s):
 print("APP_NAME=%s" % q(name))
 print("APP_ID=%s" % q(pid))
 print("DEFAULT_PORT=%d" % port)
+print("SHELL_GLASS=%d" % (1 if glass else 0))
+print("SHELL_FRAMELESS=%d" % (1 if frameless else 0))
+print("SHELL_URL=%s" % q(url))
 PY
 )" || die "woohkit.json 无效（$_kit_json）"
   eval "$_kit_out"
-  export APP_NAME APP_ID DEFAULT_PORT
+  export APP_NAME APP_ID DEFAULT_PORT SHELL_GLASS SHELL_FRAMELESS SHELL_URL
 }
 
 # ---------------------------------------------------------------------------
@@ -269,11 +294,11 @@ kit_stop_sidecars() {
 # 可选变量 GO_CGO_ENV（例 CGO_ENABLED=1）：仅 darwin 目标时生效（跨编到
 # arm64/amd64 用本机 clang，hapiy 这类带 cgo 的项目需要）。
 kit_go_build() {
-  local pkgdir="$1"
-  local goos="$2"
-  local goarch="$3"
-  local out="$4"
-  local pkg="${5:-.}"
+  pkgdir="$1"
+  goos="$2"
+  goarch="$3"
+  out="$4"
+  pkg="${5:-.}"
   msg "go build $goos/$goarch -> $out"
   if [ "$goos" = darwin ] && [ -n "${GO_CGO_ENV:-}" ]; then
     (cd "$pkgdir" && env GOOS="$goos" GOARCH="$goarch" $GO_CGO_ENV go build -o "$out" "$pkg")
@@ -284,10 +309,9 @@ kit_go_build() {
 
 # kit_go_universal <包目录> <输出> [包路径=.] — darwin amd64+arm64 lipo 通用二进制。
 kit_go_universal() {
-  local pkgdir="$1"
-  local out="$2"
-  local pkg="${3:-.}"
-  local tmpd
+  pkgdir="$1"
+  out="$2"
+  pkg="${3:-.}"
   tmpd=$(mktemp -d)
   kit_go_build "$pkgdir" darwin amd64 "$tmpd/amd64" "$pkg"
   kit_go_build "$pkgdir" darwin arm64 "$tmpd/arm64" "$pkg"

@@ -8,6 +8,11 @@
 #
 # 应用名 / 端口 / 主题色等来自项目 scripts/project.sh（与 shell/macapp/build.sh
 # 同一套配置：APP_NAME、APP_ID、DEFAULT_PORT、SHELL_THEME、SHELL_ICON）。
+# 桌面壳外观（毛玻璃背景 / 无边框顶部 / 预设地址）看项目 alive/woohkit.json
+# 的 shell 块（都可选，默认都 true / 空）：
+#   "shell": { "glass": true, "frameless": true, "url": "" }
+# glass=true 时 Win11 22H2+ 出 DWM Acrylic，老系统自动退回主题色纯色；
+# url 填了（http(s):// 或 file://）就直接打开它，留空=打开本机服务。
 #
 # 依赖：.NET SDK（dotnet，或 ~/.dotnet/dotnet）、python3 + Pillow（生成 icon.ico）。
 # net48（.NET Framework 4.8，Win10/11 自带）交叉编译，引用程序集由
@@ -25,6 +30,11 @@ export ROOT_DIR KIT_DIR
 kit_load_project_json "$ROOT"
 
 THEME="${SHELL_THEME:-#0a0202}"
+# 外观两个开关：来自 woohkit.json 的 shell 块（kit_load_project_json 导出 1/0）
+case "$SHELL_GLASS" in 1) GLASS=true ;; *) GLASS=false ;; esac
+case "$SHELL_FRAMELESS" in 1) FRAMELESS=true ;; *) FRAMELESS=false ;; esac
+# 预设地址（shell.url，留空=本机服务）；转义进 C# 字符串字面量
+APP_URL_ESC=$(printf '%s' "$SHELL_URL" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 
 ICON=""
 for c in "${SHELL_ICON:-}" "$ROOT/web/public/icon-512.png" "$ROOT/public/icon-512.png"; do
@@ -71,6 +81,9 @@ namespace KitShell
         public const int ThemeR = $R;
         public const int ThemeG = $G;
         public const int ThemeB = $B;
+        public static readonly bool Glass = $GLASS;
+        public static readonly bool Frameless = $FRAMELESS;
+        public const string AppUrl = "$APP_URL_ESC";
     }
 }
 EOF
