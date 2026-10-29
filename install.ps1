@@ -3,11 +3,13 @@
 #   irm https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.ps1 | iex
 #
 # 安装脚本做这些事：下载最新发行版、校验 SHA256、装到固定目录并加入用户
-# PATH、注册登录自启（任务计划程序，被安全软件拦截时退回启动文件夹）。
+# PATH、注册登录自启（任务计划程序，被安全软件拦截时退回启动文件夹）、在
+# 桌面放 hapiy 快捷方式（发行包里带 WinForms + WebView2 外壳时）。
 # 重复执行即为升级。
 #
 # 环境变量：
 #   $env:HAPIY_HOME            安装根目录（默认 %LOCALAPPDATA%\hapiy）
+#   $env:HAPIY_NO_DESKTOP=1    跳过桌面快捷方式
 #   $env:HAPIY_NO_SERVICE=1    跳过自启任务注册
 #
 # 本文件由 woohkit 在 release 时按项目配置渲染生成，勿手改。
@@ -56,6 +58,82 @@ try {
     if ($UserPath -notlike "*$AppDir*") {
         [Environment]::SetEnvironmentVariable("Path", ($AppDir + ";" + $UserPath), "User")
         Say "added $AppDir to the user PATH (takes effect in new terminals)"
+    }
+
+    if ($env:HAPIY_NO_DESKTOP -ne "1") {
+        $ShellSrc = Join-Path $Work "hapiy"
+        if (Test-Path (Join-Path $ShellSrc "hapiy.exe")) {
+            Say "installing desktop app ..."
+            $ShellDst = Join-Path $AppDir "hapiy"
+            $ShellExe = Join-Path $ShellDst "hapiy.exe"
+            # 升级时先关掉正在运行的外壳；只关路径匹配的那个，别误伤后端
+            # hapiy.exe（PowerShell 名字匹配不区分大小写）。
+            Get-Process -Name "hapiy" -ErrorAction SilentlyContinue | ForEach-Object {
+                try {
+                    if ($_.Path -eq $ShellExe) { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+                } catch { }
+            }
+            Remove-Item $ShellDst -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path $ShellDst) {
+                Say "WARN: could not clear $ShellDst (desktop app still running?); skipping the desktop app"
+            } else {
+                New-Item -ItemType Directory -Path $ShellDst -Force | Out-Null
+                # 拷目录内容而不是整个目录：目标已存在时 Copy-Item 会把源目录再
+                # 套一层（app\hapiy\hapiy\...），外壳就会因缺 dll 起不来。
+                Copy-Item (Join-Path $ShellSrc "*") $ShellDst -Recurse -Force
+
+                $Missing = @()
+                foreach ($f in "hapiy.exe", "Microsoft.Web.WebView2.Core.dll", "Microsoft.Web.WebView2.WinForms.dll", "WebView2Loader.dll") {
+                    $p = Join-Path $ShellDst $f
+                    if (-not (Test-Path $p) -or (Get-Item $p).Length -le 0) { $Missing += $f }
+                }
+                if ($Missing.Count -gt 0) {
+                    Say ("WARN: desktop app files are incomplete (" + ($Missing -join ", ") + "); skipping the shortcut")
+                } else {
+                    $Desktop = [Environment]::GetFolderPath("Desktop")
+                    if (Test-Path $Desktop) {
+                        $Link = Join-Path $Desktop "hapiy.lnk"
+                        $Made = $false
+                        try {
+                            $Ws = New-Object -ComObject WScript.Shell
+                            $Shortcut = $Ws.CreateShortcut($Link)
+                            $Shortcut.TargetPath = $ShellExe
+                            $Shortcut.WorkingDirectory = $ShellDst
+                            $Shortcut.IconLocation = "$ShellExe,0"
+                            $Shortcut.Description = "hapiy 控制台"
+                            $Shortcut.Save()
+                            $Made = $true
+                        } catch { }
+                        if (-not $Made) {
+                            # 受限会话/安全软件不让直接往桌面写 .lnk：先在安装目录生成，
+                            # 再交给资源管理器（Shell COM）复制过去。Shell COM 在个别
+                            # 环境下会卡死，放到独立进程里跑并限时 15 秒，卡了就放弃。
+                            try {
+                                $Staged = Join-Path $AppDir "hapiy.lnk"
+                                $Ws = New-Object -ComObject WScript.Shell
+                                $Shortcut = $Ws.CreateShortcut($Staged)
+                                $Shortcut.TargetPath = $ShellExe
+                                $Shortcut.WorkingDirectory = $ShellDst
+                                $Shortcut.IconLocation = "$ShellExe,0"
+                                $Shortcut.Description = "hapiy 控制台"
+                                $Shortcut.Save()
+                                $Helper = Join-Path $Work "copy-lnk.ps1"
+                                Set-Content -LiteralPath $Helper -Encoding ASCII -Value (
+                                    '(New-Object -ComObject Shell.Application).NameSpace("' + $Desktop +
+                                    '").CopyHere("' + $Staged + '", 20)')
+                                $Proc = Start-Process powershell -PassThru -WindowStyle Hidden -ArgumentList @(
+                                    "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $Helper)
+                                if (-not $Proc.WaitForExit(15000)) { try { $Proc.Kill() } catch { } }
+                                Start-Sleep -Milliseconds 600
+                                $Made = Test-Path $Link
+                            } catch { }
+                        }
+                        if ($Made) { Say "desktop app: $Link" }
+                        else { Say "WARN: could not create the desktop shortcut" }
+                    }
+                }
+            }
+        }
     }
 
     if ($env:HAPIY_NO_SERVICE -ne "1") {

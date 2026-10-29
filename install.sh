@@ -4,13 +4,15 @@
 #   curl -fsSL https://raw.githubusercontent.com/woohahahaaa/hapiy/main/install.sh | sh
 #
 # 安装脚本做这些事：下载最新发行版、校验 SHA256、装到固定目录并链接到
-# PATH、注册登录自启（launchd / systemd --user）。
+# PATH、注册登录自启（launchd / systemd --user）；macOS 还会把
+# 发行包里的原生外壳 hapiy.app 装到桌面（老包没有时退回 Chrome 启动器）。
 # 重复执行即为升级。
 #
 # 环境变量：
 #   HAPIY_HOME          安装根目录（默认 ~/.hapiy）
 #   HAPIY_BIN_DIR       命令链接目录（默认 ~/.local/bin）
 #   HAPIY_NO_SERVICE=1  跳过自启服务注册
+#   HAPIY_NO_DESKTOP=1  macOS：跳过桌面启动器生成
 #
 # 本文件由 woohkit 在 release 时按项目配置渲染生成，勿手改。
 set -eu
@@ -118,6 +120,95 @@ if [ "${HAPIY_NO_SERVICE:-0}" != "1" ]; then
       exit 1
       ;;
   esac
+fi
+
+# macOS：桌面生成 hapiy.app。发行包里带原生外壳（基于系统 WebKit 的
+# 小浏览器，窗口无工具栏、程序坞就是 hapiy 图标）就直接装它；老发行
+# 包没有就退回 Chrome 启动器（完整窗口，方便点地址栏的「安装」装成 PWA）。
+if [ "$os" = darwin ] && [ "${HAPIY_NO_DESKTOP:-0}" != "1" ]; then
+  APP="$HOME/Desktop/hapiy.app"
+  if [ -d "$WORK/extract/hapiy.app" ]; then
+    say "installing desktop app ..."
+    rm -rf "$APP"
+    cp -R "$WORK/extract/hapiy.app" "$APP"
+    # 浏览器/中转下载可能带隔离属性：清掉并重签一次（失败无妨）。
+    xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
+    codesign --force -s - "$APP" >/dev/null 2>&1 || true
+  else
+    say "creating desktop launcher ..."
+    BUILD="$WORK/hapiy.app"
+    mkdir -p "$BUILD/Contents/MacOS" "$BUILD/Contents/Resources"
+
+    cat > "$BUILD/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>hapiy</string>
+  <key>CFBundleDisplayName</key><string>hapiy</string>
+  <key>CFBundleIdentifier</key><string>dev.hapiy.launcher</string>
+  <key>CFBundleVersion</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleExecutable</key><string>hapiy</string>
+  <key>CFBundleIconFile</key><string>icon</string>
+  <key>LSMinimumSystemVersion</key><string>10.13</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+</dict>
+</plist>
+PLIST
+
+    cat > "$BUILD/Contents/MacOS/hapiy" <<'LAUNCHER'
+#!/bin/sh
+# hapiy 启动器：用完整 Chrome 窗口打开控制台（有地址栏，方便点「安装」
+# 把控制台装成 PWA，装完程序坞图标才是 hapiy 自己的）。
+# 端口从 ~/.hapiy/port 读取，读不到退回 18009。
+set -u
+
+PORT="$(cat "$HOME/.hapiy/port" 2>/dev/null || true)"
+case "$PORT" in
+  ''|*[!0-9]*) PORT=18009 ;;
+esac
+URL="http://127.0.0.1:$PORT"
+
+for app in "Google Chrome" "Google Chrome Canary" "Microsoft Edge" "Brave Browser" "Chromium"; do
+  bin="/Applications/$app.app/Contents/MacOS/$app"
+  if [ -x "$bin" ]; then
+    exec "$bin" --new-window "$URL"
+  fi
+done
+
+# 没装 Chromium 系浏览器就交给默认浏览器打开
+exec open "$URL"
+LAUNCHER
+    chmod +x "$BUILD/Contents/MacOS/hapiy"
+
+    # 图标从本机后端取（本地服务是唯一现成的来源；服务没跑就退化成默认图标，
+    # 不算失败）。
+    rm -f "$BUILD/Contents/Resources/icon.icns"
+    PORT_NOW="$(cat "$HOME/.hapiy/port" 2>/dev/null || true)"
+    case "$PORT_NOW" in ''|*[!0-9]*) PORT_NOW=18009 ;; esac
+    if command -v sips >/dev/null 2>&1 && command -v iconutil >/dev/null 2>&1 \
+       && curl -fsSL -o "$WORK/icon-512.png" "http://127.0.0.1:$PORT_NOW/icon-512.png"; then
+      mkdir -p "$WORK/icon.iconset"
+      for s in 16 32 128 256 512; do
+        sips -z "$s" "$s" "$WORK/icon-512.png" --out "$WORK/icon.iconset/icon_${s}x${s}.png" >/dev/null 2>&1 || true
+        sips -z "$((s * 2))" "$((s * 2))" "$WORK/icon-512.png" --out "$WORK/icon.iconset/icon_${s}x${s}@2x.png" >/dev/null 2>&1 || true
+      done
+      iconutil -c icns "$WORK/icon.iconset" -o "$BUILD/Contents/Resources/icon.icns" >/dev/null 2>&1 || true
+    fi
+
+    rm -rf "$APP"
+    mv "$BUILD" "$APP"
+  fi
+
+  # 让 Finder / LaunchServices 立刻认识这个包（失败无妨，稍后自会刷新）。
+  lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  if [ -x "$lsregister" ]; then
+    "$lsregister" -f "$APP" >/dev/null 2>&1 || true
+  fi
+  say "desktop app: $APP"
 fi
 
 say "done: hapiy $("$APP_DIR/hapiy" version)"
