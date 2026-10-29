@@ -308,16 +308,18 @@ kit_go_build() {
 }
 
 # kit_go_universal <包目录> <输出> [包路径=.] — darwin amd64+arm64 lipo 通用二进制。
+# 变量都带 _gu_ 前缀：kit_go_build 用的是同名全局（pkgdir/out/pkg），不隔离会被它
+# 覆盖，lipo 就会写进临时目录、随后被删掉（hapiy 归档里丢过二进制，就是这毛病）。
 kit_go_universal() {
-  pkgdir="$1"
-  out="$2"
-  pkg="${3:-.}"
-  tmpd=$(mktemp -d)
-  kit_go_build "$pkgdir" darwin amd64 "$tmpd/amd64" "$pkg"
-  kit_go_build "$pkgdir" darwin arm64 "$tmpd/arm64" "$pkg"
-  msg "lipo -create -> $out"
-  lipo -create "$tmpd/amd64" "$tmpd/arm64" -output "$out"
-  rm -rf "$tmpd"
+  _gu_pkgdir="$1"
+  _gu_out="$2"
+  _gu_pkg="${3:-.}"
+  _gu_tmpd=$(mktemp -d)
+  kit_go_build "$_gu_pkgdir" darwin amd64 "$_gu_tmpd/amd64" "$_gu_pkg"
+  kit_go_build "$_gu_pkgdir" darwin arm64 "$_gu_tmpd/arm64" "$_gu_pkg"
+  msg "lipo -create -> $_gu_out"
+  lipo -create "$_gu_tmpd/amd64" "$_gu_tmpd/arm64" -output "$_gu_out"
+  rm -rf "$_gu_tmpd"
 }
 
 # ---------------------------------------------------------------------------

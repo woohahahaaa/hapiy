@@ -5,4 +5,4 @@ package version
 
 // Version is the running build's version (x.y.z). Bump it by hand, or let
 // scripts/release.sh take an explicit value.
-const Version = "1.1.0"
+const Version = "1.1.1"
