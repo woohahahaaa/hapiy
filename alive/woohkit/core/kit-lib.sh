@@ -269,11 +269,11 @@ kit_stop_sidecars() {
 # 可选变量 GO_CGO_ENV（例 CGO_ENABLED=1）：仅 darwin 目标时生效（跨编到
 # arm64/amd64 用本机 clang，hapiy 这类带 cgo 的项目需要）。
 kit_go_build() {
-  pkgdir="$1"
-  goos="$2"
-  goarch="$3"
-  out="$4"
-  pkg="${5:-.}"
+  local pkgdir="$1"
+  local goos="$2"
+  local goarch="$3"
+  local out="$4"
+  local pkg="${5:-.}"
   msg "go build $goos/$goarch -> $out"
   if [ "$goos" = darwin ] && [ -n "${GO_CGO_ENV:-}" ]; then
     (cd "$pkgdir" && env GOOS="$goos" GOARCH="$goarch" $GO_CGO_ENV go build -o "$out" "$pkg")
@@ -284,9 +284,10 @@ kit_go_build() {
 
 # kit_go_universal <包目录> <输出> [包路径=.] — darwin amd64+arm64 lipo 通用二进制。
 kit_go_universal() {
-  pkgdir="$1"
-  out="$2"
-  pkg="${3:-.}"
+  local pkgdir="$1"
+  local out="$2"
+  local pkg="${3:-.}"
+  local tmpd
   tmpd=$(mktemp -d)
   kit_go_build "$pkgdir" darwin amd64 "$tmpd/amd64" "$pkg"
   kit_go_build "$pkgdir" darwin arm64 "$tmpd/arm64" "$pkg"
