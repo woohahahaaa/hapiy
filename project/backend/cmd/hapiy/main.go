@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"mime"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -26,6 +27,18 @@ import (
 	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/version"
 )
+
+// chatGatewayURL is the loopback base the console assistant POSTs to. A
+// wildcard bind is reached through the loopback interface; any other host is
+// used as configured so a host-only bind still works.
+func chatGatewayURL(cfg *config.Config) string {
+	host := strings.TrimSpace(cfg.Host)
+	switch host {
+	case "", "0.0.0.0", "[::]", "::":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, cfg.Port)
+}
 
 func main() {
 	// Subcommands: "up" / "down" / "status" manage the backend lifecycle (see
@@ -432,8 +445,11 @@ func runServe() {
 			dashboardAuthed.PUT("/mcp", mcpserver.UpdateHandler(db))
 			dashboardAuthed.POST("/mcp/key", mcpserver.RotateKeyHandler(db))
 
-			// Console chat (Agent panel): threads live per account, replies go
-			// through the relay engine (auto = topology, fixed = that provider).
+			// Console chat (Agent panel): threads live per account. Every turn
+			// is POSTed back through the public relay ingress (see
+			// handler.chatGatewayPath), so it shares auth, dispatch, rewrites,
+			// failover and the usage log with any external app. 直连 is the only
+			// deliberate exception and says so in the UI.
 			dashboardAuthed.GET("/chat/models", handler.ChatModels(db, engine))
 			dashboardAuthed.GET("/chat/model-usage", handler.ChatModelUsage(db))
 			dashboardAuthed.GET("/chat/threads", handler.ListChatThreads(db))
@@ -441,7 +457,7 @@ func runServe() {
 			dashboardAuthed.PATCH("/chat/threads/:id", handler.UpdateChatThread(db))
 			dashboardAuthed.DELETE("/chat/threads/:id", handler.DeleteChatThread(db))
 			dashboardAuthed.GET("/chat/threads/:id/messages", handler.ListChatMessages(db))
-			dashboardAuthed.POST("/chat/threads/:id/messages", handler.SendChatMessage(db, engine))
+			dashboardAuthed.POST("/chat/threads/:id/messages", handler.SendChatMessage(db, engine, chatGatewayURL(cfg)))
 			dashboardAuthed.POST("/chat/ui-actions/:id/result", handler.CompleteChatUIAction())
 		}
 

@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hapiy/hapiy/internal/affinity"
 	"github.com/hapiy/hapiy/internal/chatproto"
 	hapiymcp "github.com/hapiy/hapiy/internal/mcp"
 	"github.com/hapiy/hapiy/internal/model"
@@ -24,11 +23,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// The console chat speaks the OpenAI chat-completions shape and reuses the
-// relay engine, so a reply goes through the same provider, rewrite, failover
-// and affinity machinery as external clients.
+// The console chat speaks the OpenAI chat-completions shape and posts every
+// turn back through the relay's public ingress. Auth, dispatch/topology,
+// rewrites, failover, concurrency and the usage log are therefore the same
+// code an external app hits — the console is just another gateway client.
 const (
-	chatPath         = "/v1/chat/completions"
 	chatHistoryLimit = 40
 	// chatRequestTimeout is the wall clock of one turn. The tool loop is free
 	// (no small step cap), so time is what bounds a runaway task — not a
@@ -378,6 +377,12 @@ func ChatModels(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				TotalKeys:        disable.TotalKeys,
 			}
 			for _, name := range parseProviderModelNames(provider.Models) {
+				// The console posts one fixed ingress path; a model whose
+				// declared endpoints exclude it cannot serve the console, so it
+				// is not offered (an external client would hit the same limit).
+				if !chatIngressServable(&provider, name) {
+					continue
+				}
 				byModel[name] = append(byModel[name], option)
 			}
 		}
@@ -388,6 +393,21 @@ func ChatModels(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		sort.Slice(models, func(i, j int) bool { return models[i].Model < models[j].Model })
 		c.JSON(http.StatusOK, gin.H{"data": models})
 	}
+}
+
+// chatIngressServable reports whether a provider can serve the console's
+// fixed ingress path for a model. No declared endpoints means unrestricted.
+func chatIngressServable(provider *model.Provider, modelName string) bool {
+	paths := relay.PathsForModel(provider, modelName)
+	if len(paths) == 0 {
+		return true
+	}
+	for _, path := range paths {
+		if path == chatIngressPath {
+			return true
+		}
+	}
+	return false
 }
 
 // ChatModelUsage serves GET /v1/dashboard/chat/model-usage. It ranks models by
@@ -545,11 +565,12 @@ func resolveDirectChat(db *gorm.DB, in chatDirectInput) (chatproto.Endpoint, str
 	return chatproto.Endpoint{Path: endpointPath, Protocol: protocol}, baseURL, key, provider, nil
 }
 
-// SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. It
-// resolves the model's endpoint (chat completions / Responses / Anthropic),
-// runs the conversation through the matching protocol adapter, executes MCP
-// tool calls, and persists the user and assistant turns.
-func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
+// SendChatMessage serves POST /v1/dashboard/chat/threads/:id/messages. Unless
+// the turn is pinned to a 直连 channel, each step is POSTed to the relay's
+// /proxy/__内置助手/chat/completions ingress, so the turn is routed, failed
+// over and logged by the gateway itself. MCP tool calls execute locally and
+// the user/assistant turns are persisted here.
+func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		user := chatUser(c)
@@ -651,26 +672,39 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), chatRequestTimeout)
 		defer cancel()
 
+		// Two ways to reach a model: 直连 (explicitly outside the gateway) or
+		// the gateway itself. The gateway path resolves nothing locally — it
+		// POSTs to the relay URL and lets dispatch/rewrite/failover decide,
+		// exactly like any external client.
+		gateway := newChatGateway(gatewayURL)
 		var (
 			endpoint   chatproto.Endpoint
 			baseURL    string
 			apiKey     string
 			provider   *model.Provider
+			token      *model.Token
 			resolveErr error
 		)
 		if direct != nil {
 			endpoint, baseURL, apiKey, provider, resolveErr = resolveDirectChat(db, *direct)
+			if resolveErr != nil {
+				writeChatLog(c, db, user, start, chatUpstream{}, modelName, chatproto.Result{}, "failed", resolveErr.Error())
+				c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
+				return
+			}
 		} else {
-			endpoint, baseURL, apiKey, provider, resolveErr = resolveChatEndpoint(db, engine, modelName, providerID, thread.ID)
+			// 指定供应商 was removed: every turn now goes through the gateway
+			// and the topology decides, so providerID from the request or a
+			// stored thread is deliberately ignored.
+			providerID = ""
+			token, resolveErr = ensureChatToken(db, user)
+			if resolveErr != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化内置助手令牌失败: " + resolveErr.Error()})
+				return
+			}
 		}
-		if resolveErr != nil {
-			writeChatLog(c, db, user, start, chatUpstream{}, modelName, chatproto.Result{}, "failed", resolveErr.Error())
-			c.JSON(http.StatusBadRequest, gin.H{"error": resolveErr.Error()})
-			return
-		}
-		// The turn keeps one resolved channel for all its tool steps, so the
-		// usage row can name the same provider key and URL the gateway path
-		// records for relayed requests.
+		// Only 直连 writes its own usage row; gateway turns are logged by the
+		// relay with the full failover/rewrite detail.
 		upstream := chatUpstream{
 			provider: provider,
 			baseURL:  baseURL,
@@ -771,25 +805,37 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		var usage chatproto.Result
 		toolBytes := 0
 		for step := 0; step < chatMaxToolSteps; step++ {
-			result, completeErr := chatproto.Complete(ctx, chatproto.Request{
-				Endpoint:        endpoint,
-				BaseURL:         baseURL,
-				Key:             apiKey,
-				Model:           modelName,
-				Messages:        messages,
-				Tools:           tools,
-				SessionID:       thread.ID,
-				ReasoningEffort: reasoningEffort,
-			})
+			var (
+				result      chatproto.Result
+				completeErr error
+			)
+			if direct != nil {
+				result, completeErr = chatproto.Complete(ctx, chatproto.Request{
+					Endpoint:        endpoint,
+					BaseURL:         baseURL,
+					Key:             apiKey,
+					Model:           modelName,
+					Messages:        messages,
+					Tools:           tools,
+					SessionID:       thread.ID,
+					ReasoningEffort: reasoningEffort,
+				})
+			} else {
+				result, completeErr = gateway.complete(ctx, token.Key, thread.ID, modelName, messages, tools, reasoningEffort)
+			}
 			if completeErr != nil {
 				message := completeErr.Error()
 				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 					message = "本轮已超过 " + chatRequestTimeout.String() + " 上限，工具调用被中止"
-					writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+					if direct != nil {
+						writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+					}
 					c.JSON(http.StatusGatewayTimeout, gin.H{"error": message})
 					return
 				}
-				writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+				if direct != nil {
+					writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+				}
 				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
@@ -875,18 +921,27 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			// wrap-up so the user learns what happened instead of a bare error.
 			wrapCtx, cancelWrap := context.WithTimeout(ctx, chatWrapUpTimeout)
 			defer cancelWrap()
-			final, finalErr := chatproto.Complete(wrapCtx, chatproto.Request{
-				Endpoint:        endpoint,
-				BaseURL:         baseURL,
-				Key:             apiKey,
-				Model:           modelName,
-				Messages:        append(messages, chatproto.Message{Role: "user", Content: chatWrapUpPrompt}),
-				SessionID:       thread.ID,
-				ReasoningEffort: reasoningEffort,
-			})
+			wrapMessages := append(messages, chatproto.Message{Role: "user", Content: chatWrapUpPrompt})
+			var final chatproto.Result
+			var finalErr error
+			if direct != nil {
+				final, finalErr = chatproto.Complete(wrapCtx, chatproto.Request{
+					Endpoint:        endpoint,
+					BaseURL:         baseURL,
+					Key:             apiKey,
+					Model:           modelName,
+					Messages:        wrapMessages,
+					SessionID:       thread.ID,
+					ReasoningEffort: reasoningEffort,
+				})
+			} else {
+				final, finalErr = gateway.complete(wrapCtx, token.Key, thread.ID, modelName, wrapMessages, nil, reasoningEffort)
+			}
 			if finalErr != nil {
 				message := "本轮没有正常结束: " + finalErr.Error()
-				writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+				if direct != nil {
+					writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", message)
+				}
 				c.JSON(http.StatusBadGateway, gin.H{"error": message})
 				return
 			}
@@ -896,7 +951,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			reply = final.Text
 		}
 		if strings.TrimSpace(reply) == "" {
-			writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", "上游没有返回文本回复")
+			if direct != nil {
+				writeChatLog(c, db, user, start, upstream, modelName, usage, "failed", "上游没有返回文本回复")
+			}
 			c.JSON(http.StatusBadGateway, gin.H{"error": "上游没有返回文本回复"})
 			return
 		}
@@ -908,12 +965,14 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Model:    modelName,
 		}
 		assistantMessage := model.ChatMessage{
-			ThreadID:     thread.ID,
-			Role:         "assistant",
-			Content:      reply,
-			Model:        modelName,
-			ProviderID:   provider.ID,
-			ProviderName: provider.Name,
+			ThreadID: thread.ID,
+			Role:     "assistant",
+			Content:  reply,
+			Model:    modelName,
+		}
+		if provider != nil {
+			assistantMessage.ProviderID = provider.ID
+			assistantMessage.ProviderName = provider.Name
 		}
 		updates := map[string]any{
 			"updated_at":  time.Now(),
@@ -944,7 +1003,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		thread.DirectEndpoint = directEndpoint
 		thread.DirectKey = directKey
 
-		writeChatLog(c, db, user, start, upstream, modelName, usage, "success", "")
+		if direct != nil {
+			writeChatLog(c, db, user, start, upstream, modelName, usage, "success", "")
+		}
 
 		// Write actions are executed while the turn runs (the console reports
 		// back before the tool returns), so replaying them from the final
@@ -1023,174 +1084,6 @@ func chatLogEntry(c *gin.Context, db *gorm.DB, user string, start time.Time, ups
 		}
 	}
 	return entry
-}
-
-// resolveChatEndpoint picks the endpoint, base URL and key for one chat turn.
-// An empty providerID means 自动: try the model's declared endpoints in
-// protocol order and let the topology dispatch pick a provider for each.
-func resolveChatEndpoint(db *gorm.DB, engine *relay.Engine, modelName, providerID, sessionID string) (chatproto.Endpoint, string, string, *model.Provider, error) {
-	if providerID != "" {
-		var provider model.Provider
-		if err := db.First(&provider, "id = ?", providerID).Error; err != nil {
-			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("找不到供应商")
-		}
-		if !provider.Status {
-			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 已停用", provider.Name)
-		}
-		plan, err := engine.PlanForProvider(providerID)
-		if err != nil {
-			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("编译供应商 %s 失败: %w", provider.Name, err)
-		}
-		endpoints := chatproto.Resolve(plan.Provider, modelName)
-		if len(endpoints) == 0 {
-			return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的模型 %s 没有可用的聊天端点", provider.Name, modelName)
-		}
-		for _, endpoint := range endpoints {
-			if !plan.AllowsPath(modelName, endpoint.Path) {
-				continue
-			}
-			baseURLIndex := engine.FirstEnabledIndex(providerID, model.FailoverDimensionBaseURL, plan.BaseURLs, -1)
-			keyIndex := engine.FirstEnabledIndex(providerID, model.FailoverDimensionKey, plan.Keys, -1)
-			if baseURLIndex < 0 || keyIndex < 0 {
-				return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的 Key 或 BaseURL 已全部禁用", provider.Name)
-			}
-			baseURL := plan.BaseURLs[baseURLIndex]
-			key := plan.Keys[keyIndex]
-			if baseURL == "" || key == "" {
-				return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 缺少 BaseURL 或 Key", provider.Name)
-			}
-			return endpoint, baseURL, key, plan.Provider, nil
-		}
-		return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("供应商 %s 的模型 %s 没有可用的聊天端点", provider.Name, modelName)
-	}
-
-	paths := autoChatPaths(db, modelName)
-	var lastErr error
-	for _, path := range paths {
-		protocol, ok := chatproto.Detect(path)
-		if !ok {
-			continue
-		}
-		result, err := engine.Dispatch(modelName, path, &affinity.Request{
-			Model:   modelName,
-			Path:    path,
-			Headers: map[string]string{"X-Session-Id": sessionID},
-		})
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		baseURL := ""
-		if result.BaseURLIndex >= 0 && result.BaseURLIndex < len(result.Plan.BaseURLs) {
-			baseURL = result.Plan.BaseURLs[result.BaseURLIndex]
-		} else if len(result.Plan.BaseURLs) > 0 {
-			baseURL = result.Plan.BaseURLs[0]
-		}
-		key := ""
-		if result.KeyIndex >= 0 && result.KeyIndex < len(result.Plan.Keys) {
-			key = result.Plan.Keys[result.KeyIndex]
-		} else if len(result.Plan.Keys) > 0 {
-			key = result.Plan.Keys[0]
-		}
-		if baseURL == "" || key == "" {
-			lastErr = fmt.Errorf("供应商 %s 缺少 BaseURL 或 Key", result.Provider.Name)
-			continue
-		}
-		return chatproto.Endpoint{Path: path, Protocol: protocol}, baseURL, key, result.Provider, nil
-	}
-	if lastErr != nil {
-		return chatproto.Endpoint{}, "", "", nil, lastErr
-	}
-	return chatproto.Endpoint{}, "", "", nil, fmt.Errorf("没有供应商支持模型 %s 的聊天端点", modelName)
-}
-
-// autoChatPaths returns the candidate endpoint paths for 自动 dispatch: the
-// default chat path plus every endpoint declared by an enabled provider,
-// ordered chat -> responses -> anthropic.
-func autoChatPaths(db *gorm.DB, modelName string) []string {
-	seen := map[string]bool{}
-	paths := make([]string, 0, 4)
-	add := func(path string) {
-		path = strings.TrimSpace(path)
-		if path == "" || seen[path] {
-			return
-		}
-		seen[path] = true
-		paths = append(paths, path)
-	}
-	add("/v1/chat/completions")
-	var providers []model.Provider
-	if err := db.Where("status = ? AND workflow_enabled = ?", true, true).Find(&providers).Error; err == nil {
-		for i := range providers {
-			for _, endpoint := range chatproto.Resolve(&providers[i], modelName) {
-				add(endpoint.Path)
-			}
-		}
-	}
-	rank := func(path string) int {
-		protocol, ok := chatproto.Detect(path)
-		if !ok {
-			return 9
-		}
-		switch protocol {
-		case chatproto.ProtocolChat:
-			return 0
-		case chatproto.ProtocolResponses:
-			return 1
-		case chatproto.ProtocolAnthropic:
-			return 2
-		}
-		return 3
-	}
-	for i := 1; i < len(paths); i++ {
-		for j := i; j > 0 && rank(paths[j]) < rank(paths[j-1]); j-- {
-			paths[j], paths[j-1] = paths[j-1], paths[j]
-		}
-	}
-	return paths
-}
-
-// dispatchChatRequest resolves the execution plan: an empty providerID means
-// 自动 (topology + channel affinity), otherwise the provider is used directly
-// and the topology is bypassed.
-func dispatchChatRequest(db *gorm.DB, engine *relay.Engine, modelName, providerID string, relayReq *relay.RelayRequest, body []byte) (*relay.ExecutionPlan, *model.Provider, error) {
-	if providerID == "" {
-		result, err := engine.Dispatch(modelName, chatPath, &affinity.Request{
-			Model:   modelName,
-			Path:    chatPath,
-			Headers: relayReq.Headers,
-			Body:    body,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		relayReq.KeyIndex = result.KeyIndex
-		relayReq.BaseURLIndex = result.BaseURLIndex
-		relayReq.EntryID = result.EntryID
-		relayReq.TopologyOrigin = result.Origin
-		relayReq.AffinityDispatchState = result.AffinityReuse
-		return result.Plan, result.Provider, nil
-	}
-
-	var provider model.Provider
-	if err := db.First(&provider, "id = ?", providerID).Error; err != nil {
-		return nil, nil, fmt.Errorf("找不到供应商")
-	}
-	if !provider.Status {
-		return nil, nil, fmt.Errorf("供应商 %s 已停用", provider.Name)
-	}
-	plan, err := engine.PlanForProvider(providerID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("编译供应商 %s 失败: %w", provider.Name, err)
-	}
-	models := plan.ModelSet
-	if _, ok := models[modelName]; !ok {
-		return nil, nil, fmt.Errorf("供应商 %s 没有声明模型 %s", provider.Name, modelName)
-	}
-	if !plan.AllowsPath(modelName, chatPath) {
-		return nil, nil, fmt.Errorf("供应商 %s 的模型 %s 不支持 %s", provider.Name, modelName, chatPath)
-	}
-	return plan, plan.Provider, nil
 }
 
 // chatToolCall mirrors the OpenAI tool_calls entry.

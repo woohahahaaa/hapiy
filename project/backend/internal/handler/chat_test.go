@@ -45,7 +45,13 @@ func newChatTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newChatRouter(db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
+// newChatRouter registers the console routes plus a real relay ingress. The
+// assistant POSTs back to that ingress, so the tests exercise the same token
+// auth, dispatch, failover and logging an external client hits.
+func newChatRouter(t *testing.T, db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
+	t.Helper()
+	gateway := newChatTestGateway(t, db, engine)
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -59,8 +65,33 @@ func newChatRouter(db *gorm.DB, engine *relay.Engine, user string) *gin.Engine {
 	r.PATCH("/chat/threads/:id", UpdateChatThread(db))
 	r.DELETE("/chat/threads/:id", DeleteChatThread(db))
 	r.GET("/chat/threads/:id/messages", ListChatMessages(db))
-	r.POST("/chat/threads/:id/messages", SendChatMessage(db, engine))
+	r.POST("/chat/threads/:id/messages", SendChatMessage(db, engine, gateway))
 	return r
+}
+
+// newChatTestGateway mirrors the production /proxy/__<source> ingress on a
+// real loopback listener.
+func newChatTestGateway(t *testing.T, db *gorm.DB, engine *relay.Engine) string {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	gw := gin.New()
+	proxy := gw.Group("/proxy/__:source")
+	proxy.Use(func(c *gin.Context) {
+		src := c.Param("source")
+		service.SetSourceMark(c, "__"+src)
+		rest := c.Request.URL.Path[len("/proxy/__"+src):]
+		if rest == "" || rest[0] != '/' {
+			rest = "/" + rest
+		}
+		c.Request.URL.Path = rest
+		c.Next()
+	})
+	proxy.Use(middleware.TokenAuth(db))
+	proxy.POST("/:endpoint", Relay(db, engine))
+	proxy.POST("/:endpoint/*rest", Relay(db, engine))
+	server := httptest.NewServer(gw)
+	t.Cleanup(server.Close)
+	return server.URL
 }
 
 func doJSON(t *testing.T, r http.Handler, method, path, body string) *httptest.ResponseRecorder {
@@ -109,7 +140,7 @@ func TestChatModelsListsEnabledProviders(t *testing.T) {
 	upstreamProvider(t, db, "p2", "Beta", "http://127.0.0.1:1", true, false)
 	upstreamProvider(t, db, "p3", "Off", "http://127.0.0.1:1", false, true)
 
-	rec := doJSON(t, newChatRouter(db, relay.NewEngine(db), "alice"), http.MethodGet, "/chat/models", "")
+	rec := doJSON(t, newChatRouter(t, db, relay.NewEngine(db), "alice"), http.MethodGet, "/chat/models", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -155,7 +186,7 @@ func TestChatModelsFollowsTheTopology(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := doJSON(t, newChatRouter(db, engine, "alice"), http.MethodGet, "/chat/models", "")
+	rec := doJSON(t, newChatRouter(t, db, engine, "alice"), http.MethodGet, "/chat/models", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -179,7 +210,7 @@ func TestChatModelsFollowsTheTopology(t *testing.T) {
 	if err := topology.NewStore(db).Save(tp); err != nil {
 		t.Fatal(err)
 	}
-	rec = doJSON(t, newChatRouter(db, engine, "alice"), http.MethodGet, "/chat/models", "")
+	rec = doJSON(t, newChatRouter(t, db, engine, "alice"), http.MethodGet, "/chat/models", "")
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatal(err)
 	}
@@ -191,8 +222,8 @@ func TestChatModelsFollowsTheTopology(t *testing.T) {
 func TestChatThreadsAreScopedToTheAccount(t *testing.T) {
 	db := newChatTestDB(t)
 	engine := relay.NewEngine(db)
-	alice := newChatRouter(db, engine, "alice")
-	bob := newChatRouter(db, engine, "bob")
+	alice := newChatRouter(t, db, engine, "alice")
+	bob := newChatRouter(t, db, engine, "bob")
 
 	rec := doJSON(t, alice, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	if rec.Code != http.StatusOK {
@@ -220,7 +251,7 @@ func TestChatThreadsAreScopedToTheAccount(t *testing.T) {
 
 func TestChatModelUsageRanksRecentRequestsOnly(t *testing.T) {
 	db := newChatTestDB(t)
-	router := newChatRouter(db, relay.NewEngine(db), "alice")
+	router := newChatRouter(t, db, relay.NewEngine(db), "alice")
 
 	now := time.Now()
 	rows := []model.Log{
@@ -287,7 +318,7 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	// Create the thread, then send the first message.
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
@@ -382,7 +413,7 @@ func TestSendChatMessageForwardsReasoningEffort(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -419,7 +450,7 @@ func TestSendChatMessageRejectsUnknownReasoningEffort(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -453,7 +484,7 @@ func TestSendChatMessageToFixedProviderBypassesWorkflow(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model","provider_id":"fixed"}`)
 	var created struct {
@@ -476,7 +507,7 @@ func TestSendChatMessageRejectsADisabledFixedProvider(t *testing.T) {
 	db := newChatTestDB(t)
 	upstreamProvider(t, db, "off", "Off", "http://127.0.0.1:1", false, true)
 	engine := relay.NewEngine(db)
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -523,7 +554,7 @@ func TestSendChatMessageRunsMCPToolCalls(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -603,7 +634,7 @@ func TestSendChatMessageChatModeIsReadOnly(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -677,7 +708,7 @@ func TestSendChatMessageQueuesUIActions(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -746,7 +777,7 @@ func TestSendChatMessageQueuesCreateProviderDraft(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 	threadID := createChatTestThread(t, router)
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
@@ -813,7 +844,7 @@ func TestSendChatMessageRunsProviderWritesThroughTheConsole(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 	router.POST("/chat/ui-actions/:id/result", CompleteChatUIAction())
 	threadID := createChatTestThread(t, router)
 
@@ -912,7 +943,7 @@ func TestSendChatMessageDetectsBareChatPath(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -961,7 +992,7 @@ func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
@@ -985,7 +1016,7 @@ func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
 
 func chatModelProviders(t *testing.T, db *gorm.DB) []chatProviderOption {
 	t.Helper()
-	rec := doJSON(t, newChatRouter(db, relay.NewEngine(db), "alice"), http.MethodGet, "/chat/models", "")
+	rec := doJSON(t, newChatRouter(t, db, relay.NewEngine(db), "alice"), http.MethodGet, "/chat/models", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -1101,7 +1132,7 @@ func TestSendChatMessageLoopsUntilTheModelStopsCallingTools(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 	threadID := createChatTestThread(t, router)
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
@@ -1155,7 +1186,7 @@ func TestSendChatMessageWrapsUpWhenTheToolStepValveTrips(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 	threadID := createChatTestThread(t, router)
 
 	rec := doJSON(t, router, http.MethodPost, "/chat/threads/"+threadID+"/messages",
@@ -1209,7 +1240,7 @@ func TestSendChatMessageDirectChannelSkipsTopology(t *testing.T) {
 	if err := engine.LoadProviders(); err != nil {
 		t.Fatal(err)
 	}
-	router := newChatRouter(db, engine, "alice")
+	router := newChatRouter(t, db, engine, "alice")
 
 	var created struct {
 		Data model.ChatThread `json:"data"`
