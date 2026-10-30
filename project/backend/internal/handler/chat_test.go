@@ -12,8 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/chatproto"
+	"github.com/hapiy/hapiy/internal/middleware"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/relay"
+	"github.com/hapiy/hapiy/internal/service"
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -120,8 +122,8 @@ func upstreamProvider(t *testing.T, db *gorm.DB, id, name, baseURL string, statu
 		WorkflowEnabled: workflow,
 		BaseURLs:        `["` + baseURL + `"]`,
 		Keys:            `["sk-test"]`,
-		Endpoints:       `[{"pathSuffix":"/v1/chat/completions"}]`,
-		Models:          `[{"model":"test-model","endpoints":["/v1/chat/completions"]}]`,
+		Endpoints:       `[{"pathSuffix":"/chat/completions"}]`,
+		Models:          `[{"model":"test-model","endpoints":["/chat/completions"]}]`,
 	}
 	if err := db.Create(&provider).Error; err != nil {
 		t.Fatal(err)
@@ -296,7 +298,7 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	var seenSession string
 	var seenMessages []map[string]any
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
+		if r.URL.Path != "/chat/completions" {
 			t.Errorf("unexpected upstream path %s", r.URL.Path)
 		}
 		seenSession = r.Header.Get("X-Session-Id")
@@ -362,7 +364,9 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 	if payload.Data.AssistantMessage.Content != "来自上游的回复" {
 		t.Fatalf("assistant content = %q", payload.Data.AssistantMessage.Content)
 	}
-	if payload.Data.AssistantMessage.ProviderName != "Alpha" {
+	// The gateway picks (and may fail over to) the provider, so the console
+	// message no longer names one; 使用记录 carries the served provider.
+	if payload.Data.AssistantMessage.ProviderName != "" {
 		t.Fatalf("provider name = %q", payload.Data.AssistantMessage.ProviderName)
 	}
 	if payload.Data.Thread.Title != "你好" {
@@ -469,16 +473,21 @@ func TestSendChatMessageRejectsUnknownReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestSendChatMessageToFixedProviderBypassesWorkflow(t *testing.T) {
+// 指定供应商 is gone: a provider_id on the request or thread is ignored and the
+// gateway routes by topology. A provider outside the topology must therefore
+// not serve the turn even when it was pinned before the switch.
+func TestSendChatMessageIgnoresPinnedProvider(t *testing.T) {
+	var served bool
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		served = true
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"fixed ok"}}]}`))
 	}))
 	defer upstream.Close()
 
 	db := newChatTestDB(t)
-	// workflow_enabled=false: the provider is not in the startup plans, but a
-	// fixed selection must still be able to use it.
+	// workflow_enabled=false: the provider is not wired into the topology, so
+	// ordinary clients cannot reach it and the console must not either.
 	upstreamProvider(t, db, "fixed", "Fixed", upstream.URL, true, false)
 	engine := relay.NewEngine(db)
 	if err := engine.LoadProviders(); err != nil {
@@ -495,15 +504,15 @@ func TestSendChatMessageToFixedProviderBypassesWorkflow(t *testing.T) {
 	}
 	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
 		`{"content":"hi","model":"test-model","provider_id":"fixed"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("fixed send status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("pinned provider outside the topology must not serve, got %d %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "fixed ok") {
-		t.Fatalf("unexpected body: %s", rec.Body.String())
+	if served {
+		t.Fatal("the pinned provider was called even though it is not in the topology")
 	}
 }
 
-func TestSendChatMessageRejectsADisabledFixedProvider(t *testing.T) {
+func TestSendChatMessageRejectsADisabledProvider(t *testing.T) {
 	db := newChatTestDB(t)
 	upstreamProvider(t, db, "off", "Off", "http://127.0.0.1:1", false, true)
 	engine := relay.NewEngine(db)
@@ -518,8 +527,11 @@ func TestSendChatMessageRejectsADisabledFixedProvider(t *testing.T) {
 	}
 	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
 		`{"content":"hi","model":"test-model","provider_id":"off"}`)
-	if rec.Code != http.StatusBadRequest {
+	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("disabled provider must be rejected, got %d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "test-model") {
+		t.Fatalf("error should name the model, body=%s", rec.Body.String())
 	}
 }
 
@@ -858,10 +870,13 @@ func TestSendChatMessageRunsProviderWritesThroughTheConsole(t *testing.T) {
 	}()
 
 	var event hubEvent
-	select {
-	case event = <-events:
-	case <-time.After(3 * time.Second):
-		t.Fatal("no chat_ui_action event was published")
+	deadline := time.After(3 * time.Second)
+	for event.event != "chat_ui_action" {
+		select {
+		case event = <-events:
+		case <-deadline:
+			t.Fatal("no chat_ui_action event was published")
+		}
 	}
 	if event.event != "chat_ui_action" {
 		t.Fatalf("event type = %q", event.event)
@@ -965,10 +980,12 @@ func TestSendChatMessageDetectsBareChatPath(t *testing.T) {
 	}
 }
 
-func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
-	var seenPath string
+// The console speaks one fixed ingress path. A model that only declares the
+// Responses endpoint is invisible to it (and to any chat-completions client),
+// so the picker must not offer it and a send must fail, not silently switch
+// protocols behind the gateway's back.
+func TestChatModelsHidesNonChatCompletionsModels(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"r1","object":"response","created_at":1,"model":"test-model","status":"completed","output":[{"type":"message","id":"m1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"responses ok"}]}],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}`))
 	}))
@@ -994,7 +1011,15 @@ func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
 	}
 	router := newChatRouter(t, db, engine, "alice")
 
-	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	rec := doJSON(t, router, http.MethodGet, "/chat/models", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("models status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "test-model") {
+		t.Fatalf("a Responses-only model must not be offered: %s", rec.Body.String())
+	}
+
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
 	var created struct {
 		Data model.ChatThread `json:"data"`
 	}
@@ -1002,15 +1027,12 @@ func TestSendChatMessageUsesResponsesEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
-		`{"content":"hi","model":"test-model","provider_id":""}`)
-	if rec.Code != http.StatusOK {
+		`{"content":"hi","model":"test-model"}`)
+	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if seenPath != "/v1/responses" {
-		t.Fatalf("upstream path = %q", seenPath)
-	}
-	if !strings.Contains(rec.Body.String(), "responses ok") {
-		t.Fatalf("unexpected body: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "test-model") {
+		t.Fatalf("error should name the model, body=%s", rec.Body.String())
 	}
 }
 
@@ -1084,9 +1106,19 @@ func TestChatModelsKeepsProviderAvailableWhenOnlyKeysAreDisabled(t *testing.T) {
 	}
 }
 
-func TestResolveChatEndpointSkipsAutoDisabledKeys(t *testing.T) {
+// The gateway's dispatch skips auto-disabled keys, so the console inherits
+// that behaviour instead of resolving a channel itself.
+func TestSendChatMessageSkipsAutoDisabledKeys(t *testing.T) {
+	var seenAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer upstream.Close()
+
 	db := newChatTestDB(t)
-	upstreamProvider(t, db, "p1", "Alpha", "http://127.0.0.1:1", true, true)
+	upstreamProvider(t, db, "p1", "Alpha", upstream.URL, true, true)
 	if err := db.Model(&model.Provider{}).Where("id = ?", "p1").
 		Update("keys", `["sk-dead","sk-live"]`).Error; err != nil {
 		t.Fatal(err)
@@ -1096,16 +1128,26 @@ func TestResolveChatEndpointSkipsAutoDisabledKeys(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
+	engine := relay.NewEngine(db)
+	if err := engine.LoadProviders(); err != nil {
+		t.Fatal(err)
+	}
+	router := newChatRouter(t, db, engine, "alice")
 
-	_, baseURL, key, _, err := resolveChatEndpoint(db, relay.NewEngine(db), "test-model", "p1", "session")
-	if err != nil {
-		t.Fatalf("resolve failed: %v", err)
+	rec := doJSON(t, router, http.MethodPost, "/chat/threads", `{"model":"test-model"}`)
+	var created struct {
+		Data model.ChatThread `json:"data"`
 	}
-	if baseURL != "http://127.0.0.1:1" {
-		t.Fatalf("base URL = %q", baseURL)
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
 	}
-	if key != "sk-live" {
-		t.Fatalf("key = %q, want the first enabled key", key)
+	rec = doJSON(t, router, http.MethodPost, "/chat/threads/"+created.Data.ID+"/messages",
+		`{"content":"hi","model":"test-model"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("send status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seenAuth != "Bearer sk-live" {
+		t.Fatalf("upstream key = %q, want the first enabled key", seenAuth)
 	}
 }
 

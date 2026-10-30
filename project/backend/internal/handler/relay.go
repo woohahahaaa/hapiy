@@ -418,12 +418,16 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		// 规则命中情况（请求改写/响应改写/故障转移 + 命中未生效原因）写在
 		// 使用记录详情的最后。
 		logEntry.EventDetail = service.RuleNotesText(relayReq.RuleNotes)
-		service.Logs().Write(&logEntry)
+		if writer := service.Logs(); writer != nil {
+			writer.Write(&logEntry)
+		}
 
 		if tokenID, ok := tokenIDRaw.(string); ok && tokenID != "" && resp.Usage != nil {
 			tokens := int64(resp.Usage.PromptTokens + resp.Usage.CompletionTokens)
-			if err := service.Quota().Charge(tokenID, tokens); err != nil {
-				log.Printf("Failed to charge quota for token %s: %v", tokenID, err)
+			if ledger := service.Quota(); ledger != nil {
+				if err := ledger.Charge(tokenID, tokens); err != nil {
+					log.Printf("Failed to charge quota for token %s: %v", tokenID, err)
+				}
 			}
 		}
 
@@ -588,23 +592,26 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 	if req != nil {
 		ruleNotes = service.RuleNotesText(req.RuleNotes)
 	}
-	service.Logs().Write(&model.Log{
-		UserID:          getString(userID),
-		TokenName:       getString(tokenName),
-		ProviderName:    providerName,
-		ModelName:       modelName,
-		Source:          service.ResolveSourceMark(req.SourceMark, req.Path),
-		Status:          "failed",
-		IP:              c.ClientIP(),
-		RequestID:       c.GetString("request_id"),
-		ErrorMessage:    err.Error(),
-		EventDetail:     ruleNotes,
-		UseTime:         useTime,
-		UpstreamURL:     upstreamURL,
-		ProviderKey:     providerKey,
-		ProviderBaseURL: providerBaseURL,
-		DownstreamURL:   req.DownstreamURL,
-	})
+	writer := service.Logs()
+	if writer != nil {
+		writer.Write(&model.Log{
+			UserID:          getString(userID),
+			TokenName:       getString(tokenName),
+			ProviderName:    providerName,
+			ModelName:       modelName,
+			Source:          service.ResolveSourceMark(req.SourceMark, req.Path),
+			Status:          "failed",
+			IP:              c.ClientIP(),
+			RequestID:       c.GetString("request_id"),
+			ErrorMessage:    err.Error(),
+			EventDetail:     ruleNotes,
+			UseTime:         useTime,
+			UpstreamURL:     upstreamURL,
+			ProviderKey:     providerKey,
+			ProviderBaseURL: providerBaseURL,
+			DownstreamURL:   req.DownstreamURL,
+		})
+	}
 	outcome := "upstream_error"
 	if errors.Is(err, relay.ErrConcurrencyRejected) {
 		outcome = "queued_rejected"
