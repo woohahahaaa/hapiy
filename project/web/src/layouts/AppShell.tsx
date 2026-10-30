@@ -27,7 +27,11 @@ function ShellBody({ children }: AppShellProps) {
           靠宽度过渡完成收放，不卸载、不闪。 */}
       <AppSidebar />
       <SidebarInset ref={setDialogHost} className="overflow-hidden">
-        <DialogHostProvider host={dialogHost}>{children}</DialogHostProvider>
+        {/* 页面内容单独一层滚动：弹窗仍挂在不滚动的 SidebarInset 上，
+            滚动管理面板时弹窗不会跟着偏移。 */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+          <DialogHostProvider host={dialogHost}>{children}</DialogHostProvider>
+        </div>
       </SidebarInset>
     </div>
   )
