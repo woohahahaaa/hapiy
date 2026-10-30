@@ -82,8 +82,10 @@ func ensureChatToken(db *gorm.DB, user string) (*model.Token, error) {
 
 // chatGatewayMessage is one OpenAI chat-completions message.
 type chatGatewayMessage struct {
-	Role       string            `json:"role"`
-	Content    string            `json:"content"`
+	Role string `json:"role"`
+	// Content is null for an assistant turn that only made tool calls, which
+	// is what the OpenAI shape expects there.
+	Content    *string           `json:"content"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
 	ToolCalls  []chatGatewayTool `json:"tool_calls,omitempty"`
 }
@@ -124,8 +126,11 @@ func (g *chatGateway) complete(ctx context.Context, token, sessionID, modelName 
 	for _, message := range messages {
 		entry := chatGatewayMessage{
 			Role:       message.Role,
-			Content:    message.Content,
 			ToolCallID: message.ToolCallID,
+		}
+		if message.Content != "" || len(message.ToolCalls) == 0 {
+			content := message.Content
+			entry.Content = &content
 		}
 		for _, call := range message.ToolCalls {
 			entry.ToolCalls = append(entry.ToolCalls, chatGatewayTool{
