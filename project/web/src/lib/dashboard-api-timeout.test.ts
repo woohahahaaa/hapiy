@@ -62,7 +62,7 @@ describe('dashboard request timeouts', () => {
     vi.useFakeTimers()
 
     void dashboardApi
-      .sendChatMessage('thread-1', { content: 'hi', model: 'm', providerId: '' })
+      .sendChatMessage('thread-1', { content: 'hi', model: 'm' })
       .catch(() => {})
     expect(signals).toHaveLength(1)
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/hapiy/hapiy/internal/chatproto"
 	"github.com/hapiy/hapiy/internal/model"
+	"github.com/hapiy/hapiy/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -30,7 +31,7 @@ const (
 	// /chat/completions (no /v1) because provider base URLs already end in
 	// /v1, and it is the same path OpenChamber and the other agents post.
 	chatIngressPath  = "/chat/completions"
-	chatGatewayPath  = "/proxy/__内置助手" + chatIngressPath
+	chatGatewayPath  = "/proxy/" + service.LogSourceAgent + chatIngressPath
 	chatTokenName    = "内置助手"
 	chatMaxBodyBytes = 8 << 20
 )

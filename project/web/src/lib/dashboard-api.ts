@@ -3228,15 +3228,15 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
   async getChatModelUsage(): Promise<readonly ChatModelUsage[]> {
     return parseChatModelUsage(await request('/chat/model-usage'))
   },
-  async createChatThread(input: { model: string; providerId: string }): Promise<ChatThread> {
+  async createChatThread(input: { model: string }): Promise<ChatThread> {
     return parseChatThread(await request('/chat/threads', {
       method: 'POST',
-      body: JSON.stringify({ model: input.model, provider_id: input.providerId }),
+      body: JSON.stringify({ model: input.model }),
     }))
   },
   async updateChatThread(
     id: string,
-    patch: { title?: string; archived?: boolean; model?: string; providerId?: string; direct?: ChatDirectInput | null },
+    patch: { title?: string; archived?: boolean; model?: string; direct?: ChatDirectInput | null },
   ): Promise<ChatThread> {
     return parseChatThread(await request(`/chat/threads/${id}`, {
       method: 'PATCH',
@@ -3244,7 +3244,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
         title: patch.title,
         archived: patch.archived,
         model: patch.model,
-        provider_id: patch.providerId,
         direct_enabled: patch.direct === undefined ? undefined : patch.direct !== null,
         direct: patch.direct ?? undefined,
       }),
@@ -3262,7 +3261,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
     input: {
       content: string
       model: string
-      providerId: string
       /** Manual channel; empty/undefined routes through the topology. */
       direct?: ChatDirectInput
       pageContext?: string
@@ -3277,7 +3275,6 @@ async deleteRule(type: RuleType, id: string): Promise<void> {
       body: JSON.stringify({
         content: input.content,
         model: input.model,
-        provider_id: input.providerId,
         direct: input.direct ?? null,
         page_context: input.pageContext ?? '',
         mode: input.mode === 'chat' ? 'chat' : '',

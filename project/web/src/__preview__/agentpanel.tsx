@@ -84,7 +84,6 @@ function Demo({ dark, empty }: { dark: boolean; empty: boolean }) {
                   },
                 ]}
                 model="DeepSeek"
-                providerId="p1"
                 onChange={() => {}}
               />
             }

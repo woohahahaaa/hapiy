@@ -616,12 +616,10 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.H
 		if direct != nil && strings.TrimSpace(direct.Model) != "" {
 			modelName = strings.TrimSpace(direct.Model)
 		}
-		providerID := strings.TrimSpace(req.ProviderID)
-		if direct != nil && strings.TrimSpace(direct.ProviderID) != "" {
+		// 指定供应商 is gone; provider_id on the request/thread is ignored.
+		providerID := ""
+		if direct != nil {
 			providerID = strings.TrimSpace(direct.ProviderID)
-		}
-		if providerID == "" {
-			providerID = thread.ProviderID
 		}
 		if modelName == "" {
 			respondError(c, http.StatusBadRequest, "CHAT_MODEL_REQUIRED", "先选择一个模型")

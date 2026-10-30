@@ -288,9 +288,10 @@ const (
 	LogSourceChannelRecoveredAuto   = "自动恢复"
 	LogSourceChannelRecoveredManual = "手动恢复"
 	LogSourceSystemAdmin            = "系统管理"
-	// LogSourceAgent marks a console-chat (built-in assistant) turn. It is not
-	// an event row: successful turns count towards usage stats.
-	LogSourceAgent = "内置助手"
+	// LogSourceAgent marks traffic from the built-in assistant. Gateway turns
+	// carry it as an ingress source mark; 直连 turns write it directly. It is
+	// not an event row: successful turns count towards usage stats.
+	LogSourceAgent = "__内置助手"
 )
 
 // LogSourceUnmarked is the dashboard filter sentinel for "no source mark":
@@ -313,13 +314,13 @@ func MigrateLogSources(db *gorm.DB) error {
 		log.Printf("migrated %d log rows from source 自动禁用 to 故障转移", result.RowsAffected)
 	}
 	agent := db.Model(&model.Log{}).
-		Where("source = ?", "内置Agent").
+		Where("source IN ?", []string{"内置Agent", "内置助手"}).
 		Update("source", LogSourceAgent)
 	if agent.Error != nil {
-		return fmt.Errorf("rename legacy 内置Agent log sources: %w", agent.Error)
+		return fmt.Errorf("rename legacy assistant log sources: %w", agent.Error)
 	}
 	if agent.RowsAffected > 0 {
-		log.Printf("migrated %d log rows from source 内置Agent to %s", agent.RowsAffected, LogSourceAgent)
+		log.Printf("migrated %d log rows to source %s", agent.RowsAffected, LogSourceAgent)
 	}
 	return nil
 }

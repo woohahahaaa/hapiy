@@ -17,7 +17,6 @@ import { dispatchUIAction } from '@/lib/ui-actions'
 import { parseChatUIActionEvent } from '@/lib/chat-follow'
 import { useAgentDock } from '@/components/wooh/agent-dock-context'
 
-const AUTO_PROVIDER = 'auto'
 // Actions handled by the provider page: dialogs the agent opens, plus the
 // mirror of writes it already made (navigate + refresh + show the result).
 const PROVIDER_ACTIONS = new Set([
@@ -90,7 +89,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const [initialMessages, setInitialMessages] = useState<readonly ChatMessageRecord[]>([])
   const [sessionKey, setSessionKey] = useState('new:0')
   const [selectedModel, setSelectedModel] = useState('')
-  const [selectedProvider, setSelectedProvider] = useState(AUTO_PROVIDER)
   // Set when the picker's 直连 dialog pins this thread to one manual channel.
   const [direct, setDirect] = useState<AgentDirectChannel | null>(null)
   const [usage, setUsage] = useState<readonly ChatModelUsage[]>([])
@@ -124,9 +122,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
           // The stored thread was deleted (or belongs to another account):
           // drop the stale id instead of restoring a dead conversation.
           if (storedThreadId) window.sessionStorage.removeItem(ACTIVE_THREAD_KEY)
-          const fallback = pickDefaultModel(nextModels, nextUsage)
-          setSelectedModel(fallback.model)
-          setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
+          setSelectedModel(pickDefaultModel(nextModels, nextUsage).model)
           setDirect(null)
           return
         }
@@ -141,7 +137,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
         setActiveThread(restored)
         setInitialMessages(records)
         setSelectedModel(restored.model || pickDefaultModel(nextModels, nextUsage).model)
-        setSelectedProvider(restored.providerId || AUTO_PROVIDER)
         setDirect(
           restored.direct
             ? {
@@ -198,21 +193,9 @@ export function AgentChat({ className }: { readonly className?: string }) {
   // reopening the thread never silently switches models.
   const modelUnavailable = !direct && selectedModel !== '' && !models.some((entry) => entry.model === selectedModel)
 
-  const providerOptions = useMemo(
-    () => modelOptions.find((entry) => entry.model === selectedModel)?.providers ?? [],
-    [modelOptions, selectedModel],
-  )
-
-  const effectiveProvider =
-    selectedProvider === AUTO_PROVIDER ||
-    providerOptions.some((provider) => provider.id === selectedProvider)
-      ? selectedProvider
-      : AUTO_PROVIDER
-
   const openThread = async (thread: ChatThread) => {
     setActiveThread(thread)
     setSelectedModel(thread.model || pickDefaultModel(models, usage).model)
-    setSelectedProvider(thread.providerId || AUTO_PROVIDER)
     setDirect(
       thread.direct
         ? {
@@ -243,9 +226,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
     setSessionKey(`new:${Date.now()}`)
     setHistoryOpen(false)
     window.sessionStorage.removeItem(ACTIVE_THREAD_KEY)
-    const fallback = pickDefaultModel(models, usage)
-    setSelectedModel(fallback.model)
-    setSelectedProvider(fallback.providerId || AUTO_PROVIDER)
+    setSelectedModel(pickDefaultModel(models, usage).model)
     setDirect(null)
   }
 
@@ -273,14 +254,9 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const handleSend = async (text: string): Promise<string> => {
     if (!selectedModel) throw new Error(t('selectModelFirst'))
     const directInput = direct ? { ...direct, model: selectedModel } : undefined
-    const providerId = direct
-      ? direct.providerId
-      : effectiveProvider === AUTO_PROVIDER
-        ? ''
-        : effectiveProvider
     let thread = activeThread
     if (!thread) {
-      thread = await dashboardApi.createChatThread({ model: selectedModel, providerId })
+      thread = await dashboardApi.createChatThread({ model: selectedModel })
       setActiveThread(thread)
       setThreads((current) => [thread!, ...current])
       window.sessionStorage.setItem(ACTIVE_THREAD_KEY, thread.id)
@@ -305,7 +281,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
       const result = await dashboardApi.sendChatMessage(thread.id, {
         content: text,
         model: selectedModel,
-        providerId,
         direct: directInput,
         pageContext: location.pathname,
         mode,
@@ -337,13 +312,11 @@ export function AgentChat({ className }: { readonly className?: string }) {
               <AgentModelPicker
                 models={modelOptions}
                 model={selectedModel}
-                providerId={effectiveProvider === AUTO_PROVIDER ? '' : effectiveProvider}
                 direct={direct}
                 unavailable={modelUnavailable}
                 onRefresh={refreshModels}
-                onChange={({ model, providerId, direct: nextDirect }) => {
+                onChange={({ model, direct: nextDirect }) => {
                   setSelectedModel(model)
-                  setSelectedProvider(providerId || AUTO_PROVIDER)
                   setDirect(nextDirect ?? null)
                   if (!activeThread) return
                   // Remember the choice on the thread itself so switching back
@@ -353,7 +326,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
                     ? {
                         ...activeThread,
                         model,
-                        providerId,
                         direct: true,
                         directProvider: nextDirect.providerName,
                         directBaseUrl: nextDirect.baseUrl,
@@ -363,7 +335,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
                     : {
                         ...activeThread,
                         model,
-                        providerId,
                         direct: false,
                         directProvider: '',
                         directBaseUrl: '',
@@ -375,7 +346,6 @@ export function AgentChat({ className }: { readonly className?: string }) {
                   void dashboardApi
                     .updateChatThread(activeThread.id, {
                       model,
-                      providerId,
                       direct: nextDirect ? { ...nextDirect, model } : null,
                     })
                     .catch((error: unknown) => {
