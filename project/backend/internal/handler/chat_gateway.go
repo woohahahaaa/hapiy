@@ -22,15 +22,13 @@ import (
 // topology, request/response rewrites, failover, concurrency rules and the
 // usage log with any external app. Nothing is special-cased inside the relay.
 const (
-	// chatGatewayPath is the ingress the built-in assistant uses. The
-	// /proxy/__<source> prefix is the same one OpenChamber and the other
-	// agents use, so 使用记录 labels the traffic with the assistant source and
-	// the request path stays /chat/completions (the provider base URL already
-	// carries /v1).
 	// chatIngressPath is the relay path the console speaks. It stays
 	// /chat/completions (no /v1) because provider base URLs already end in
 	// /v1, and it is the same path OpenChamber and the other agents post.
-	chatIngressPath  = "/chat/completions"
+	chatIngressPath = "/chat/completions"
+	// chatGatewayPath is the ingress the built-in assistant uses: the same
+	// /proxy/__<source> prefix as the other agents, so 使用记录 labels the
+	// traffic with the assistant source.
 	chatGatewayPath  = "/proxy/" + service.LogSourceAgent + chatIngressPath
 	chatTokenName    = "内置助手"
 	chatMaxBodyBytes = 8 << 20
@@ -52,14 +50,15 @@ func newChatGateway(baseURL string) *chatGateway {
 	}
 }
 
+// chatGatewayMu serialises first-use creation of the assistant token.
+var chatGatewayMu sync.Mutex
+
 // ensureChatToken returns the token the console presents to the gateway,
 // creating it on first use. It is a normal token row: it can be disabled or
 // deleted like any app token, and its usage shows up under its name.
-var chatTokenMu sync.Mutex
-
 func ensureChatToken(db *gorm.DB, user string) (*model.Token, error) {
-	chatTokenMu.Lock()
-	defer chatTokenMu.Unlock()
+	chatGatewayMu.Lock()
+	defer chatGatewayMu.Unlock()
 
 	var token model.Token
 	err := db.Where("name = ?", chatTokenName).First(&token).Error
@@ -89,6 +88,8 @@ type chatGatewayMessage struct {
 	ToolCalls  []chatGatewayTool `json:"tool_calls,omitempty"`
 }
 
+// chatGatewayTool is both a tool definition (description/parameters) and an
+// assistant tool call (id/arguments); omitempty keeps each shape clean.
 type chatGatewayTool struct {
 	ID       string                  `json:"id,omitempty"`
 	Type     string                  `json:"type"`
