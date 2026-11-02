@@ -82,7 +82,7 @@ export function AgentChat({ className }: { readonly className?: string }) {
   const { t } = useTranslation('agentPanel')
   const navigate = useNavigate()
   const location = useLocation()
-  const { rightCollapsed, expandRight, setWidth } = useAgentDock()
+  const { rightCollapsed, expandRight, setWidth, isMobile, setMobilePanel } = useAgentDock()
   const [models, setModels] = useState<readonly ChatModelOption[]>([])
   const [threads, setThreads] = useState<readonly ChatThread[]>([])
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null)
@@ -272,6 +272,9 @@ export function AgentChat({ className }: { readonly className?: string }) {
         seen.add(action.id)
       }
       if (!PROVIDER_ACTIONS.has(action.type)) return
+      // On mobile the assistant covers the console; a write/dialog action must
+      // swap back so the user actually sees the page or dialog it opens.
+      if (isMobile) setMobilePanel('console')
       if (location.pathname !== '/provider') navigate('/provider')
       dispatchUIAction({ type: action.type, payload: action.payload })
     }
@@ -403,10 +406,17 @@ export function AgentChat({ className }: { readonly className?: string }) {
                 size="sm"
                 variant="secondary"
                 className="h-8 px-3"
-                onClick={() => (rightCollapsed ? expandRight() : setWidth(0))}
+                onClick={() => {
+                  if (isMobile) {
+                    setMobilePanel('console')
+                    return
+                  }
+                  if (rightCollapsed) expandRight()
+                  else setWidth(0)
+                }}
               >
                 <AppIcon name="menu_fold" />
-                <span>{rightCollapsed ? t('showConsole') : t('collapseAgent')}</span>
+                <span>{isMobile ? t('switchToConsole') : rightCollapsed ? t('showConsole') : t('collapseAgent')}</span>
               </Button>
             </>
           }

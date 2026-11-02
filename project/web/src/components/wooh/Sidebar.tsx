@@ -283,12 +283,25 @@ export function AppSidebar() {
     setWidth,
     maxWidth,
     rightCollapsed,
+    setMobilePanel,
   } = useAgentDock()
   // 管理面板的按钮：两个面板都在时收起管理面板（助手面板铺满），管理面板单独
   // 存在时反过来展开助手面板。
   const bothOpen = dockWidth > 0 && !rightCollapsed
-  const chatButtonLabel = i18n.t(bothOpen ? 'agentPanel:hideConsole' : 'agentPanel:expandAgent')
+  // 手机上面板是整屏互斥的：这里只负责切到助手面板，不再有展开/收起。
+  const chatButtonLabel = i18n.t(
+    isMobile
+      ? 'agentPanel:switchToAgent'
+      : bothOpen
+        ? 'agentPanel:hideConsole'
+        : 'agentPanel:expandAgent',
+  )
   const toggleChat = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+      setMobilePanel('assistant')
+      return
+    }
     if (bothOpen) setWidth(maxWidth)
     else openDock()
   }

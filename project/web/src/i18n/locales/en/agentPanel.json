@@ -34,6 +34,8 @@
   "noProviders": "No providers available",
   "expandAgent": "Expand Assistant panel",
   "collapseAgent": "Collapse Assistant panel",
+  "switchToAgent": "Switch to assistant",
+  "switchToConsole": "Switch to management",
   "modeLabel": "Write access",
   "modeChatHint": "Chat mode: answers from lookups only, never changes any setting",
   "modeExecuteHint": "Execute mode: looks things up and can also create, change or toggle settings for you",

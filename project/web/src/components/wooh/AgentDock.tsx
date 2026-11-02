@@ -9,7 +9,7 @@ import {
   AgentDockContext,
   useAgentDock,
 } from '@/components/wooh/agent-dock-context'
-import type { AgentDockContextValue } from '@/components/wooh/agent-dock-context'
+import type { AgentDockContextValue, MobilePanel } from '@/components/wooh/agent-dock-context'
 
 const DEFAULT_DOCK_WIDTH = 360
 // 低于这个宽度就不显示了：拖过阈值直接收到 0，避免留一条夹不紧的窄缝。
@@ -20,6 +20,9 @@ const KEYBOARD_STEP = 24
 // 和 ui/sidebar 的 SIDEBAR_WIDTH_ICON 对齐：
 //   展开 = 16rem；收起（variant=inset）= 2.5rem 图标 + 1.5rem 内边距 = 4rem。
 const SIDEBAR_EXPANDED_REM = 16
+// Tailwind md: below this the console and the assistant swap full-screen
+// instead of sitting side by side.
+const MOBILE_BREAKPOINT = 768
 
 function remToPx(rem: number): number {
   if (typeof window === 'undefined') return rem * 16
@@ -47,6 +50,7 @@ function readStoredWidth(): number {
 export function AgentDockProvider({ children }: { children: ReactNode }) {
   const [width, setWidthState] = useState<number>(readStoredWidth)
   const [dragging, setDragging] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>('console')
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth,
   )
@@ -58,6 +62,7 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // 面板最宽可以铺满整行（此时右侧整体被折叠）。
+  const isMobile = viewportWidth < MOBILE_BREAKPOINT
   const maxWidth = Math.max(0, viewportWidth - AGENT_DOCK_SPLITTER_WIDTH)
   const expandedPx = remToPx(SIDEBAR_EXPANDED_REM)
 
@@ -104,32 +109,39 @@ export function AgentDockProvider({ children }: { children: ReactNode }) {
       openDock,
       rightCollapsed,
       expandRight,
+      isMobile,
+      mobilePanel,
+      setMobilePanel,
     }),
-    [visibleWidth, maxWidth, dragging, setWidth, setDragging, openDock, rightCollapsed, expandRight],
+    [visibleWidth, maxWidth, dragging, setWidth, setDragging, openDock, rightCollapsed, expandRight, isMobile, mobilePanel],
   )
 
   return <AgentDockContext.Provider value={value}>{children}</AgentDockContext.Provider>
 }
 
-// AgentDock renders the panel itself. Mobile keeps the existing layout: the
-// dock is desktop-only for now.
+// AgentDock renders the panel itself. On desktop it sits beside the console
+// and can be split/dragged. On mobile the same panel goes full-screen and the
+// top buttons swap between it and the console instead of expanding/collapsing.
 export function AgentDock() {
-  const { width, dragging } = useAgentDock()
+  const { width, dragging, isMobile, mobilePanel } = useAgentDock()
+  const mobileOpen = isMobile && mobilePanel === 'assistant'
 
   // 收起/展开时整条（分隔条 + 面板）一起做宽度过渡；拖动过程中关掉过渡，
   // 否则面板会追着指针慢半拍。
   return (
     <div
       className={cn(
-        'hidden min-h-0 shrink-0 overflow-hidden md:flex',
-        !dragging && 'transition-[width] duration-200 ease-linear',
+        'min-h-0 shrink-0 overflow-hidden',
+        mobileOpen ? 'fixed inset-0 z-50 flex w-full bg-background' : 'hidden',
+        'md:static md:z-auto md:flex md:w-auto md:bg-transparent',
+        !isMobile && !dragging && 'transition-[width] duration-200 ease-linear',
       )}
-      style={{ width: width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0 }}
+      style={isMobile ? undefined : { width: width > 0 ? width + AGENT_DOCK_SPLITTER_WIDTH : 0 }}
     >
-      <div className="min-h-0 min-w-0 p-2 pr-0" style={{ width }}>
+      <div className={cn('min-h-0 min-w-0 p-2', isMobile ? 'w-full' : 'pr-0')} style={isMobile ? undefined : { width }}>
         <AgentChat className="h-full w-full" />
       </div>
-      {(width > 0 || dragging) && <AgentDockSplitter />}
+      {!isMobile && (width > 0 || dragging) && <AgentDockSplitter />}
     </div>
   )
 }

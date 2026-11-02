@@ -5,6 +5,9 @@ export const AGENT_DOCK_STORAGE_KEY = 'agent_dock_width'
 // 分隔条宽度（px）。侧边菜单是 fixed 定位，左侧偏移量要把这段宽度算进去。
 export const AGENT_DOCK_SPLITTER_WIDTH = 8
 
+// Mobile shows one panel at a time: the management console or the assistant.
+export type MobilePanel = 'console' | 'assistant'
+
 export type AgentDockContextValue = {
   readonly width: number
   readonly maxWidth: number
@@ -16,6 +19,10 @@ export type AgentDockContextValue = {
   readonly rightCollapsed: boolean
   /** Restores the sidebar + page at a 50/50 split. */
   readonly expandRight: () => void
+  /** True below the md breakpoint, where the panels swap full-screen. */
+  readonly isMobile: boolean
+  readonly mobilePanel: MobilePanel
+  readonly setMobilePanel: (next: MobilePanel) => void
 }
 
 export const AgentDockContext = createContext<AgentDockContextValue | null>(null)
