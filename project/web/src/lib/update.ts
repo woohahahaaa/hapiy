@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { dashboardApi, DashboardApiError, type UpdateStatus } from '@/lib/dashboard-api'
 
+// UpdatePoll is one refresh of the update state. `status` is null when the
+// backend did not answer, and `unauthorized` says why: the restart that follows
+// an upgrade used to drop the session cookie, and polling a 401 forever looked
+// exactly like a frozen upgrade.
+export type UpdatePoll = {
+  readonly status: UpdateStatus | null
+  readonly unauthorized: boolean
+}
+
 // useUpdateStatus polls the self-update endpoint so the sidebar's green dot and
 // the version dialog stay in sync without a page reload. `refresh` re-reads the
 // cached snapshot (used while waiting for a restarted backend), `check` forces
@@ -9,13 +18,16 @@ import { dashboardApi, DashboardApiError, type UpdateStatus } from '@/lib/dashbo
 export function useUpdateStatus(intervalMs = 60_000) {
   const [status, setStatus] = useState<UpdateStatus | null>(null)
 
-  const refresh = useCallback(async (): Promise<UpdateStatus | null> => {
+  const refresh = useCallback(async (): Promise<UpdatePoll> => {
     try {
       const next = await dashboardApi.getUpdateStatus()
       setStatus(next)
-      return next
-    } catch {
-      return null
+      return { status: next, unauthorized: false }
+    } catch (error) {
+      return {
+        status: null,
+        unauthorized: error instanceof DashboardApiError && error.status === 401,
+      }
     }
   }, [])
 

@@ -90,6 +90,9 @@ func (u *UpdateController) runUpgrade() {
 		u.checker.EndUpgrade(nil)
 		return
 	}
+	// The swap is done but the process has not exited yet: tell the page which
+	// phase it is waiting on instead of leaving the download line at 100%.
+	u.checker.SetPhase(selfupdate.PhaseRestarting)
 	if u.beforeRestart != nil {
 		u.beforeRestart()
 	}

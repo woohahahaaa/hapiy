@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,5 +91,38 @@ func TestAssetNameAndExeName(t *testing.T) {
 	}
 	if ExeName() == "" {
 		t.Fatal("ExeName is empty")
+	}
+}
+
+// The version dialog keys its text off Phase: the download callback must flip
+// to installing on the terminal progress report, and a failed upgrade must
+// clear the phase so a stale "installing" cannot linger in the dialog.
+func TestCheckerPhaseTransitions(t *testing.T) {
+	c := NewChecker("1.0.0")
+	if got := c.Status().Phase; got != "" {
+		t.Fatalf("initial phase = %q, want empty", got)
+	}
+	if !c.BeginUpgrade() {
+		t.Fatal("BeginUpgrade returned false")
+	}
+	if got := c.Status().Phase; got != PhaseDownloading {
+		t.Fatalf("phase after begin = %q, want %q", got, PhaseDownloading)
+	}
+	c.SetDownloadProgress(10, 100)
+	if got := c.Status().Phase; got != PhaseDownloading {
+		t.Fatalf("phase mid-download = %q, want %q", got, PhaseDownloading)
+	}
+	c.SetDownloadProgress(100, 100)
+	if got := c.Status().Phase; got != PhaseInstalling {
+		t.Fatalf("phase at download end = %q, want %q", got, PhaseInstalling)
+	}
+	c.SetPhase(PhaseRestarting)
+	if got := c.Status().Phase; got != PhaseRestarting {
+		t.Fatalf("phase before restart = %q, want %q", got, PhaseRestarting)
+	}
+	c.EndUpgrade(errors.New("boom"))
+	status := c.Status()
+	if status.Upgrading || status.Phase != "" || status.UpgradeError == "" {
+		t.Fatalf("after failure: %+v, want upgrading=false, phase empty, error set", status)
 	}
 }

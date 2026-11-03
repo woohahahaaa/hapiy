@@ -111,10 +111,13 @@
     "upgradeConfirm": "将从v{{from}}升级到v{{to}}：下载并替换程序文件后后端会自动重启，大约十几秒不可用，完成后页面自动刷新。",
     "upgradeNow": "立即升级",
     "prepare": "正在准备下载v{{version}}…",
-    "downloading": "正在下载并安装v{{version}}",
+    "downloading": "正在下载v{{version}}",
+    "installing": "下载完成，正在校验并安装v{{version}}…",
+    "restarting": "正在重启后端，稍后页面会自动刷新…",
     "checkFailed": "检查更新失败：网络不可达",
     "upgradeFailed": "升级失败：{{message}}",
     "notExecuted": "升级未执行，请重试",
+    "notRestarted": "升级文件已安装，但后端没有自动重启：请手动刷新页面，或在终端运行hapiy up",
     "timeout": "升级等待超时：请稍后重试，或在终端运行hapiy upgrade",
     "tooltip": "有新版本，点击查看"
   }

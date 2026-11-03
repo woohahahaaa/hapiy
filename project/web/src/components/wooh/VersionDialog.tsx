@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { version as appVersion } from '../../../package.json'
 
+import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/wooh/dialog'
 import { useUpdateStatus } from '@/lib/update'
@@ -10,6 +11,11 @@ import { useUpdateStatus } from '@/lib/update'
 function fmtMB(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+// UpgradePhase is what the progress line tells the user: a download with a
+// percentage, the silent verify/swap step after it, or the backend restart that
+// briefly takes the API away.
+type UpgradePhase = 'downloading' | 'installing' | 'restarting'
 
 type Notice = { readonly text: string; readonly kind: 'ok' | 'error' }
 
@@ -29,6 +35,7 @@ export function VersionDialog({
   const [checkBusy, setCheckBusy] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
+  const [phase, setPhase] = useState<UpgradePhase>('downloading')
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [speedBps, setSpeedBps] = useState(0)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -70,6 +77,7 @@ export function VersionDialog({
     const target = status?.latest
     if (!target || upgrading) return
     setUpgrading(true)
+    setPhase('downloading')
     setConfirmOpen(false)
     setNotice(null)
     setProgress(null)
@@ -80,44 +88,98 @@ export function VersionDialog({
       showNotice(t('update.upgradeFailed', { message: res.message }), 'error')
       return
     }
-    // The backend exits and the manager restarts it, so the API is briefly
-    // unreachable — that is normal. Poll once a second for progress until the
-    // reported version changes, then reload; capped at 30 minutes (the
-    // download itself is only cut when it stalls, see the backend watchdog).
+    // apply() answers before the download starts, so everything from here is
+    // the live upgrade: download bytes, then verify/swap, then the restart.
+    // The backend exits and the manager brings it back, so polls fail for a
+    // few seconds — that is the restart, not a freeze, and it gets its own
+    // phase instead of leaving the download line stuck at 100%.
     let lastDone = 0
     let lastAt = Date.now()
+    let sawUpgrading = false
+    let restartSince = 0
+    let downSince = 0
     for (let i = 0; i < 1800; i += 1) {
       await new Promise((resolve) => window.setTimeout(resolve, 1000))
-      const snap = await refresh()
+      const poll = await refresh()
+      const snap = poll.status
       const now = Date.now()
-      if (snap?.upgrading && (snap.downloadDone ?? 0) > 0) {
-        const done = snap.downloadDone
-        if (done < lastDone) {
-          // A fresh download (retry) restarts the speed baseline.
-          lastDone = 0
-          lastAt = now
+
+      if (snap) {
+        downSince = 0
+        if (snap.current === target) {
+          window.location.reload()
+          return
         }
-        const dt = (now - lastAt) / 1000
-        if (dt >= 0.5 && done >= lastDone) {
-          setSpeedBps((done - lastDone) / dt)
-          lastDone = done
-          lastAt = now
+        if (snap.phase === 'restarting') {
+          // The swap is done; the old process is about to exit.
+          sawUpgrading = true
         }
-        setProgress({ done, total: snap.downloadTotal ?? 0 })
-      }
-      if (snap?.current === target) {
-        window.location.reload()
+        if (snap.upgrading) {
+          sawUpgrading = true
+          restartSince = 0
+          if (snap.phase === 'restarting') {
+            setPhase('restarting')
+          } else if (
+            snap.phase === 'installing' ||
+            (snap.downloadTotal > 0 && snap.downloadDone >= snap.downloadTotal)
+          ) {
+            setPhase('installing')
+          } else {
+            setPhase('downloading')
+          }
+          if ((snap.downloadDone ?? 0) > 0) {
+            const done = snap.downloadDone
+            if (done < lastDone) {
+              // A fresh download (retry) restarts the speed baseline.
+              lastDone = 0
+              lastAt = now
+            }
+            const dt = (now - lastAt) / 1000
+            if (dt >= 0.5 && done >= lastDone) {
+              setSpeedBps((done - lastDone) / dt)
+              lastDone = done
+              lastAt = now
+            }
+            setProgress({ done, total: snap.downloadTotal ?? 0 })
+          }
+        } else if (snap.upgradeError) {
+          setUpgrading(false)
+          showNotice(t('update.upgradeFailed', { message: snap.upgradeError }), 'error')
+          return
+        } else if (sawUpgrading) {
+          // Files were swapped; the process is about to exit. Wait for the
+          // version to change instead of calling a successful upgrade failed.
+          setPhase('restarting')
+          if (restartSince === 0) restartSince = now
+          if (now - restartSince > 90_000) {
+            setUpgrading(false)
+            showNotice(t('update.notRestarted'), 'error')
+            return
+          }
+        } else if (i > 15) {
+          // Nothing ever started: the click never reached the download.
+          setUpgrading(false)
+          showNotice(t('update.notExecuted'), 'error')
+          return
+        }
+      } else if (poll.unauthorized) {
+        // The restarted backend is answering but no longer knows this session
+        // (older builds keep sessions in memory). Reload so the login gate can
+        // take over instead of polling a 401 until the timeout.
+        setPhase('restarting')
+        window.setTimeout(() => window.location.reload(), 800)
         return
-      }
-      if (snap && !snap.upgrading && snap.upgradeError) {
-        setUpgrading(false)
-        showNotice(t('update.upgradeFailed', { message: snap.upgradeError }), 'error')
-        return
-      }
-      if (snap && !snap.upgrading && !snap.upgradeError && i > 15) {
-        setUpgrading(false)
-        showNotice(t('update.notExecuted'), 'error')
-        return
+      } else {
+        // apply() succeeded, so a dead API is the restart itself. A later
+        // successful poll puts the download/install phase back if it was only
+        // a blip, but a backend that never comes back is a real failure.
+        setPhase('restarting')
+        if (downSince === 0) downSince = now
+        if (now - downSince > 90_000) {
+          setUpgrading(false)
+          showNotice(t('update.notRestarted'), 'error')
+          return
+        }
       }
     }
     setUpgrading(false)
@@ -127,6 +189,8 @@ export function VersionDialog({
   const progressText = (() => {
     if (!upgrading) return ''
     const target = status?.latest ?? ''
+    if (phase === 'restarting') return t('update.restarting', { version: target })
+    if (phase === 'installing') return t('update.installing', { version: target })
     if (!progress || progress.done <= 0) return t('update.prepare', { version: target })
     const pct =
       progress.total > 0
@@ -171,7 +235,16 @@ export function VersionDialog({
                 </Button>
               </div>
             )}
-            {upgrading && <p className="text-xs text-muted-foreground">{progressText}</p>}
+            {upgrading && (
+              <div className="flex items-start gap-2">
+                <AppIcon
+                  name="progress_activity"
+                  size={14}
+                  className="mt-0.5 shrink-0 animate-spin text-muted-foreground"
+                />
+                <p className="text-xs text-muted-foreground">{progressText}</p>
+              </div>
+            )}
             {notice && (
               <p className={notice.kind === 'error' ? 'text-xs text-destructive' : 'text-xs text-emerald-600'}>
                 {notice.text}

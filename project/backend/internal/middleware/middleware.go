@@ -1,9 +1,13 @@
 package middleware
 
 import (
+	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -69,27 +73,93 @@ func AuthRequired(db *gorm.DB, sessions *SessionStore) gin.HandlerFunc {
 
 const sessionCookieName = "hapiy_admin_session"
 
+// SessionStore keeps the dashboard login tokens. When path is set the tokens
+// are also written to disk, so a backend restart (a self-upgrade, `hapiy up`,
+// a crashed supervisor) does not silently log every open dashboard out.
 type SessionStore struct {
+	mu     sync.RWMutex
 	tokens map[string]string
+	path   string
 }
 
 func NewSessionStore() *SessionStore {
 	return &SessionStore{tokens: make(map[string]string)}
 }
 
+// NewSessionStoreAt is NewSessionStore plus persistence: tokens already in
+// path are loaded, and every issue/revoke rewrites the file. A missing file
+// starts empty; an unreadable or malformed one is logged and ignored so a
+// damaged state file cannot lock the user out of the dashboard.
+func NewSessionStoreAt(path string) *SessionStore {
+	s := NewSessionStore()
+	s.path = path
+	s.load()
+	return s
+}
+
+func (s *SessionStore) load() {
+	if s.path == "" {
+		return
+	}
+	raw, err := os.ReadFile(s.path) // #nosec G304 -- fixed path under the state dir
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("sessions: read %s: %v", s.path, err)
+		}
+		return
+	}
+	var tokens map[string]string
+	if err := json.Unmarshal(raw, &tokens); err != nil {
+		log.Printf("sessions: parse %s: %v", s.path, err)
+		return
+	}
+	if len(tokens) > 0 {
+		s.tokens = tokens
+	}
+}
+
 func (s *SessionStore) Issue(username string) string {
 	token := uuid.New().String()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.tokens[token] = username
+	s.persistLocked()
 	return token
 }
 
 func (s *SessionStore) Lookup(token string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	username, ok := s.tokens[token]
 	return username, ok
 }
 
 func (s *SessionStore) Revoke(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.tokens, token)
+	s.persistLocked()
+}
+
+// persistLocked rewrites the token file atomically (temp + rename). The file
+// is 0600: a session token is as sensitive as the password that issued it.
+func (s *SessionStore) persistLocked() {
+	if s.path == "" {
+		return
+	}
+	raw, err := json.Marshal(s.tokens)
+	if err != nil {
+		log.Printf("sessions: encode %s: %v", s.path, err)
+		return
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
+		log.Printf("sessions: write %s: %v", tmp, err)
+		return
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		log.Printf("sessions: replace %s: %v", s.path, err)
+	}
 }
 
 // TokenAuth middleware (API token authentication)

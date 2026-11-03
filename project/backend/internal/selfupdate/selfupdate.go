@@ -208,15 +208,25 @@ func Upgrade(ctx context.Context, current, exePath, webDistDir string, progress 
 	return latest, true, nil
 }
 
+// 升级阶段：下载之后还有校验、解压、替换和重启，前端要能分别提示，
+// 否则下载条停在 100% 看着就像卡死了。
+const (
+	PhaseDownloading = "downloading"
+	PhaseInstalling  = "installing"
+	PhaseRestarting  = "restarting"
+)
+
 // Status 是给 /api/update 的状态快照。Error 记录版本检查的失败原因，
 // UpgradeError 只记录升级流程本身的失败原因（避免两者互相覆盖）。
-// DownloadDone/Total 是升级下载的实时进度（total 0 表示未知）。
+// DownloadDone/Total 是升级下载的实时进度（total 0 表示未知），Phase 是
+// 当前所处的阶段（空字符串表示没有升级在跑）。
 type Status struct {
 	Current       string `json:"current"`
 	Latest        string `json:"latest"`
 	Available     bool   `json:"available"`
 	Checking      bool   `json:"checking"`
 	Upgrading     bool   `json:"upgrading"`
+	Phase         string `json:"phase"`
 	CheckedAtMs   int64  `json:"checkedAtMs"`
 	Error         string `json:"error"`
 	UpgradeError  string `json:"upgradeError"`
@@ -317,18 +327,32 @@ func (c *Checker) BeginUpgrade() bool {
 	}
 	c.status.Upgrading = true
 	c.status.UpgradeError = ""
+	c.status.Phase = PhaseDownloading
 	c.status.DownloadDone = 0
 	c.status.DownloadTotal = 0
 	return true
 }
 
 // SetDownloadProgress 记录当前升级下载的字节进度（total 0 表示未知）；
-// 作为 selfupdate.ProgressFunc 传给下载器。
+// 作为 selfupdate.ProgressFunc 传给下载器。下载器收完字节后会再报一次终值，
+// 那一次把阶段切到 installing：校验、解压和替换已经开始。
 func (c *Checker) SetDownloadProgress(done, total int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.status.DownloadDone = done
 	c.status.DownloadTotal = total
+	if total > 0 && done >= total {
+		c.status.Phase = PhaseInstalling
+	} else {
+		c.status.Phase = PhaseDownloading
+	}
+}
+
+// SetPhase 记录升级阶段（PhaseRestarting 由 handler 在退出前设置）。
+func (c *Checker) SetPhase(phase string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.status.Phase = phase
 }
 
 // EndUpgrade 结束升级标记并记录错误（err 为 nil 表示替换完成，等待重启）。
@@ -338,6 +362,7 @@ func (c *Checker) EndUpgrade(err error) {
 	c.status.Upgrading = false
 	if err != nil {
 		c.status.UpgradeError = err.Error()
+		c.status.Phase = ""
 	}
 }
 

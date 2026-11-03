@@ -2730,6 +2730,9 @@ export type UpdateStatus = {
   readonly available: boolean
   readonly checking: boolean
   readonly upgrading: boolean
+  // phase is 'downloading' | 'installing' | 'restarting' while an upgrade runs.
+  // Older backends send nothing, so callers fall back to the byte counters.
+  readonly phase: string
   readonly checkedAtMs: number
   readonly error: string
   readonly upgradeError: string
@@ -2750,6 +2753,7 @@ function parseUpdateStatus(value: unknown): UpdateStatus {
     available: bool('available'),
     checking: bool('checking'),
     upgrading: bool('upgrading'),
+    phase: str('phase'),
     checkedAtMs: num('checkedAtMs'),
     error: str('error'),
     upgradeError: str('upgradeError'),

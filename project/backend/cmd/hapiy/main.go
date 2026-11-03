@@ -251,7 +251,9 @@ func runServe() {
 	// lives in a single NoRoute handler — see registerNoRoute.
 	r.NoRoute(noRouteHandler(db, engine, cfg.WebDistDir))
 
-	sessions := middleware.NewSessionStore()
+	// Sessions live next to the database so a restart (self-upgrade, `hapiy
+	// up`) keeps the dashboard logged in instead of bouncing to /login.
+	sessions := middleware.NewSessionStoreAt(filepath.Join(filepath.Dir(cfg.DatabasePath), "sessions.json"))
 
 	// Middleware
 	r.Use(middleware.CORS())

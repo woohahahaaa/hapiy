@@ -111,10 +111,13 @@
     "upgradeConfirm": "Upgrade from v{{from}} to v{{to}}: the program files are downloaded and replaced, then the backend restarts automatically. Expect about ten seconds of downtime; the page reloads when done.",
     "upgradeNow": "Upgrade now",
     "prepare": "Preparing to download v{{version}}…",
-    "downloading": "Downloading and installing v{{version}}",
+    "downloading": "Downloading v{{version}}",
+    "installing": "Downloaded; verifying and installing v{{version}}…",
+    "restarting": "Restarting the backend; the page reloads automatically…",
     "checkFailed": "Update check failed: network unreachable",
     "upgradeFailed": "Upgrade failed: {{message}}",
     "notExecuted": "Upgrade did not run, please retry",
+    "notRestarted": "Files were installed but the backend did not restart: refresh the page, or run hapiy up in a terminal",
     "timeout": "Upgrade timed out: retry later, or run hapiy upgrade in a terminal",
     "tooltip": "Update available, click to view"
   }

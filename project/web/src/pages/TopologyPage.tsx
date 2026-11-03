@@ -71,6 +71,7 @@ import {
   type FlatCanvas,
 } from '@/lib/flat-topology'
 import { buildCanvasNodes } from '@/lib/canvas-nodes'
+import { withPreservedSelection } from '@/lib/flow-selection'
 import { attachProviderToTopology } from '@/lib/topology-attach'
 
 const nodeTypes = {
@@ -514,6 +515,10 @@ export function TopologyPage() {
   }, [handleSelEnd])
 
   const selectionRef = useRef<{ nodes: Node[]; edges: Edge[] }>({ nodes: [], edges: [] })
+  // 重建节点/边时用来把选中态重新贴回去：React Flow 的选中只存在节点对象
+  // 的 selected 上，每次状态轮询重建数组都会丢。
+  const selectedNodeIdsRef = useRef<ReadonlySet<string>>(new Set())
+  const selectedEdgeIdsRef = useRef<ReadonlySet<string>>(new Set())
   const [layoutSnapshot, setLayoutSnapshot] = useState<LayoutSnapshot>({})
   const layoutSnapshotRef = useRef(layoutSnapshot)
   layoutSnapshotRef.current = layoutSnapshot
@@ -982,7 +987,9 @@ export function TopologyPage() {
   setNodesRef.current = setNodes
 
   useEffect(() => {
-    setNodes(baseNodes)
+    // 状态轮询会重建 baseNodes；React Flow 的选中态存在节点对象的 selected
+    // 上，直接替换会清空用户的选择（按 Delete 也就没东西可删了）。
+    setNodes(withPreservedSelection(baseNodes, selectedNodeIdsRef.current))
   }, [baseNodes, setNodes])
 
   useEffect(() => {
@@ -1074,7 +1081,7 @@ export function TopologyPage() {
   edgesRef.current = edges
 
   useEffect(() => {
-    setEdges(displayEdges)
+    setEdges(withPreservedSelection(displayEdges, selectedEdgeIdsRef.current))
   }, [displayEdges, setEdges])
 
   // ── Flow light (request_started SSE) ──
@@ -1565,6 +1572,8 @@ export function TopologyPage() {
 
 const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     selectionRef.current = { nodes: params.nodes, edges: params.edges }
+    selectedNodeIdsRef.current = new Set(params.nodes.map((n) => n.id))
+    selectedEdgeIdsRef.current = new Set(params.edges.map((e) => e.id))
     setSelectedDebugIds(params.nodes.map((n) => n.id))
     if (params.nodes.length > 0) setSelectedExecutor(null)
   }, [])
