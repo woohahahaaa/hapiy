@@ -132,6 +132,12 @@ proj_version() {
   grep -o 'Version = "[^"]*"' "$ROOT_DIR/project/backend/internal/version/version.go" | head -1 | sed 's/Version = "//;s/"//'
 }
 
+# 无参数发布（./alive/release.sh）时由 kit 先调用：版本自动 +1（发布：中间位
+# +1、末位归零）。显式传版本号时不会调用它。
+proj_bump_version() {
+  python3 "$ROOT_DIR/scripts/bump-version.py" --release
+}
+
 proj_build_web() {
   msg "building frontend ($VERSION) …"
   (cd "$WEB_DIR" && pnpm build)
