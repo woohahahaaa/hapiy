@@ -58,9 +58,9 @@ var auditLabels = map[string]string{
 	"PUT /v1/dashboard/settings/base-url-paths": "更新 BaseURL 路径",
 	"POST /v1/dashboard/exchange-rate/refresh":  "刷新汇率",
 
-	"PUT /v1/dashboard/topology":                       "保存拓扑",
-	"POST /v1/dashboard/topology/versions/archive":     "归档拓扑版本",
-	"POST /v1/dashboard/topology/versions/:id/restore": "恢复拓扑版本",
+	"PUT /v1/dashboard/topology":                       "保存转发规则",
+	"POST /v1/dashboard/topology/versions/archive":     "归档转发规则版本",
+	"POST /v1/dashboard/topology/versions/:id/restore": "恢复转发规则版本",
 	"PUT /v1/dashboard/flat-topology":                  "保存工作流",
 	"PUT /v1/dashboard/layout":                         "更新布局",
 	"PUT /v1/dashboard/channel-affinity":               "修改渠道亲和性",

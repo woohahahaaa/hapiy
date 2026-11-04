@@ -1,24 +1,24 @@
 {
   "page": {
-    "description": "可视化编辑请求转发的拓扑结构",
+    "description": "可视化编辑请求转发规则",
     "status": "请求入口：{{active}}/{{total}} · {{nodes}}节点"
   },
   "state": {
-    "loadingTopology": "加载拓扑数据…"
+    "loadingTopology": "加载转发规则数据…"
   },
   "error": {
     "loadData": "加载数据失败"
   },
   "toast": {
-    "saveRetry": "拓扑保存失败，稍后自动重试",
+    "saveRetry": "转发规则保存失败，稍后自动重试",
     "layoutSaveFailed": "布局保存失败",
-    "topologyChangedElsewhere": "拓扑已在其他页面被修改，请刷新以加载最新数据",
+    "topologyChangedElsewhere": "转发规则已在其他页面被修改，请刷新以加载最新数据",
     "layoutChangedElsewhere": "布局已在其他页面被修改，请刷新以加载最新布局",
     "layoutLoadFailed": "布局加载失败，使用默认位置",
     "nothingToCopy": "没有可复制的选中节点",
     "duplicateProvider": "同一个供应商（{{name}}）不能在多个激活工作流中被启用",
-    "providerAdded": "已将「{{name}}」添加到转发拓扑",
-    "providerAlreadyAdded": "「{{name}}」已经在转发拓扑中"
+    "providerAdded": "已将「{{name}}」添加到转发规则",
+    "providerAlreadyAdded": "「{{name}}」已经在转发规则中"
   },
   "validation": {
     "duplicateSlot": "一个工作流里面不能有多个{{slot}}",

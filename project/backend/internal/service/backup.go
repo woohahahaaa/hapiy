@@ -50,7 +50,7 @@ const defaultBackupModulesJSON = `["topology","providers","tokens","policy","age
 var backupModuleOrder = []string{"topology", "providers", "tokens", "policy", "agent", "settings", "usage", "logs"}
 
 var BackupModuleTables = map[string][]string{
-	// 转发拓扑：节点、连线、布局与历史版本
+	// 转发规则：节点、连线、布局与历史版本
 	"topology": {
 		"topology_configs", "topology_nodes", "topology_slot_assignments",
 		"topology_states", "topology_versions", "layout_configs",

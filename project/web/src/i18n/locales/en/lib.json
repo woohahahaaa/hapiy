@@ -24,7 +24,7 @@
     "nonNegativeInteger": "{{field}} must be a non-negative integer",
     "nodeMustBeObject": "A node must be an object",
     "unknownNodeType": "Unknown node type: {{type}}",
-    "documentMustBeArray": "The topology document must be an array",
+    "documentMustBeArray": "The forwarding-rules document must be an array",
     "workflowMustBeArray": "Workflow {{index}} must be an array",
     "workflowNotEmpty": "Workflow {{index}} must not be empty",
     "workflowFirstNode": "The first node of workflow {{index}} must be a provider",

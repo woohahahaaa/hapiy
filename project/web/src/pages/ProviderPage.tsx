@@ -179,7 +179,7 @@ export function ProviderPage() {
   // when the operator is looking at the chat panel.
   const [highlightId, setHighlightId] = useState('')
   const highlightTimer = useRef<number | null>(null)
-  // 新建成功后询问是否接入转发拓扑；非空即弹窗。
+  // 新建成功后询问是否接入转发规则；非空即弹窗。
   const [createdProvider, setCreatedProvider] = useState<Provider | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)

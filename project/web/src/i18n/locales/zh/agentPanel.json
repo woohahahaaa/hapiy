@@ -24,8 +24,8 @@
   "providerLabel": "供应商",
   "providerEmptyHint": "先选择模型",
   "modelPlaceholder": "选择模型",
-  "providerAuto": "自动（按拓扑）",
-  "providerNoTopologySuffix": "(未接入拓扑)",
+  "providerAuto": "自动（按转发规则）",
+  "providerNoTopologySuffix": "(未接入转发规则)",
   "selectModelFirst": "先选择一个模型",
   "sendFailed": "发送失败",
   "showConsole": "展开管理面板",
@@ -68,5 +68,5 @@
   "directCancel": "取消",
   "directConfirm": "确定",
   "modelUnavailable": "模型不可用",
-  "modelUnavailableHint": "该模型已不在当前拓扑的可用列表里，请重新选择"
+  "modelUnavailableHint": "该模型已不在当前转发规则的可用列表里，请重新选择"
 }

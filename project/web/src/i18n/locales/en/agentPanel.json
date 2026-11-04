@@ -24,8 +24,8 @@
   "providerLabel": "Provider",
   "providerEmptyHint": "Choose a model first",
   "modelPlaceholder": "Select a model",
-  "providerAuto": "Auto (topology)",
-  "providerNoTopologySuffix": "(not in topology)",
+  "providerAuto": "Auto (forwarding rules)",
+  "providerNoTopologySuffix": "(not in forwarding rules)",
   "selectModelFirst": "Pick a model first",
   "sendFailed": "Failed to send",
   "showConsole": "Expand management panel",
@@ -68,5 +68,5 @@
   "directCancel": "Cancel",
   "directConfirm": "OK",
   "modelUnavailable": "Unavailable",
-  "modelUnavailableHint": "This model is no longer offered by the current topology. Pick another one."
+  "modelUnavailableHint": "This model is no longer offered by the current forwarding rules. Pick another one."
 }

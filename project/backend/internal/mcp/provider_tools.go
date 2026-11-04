@@ -44,7 +44,7 @@ func registerProviderWriteTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "set_provider_workflow",
-		Description: "启用或停用供应商的工作流开关（拓扑节点上的开关），与渠道级状态独立。同名供应商同时只能有一个工作流启用。",
+		Description: "启用或停用供应商的工作流开关（转发规则节点上的开关），与渠道级状态独立。同名供应商同时只能有一个工作流启用。",
 	}, setProviderWorkflow(db, engine))
 
 	mcp.AddTool(s, &mcp.Tool{

@@ -64,8 +64,8 @@ func i18nMessage(r *http.Request, modelName string, err error) string {
 	}
 	return i18n.S(
 		lang,
-		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、Endpoints 白名单、供应商/工作流开关、故障转移状态、拓扑接线。", modelName),
-		fmt.Sprintf("No usable provider found for %s. Check: model name (case-sensitive), endpoint limits, provider/workflow switches, failover status, and topology wiring.", modelName),
+		fmt.Sprintf("无法为 %s 找到可用供应商，请检查：模型名（区分大小写）、Endpoints 白名单、供应商/工作流开关、故障转移状态、转发规则接线。", modelName),
+		fmt.Sprintf("No usable provider found for %s. Check: model name (case-sensitive), endpoint limits, provider/workflow switches, failover status, and forwarding-rules wiring.", modelName),
 	)
 }
 

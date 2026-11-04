@@ -660,7 +660,7 @@ func registerTools(s *mcp.Server, db *gorm.DB, engine *relay.Engine) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_topology",
-		Description: "返回转发拓扑的节点与连线（请求入口、供应商插槽、条件开关、日志输出等），用于判断请求实际会被路由到哪里。",
+		Description: "返回转发规则的节点与连线（请求入口、供应商插槽、条件开关、日志输出等），用于判断请求实际会被路由到哪里。",
 	}, getTopology(db))
 
 	mcp.AddTool(s, &mcp.Tool{

@@ -12,13 +12,16 @@ import { i18n } from "@/i18n/i18n"
 import { useDialogHost } from "./host"
 
 const WIDTH_MAP: Record<string, string> = {
-  // 固定目标宽度，但 max-w 始终以视口为上限（留 2rem 边距），窄屏时收缩、永不超屏。
-  xs: '!w-[384px] !max-w-[calc(100vw-2rem)]',
-  sm: '!w-[640px] !max-w-[calc(100vw-2rem)]',
-  md: '!w-[960px] !max-w-[calc(100vw-2rem)]',
-  lg: '!w-[1024px] !max-w-[calc(100vw-2rem)]',
-  xl: '!w-[1280px] !max-w-[calc(100vw-2rem)]',
-  full: '!w-screen !max-w-none',
+  // 固定目标宽度；max-w 以「可用容器」为上限：弹窗挂进管理面板时就是面板
+  // 宽度，独立页面（登录页等）就是视口，统一留 2rem 边距，窄屏时收缩、永不超屏。
+  xs: '!w-[384px] !max-w-[calc(100%-2rem)]',
+  sm: '!w-[640px] !max-w-[calc(100%-2rem)]',
+  md: '!w-[960px] !max-w-[calc(100%-2rem)]',
+  lg: '!w-[1024px] !max-w-[calc(100%-2rem)]',
+  xl: '!w-[1280px] !max-w-[calc(100%-2rem)]',
+  // 铺满可用容器（保留 2rem 边距），预览类大弹窗用。
+  max: '!w-[calc(100%-2rem)] !max-w-none',
+  full: '!w-full !max-w-none',
 }
 const HEIGHT_MAP: Record<string, string> = {
   auto: 'max-h-[85vh]',
@@ -106,7 +109,7 @@ function DialogContent({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
-  width?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full'
+  width?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'max' | 'full'
   height?: 'auto' | 'full'
   /** Minimum content height (e.g. "640px"): keeps the dialog at a usable
    * size regardless of its content, e.g. so list dialogs don't jump. */

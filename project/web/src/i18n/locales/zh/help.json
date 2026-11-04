@@ -17,8 +17,8 @@
       "description": "四步搭好第一条API转发工作流"
     },
     "topology": {
-      "id": "转发拓扑",
-      "title": "转发拓扑",
+      "id": "转发规则",
+      "title": "转发规则",
       "description": "可视化编排请求的转发路径"
     },
     "models": {

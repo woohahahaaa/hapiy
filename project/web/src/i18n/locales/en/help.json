@@ -18,8 +18,8 @@
       "description": "Four steps to your first API forwarding workflow"
     },
     "topology": {
-      "id": "topology",
-      "title": "Topology",
+      "id": "forwarding-rules",
+      "title": "Forwarding rules",
       "description": "Visually arrange how requests are forwarded"
     },
     "models": {

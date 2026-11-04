@@ -146,9 +146,9 @@
     "placeholder": "Enter model name"
   },
   "addToTopology": {
-    "title": "Add to the topology?",
-    "description": "Provider \"{{name}}\" has been saved. Adding it creates its own workflow (request entry + provider slot) in a new bottom row, leaving existing workflows untouched; if you skip this, it will not participate in any request.",
+    "title": "Add to forwarding rules?",
+    "description": "Provider \"{{name}}\" has been saved. Adding it creates a separate workflow (request entry + provider slot) in a new bottom row, leaving existing workflows untouched; if you skip this, it will not participate in any request.",
     "later": "Not now",
-    "confirm": "Add to topology"
+    "confirm": "Add to forwarding rules"
   }
 }

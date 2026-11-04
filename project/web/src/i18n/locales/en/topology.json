@@ -4,21 +4,21 @@
     "status": "Entries: {{active}}/{{total}} · {{nodes}} nodes"
   },
   "state": {
-    "loadingTopology": "Loading topology data…"
+    "loadingTopology": "Loading forwarding rules…"
   },
   "error": {
     "loadData": "Failed to load data"
   },
   "toast": {
-    "saveRetry": "Failed to save topology; retrying automatically",
+    "saveRetry": "Failed to save the forwarding rules; retrying automatically",
     "layoutSaveFailed": "Failed to save layout",
-    "topologyChangedElsewhere": "The topology was modified in another page. Refresh to load the latest data.",
+    "topologyChangedElsewhere": "The forwarding rules were modified in another page. Refresh to load the latest data.",
     "layoutChangedElsewhere": "The layout was modified in another page. Refresh to load the latest layout.",
     "layoutLoadFailed": "Failed to load layout; using default positions",
     "nothingToCopy": "No selected nodes to copy",
     "duplicateProvider": "Provider ({{name}}) cannot be enabled in multiple active workflows",
-    "providerAdded": "\"{{name}}\" added to the topology",
-    "providerAlreadyAdded": "\"{{name}}\" is already in the topology"
+    "providerAdded": "\"{{name}}\" added to the forwarding rules",
+    "providerAlreadyAdded": "\"{{name}}\" is already in the forwarding rules"
   },
   "validation": {
     "duplicateSlot": "A workflow cannot contain more than one {{slot}}",

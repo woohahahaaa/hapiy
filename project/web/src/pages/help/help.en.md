@@ -4,14 +4,14 @@
 
 hapiy is a **self-hosted AI gateway and agent onboarding manager**: one API surface for every upstream model, and one click to point your AI coding tools at your own gateway instead of editing each client config by hand.
 
-- **Model gateway**: exposes OpenAI-compatible HTTP endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/speech`, `/v1/audio/transcriptions`), so clients only change a Base URL and a token; internally it forwards requests along the "Topology" to OpenAI-compatible, Anthropic-compatible, self-hosted or third-party upstreams.
+- **Model gateway**: exposes OpenAI-compatible HTTP endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/speech`, `/v1/audio/transcriptions`), so clients only change a Base URL and a token; internally it forwards requests along the "Forwarding Rules" to OpenAI-compatible, Anthropic-compatible, self-hosted or third-party upstreams.
 - **Management**: providers and key pools, tokens and quota, request/response rewrite, concurrency control, failover and auto recovery, channel affinity.
 - **Monitoring & cost**: log capture, activity monitor, usage logs, usage and cost statistics.
 - **Agent takeover**: take over config files of opencode, Codex, openclaw, WorkBuddy, DeepSeek Harness and more (locally or over SSH), writing the hapiy address and token into them.
 
 All data lives in a local SQLite database; single-process deployment.
 
-A request's full journey: the client calls hapiy with `Authorization: Bearer hk-...` → token auth → the topology (request entry, switch, provider slots) picks a usable upstream provider and Key → request rewrite → concurrency control → upstream call → response rewrite → usage record written and usage accumulated.
+A request's full journey: the client calls hapiy with `Authorization: Bearer hk-...` → token auth → the forwarding rules (request entry, switch, provider slots) pick a usable upstream provider and Key → request rewrite → concurrency control → upstream call → response rewrite → usage record written and usage accumulated.
 
 > Note: hapiy is a pass-through gateway; it does not change the OpenAI request/response format. Clients change two things: point the request URL at hapiy (for the OpenAI SDK, `base_url` is `http(s)://<hapiy address>/v1`) and replace the API Key with the `hk-` token created on the Tokens page.
 
@@ -25,9 +25,9 @@ These scenarios come from real use, organized as problem → fix → result.
 
 | Scenario | Problem | How to fix | Result |
 | --- | --- | --- | --- |
-| Flaky relays | Multiple relay providers are fast one minute and slow the next, or suddenly rate-limit; switching configs by hand is painful | Add them all under Providers; create a failover rule under Request Handling → Failover with triggers (first byte too slow, speed too low, upstream errors) and a hit threshold, then attach it to the route in Topology | A slow provider is switched away automatically; your preferred route is still used while healthy, and a disabled one is restored automatically |
-| All relays down | Every relay is down, or an urgent task needs a faster route | Add an emergency request entry in Topology and bind it to the official provider; normal entries keep preferring third parties | The official route is only used when no normal provider is available; any relay recovering switches things back |
-| Upstream errors | WorkBuddy calls GLM-5.3-flash through opencode go; `max_token` is set as GLM requires, but the upstream keeps saying it is too large | Turn on log capture for this request in Topology, then export the request and response under Logs / Usage and compare them | Confirm the client sent the wrong value in minutes |
+| Flaky relays | Multiple relay providers are fast one minute and slow the next, or suddenly rate-limit; switching configs by hand is painful | Add them all under Providers; create a failover rule under Request Handling → Failover with triggers (first byte too slow, speed too low, upstream errors) and a hit threshold, then attach it to the route in Forwarding Rules | A slow provider is switched away automatically; your preferred route is still used while healthy, and a disabled one is restored automatically |
+| All relays down | Every relay is down, or an urgent task needs a faster route | Add an emergency request entry in Forwarding Rules and bind it to the official provider; normal entries keep preferring third parties | The official route is only used when no normal provider is available; any relay recovering switches things back |
+| Upstream errors | WorkBuddy calls GLM-5.3-flash through opencode go; `max_token` is set as GLM requires, but the upstream keeps saying it is too large | Turn on log capture for this request in Forwarding Rules, then export the request and response under Logs / Usage and compare them | Confirm the client sent the wrong value in minutes |
 | Client bug | You have confirmed it is a client bug, but a fix is nowhere in sight | Create a request rewrite rule that sets `max_token` to a value the upstream accepts, and attach it to the route | The request is fixed before it leaves, so the task runs now |
 | Agent stuck | It says Working for 30–60 seconds; you cannot tell whether the upstream or the client is stuck | Open Activity Monitor and check connection state, chunks received, and average token speed | See whether it is stuck at connect, first byte, or streaming; kill it if needed |
 | Unclear costs | Relays price differently and cache hits change the bill, so the total is hard to work out | Set per-model prices under Providers; sync public prices from Model DB with a multiplier, or enter custom prices by hand; set the exchange rate under Settings → Currency | One consistent total across providers, so you can see where the money goes |
@@ -48,21 +48,21 @@ Go to "Models → Providers" and click "Add provider":
 - **Models**: the model names the upstream supports (case-sensitive); you can also click "Fetch models from upstream".
 - **Endpoints**: leave empty to allow any request path.
 
-After saving, make sure the row shows "enabled". A dialog then asks whether to add it to the topology — choose "Add to topology" to wire it in automatically (a minimal workflow is created when none is usable), after which requests can route to it; choose "Not now" and the provider only keeps its configuration without serving requests.
+After saving, make sure the row shows "enabled". A dialog then asks whether to add it to the forwarding rules — choose "Add to forwarding rules" to wire it in automatically (a minimal workflow is created when none is usable), after which requests can route to it; choose "Not now" and the provider only keeps its configuration without serving requests.
 
 ### Step 2 Create a token
 
 Go to "Models → Tokens", click "Add token", fill in a name (quota may stay empty = unlimited) and save. Then click the copy icon in the list to get the full `hk-` token — clients use it to call hapiy.
 
-### Step 3 Build the topology
+### Step 3 Build the forwarding rules
 
-Open "Topology":
+Open "Forwarding Rules":
 
 1. Right-click an empty spot on the canvas and choose "Add full workflow" to generate the whole chain: request entry → providers → failover → request rewrite → response rewrite → concurrency → log capture.
 2. In the "Providers" slot click add and bind the provider from step 1 using the "Choose provider" dropdown.
 3. Make sure the request entry switch in the top-right corner is on (keep its weight at 1).
 
-Topology changes save automatically; there is no save button.
+Forwarding-rules changes save automatically; there is no save button.
 
 ### Step 4 Verify with a call
 
@@ -75,7 +75,7 @@ curl http://<hapiy address>/v1/chat/completions \
   -d '{"model":"your-model-name","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the topology shows the animated path the request took, "Log Center → Activity" has the live request list, and "Usage Logs" shows this call's latency and token usage.
+`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the forwarding rules show the animated path the request took, "Log Center → Activity" has the live request list, and "Usage Logs" shows this call's latency and token usage.
 
 ### When a call fails
 
@@ -83,12 +83,12 @@ curl http://<hapiy address>/v1/chat/completions \
 | --- | --- |
 | 401 `invalid token` | Wrong token, a disabled token, or a missing `Authorization: Bearer` header |
 | 403 `quota exceeded` | The token's quota is used up |
-| 503 `No usable provider found for xxx` | No usable route in the topology: check the model name case, whether the provider is enabled, whether the entry is on, and whether the topology is wired |
+| 503 `No usable provider found for xxx` | No usable route in the forwarding rules: check the model name case, whether the provider is enabled, whether the entry is on, and whether the wiring is connected |
 | 404 `path not found` | An unsupported API path was called, or the provider's Endpoints list does not allow that path |
 
-## Topology
+## Forwarding rules
 
-"Topology" is the heart of the system: a visual flow chart of "where a request goes after it arrives". The status line under the title shows the active request entries and the node count.
+"Forwarding rules" is the heart of the system: a visual flow chart of "where a request goes after it arrives". The status line under the title shows the active request entries and the node count.
 
 ### Canvas controls
 
@@ -125,9 +125,9 @@ curl http://<hapiy address>/v1/chat/completions \
 ### Saving and version history
 
 - Every change saves automatically after about 0.4 seconds; a failed save is reported and retried.
-- Node positions (the layout) are saved separately from the topology data.
+- Node positions (the layout) are saved separately from the forwarding-rules data.
 - "Version History" in the top-right corner previews and restores versions; the current version is archived first, so you can always go back. The system keeps a stable version every 5 minutes, up to 20.
-- If the same topology was edited on another page, hapiy asks you to refresh instead of merging automatically.
+- If the same forwarding rules were edited on another page, hapiy asks you to refresh instead of merging automatically.
 
 ## Models
 
@@ -152,9 +152,9 @@ Form fields for creating/editing:
 
 There is no "Test connection" button; verify connectivity with "Fetch models from upstream".
 
-Deleting a provider does not clean up its bindings in the topology — handle those afterwards.
+Deleting a provider does not clean up its bindings in the forwarding rules — handle those afterwards.
 
-After saving a new provider hapiy asks whether to add it to the topology: confirming adds it as an extra card to the provider slot of the first usable workflow; if no workflow is enabled yet, a minimal "request entry → providers" chain is created. Providers already in the topology are not added twice.
+After saving a new provider hapiy asks whether to add it to the forwarding rules: confirming adds it as an extra card to the provider slot of the first usable workflow; if no workflow is enabled yet, a minimal "request entry → providers" chain is created. Providers already in the forwarding rules are not added twice.
 
 ### Tokens
 
@@ -192,7 +192,7 @@ For the "set value" action the quotes mean something different than in condition
 
 **Test**: the "Test" button in the top-right corner lets you pick a rule, paste a JSON request body and see the result immediately. The test only covers the body; header actions do not show up in the output.
 
-**Binding**: after creating a rule it only takes effect once selected in a "Request rewrite" slot of the topology; one slot can hold several rules, executed in order.
+**Binding**: after creating a rule it only takes effect once selected in a "Request rewrite" slot of the forwarding rules; one slot can hold several rules, executed in order.
 
 ### Response rewrite
 
@@ -214,7 +214,7 @@ Rule fields:
 
 The speed limit is special: it is evaluated from the overall speed after the response completes, only counts hits, and does not resend the request.
 
-Once the "hit threshold" (N hits within the window) is reached, the action runs: skip only just fails over, skip and disable fails over and disables, and a "failover" record is written. A rule also has to be bound in a "Failover" slot of the topology to take effect.
+Once the "hit threshold" (N hits within the window) is reached, the action runs: skip only just fails over, skip and disable fails over and disables, and a "failover" record is written. A rule also has to be bound in a "Failover" slot of the forwarding rules to take effect.
 
 The "Auto Recovery" tab brings disabled channels back, in two modes:
 
@@ -231,9 +231,9 @@ There is one global configuration; the page has a master switch and three fields
 
 - **Session ID headers**: one per line, case-insensitive; looked up in headers only (never in the body), and the first non-empty one wins.
 - **Model fields**: gjson paths, one per line; used to find the model name in the request body; when empty, the request's `model` field is used directly.
-- **Cache TTL (seconds)**: counted from the session's last successful request; after it expires the topology is consulted again. Default 1800.
+- **Cache TTL (seconds)**: counted from the session's last successful request; after it expires the forwarding rules are consulted again. Default 1800.
 
-The order is: channel affinity first, then normal topology selection; a hit also requires the channel to still be in the usable set. A failover clears the affinity record too, so requests do not stick to a failed channel. Records live in the database and survive restarts.
+The order is: channel affinity first, then normal forwarding-rules selection; a hit also requires the channel to still be in the usable set. A failover clears the affinity record too, so requests do not stick to a failed channel. Records live in the database and survive restarts.
 
 A request rewrite (Request Handling) sometimes only adds the session header after dispatch — for instance when the session id is derived from the request body. Such a session is still invisible when dispatch runs, so the first affinity recall misses it. The gateway therefore **runs affinity a second time** once the request rewrite has finished; when that recall hits, the usage record marks the channel affinity with "(after request rewrite)". If the rewrite switches the request to another session (one channel recalled before it, another after), the after-rewrite one wins.
 
@@ -241,7 +241,7 @@ The second recall only reuses the same workflow (the provider does not change; o
 
 ### Concurrency
 
-Concurrency is not configured on the "Request Handling" page: it lives in a "Concurrency" slot of the topology as an inline "at most N within X minutes".
+Concurrency is not configured on the "Request Handling" page: it lives in a "Concurrency" slot of the forwarding rules as an inline "at most N within X minutes".
 
 Semantics: a request occupies a slot on arrival, the countdown starts when it completes, and the slot is released at zero; requests above the limit **queue** (they are not rejected immediately). Several routes sharing one slot node share the same window. When several concurrency slots are on a path, all of them must pass.
 
@@ -269,7 +269,7 @@ Per-request details — the main place to troubleshoot and see usage.
 
 Review captured **raw** requests/responses, including the before/after difference of rewrites.
 
-- The capture switch is not here: open it in a "Log capture" slot of the topology and set how long it stays on (it turns itself off at the end). The slot also lets you record requests, record responses, and set a log prefix (used as the folder filter).
+- The capture switch is not here: open it in a "Log capture" slot of the forwarding rules and set how long it stays on (it turns itself off at the end). The slot also lets you record requests, record responses, and set a log prefix (used as the folder filter).
 - The list shows requests in pairs with time, folder, token, provider, model, source, type (request / response / request+response, optionally marked "modified" or "error"), file name / request ID and size.
 - Click a row to preview request headers/body and response headers/body separately; content changed by rules is shown in a diff view; streaming responses can be viewed as merged JSON or event by event, and every node can be copied.
 - Clearing is irreversible as well; clearing by filter only keeps the folder, source and date conditions.
@@ -302,7 +302,7 @@ The "Agent Takeover" entry is hidden from the sidebar by default; turn it on und
 
 ## MCP server
 
-hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the topology directly, and can also create, update and delete providers or clear automatic disables. Upstream keys are only ever returned as their last 4 characters; usernames and passwords are never exposed.
+hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the forwarding rules directly, and can also create, update and delete providers or clear automatic disables. Upstream keys are only ever returned as their last 4 characters; usernames and passwords are never exposed.
 
 ### Enable it
 
@@ -321,7 +321,7 @@ Open "Settings → Other → MCP server" and turn the switch on. A key starting 
 | `list_models` | Callable models plus their providers and endpoints |
 | `query_logs` | Request logs filtered by model/provider/token/status/time |
 | `get_usage_stats` | Requests, tokens, cost, cache hit rate, average latency |
-| `get_topology` | Nodes and wires of the forwarding topology |
+| `get_topology` | Nodes and wires of the forwarding rules |
 | `list_disabled_channels` | Channels currently disabled |
 | `list_agent_configs` | Managed agent config file records (contents excluded) |
 | `web_search` | Search public web pages (self-hosted SearXNG when configured, Bing otherwise) |
@@ -408,7 +408,7 @@ Currency and rate only affect records created afterwards; existing records keep 
 
 ### Data Backup
 
-- **Backup contents**: tick the modules to back up; topology, providers, tokens, request handling rules, Agent Takeover and settings are on by default, usage logs and log captures are off;
+- **Backup contents**: tick the modules to back up; forwarding rules, providers, tokens, request handling rules, Agent Takeover and settings are on by default, usage logs and log captures are off;
 - **Auto backup frequency**: never / daily / weekly;
 - **Relative path**: where backup files are stored, relative to the machine running the backend; the page shows the resolved absolute path live;
 - "Manual backup now" runs immediately with the current ticks (without saving them back);
@@ -430,7 +430,7 @@ Manages the login account:
 
 ## FAQ
 
-**The topology doesn't take effect after a change?** Check, in order: the provider is enabled, the entry switch is on with a non-zero weight, the provider card in the slot is enabled, the model name case matches, and the slot is not gray (unreachable from every entry). For rule slots, also confirm the bound rule was not deleted or disabled.
+**The forwarding rules don't take effect after a change?** Check, in order: the provider is enabled, the entry switch is on with a non-zero weight, the provider card in the slot is enabled, the model name case matches, and the slot is not gray (unreachable from every entry). For rule slots, also confirm the bound rule was not deleted or disabled.
 
 **How do I recover a disabled channel?** Under "Request Handling → Failover → Auto Recovery", the waiting list offers "Test upstream" and "Restore"; you can also click "Restore" per Provider / Base URL / Key on the provider edit page.
 
@@ -440,4 +440,4 @@ Manages the login account:
 
 **How do I onboard an Agent tool?** Set the public address under "Settings → Base URL" first, then add a managed provider under "Agent Takeover → Config Files" and sync it back to the config file.
 
-**Why is Log Capture empty?** Capture is off by default: open the switch in the "Log capture" slot of the topology, set how long it stays on, and make sure the entry records requests/responses and the slot sits downstream of the right provider route.
+**Why is Log Capture empty?** Capture is off by default: open the switch in the "Log capture" slot of the forwarding rules, set how long it stays on, and make sure the entry records requests/responses and the slot sits downstream of the right provider route.
