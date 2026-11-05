@@ -769,10 +769,7 @@ export function OnboardingPage() {
     >
       <header className="flex items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground">
-            h
-          </span>
-          <span className="text-sm font-semibold tracking-tight">hapiy</span>
+          <span className="font-hapiy-logo text-2xl leading-none text-foreground">hapiy</span>
           <span className="rounded-full border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
             {t('badge')}
           </span>
