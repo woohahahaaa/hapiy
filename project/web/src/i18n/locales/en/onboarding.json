@@ -1,0 +1,67 @@
+{
+  "checking": "Checking setup…",
+  "badge": "First-time setup",
+  "skip": "Skip for now",
+  "skipping": "Skipping…",
+  "title": "Connect a model first",
+  "description": "Connect at least one model and hapiy can start forwarding requests, which also activates the built-in assistant. After that, just ask it to add providers, change the topology, or check usage — no need to dig through settings.",
+  "steps": {
+    "provider": "Connect provider",
+    "models": "Choose models",
+    "progress": "Step {{current}} of 2"
+  },
+  "form": {
+    "nameLabel": "Provider name",
+    "optional": "(optional)",
+    "namePlaceholder": "DeepSeek official",
+    "baseUrlLabel": "Base URL",
+    "baseUrlPlaceholder": "https://api.deepseek.com/v1",
+    "presets": "Common:",
+    "apiKeyLabel": "API Key",
+    "keyPlaceholder": "sk-…",
+    "show": "Show",
+    "hide": "Hide",
+    "keyHint": "Use the /v1 level here, not /chat/completions. The key is stored only on this machine."
+  },
+  "fetch": {
+    "errorTitle": "Could not fetch models automatically",
+    "errorHint": "{{message}}. Retry, or continue to enter model names manually.",
+    "manualTitle": "Automatic fetch failed, switching to manual entry",
+    "manualHint": "{{message}}. Enter model names below and press Enter or comma to add them, or go back and retry."
+  },
+  "models": {
+    "providerBadge": "OpenAI compatible",
+    "fetchedCount": "Fetched {{count}} models. Choose the ones to enable",
+    "searchPlaceholder": "Search models",
+    "empty": "No matching models",
+    "manualHint": "Press Enter or comma to add. Model names must match the upstream console exactly.",
+    "manualPlaceholder": "deepseek-chat",
+    "remove": "Remove {{model}}"
+  },
+  "actions": {
+    "manual": "Enter models manually",
+    "fetch": "Fetch models",
+    "fetching": "Fetching models…",
+    "add": "Add",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "manualAdd": "Not in the list? Enter manually",
+    "back": "Back",
+    "done": "Finish setup",
+    "doneCount": "Finish setup ({{count}})",
+    "enter": "Go to console"
+  },
+  "done": {
+    "title": "Setup complete",
+    "description": "hapiy can now forward requests. Continue in the console to add providers or adjust the topology.",
+    "provider": "Provider",
+    "baseUrl": "Base URL",
+    "models": "Models"
+  },
+  "errors": {
+    "unexpected": "Something went wrong. Try again.",
+    "createFailed": "Could not create the provider"
+  },
+  "footer": "The key is stored only in hapiy's local configuration and is never uploaded to any third party.",
+  "unnamedProvider": "Unnamed provider"
+}

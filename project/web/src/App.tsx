@@ -21,6 +21,8 @@ import { AgentConfigPage } from '@/pages/AgentConfigPage'
 import { AgentRulesPage } from '@/pages/AgentRulesPage'
 import { AuthGate } from '@/components/wooh/AuthGate'
 import { CustomThemeApplier } from '@/components/wooh/CustomThemeApplier'
+import { OnboardingGate } from '@/components/wooh/OnboardingGate'
+import { OnboardingPage } from '@/pages/OnboardingPage'
 import { LanguageProvider } from '@/i18n/language-context'
 import { Toaster } from '@/components/ui/toast'
 
@@ -41,43 +43,57 @@ function App() {
             </Suspense>
           }
         />
+        {/* 首次引导是独立全屏页：不套 AppShell，但同样要求登录态。 */}
+        <Route
+          path="/onboarding"
+          element={
+            <AuthGate>
+              <LanguageProvider>
+                <CustomThemeApplier />
+                <OnboardingPage />
+              </LanguageProvider>
+            </AuthGate>
+          }
+        />
         <Route
           path="/*"
           element={
             <AuthGate>
               <LanguageProvider>
                 <CustomThemeApplier />
-                <AppShell>
-                  <Routes>
-                    <Route path="/" element={<TopologyPage />} />
-                    <Route path="/monitor" element={<Navigate to="/" replace />} />
-                    <Route path="/logs" element={<LogsPage />} />
-                    <Route path="/logs/capture" element={<LogCapturePage />} />
-                    <Route path="/provider" element={<ProviderPage />} />
-                    <Route path="/token" element={<TokenPage />} />
-                    <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
-                    <Route path="/policy/:type" element={<PolicyPage />} />
-                    <Route path="/settings" element={<Navigate to="/settings/advanced-query" replace />} />
-                    <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
-                    <Route path="/settings/advanced-query" element={<AdvancedQuerySettingsPage />} />
-                    {/* 旧地址已合并进「高级查询」，保留重定向避免书签失效 */}
-                    <Route path="/settings/general" element={<Navigate to="/settings/advanced-query" replace />} />
-                    <Route path="/settings/billing" element={<Navigate to="/settings/advanced-query" replace />} />
-                    <Route path="/settings/token-usage" element={<Navigate to="/settings/advanced-query" replace />} />
-                    {/* Debug 仅 dev 模式可用，生产构建不注册该路由 */}
-                    {import.meta.env.DEV && (
-                      <Route path="/settings/debug" element={<DebugSettingsPage />} />
-                    )}
-                    <Route path="/settings/backup" element={<BackupSettingsPage />} />
-                    <Route path="/settings/theme" element={<ThemeSettingsPage />} />
-                    <Route path="/settings/reverse-proxy" element={<ReverseProxySettingsPage />} />
-                    <Route path="/settings/other" element={<OtherSettingsPage />} />
-                    <Route path="/profile" element={<ProfilePage />} />
-                    <Route path="/agent" element={<AgentRulesPage />} />
-                    <Route path="/agent/config" element={<AgentConfigPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </AppShell>
+                <OnboardingGate>
+                  <AppShell>
+                    <Routes>
+                      <Route path="/" element={<TopologyPage />} />
+                      <Route path="/monitor" element={<Navigate to="/" replace />} />
+                      <Route path="/logs" element={<LogsPage />} />
+                      <Route path="/logs/capture" element={<LogCapturePage />} />
+                      <Route path="/provider" element={<ProviderPage />} />
+                      <Route path="/token" element={<TokenPage />} />
+                      <Route path="/channel-affinity" element={<ChannelAffinityPage />} />
+                      <Route path="/policy/:type" element={<PolicyPage />} />
+                      <Route path="/settings" element={<Navigate to="/settings/advanced-query" replace />} />
+                      <Route path="/settings/base-url" element={<BaseUrlSettingsPage />} />
+                      <Route path="/settings/advanced-query" element={<AdvancedQuerySettingsPage />} />
+                      {/* 旧地址已合并进「高级查询」，保留重定向避免书签失效 */}
+                      <Route path="/settings/general" element={<Navigate to="/settings/advanced-query" replace />} />
+                      <Route path="/settings/billing" element={<Navigate to="/settings/advanced-query" replace />} />
+                      <Route path="/settings/token-usage" element={<Navigate to="/settings/advanced-query" replace />} />
+                      {/* Debug 仅 dev 模式可用，生产构建不注册该路由 */}
+                      {import.meta.env.DEV && (
+                        <Route path="/settings/debug" element={<DebugSettingsPage />} />
+                      )}
+                      <Route path="/settings/backup" element={<BackupSettingsPage />} />
+                      <Route path="/settings/theme" element={<ThemeSettingsPage />} />
+                      <Route path="/settings/reverse-proxy" element={<ReverseProxySettingsPage />} />
+                      <Route path="/settings/other" element={<OtherSettingsPage />} />
+                      <Route path="/profile" element={<ProfilePage />} />
+                      <Route path="/agent" element={<AgentRulesPage />} />
+                      <Route path="/agent/config" element={<AgentConfigPage />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </AppShell>
+                </OnboardingGate>
               </LanguageProvider>
             </AuthGate>
           }
