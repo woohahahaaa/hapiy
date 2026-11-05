@@ -59,8 +59,19 @@ var controllers: [MainWindowController] = []
 
 final class MainWindowController: NSWindowController, NSWindowDelegate, WKUIDelegate, WKNavigationDelegate {
     let webView: WKWebView
-    private var retries = 0
     private var currentURL: URL = localConsoleURL()
+
+    // 后端没起来时不白屏：壳自己显示状态页，调用 `hapiy up` 拉起服务并轮询
+    // /health，服务恢复后自动刷新回控制台。
+    private var fallbackShown = false
+    private var fallbackReady = false
+    private var fallbackTitle = ""
+    private var fallbackStatus = ""
+    private var fallbackSpinner = true
+    private var healthTimer: Timer?
+    private var restartProcess: Process?
+    private var lastRestartAttempt = Date.distantPast
+    private var backendMissing = false
 
     init(initialURL: URL? = nil) {
         let config = WKWebViewConfiguration()
@@ -186,29 +197,231 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, WKUIDele
     }
 
     func windowWillClose(_ notification: Notification) {
+        healthTimer?.invalidate()
+        healthTimer = nil
         controllers.removeAll { $0 === self }
     }
 
-    // 后端可能还没起来：加载失败就 1 秒后重试（同一个地址），最多 30 次。
+    // 后端可能还没起来：不再空白重试，改为显示状态页并主动拉起服务，
+    // 服务恢复（/health 可访问）后自动刷新回控制台。
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        retry()
+        showUnavailable()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        retry()
+        showUnavailable()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        retries = 0
+        if fallbackShown {
+            fallbackReady = true
+            applyFallbackStatus()
+        }
     }
 
-    private func retry() {
-        guard retries < 30 else { return }
-        retries += 1
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard let self = self else { return }
-            self.load(self.currentURL)
+    // MARK: - 服务未启动时的状态页
+
+    private func showUnavailable() {
+        guard !fallbackShown else { return }
+        // 预设为远端地址时不在本机拉起服务，只显示连接失败。
+        guard kAppUrl.isEmpty || isLocalURL(currentURL) else {
+            showFallback(
+                title: localized("无法连接服务", "Cannot reach the service"),
+                status: currentURL.absoluteString,
+                spinner: false
+            )
+            return
         }
+        currentURL = localConsoleURL()
+        showFallback(
+            title: localized("hapiy 服务未启动", "hapiy service is not running"),
+            status: localized("正在重启…", "Restarting…"),
+            spinner: true
+        )
+        startBackend()
+        startHealthPolling()
+    }
+
+    private func showFallback(title: String, status: String, spinner: Bool) {
+        fallbackShown = true
+        fallbackReady = false
+        setFallbackStatus(title: title, status: status, spinner: spinner)
+        webView.loadHTMLString(fallbackHTML(title: title, status: status, spinner: spinner), baseURL: nil)
+    }
+
+    private func setFallbackStatus(title: String, status: String, spinner: Bool) {
+        fallbackTitle = title
+        fallbackStatus = status
+        fallbackSpinner = spinner
+        applyFallbackStatus()
+    }
+
+    private func applyFallbackStatus() {
+        guard fallbackReady else { return }
+        let script = "window.setStatus(\(jsLiteral(fallbackTitle)), \(jsLiteral(fallbackStatus)), \(fallbackSpinner ? "true" : "false"))"
+        webView.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    private func startBackend() {
+        if let process = restartProcess, process.isRunning { return }
+        let exe = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".hapiy/app/hapiy")
+        guard FileManager.default.isExecutableFile(atPath: exe.path) else {
+            backendMissing = true
+            setFallbackStatus(
+                title: localized("hapiy 服务未安装", "hapiy is not installed"),
+                status: localized("请先运行 install.sh 安装 hapiy。", "Run install.sh to install hapiy first."),
+                spinner: false
+            )
+            return
+        }
+        backendMissing = false
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: exe.path)
+        process.arguments = ["up"]
+        var env = ProcessInfo.processInfo.environment
+        if let port = localConsoleURL().port {
+            env["HAPIY_PORT"] = String(port)
+        }
+        process.environment = env
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { [weak self] finished in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.restartProcess = nil
+                guard self.fallbackShown, finished.terminationStatus != 0 else { return }
+                self.setFallbackStatus(
+                    title: self.localized("hapiy 服务未启动", "hapiy service is not running"),
+                    status: self.localized("重启失败，正在重试…", "Restart failed, retrying…"),
+                    spinner: true
+                )
+            }
+        }
+        do {
+            try process.run()
+            restartProcess = process
+            lastRestartAttempt = Date()
+        } catch {
+            setFallbackStatus(
+                title: localized("hapiy 服务未启动", "hapiy service is not running"),
+                status: localized("重启失败，正在重试…", "Restart failed, retrying…"),
+                spinner: true
+            )
+        }
+    }
+
+    private func startHealthPolling() {
+        healthTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkHealth()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        healthTimer = timer
+        checkHealth()
+    }
+
+    private func checkHealth() {
+        guard fallbackShown else { return }
+        let base = localConsoleURL()
+        if base != currentURL { currentURL = base }
+        guard let healthURL = URL(string: "/health", relativeTo: base) else { return }
+        var request = URLRequest(url: healthURL)
+        request.timeoutInterval = 2
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            DispatchQueue.main.async {
+                guard let self = self, self.fallbackShown else { return }
+                if let http = response as? HTTPURLResponse, http.statusCode < 500 {
+                    self.recover()
+                    return
+                }
+                // `up` 已经退出但服务仍没起来：隔 10 秒再拉一次，避免刷屏。
+                if self.restartProcess?.isRunning != true,
+                   !self.backendMissing,
+                   Date().timeIntervalSince(self.lastRestartAttempt) > 10 {
+                    self.startBackend()
+                }
+            }
+        }.resume()
+    }
+
+    private func recover() {
+        healthTimer?.invalidate()
+        healthTimer = nil
+        fallbackShown = false
+        fallbackReady = false
+        let url = localConsoleURL()
+        currentURL = url
+        load(url)
+    }
+
+    private func localized(_ chinese: String, _ english: String) -> String {
+        let language = Locale.preferredLanguages.first?.lowercased() ?? ""
+        return language.hasPrefix("zh") ? chinese : english
+    }
+
+    private func jsLiteral(_ value: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return encoded
+    }
+
+    private func fallbackHTML(title: String, status: String, spinner: Bool) -> String {
+        let spinnerClass = spinner ? "spinner" : "spinner hidden"
+        return """
+        <!doctype html>
+        <html lang="zh-CN">
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          :root { color-scheme: dark; }
+          * { box-sizing: border-box; }
+          html, body { height: 100%; }
+          body {
+            margin: 0;
+            background: #101010;
+            color: #f4f4f5;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .card { width: min(360px, calc(100vw - 48px)); text-align: center; }
+          .logo { font-family: "Cookie", "Snell Roundhand", cursive; font-size: 40px; line-height: 1; }
+          .spinner {
+            width: 20px; height: 20px; margin: 24px auto 0;
+            border: 2px solid rgba(255,255,255,.16);
+            border-top-color: rgba(255,255,255,.9);
+            border-radius: 50%;
+            animation: spin .8s linear infinite;
+          }
+          .spinner.hidden { display: none; }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          h1 { margin: 14px 0 6px; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+          p { margin: 0; color: #a1a1aa; font-size: 12px; line-height: 1.6; }
+        </style>
+        </head>
+        <body>
+          <main class="card">
+            <div class="logo">hapiy</div>
+            <div class="\(spinnerClass)"></div>
+            <h1 id="title">\(title)</h1>
+            <p id="status">\(status)</p>
+          </main>
+          <script>
+            window.setStatus = function (title, status, spin) {
+              document.getElementById('title').textContent = title;
+              document.getElementById('status').textContent = status;
+              document.querySelector('.spinner').classList.toggle('hidden', !spin);
+            };
+          </script>
+        </body>
+        </html>
+        """
     }
 
     // window.open / target=_blank：内部地址（本机 / shell.url 的站）开独立窗口；
