@@ -1,10 +1,9 @@
 {
   "checking": "Checking setup…",
-  "badge": "First-time setup",
   "skip": "Skip for now",
   "skipping": "Skipping…",
-  "title": "Connect a model first",
-  "description": "Connect at least one model and hapiy can start forwarding requests, which also activates the built-in assistant. After that, just ask it to add providers, change the topology, or check usage — no need to dig through settings.",
+  "title": "First-time setup: connect a model first",
+  "description": "Connect a model and hapiy can start forwarding requests.",
   "steps": {
     "provider": "Connect provider",
     "models": "Choose models",
