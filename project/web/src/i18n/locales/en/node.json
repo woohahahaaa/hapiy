@@ -57,8 +57,7 @@
   },
   "slotProvider": {
     "strategySequential": "Sequential",
-    "strategyRandom": "Random",
-    "strategyRoundRobin": "Round robin"
+    "strategyBalanced": "Balanced"
   },
   "slotLabels": {
     "requestModify": "Request Rewrite",

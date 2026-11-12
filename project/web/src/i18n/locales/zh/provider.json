@@ -14,6 +14,8 @@
     "statusCount": "{{count}}供应商",
     "empty": "暂无供应商。添加一个供应商开始配置。",
     "add": "添加供应商",
+    "copy": "复制供应商",
+    "copySuffix": "副本",
     "urls": "{{count}} URLs",
     "keys": "{{count}} Keys",
     "endpoints": "{{count}} Endpoints"
@@ -30,7 +32,7 @@
     "editProvider": "编辑供应商",
     "endpointTitle": "模型列表接口",
     "endpointPathLabel": "模型列表接口路径",
-    "endpointPathHint": "路径必须以斜杠开头（/），将拼接在Base URL之后",
+    "endpointPathHint": "将拼接在Base URL之后，没写开头的斜杠会自动补上",
     "endpointUseKey": "是否传入Key",
     "endpointUseKeyHint": "优先使用未禁用的Key；全部禁用时使用第一个非空Key",
     "dedupeV1Suffix": "自动去重 /v1 后缀",
@@ -45,7 +47,10 @@
     "syncQuestion": "确认将模型「{{model}}」的当前价格设置同步到其他供应商的同名模型？",
     "syncDetail": "会将价格模式、参考供应商、价格快照和倍率一起写入其他供应商的同名模型。",
     "deleteTitle": "确认删除",
-    "deleteDescription": "将删除供应商「{{name}}」及其全部渠道配置，删除后不可恢复。"
+    "deleteDescription": "将删除供应商「{{name}}」及其全部渠道配置，删除后不可恢复。",
+    "copyTitle": "确认复制",
+    "copyDescription": "将复制供应商「{{name}}」的全部配置（Base URLs、Keys、模型与价格），生成一个名称带「副本」后缀的新供应商；名称被占用时会自动追加序号。",
+    "copyConfirm": "确认复制"
   },
   "actions": {
     "saving": "保存中…",
@@ -56,12 +61,14 @@
   },
   "form": {
     "apiKeys": "API Keys",
+    "strategySequential": "按顺序",
+    "strategyBalanced": "均衡",
     "notesPlaceholder": "备注（可选）",
     "note": "备注",
     "noteAria": "{{label}}备注",
     "deleteValueAria": "删除{{label}}",
     "deleteEndpointAria": "删除Endpoint",
-    "endpointHint": "该模型允许的完整请求路径，留空表示不限制。下拉里列出的路径点击可直接切换；也可输入后移开焦点即生效；清空后移开焦点回到不限路径。",
+    "endpointHint": "该模型允许的完整请求路径，留空表示不限制。空格、逗号、分号分隔可填多个；没写开头的斜杠会自动补上。下拉里列出的路径点击可直接切换；也可输入后移开焦点即生效；清空后移开焦点回到不限路径。",
     "modelNamePlaceholder": "模型名称"
   },
   "price": {
@@ -112,7 +119,6 @@
     "unknown": "未知错误",
     "duplicateEndpoint": "该路径已添加",
     "noDefaultEndpoint": "请先在系统设置中配置默认模型列表接口，或点击齿轮设置接口地址",
-    "pathMustStartSlash": "路径必须以斜杠开头（/）",
     "baseUrlRequired": "请先在上方填写Base URLs"
   },
   "toast": {
@@ -121,7 +127,8 @@
     "bulkFilled": "已为{{count}}个模型匹配参考供应商并同步价格（当前供应商优先）",
     "bulkVendorless": "{{count}}个模型未在models.dev找到可用的参考供应商，未自动设置",
     "noAutoModels": "没有可自动设置的模型",
-    "synced": "已同步到{{count}}个其他供应商的同名模型"
+    "synced": "已同步到{{count}}个其他供应商的同名模型",
+    "copied": "已复制为「{{name}}」"
   },
   "rateRules": {
     "hint": "规则从上到下按优先级匹配，命中第一条后停止",

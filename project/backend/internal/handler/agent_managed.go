@@ -462,12 +462,15 @@ func rebuildManagedBlocks(c *gin.Context, db *gorm.DB, row *model.AgentConfigFil
 		}
 	}
 	synced := 0
+	// 同步会真正写文件，模型基础字段要尽量完整：只有这里阻塞等 models.dev
+	// （离线时由失败冷却直接返回错误，不会每个分组各等一轮超时）。
+	mdModels, _ := modelsDev.load()
 	for _, stored := range groupsByKey {
 		members := membersOf(stored)
 		if len(members) == 0 {
 			continue
 		}
-		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix))
+		gen := buildGeneratedBlock(rule, jpaths, stored, members, m.APIKey, basePrefix, providerBlockName(m.Name, stored.Suffix), mdModels)
 		fullName := providerBlockName(m.Name, stored.Suffix)
 		providerIDPath := jpaths.Provider + "." + fullName
 		// 托管块由系统全权生成（不允许编辑）：先整块删除再重写，
@@ -980,7 +983,7 @@ func deriveManagedProvider(rule model.AgentTypeRule, row model.AgentConfigFile, 
 		}
 		mv.ModelNames = uniqueSorted(membersModelNamesForEndpoint(members, group.Endpoint, protocols))
 		mv.ModelCount = len(mv.ModelNames)
-		gen := buildGeneratedBlock(rule, jpaths, group, members, m.APIKey, basePrefix, providerBlockName(m.Name, group.Suffix))
+		gen := buildGeneratedBlock(rule, jpaths, group, members, m.APIKey, basePrefix, providerBlockName(m.Name, group.Suffix), modelsDev.peek())
 		mv.Generated = gen
 		fullName := providerBlockName(m.Name, group.Suffix)
 		actual := normalizeFileProvider(provResult.Get(fullName), jpaths)
@@ -1014,7 +1017,9 @@ func ruleKey(endpoint string, protocols []model.AgentProtocol) string {
 // four unified fields filled from the chosen models.dev reference
 // suppliers. apiKeyOverride is the 令牌 key chosen in the 托管 dialog;
 // empty falls back to the first linked provider's key (legacy rows).
-func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, apiKeyOverride string, basePrefix string, displayName string) map[string]any {
+// mdModels is the caller's models.dev snapshot: read paths pass the cached
+// one so a dead network can't stall the list, write paths pass a loaded one.
+func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, group model.ManagedAgentGroup, members []model.Provider, apiKeyOverride string, basePrefix string, displayName string, mdModels []modelsDevModel) map[string]any {
 	recs, _ := rule.GetRecommendations()
 	protocols, _ := rule.GetProtocols()
 	mif, _ := rule.GetModelInfoFields()
@@ -1026,12 +1031,6 @@ func buildGeneratedBlock(rule model.AgentTypeRule, jpaths model.AgentJsonPaths, 
 		providerRecs = append(providerRecs, recsForScope(protocol.Recommendations, "provider")...)
 		modelRecs = append(modelRecs, recsForScope(protocol.Recommendations, "model")...)
 	}
-
-	// models.dev snapshot for the reference-supplier capability lookup.
-	// Fetch failures degrade to "no model info" rather than failing the
-	// whole view/sync: the snapshot endpoint served the UI already, and a
-	// transient network error must not break config generation.
-	mdModels, _ := modelsDev.load()
 
 	block := map[string]any{}
 	applyRecToMap(block, providerRecs)

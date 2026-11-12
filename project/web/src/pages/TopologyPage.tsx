@@ -2060,7 +2060,7 @@ const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[
 
   const handleCycleProviderStrategy = useCallback(
     (slotId: string, current: ProviderStrategy) => {
-      const next: ProviderStrategy = current === 'sequential' ? 'random' : current === 'random' ? 'roundRobin' : 'sequential'
+      const next: ProviderStrategy = current === 'sequential' ? 'balanced' : 'sequential'
       updateTopologyNodes((list) => list.map((n) => (n.id === slotId ? { ...n, strategy: next } : n)))
     },
     [updateTopologyNodes],

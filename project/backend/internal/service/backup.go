@@ -538,6 +538,11 @@ func RestoreBackup(db *gorm.DB, id string) (*RestoreResult, error) {
 	if err := applyBackupFile(db, filePath, modules); err != nil {
 		return nil, err
 	}
+	// An old backup can still carry the token row the console assistant used
+	// to need. Restore must not bring that key back into the token list.
+	if err := RetireLegacyAssistantToken(db); err != nil {
+		return nil, err
+	}
 	return &RestoreResult{Modules: modules, SafetyBackup: safety.Record}, nil
 }
 

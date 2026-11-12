@@ -1,5 +1,30 @@
 import type { ProviderEndpoint, ProviderModel } from './dashboard-api'
 
+// normalizeEndpointPath trims one request path and adds its leading slash, so
+// typed values like "v1/models" and "/v1/models" end up identical.
+export function normalizeEndpointPath(raw: string): string {
+  const path = raw.trim()
+  if (path === '') return ''
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+// parseEndpointPaths turns free-form endpoint input into request paths:
+// whitespace, commas and semicolons (ASCII or full-width) all separate
+// entries, a missing leading slash is added, and blank/duplicate paths are
+// dropped while the input order is kept.
+export function parseEndpointPaths(raw: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const piece of raw.split(/[\s,，;；、]+/)) {
+    if (piece === '') continue
+    const path = normalizeEndpointPath(piece)
+    if (seen.has(path)) continue
+    seen.add(path)
+    out.push(path)
+  }
+  return out
+}
+
 // collectDeclaredEndpoints returns the distinct endpoint paths a provider
 // declares. Model-level lists are the new source of truth; the provider-level
 // (legacy) list still counts for rows that were never re-saved.

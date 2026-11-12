@@ -15,6 +15,11 @@ import (
 
 const modelsDevURL = "https://models.dev/api.json"
 const modelsDevCacheTTL = 24 * time.Hour
+// modelsDevFetchTimeout 与 modelsDevRetryAfter 决定离线时最坏等待：models.dev
+// 不可达（离线、被墙、代理黑洞）会一直挂到超时；超时后记下失败时间，
+// modelsDevRetryAfter 内的调用直接复用同一个错误，不再各等一轮。
+const modelsDevFetchTimeout = 20 * time.Second
+const modelsDevRetryAfter = 30 * time.Second
 
 type modelsDevModel struct {
 	ID            string   `json:"id"`
@@ -43,12 +48,25 @@ type modelsDevSnapshot struct {
 
 // modelsDevProxy holds a cached, single-flight snapshot of models.dev.
 type modelsDevProxy struct {
-	mu     sync.Mutex
-	cached *modelsDevSnapshot
+	mu       sync.Mutex
+	cached   *modelsDevSnapshot
+	inflight *modelsDevFetch
+	failedAt time.Time
+	failure  error
+}
+
+type modelsDevFetch struct {
+	done   chan struct{}
+	models []modelsDevModel
+	err    error
 }
 
 var modelsDev = &modelsDevProxy{}
 
+// load returns the snapshot, fetching it when the cache is cold or expired.
+// Concurrent callers share one fetch (a single 20s timeout, not one per
+// caller), and a failure is remembered for modelsDevRetryAfter so a dead
+// network costs one timeout instead of stalling every request that asks.
 func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 	p.mu.Lock()
 	if p.cached != nil && time.Since(p.cached.fetchedAt) < modelsDevCacheTTL {
@@ -56,9 +74,66 @@ func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 		p.mu.Unlock()
 		return snapshot.models, nil
 	}
+	if p.inflight != nil {
+		fetch := p.inflight
+		p.mu.Unlock()
+		<-fetch.done
+		return fetch.models, fetch.err
+	}
+	if p.failure != nil && time.Since(p.failedAt) < modelsDevRetryAfter {
+		err := p.failure
+		// 有旧快照时宁可给旧数据：一次网络抖动不该挡住整页。
+		if p.cached != nil {
+			snapshot := p.cached
+			p.mu.Unlock()
+			return snapshot.models, nil
+		}
+		p.mu.Unlock()
+		return nil, err
+	}
+	fetch := &modelsDevFetch{done: make(chan struct{})}
+	p.inflight = fetch
 	p.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	models, err := fetchModelsDev()
+
+	p.mu.Lock()
+	p.inflight = nil
+	fetch.models, fetch.err = models, err
+	if err != nil {
+		p.failedAt = time.Now()
+		p.failure = err
+	} else {
+		p.cached = &modelsDevSnapshot{models: models, fetchedAt: time.Now()}
+		p.failedAt = time.Time{}
+		p.failure = nil
+	}
+	p.mu.Unlock()
+	close(fetch.done)
+	return models, err
+}
+
+// peek returns the cached snapshot without waiting on the network. Stale data
+// is still useful for config generation, so age is ignored here; nil means
+// "never loaded". A cold cache kicks one background fetch (load collapses
+// concurrent calls) so the next caller sees data.
+func (p *modelsDevProxy) peek() []modelsDevModel {
+	p.mu.Lock()
+	cached := p.cached
+	cooling := p.failure != nil && time.Since(p.failedAt) < modelsDevRetryAfter
+	fetching := p.inflight != nil
+	p.mu.Unlock()
+	if cached != nil {
+		return cached.models
+	}
+	if !cooling && !fetching {
+		go func() { _, _ = p.load() }()
+	}
+	return nil
+}
+
+func fetchModelsDev() ([]modelsDevModel, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), modelsDevFetchTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsDevURL, nil)
@@ -154,9 +229,6 @@ func (p *modelsDevProxy) load() ([]modelsDevModel, error) {
 		}
 	}
 
-	p.mu.Lock()
-	p.cached = &modelsDevSnapshot{models: models, fetchedAt: time.Now()}
-	p.mu.Unlock()
 	return models, nil
 }
 

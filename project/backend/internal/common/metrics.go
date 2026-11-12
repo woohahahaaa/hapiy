@@ -52,12 +52,16 @@ type modelCounter struct {
 // Stage/ChunkCount/BytesReceived describe live progress for in-flight
 // requests and are refreshed periodically by the relay handler.
 type ActiveRequest struct {
-	RequestID     string     `json:"request_id"`
-	Model         string     `json:"model"`
-	TokenName     string     `json:"token_name"`
-	UserID        string     `json:"user_id"`
-	Provider      string     `json:"provider"`
-	ProviderID    string     `json:"provider_id"`
+	RequestID  string `json:"request_id"`
+	Model      string `json:"model"`
+	TokenName  string `json:"token_name"`
+	UserID     string `json:"user_id"`
+	Provider   string `json:"provider"`
+	ProviderID string `json:"provider_id"`
+	// KeyIndex / BaseURLIndex identify the provider channel currently serving
+	// the request; -1 until dispatch resolves one.
+	KeyIndex      int        `json:"key_index"`
+	BaseURLIndex  int        `json:"base_url_index"`
 	Source        string     `json:"source"`
 	Stream        bool       `json:"stream"`
 	StartTime     time.Time  `json:"start_time"`
@@ -222,6 +226,27 @@ func (m *Metrics) UpdateActiveRequestAffinity(requestID, state string) {
 	m.activeEntries.Store(requestID, &req)
 }
 
+// UpdateActiveRequestChannel records the provider channel (key/base URL
+// indices) an in-flight request is currently using. The engine calls it right
+// before each upstream attempt, so the balanced key/base URL strategies see an
+// up-to-date load. Finished entries are left alone.
+func (m *Metrics) UpdateActiveRequestChannel(requestID string, keyIndex, baseURLIndex int) {
+	if requestID == "" {
+		return
+	}
+	v, ok := m.activeEntries.Load(requestID)
+	if !ok {
+		return
+	}
+	req := *v.(*ActiveRequest)
+	if req.EndTime != nil {
+		return
+	}
+	req.KeyIndex = keyIndex
+	req.BaseURLIndex = baseURLIndex
+	m.activeEntries.Store(requestID, &req)
+}
+
 // EndRequest records completion of a request. The active entry (if any) is
 // kept with its EndTime set so the monitoring API can show finished requests
 // for the configured retention period. Outcome classifies how it ended:
@@ -292,6 +317,63 @@ func (m *Metrics) ActiveRequests() []ActiveRequest {
 		return true
 	})
 	return out
+}
+
+// ProviderInFlight returns how many in-flight requests are currently bound to
+// providerID. Finished entries kept for the retention window are not counted.
+// The provider slot's balanced strategy uses it to prefer the idlest provider.
+func (m *Metrics) ProviderInFlight(providerID string) int {
+	if providerID == "" {
+		return 0
+	}
+	n := 0
+	m.activeEntries.Range(func(_, v interface{}) bool {
+		req := v.(*ActiveRequest)
+		if req.EndTime == nil && req.ProviderID == providerID {
+			n++
+		}
+		return true
+	})
+	return n
+}
+
+// KeyInFlight returns how many in-flight requests of providerID currently use
+// the key at keyIndex. The provider's balanced key strategy uses it to prefer
+// the idlest key.
+func (m *Metrics) KeyInFlight(providerID string, keyIndex int) int {
+	if keyIndex < 0 {
+		return 0
+	}
+	return m.channelInFlight(providerID, func(req *ActiveRequest) bool {
+		return req.KeyIndex == keyIndex
+	})
+}
+
+// BaseURLInFlight returns how many in-flight requests of providerID currently
+// use the base URL at baseURLIndex. The provider's balanced base URL strategy
+// uses it to prefer the idlest base URL.
+func (m *Metrics) BaseURLInFlight(providerID string, baseURLIndex int) int {
+	if baseURLIndex < 0 {
+		return 0
+	}
+	return m.channelInFlight(providerID, func(req *ActiveRequest) bool {
+		return req.BaseURLIndex == baseURLIndex
+	})
+}
+
+func (m *Metrics) channelInFlight(providerID string, match func(*ActiveRequest) bool) int {
+	if providerID == "" {
+		return 0
+	}
+	n := 0
+	m.activeEntries.Range(func(_, v interface{}) bool {
+		req := v.(*ActiveRequest)
+		if req.EndTime == nil && req.ProviderID == providerID && match(req) {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 // StartEvictionLoop periodically removes expired finished entries so the map

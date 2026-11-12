@@ -128,11 +128,24 @@ func runServe() {
 	if err := model.MigrateProviderEndpoints(db); err != nil {
 		log.Fatalf("Failed to migrate model endpoints: %v", err)
 	}
+	if err := model.NormalizeModelEndpoints(db); err != nil {
+		log.Fatalf("Failed to normalize model endpoints: %v", err)
+	}
 
 	// Rename the legacy "故障转移" event-source mark to "故障转移" so
 	// dashboard filters keep grouping old rows under the current label.
 	if err := service.MigrateLogSources(db); err != nil {
 		log.Fatalf("Failed to migrate log sources: %v", err)
+	}
+	if err := service.MigrateLogErrorOrigins(db); err != nil {
+		log.Fatalf("Failed to migrate log error origins: %v", err)
+	}
+
+	// The console assistant authenticates in-process now. Drop the token row
+	// older builds created for it so it stops appearing in the token list
+	// with a key users can copy.
+	if err := service.RetireLegacyAssistantToken(db); err != nil {
+		log.Fatalf("Failed to retire the legacy assistant token: %v", err)
 	}
 
 	// Seed the built-in agent type (opencode) for the 接管配置文件 feature.

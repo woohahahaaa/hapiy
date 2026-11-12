@@ -4,12 +4,13 @@ import "testing"
 
 func pickable(name string, weight float64, strategy string) EligibleProvider {
 	return EligibleProvider{
-		Node:     FlatNode{ID: name},
-		Name:     name,
-		Weight:   weight,
-		EntryID:  "re",
-		SlotID:   "ps",
-		Strategy: strategy,
+		Node:       FlatNode{ID: name},
+		Name:       name,
+		ProviderID: name,
+		Weight:     weight,
+		EntryID:    "re",
+		SlotID:     "ps",
+		Strategy:   strategy,
 	}
 }
 
@@ -17,40 +18,57 @@ func TestPickEligibleProviderSequentialPicksFirst(t *testing.T) {
 	got, ok := PickEligibleProvider([]EligibleProvider{
 		pickable("a", 1, ""),
 		pickable("b", 1, ""),
-	})
+	}, nil)
 	if !ok || got.Name != "a" {
 		t.Fatalf("sequential: want a, got %+v ok=%v", got, ok)
 	}
 }
 
-func TestPickEligibleProviderRandomUsesBoth(t *testing.T) {
+func TestPickEligibleProviderBalancedPicksLeastLoaded(t *testing.T) {
+	loads := map[string]int{"a": 3, "b": 1, "c": 0}
+	got, ok := PickEligibleProvider([]EligibleProvider{
+		pickable("a", 1, StrategyBalanced),
+		pickable("b", 1, StrategyBalanced),
+		pickable("c", 1, StrategyBalanced),
+	}, func(id string) int { return loads[id] })
+	if !ok || got.Name != "c" {
+		t.Fatalf("balanced: want c (0 in flight), got %+v ok=%v", got, ok)
+	}
+}
+
+func TestPickEligibleProviderBalancedRotatesIdleProviders(t *testing.T) {
+	ResetRoundRobinForTest()
 	seen := map[string]int{}
-	const n = 200
+	const n = 100
 	for i := 0; i < n; i++ {
 		got, ok := PickEligibleProvider([]EligibleProvider{
-			pickable("a", 1, StrategyRandom),
-			pickable("b", 1, StrategyRandom),
-		})
+			pickable("a", 1, StrategyBalanced),
+			pickable("b", 1, StrategyBalanced),
+		}, func(string) int { return 0 })
 		if !ok {
 			t.Fatalf("pick %d: not ok", i)
 		}
 		seen[got.Name]++
 	}
-	if seen["a"] == 0 || seen["b"] == 0 {
-		t.Fatalf("random strategy never picked one child: %v", seen)
+	if seen["a"] != n/2 || seen["b"] != n/2 {
+		t.Fatalf("balanced should spread idle providers evenly, got %v", seen)
 	}
 }
 
-func TestPickEligibleProviderRoundRobinAlternates(t *testing.T) {
-	ResetRoundRobinForTest()
-	want := []string{"a", "b", "a", "b"}
-	for i, name := range want {
+func TestPickEligibleProviderBalancedLegacyValues(t *testing.T) {
+	for _, legacy := range []string{strategyLegacyRandom, strategyLegacyRoundRobin} {
+		ResetRoundRobinForTest()
 		got, ok := PickEligibleProvider([]EligibleProvider{
-			pickable("a", 1, StrategyRoundRobin),
-			pickable("b", 1, StrategyRoundRobin),
+			pickable("a", 1, legacy),
+			pickable("b", 1, legacy),
+		}, func(id string) int {
+			if id == "a" {
+				return 2
+			}
+			return 0
 		})
-		if !ok || got.Name != name {
-			t.Fatalf("round robin pick %d = %q ok=%v, want %q", i, got.Name, ok, name)
+		if !ok || got.Name != "b" {
+			t.Fatalf("legacy %q: want balanced pick b, got %+v ok=%v", legacy, got, ok)
 		}
 	}
 }
@@ -68,7 +86,7 @@ func TestPickEligibleProviderEntryWeighted(t *testing.T) {
 	providers[1].EntryID = "re-a"
 	providers[2].EntryID = "re-b"
 	for i := 0; i < n; i++ {
-		got, ok := PickEligibleProvider(providers)
+		got, ok := PickEligibleProvider(providers, nil)
 		if !ok {
 			t.Fatalf("pick %d: not ok", i)
 		}
@@ -83,7 +101,7 @@ func TestPickEligibleProviderEntryWeighted(t *testing.T) {
 }
 
 func TestPickEligibleProviderEmpty(t *testing.T) {
-	if _, ok := PickEligibleProvider(nil); ok {
+	if _, ok := PickEligibleProvider(nil, nil); ok {
 		t.Fatalf("expected not ok on empty set")
 	}
 }

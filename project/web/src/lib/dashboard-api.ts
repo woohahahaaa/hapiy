@@ -95,6 +95,12 @@ export type Provider = {
   // dedupeV1Suffix drives the model-list URL builder in the "fetch models"
   // dialog. Missing on older backends → default true.
   readonly dedupeV1Suffix: boolean
+  // Per-provider channel strategies, independent of each other and of the
+  // provider slot's strategy: how a key / base URL is picked once this
+  // provider is chosen. sequential = first enabled, balanced = least loaded.
+  // Missing on older backends → key balanced, base URL sequential.
+  readonly keyStrategy: ProviderStrategy
+  readonly baseUrlStrategy: ProviderStrategy
 }
 
 export type ProviderInput = Omit<Provider, 'id'>
@@ -187,6 +193,10 @@ export type UsageLog = {
   readonly queueWaitMs: number
   readonly status: 'success' | 'failed' | ''
   readonly errorMessage: string
+  // errorOrigin distinguishes a gateway-side failure from an upstream one on
+  // failed rows: 'local' | 'upstream'. Empty on success rows and on rows
+  // written before the column existed (shown as the plain "报错").
+  readonly errorOrigin: 'local' | 'upstream' | ''
   // eventDetail is populated for event rows with the matched rule / action explanation; empty for request rows and pre-existing data.
   readonly eventDetail: string
   // downstreamUrl is the gateway-side URL the caller used (scheme://host +
@@ -559,7 +569,7 @@ export type CurrentUser = {
 // ── Flat topology (canvas node/wire model) ──
 export type FlatNodeKind = 'requestEntry' | 'provider' | 'slot' | 'switch'
 
-export type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
+export type ProviderStrategy = 'sequential' | 'balanced'
 
 /** 条件开关节点的单条判断条件（与请求改写的叶子条件同形）。 */
 export type SwitchCondition = {
@@ -662,13 +672,16 @@ function parseFlatNode(value: unknown): FlatNode {
     emergency: value.emergency === true ? true : undefined,
     entries: readObjectArray(value.entries, 'node.entries', (x) => x as SlotEntry),
     deadlineAt: typeof value.deadline_at === 'number' ? value.deadline_at : null,
-    strategy: isProviderStrategy(value.strategy) ? value.strategy : undefined,
+    strategy: normalizeProviderStrategy(value.strategy),
     ...(config !== undefined ? { config } : {}),
   }
 }
 
-function isProviderStrategy(value: unknown): value is ProviderStrategy {
-  return value === 'sequential' || value === 'random' || value === 'roundRobin'
+function normalizeProviderStrategy(value: unknown): ProviderStrategy | undefined {
+  if (value === 'sequential') return 'sequential'
+  // 旧版本的随机 / 轮询在加载时并入「均衡」，保存后即完成迁移。
+  if (value === 'balanced' || value === 'random' || value === 'roundRobin') return 'balanced'
+  return undefined
 }
 
 function parseFlatWire(value: unknown): FlatWire {
@@ -1558,6 +1571,8 @@ function parseProvider(value: unknown): Provider {
     dedupeV1Suffix: value.dedupe_v1_suffix === undefined || value.dedupe_v1_suffix === null
       ? true
       : readBoolean(value.dedupe_v1_suffix, 'provider.dedupe_v1_suffix'),
+    keyStrategy: normalizeProviderStrategy(value.key_strategy) ?? 'balanced',
+    baseUrlStrategy: normalizeProviderStrategy(value.base_url_strategy) ?? 'sequential',
   }
 }
 
@@ -1676,6 +1691,7 @@ function parseLog(value: unknown): UsageLog {
     queueWaitMs: parseStageMs(value.queue_wait_ms),
     status,
     errorMessage: readString(value.error_message, 'log.error_message'),
+    errorOrigin: value.error_origin === 'local' || value.error_origin === 'upstream' ? value.error_origin : '',
     eventDetail: readString(value.event_detail ?? '', 'log.event_detail'),
     downstreamUrl: readString(value.downstream_url ?? '', 'log.downstream_url'),
     upstreamUrl: readString(value.upstream_url ?? '', 'log.upstream_url'),
@@ -2118,6 +2134,8 @@ function serializeProvider(provider: ProviderInput): JsonRecord {
     auto_disabled: provider.autoDisabled,
     workflow_enabled: provider.workflowEnabled,
     dedupe_v1_suffix: provider.dedupeV1Suffix,
+    key_strategy: provider.keyStrategy,
+    base_url_strategy: provider.baseUrlStrategy,
   }
 }
 

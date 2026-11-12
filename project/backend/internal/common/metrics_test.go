@@ -31,6 +31,60 @@ func TestFinishedRequestStaysWithinRetention(t *testing.T) {
 	}
 }
 
+func TestProviderInFlightCountsOnlyActiveRequestsOfProvider(t *testing.T) {
+	m := NewMetrics()
+	now := time.Now()
+	m.TrackActiveRequest(ActiveRequest{RequestID: "a", ProviderID: "p1", StartTime: now})
+	m.TrackActiveRequest(ActiveRequest{RequestID: "b", ProviderID: "p1", StartTime: now})
+	m.TrackActiveRequest(ActiveRequest{RequestID: "c", ProviderID: "p2", StartTime: now})
+	m.TrackActiveRequest(ActiveRequest{RequestID: "d", StartTime: now}) // queued, not dispatched yet
+	// A finished entry stays visible for the retention window but must not count.
+	m.TrackActiveRequest(ActiveRequest{RequestID: "e", ProviderID: "p1", StartTime: now})
+	m.EndRequest("e", "test-model", true, 1, 0, "completed")
+
+	if got := m.ProviderInFlight("p1"); got != 2 {
+		t.Fatalf("p1 in flight = %d, want 2", got)
+	}
+	if got := m.ProviderInFlight("p2"); got != 1 {
+		t.Fatalf("p2 in flight = %d, want 1", got)
+	}
+	if got := m.ProviderInFlight(""); got != 0 {
+		t.Fatalf("empty provider id = %d, want 0", got)
+	}
+}
+
+func TestUpdateActiveRequestChannelTracksPerChannelLoads(t *testing.T) {
+	m := NewMetrics()
+	now := time.Now()
+	m.TrackActiveRequest(ActiveRequest{RequestID: "r1", ProviderID: "p", KeyIndex: -1, BaseURLIndex: -1, StartTime: now})
+	m.TrackActiveRequest(ActiveRequest{RequestID: "r2", ProviderID: "p", KeyIndex: -1, BaseURLIndex: -1, StartTime: now})
+
+	m.UpdateActiveRequestChannel("r1", 1, 0)
+	m.UpdateActiveRequestChannel("r2", 1, 1)
+
+	if got := m.KeyInFlight("p", 1); got != 2 {
+		t.Fatalf("key 1 in flight = %d, want 2", got)
+	}
+	if got := m.KeyInFlight("p", 0); got != 0 {
+		t.Fatalf("key 0 in flight = %d, want 0", got)
+	}
+	if got := m.BaseURLInFlight("p", 0); got != 1 {
+		t.Fatalf("base url 0 in flight = %d, want 1", got)
+	}
+	if got := m.BaseURLInFlight("p", 1); got != 1 {
+		t.Fatalf("base url 1 in flight = %d, want 1", got)
+	}
+
+	// A finished request keeps its channel but no longer counts as in flight.
+	m.EndRequest("r1", "test-model", true, 1, 0, "completed")
+	if got := m.KeyInFlight("p", 1); got != 1 {
+		t.Fatalf("key 1 in flight after finish = %d, want 1", got)
+	}
+	if got := m.BaseURLInFlight("p", 0); got != 0 {
+		t.Fatalf("base url 0 in flight after finish = %d, want 0", got)
+	}
+}
+
 func TestFinishedRequestEvictedAfterRetention(t *testing.T) {
 	m := NewMetrics()
 	now := time.Now()

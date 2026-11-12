@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hapiy/hapiy/internal/affinity"
+	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/topology"
 	"gorm.io/gorm"
@@ -124,7 +125,7 @@ func (e *Engine) SelectByFlatTopology(tp *topology.Topology, model, path string)
 	if err != nil {
 		return nil, err
 	}
-	pick, ok := topology.PickEligibleProvider(eligible)
+	pick, ok := topology.PickEligibleProvider(eligible, common.Global().ProviderInFlight)
 	if !ok {
 		return nil, fmt.Errorf("%w for model %s", ErrNoProvider, model)
 	}
@@ -301,7 +302,7 @@ func (e *Engine) selectByFlatTopologyLane(tp *topology.Topology, model, path str
 	if err != nil {
 		return nil, err
 	}
-	pick, ok := topology.PickEligibleProvider(eligible)
+	pick, ok := topology.PickEligibleProvider(eligible, common.Global().ProviderInFlight)
 	if !ok {
 		return nil, nil
 	}
@@ -339,7 +340,7 @@ func (e *Engine) dispatchWithChannelHint(model, path string, hint channelHint, e
 	// 1) The hinted provider is still eligible: use it. Full reuse only when
 	// the hinted key and baseURL indices are both still valid on this plan;
 	// otherwise it is a partial reuse and the relay layer falls back to the
-	// first enabled key/baseURL.
+	// provider's per-dimension strategy for the unresolvable part.
 	for _, c := range candidates {
 		if (hint.providerID != "" && c.provider.ID == hint.providerID) ||
 			(hint.providerName != "" && c.provider.Name == hint.providerName) {

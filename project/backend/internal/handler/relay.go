@@ -138,14 +138,16 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		}
 
 		common.Global().TrackActiveRequest(common.ActiveRequest{
-			RequestID: relayReq.RequestID,
-			Model:     relayReq.Model,
-			TokenName: getString(tokenName),
-			UserID:    getString(userID),
-			Source:    service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
-			Stream:    relayReq.Stream,
-			StartTime: startTime,
-			Stage:     "queued",
+			RequestID:    relayReq.RequestID,
+			Model:        relayReq.Model,
+			TokenName:    getString(tokenName),
+			UserID:       getString(userID),
+			Source:       service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
+			Stream:       relayReq.Stream,
+			StartTime:    startTime,
+			Stage:        "queued",
+			KeyIndex:     -1,
+			BaseURLIndex: -1,
 		})
 
 		// Select provider for the model (channel affinity -> flat topology ->
@@ -158,7 +160,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		})
 		if err != nil {
 			engine.RecordDispatchRejection(&relayReq, err)
-			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "", "", "")
+			logRelayError(c, userID, tokenName, relayReq.Model, "", err, startTime, &relayReq, "", "", "", model.LogErrorOriginLocal)
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error": gin.H{
 					"message": i18nMessage(c.Request, relayReq.Model, err),
@@ -188,6 +190,8 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			UserID:        getString(userID),
 			Provider:      provider.Name,
 			ProviderID:    provider.ID,
+			KeyIndex:      dispatchResult.KeyIndex,
+			BaseURLIndex:  dispatchResult.BaseURLIndex,
 			Source:        service.ResolveSourceMark(relayReq.SourceMark, relayReq.Path),
 			Stream:        relayReq.Stream,
 			StartTime:     startTime,
@@ -212,7 +216,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			}
 			if !matched {
 				err := fmt.Errorf("endpoint not allowed for model %s: %s (allowed: %s)", relayReq.Model, relayReq.Path, strings.Join(allowed, ", "))
-				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "", "", "")
+				logRelayError(c, userID, tokenName, relayReq.Model, provider.Name, err, startTime, &relayReq, "", "", "", model.LogErrorOriginLocal)
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error": gin.H{
 						"message": err.Error(),
@@ -272,7 +276,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 					errProviderName = p.Name
 				}
 			}
-			logRelayError(c, userID, tokenName, relayReq.Model, errProviderName, err, startTime, &relayReq, upstreamURLFromResp(resp), failKey, failBaseURL)
+			logRelayError(c, userID, tokenName, relayReq.Model, errProviderName, err, startTime, &relayReq, upstreamURLFromResp(resp), failKey, failBaseURL, relayErrorOrigin(err, resp))
 			// Concurrency rejection has its own dedicated HTTP status.
 			// errors.As walks the wrapped chain so the rewrite stage
 			// (which wraps with rule IDs) still surfaces correctly.
@@ -586,7 +590,7 @@ func handleStreamingResponse(c *gin.Context, resp *relay.RelayResponse, requestI
 	return firstByteMs, clientDisconnected
 }
 
-func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL, providerKey, providerBaseURL string) {
+func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName string, providerName string, err error, startTime time.Time, req *relay.RelayRequest, upstreamURL, providerKey, providerBaseURL, origin string) {
 	useTime := int(time.Since(startTime).Milliseconds())
 	ruleNotes := ""
 	if req != nil {
@@ -601,6 +605,7 @@ func logRelayError(c *gin.Context, userID, tokenName interface{}, modelName stri
 			ModelName:       modelName,
 			Source:          service.ResolveSourceMark(req.SourceMark, req.Path),
 			Status:          "failed",
+			ErrorOrigin:     origin,
 			IP:              c.ClientIP(),
 			RequestID:       c.GetString("request_id"),
 			ErrorMessage:    err.Error(),
@@ -643,6 +648,22 @@ func upstreamURLFromResp(resp *relay.RelayResponse) string {
 		return ""
 	}
 	return resp.UpstreamURL
+}
+
+// relayErrorOrigin classifies a relay failure for the 使用记录 status label.
+// A response carrying an HTTP status code or an upstream URL means the call
+// reached (or tried to reach) the provider, so the error is upstream-side —
+// including transport failures, which get a synthesized response carrying the
+// attempted URL. Everything else (no eligible provider, concurrency gate,
+// rewrite or local config errors) is gateway-side.
+func relayErrorOrigin(err error, resp *relay.RelayResponse) string {
+	if errors.Is(err, relay.ErrNoProvider) || errors.Is(err, relay.ErrConcurrencyRejected) {
+		return model.LogErrorOriginLocal
+	}
+	if resp != nil && (resp.StatusCode != 0 || resp.UpstreamURL != "") {
+		return model.LogErrorOriginUpstream
+	}
+	return model.LogErrorOriginLocal
 }
 
 // channelFromResp returns the provider key and base URL the relay actually

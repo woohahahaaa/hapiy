@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hapiy/hapiy/internal/common"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/publicFunction"
 	"github.com/hapiy/hapiy/internal/service"
@@ -650,6 +651,7 @@ func (e *Engine) recordFailoverAttempt(req *RelayRequest, plan *ExecutionPlan, f
 		IP:            req.IP,
 		DownstreamURL: req.DownstreamURL,
 		Error:         failErr,
+		Origin:        model.LogErrorOriginUpstream,
 	})
 }
 
@@ -732,11 +734,11 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 	if len(plan.Keys) == 0 {
 		return nil, errors.New("no API key configured")
 	}
-	baseURLIndex := e.firstEnabledIndex(plan.Provider.ID, model.FailoverDimensionBaseURL, plan.BaseURLs, req.BaseURLIndex)
+	baseURLIndex := e.selectChannelIndex(plan.Provider.ID, model.FailoverDimensionBaseURL, plan.BaseURLs, req.BaseURLIndex, plan.Provider.BaseURLStrategy)
 	if baseURLIndex < 0 {
 		return nil, errors.New("no enabled base URL configured")
 	}
-	keyIndex := e.firstEnabledIndex(plan.Provider.ID, model.FailoverDimensionKey, plan.Keys, req.KeyIndex)
+	keyIndex := e.selectChannelIndex(plan.Provider.ID, model.FailoverDimensionKey, plan.Keys, req.KeyIndex, plan.Provider.KeyStrategy)
 	if keyIndex < 0 {
 		return nil, errors.New("no enabled API key configured")
 	}
@@ -745,6 +747,7 @@ func (e *Engine) performUpstreamCall(ctx context.Context, plan *ExecutionPlan, r
 	// placeholder carried by normal weighted selection.
 	req.BaseURLIndex = baseURLIndex
 	req.KeyIndex = keyIndex
+	common.Global().UpdateActiveRequestChannel(req.RequestID, keyIndex, baseURLIndex)
 	upstreamURL := publicfunction.JoinUpstreamPath(plan.BaseURLs[baseURLIndex], req.Path)
 	key := plan.Keys[keyIndex]
 	var resp *RelayResponse

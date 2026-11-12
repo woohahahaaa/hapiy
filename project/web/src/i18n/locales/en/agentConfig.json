@@ -103,7 +103,8 @@
     "readFailed": "Read failed",
     "cannotPrettify": "Content is not valid JSON, cannot format",
     "cannotParseJson": "Cannot parse JSON",
-    "parseJson": "JSON parse failed"
+    "parseJson": "JSON parse failed",
+    "modelsDevUnavailable": "Couldn't load models.dev data (the source of model details). Check your network and retry."
   },
   "validation": {
     "recordNameRequired": "Enter a record name",

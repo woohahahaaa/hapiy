@@ -131,6 +131,17 @@ func (e *Engine) saveDisabledRecord(providerID, dimension, value, baseURL, key, 
 		model.DisabledRecord{ProviderID: providerID, Dimension: dimension, Value: value},
 	).Assign(row).FirstOrCreate(&row).Error; dbErr != nil {
 		log.Printf("relay: save disabled record: %v", dbErr)
+		return
+	}
+	// Assign skips zero-valued fields, so a resolved_at left on a reused row
+	// survives the update above. Clear it explicitly: a re-disable must be
+	// open (visible in the pending table and replayable by the scheduler).
+	if row.ResolvedAt != nil {
+		if dbErr := e.db.Model(&model.DisabledRecord{}).
+			Where("id = ?", row.ID).
+			Update("resolved_at", nil).Error; dbErr != nil {
+			log.Printf("relay: reopen disabled record %s: %v", row.ID, dbErr)
+		}
 	}
 }
 

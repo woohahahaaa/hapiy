@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { Button } from '@/components/ui/button'
@@ -20,7 +20,7 @@ import {
 import { toast } from '@/components/ui/toast'
 import { dashboardApi } from '@/lib/dashboard-api'
 import { filterValues } from '@/lib/agent-model-info'
-import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, resolveModelsDevReference, type ModelsDevModel } from '@/lib/models-dev'
+import { findModelsDevProviderRow, isModelsDevLab, loadModelsDevModels, providersForModel, refreshModelsDevModels, resolveModelsDevReference, type ModelsDevModel } from '@/lib/models-dev'
 import {
   MODEL_INFO_FIELD_KEYS,
   MODEL_INFO_FIELD_LABELS,
@@ -145,6 +145,9 @@ export function AgentModelInfoMatchDialog({
   const { t } = useTranslation('agentRules')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // retryTick 重新跑一次加载；forceRefreshRef 让这次重试绕开前端快照缓存。
+  const [retryTick, setRetryTick] = useState(0)
+  const forceRefreshRef = useRef(false)
   const [snapshot, setSnapshot] = useState<readonly ModelsDevModel[] | null>(null)
   const [checkedProviders, setCheckedProviders] = useState<Record<string, boolean>>({})
   const [checkedModels, setCheckedModels] = useState<Record<string, boolean>>({})
@@ -169,7 +172,9 @@ export function AgentModelInfoMatchDialog({
     setSupplierByModelId({})
     setPersistedSources(null)
     let cancelled = false
-    loadModelsDevModels()
+    const load = forceRefreshRef.current ? refreshModelsDevModels : loadModelsDevModels
+    forceRefreshRef.current = false
+    load()
       .then((models) => {
         if (!cancelled) setSnapshot(models)
       })
@@ -190,7 +195,7 @@ export function AgentModelInfoMatchDialog({
         })
     }
     return () => { cancelled = true }
-  }, [open, record])
+  }, [open, record, retryTick])
 
   // provider 有效推荐（common + 匹配协议）。与主弹窗 effectiveProviderRecs
   // 同语义。
@@ -489,7 +494,22 @@ export function AgentModelInfoMatchDialog({
         }>
         <div className="flex min-h-0 flex-1 flex-col">
           {loading && <Placeholder>{t('common:state.loading')}</Placeholder>}
-          {error && <Placeholder tone="error">{error}</Placeholder>}
+          {error && (
+            <div className="flex flex-col items-start gap-2 py-4">
+              <Placeholder tone="error">{t('match.errors.modelsDevUnavailable')}</Placeholder>
+              <p className="text-xs text-muted-foreground">{error}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  forceRefreshRef.current = true
+                  setRetryTick((n) => n + 1)
+                }}
+              >
+                {t('common:action.retry')}
+              </Button>
+            </div>
+          )}
           {!loading && !error && providers.length === 0 && (
             <Placeholder>{t('match.emptyProviders')}</Placeholder>
           )}

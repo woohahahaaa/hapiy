@@ -38,7 +38,9 @@
   },
   "status": {
     "success": "成功",
-    "failed": "失败"
+    "failed": "报错",
+    "localError": "本地报错",
+    "upstreamError": "上游报错"
   },
   "affinity": {
     "full": "复用渠道",
@@ -106,7 +108,7 @@
     "metrics": {
       "totalRequests": "总请求",
       "successRequests": "成功请求",
-      "failedRequests": "失败请求",
+      "failedRequests": "报错请求",
       "totalTokens": "总Token",
       "averageLatency": "平均延迟",
       "successRate": "成功率",

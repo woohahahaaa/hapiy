@@ -56,8 +56,7 @@
   },
   "slotProvider": {
     "strategySequential": "按顺序",
-    "strategyRandom": "随机",
-    "strategyRoundRobin": "轮询"
+    "strategyBalanced": "均衡"
   },
   "slotLabels": {
     "requestModify": "请求改写",

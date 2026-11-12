@@ -17,15 +17,14 @@
     "pageDescription": "配置模型列表接口、Token用量字段与币种汇率"
   },
   "general": {
-    "pathMustStartSlash": "路径必须以斜杠开头（/）",
     "upstreamTitle": "上游模型列表接口",
     "upstreamDescription": "从供应商获取模型列表时的默认接口路径",
     "defaultEndpointLabel": "默认模型列表接口路径",
-    "defaultEndpointHint": "路径必须以斜杠开头（/），将拼接在供应商的 Base URL 之后。当供应商表单中「从上游获取模型」未单独配置接口地址时，将使用此路径作为回退。",
+    "defaultEndpointHint": "该路径将拼接在供应商的 Base URL 之后。当供应商表单中「从上游获取模型」未单独配置接口地址时，将使用此路径作为回退。",
     "ownTitle": "hapiy模型列表接口",
     "ownDescription": "对外暴露的hapiy自身模型列表路径",
     "ownEndpointLabel": "hapiy模型列表接口路径",
-    "ownEndpointHintPrefix": "路径必须以斜杠开头（/）。访问该路径时，hapiy会以OpenAI兼容格式返回自身已知的模型列表（",
+    "ownEndpointHintPrefix": "访问该路径时，hapiy会以OpenAI兼容格式返回自身已知的模型列表（",
     "ownEndpointHintSuffix": "），使用Bearer Token鉴权，调用方式与其他对外接口一致。"
   },
   "billing": {

@@ -197,6 +197,10 @@ type LogRelayFailureInput struct {
 	DownstreamURL string
 	UseTimeMs     int
 	Error         error
+	// Origin is model.LogErrorOriginLocal / Upstream. Empty defaults to
+	// local: the callers that don't classify are token rejections and
+	// request-parsing failures, which never reached an upstream.
+	Origin string
 }
 
 // sourceMarkContextKey is the gin context key carrying the 来源标记 captured
@@ -267,12 +271,17 @@ func LogRelayFailure(in LogRelayFailureInput) {
 	if globalLogWriter == nil || in.Error == nil {
 		return
 	}
+	origin := in.Origin
+	if origin == "" {
+		origin = model.LogErrorOriginLocal
+	}
 	globalLogWriter.Write(&model.Log{
 		UserID:        in.UserID,
 		TokenName:     in.TokenName,
 		ProviderName:  in.ProviderName,
 		ModelName:     in.ModelName,
 		Status:        "failed",
+		ErrorOrigin:   origin,
 		IP:            in.IP,
 		RequestID:     in.RequestID,
 		DownstreamURL: in.DownstreamURL,
@@ -321,6 +330,32 @@ func MigrateLogSources(db *gorm.DB) error {
 	}
 	if agent.RowsAffected > 0 {
 		log.Printf("migrated %d log rows to source %s", agent.RowsAffected, LogSourceAgent)
+	}
+	return nil
+}
+
+// MigrateLogErrorOrigins backfills the error_origin column for failed rows
+// written before it existed. The dashboard then shows 本地报错 / 上游报错
+// instead of the plain 报错 on old data. A failure that recorded an upstream
+// URL reached the upstream (or tried to, for transport errors), so it is
+// upstream; everything else was rejected or failed gateway-side. Idempotent:
+// only touches failed rows whose origin is still empty.
+func MigrateLogErrorOrigins(db *gorm.DB) error {
+	upstream := db.Model(&model.Log{}).
+		Where("status = ? AND (error_origin IS NULL OR error_origin = '') AND COALESCE(upstream_url, '') != ''", "failed").
+		Update("error_origin", model.LogErrorOriginUpstream)
+	if upstream.Error != nil {
+		return fmt.Errorf("backfill upstream log error origins: %w", upstream.Error)
+	}
+	local := db.Model(&model.Log{}).
+		Where("status = ? AND (error_origin IS NULL OR error_origin = '')", "failed").
+		Update("error_origin", model.LogErrorOriginLocal)
+	if local.Error != nil {
+		return fmt.Errorf("backfill local log error origins: %w", local.Error)
+	}
+	if upstream.RowsAffected+local.RowsAffected > 0 {
+		log.Printf("migrated %d log rows to error origins (%d upstream, %d local)",
+			upstream.RowsAffected+local.RowsAffected, upstream.RowsAffected, local.RowsAffected)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/components/ui/toast'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
+import { normalizeEndpointPath } from '@/lib/provider-endpoints'
 import { i18n } from '@/i18n/i18n'
 
 const DEFAULT_MODEL_LIST_ENDPOINT_KEY = 'default_model_list_endpoint'
@@ -23,10 +24,6 @@ function settingsValue(settings: readonly { key: string; value: string }[], key:
 function toErrorMessage(err: unknown): string {
   if (err instanceof DashboardApiError) return err.message
   return err instanceof Error ? err.message : i18n.t('settings:errors.operationFailed')
-}
-
-function isValidPath(value: string): boolean {
-  return value.startsWith('/')
 }
 
 export function GeneralSettings() {
@@ -65,13 +62,11 @@ export function GeneralSettings() {
 
   const handleSaveDefault = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!isValidPath(defaultEndpoint)) {
-      toast.error(t('general.pathMustStartSlash'))
-      return
-    }
+    const endpoint = normalizeEndpointPath(defaultEndpoint)
+    setDefaultEndpoint(endpoint)
     setSavingDefault(true)
     try {
-      await dashboardApi.updateSetting(DEFAULT_MODEL_LIST_ENDPOINT_KEY, defaultEndpoint)
+      await dashboardApi.updateSetting(DEFAULT_MODEL_LIST_ENDPOINT_KEY, endpoint)
       toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -82,13 +77,11 @@ export function GeneralSettings() {
 
   const handleSaveOwn = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!isValidPath(ownEndpoint)) {
-      toast.error(t('general.pathMustStartSlash'))
-      return
-    }
+    const endpoint = normalizeEndpointPath(ownEndpoint)
+    setOwnEndpoint(endpoint)
     setSavingOwn(true)
     try {
-      await dashboardApi.updateSetting(OWN_MODEL_LIST_ENDPOINT_KEY, ownEndpoint)
+      await dashboardApi.updateSetting(OWN_MODEL_LIST_ENDPOINT_KEY, endpoint)
       toast(t('toast.saved'))
     } catch (err) {
       toast.error(toErrorMessage(err))
@@ -134,6 +127,7 @@ export function GeneralSettings() {
                   id="general-default-model-list-endpoint"
                   value={defaultEndpoint}
                   onChange={(event) => setDefaultEndpoint(event.target.value)}
+                  onBlur={() => setDefaultEndpoint(normalizeEndpointPath(defaultEndpoint))}
                   disabled={savingDefault}
                   placeholder="/v1/models"
                 />
@@ -187,6 +181,7 @@ export function GeneralSettings() {
                   id="general-own-model-list-endpoint"
                   value={ownEndpoint}
                   onChange={(event) => setOwnEndpoint(event.target.value)}
+                  onBlur={() => setOwnEndpoint(normalizeEndpointPath(ownEndpoint))}
                   disabled={savingOwn}
                   placeholder="/models"
                 />

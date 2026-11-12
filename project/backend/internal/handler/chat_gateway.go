@@ -9,18 +9,18 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/hapiy/hapiy/internal/chatproto"
-	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
-	"gorm.io/gorm"
 )
 
-// The console assistant is an ordinary gateway client. Every turn is POSTed
-// back to the relay over the loopback URL, so it shares token auth, dispatch,
-// topology, request/response rewrites, failover, concurrency rules and the
-// usage log with any external app. Nothing is special-cased inside the relay.
+// The console assistant is an internal gateway client. Every turn is POSTed
+// back to the relay over the loopback URL, so it shares dispatch, topology,
+// request/response rewrites, failover, concurrency rules and the usage log
+// with any external app. It deliberately has no downstream token row: the
+// call authenticates with the per-process secret from
+// service.ApplyInternalRelayAuth, so users cannot read, reuse, rotate,
+// disable or delete its key.
 const (
 	// chatIngressPath is the relay path the console speaks. It stays
 	// /chat/completions (no /v1) because provider base URLs already end in
@@ -30,7 +30,6 @@ const (
 	// /proxy/__<source> prefix as the other agents, so 使用记录 labels the
 	// traffic with the assistant source.
 	chatGatewayPath  = "/proxy/" + service.LogSourceAgent + chatIngressPath
-	chatTokenName    = "内置助手"
 	chatMaxBodyBytes = 8 << 20
 )
 
@@ -48,36 +47,6 @@ func newChatGateway(baseURL string) *chatGateway {
 			Transport: &http.Transport{Proxy: nil},
 		},
 	}
-}
-
-// chatGatewayMu serialises first-use creation of the assistant token.
-var chatGatewayMu sync.Mutex
-
-// ensureChatToken returns the token the console presents to the gateway,
-// creating it on first use. It is a normal token row: it can be disabled or
-// deleted like any app token, and its usage shows up under its name.
-func ensureChatToken(db *gorm.DB, user string) (*model.Token, error) {
-	chatGatewayMu.Lock()
-	defer chatGatewayMu.Unlock()
-
-	var token model.Token
-	err := db.Where("name = ?", chatTokenName).First(&token).Error
-	if err == nil {
-		return &token, nil
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
-	}
-	token = model.Token{
-		Name:   chatTokenName,
-		Key:    generateTokenKey(),
-		Status: true,
-		UserID: user,
-	}
-	if err := db.Create(&token).Error; err != nil {
-		return nil, err
-	}
-	return &token, nil
 }
 
 // chatGatewayMessage is one OpenAI chat-completions message.
@@ -113,10 +82,11 @@ type chatGatewayRequest struct {
 	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
 }
 
-// complete sends one step of the turn through the gateway. sessionID is the
-// console thread, carried in the same X-Session-Id header external clients use
-// so channel affinity keeps a conversation on one channel.
-func (g *chatGateway) complete(ctx context.Context, token, sessionID, modelName string, messages []chatproto.Message, tools []chatproto.Tool, effort string) (chatproto.Result, error) {
+// complete sends one step of the turn through the gateway. user is the
+// dashboard account the turn belongs to; sessionID is the console thread,
+// carried in the same X-Session-Id header external clients use so channel
+// affinity keeps a conversation on one channel.
+func (g *chatGateway) complete(ctx context.Context, user, sessionID, modelName string, messages []chatproto.Message, tools []chatproto.Tool, effort string) (chatproto.Result, error) {
 	body := chatGatewayRequest{
 		Model:           modelName,
 		Messages:        make([]chatGatewayMessage, 0, len(messages)),
@@ -168,7 +138,7 @@ func (g *chatGateway) complete(ctx context.Context, token, sessionID, modelName 
 		return chatproto.Result{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
+	service.ApplyInternalRelayAuth(req, user)
 	if sessionID != "" {
 		req.Header.Set("X-Session-Id", sessionID)
 	}

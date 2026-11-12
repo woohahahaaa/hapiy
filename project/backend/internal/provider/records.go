@@ -1,9 +1,7 @@
 package provider
 
 import (
-	"encoding/json"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -21,7 +19,7 @@ var (
 // disabled_at descending, after reconciling the table with the live disable
 // states. Resolved rows are filtered out.
 func ListPendingRecords(db *gorm.DB) ([]model.DisabledRecord, error) {
-	backfillRecords(db)
+	service.ReconcileDisabledRecords(db)
 	var rows []model.DisabledRecord
 	if err := db.Where("resolved_at IS NULL").Order("disabled_at desc").Find(&rows).Error; err != nil {
 		return nil, err
@@ -118,76 +116,4 @@ func loadRecord(db *gorm.DB, id string) (*model.DisabledRecord, error) {
 		return nil, err
 	}
 	return &record, nil
-}
-
-// backfillRecords reconciles auto_disable_states with disabled_records in both
-// directions:
-//   - states that are disabled but have no record get one created (so the
-//     pending table always reflects reality even if the original disable
-//     predates record-keeping or the record was cleaned up). The captured
-//     request body is best-effort recovered from the latest log_captures row
-//     for that provider; when nothing is found the record is stored with an
-//     empty body and the replay falls back to a default probe.
-//   - records whose underlying disable state is gone (manually restored
-//     elsewhere, e.g. the provider editor) are dropped so the pending table
-//     never shows items that are no longer disabled.
-func backfillRecords(db *gorm.DB) {
-	var states []model.AutoDisableState
-	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
-		return
-	}
-	for _, st := range states {
-		var count int64
-		if err := db.Model(&model.DisabledRecord{}).
-			Where("provider_id = ? AND dimension = ? AND value = ?", st.ProviderID, st.Dimension, st.Value).
-			Count(&count).Error; err != nil || count > 0 {
-			continue
-		}
-		headers := ""
-		body := ""
-		var capture model.LogCapture
-		if err := db.Where("provider_id = ?", st.ProviderID).
-			Order("created_at desc").First(&capture).Error; err == nil {
-			if capture.Headers != nil {
-				if raw, err := json.Marshal(capture.Headers); err == nil {
-					headers = string(raw)
-				}
-			}
-			if capture.RequestBody != nil {
-				if raw, err := json.Marshal(capture.RequestBody); err == nil {
-					body = string(raw)
-				}
-			}
-		}
-		row := model.DisabledRecord{
-			ProviderID:     st.ProviderID,
-			Dimension:      st.Dimension,
-			Value:          st.Value,
-			RequestHeaders: headers,
-			RequestBody:    body,
-			DisabledAt:     time.Now(),
-			RetryCount:     0,
-		}
-		if err := db.Create(&row).Error; err != nil {
-			log.Printf("backfill disabled record %s/%s/%s: %v", st.ProviderID, st.Dimension, st.Value, err)
-		}
-	}
-	var records []model.DisabledRecord
-	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
-		return
-	}
-	for _, rec := range records {
-		var stateCount int64
-		if err := db.Model(&model.AutoDisableState{}).
-			Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?",
-				rec.ProviderID, rec.Dimension, rec.Value, true).
-			Count(&stateCount).Error; err != nil {
-			continue
-		}
-		if stateCount == 0 {
-			if err := db.Delete(&model.DisabledRecord{}, "id = ?", rec.ID).Error; err != nil {
-				log.Printf("backfill drop stale record %s: %v", rec.ID, err)
-			}
-		}
-	}
 }

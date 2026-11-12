@@ -174,7 +174,8 @@
     },
     "errors": {
       "loadFailed": "Failed to load",
-      "applyFailed": "Apply failed"
+      "applyFailed": "Apply failed",
+      "modelsDevUnavailable": "Couldn't load models.dev data (the source of model details); recommended values are unavailable for now"
     }
   },
   "modelInfoFields": {

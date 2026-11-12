@@ -103,6 +103,10 @@ const [error, setError] = useState<string | null>(null)
 
   // Managed (托管) providers bound to this file + their selection state.
   const [managed, setManaged] = useState<readonly ManagedProviderView[]>([])
+  // 托管列表与模型列表分开加载：托管侧要读托管行 + 生成块，后端可能因为
+  // models.dev 变慢，不能让它把整个弹窗卡在「加载中」。
+  const [managedLoading, setManagedLoading] = useState(false)
+  const [managedError, setManagedError] = useState<string | null>(null)
   // selectedManaged: { mid, endpoint } when viewing a managed group's
   // generated block (read-only), null otherwise.
   const [selectedManaged, setSelectedManaged] = useState<{ mid: string; endpoint: string } | null>(null)
@@ -138,22 +142,50 @@ const [error, setError] = useState<string | null>(null)
   // diff 中点击某一行动作后退出预览，把 JsonEditor 定位到该行（0-based）。
   const [diffJumpLine, setDiffJumpLine] = useState<number | null>(null)
 
+  // 托管列表异步后到：用户在加载途中切到托管页签时，数据到达后自动选中
+  // 第一组，别让中间/右侧停在「未选择」。每次加载只抢一次，用户手动折叠
+  // 清空选择后不再抢回。
+  const managedAutoSelectedRef = useRef(false)
+  const reloadSeq = useRef(0)
   const reload = () => {
     if (!record) return
+    // 记录序号：切记录后旧请求回落不能覆盖新记录的状态（托管侧可能很慢）。
+    const seq = ++reloadSeq.current
+    const stale = () => seq !== reloadSeq.current
+    managedAutoSelectedRef.current = false
     setLoading(true)
+    setManagedLoading(true)
     setError(null)
-    Promise.all([
-      fetchModels(record.id),
-      dashboardApi.listManagedProviders(record.id),
-      dashboardApi.getAgentConfigFileContent(record.id).catch(() => null),
-    ])
-      .then(([res, managedRes, raw]) => {
-        setSummary(res)
-        setManaged(managedRes)
-        setRawContent(raw)
+    setManagedError(null)
+    fetchModels(record.id)
+      .then((res) => {
+        if (!stale()) setSummary(res)
       })
-      .catch((err) => setError(err instanceof Error ? err.message : t('errors.loadFailed')))
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        if (!stale()) setError(err instanceof Error ? err.message : t('errors.loadFailed'))
+      })
+      .finally(() => {
+        if (!stale()) setLoading(false)
+      })
+    dashboardApi
+      .listManagedProviders(record.id)
+      .then((res) => {
+        if (!stale()) setManaged(res)
+      })
+      .catch((err) => {
+        if (!stale()) setManagedError(err instanceof Error ? err.message : t('errors.loadFailed'))
+      })
+      .finally(() => {
+        if (!stale()) setManagedLoading(false)
+      })
+    dashboardApi
+      .getAgentConfigFileContent(record.id)
+      .then((raw) => {
+        if (!stale()) setRawContent(raw)
+      })
+      .catch(() => {
+        if (!stale()) setRawContent(null)
+      })
   }
 
   useEffect(() => {
@@ -164,6 +196,8 @@ const [error, setError] = useState<string | null>(null)
     setSelectedModelId(null)
     setSelectedManaged(null)
     setManaged([])
+    setManagedError(null)
+    setManagedLoading(false)
     setExpandedManaged(new Set())
     setRawContent(null)
     setTemplateTally(new Map()); setTemplateApplied(0)
@@ -208,10 +242,13 @@ const [error, setError] = useState<string | null>(null)
 
   // Re-select the first provider/model whenever the working provider set
   // changes (deletions/renames staged in liveContent reflect here). The
-  // Managed selection is entirely separate and never auto-selected.
+  // Managed selection is entirely separate and never auto-selected; while the
+  // managed panel is showing we must not pull a normal provider back into
+  // the right pane either (its data may still be loading).
   useEffect(() => {
     const working = normalProviders
     if (selectedManaged) return
+    if (activePanel === 'managed') return
     if (
       selectedProviderId &&
       working.some((p) => p.provider_id === selectedProviderId)
@@ -225,7 +262,7 @@ const [error, setError] = useState<string | null>(null)
     setSelectedProviderId(first?.provider_id ?? null)
     setSelectedModelId(first?.models[0]?.id ?? null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [normalProviders, selectedProviderId, selectedModelId, selectedManaged])
+  }, [normalProviders, selectedProviderId, selectedModelId, selectedManaged, activePanel])
 
   // The managed view backing the current selection: { view, group }.
   const selectedManagedGroup = useMemo<{ view: ManagedProviderView; group: ManagedGroupView } | null>(() => {
@@ -625,6 +662,21 @@ for (const p of summary?.providers ?? []) {
     }
   }
 
+  // 托管数据晚到时补一次自动选中（见 managedAutoSelectedRef 的说明）。
+  /* eslint-disable react-hooks/set-state-in-effect -- 数据到达后补选中是一次性的
+     选择同步；只在 managedAutoSelectedRef 为假时执行，不会反复触发渲染。 */
+  useEffect(() => {
+    if (activePanel !== 'managed' || managedLoading || managedAutoSelectedRef.current) return
+    const first = managed[0]
+    if (!first || first.groups.length === 0) return
+    managedAutoSelectedRef.current = true
+    setSelectedProviderId(null)
+    setSelectedModelId(null)
+    setSelectedManagedModelId(null)
+    setSelectedManaged({ mid: first.id, endpoint: first.groups[0].endpoint })
+  }, [activePanel, managed, managedLoading])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // 同步所有待同步的托管供应商（顺序执行，失败即中断提示）。
   const handleSyncAllManaged = async () => {
     if (!record) return
@@ -713,10 +765,14 @@ for (const p of summary?.providers ?? []) {
     }
     setDiffLoading(true)
     try {
-      const [models, sources] = await Promise.all([
-        loadModelsDevModels(),
-        dashboardApi.getAgentModelConfigSources(record.id).catch(() => ({}) as AgentModelConfigSources),
-      ])
+      const models = await loadModelsDevModels().catch(() => null)
+      if (models === null) {
+        toast.error(t('errors.modelsDevUnavailable'))
+        return
+      }
+      const sources = await dashboardApi
+        .getAgentModelConfigSources(record.id)
+        .catch(() => ({}) as AgentModelConfigSources)
       const modelInfoFields = summary.model_info_fields ?? {
         max_context: '',
         max_output_token: '',
@@ -836,15 +892,15 @@ for (const p of summary?.providers ?? []) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        width="md"
+        width="xl"
         height="auto"
         showCloseButton={false}
-        className="flex !h-[90vh] max-h-[90vh] flex-col !gap-0 overflow-hidden p-0 !w-[1280px] !max-w-[calc(100vw-2rem)]"
+        className="flex !h-[90vh] flex-col !gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="flex-row items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex flex-col gap-0.5">
-            <DialogTitle>{t('modelsDialog.title', { name: record?.record_name ?? '' })}</DialogTitle>
-            <p className="text-xs text-muted-foreground">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <DialogTitle className="truncate">{t('modelsDialog.title', { name: record?.record_name ?? '' })}</DialogTitle>
+            <p className="truncate text-xs text-muted-foreground" title={record?.path ?? ''}>
               {record?.agent_type ?? ''} · {record?.path ?? ''}
             </p>
           </div>
@@ -889,7 +945,7 @@ for (const p of summary?.providers ?? []) {
             <>
               <ColumnHeader>{t('columns.providers')}</ColumnHeader>
               {/* 非托管面板工具行：与托管面板样式一致 */}
-              <div className="flex items-center border-b border-border bg-muted/30 px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/30 px-2 py-1.5">
                 <Button
                   type="button"
                   variant="outline"
@@ -904,7 +960,6 @@ for (const p of summary?.providers ?? []) {
                   type="button"
                   variant={diffPreviewing ? 'default' : 'outline'}
                   size="xs"
-                  className="ml-2"
                   title={
                     diffPreviewing
                       ? t('toolbar.exitDiffTitle')
@@ -985,7 +1040,9 @@ for (const p of summary?.providers ?? []) {
                 </Button>
               </div>
               <div className="flex-1 overflow-y-auto p-0">
-                {managed.length === 0 && (
+                {managedLoading && <Placeholder>{t('common:state.loading')}</Placeholder>}
+                {managedError && <Placeholder tone="error">{managedError}</Placeholder>}
+                {!managedLoading && !managedError && managed.length === 0 && (
                   <Placeholder>{t('placeholder.noManagedProviders')}</Placeholder>
                 )}
                 {managed.map((mv) => {
@@ -1107,7 +1164,9 @@ for (const p of summary?.providers ?? []) {
             <ColumnHeader>{t('columns.models')}</ColumnHeader>
             <div className="flex-1 overflow-y-auto p-0">
               {activePanel === 'managed' && !selectedManagedGroup ? (
-                <Placeholder>{t('placeholder.noManagedSelected')}</Placeholder>
+                <Placeholder>
+                  {managedLoading ? t('common:state.loading') : t('placeholder.noManagedSelected')}
+                </Placeholder>
               ) : selectedManagedGroup ? (
                 <>
                   {selectedManagedGroup.group.model_names.length === 0 && (

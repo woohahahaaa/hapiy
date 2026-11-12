@@ -185,6 +185,62 @@ func TestReadRecoveryTimedMinutes(t *testing.T) {
 	}
 }
 
+func TestReconcileDisabledRecords_reopensResolvedRow(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	providerID := makeProvider(t, db, "openai",
+		[]string{"https://u1"},
+		[]string{"k1"},
+		[]string{"gpt-image-2.6"},
+	)
+	setDisabled(t, db, providerID, model.FailoverDimensionProvider, providerID)
+	resolvedAt := time.Now().Add(-time.Hour)
+	row := model.DisabledRecord{
+		ProviderID: providerID,
+		Dimension:  model.FailoverDimensionProvider,
+		Value:      providerID,
+		DisabledAt: resolvedAt,
+		ResolvedAt: &resolvedAt,
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatalf("create resolved record: %v", err)
+	}
+
+	ReconcileDisabledRecords(db)
+
+	var got model.DisabledRecord
+	if err := db.First(&got, "id = ?", row.ID).Error; err != nil {
+		t.Fatalf("reload record: %v", err)
+	}
+	if got.ResolvedAt != nil {
+		t.Fatalf("disabled state must reopen its resolved record, got resolved_at %v", got.ResolvedAt)
+	}
+	if !got.DisabledAt.After(resolvedAt) {
+		t.Fatalf("reopened record must restart its countdown, got %v", got.DisabledAt)
+	}
+}
+
+func TestReconcileDisabledRecords_createsMissingRecord(t *testing.T) {
+	db := newRecoveryTestDB(t)
+	providerID := makeProvider(t, db, "openai",
+		[]string{"https://u1"},
+		[]string{"k1"},
+		[]string{"gpt-4"},
+	)
+	setDisabled(t, db, providerID, model.FailoverDimensionKey, "k1")
+
+	ReconcileDisabledRecords(db)
+
+	var count int64
+	if err := db.Model(&model.DisabledRecord{}).
+		Where("provider_id = ? AND dimension = ? AND value = ?", providerID, model.FailoverDimensionKey, "k1").
+		Count(&count).Error; err != nil {
+		t.Fatalf("count records: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("disabled state without a record must get one, got %d", count)
+	}
+}
+
 func TestRunTimedRecovery_clearsRecordPastDeadline(t *testing.T) {
 	db := newRecoveryTestDB(t)
 	providerID := makeProvider(t, db, "openai",

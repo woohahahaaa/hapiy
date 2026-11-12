@@ -48,12 +48,16 @@ func (s *Store) LoadWithMeta() (*Topology, ConfigMeta, error) {
 	if err := json.Unmarshal([]byte(config.Flat), &tp); err != nil {
 		return nil, ConfigMeta{}, fmt.Errorf("decode flat topology: %w", err)
 	}
+	// Heal documents saved by editors that only wrote the internal
+	// `slot → provider` wire when the slot had a downstream; dispatch needs it.
+	NormalizeFlatTopology(&tp)
 	return &tp, ConfigMeta{Version: config.Version, UpdatedAt: config.UpdatedAt}, nil
 }
 
 // Save validates and persists the flat topology on the TopologyConfig row,
 // bumping the version on every save so clients can detect concurrent edits.
 func (s *Store) Save(tp *Topology) error {
+	NormalizeFlatTopology(tp)
 	if err := ValidateTopology(tp); err != nil {
 		return err
 	}

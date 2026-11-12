@@ -680,7 +680,6 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.H
 			baseURL    string
 			apiKey     string
 			provider   *model.Provider
-			token      *model.Token
 			resolveErr error
 		)
 		if direct != nil {
@@ -693,13 +692,9 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.H
 		} else {
 			// 指定供应商 was removed: every turn now goes through the gateway
 			// and the topology decides, so providerID from the request or a
-			// stored thread is deliberately ignored.
+			// stored thread is deliberately ignored. The call authenticates
+			// with the console's in-process secret, not a downstream token.
 			providerID = ""
-			token, resolveErr = ensureChatToken(db, user)
-			if resolveErr != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "初始化内置助手令牌失败: " + resolveErr.Error()})
-				return
-			}
 		}
 		// Only 直连 writes its own usage row; gateway turns are logged by the
 		// relay with the full failover/rewrite detail.
@@ -819,7 +814,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.H
 					ReasoningEffort: reasoningEffort,
 				})
 			} else {
-				result, completeErr = gateway.complete(ctx, token.Key, thread.ID, modelName, messages, tools, reasoningEffort)
+				result, completeErr = gateway.complete(ctx, user, thread.ID, modelName, messages, tools, reasoningEffort)
 			}
 			if completeErr != nil {
 				message := completeErr.Error()
@@ -933,7 +928,7 @@ func SendChatMessage(db *gorm.DB, engine *relay.Engine, gatewayURL string) gin.H
 					ReasoningEffort: reasoningEffort,
 				})
 			} else {
-				final, finalErr = gateway.complete(wrapCtx, token.Key, thread.ID, modelName, wrapMessages, nil, reasoningEffort)
+				final, finalErr = gateway.complete(wrapCtx, user, thread.ID, modelName, wrapMessages, nil, reasoningEffort)
 			}
 			if finalErr != nil {
 				message := "本轮没有正常结束: " + finalErr.Error()
@@ -1063,6 +1058,15 @@ func chatLogEntry(c *gin.Context, db *gorm.DB, user string, start time.Time, ups
 		ProviderKey:      upstream.key,
 		ProviderBaseURL:  upstream.baseURL,
 		UpstreamURL:      upstream.url,
+	}
+	// A failed turn that already had an upstream channel was the provider's
+	// error (transport, HTTP status, empty reply); one logged before a
+	// channel was resolved was rejected gateway-side.
+	if status == "failed" {
+		entry.ErrorOrigin = model.LogErrorOriginLocal
+		if upstream.url != "" {
+			entry.ErrorOrigin = model.LogErrorOriginUpstream
+		}
 	}
 	if upstream.provider != nil {
 		entry.ProviderName = upstream.provider.Name

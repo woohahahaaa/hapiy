@@ -727,6 +727,8 @@ export function OnboardingPage() {
         workflowEnabled: true,
         autoDisabled: false,
         dedupeV1Suffix: true,
+        keyStrategy: 'balanced',
+        baseUrlStrategy: 'sequential',
       })
       setCreatedName(provider.name)
       setCreatedId(provider.id)

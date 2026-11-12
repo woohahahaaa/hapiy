@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/handler"
@@ -165,3 +166,71 @@ func TestListDisabledRecords_backfillsMissingRecord(t *testing.T) {
 	}
 }
 
+// TestListDisabledRecords_reopensResolvedRecord reproduces the user-visible
+// mismatch behind a provider that stays 禁用 while the 自动恢复 table is
+// empty: a re-disable reused the row of an earlier resolution, and the old
+// resolved_at kept it out of the pending list. Listing must reopen it.
+func TestListDisabledRecords_reopensResolvedRecord(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.AutoMigrate(&model.Provider{}, &model.AutoDisableState{}, &model.DisabledRecord{}, &model.LogCapture{}); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+	if err := db.Create(&model.Provider{ID: "provider-1", Name: "银河gpt-image"}).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	if err := db.Create(&model.AutoDisableState{
+		ProviderID: "provider-1",
+		Dimension:  model.FailoverDimensionProvider,
+		Value:      "provider-1",
+		Disabled:   true,
+	}).Error; err != nil {
+		t.Fatalf("create disable state: %v", err)
+	}
+	resolvedAt := time.Now().Add(-time.Hour)
+	record := model.DisabledRecord{
+		ProviderID: "provider-1",
+		Dimension:  model.FailoverDimensionProvider,
+		Value:      "provider-1",
+		Model:      "gpt-image-2.6",
+		DisabledAt: resolvedAt,
+		ResolvedAt: &resolvedAt,
+	}
+	if err := db.Create(&record).Error; err != nil {
+		t.Fatalf("create resolved record: %v", err)
+	}
+
+	sessions := middleware.NewSessionStore()
+	session := sessions.Issue("wooh")
+	router := gin.New()
+	dashboard := router.Group("/v1/dashboard")
+	dashboard.Use(middleware.AuthRequired(db, sessions))
+	dashboard.GET("/disabled-records", handler.ListDisabledRecords(db, relay.NewEngine(db)))
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/dashboard/disabled-records", nil)
+	request.AddCookie(&http.Cookie{Name: "hapiy_admin_session", Value: session})
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status: want 200, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var payload struct {
+		Data []model.DisabledRecord `json:"data"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v (%s)", err, recorder.Body.String())
+	}
+	found := false
+	for _, rec := range payload.Data {
+		if rec.ID == record.ID && rec.ResolvedAt == nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("resolved record for a disabled state was not reopened: %s", recorder.Body.String())
+	}
+}

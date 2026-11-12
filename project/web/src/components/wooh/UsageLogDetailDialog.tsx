@@ -136,7 +136,15 @@ function LogDetailFields({ log }: { log: UsageLog }) {
         <DetailRow
           className="col-span-2"
           label={t('columns.status')}
-          value={log.status === 'success' ? t('status.success') : log.status === 'failed' ? t('status.failed') : (log.source.replace(/^__/, '') || '-')}
+          value={log.status === 'success'
+            ? t('status.success')
+            : log.status === 'failed'
+              ? log.errorOrigin === 'upstream'
+                ? t('status.upstreamError')
+                : log.errorOrigin === 'local'
+                  ? t('status.localError')
+                  : t('status.failed')
+              : (log.source.replace(/^__/, '') || '-')}
         />
         {log.status === 'failed' && log.errorMessage && (
           <div className="col-span-2 flex items-baseline gap-2">

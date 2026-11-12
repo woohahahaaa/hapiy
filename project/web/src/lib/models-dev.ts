@@ -70,7 +70,13 @@ export async function loadModelsDevModels(): Promise<readonly ModelsDevModel[]> 
     loadPromise = fetch(API_URL)
       .then(async (response) => {
         if (!response.ok) throw new Error(i18n.t('lib:modelsDev.requestFailed', { status: response.status }))
-        const body = (await response.json()) as unknown
+        let body: unknown
+        try {
+          body = (await response.json()) as unknown
+        } catch {
+          // 代理/门户返回 HTML 或截断响应时，别把原生 SyntaxError 抛给用户。
+          throw new Error(i18n.t('lib:modelsDev.invalidFormat'))
+        }
         if (!isRecord(body)) throw new Error(i18n.t('lib:modelsDev.invalidFormat'))
         const data = body.data
         if (!Array.isArray(data)) throw new Error(i18n.t('lib:modelsDev.invalidFormat'))

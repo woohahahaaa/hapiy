@@ -17,15 +17,14 @@
     "pageDescription": "Configure model list endpoints, token usage fields, and currency exchange rate"
   },
   "general": {
-    "pathMustStartSlash": "Path must start with a slash (/)",
     "upstreamTitle": "Upstream Model List Endpoint",
     "upstreamDescription": "Default endpoint path for fetching the model list from a provider",
     "defaultEndpointLabel": "Default model list endpoint path",
-    "defaultEndpointHint": "The path must start with a slash (/); it is appended to the provider's Base URL. When \"Fetch models from upstream\" in the provider form has no dedicated endpoint configured, this path is used as the fallback.",
+    "defaultEndpointHint": "The path is appended to the provider's Base URL. When \"Fetch models from upstream\" in the provider form has no dedicated endpoint configured, this path is used as the fallback.",
     "ownTitle": "hapiy Model List Endpoint",
     "ownDescription": "The publicly exposed hapiy model list path",
     "ownEndpointLabel": "hapiy model list endpoint path",
-    "ownEndpointHintPrefix": "The path must start with a slash (/). When accessed, hapiy returns its known model list in OpenAI-compatible format (",
+    "ownEndpointHintPrefix": "When accessed, hapiy returns its known model list in OpenAI-compatible format (",
     "ownEndpointHintSuffix": "), authenticated with a Bearer Token and called the same way as other public endpoints."
   },
   "billing": {

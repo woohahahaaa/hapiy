@@ -35,8 +35,12 @@ const (
 // node and decides which of its eligible provider children serves a request.
 const (
 	StrategySequential = "sequential" // first eligible child in display order (default)
-	StrategyRandom     = "random"     // uniform random among eligible children
-	StrategyRoundRobin = "roundRobin" // rotate one eligible child per request
+	StrategyBalanced   = "balanced"   // least in-flight child; ties rotate
+
+	// Legacy strategy values persisted by older versions. They are still
+	// accepted when loading a stored topology and behave as balanced.
+	strategyLegacyRandom     = "random"
+	strategyLegacyRoundRobin = "roundRobin"
 )
 
 // Node is one element of the flat topology. IDs are unique strings. A provider
@@ -54,7 +58,7 @@ type FlatNode struct {
 	Entries    json.RawMessage `json:"entries,omitempty"`     // for KindSlot: rule entries, opaque to the engine
 	Config     json.RawMessage `json:"config,omitempty"`      // for KindSwitch: {providers:[], conditions:[]}, opaque to the engine
 	DeadlineAt *int64          `json:"deadline_at,omitempty"` // slot-level optional deadline (auto-off), Unix epoch ms
-	Strategy   string          `json:"strategy,omitempty"`    // provider slot child-picking strategy: sequential|random|roundRobin
+	Strategy   string          `json:"strategy,omitempty"`    // provider slot child-picking strategy: sequential|balanced
 }
 
 // Wire is one directed connection in the flat topology. Branch labels the
@@ -217,6 +221,44 @@ func ValidateTopology(t *Topology) error {
 		branchByPair[key] = w.Branch
 	}
 	return nil
+}
+
+// NormalizeFlatTopology repairs flat documents written before provider slots
+// always carried a `slot → provider` wire. Provider membership is stored by
+// adjacency (a provider node belongs to the provider slot right before it in
+// the node list), so a slot whose cards are adjacent but has no outgoing wire
+// is the minimal topology 请求入口 → 供应商插槽 → 供应商 — but dispatch walks
+// wires only and would dead-end at the slot. This adds `slot → primary` for
+// every child-bearing provider slot without an outgoing wire, where primary is
+// the first enabled child (falling back to the first child), matching the
+// canvas serializer's choice. Idempotent: slots that already wire somewhere
+// are left untouched.
+func NormalizeFlatTopology(t *Topology) {
+	if t == nil {
+		return
+	}
+	hasOutgoing := make(map[string]bool, len(t.Wires))
+	for _, w := range t.Wires {
+		hasOutgoing[w.Source] = true
+	}
+	for _, n := range t.Nodes {
+		if n.Kind != KindSlot || n.SlotType != "provider" || hasOutgoing[n.ID] {
+			continue
+		}
+		children := providerChildren(t, n.ID)
+		if len(children) == 0 {
+			continue
+		}
+		primary := children[0]
+		for _, child := range children {
+			if child.Enabled {
+				primary = child
+				break
+			}
+		}
+		t.Wires = append(t.Wires, Wire{Source: n.ID, Target: primary.ID})
+		hasOutgoing[n.ID] = true
+	}
 }
 
 // activeRequestEntries returns the enabled request entries with positive weight.
@@ -487,9 +529,11 @@ func findEligibleFromEntries(t *Topology, refs map[string]ProviderRef, model, pa
 // channel-affinity hint. It picks the request entry by weight (only entries
 // with at least one eligible provider participate), then applies the owning
 // provider slot's strategy among that entry's providers: sequential picks the
-// first in display order, random picks uniformly, roundRobin rotates per
-// request. Returns false when the set is empty.
-func PickEligibleProvider(eligible []EligibleProvider) (EligibleProvider, bool) {
+// first in display order, balanced picks a provider with the fewest in-flight
+// requests (ties rotate so idle providers share traffic evenly). inFlight may
+// be nil, in which case every provider counts as idle. Returns false when the
+// set is empty.
+func PickEligibleProvider(eligible []EligibleProvider, inFlight func(providerID string) int) (EligibleProvider, bool) {
 	if len(eligible) == 0 {
 		return EligibleProvider{}, false
 	}
@@ -521,13 +565,51 @@ func PickEligibleProvider(eligible []EligibleProvider) (EligibleProvider, bool) 
 		}
 	}
 	cands := byEntry[pickedEntry]
-	switch cands[0].Strategy {
-	case StrategyRandom:
-		return cands[rand.Intn(len(cands))], true
-	case StrategyRoundRobin:
-		return cands[roundRobinIndex(cands[0].SlotID, len(cands))], true
+	switch normalizeStrategy(cands[0].Strategy) {
+	case StrategyBalanced:
+		return pickLeastLoaded(cands, inFlight), true
 	default:
 		return cands[0], true
+	}
+}
+
+// pickLeastLoaded returns the candidate with the fewest in-flight requests.
+// Candidates tied at the minimum rotate through the slot's round-robin cursor,
+// so an idle slot spreads requests instead of always serving from the first
+// child (which is what sequential does).
+func pickLeastLoaded(cands []EligibleProvider, inFlight func(providerID string) int) EligibleProvider {
+	load := func(c EligibleProvider) int {
+		if inFlight == nil {
+			return 0
+		}
+		return inFlight(c.ProviderID)
+	}
+	min := load(cands[0])
+	tied := []int{0}
+	for i := 1; i < len(cands); i++ {
+		switch l := load(cands[i]); {
+		case l < min:
+			min = l
+			tied = []int{i}
+		case l == min:
+			tied = append(tied, i)
+		}
+	}
+	if len(tied) == 1 {
+		return cands[tied[0]]
+	}
+	return cands[tied[roundRobinIndex(cands[0].SlotID, len(tied))]]
+}
+
+// normalizeStrategy collapses stored strategy values onto the two supported
+// strategies. Legacy random/roundRobin configurations map to balanced;
+// anything unknown behaves as sequential.
+func normalizeStrategy(s string) string {
+	switch s {
+	case StrategyBalanced, strategyLegacyRandom, strategyLegacyRoundRobin:
+		return StrategyBalanced
+	default:
+		return StrategySequential
 	}
 }
 
@@ -691,7 +773,7 @@ func ReachableProviderIDs(t *Topology, refs map[string]ProviderRef) map[string]b
 
 func validStrategy(s string) bool {
 	switch s {
-	case StrategySequential, StrategyRandom, StrategyRoundRobin:
+	case StrategySequential, StrategyBalanced, strategyLegacyRandom, strategyLegacyRoundRobin:
 		return true
 	}
 	return false

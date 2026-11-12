@@ -351,6 +351,16 @@ func TestSendChatMessageRunsThroughAutoDispatch(t *testing.T) {
 		t.Fatalf("unexpected messages sent upstream: %+v", seenMessages)
 	}
 
+	// The console assistant authenticates with an in-process secret, so a
+	// turn must never leave a user-manageable token row behind.
+	var tokenCount int64
+	if err := db.Model(&model.Token{}).Count(&tokenCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if tokenCount != 0 {
+		t.Fatalf("assistant turn created %d token row(s), want 0", tokenCount)
+	}
+
 	var payload struct {
 		Data struct {
 			Thread           model.ChatThread  `json:"thread"`

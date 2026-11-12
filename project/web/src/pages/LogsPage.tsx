@@ -378,7 +378,15 @@ export function LogsPage() {
       slot: {
         line1: (row) => {
           if (row.status === 'success') return `<#16a34a>${t('status.success')}</#16a34a>`
-          if (row.status === 'failed') return `<#dc2626>${t('status.failed')}</#dc2626>`
+          if (row.status === 'failed') {
+            // 失败行标明是网关侧还是上游侧报错；老记录没有 origin 就只写「报错」。
+            const label = row.errorOrigin === 'upstream'
+              ? t('status.upstreamError')
+              : row.errorOrigin === 'local'
+                ? t('status.localError')
+                : t('status.failed')
+            return `<#dc2626>${label}</#dc2626>`
+          }
           // 事件行（故障转移/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
           // 长文本（errorMessage/eventDetail）统一放进详情字段。
           return row.source ? `<#9ca3af>${row.source}</#9ca3af>` : null

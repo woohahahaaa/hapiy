@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -208,8 +209,8 @@ func probeErrorExcerpt(body []byte) string {
 // context is sent against a healthy partner) and successful rows are marked
 // resolved. Harness-based recovery then handles anything still left.
 type RecoveryOptions struct {
-	Probe      func(baseURL, key, model string) ProbeResult
-	SpeedProbe func(baseURL, key, model string) ProbeResult
+	Probe        func(baseURL, key, model string) ProbeResult
+	SpeedProbe   func(baseURL, key, model string) ProbeResult
 	RecordReplay func() (resolved int, total int)
 }
 
@@ -274,6 +275,7 @@ func StartRecoverySchedulerWithRecordReplay(db *gorm.DB, recordReplay func() (re
 }
 
 func runProbeCycle(db *gorm.DB, recordReplay func() (resolved, total int)) {
+	ReconcileDisabledRecords(db)
 	RunRecoveryCycle(db, RecoveryOptions{
 		Probe:        ChannelProbe,
 		SpeedProbe:   ChannelSpeedProbe,
@@ -359,6 +361,98 @@ func SatisfiesRecoveryRule(rule *model.FailoverRule, result ProbeResult) bool {
 		}
 	}
 	return true
+}
+
+// ReconcileDisabledRecords keeps disabled_records aligned with the live
+// auto_disable_states table in both directions:
+//   - a disabled state with no open record gets one, so the pending table and
+//     the recovery scheduler always see it even when the original disable
+//     predates record-keeping or its row was cleaned up. A row left over from
+//     an earlier resolution is reopened (resolved_at cleared) instead of being
+//     treated as present — otherwise the entity stays disabled but invisible.
+//   - an open record whose underlying disable state is gone (manually
+//     restored elsewhere, e.g. the provider editor) is dropped so the pending
+//     table never shows items that are no longer disabled.
+func ReconcileDisabledRecords(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	var states []model.AutoDisableState
+	if err := db.Where("disabled = ?", true).Find(&states).Error; err != nil {
+		return
+	}
+	for _, st := range states {
+		var existing model.DisabledRecord
+		err := db.Where("provider_id = ? AND dimension = ? AND value = ?", st.ProviderID, st.Dimension, st.Value).
+			First(&existing).Error
+		if err == nil {
+			if existing.ResolvedAt == nil {
+				continue
+			}
+			// Reopen the row: the entity is disabled again, so the old
+			// resolution no longer applies.
+			if updateErr := db.Model(&model.DisabledRecord{}).
+				Where("id = ?", existing.ID).
+				Updates(map[string]interface{}{
+					"resolved_at": nil,
+					"disabled_at": time.Now(),
+					"retry_count": 0,
+				}).Error; updateErr != nil {
+				log.Printf("reconcile disabled record %s: %v", existing.ID, updateErr)
+			}
+			continue
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Printf("reconcile disabled record %s/%s/%s: %v", st.ProviderID, st.Dimension, st.Value, err)
+			continue
+		}
+		headers := ""
+		body := ""
+		var capture model.LogCapture
+		if err := db.Where("provider_id = ?", st.ProviderID).
+			Order("created_at desc").First(&capture).Error; err == nil {
+			if capture.Headers != nil {
+				if raw, err := json.Marshal(capture.Headers); err == nil {
+					headers = string(raw)
+				}
+			}
+			if capture.RequestBody != nil {
+				if raw, err := json.Marshal(capture.RequestBody); err == nil {
+					body = string(raw)
+				}
+			}
+		}
+		row := model.DisabledRecord{
+			ProviderID:     st.ProviderID,
+			Dimension:      st.Dimension,
+			Value:          st.Value,
+			RequestHeaders: headers,
+			RequestBody:    body,
+			DisabledAt:     time.Now(),
+			RetryCount:     0,
+		}
+		if err := db.Create(&row).Error; err != nil {
+			log.Printf("backfill disabled record %s/%s/%s: %v", st.ProviderID, st.Dimension, st.Value, err)
+		}
+	}
+	var records []model.DisabledRecord
+	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
+		return
+	}
+	for _, rec := range records {
+		var stateCount int64
+		if err := db.Model(&model.AutoDisableState{}).
+			Where("provider_id = ? AND dimension = ? AND value = ? AND disabled = ?",
+				rec.ProviderID, rec.Dimension, rec.Value, true).
+			Count(&stateCount).Error; err != nil {
+			continue
+		}
+		if stateCount == 0 {
+			if err := db.Delete(&model.DisabledRecord{}, "id = ?", rec.ID).Error; err != nil {
+				log.Printf("backfill drop stale record %s: %v", rec.ID, err)
+			}
+		}
+	}
 }
 
 // RunRecoveryCycle executes one auto-recovery pass. If a RecordReplay
@@ -466,6 +560,7 @@ func recoveryTarget(db *gorm.DB, r *model.DisabledRecord, provider *model.Provid
 // AutoDisableState is cleared. No upstream probing is involved — the
 // user explicitly opted into "wait N minutes and re-enable".
 func runTimedRecovery(db *gorm.DB, duration time.Duration) {
+	ReconcileDisabledRecords(db)
 	var records []model.DisabledRecord
 	if err := db.Where("resolved_at IS NULL").Find(&records).Error; err != nil {
 		log.Printf("timed-recovery: load records: %v", err)

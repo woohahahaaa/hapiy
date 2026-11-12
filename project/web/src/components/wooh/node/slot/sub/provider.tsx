@@ -7,7 +7,7 @@ import { SlotEnableControl } from '@/components/wooh/node/slot/slot-enable-contr
 import type { FlowLayerOverlay } from '@/modules/flow-hub'
 import { NodeExecutorProvider, type FlatProviderChild, type ProviderOption } from '@/components/wooh/node/executor/sub/provider'
 
-export type ProviderStrategy = 'sequential' | 'random' | 'roundRobin'
+export type ProviderStrategy = 'sequential' | 'balanced'
 
 export interface NodeSlotProviderProps {
   title: string
@@ -60,8 +60,7 @@ export function NodeSlotProvider({
   const { t } = useTranslation('node')
   const strategyLabel = {
     sequential: t('slotProvider.strategySequential'),
-    random: t('slotProvider.strategyRandom'),
-    roundRobin: t('slotProvider.strategyRoundRobin'),
+    balanced: t('slotProvider.strategyBalanced'),
   } as const
   const titleBadge = (
     <div className="flex items-center justify-between">

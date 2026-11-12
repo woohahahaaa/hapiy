@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canvasWireHandles } from './flat-topology'
+import { canvasFromFlat, canvasWireHandles, flatWiresFromCanvas } from './flat-topology'
 import type { FlatNode, FlatWire } from './dashboard-api'
 
 function entry(id: string): FlatNode {
@@ -8,6 +8,10 @@ function entry(id: string): FlatNode {
 
 function slot(id: string, slotType = 'provider'): FlatNode {
   return { id, kind: 'slot', enabled: true, slotType }
+}
+
+function provider(id: string, enabled = true): FlatNode {
+  return { id, kind: 'provider', enabled, name: id, providerId: `p-${id}` }
 }
 
 function switchNode(id: string): FlatNode {
@@ -52,5 +56,41 @@ describe('canvasWireHandles', () => {
   it('does not set a source handle for plain (branchless) wires', () => {
     const topLevel = [entry('e'), slot('s')]
     expect(canvasWireHandles([wire('e', 's')], topLevel)[0].sourceHandle).toBeUndefined()
+  })
+})
+
+describe('flatWiresFromCanvas provider slot wiring', () => {
+  it('wires slot → primary provider even without a downstream (minimal topology)', () => {
+    const nodes: FlatNode[] = [entry('e'), slot('s'), provider('a')]
+    const collapsed = canvasFromFlat(nodes, [wire('e', 's')])
+
+    const saved = flatWiresFromCanvas(collapsed)
+
+    expect(saved).toEqual([wire('e', 's'), wire('s', 'a')])
+    // Round-trip stays stable: reloading and saving again keeps the internal wire.
+    expect(flatWiresFromCanvas(canvasFromFlat(nodes, saved))).toEqual(saved)
+  })
+
+  it('skips disabled cards when choosing the primary', () => {
+    const nodes: FlatNode[] = [entry('e'), slot('s'), provider('a', false), provider('b')]
+    const collapsed = canvasFromFlat(nodes, [wire('e', 's')])
+
+    expect(flatWiresFromCanvas(collapsed)).toEqual([wire('e', 's'), wire('s', 'b')])
+  })
+
+  it('leaves a childless provider slot untouched', () => {
+    const nodes: FlatNode[] = [entry('e'), slot('s')]
+    const collapsed = canvasFromFlat(nodes, [wire('e', 's')])
+
+    expect(flatWiresFromCanvas(collapsed)).toEqual([wire('e', 's')])
+  })
+
+  it('keeps the existing expansion when the slot has a downstream', () => {
+    const nodes: FlatNode[] = [
+      entry('e'), slot('s'), provider('a'), provider('b'), slot('rm', 'requestModify'),
+    ]
+    const wires = [wire('e', 's'), wire('s', 'a'), wire('a', 'rm'), wire('b', 'rm')]
+
+    expect(flatWiresFromCanvas(canvasFromFlat(nodes, wires))).toEqual(wires)
   })
 })

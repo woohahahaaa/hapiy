@@ -39,7 +39,9 @@
   },
   "status": {
     "success": "Success",
-    "failed": "Failed"
+    "failed": "Error",
+    "localError": "Local error",
+    "upstreamError": "Upstream error"
   },
   "affinity": {
     "full": "Reused channel",
@@ -109,7 +111,7 @@
     "metrics": {
       "totalRequests": "Total requests",
       "successRequests": "Successful",
-      "failedRequests": "Failed",
+      "failedRequests": "Errors",
       "totalTokens": "Total Tokens",
       "averageLatency": "Avg. latency",
       "successRate": "Success rate",

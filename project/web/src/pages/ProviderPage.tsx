@@ -10,8 +10,9 @@ import { DataTable, type ColumnDef } from '@/components/wooh/data-table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogScrollBody, DialogTitle } from '@/components/wooh/dialog'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import { collectDeclaredEndpoints, seedModelEndpointsFromProvider } from '@/lib/provider-endpoints'
+import { collectDeclaredEndpoints, normalizeEndpointPath, parseEndpointPaths, seedModelEndpointsFromProvider } from '@/lib/provider-endpoints'
 import { joinModelListUrl, pickFetchModelKey } from '@/lib/provider-fetch'
+import { providerCopyInput, providerCopyName } from '@/lib/provider-copy'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Separator } from '@/components/ui/separator'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -24,7 +25,7 @@ import { agentPause, reportAgentAction, AGENT_STEP_GAP_MS } from '@/lib/agent-pa
 import { i18n } from '@/i18n/i18n'
 import { usePersistedState } from '@/hooks/use-persisted-state'
 import { dashboardApi, DashboardApiError } from '@/lib/dashboard-api'
-import type { Provider, ProviderDisableStatus, ProviderDisableDimension, ProviderInput, ProviderModel, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
+import type { Provider, ProviderDisableStatus, ProviderDisableDimension, ProviderInput, ProviderModel, ProviderStrategy, ModelPrices, FetchedModel, ModelReferencePrices } from '@/lib/dashboard-api'
 import {
   findModelsDevProviderRow,
   isModelsDevLab,
@@ -58,6 +59,7 @@ type ProviderFormProps = {
 
 const emptyProvider: ProviderInput = {
   name: '', baseUrls: [], keys: [], keyNotes: {}, endpoints: [], models: [], status: true, workflowEnabled: true, autoDisabled: false, dedupeV1Suffix: true,
+  keyStrategy: 'balanced', baseUrlStrategy: 'sequential',
 }
 
 // providerDraftFromUIAction turns the agent's create-provider payload into the
@@ -94,6 +96,16 @@ function agentStringArray(value: unknown): readonly string[] {
   return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter((item) => item !== '')
 }
 
+// normalizeModelEndpoints applies the endpoint field's input rules to stored
+// rows (split on whitespace/comma/semicolon, add a missing leading slash,
+// dedupe), so a list saved before as one string like "/a,/b" is repaired the
+// next time the form opens.
+function normalizeModelEndpoints(models: readonly ProviderModel[]): readonly ProviderModel[] {
+  return models.map((model) => model.endpoints.length === 0
+    ? model
+    : { ...model, endpoints: parseEndpointPaths(model.endpoints.join(' ')) })
+}
+
 // providerDraftFromAgentCreate maps the chat's create payload to the form. The
 // console then saves it through the normal dialog, so the agent never writes
 // directly on this path.
@@ -105,7 +117,7 @@ export function providerDraftFromAgentCreate(payload: Readonly<Record<string, un
     name,
     baseUrls: agentStringArray(payload.base_urls),
     keys: agentStringArray(payload.keys),
-    endpoints: agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix })),
+    endpoints: agentStringArray(payload.endpoints).flatMap(parseEndpointPaths).map((pathSuffix) => ({ pathSuffix })),
     models: agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) })),
     dedupeV1Suffix: payload.dedupe_v1_suffix !== false,
   }
@@ -126,7 +138,7 @@ function providerWithAgentPatch(provider: Provider, payload: Readonly<Record<str
     patch.models = agentStringArray(payload.models).map((model) => ({ ...emptyProviderModel(model) }))
   }
   if (Array.isArray(payload.endpoints)) {
-    patch.endpoints = agentStringArray(payload.endpoints).map((pathSuffix) => ({ pathSuffix }))
+    patch.endpoints = agentStringArray(payload.endpoints).flatMap(parseEndpointPaths).map((pathSuffix) => ({ pathSuffix }))
   }
   if (typeof payload.status === 'boolean') patch.status = payload.status
   if (typeof payload.workflow_enabled === 'boolean') patch.workflowEnabled = payload.workflow_enabled
@@ -187,6 +199,8 @@ export function ProviderPage() {
   const [useKey, setUseKey] = useState(true)
   const [disableStatuses, setDisableStatuses] = useState<ReadonlyMap<string, ProviderDisableStatus>>(new Map())
   const [deleting, setDeleting] = useState<Provider | null>(null)
+  // 复制供应商：非空即打开二次确认弹窗。
+  const [copying, setCopying] = useState<Provider | null>(null)
   // The delete dialog can be opened by the agent, which confirms it itself
   // after the same pause a person would take to read it.
   const deleteTargetRef = useRef<Provider | null>(null)
@@ -490,6 +504,37 @@ export function ProviderPage() {
   const runDeleteRef = useRef(runDelete)
   runDeleteRef.current = runDelete
 
+  // runCopy duplicates the confirmed provider through the normal create
+  // endpoint, so the copy gets the same name check and relay refresh as a
+  // provider made by hand.
+  const runCopy = async () => {
+    const provider = copying
+    if (!provider) return
+    setCopying(null)
+    setIsSaving(true)
+    setError(null)
+    try {
+      // Names are unique backend-side; look at every provider, not just the
+      // current page, so the generated name does not collide off-page.
+      let taken: readonly string[] = providers.map((item) => item.name)
+      try {
+        const all = await dashboardApi.listProviders({ limit: 500, offset: 0 })
+        taken = all.providers.map((item) => item.name)
+      } catch {
+        // 取全部失败时退回当前页；真撞名仍会由 create 报错。
+      }
+      const name = providerCopyName(provider.name, t('list.copySuffix'), taken)
+      const copied = await dashboardApi.createProvider(providerCopyInput(provider, name))
+      await loadProviders()
+      flashProvider(copied.id)
+      toast(t('toast.copied', { name: copied.name }))
+    } catch (error) {
+      setError(toErrorMessage(error))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   const handleAddToTopology = () => {
     const provider = createdProvider
     if (!provider) return
@@ -584,6 +629,7 @@ export function ProviderPage() {
       render: (_, provider) => (
         <div className="inline-flex items-center gap-2">
           <Button variant="outline" size="sm" disabled={isSaving} onClick={() => void runMutation(() => dashboardApi.toggleProvider(provider.id))}>{provider.status ? t('common:action.disable') : t('common:action.enable')}</Button>
+          <Button variant="ghost" size="icon-sm" disabled={isSaving} title={t('list.copy')} aria-label={t('list.copy')} onClick={() => setCopying(provider)}><AppIcon name="content_copy" /></Button>
           <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { setEditing(provider); setDraft(null); setAgentSaveReport(''); setIsDialogOpen(true) }}><AppIcon name="edit" /></Button>
           <Button variant="ghost" size="icon-sm" disabled={isSaving} onClick={() => { deleteTargetRef.current = provider; deleteReportRef.current = ''; setDeleting(provider) }}><AppIcon name="delete" /></Button>
         </div>
@@ -667,6 +713,34 @@ export function ProviderPage() {
         />
 
         <Dialog
+          open={copying !== null}
+          onOpenChange={(open) => {
+            if (!open) setCopying(null)
+          }}
+        >
+          <DialogContent width="sm" scrollFooter>
+            <DialogHeader>
+              <DialogTitle>{t('dialog.copyTitle')}</DialogTitle>
+              <DialogDescription>
+                {t('dialog.copyDescription', { name: copying?.name ?? '' })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogScrollBody
+              footer={
+                <>
+                  <Button variant="outline" onClick={() => setCopying(null)}>
+                    {t('common:action.cancel')}
+                  </Button>
+                  <Button onClick={() => { void runCopy() }} disabled={isSaving}>
+                    {isSaving ? t('actions.saving') : t('dialog.copyConfirm')}
+                  </Button>
+                </>
+              }
+            />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
           open={createdProvider !== null}
           onOpenChange={(open) => {
             if (!open) setCreatedProvider(null)
@@ -700,7 +774,9 @@ export function ProviderPage() {
 // combobox value: clicking the field opens a dropdown of the paths already
 // used by this provider's models (merged and deduped), typing filters them,
 // clicking one switches the model to that path, and leaving the field (blur)
-// commits whatever was typed — no Enter needed. Enter commits too (for
+// commits whatever was typed — no Enter needed. Spaces, commas and semicolons
+// all separate multiple paths, a missing leading slash is added on commit, and
+// the committed value is shown space-separated. Enter commits too (for
 // keyboard users), Escape discards, and an empty value means unrestricted.
 function ModelEndpointEditor({ values, candidates, onChange }: {
   readonly values: readonly string[]
@@ -708,12 +784,11 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   readonly onChange: (values: readonly string[]) => void
 }) {
   const { t } = useTranslation('provider')
-  const display = values.join(', ')
+  const display = values.join(' ')
   const [text, setText] = useState(display)
   const [open, setOpen] = useState(false)
   // query === null means "nothing typed yet": show every candidate.
   const [query, setQuery] = useState<string | null>(null)
-  const [error, setError] = useState(false)
   // Swallow the first mouseup so the select-all applied on focus survives the
   // click that opened the field (the browser would collapse it otherwise).
   const keepSelection = useRef(false)
@@ -729,7 +804,6 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   const close = () => {
     setOpen(false)
     setQuery(null)
-    setError(false)
   }
   // reset discards the edit (Escape) and restores the committed value.
   const reset = () => {
@@ -737,15 +811,10 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
     setText(display)
   }
   const commit = (raw: string) => {
-    const path = raw.trim()
-    if (path !== '' && !path.startsWith('/')) {
-      setError(true)
-      return
-    }
-    onChange(path === '' ? [] : [path])
-    setText(path)
+    const paths = parseEndpointPaths(raw)
+    onChange(paths)
+    setText(paths.join(' '))
     setQuery(null)
-    setError(false)
     setOpen(false)
   }
   return (
@@ -756,13 +825,11 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
           value={text}
           title={display || undefined}
           placeholder={t('price.endpointUnset')}
-          aria-invalid={error || undefined}
           onFocus={(event) => {
             keepSelection.current = true
             event.currentTarget.select()
             setOpen(true)
             setQuery(null)
-            setError(false)
           }}
           onMouseUp={(event) => {
             if (!keepSelection.current) return
@@ -773,7 +840,6 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
             setText(event.target.value)
             setQuery(event.target.value)
             setOpen(true)
-            setError(false)
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -784,12 +850,8 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
             }
           }}
           onBlur={() => {
-            // Leaving the field commits; only an unchanged value just closes.
-            if (text.trim() === display.trim()) {
-              close()
-            } else {
-              commit(text)
-            }
+            // 失焦即格式化：拆分多个路径、补斜杠、去重，再按空格重排显示。
+            commit(text)
           }}
         />
       </PopoverAnchor>
@@ -800,7 +862,6 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
         onInteractOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}
         onFocusOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}
       >
-        {error && <p role="alert" className="text-xs text-destructive">{t('errors.pathMustStartSlash')}</p>}
         <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
           {options.map((path) => (
             <Button key={path} type="button" variant="ghost" size="sm" className="justify-start font-normal" onMouseDown={(event) => event.preventDefault()} onClick={() => commit(path)}>
@@ -817,8 +878,12 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
 function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
   const [form, setForm] = useState<ProviderInput>(() => provider
-    ? { ...provider, models: seedModelEndpointsFromProvider(provider.endpoints, provider.models) }
+    ? { ...provider, models: normalizeModelEndpoints(seedModelEndpointsFromProvider(provider.endpoints, provider.models)) }
     : draft ?? emptyProvider)
+  // 每个维度独立切换 按顺序 ↔ 均衡；不影响供应商插槽自身的策略。
+  const cycleStrategy = (field: 'keyStrategy' | 'baseUrlStrategy') => {
+    setForm((current) => ({ ...current, [field]: current[field] === 'sequential' ? 'balanced' : 'sequential' }))
+  }
   // Per-key remarks as a parallel array aligned with form.keys (array instead
   // of a key→note map so editing a key text keeps its note). Converted back to
   // the stored key→note map on save.
@@ -1042,17 +1107,16 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
       setFetchError(t('errors.noDefaultEndpoint'))
       return
     }
-    if (!endpoint.startsWith('/')) {
-      setFetchError(t('errors.pathMustStartSlash'))
-      return
-    }
+    // 没写开头的斜杠直接补上，不再拦截成错误。
+    const path = normalizeEndpointPath(endpoint)
     const baseUrl = form.baseUrls[0]
     if (!baseUrl) {
       setFetchError(t('errors.baseUrlRequired'))
       return
     }
-    setEndpointOverride(draft === '' ? null : draft)
-    const fullUrl = joinModelListUrl(baseUrl, endpoint, form.dedupeV1Suffix)
+    setEndpointDraft(path)
+    setEndpointOverride(draft === '' ? null : path)
+    const fullUrl = joinModelListUrl(baseUrl, path, form.dedupeV1Suffix)
     const key = useKey ? pickFetchModelKey(form.keys, disableStatus?.keys) : undefined
     setFetchError(null)
     setIsFetching(true)
@@ -1123,14 +1187,15 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
     const models = form.models
       .map((item) => {
         const model = item.model.trim()
-        if (!item.prices) return { ...item, model }
+        const endpoints = parseEndpointPaths(item.endpoints.join(' '))
+        if (!item.prices) return { ...item, model, endpoints }
         const prices: ModelPrices = {
           input: item.prices.input.replace(/\s+/g, ''),
           cacheWrite: item.prices.cacheWrite.replace(/\s+/g, ''),
           cacheRead: item.prices.cacheRead.replace(/\s+/g, ''),
           output: item.prices.output.replace(/\s+/g, ''),
         }
-        return { ...item, model, prices }
+        return { ...item, model, endpoints, prices }
       })
       .filter((item) =>
         !(item.model === '' && (item.rate === '' || item.rate === '1') && item.prices === null && item.endpoints.length === 0),
@@ -1209,7 +1274,7 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
           <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
         </Field>
       </div>
-      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} disabledNote={t('failoverStatus.disabledNote', { label: 'Base URL' })} onRestore={(value) => onResetDisableValue('base_url', value)} />
+      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} disabledNote={t('failoverStatus.disabledNote', { label: 'Base URL' })} onRestore={(value) => onResetDisableValue('base_url', value)} strategy={form.baseUrlStrategy} onCycleStrategy={() => cycleStrategy('baseUrlStrategy')} />
       <ProviderValueList
         label={t('form.apiKeys')}
         placeholder="sk-xxx"
@@ -1221,6 +1286,8 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
         disabledValues={disableStatus?.keys}
         disabledNote={t('failoverStatus.disabledNote', { label: 'Key' })}
         onRestore={(value) => onResetDisableValue('key', value)}
+        strategy={form.keyStrategy}
+        onCycleStrategy={() => cycleStrategy('keyStrategy')}
       />
       <Field>
         <FieldLabel>{t('columns.models')}</FieldLabel>
@@ -1356,10 +1423,17 @@ type ProviderValueListProps = {
   readonly disabledValues?: Readonly<Record<string, boolean>>
   readonly disabledNote?: string
   readonly onRestore?: (value: string) => void
+  // 该维度的选择策略（按顺序 / 均衡），显示在标题右侧；不传则不显示按钮。
+  readonly strategy?: ProviderStrategy
+  readonly onCycleStrategy?: () => void
 }
 
-export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, disabledNote, onRestore }: ProviderValueListProps) {
+export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, disabledNote, onRestore, strategy, onCycleStrategy }: ProviderValueListProps) {
   const { t } = useTranslation('provider')
+  const strategyLabel = {
+    sequential: t('form.strategySequential'),
+    balanced: t('form.strategyBalanced'),
+  } as const
   const rows = values.length === 0 ? [''] : [...values]
   const withNotes = onNotesChange !== undefined
   const applyNote = (index: number, next: string) => {
@@ -1371,7 +1445,19 @@ export function ProviderValueList({ label, placeholder, values, onChange, stripT
   }
   return (
     <Field>
-      <FieldLabel>{label}</FieldLabel>
+      <div className="flex items-center gap-2">
+        <FieldLabel>{label}</FieldLabel>
+        {strategy && onCycleStrategy && (
+          <button
+            type="button"
+            onClick={onCycleStrategy}
+            className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          >
+            {strategyLabel[strategy]}
+            <AppIcon name="refresh" size={10} />
+          </button>
+        )}
+      </div>
       <div className="space-y-2">
         {rows.map((value, index) => {
           const isPhantom = values.length === 0
@@ -1723,7 +1809,7 @@ function FetchModelDialog({ endpoint, onEndpointChange, useKey, onUseKeyChange, 
         <div className="flex flex-col gap-3">
           <Field>
             <FieldLabel htmlFor="model-list-endpoint">{t('dialog.endpointPathLabel')}</FieldLabel>
-            <Input id="model-list-endpoint" value={endpoint} onChange={(event) => onEndpointChange(event.target.value)} placeholder="/v1/models" />
+            <Input id="model-list-endpoint" value={endpoint} onChange={(event) => onEndpointChange(event.target.value)} onBlur={() => onEndpointChange(normalizeEndpointPath(endpoint))} placeholder="/v1/models" />
           </Field>
           <div className="flex flex-col gap-1">
             <label className="flex cursor-pointer items-center gap-2">

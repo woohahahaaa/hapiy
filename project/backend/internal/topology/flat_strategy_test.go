@@ -62,33 +62,35 @@ func TestFindEligibleProvidersSequentialReturnsAllInOrder(t *testing.T) {
 	}
 }
 
-func TestFindEligibleProvidersRandomReturnsAll(t *testing.T) {
-	tp := dualSlotTopology(StrategyRandom)
+func TestFindEligibleProvidersBalancedReturnsAll(t *testing.T) {
+	tp := dualSlotTopology(StrategyBalanced)
 	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("random strategy: expected both children eligible, got %d", len(got))
+		t.Fatalf("balanced strategy: expected both children eligible, got %d", len(got))
 	}
-	if got[0].Strategy != StrategyRandom || got[0].SlotID != "ps" {
-		t.Fatalf("expected strategy random on candidate, got %q", got[0].Strategy)
+	if got[0].Strategy != StrategyBalanced || got[0].SlotID != "ps" {
+		t.Fatalf("expected strategy balanced on candidate, got %q", got[0].Strategy)
 	}
 }
 
-func TestFindEligibleProvidersRoundRobinReturnsAll(t *testing.T) {
-	tp := dualSlotTopology(StrategyRoundRobin)
-	got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("round robin strategy: expected both children eligible, got %d", len(got))
+func TestFindEligibleProvidersLegacyStrategyStillLoads(t *testing.T) {
+	for _, legacy := range []string{strategyLegacyRandom, strategyLegacyRoundRobin} {
+		tp := dualSlotTopology(legacy)
+		got, err := FindEligibleProviders(tp, refsFor("deepseek-a", "deepseek-b"), "deepseek-chat", "/v1/chat/completions", nil)
+		if err != nil {
+			t.Fatalf("legacy %q: unexpected error: %v", legacy, err)
+		}
+		if len(got) != 2 {
+			t.Fatalf("legacy %q: expected both children eligible, got %d", legacy, len(got))
+		}
 	}
 }
 
 func TestFindEligibleProvidersStrategySkipsIneligibleChild(t *testing.T) {
-	tp := dualSlotTopology(StrategyRandom)
+	tp := dualSlotTopology(StrategyBalanced)
 	refs := refsFor("deepseek-a") // deepseek-b has no ref: not eligible
 	got, err := FindEligibleProviders(tp, refs, "deepseek-chat", "/v1/chat/completions", nil)
 	if err != nil {

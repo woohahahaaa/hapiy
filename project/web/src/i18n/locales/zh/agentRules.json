@@ -174,7 +174,8 @@
     },
     "errors": {
       "loadFailed": "加载失败",
-      "applyFailed": "应用失败"
+      "applyFailed": "应用失败",
+      "modelsDevUnavailable": "无法获取 models.dev 数据（模型基础信息的来源），推荐配置暂时不可用"
     }
   },
   "modelInfoFields": {

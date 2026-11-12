@@ -385,11 +385,12 @@ export function AppSidebar() {
     <Button
       size="sm"
       variant="ghost"
-      className="h-8 border border-sidebar-border bg-sidebar-accent px-3 text-sidebar-foreground hover:bg-sidebar-accent/80"
+      className="h-8 min-w-0 shrink border border-sidebar-border bg-sidebar-accent px-3 text-sidebar-foreground hover:bg-sidebar-accent/80"
       onClick={toggleChat}
+      title={chatButtonLabel}
     >
-      <AppIcon name="menu_unfold" />
-      <span>{chatButtonLabel}</span>
+      <AppIcon name="menu_unfold" className="shrink-0" />
+      <span className="truncate">{chatButtonLabel}</span>
     </Button>
   ) : (
     <Button
@@ -421,12 +422,12 @@ export function AppSidebar() {
       <SidebarHeader>
         {showLabel ? (
           <div className="relative -top-[5px] flex items-center justify-between gap-2 py-2 pl-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5">
               {/* 移动端：菜单开关固定在左侧，与页面头部同一位置、同为三横线图标 */}
               {isMobile && <SidebarTrigger icon="menu" />}
               {logoButton}
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               {chatButton}
               <SidebarTrigger size="icon" />
             </div>

@@ -15,6 +15,8 @@
     "statusCount_other": "{{count}} providers",
     "empty": "No providers yet. Add a provider to start configuring.",
     "add": "Add provider",
+    "copy": "Copy provider",
+    "copySuffix": "copy",
     "urls": "{{count}} URLs",
     "keys": "{{count}} Keys",
     "endpoints": "{{count}} Endpoints"
@@ -31,7 +33,7 @@
     "editProvider": "Edit provider",
     "endpointTitle": "Model list endpoint",
     "endpointPathLabel": "Model list endpoint path",
-    "endpointPathHint": "The path must start with a slash (/); it is appended to the Base URL",
+    "endpointPathHint": "Appended to the Base URL; a missing leading slash is added automatically",
     "endpointUseKey": "Send Key",
     "endpointUseKeyHint": "Uses the first non-disabled Key; falls back to the first non-empty Key when all are disabled",
     "dedupeV1Suffix": "Dedupe /v1 suffix",
@@ -46,7 +48,10 @@
     "syncQuestion": "Sync the current price settings of model \"{{model}}\" to models with the same name in other providers?",
     "syncDetail": "The price mode, reference provider, price snapshot and multiplier are written to models with the same name in other providers.",
     "deleteTitle": "Confirm deletion",
-    "deleteDescription": "Provider \"{{name}}\" and all of its channel configurations will be deleted. This cannot be undone."
+    "deleteDescription": "Provider \"{{name}}\" and all of its channel configurations will be deleted. This cannot be undone.",
+    "copyTitle": "Confirm copy",
+    "copyDescription": "Copy provider \"{{name}}\" and all of its configuration (Base URLs, Keys, models and prices) into a new provider with a \"copy\" suffix; a number is appended when that name is taken.",
+    "copyConfirm": "Copy"
   },
   "actions": {
     "saving": "Saving…",
@@ -57,12 +62,14 @@
   },
   "form": {
     "apiKeys": "API Keys",
+    "strategySequential": "Sequential",
+    "strategyBalanced": "Balanced",
     "notesPlaceholder": "Note (optional)",
     "note": "Note",
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
     "deleteEndpointAria": "Delete Endpoint",
-    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Click a path in the dropdown to switch to it, or type one and leave the field to apply it — clearing it and leaving the field means unrestricted.",
+    "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Separate multiple paths with spaces, commas or semicolons; a missing leading slash is added automatically. Click a path in the dropdown to switch to it, or type and leave the field to apply it — clearing it and leaving the field means unrestricted.",
     "modelNamePlaceholder": "Model name"
   },
   "price": {
@@ -113,7 +120,6 @@
     "unknown": "Unknown error",
     "duplicateEndpoint": "This path was already added",
     "noDefaultEndpoint": "Configure a default model list endpoint in Settings first, or click the gear to set the endpoint URL",
-    "pathMustStartSlash": "Path must start with a slash (/)",
     "baseUrlRequired": "Fill in Base URLs above first"
   },
   "toast": {
@@ -125,7 +131,8 @@
     "bulkVendorless_other": "Skipped {{count}} models: no usable reference provider found on models.dev",
     "noAutoModels": "No models available for automatic setup",
     "synced_one": "Synced to the model with the same name in {{count}} other provider",
-    "synced_other": "Synced to models with the same name in {{count}} other providers"
+    "synced_other": "Synced to models with the same name in {{count}} other providers",
+    "copied": "Copied as \"{{name}}\""
   },
   "rateRules": {
     "hint": "Rules are matched from top to bottom by priority; matching stops at the first hit",

@@ -106,7 +106,7 @@ curl http://<hapiy address>/v1/chat/completions \
 | --- | --- |
 | Model center | Generated from the providers' model lists; shows every available model, and clicking a model name copies it. No need to wire it manually |
 | Request entry | The workflow's starting point: on/off switch plus weight in the top-right corner; weight 0 equals disabled |
-| Providers slot | Binds one or more providers; the top-right button switches the selection strategy: sequential / random / round-robin |
+| Providers slot | Binds one or more providers; the top-right button switches the selection strategy: sequential / balanced. Sequential always uses the first available provider; balanced prefers the provider with the fewest in-flight requests and rotates among ties |
 | Request rewrite slot | Binds request rewrite rules; several are allowed, drag to reorder |
 | Response rewrite slot | Binds response rewrite rules |
 | Concurrency slot | Inline "at most N within X minutes", one per slot |
@@ -142,6 +142,7 @@ Form fields for creating/editing:
 - **Name**: required, globally unique; duplicates are rejected.
 - **Base URLs**: one per line; a trailing `/` is removed on save. The **first address** is used by "Fetch models from upstream".
 - **API Keys**: one Key per line, notes allowed; the **first Key** may or may not be sent when fetching models.
+- **Base URL / Key strategy**: the button next to each list title switches that dimension between "Sequential" and "Balanced", independently of the other dimension and of the provider slot's strategy. Sequential always uses the first enabled address/Key; Balanced prefers the one with the fewest in-flight requests and rotates among ties. Defaults: Base URL Sequential, Key Balanced. A channel-affinity hit reuses the previous Base URL / Key directly and is not affected by this strategy.
 - **Endpoints**: the list of allowed paths (for example `/chat/completions`); a request path must end with one of them (`/v1/chat/completions` matches `/chat/completions`); empty means no restriction.
 - **Models**: one model name per line, each with its own price and Endpoint settings; an empty model list accepts any model name.
 - **Model price**: three modes —

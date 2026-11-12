@@ -165,6 +165,18 @@ func (s *SessionStore) persistLocked() {
 // TokenAuth middleware (API token authentication)
 func TokenAuth(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// The console assistant authenticates with the per-process secret
+		// described in service.ApplyInternalRelayAuth, not with a token row:
+		// there is no key for a user to read, copy, rotate or delete, and no
+		// quota to charge. Verified before the header parsing below because
+		// this call carries no Authorization header at all.
+		if user, ok := service.VerifyInternalRelayAuth(c); ok {
+			c.Set("token_name", service.InternalAssistantName)
+			c.Set("user_id", user)
+			c.Next()
+			return
+		}
+
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			rejectTokenAuth(c, http.StatusUnauthorized, gin.H{"error": "missing authorization header"}, "", "", errors.New("missing authorization header"))

@@ -32,6 +32,13 @@ type Provider struct {
 	Name     string `gorm:"not null" json:"name"`
 	BaseURLs string `gorm:"type:text" json:"base_urls"` // JSON array
 	Keys     string `gorm:"type:text" json:"keys"`      // JSON array
+	// KeyStrategy / BaseURLStrategy pick a channel inside this provider once
+	// the provider itself is chosen: "sequential" = first enabled, "balanced"
+	// = fewest in-flight requests (ties rotate). Empty falls back to the
+	// dimension default: keys balanced, base URLs sequential. They are
+	// independent of each other and of the provider slot's own strategy.
+	KeyStrategy     string `gorm:"default:''" json:"key_strategy"`
+	BaseURLStrategy string `gorm:"default:''" json:"base_url_strategy"`
 	// KeyNotes is a JSON object mapping each API key to its optional user
 	// remark. Purely informational; the relay never reads it.
 	KeyNotes  string `gorm:"type:text" json:"key_notes"`
@@ -42,12 +49,12 @@ type Provider struct {
 	// source is the auto_disable_states table. It is kept on the struct so the
 	// API contract (auto_disabled in provider payloads) is preserved; callers
 	// derive it from AutoDisableState before serializing.
-	AutoDisabled    bool      `gorm:"-" json:"auto_disabled"`
-	WorkflowEnabled bool      `gorm:"default:true" json:"workflow_enabled"`
-	Weight          int       `gorm:"default:1" json:"weight"`
-	Priority        int       `gorm:"default:0" json:"priority"`
-	AutoBan         bool      `gorm:"default:true" json:"auto_ban"`
-	Group           string    `gorm:"default:''" json:"group"`
+	AutoDisabled    bool   `gorm:"-" json:"auto_disabled"`
+	WorkflowEnabled bool   `gorm:"default:true" json:"workflow_enabled"`
+	Weight          int    `gorm:"default:1" json:"weight"`
+	Priority        int    `gorm:"default:0" json:"priority"`
+	AutoBan         bool   `gorm:"default:true" json:"auto_ban"`
+	Group           string `gorm:"default:''" json:"group"`
 	// DedupeV1Suffix controls the "From upstream fetch models" URL builder:
 	// when enabled and the Base URL path already ends with /v1, the model
 	// list path's leading /v1 is dropped so the final URL has one /v1.
@@ -85,6 +92,12 @@ func (t *Token) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// Log.ErrorOrigin values: which side produced a failed request's error.
+const (
+	LogErrorOriginLocal    = "local"
+	LogErrorOriginUpstream = "upstream"
+)
 
 // Log model (usage log)
 type Log struct {
@@ -124,6 +137,12 @@ type Log struct {
 	IP                   string `json:"ip"`
 	RequestID            string `json:"request_id"`
 	ErrorMessage         string `json:"error_message"`
+	// ErrorOrigin distinguishes a gateway-side failure (bad request, token
+	// rejection, no eligible provider, local config) from an upstream-side
+	// failure (transport error or HTTP 4xx/5xx from the provider). Empty on
+	// success rows and on rows written before the column existed; the
+	// dashboard then shows the plain "报错" label.
+	ErrorOrigin string `gorm:"type:text" json:"error_origin,omitempty"`
 	// EventDetail explains what happened on this row: for event rows
 	// (auto-disable / auto-recover / manual action / system admin) it names
 	// the rule or action that fired; for request rows it carries the

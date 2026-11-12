@@ -237,6 +237,20 @@ export function flatWiresFromCanvas(input: FlatSaveInput): FlatWire[] {
     add(w.source, w.target, w.branch)
   }
 
+  // A provider slot with cards must always wire into its run, even when nothing
+  // follows it: 请求入口 → 供应商插槽 → 卡片 is a complete minimal topology.
+  // canvasWires only carry slot → downstream when the slot has a downstream, so
+  // the internal slot → primary wire is added here when missing — otherwise it
+  // is silently dropped on every node-only save.
+  for (const slotId of providerSlotIds) {
+    const children = bySlot.get(slotId) ?? []
+    if (children.length === 0) continue
+    if (wires.some((w) => w.source === slotId)) continue
+    const enabled = children.filter((p) => p.enabled)
+    const primary = enabled.length > 0 ? enabled[0] : children[0]
+    add(slotId, primary.id)
+  }
+
   return wires
 }
 

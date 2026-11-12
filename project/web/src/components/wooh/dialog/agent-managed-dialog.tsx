@@ -93,7 +93,9 @@ export function ManagedProviderDialog({
     setEndpointRules({})
     Promise.all([
       dashboardApi.listManagedProviderOptions(record.id),
-      loadModelsDevModels(),
+      // models.dev 只影响「参考供应商」候选；拉不到时按空快照继续，
+      // 不能让整个托管供应商弹窗因此打不开。
+      loadModelsDevModels().catch(() => [] as readonly ModelsDevModel[]),
       dashboardApi.listTokens({ limit: 1000, offset: 0 }).catch(() => ({ tokens: [] as readonly Token[], total: 0 })),
       dashboardApi.getSettings().catch(() => [] as ReadonlyArray<{ key: string; value: string }>),
     ])
