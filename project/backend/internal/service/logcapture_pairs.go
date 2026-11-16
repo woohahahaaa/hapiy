@@ -229,6 +229,9 @@ func (w *LogCaptureWriter) ReadPair(requestId string) (*LogCapturePairFull, erro
 	if len(rows) == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	for i := range rows {
+		hydrateCapturedBody(&rows[i])
+	}
 	return assembleFull(requestId, rows), nil
 }
 

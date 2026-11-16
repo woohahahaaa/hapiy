@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { DiffView } from '@/components/wooh/DiffView'
 import { JsonHighlight } from '@/components/wooh/JsonHighlight'
 import { RuleNoteLines } from '@/components/wooh/RuleNoteLines'
-import { dashboardApi } from '@/lib/dashboard-api'
+import { apiBaseUrl, dashboardApi } from '@/lib/dashboard-api'
 import type { LogCapturePairFull, LogCaptureStageRow, LogCaptureTiming } from '@/lib/dashboard-api'
 
 // ── Props (discriminated union — TypeScript exhaustiveness on `kind`) ──
@@ -246,6 +246,86 @@ function stageRuleNotes(node: { readonly before?: LogCaptureStageRow; readonly a
   return node.after?.ruleNotes ?? node.before?.ruleNotes ?? ''
 }
 
+// ── CapturedFiles: file slices a multipart request uploaded ──
+// The capture writer keeps uploaded bytes on disk and leaves a marker in the
+// body ({$file, filename, content_type, size, url}). Rendering them as chips
+// keeps the body JSON readable while still making every image one click from
+// a preview.
+type CapturedFileRef = {
+  readonly field: string
+  readonly filename: string
+  readonly contentType: string
+  readonly size: number
+  readonly url: string
+}
+
+function isFileMarker(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return typeof record['$file'] === 'number' && typeof record['url'] === 'string'
+}
+
+function collectCapturedFiles(value: unknown, field = ''): CapturedFileRef[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectCapturedFiles(item, field))
+  }
+  if (value === null || typeof value !== 'object') return []
+  if (isFileMarker(value)) {
+    const marker = value as Record<string, unknown>
+    return [{
+      field,
+      filename: typeof marker['filename'] === 'string' ? marker['filename'] : 'file',
+      contentType: typeof marker['content_type'] === 'string' ? marker['content_type'] : '',
+      size: typeof marker['size'] === 'number' ? marker['size'] : 0,
+      url: marker['url'] as string,
+    }]
+  }
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, child]) => collectCapturedFiles(child, key))
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function previewableType(contentType: string): boolean {
+  return contentType.startsWith('image/') || contentType === 'application/pdf' || contentType.startsWith('text/')
+}
+
+function CapturedFileChips({ body }: { readonly body: unknown }) {
+  const { t } = useTranslation('logs')
+  const files = useMemo(() => collectCapturedFiles(body), [body])
+  if (files.length === 0) return null
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="font-mono text-xs font-medium text-foreground">{t('preview.files')}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {files.map((file) => {
+          const canPreview = previewableType(file.contentType)
+          return (
+            <a
+              key={file.url}
+              href={`${apiBaseUrl}${file.url}`}
+              target="_blank"
+              rel="noreferrer"
+              download={canPreview ? undefined : file.filename}
+              title={canPreview ? t('preview.preview') : t('preview.download')}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border bg-muted/40 px-2 py-1 font-mono text-[11px] text-foreground hover:bg-muted"
+            >
+              <span className="shrink-0 text-muted-foreground">{file.field}</span>
+              <span className="truncate">{file.filename}</span>
+              <span className="shrink-0 text-muted-foreground">{formatFileSize(file.size)}</span>
+            </a>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function renderStageBody(node: StageNode, t: TFunction): ReactNode {
   const headersEl = node.modified
     ? renderHeaderDiff(node.before?.headers ?? null, node.after?.headers ?? null)
@@ -263,6 +343,9 @@ function renderStageBody(node: StageNode, t: TFunction): ReactNode {
     <>
       {stageError !== '' && <StageErrorRow error={stageError} />}
       {headersEl !== null && <Node label={t('preview.requestHeaders')}>{headersEl}</Node>}
+      {/* The after stage is what actually went upstream, so its slices win
+          when a rewrite dropped one; a single-stage node falls back to before. */}
+      <CapturedFileChips body={node.after?.body ?? node.before?.body} />
       {bodyEl !== null && <Node label={t('preview.requestBody')}>{bodyEl}</Node>}
       {ruleNotes !== '' && <RuleNotesBlock notes={ruleNotes} />}
     </>

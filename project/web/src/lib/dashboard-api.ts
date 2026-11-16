@@ -2157,6 +2157,15 @@ export type RewriteRule = {
   readonly name: string
   readonly script: string
   readonly status: boolean
+  // Container gate: '' applies to every request body, 'json' only to JSON,
+  // 'multipart' only to multipart/form-data uploads (image edits).
+  readonly format: RewriteRuleFormat
+}
+
+export type RewriteRuleFormat = '' | 'json' | 'multipart'
+
+export function parseRewriteRuleFormat(value: unknown): RewriteRuleFormat {
+  return value === 'json' || value === 'multipart' ? value : ''
 }
 
 // 并行控制节点内联配置：直接在拓扑 slot 条目上保存，不再依赖规则表。
@@ -2238,6 +2247,7 @@ function parseRewriteRule(value: unknown): RewriteRule {
     name: readString(value.name, 'rule.name'),
     script: readString(value.script, 'rule.script'),
     status: readBoolean(value.status, 'rule.status'),
+    format: parseRewriteRuleFormat(value.format),
   }
 }
 
@@ -2296,6 +2306,7 @@ const serializeRewriteRule: RuleSerializer<RewriteRule> = (rule) => ({
   name: rule.name,
   script: (rule as RewriteRule).script ?? '',
   status: rule.status,
+  format: (rule as RewriteRule).format ?? '',
 })
 
 const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({

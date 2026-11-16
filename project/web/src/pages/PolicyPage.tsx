@@ -305,7 +305,7 @@ function RewritePage() {
 function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; saving: boolean }) {
   const { t } = useTranslation('policy')
   const [form, setForm] = useState<RewriteRule>(
-    rule || { id: '', name: '', script: '[]', status: true }
+    rule || { id: '', name: '', script: '[]', status: true, format: '' }
   )
 
   const formKey = rule?.id ?? 'new'
@@ -325,6 +325,29 @@ function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSav
       <Field>
         <FieldLabel htmlFor="rewrite-name">{t('name')}</FieldLabel>
         <Input id="rewrite-name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder={t('form.ruleName')} />
+      </Field>
+      <Field>
+        <FieldLabel>{t('rewrite.formatLabel')}</FieldLabel>
+        <Select
+          value={form.format === '' ? 'any' : form.format}
+          onValueChange={(value) =>
+            setForm((p) => ({ ...p, format: value === 'any' ? '' : (value as RewriteRule['format']) }))
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="any">{t('rewrite.formatAny')}</SelectItem>
+              <SelectItem value="json">{t('rewrite.formatJSON')}</SelectItem>
+              <SelectItem value="multipart">{t('rewrite.formatMultipart')}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        {form.format === 'multipart' && (
+          <p className="text-xs text-muted-foreground">{t('rewrite.formatMultipartHint')}</p>
+        )}
       </Field>
       <Field>
         <FieldLabel>{t('rewrite.rewriteRules')}</FieldLabel>

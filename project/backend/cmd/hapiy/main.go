@@ -205,6 +205,10 @@ func runServe() {
 	service.InitLogWriter(db)
 	defer service.Logs().Stop()
 
+	// Captured request/response bodies and uploaded files live under
+	// <state dir>/captures, next to the database, never inside it.
+	service.InitCaptureStore(filepath.Join(filepath.Dir(cfg.DatabasePath), "captures"))
+
 	// Initialize per-request log file capture (writes JSON files to disk)
 	service.InitLogCaptureWriter(db)
 
@@ -383,6 +387,7 @@ func runServe() {
 			dashboardAuthed.GET("/logs/capture/sources", handler.ListLogCaptureSources(db))
 			dashboardAuthed.GET("/logs/capture/models", handler.ListLogCaptureModels(db))
 			dashboardAuthed.GET("/logs/capture/:id", handler.ReadLogFile(db))
+			dashboardAuthed.GET("/logs/capture-file", handler.ReadLogCaptureFile(db))
 			dashboardAuthed.POST("/log-capture/clear", handler.ClearLogFiles(db))
 
 			// Users

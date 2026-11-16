@@ -1,14 +1,17 @@
 package handler
 
 import (
+	"mime"
 	"net/http"
+	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/i18n"
 	"github.com/hapiy/hapiy/internal/model"
 	"github.com/hapiy/hapiy/internal/service"
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -375,4 +378,51 @@ func splitComma(s string) []string {
 		}
 	}
 	return out
+}
+
+// ReadLogCaptureFile serves one captured blob from the on-disk capture store.
+// Captured bodies and multipart file slices live outside the database, so the
+// dashboard fetches them through this endpoint by the key the body view
+// carries. Previewable types render inline; everything else downloads.
+func ReadLogCaptureFile(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := c.Query("key")
+		if key == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
+			return
+		}
+		store := service.Captures()
+		if store == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "capture store not initialized"})
+			return
+		}
+		data, err := store.Get(key)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "captured file not found"})
+			return
+		}
+		contentType := mime.TypeByExtension(strings.ToLower(path.Ext(key)))
+		if contentType == "" {
+			contentType = http.DetectContentType(data)
+		}
+		disposition := "attachment"
+		if capturePreviewable(contentType) {
+			disposition = "inline"
+		}
+		filename := path.Base(filepath.ToSlash(key))
+		c.Header("Content-Disposition", disposition+`; filename="`+strings.ReplaceAll(filename, `"`, "")+`"`)
+		c.Header("Cache-Control", "private, max-age=300")
+		c.Data(http.StatusOK, contentType, data)
+	}
+}
+
+// capturePreviewable reports whether the browser can render the type inline.
+func capturePreviewable(contentType string) bool {
+	switch {
+	case strings.HasPrefix(contentType, "image/"), strings.HasPrefix(contentType, "text/"):
+		return true
+	case contentType == "application/pdf", contentType == "application/json":
+		return true
+	}
+	return false
 }

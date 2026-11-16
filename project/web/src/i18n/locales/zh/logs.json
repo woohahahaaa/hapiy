@@ -188,7 +188,10 @@
       "firstByte": "首字",
       "responseRewrite": "响应改写",
       "streamRewrite": "流式改写"
-    }
+    },
+    "files": "上传的文件",
+    "download": "下载",
+    "preview": "预览"
   },
   "detail": {
     "title": "记录详情{{id}}",

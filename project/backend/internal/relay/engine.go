@@ -221,6 +221,22 @@ type RelayRequest struct {
 	Temperature float64                  `json:"temperature,omitempty"`
 	Body        map[string]interface{}   `json:"-"` // Full request body
 	Headers     map[string]string        `json:"-"`
+	// RawBody is the request body exactly as received. It is the source of
+	// truth for everything hapiy forwards: a request no rewrite touched goes
+	// upstream byte for byte, which is the only way a multipart (image
+	// upload) body survives the pipeline. Body is a derived view of it.
+	RawBody []byte `json:"-"`
+	// ContentType is the incoming Content-Type header, kept so a pass-through
+	// request reaches the upstream with the boundary it was parsed with.
+	ContentType string `json:"-"`
+	// Format records which codec decoded the body.
+	Format BodyFormat `json:"-"`
+	// Multipart is set for multipart/form-data requests: the slice list that
+	// lets the encoder rebuild the body after a rewrite.
+	Multipart *MultipartBody `json:"-"`
+	// BodyDirty marks a body the request rewrite actually changed. Only a
+	// dirty body is re-encoded; a clean one is forwarded as bytes.
+	BodyDirty bool `json:"-"`
 	// Path is the request URL path (e.g. "/v1/chat/completions"). It is
 	// appended to the provider's base URL when building the upstream URL.
 	Path string `json:"-"`
@@ -537,6 +553,36 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	return resp, nil
 }
 
+// chainsForFormat drops the rules whose container gate does not match the
+// request. A rule without a gate ("") applies to both containers: its paths are
+// top-level keys either way, so the same wording works for a JSON field and a
+// multipart form field.
+func chainsForFormat(chains []CompiledRewriteChain, format BodyFormat) []CompiledRewriteChain {
+	if len(chains) == 0 {
+		return nil
+	}
+	filtered := make([]CompiledRewriteChain, 0, len(chains))
+	for _, chain := range chains {
+		switch chain.Format {
+		case "", "any":
+			filtered = append(filtered, chain)
+		case string(BodyFormatMultipart):
+			if format == BodyFormatMultipart {
+				filtered = append(filtered, chain)
+			}
+		case string(BodyFormatJSON):
+			if format != BodyFormatMultipart {
+				filtered = append(filtered, chain)
+			}
+		default:
+			// An unknown gate is treated as "both" so a rule authored by a
+			// newer build never silently stops running.
+			filtered = append(filtered, chain)
+		}
+	}
+	return filtered
+}
+
 // applyCompiledRewriteRules reads req.Body, runs the compiled rewrite
 // chain, and writes the result back into req.Body. We round-trip through
 // JSON because the existing req.Body is map[string]any — that's the
@@ -547,7 +593,11 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 	if err != nil {
 		return fmt.Errorf("marshal request body: %w", err)
 	}
-	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(raw, req.Headers, plan.CompiledRewrite, service.RuleCategoryRequest)
+	chains := chainsForFormat(plan.CompiledRewrite, req.Format)
+	if len(chains) == 0 {
+		return nil
+	}
+	updated, updatedHeaders, notes, err := applyRewriteChainsWithNotes(raw, req.Headers, chains, service.RuleCategoryRequest)
 	req.RuleNotes = append(req.RuleNotes, notes...)
 	if err != nil {
 		return err
@@ -559,6 +609,7 @@ func (e *Engine) applyCompiledRewriteRules(plan *ExecutionPlan, req *RelayReques
 			return fmt.Errorf("unmarshal rewritten request: %w", err)
 		}
 		req.Body = merged
+		req.BodyDirty = true
 	}
 	return nil
 }
@@ -610,6 +661,26 @@ func captureRuleNotes(stage topologyStage, req *RelayRequest) []service.RuleNote
 	}
 }
 
+// captureFiles converts the request's multipart file slices into capture
+// payloads so the log view can show them as previewable chips.
+func captureFiles(req *RelayRequest) []service.CapturedFile {
+	parts := req.FileParts()
+	if len(parts) == 0 {
+		return nil
+	}
+	files := make([]service.CapturedFile, 0, len(parts))
+	for _, part := range parts {
+		files = append(files, service.CapturedFile{
+			Index:       part.Index,
+			FieldName:   part.FieldName,
+			Filename:    part.Filename,
+			ContentType: part.ContentType,
+			Data:        part.Data,
+		})
+	}
+	return files
+}
+
 // runTopologyLogOutputs records the stage event for the selected log outputs
 // and writes the per-stage capture row for every configured log node.
 func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOutputAssignment, plan *ExecutionPlan, req *RelayRequest, resp *RelayResponse) {
@@ -657,6 +728,7 @@ func (e *Engine) runTopologyLogOutputs(stage topologyStage, assignments []LogOut
 			Prefix:       cfg.Prefix,
 			Source:       service.ResolveSourceMark(req.SourceMark, req.Path),
 			RuleNotes:    captureRuleNotes(stage, req),
+			Files:        captureFiles(req),
 		}
 		// Stage timings are always recorded (independent of the record_*
 		// switches) so every captured request carries its timing breakdown.
@@ -732,6 +804,7 @@ func (e *Engine) RecordDispatchRejection(req *RelayRequest, err error) {
 				Prefix:    cfg.Prefix,
 				Source:    service.ResolveSourceMark(req.SourceMark, req.Path),
 				Error:     err.Error(),
+				Files:     captureFiles(req),
 			}
 			if cfg.RecordRequest {
 				data.Request = &service.HTTPCapture{Headers: req.Headers, Body: req.Body}
@@ -906,18 +979,20 @@ func (e *Engine) relayStreaming(ctx context.Context, url, key string, req *Relay
 }
 
 func (e *Engine) marshalRequestBody(req *RelayRequest) ([]byte, error) {
-	if req.Body != nil {
-		return json.Marshal(req.Body)
-	}
-	return json.Marshal(req)
+	return req.EncodeBody()
 }
 
 func (e *Engine) setupUpstreamHeaders(httpReq *http.Request, key string, req *RelayRequest) {
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", req.UpstreamContentType())
 	httpReq.Header.Set("Authorization", "Bearer "+key)
 	for k, v := range req.Headers {
 		switch k {
 		case "Authorization", "Content-Length", "Host", "Connection":
+			continue
+		case "Content-Type":
+			// The explicit value above already matches the body we encode —
+			// the client's header may not (a rebuilt body, a lowercased
+			// header key), so it never overrides it.
 			continue
 		case "Accept-Encoding":
 			// Let Go negotiate encoding itself so it transparently

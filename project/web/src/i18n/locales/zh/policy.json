@@ -36,7 +36,12 @@
   "rewrite": {
     "description": "使用JSON操作数组修改请求体字段",
     "empty": "暂无请求改写规则，点击「添加规则」创建第一条",
-    "rewriteRules": "改写规则"
+    "rewriteRules": "改写规则",
+    "formatLabel": "请求体格式",
+    "formatAny": "通用（JSON + multipart）",
+    "formatJSON": "仅 JSON",
+    "formatMultipart": "仅 multipart（表单上传）",
+    "formatMultipartHint": "multipart 是扁平表单：路径直接填字段名（model / prompt / size）。同名字段发多次时是数组，用 字段名.0、字段名.1 指定第几片。文件片原样转发，不能改写。"
   },
   "failover": {
     "description": "请求失败或命中条件时，按维度自动转移到下一个候选",

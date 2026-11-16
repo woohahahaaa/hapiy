@@ -172,7 +172,7 @@ func (e *Engine) populateAssignment(db *gorm.DB, plan *ExecutionPlan, assignment
 		if err != nil {
 			return fmt.Errorf("compile rewrite rule %s (%s): %w", rule.ID, rule.Name, err)
 		}
-		plan.CompiledRewrite = append(plan.CompiledRewrite, CompiledRewriteChain{RuleID: rule.ID, RuleName: rule.Name, Ops: chain})
+		plan.CompiledRewrite = append(plan.CompiledRewrite, CompiledRewriteChain{RuleID: rule.ID, RuleName: rule.Name, Ops: chain, Format: rule.Format})
 	case "responseModify":
 		var rule model.ResponseRewriteRule
 		if err := query.First(&rule).Error; err != nil {

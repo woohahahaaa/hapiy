@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"log"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -42,17 +43,17 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 	}
 
 	row := model.LogCapture{
-		RequestID:  data.RequestID,
-		Type:       data.Type,
-		Prefix:     data.Prefix,
-		Source:     data.Source,
-		ProviderID: data.ProviderID,
+		RequestID:    data.RequestID,
+		Type:         data.Type,
+		Prefix:       data.Prefix,
+		Source:       data.Source,
+		ProviderID:   data.ProviderID,
 		ProviderName: data.ProviderName,
-		ModelName:  data.ModelName,
-		TokenName:  data.TokenName,
-		Stage:      data.Stage,
-		Error:      data.Error,
-		RuleNotes:  RuleNotesJSON(data.RuleNotes),
+		ModelName:    data.ModelName,
+		TokenName:    data.TokenName,
+		Stage:        data.Stage,
+		Error:        data.Error,
+		RuleNotes:    RuleNotesJSON(data.RuleNotes),
 		// Always keep stage timings, even when body recording is off.
 		ConnectMs:         data.ConnectMs,
 		FirstByteMs:       data.FirstByteMs,
@@ -79,16 +80,27 @@ func (w *LogCaptureWriter) WriteLog(data *LogCaptureData) {
 			row.Headers = m
 		}
 		if cap.Body != nil {
-			switch body := cap.Body.(type) {
-			case map[string]interface{}:
+			body := captureBodyMap(cap.Body)
+			// The bytes go to disk next to any uploaded file slices; only the
+			// key lands in the row. File slices only belong to the request
+			// stages — a response never carries the upload.
+			if strings.HasPrefix(data.Stage, "request") {
+				storeCapturedFiles(data.RequestID, body, data.Files)
+			}
+			if store := Captures(); store != nil {
+				encoded, err := json.Marshal(body)
+				if err == nil {
+					if key, err := store.Put(data.RequestID, data.Stage, encoded); err == nil {
+						row.BodyKey = key
+						row.BodySize = int64(len(encoded))
+					} else {
+						row.RequestBody = model.JSONMap(body)
+					}
+				} else {
+					row.RequestBody = model.JSONMap(body)
+				}
+			} else {
 				row.RequestBody = model.JSONMap(body)
-			case string:
-				row.RequestBody = model.JSONMap{"raw": body}
-			case []byte:
-				row.RequestBody = model.JSONMap{"raw": string(body)}
-			default:
-				b, _ := json.Marshal(cap.Body)
-				row.RequestBody = model.JSONMap{"raw": string(b)}
 			}
 		}
 	}
@@ -158,32 +170,55 @@ func (w *LogCaptureWriter) UpdateStreamBody(requestID string, body []byte) {
 		return
 	}
 	wrapped := model.JSONMap{"raw": string(body)}
-	if err := w.db.Model(&model.LogCapture{}).
+	encoded, err := json.Marshal(wrapped)
+	if err != nil {
+		return
+	}
+	var rows []model.LogCapture
+	if err := w.db.Select("id", "body_key").
 		Where("request_id = ? AND stage IN ?", requestID, []string{"response_before", "response_after"}).
-		Update("request_body", wrapped).Error; err != nil {
-		println("logcapture: update stream body failed:", err.Error())
+		Find(&rows).Error; err != nil {
+		println("logcapture: load stream body rows failed:", err.Error())
+		return
+	}
+	store := Captures()
+	for _, row := range rows {
+		if store != nil && row.BodyKey != "" {
+			if err := store.PutAt(row.BodyKey, encoded); err != nil {
+				println("logcapture: update stream body file failed:", err.Error())
+			}
+			continue
+		}
+		if err := w.db.Model(&model.LogCapture{}).
+			Where("id = ?", row.ID).
+			Update("request_body", wrapped).Error; err != nil {
+			println("logcapture: update stream body failed:", err.Error())
+		}
 	}
 }
 
 // LogCaptureData is the payload for a single capture event.
 type LogCaptureData struct {
-	RequestID  string
-	Stage      string // request_before | request_after | response_before | response_after
-	Type       string // request | response | system
-	ProviderID string
+	RequestID    string
+	Stage        string // request_before | request_after | response_before | response_after
+	Type         string // request | response | system
+	ProviderID   string
 	ProviderName string
-	ModelName  string
-	TokenName  string
-	Prefix     string
-	Source     string
-	Request    *HTTPCapture
-	Response   *HTTPCapture
-	SystemLog  []string
-	Error      string
+	ModelName    string
+	TokenName    string
+	Prefix       string
+	Source       string
+	Request      *HTTPCapture
+	Response     *HTTPCapture
+	SystemLog    []string
+	Error        string
 	// RuleNotes carries this stage's per-rule outcomes (request rewrite on
 	// the request nodes, response rewrite + failover on the response nodes);
 	// stored as JSON on the row and rendered for display by the pair API.
 	RuleNotes []RuleNote
+	// Files carries the request's multipart file slices so the captured body
+	// can show them as previewable chips instead of dropping them.
+	Files []CapturedFile
 	// Stage timings (nil = not applicable / not yet known).
 	ConnectMs         *int
 	FirstByteMs       *int
@@ -288,7 +323,8 @@ func (w *LogCaptureWriter) ListFiles(params LogListParams) ([]LogFileEntry, int,
 	return entries, int(total), nil
 }
 
-// ReadFile returns the full LogCapture row for a given ID.
+// ReadFile returns the full LogCapture row for a given ID, with its body
+// loaded from disk when the row only carries a key.
 func (w *LogCaptureWriter) ReadFile(id string) (*model.LogCapture, error) {
 	if w == nil {
 		return nil, nil
@@ -297,6 +333,7 @@ func (w *LogCaptureWriter) ReadFile(id string) (*model.LogCapture, error) {
 	if err := w.db.First(&row, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
+	hydrateCapturedBody(&row)
 	return &row, nil
 }
 
@@ -348,9 +385,25 @@ func (w *LogCaptureWriter) DeleteFiles(params LogDeleteParams) (int, error) {
 		}
 	}
 
+	// Capture the affected requests before the rows disappear: their bodies
+	// and file slices live in directories keyed by request id.
+	var requestIDs []string
+	if err := query.Session(&gorm.Session{}).Distinct().Pluck("request_id", &requestIDs).Error; err != nil {
+		requestIDs = nil
+	}
+
 	result := query.Delete(&model.LogCapture{})
 	if result.Error != nil {
 		return 0, result.Error
+	}
+	if params.All {
+		if store := Captures(); store != nil {
+			store.DeleteAll()
+		}
+	} else if len(requestIDs) > 0 {
+		if store := Captures(); store != nil {
+			store.DeleteRequests(requestIDs)
+		}
 	}
 	// Reclaim the pages the delete just freed so the file does not stay at its
 	// historical high-water mark. Best effort: a failure here must not hide
@@ -389,3 +442,110 @@ func ResolveSourceMark(mark, path string) string {
 // We keep the old types for backward compatibility with the relay engine until
 // its next refactor, but they are no longer used for file I/O.
 // LogCaptureData is defined above; HTTPCapture is defined above.
+// captureFileMarker mirrors relay.FileMarker: the view key that marks a value
+// as a file slice instead of a text field. It is duplicated here because the
+// service package must not import the relay package (relay imports service).
+const captureFileMarker = "$file"
+
+// captureBodyMap normalizes a captured body into the map the log view renders.
+// Bodies that are not objects (a plain error string, a raw SSE stream) keep
+// the historical {"raw": ...} shape.
+func captureBodyMap(body interface{}) map[string]interface{} {
+	switch value := body.(type) {
+	case map[string]interface{}:
+		return value
+	case string:
+		return map[string]interface{}{"raw": value}
+	case []byte:
+		return map[string]interface{}{"raw": string(value)}
+	}
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		return map[string]interface{}{"raw": ""}
+	}
+	return map[string]interface{}{"raw": string(encoded)}
+}
+
+// storeCapturedFiles writes a request's file slices to disk and links them
+// from the captured body, so the dashboard can render each one as a chip with
+// a preview/download URL.
+func storeCapturedFiles(requestID string, body interface{}, files []CapturedFile) {
+	if len(files) == 0 || requestID == "" {
+		return
+	}
+	store := Captures()
+	if store == nil {
+		return
+	}
+	keys := make(map[int]string, len(files))
+	for _, file := range files {
+		key, err := store.PutFile(requestID, file)
+		if err != nil {
+			continue
+		}
+		keys[file.Index] = key
+	}
+	if len(keys) == 0 {
+		return
+	}
+	linkCapturedFiles(body, keys)
+}
+
+// linkCapturedFiles walks the decoded body and annotates every file marker
+// with the key it was stored under and the URL that serves it.
+func linkCapturedFiles(value interface{}, keys map[int]string) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		if rawIndex, ok := v[captureFileMarker]; ok {
+			if index, ok := captureFileIndex(rawIndex); ok {
+				if key, ok := keys[index]; ok {
+					v["key"] = key
+					v["url"] = "/v1/dashboard/logs/capture-file?key=" + url.QueryEscape(key)
+				}
+			}
+		}
+		for _, child := range v {
+			linkCapturedFiles(child, keys)
+		}
+	case []interface{}:
+		for _, child := range v {
+			linkCapturedFiles(child, keys)
+		}
+	}
+}
+
+// captureFileIndex reads the file slice index from its marker value.
+func captureFileIndex(value interface{}) (int, bool) {
+	switch v := value.(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	case json.Number:
+		parsed, err := v.Int64()
+		return int(parsed), err == nil
+	}
+	return 0, false
+}
+
+// hydrateCapturedBody loads a row's body from disk into RequestBody so the API
+// keeps returning one shape whether the row predates disk-backed capture or
+// not.
+func hydrateCapturedBody(row *model.LogCapture) {
+	if row == nil || row.BodyKey == "" || len(row.RequestBody) > 0 {
+		return
+	}
+	store := Captures()
+	if store == nil {
+		return
+	}
+	raw, err := store.Get(row.BodyKey)
+	if err != nil {
+		return
+	}
+	body := model.JSONMap{}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return
+	}
+	row.RequestBody = body
+}

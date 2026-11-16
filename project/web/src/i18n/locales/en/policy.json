@@ -37,7 +37,12 @@
   "rewrite": {
     "description": "Modify request body fields with a JSON operation array",
     "empty": "No request rewrite rules yet. Click \"Add rule\" to create the first one",
-    "rewriteRules": "Rewrite rules"
+    "rewriteRules": "Rewrite rules",
+    "formatLabel": "Body format",
+    "formatAny": "Any (JSON + multipart)",
+    "formatJSON": "JSON only",
+    "formatMultipart": "multipart only (form upload)",
+    "formatMultipartHint": "A multipart body is a flat form: write the field name as the path (model / prompt / size). A field sent more than once is an array, so field.0 / field.1 picks one slice. File slices are forwarded untouched and cannot be rewritten."
   },
   "failover": {
     "description": "Fail over to the next candidate along a dimension when a request fails or a condition matches",

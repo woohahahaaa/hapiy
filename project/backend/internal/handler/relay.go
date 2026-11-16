@@ -22,6 +22,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// maxRequestBodyBytes caps an inbound relay body. Image edit requests carry
+// their reference images inside the body, so the ceiling is generous but
+// finite: hapiy holds the whole body in memory to parse, route and forward it.
+const maxRequestBodyBytes = 50 << 20
+
 // i18nMessage localizes the "no usable provider" relay error by the client
 // language. When dispatch attached a classified reason (model unknown,
 // endpoint unsupported by every provider of the model, or only
@@ -80,8 +85,10 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 		tokenName, _ := c.Get("token_name")
 		userID, _ := c.Get("user_id")
 
-		// Parse request body
-		bodyBytes, err := io.ReadAll(c.Request.Body)
+		// Parse request body. The size cap keeps a runaway image upload from
+		// exhausting memory: every body is held whole for parsing, routing
+		// and forwarding.
+		bodyBytes, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodyBytes))
 		if err != nil {
 			useTime := int(time.Since(startTime).Milliseconds())
 			service.LogRelayFailure(service.LogRelayFailureInput{
@@ -94,30 +101,69 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 				Error:         err,
 			})
 			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": fmt.Sprintf("request body too large: limit is %d MB", maxRequestBodyBytes>>20)})
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 			return
 		}
 
+		// Decode by container: JSON keeps its parsed map, multipart is
+		// decoded into the same shape (text fields) with its file slices
+		// parked for byte-for-byte forwarding. Everything downstream works on
+		// the view, so a rewrite reaches both formats without a second
+		// pipeline.
+		contentType := c.GetHeader("Content-Type")
 		var relayReq relay.RelayRequest
-		if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
-			useTime := int(time.Since(startTime).Milliseconds())
-			service.LogRelayFailure(service.LogRelayFailureInput{
-				TokenName:     getString(tokenName),
-				UserID:        getString(userID),
-				RequestID:     c.GetString("request_id"),
-				IP:            c.ClientIP(),
-				DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
-				UseTimeMs:     useTime,
-				Error:         err,
-			})
-			common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
-			return
-		}
+		if relay.DetectBodyFormat(contentType) == relay.BodyFormatMultipart {
+			view, multipart, decodeErr := relay.DecodeMultipart(bodyBytes, contentType)
+			if decodeErr != nil {
+				useTime := int(time.Since(startTime).Milliseconds())
+				service.LogRelayFailure(service.LogRelayFailureInput{
+					TokenName:     getString(tokenName),
+					UserID:        getString(userID),
+					RequestID:     c.GetString("request_id"),
+					IP:            c.ClientIP(),
+					DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
+					UseTimeMs:     useTime,
+					Error:         decodeErr,
+				})
+				common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format: " + decodeErr.Error()})
+				return
+			}
+			relayReq.RawBody = bodyBytes
+			relayReq.ContentType = contentType
+			relayReq.Format = relay.BodyFormatMultipart
+			relayReq.Multipart = multipart
+			relayReq.Body = view
+			relayReq.Model = relay.ViewString(view, "model")
+		} else {
+			if err := json.Unmarshal(bodyBytes, &relayReq); err != nil {
+				useTime := int(time.Since(startTime).Milliseconds())
+				service.LogRelayFailure(service.LogRelayFailureInput{
+					TokenName:     getString(tokenName),
+					UserID:        getString(userID),
+					RequestID:     c.GetString("request_id"),
+					IP:            c.ClientIP(),
+					DownstreamURL: service.RequestURL(c, service.SourceMark(c), c.Request.URL.Path),
+					UseTimeMs:     useTime,
+					Error:         err,
+				})
+				common.Global().EndRequest(c.GetString("request_id"), "", false, int64(useTime), 0, "invalid_request")
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
+				return
+			}
+			relayReq.RawBody = bodyBytes
+			relayReq.ContentType = contentType
+			relayReq.Format = relay.BodyFormatJSON
 
-		// Store full body for potential rewrite
-		relayReq.Body = make(map[string]interface{})
-		json.Unmarshal(bodyBytes, &relayReq.Body)
+			// Store full body for potential rewrite
+			relayReq.Body = make(map[string]interface{})
+			json.Unmarshal(bodyBytes, &relayReq.Body)
+		}
 
 		// Copy headers
 		relayReq.Headers = make(map[string]string)
@@ -156,7 +202,7 @@ func Relay(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
 			Model:   relayReq.Model,
 			Path:    c.Request.URL.Path,
 			Headers: relayReq.Headers,
-			Body:    bodyBytes,
+			Body:    relayReq.AffinityBody(),
 		})
 		if err != nil {
 			engine.RecordDispatchRejection(&relayReq, err)

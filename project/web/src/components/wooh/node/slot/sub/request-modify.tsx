@@ -55,7 +55,7 @@ export function NodeSlotRequestModify({
     .sort((a, b) => a.index - b.index)
   const testRules = boundEntries
     .map((e) => rules.find((r) => r.id === e.ruleId))
-    .filter((r): r is { id: string; name: string; script: string; status: boolean } => r != null && r.status)
+    .filter((r): r is RewriteRule => r != null && r.status)
   const titleBadge = (
     <div className="flex items-center justify-between">
       <span>{title}</span>

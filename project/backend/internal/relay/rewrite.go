@@ -21,6 +21,8 @@ type CompiledRewriteChain struct {
 	RuleID   string
 	RuleName string
 	Ops      []RewriteOp
+	// Format is the rule's container gate: "" (both), "json" or "multipart".
+	Format string
 }
 
 // RewriteOp is a single, pre-parsed operation from a rule's Script.

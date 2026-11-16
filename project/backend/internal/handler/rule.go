@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hapiy/hapiy/internal/model"
@@ -117,6 +118,7 @@ func CreateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
+			r.Format = normalizeRuleFormat(r.Format)
 			if dup, err := ruleNameTaken(db, RuleTypeRewrite, r.Name, ""); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -190,6 +192,7 @@ func UpdateRule(db *gorm.DB) gin.HandlerFunc {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
+			r.Format = normalizeRuleFormat(r.Format)
 			rule = &r
 		case RuleTypeFailover:
 			var r model.FailoverRule
@@ -336,4 +339,17 @@ func TestRewriteRule(db *gorm.DB) gin.HandlerFunc {
 			"modified": modifiedRaw,
 		}})
 	}
+}
+
+// normalizeRuleFormat keeps the rule's container gate to the three shapes the
+// relay understands. Anything unknown becomes the unrestricted default so a
+// typo can never silently disable a rule.
+func normalizeRuleFormat(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "json":
+		return "json"
+	case "multipart":
+		return "multipart"
+	}
+	return ""
 }

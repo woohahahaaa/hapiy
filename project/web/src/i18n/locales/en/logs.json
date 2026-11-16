@@ -193,7 +193,10 @@
       "firstByte": "First byte",
       "responseRewrite": "Response rewrite",
       "streamRewrite": "Stream rewrite"
-    }
+    },
+    "files": "Uploaded files",
+    "download": "Download",
+    "preview": "Preview"
   },
   "detail": {
     "title": "Log Details {{id}}",

@@ -69,19 +69,26 @@ func (s *JSONSlice) Scan(src interface{}) error {
 // response-before, response-after, or system) for a single log output node.
 // Stage timings mirror model.Log: nil means the stage does not apply.
 type LogCapture struct {
-	ID             string    `gorm:"primaryKey;type:uuid" json:"id"`
-	RequestID      string    `gorm:"not null;index" json:"request_id"`
-	Type           string    `gorm:"not null;index" json:"type"` // request | response | system
-	Prefix         string    `json:"prefix"`
-	Source         string    `json:"source"`
-	ProviderID     string    `json:"provider_id"`
-	ProviderName   string    `json:"provider_name"`
-	ModelName      string    `json:"model_name"`
-	TokenName      string    `json:"token_name"`
-	Stage          string    `json:"stage"` // request_before | request_after | response_before | response_after
-	Headers        JSONMap   `gorm:"type:jsonb" json:"headers,omitempty"`
-	RequestBody    JSONMap   `gorm:"type:jsonb" json:"request_body,omitempty"`
-	ResponseBody   JSONMap   `gorm:"type:jsonb" json:"response_body,omitempty"`
+	ID           string  `gorm:"primaryKey;type:uuid" json:"id"`
+	RequestID    string  `gorm:"not null;index" json:"request_id"`
+	Type         string  `gorm:"not null;index" json:"type"` // request | response | system
+	Prefix       string  `json:"prefix"`
+	Source       string  `json:"source"`
+	ProviderID   string  `json:"provider_id"`
+	ProviderName string  `json:"provider_name"`
+	ModelName    string  `json:"model_name"`
+	TokenName    string  `json:"token_name"`
+	Stage        string  `json:"stage"` // request_before | request_after | response_before | response_after
+	Headers      JSONMap `gorm:"type:jsonb" json:"headers,omitempty"`
+	RequestBody  JSONMap `gorm:"type:jsonb" json:"request_body,omitempty"`
+	ResponseBody JSONMap `gorm:"type:jsonb" json:"response_body,omitempty"`
+	// BodyKey points at the captured body on disk (see service.CaptureStore).
+	// Bodies live outside the database: one row holding a few megabytes of
+	// base64 used to make listing, backups and exports crawl. Rows written
+	// before the column existed keep their inline body, and the readers fall
+	// back to it, so no migration is needed.
+	BodyKey        string    `json:"body_key,omitempty"`
+	BodySize       int64     `json:"body_size,omitempty"`
 	ResponseStatus int       `json:"response_status,omitempty"`
 	SystemLog      JSONSlice `gorm:"type:jsonb" json:"system_log,omitempty"`
 	Error          string    `json:"error,omitempty"`
