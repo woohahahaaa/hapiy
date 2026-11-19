@@ -39,10 +39,10 @@
     "empty": "No request rewrite rules yet. Click \"Add rule\" to create the first one",
     "rewriteRules": "Rewrite rules",
     "formatLabel": "Body format",
-    "formatAny": "Any (JSON + multipart)",
-    "formatJSON": "JSON only",
-    "formatMultipart": "multipart only (form upload)",
-    "formatMultipartHint": "A multipart body is a flat form: write the field name as the path (model / prompt / size). A field sent more than once is an array, so field.0 / field.1 picks one slice. File slices are forwarded untouched and cannot be rewritten."
+    "formatJSON": "JSON",
+    "formatMultipart": "multipart",
+    "formatMultipartHint": "Runs on multipart form uploads such as image edits. Paths are form field names; a file slice can only be renamed, never rewritten.",
+    "formatJSONHint": "Runs on JSON request bodies: chat and text-to-image. Paths address fields in the JSON body."
   },
   "failover": {
     "description": "Fail over to the next candidate along a dimension when a request fails or a condition matches",

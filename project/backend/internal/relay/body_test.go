@@ -238,7 +238,7 @@ func TestRewriteMultipartTextFieldKeepsFileBytes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	plan := &ExecutionPlan{CompiledRewrite: []CompiledRewriteChain{{RuleID: "rule-1", RuleName: "rule-1", Ops: ops}}}
+	plan := &ExecutionPlan{CompiledRewrite: []CompiledRewriteChain{{RuleID: "rule-1", RuleName: "rule-1", Ops: ops, Format: "multipart"}}}
 	engine := &Engine{}
 	if err := engine.applyCompiledRewriteRules(plan, req); err != nil {
 		t.Fatalf("rewrite: %v", err)
@@ -275,11 +275,17 @@ func TestRewriteMultipartLeavesCleanBodyAlone(t *testing.T) {
 
 	// A rule that matches nothing must not dirty the body: it still goes out
 	// byte for byte.
-	ops, err := compileRewriteChain("rule-2", `[{"mode":"set","path":"nonexistent","value":"y"}]`)
+	ops, err := compileRewriteChain("rule-2", `[{"mode":"delete","path":"nonexistent"}]`)
 	if err != nil {
 		t.Fatalf("compile: %v", err)
 	}
-	_ = ops
+	plan := &ExecutionPlan{CompiledRewrite: []CompiledRewriteChain{{RuleID: "rule-2", RuleName: "rule-2", Ops: ops, Format: "multipart"}}}
+	if err := (&Engine{}).applyCompiledRewriteRules(plan, req); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if req.BodyDirty {
+		t.Fatalf("a rule that matched nothing must not dirty the body")
+	}
 
 	encoded, err := req.EncodeBody()
 	if err != nil {
@@ -287,5 +293,54 @@ func TestRewriteMultipartLeavesCleanBodyAlone(t *testing.T) {
 	}
 	if !bytes.Equal(encoded, raw) {
 		t.Fatalf("untouched multipart body was re-encoded")
+	}
+}
+
+func TestRuleFormatGateIsExclusive(t *testing.T) {
+	chains := []CompiledRewriteChain{
+		{RuleID: "json-rule", Format: "json"},
+		{RuleID: "multipart-rule", Format: "multipart"},
+		{RuleID: "legacy-rule", Format: ""},
+	}
+
+	jsonChains := chainsForFormat(chains, BodyFormatJSON)
+	jsonIDs := make([]string, 0, len(jsonChains))
+	for _, chain := range jsonChains {
+		jsonIDs = append(jsonIDs, chain.RuleID)
+	}
+	if strings.Join(jsonIDs, ",") != "json-rule,legacy-rule" {
+		t.Fatalf("JSON request must run the json and legacy rules only, got %v", jsonIDs)
+	}
+
+	multipartChains := chainsForFormat(chains, BodyFormatMultipart)
+	if len(multipartChains) != 1 || multipartChains[0].RuleID != "multipart-rule" {
+		t.Fatalf("multipart request must run the multipart rule only, got %+v", multipartChains)
+	}
+}
+
+func TestMultipartRuleDoesNotRunOnJSONBody(t *testing.T) {
+	body := []byte(`{"model":"gpt-image-2.6","prompt":"old"}`)
+	req := &RelayRequest{RawBody: body, ContentType: "application/json", Format: BodyFormatJSON}
+	if err := json.Unmarshal(body, &req.Body); err != nil {
+		t.Fatal(err)
+	}
+	ops, err := compileRewriteChain("mp", `[{"mode":"set","path":"prompt","value":"rewritten"}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := &ExecutionPlan{CompiledRewrite: []CompiledRewriteChain{{RuleID: "mp", RuleName: "mp", Ops: ops, Format: "multipart"}}}
+	engine := &Engine{}
+	if err := engine.applyCompiledRewriteRules(plan, req); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if req.BodyDirty {
+		t.Fatalf("a multipart rule must not touch a JSON request")
+	}
+	encoded, err := req.EncodeBody()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(encoded, body) {
+		t.Fatalf("JSON body changed: %s", encoded)
 	}
 }

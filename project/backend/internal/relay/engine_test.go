@@ -2,10 +2,12 @@ package relay
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hapiy/hapiy/internal/model"
@@ -19,9 +21,15 @@ import (
 // (e.g. the throttled ConcurrencyWindowCounter snapshot goroutine) are visible
 // to the test's own connections — plain ":memory:" opens a fresh empty
 // database per connection, and a fixed name would be shared across tests.
+// The sequence suffix keeps the DSN unique per engine: go test -count=N
+// reruns a test under the same t.Name(), and a reused DSN would see the
+// previous run's rows (UNIQUE constraint on providers.id).
+var testEngineSeq atomic.Uint64
+
 func newTestEngine(t *testing.T) (*Engine, *gorm.DB) {
 	t.Helper()
-	dsn := "file:" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
+	dsn := fmt.Sprintf("file:%s_%d?mode=memory&cache=shared",
+		strings.ReplaceAll(t.Name(), "/", "_"), testEngineSeq.Add(1))
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)

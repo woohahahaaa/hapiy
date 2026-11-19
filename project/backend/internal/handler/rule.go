@@ -341,15 +341,13 @@ func TestRewriteRule(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-// normalizeRuleFormat keeps the rule's container gate to the three shapes the
-// relay understands. Anything unknown becomes the unrestricted default so a
-// typo can never silently disable a rule.
+// normalizeRuleFormat keeps the rule's container gate to the two shapes the
+// relay understands. The formats are exclusive, so an empty or unknown value
+// means "JSON" — the container every rule written before the gate existed was
+// authored for.
 func normalizeRuleFormat(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "json":
-		return "json"
-	case "multipart":
+	if strings.EqualFold(strings.TrimSpace(value), "multipart") {
 		return "multipart"
 	}
-	return ""
+	return "json"
 }

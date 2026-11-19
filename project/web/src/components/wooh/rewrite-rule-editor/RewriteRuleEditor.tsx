@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { BlockCard } from './BlockCard'
+import type { PathHelpFormat } from './GjsonPathHelp'
 import {
   emptyBlock,
   parseRule,
@@ -14,6 +15,8 @@ interface RewriteRuleEditorProps {
   initialScript: string
   /** 表单任意改动都会以新的序列化 script 字符串回传。 */
   onScriptChange: (next: string) => void
+  /** 规则的请求体格式：决定路径提示与占位符用的是 gjson 还是表单字段。 */
+  format?: PathHelpFormat
 }
 
 /**
@@ -25,7 +28,7 @@ interface RewriteRuleEditorProps {
  * 原因：parseRule 对嵌套 AND/OR 等高级结构是有损的，把「重新序列化的表单」
  * 静默回推会覆盖父级持有的原始 script，打开弹窗即破坏数据。
  */
-export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRuleEditorProps) {
+export function RewriteRuleEditor({ initialScript, onScriptChange, format = 'json' }: RewriteRuleEditorProps) {
   const { t } = useTranslation('rewrite')
   const [form, setForm] = useState<RuleForm>(() => parseRule(initialScript))
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -111,6 +114,7 @@ export function RewriteRuleEditor({ initialScript, onScriptChange }: RewriteRule
             }}
             isDragging={dragIndex === i}
             isDragOver={overIndex === i && dragIndex !== null && dragIndex !== i}
+            format={format}
           />
         ))
       )}

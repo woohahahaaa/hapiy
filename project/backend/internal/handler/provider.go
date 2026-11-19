@@ -276,6 +276,35 @@ func ResetProviderDisableStatus(db *gorm.DB, engine *relay.Engine) gin.HandlerFu
 	}
 }
 
+// DisableProviderValue manually disables one enabled base URL or key from the
+// provider editor's per-row 禁用 button. Manual disables stay out of the
+// auto-recovery pending table; the existing reset endpoints re-enable them.
+func DisableProviderValue(db *gorm.DB, engine *relay.Engine) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req resetProviderDisableRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		id := c.Param("id")
+		if err := providerops.DisableValue(db, engine, id, req.Dimension, req.Value); err != nil {
+			switch {
+			case errors.Is(err, providerops.ErrNotFound):
+				c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
+			case errors.Is(err, providerops.ErrValueRequired), errors.Is(err, providerops.ErrDimension):
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			default:
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
+			return
+		}
+		if req.Dimension == model.FailoverDimensionProvider {
+			req.Value = id
+		}
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"provider_id": id, "dimension": req.Dimension, "value": req.Value}})
+	}
+}
+
 type resetProviderDimensionRequest struct {
 	Dimension string `json:"dimension" binding:"required,oneof=provider base_url key"`
 }

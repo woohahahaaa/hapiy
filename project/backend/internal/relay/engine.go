@@ -553,32 +553,22 @@ func (e *Engine) RelayRequest(ctx context.Context, plan *ExecutionPlan, req *Rel
 	return resp, nil
 }
 
-// chainsForFormat drops the rules whose container gate does not match the
-// request. A rule without a gate ("") applies to both containers: its paths are
-// top-level keys either way, so the same wording works for a JSON field and a
-// multipart form field.
+// chainsForFormat keeps only the rules whose container gate matches the
+// request. The two containers are exclusive: a rule is authored for JSON or
+// for multipart, never for both. An empty gate (rules written before the
+// column existed) counts as JSON, which is what those rules were authored
+// against.
 func chainsForFormat(chains []CompiledRewriteChain, format BodyFormat) []CompiledRewriteChain {
 	if len(chains) == 0 {
 		return nil
 	}
+	wantMultipart := format == BodyFormatMultipart
 	filtered := make([]CompiledRewriteChain, 0, len(chains))
 	for _, chain := range chains {
-		switch chain.Format {
-		case "", "any":
-			filtered = append(filtered, chain)
-		case string(BodyFormatMultipart):
-			if format == BodyFormatMultipart {
-				filtered = append(filtered, chain)
-			}
-		case string(BodyFormatJSON):
-			if format != BodyFormatMultipart {
-				filtered = append(filtered, chain)
-			}
-		default:
-			// An unknown gate is treated as "both" so a rule authored by a
-			// newer build never silently stops running.
-			filtered = append(filtered, chain)
+		if (chain.Format == string(BodyFormatMultipart)) != wantMultipart {
+			continue
 		}
+		filtered = append(filtered, chain)
 	}
 	return filtered
 }

@@ -34,7 +34,7 @@ function fmtSeconds(val: number): string {
   return `${Math.max(0.1, val / 1000).toFixed(1)}s`
 }
 
-// Event records (故障转移/自动恢复/手动恢复/系统管理) carry an empty status.
+// Event records (故障转移/手动禁用/自动恢复/手动恢复/系统管理) carry an empty status.
 function isEventLog(row: UsageLog): boolean {
   return row.status === ''
 }
@@ -54,6 +54,7 @@ function cacheHitRateText(hit: number, miss: number, promptTokens: number): stri
 // type distinctly, matching the visual language of the status badges.
 const EVENT_SOURCE_COLORS: Record<string, string> = {
   故障转移: 'dc2626',
+  手动禁用: 'd97706',
   自动恢复: '16a34a',
   手动恢复: '2563eb',
   系统管理: '9ca3af',
@@ -387,7 +388,7 @@ export function LogsPage() {
                 : t('status.failed')
             return `<#dc2626>${label}</#dc2626>`
           }
-          // 事件行（故障转移/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
+          // 事件行（故障转移/手动禁用/自动恢复/手动恢复/系统管理）：状态列只显示来源标签，
           // 长文本（errorMessage/eventDetail）统一放进详情字段。
           return row.source ? `<#9ca3af>${row.source}</#9ca3af>` : null
         },

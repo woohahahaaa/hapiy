@@ -21,6 +21,7 @@ var auditSkips = map[string]struct{}{
 	"/v1/dashboard/providers/disable-status/reset-all":           {},
 	"/v1/dashboard/providers/:id/disable-status/reset":           {},
 	"/v1/dashboard/providers/:id/disable-status/reset-dimension": {},
+	"/v1/dashboard/providers/:id/disable-status/disable":        {},
 }
 
 // auditLabels maps dashboard write routes to their "系统管理" event label.

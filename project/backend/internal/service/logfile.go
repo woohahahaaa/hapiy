@@ -29,6 +29,21 @@ func InitLogCaptureWriter(db *gorm.DB) {
 	})
 }
 
+// ResetLogWritersForTest tears down the global log writer and log capture
+// writer so a subsequent Init call can bind them to a fresh test database.
+// Without this, go test -count=N reruns a test under the same process and
+// sync.Once keeps the writer pointed at the first run's discarded DB, so
+// rows silently land in a database no assertion can read.
+func ResetLogWritersForTest() {
+	if globalLogWriter != nil {
+		globalLogWriter.Stop()
+	}
+	globalLogWriter = nil
+	globalLogCaptureWriter = nil
+	logWriterOnce = sync.Once{}
+	logCaptureWriterOnce = sync.Once{}
+}
+
 // LogCapture returns the global log capture writer. Must call InitLogCaptureWriter first.
 func LogCapture() *LogCaptureWriter {
 	return globalLogCaptureWriter

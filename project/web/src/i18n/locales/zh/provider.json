@@ -26,7 +26,8 @@
     "key": "Key {{disabled}}/{{total}}",
     "disabledNote": "当前{{label}}已禁用",
     "providerDisabledNote": "当前供应商已禁用",
-    "restoreDirect": "直接恢复"
+    "restoreDirect": "直接恢复",
+    "restore": "恢复"
   },
   "dialog": {
     "editProvider": "编辑供应商",
@@ -67,6 +68,8 @@
     "note": "备注",
     "noteAria": "{{label}}备注",
     "deleteValueAria": "删除{{label}}",
+    "disableValueAria": "禁用{{label}}",
+    "restoreValueAria": "恢复{{label}}",
     "deleteEndpointAria": "删除Endpoint",
     "endpointHint": "该模型允许的完整请求路径，留空表示不限制。空格、逗号、分号分隔可填多个；没写开头的斜杠会自动补上。下拉里列出的路径点击可直接切换；也可输入后移开焦点即生效；清空后移开焦点回到不限路径。",
     "modelNamePlaceholder": "模型名称"
@@ -123,6 +126,7 @@
   },
   "toast": {
     "disableReset": "已恢复故障转移禁用状态",
+    "valueDisabled": "已手动禁用该条目",
     "snapshotUpdated": "已从models.dev更新价格快照",
     "bulkFilled": "已为{{count}}个模型匹配参考供应商并同步价格（当前供应商优先）",
     "bulkVendorless": "{{count}}个模型未在models.dev找到可用的参考供应商，未自动设置",

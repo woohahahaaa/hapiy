@@ -27,7 +27,8 @@
     "key": "Key {{disabled}}/{{total}}",
     "disabledNote": "This {{label}} is disabled",
     "providerDisabledNote": "This provider is disabled",
-    "restoreDirect": "Restore directly"
+    "restoreDirect": "Restore directly",
+    "restore": "Restore"
   },
   "dialog": {
     "editProvider": "Edit provider",
@@ -68,6 +69,8 @@
     "note": "Note",
     "noteAria": "{{label}} note",
     "deleteValueAria": "Delete {{label}}",
+    "disableValueAria": "Disable {{label}}",
+    "restoreValueAria": "Restore {{label}}",
     "deleteEndpointAria": "Delete Endpoint",
     "endpointHint": "Full request paths allowed for this model; empty means unrestricted. Separate multiple paths with spaces, commas or semicolons; a missing leading slash is added automatically. Click a path in the dropdown to switch to it, or type and leave the field to apply it — clearing it and leaving the field means unrestricted.",
     "modelNamePlaceholder": "Model name"
@@ -124,6 +127,7 @@
   },
   "toast": {
     "disableReset": "Failover disabled state restored",
+    "valueDisabled": "Entry manually disabled",
     "snapshotUpdated": "Price snapshot updated from models.dev",
     "bulkFilled_one": "Matched a reference provider and synced prices for {{count}} model (current provider first)",
     "bulkFilled_other": "Matched a reference provider and synced prices for {{count}} models (current provider first)",

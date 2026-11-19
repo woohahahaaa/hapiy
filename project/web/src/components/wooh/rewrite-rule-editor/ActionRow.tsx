@@ -6,6 +6,7 @@ import { AppIcon } from '@/components/wooh/AppIcon'
 import { MODES, MODE_BY_VALUE, SCOPE_OPTIONS, type ModeName } from './modes'
 import { LiteralValueInput } from './LiteralValueInput'
 import { materializeSource, type Action } from './serializer'
+import type { PathHelpFormat } from './GjsonPathHelp'
 
 interface ActionRowProps {
   index: number
@@ -13,12 +14,14 @@ interface ActionRowProps {
   onChange: (next: Action) => void
   onRemove: () => void
   canRemove: boolean
+  /** 规则的请求体格式：multipart 时路径是表单字段名，不是 gjson 路径。 */
+  format?: PathHelpFormat
 }
 
 // 第二排字段左对齐 scope 触发器（pl-[24px]：index w-4 + gap-2）。
 const FIELDS_LEFT_OFFSET = 'pl-[24px]'
 
-export function ActionRow({ index, action, onChange, onRemove, canRemove }: ActionRowProps) {
+export function ActionRow({ index, action, onChange, onRemove, canRemove, format = 'json' }: ActionRowProps) {
   const { t } = useTranslation('rewrite')
   const spec = action.mode && MODE_BY_VALUE.has(action.mode as ModeName)
     ? MODE_BY_VALUE.get(action.mode as ModeName)!
@@ -54,7 +57,13 @@ export function ActionRow({ index, action, onChange, onRemove, canRemove }: Acti
             className="h-7 min-w-0 flex-1 font-mono text-xs"
             value={action.path}
             onChange={(e) => onChange({ ...action, path: e.target.value })}
-            placeholder={action.scope === 'header' ? t('path.headerPlaceholder') : t('path.gjsonPlaceholder')}
+            placeholder={
+              action.scope === 'header'
+                ? t('path.headerPlaceholder')
+                : format === 'multipart'
+                  ? t('path.multipartPlaceholder')
+                  : t('path.gjsonPlaceholder')
+            }
           />
           <Select
             value={action.mode}

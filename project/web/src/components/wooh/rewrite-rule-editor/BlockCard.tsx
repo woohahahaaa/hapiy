@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { AppIcon } from '@/components/wooh/AppIcon'
 import { ConditionList } from './ConditionList'
 import { ActionRow } from './ActionRow'
+import type { PathHelpFormat } from './GjsonPathHelp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   emptyAction,
@@ -26,6 +27,8 @@ interface BlockCardProps {
   onDrop?: () => void
   isDragging?: boolean
   isDragOver?: boolean
+  /** 规则的请求体格式，透传给每条执行的路径输入。 */
+  format?: PathHelpFormat
 }
 
 export function BlockCard({
@@ -39,6 +42,7 @@ export function BlockCard({
   onDrop,
   isDragging = false,
   isDragOver = false,
+  format = 'json',
 }: BlockCardProps) {
   const { t } = useTranslation('rewrite')
   const updateAction = (i: number, next: Block['actions'][number]) => {
@@ -188,6 +192,7 @@ export function BlockCard({
                   onChange={(next) => updateAction(i, next)}
                   onRemove={() => removeAction(i)}
                   canRemove={block.actions.length > 1}
+                  format={format}
                 />
               ))}
             </div>

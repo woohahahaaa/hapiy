@@ -72,7 +72,8 @@
   },
   "path": {
     "headerPlaceholder": "header名（不用写header.）",
-    "gjsonPlaceholder": "gjson路径"
+    "gjsonPlaceholder": "JSON 路径",
+    "multipartPlaceholder": "表单字段名"
   },
   "selectModePlaceholder": "选择操作",
   "field": {
@@ -83,7 +84,7 @@
     "invalidHint": "字符串需要手动添加引号"
   },
   "convention": {
-    "refHint": "不加引号 → 变量：header名或gjson路径",
+    "refHint": "不加引号 → 变量：header名或JSON路径",
     "crossDomainHint": "跨域加前缀：header.名 或body.路径",
     "literalHint": "true/false/null/数字 → JSON字面量",
     "stringHint": "加引号 → 固定字符串，引号内为内容",
@@ -94,16 +95,16 @@
     "ariaLabel": "反向匹配"
   },
   "gjson": {
-    "triggerLabel": "gjson路径实例",
-    "triggerAria": "gjson路径实例",
-    "syntaxTitle": "gjson路径语法",
+    "triggerLabel": "JSON 路径示例",
+    "triggerAria": "JSON 路径示例",
     "examples": {
-      "topLevel": "顶层字段",
-      "arrayIndex": "数组第0项的字段",
-      "arrayLast": "数组最后一项（负数索引）",
-      "nested": "嵌套字段",
-      "header": "HTTP header（scope=header时，路径只填名字，如X-Request-ID）"
-    }
+      "topLevel": "叫 model 的字段（模型名）",
+      "arrayIndex": "第 1 句话的内容",
+      "arrayLast": "最后一句话的内容",
+      "nested": "body 里的 hello",
+      "header": "请求头（切到 header 后只写名字）"
+    },
+    "howTo": "像报地址：从外往里写，用 . 隔开；第几个从 0 数起，-1 是最后一个。"
   },
   "form": {
     "name": "名称",
@@ -132,5 +133,17 @@
     "ruleFailed": "第{{index}}条规则「{{name}}」执行失败：{{error}}",
     "unknownError": "未知错误",
     "testFailed": "测试失败"
+  },
+  "multipart": {
+    "triggerLabel": "multipart 路径示例",
+    "triggerAria": "multipart 路径示例",
+    "examples": {
+      "field": "叫 model 的行（模型名）",
+      "prompt": "要画什么，写在这行",
+      "sliceIndex": "第 1 张参考图",
+      "fileHeader": "第 1 张图的文件名（内容改不了）",
+      "header": "请求头（切到 header 后只写名字）"
+    },
+    "howTo": "像看表格：路径就是那一行的名字；同名的行按 0、1、2 数第几个。"
   }
 }

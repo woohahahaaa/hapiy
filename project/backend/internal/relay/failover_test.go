@@ -1033,6 +1033,8 @@ func TestRelayRequest_affinityHitFailoverRebuildsHistoryToServedProvider(t *test
 	db := newRelayTestDB(t, &model.Provider{}, &model.TopologyConfig{}, &model.RequestChannelHistory{},
 		&model.TopologySlotAssignment{}, &model.Setting{}, &model.FailoverHitCounter{}, &model.AutoDisableState{},
 		&model.Log{})
+	service.ResetLogWritersForTest()
+	t.Cleanup(service.ResetLogWritersForTest)
 	service.InitLogWriter(db)
 	primaryProvider := &model.Provider{ID: "primary", Name: "primary", BaseURLs: `[` + strconv.Quote(primary.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
 	alternateProvider := &model.Provider{ID: "alternate", Name: "alternate", BaseURLs: `[` + strconv.Quote(alternate.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
@@ -1123,6 +1125,8 @@ func TestRelayRequest_failedTransferWritesServedProviderRow(t *testing.T) {
 	db := newRelayTestDB(t, &model.Provider{}, &model.TopologyConfig{}, &model.RequestChannelHistory{},
 		&model.TopologySlotAssignment{}, &model.Setting{}, &model.FailoverHitCounter{}, &model.AutoDisableState{},
 		&model.Log{})
+	service.ResetLogWritersForTest()
+	t.Cleanup(service.ResetLogWritersForTest)
 	service.InitLogWriter(db)
 	primaryProvider := &model.Provider{ID: "primary", Name: "primary", BaseURLs: `[` + strconv.Quote(primary.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}
 	alternateProvider := &model.Provider{ID: "alternate", Name: "alternate", BaseURLs: `[` + strconv.Quote(alternate.URL) + `]`, Keys: `["k"]`, Status: true, WorkflowEnabled: true}

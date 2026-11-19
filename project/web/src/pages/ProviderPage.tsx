@@ -52,6 +52,9 @@ type ProviderFormProps = {
   readonly onResetDisableDimension: (dimension: 'provider' | 'base_url' | 'key') => void
   // 恢复单条被自动禁用的 base URL / key（只恢复这一条，不碰同维度的其他条目）。
   readonly onResetDisableValue: (dimension: 'base_url' | 'key', value: string) => void
+  // 手动禁用单条 base URL / key（行右侧「禁用」按钮）；不传则不渲染按钮
+  // （新建供应商还没落库，禁用无从谈起）。
+  readonly onDisableValue?: (dimension: 'base_url' | 'key', value: string) => void
   // 获取模型弹窗里切换 /v1 去重后，同步外层 providers 列表，保证重新打开
   // 弹窗时读到的是刚保存的值（而不是打开页面的旧快照）。
   readonly onProviderPreferenceUpdated: (id: string, dedupeV1Suffix: boolean) => void
@@ -560,6 +563,11 @@ export function ProviderPage() {
     if (reset) toast(t('toast.disableReset'))
   }
 
+  const handleDisableValue = async (provider: Provider, dimension: 'base_url' | 'key', value: string) => {
+    const done = await runMutation(() => dashboardApi.disableProviderValue(provider.id, dimension, value))
+    if (done) toast(t('toast.valueDisabled'))
+  }
+
   const columns: ColumnDef<Provider>[] = [
     { key: 'name', label: t('columns.name'), defaultWidth: { kind: 'pixel', value: 160 }, render: (_, provider) => <span className="font-medium">{provider.name}</span> },
     { key: 'baseUrls', label: t('columns.baseUrls'), defaultWidth: { kind: 'pixel', value: 120 }, render: (_, provider) => <span className="text-xs">{t('list.urls', { count: provider.baseUrls.length })}</span> },
@@ -691,6 +699,7 @@ export function ProviderPage() {
                disableStatus={editing ? disableStatuses.get(editing.id) ?? null : null}
                onResetDisableDimension={(dimension) => { if (editing) void handleResetDisableDimension(editing, dimension) }}
                onResetDisableValue={(dimension, value) => { if (editing) void handleResetDisableValue(editing, dimension, value) }}
+               onDisableValue={(dimension, value) => { if (editing) void handleDisableValue(editing, dimension, value) }}
                onProviderPreferenceUpdated={handleProviderPreferenceUpdated}
              />
           </DialogContent>
@@ -875,7 +884,7 @@ function ModelEndpointEditor({ values, candidates, onChange }: {
   )
 }
 
-function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
+function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onUseKeyChange, disableStatus, onResetDisableDimension, onResetDisableValue, onDisableValue, onProviderPreferenceUpdated }: ProviderFormProps) {
   const { t } = useTranslation('provider')
   const [form, setForm] = useState<ProviderInput>(() => provider
     ? { ...provider, models: normalizeModelEndpoints(seedModelEndpointsFromProvider(provider.endpoints, provider.models)) }
@@ -1274,7 +1283,7 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
           <Input id="provider-name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="OpenAI" />
         </Field>
       </div>
-      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} disabledNote={t('failoverStatus.disabledNote', { label: 'Base URL' })} onRestore={(value) => onResetDisableValue('base_url', value)} strategy={form.baseUrlStrategy} onCycleStrategy={() => cycleStrategy('baseUrlStrategy')} />
+      <ProviderValueList label={t('columns.baseUrls')} placeholder="https://api.openai.com/v1" values={form.baseUrls} onChange={(baseUrls) => setForm((current) => ({ ...current, baseUrls }))} stripTrailingSlash disabledValues={disableStatus?.baseUrls} disabledNote={t('failoverStatus.disabledNote', { label: 'Base URL' })} onRestore={(value) => onResetDisableValue('base_url', value)} onDisable={onDisableValue ? (value) => onDisableValue('base_url', value) : undefined} strategy={form.baseUrlStrategy} onCycleStrategy={() => cycleStrategy('baseUrlStrategy')} />
       <ProviderValueList
         label={t('form.apiKeys')}
         placeholder="sk-xxx"
@@ -1286,6 +1295,7 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
         disabledValues={disableStatus?.keys}
         disabledNote={t('failoverStatus.disabledNote', { label: 'Key' })}
         onRestore={(value) => onResetDisableValue('key', value)}
+        onDisable={onDisableValue ? (value) => onDisableValue('key', value) : undefined}
         strategy={form.keyStrategy}
         onCycleStrategy={() => cycleStrategy('keyStrategy')}
       />
@@ -1423,12 +1433,15 @@ type ProviderValueListProps = {
   readonly disabledValues?: Readonly<Record<string, boolean>>
   readonly disabledNote?: string
   readonly onRestore?: (value: string) => void
+  // 手动禁用：传入时每行右侧渲染「禁用」按钮（已禁用的行变「恢复」）。
+  // 不传则不渲染（如新建供应商尚未落库）。
+  readonly onDisable?: (value: string) => void
   // 该维度的选择策略（按顺序 / 均衡），显示在标题右侧；不传则不显示按钮。
   readonly strategy?: ProviderStrategy
   readonly onCycleStrategy?: () => void
 }
 
-export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, disabledNote, onRestore, strategy, onCycleStrategy }: ProviderValueListProps) {
+export function ProviderValueList({ label, placeholder, values, onChange, stripTrailingSlash = false, notes, onNotesChange, notesPlaceholder, disabledValues, disabledNote, onRestore, onDisable, strategy, onCycleStrategy }: ProviderValueListProps) {
   const { t } = useTranslation('provider')
   const strategyLabel = {
     sequential: t('form.strategySequential'),
@@ -1491,6 +1504,17 @@ export function ProviderValueList({ label, placeholder, values, onChange, stripT
                     aria-label={t('form.noteAria', { label })}
                     className="w-40 shrink-0"
                   />
+                )}
+                {onDisable && !isPhantom && trimmedValue !== '' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => (isAutoDisabled ? onRestore?.(trimmedValue) : onDisable(trimmedValue))}
+                    aria-label={isAutoDisabled ? t('form.restoreValueAria', { label }) : t('form.disableValueAria', { label })}
+                  >
+                    {isAutoDisabled ? t('failoverStatus.restore') : t('common:action.disable')}
+                  </Button>
                 )}
                 <Button
                   type="button"

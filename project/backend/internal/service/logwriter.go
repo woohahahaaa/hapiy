@@ -294,6 +294,7 @@ func LogRelayFailure(in LogRelayFailureInput) {
 // the "使用记录" feature. Source carries the Chinese event type label.
 const (
 	LogSourceChannelDisabled        = "故障转移"
+	LogSourceChannelDisabledManual  = "手动禁用"
 	LogSourceChannelRecoveredAuto   = "自动恢复"
 	LogSourceChannelRecoveredManual = "手动恢复"
 	LogSourceSystemAdmin            = "系统管理"

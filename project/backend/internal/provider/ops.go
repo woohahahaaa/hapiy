@@ -173,6 +173,47 @@ func ResetDisableValue(db *gorm.DB, engine *relay.Engine, providerID, dimension,
 	return nil
 }
 
+// DisableValue manually disables one currently enabled entity (a single base
+// URL or key) from the provider editor's 禁用 button. Unlike failover
+// disables it never creates a DisabledRecord, so the entity stays out of the
+// auto-recovery pending table until someone restores it explicitly.
+func DisableValue(db *gorm.DB, engine *relay.Engine, providerID, dimension, value string) error {
+	if !validDimension(dimension) {
+		return ErrDimension
+	}
+	p, err := load(db, providerID)
+	if err != nil {
+		return err
+	}
+	if dimension == model.FailoverDimensionProvider {
+		value = p.ID
+	}
+	if value == "" {
+		return ErrValueRequired
+	}
+	// Already disabled (auto or manual) — nothing to flip; never overwrite an
+	// auto disable's recovery semantics with the manual flag.
+	var existing model.AutoDisableState
+	err = db.Where("provider_id = ? AND dimension = ? AND value = ?", p.ID, dimension, value).First(&existing).Error
+	if err == nil && existing.Disabled {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	state := model.AutoDisableState{ProviderID: p.ID, Dimension: dimension, Value: value, Disabled: true, Manual: true}
+	if err := db.Where(model.AutoDisableState{ProviderID: p.ID, Dimension: dimension, Value: value}).
+		Assign(map[string]interface{}{"disabled": true, "manual": true}).
+		FirstOrCreate(&state).Error; err != nil {
+		return err
+	}
+	service.LogEvent(service.LogSourceChannelDisabledManual, p.Name,
+		service.ChannelEventMessage(dimension, value),
+		"操作: 手动禁用供应商 "+service.DimensionLabel(dimension)+" 的单个条目")
+	reload(engine)
+	return nil
+}
+
 // ResetDisableDimension clears every auto-disable state of one dimension for
 // one provider (恢复 Provider 行 / 全部 BaseURL / 全部 Key).
 func ResetDisableDimension(db *gorm.DB, engine *relay.Engine, providerID, dimension string) error {

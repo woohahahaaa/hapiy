@@ -152,6 +152,8 @@ func TestRecordDispatchRejection_writesLogCaptureRow(t *testing.T) {
 	if err := db.AutoMigrate(&model.TopologyConfig{}, &model.LogCapture{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
+	service.ResetLogWritersForTest()
+	t.Cleanup(service.ResetLogWritersForTest)
 	service.InitLogCaptureWriter(db)
 	seedFlatTopology(t, db, `{"nodes":[
 		{"id":"e1","kind":"requestEntry","name":"entry","enabled":true,"weight":1},
@@ -222,6 +224,8 @@ func TestRelayRequestFailure_skipsLogCaptureWhenNodeDisabled(t *testing.T) {
 	if err := db.AutoMigrate(&model.LogCapture{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
+	service.ResetLogWritersForTest()
+	t.Cleanup(service.ResetLogWritersForTest)
 	service.InitLogCaptureWriter(db)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

@@ -2162,10 +2162,13 @@ export type RewriteRule = {
   readonly format: RewriteRuleFormat
 }
 
-export type RewriteRuleFormat = '' | 'json' | 'multipart'
+// The two request containers are exclusive: a rule is authored for JSON bodies
+// or for multipart/form-data uploads (image edits), never both. Rules written
+// before the gate existed carry no format and mean JSON.
+export type RewriteRuleFormat = 'json' | 'multipart'
 
 export function parseRewriteRuleFormat(value: unknown): RewriteRuleFormat {
-  return value === 'json' || value === 'multipart' ? value : ''
+  return value === 'multipart' ? 'multipart' : 'json'
 }
 
 // 并行控制节点内联配置：直接在拓扑 slot 条目上保存，不再依赖规则表。
@@ -2306,7 +2309,7 @@ const serializeRewriteRule: RuleSerializer<RewriteRule> = (rule) => ({
   name: rule.name,
   script: (rule as RewriteRule).script ?? '',
   status: rule.status,
-  format: (rule as RewriteRule).format ?? '',
+  format: (rule as RewriteRule).format ?? 'json',
 })
 
 const serializeFailoverRule: RuleSerializer<FailoverRule> = (rule) => ({
@@ -2865,6 +2868,12 @@ export const dashboardApi = {
     await request(`/providers/${encodeURIComponent(id)}/disable-status/reset-dimension`, {
       method: 'POST',
       body: JSON.stringify({ dimension }),
+    })
+  },
+  async disableProviderValue(id: string, dimension: ProviderDisableDimension, value: string): Promise<void> {
+    await request(`/providers/${encodeURIComponent(id)}/disable-status/disable`, {
+      method: 'POST',
+      body: JSON.stringify({ dimension, value }),
     })
   },
 

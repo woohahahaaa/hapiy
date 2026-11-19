@@ -316,6 +316,7 @@ func runServe() {
 			dashboardAuthed.POST("/providers/disable-status/reset-all", handler.ResetAllProviderDisableStatus(db, engine))
 			dashboardAuthed.POST("/providers/:id/disable-status/reset", handler.ResetProviderDisableStatus(db, engine))
 			dashboardAuthed.POST("/providers/:id/disable-status/reset-dimension", handler.ResetProviderDisableDimension(db, engine))
+			dashboardAuthed.POST("/providers/:id/disable-status/disable", handler.DisableProviderValue(db, engine))
 			dashboardAuthed.GET("/disabled-records", handler.ListDisabledRecords(db, engine))
 			dashboardAuthed.POST("/disabled-records/:id/replay", handler.ReplayDisabledRecord(db, engine))
 			dashboardAuthed.POST("/disabled-records/:id/restore-direct", handler.RestoreDisabledRecordDirectly(db, engine))

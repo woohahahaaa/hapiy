@@ -568,7 +568,13 @@ func (e *Engine) applyFailoverAction(plan *ExecutionPlan, req *RelayRequest, dim
 		return nil
 	}
 	state := model.AutoDisableState{ProviderID: plan.Provider.ID, Dimension: dimension, Value: value, Disabled: true}
-	if err := e.db.Where(model.AutoDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).Assign(state).FirstOrCreate(&state).Error; err != nil {
+	// manual=false must be assigned explicitly: a struct Assign skips zero
+	// values, and a row left manual=true by an earlier manual disable would
+	// otherwise stay out of the auto-recovery pending table after this
+	// failover disable.
+	if err := e.db.Where(model.AutoDisableState{ProviderID: state.ProviderID, Dimension: state.Dimension, Value: state.Value}).
+		Assign(map[string]interface{}{"disabled": true, "manual": false}).
+		FirstOrCreate(&state).Error; err != nil {
 		return err
 	}
 	// 记录当时实际用过的 (baseURL, key) 和完整 URL，恢复探针直接重放，

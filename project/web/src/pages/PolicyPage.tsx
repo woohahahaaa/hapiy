@@ -305,7 +305,7 @@ function RewritePage() {
 function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSave: (r: RewriteRule) => void; saving: boolean }) {
   const { t } = useTranslation('policy')
   const [form, setForm] = useState<RewriteRule>(
-    rule || { id: '', name: '', script: '[]', status: true, format: '' }
+    rule || { id: '', name: '', script: '[]', status: true, format: 'json' }
   )
 
   const formKey = rule?.id ?? 'new'
@@ -314,7 +314,7 @@ function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSav
     <DialogScrollBody footer={
       <>
         <div className="flex w-full items-center justify-between gap-2">
-          <GjsonPathHelp />
+          <GjsonPathHelp format={form.format} />
           <div className="flex gap-2">
             <Button disabled={saving || !form.name.trim()} onClick={() => onSave({ ...form, name: form.name.trim() })}>{saving ? t('actions.saving') : t('common:action.save')}</Button>
           </div>
@@ -329,25 +329,22 @@ function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSav
       <Field>
         <FieldLabel>{t('rewrite.formatLabel')}</FieldLabel>
         <Select
-          value={form.format === '' ? 'any' : form.format}
-          onValueChange={(value) =>
-            setForm((p) => ({ ...p, format: value === 'any' ? '' : (value as RewriteRule['format']) }))
-          }
+          value={form.format}
+          onValueChange={(value) => setForm((p) => ({ ...p, format: value as RewriteRule['format'] }))}
         >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              <SelectItem value="any">{t('rewrite.formatAny')}</SelectItem>
               <SelectItem value="json">{t('rewrite.formatJSON')}</SelectItem>
               <SelectItem value="multipart">{t('rewrite.formatMultipart')}</SelectItem>
             </SelectGroup>
           </SelectContent>
         </Select>
-        {form.format === 'multipart' && (
-          <p className="text-xs text-muted-foreground">{t('rewrite.formatMultipartHint')}</p>
-        )}
+        <p className="text-xs text-muted-foreground">
+          {form.format === 'multipart' ? t('rewrite.formatMultipartHint') : t('rewrite.formatJSONHint')}
+        </p>
       </Field>
       <Field>
         <FieldLabel>{t('rewrite.rewriteRules')}</FieldLabel>
@@ -355,6 +352,7 @@ function RewriteForm({ rule, onSave, saving }: { rule: RewriteRule | null; onSav
           key={formKey}
           initialScript={form.script}
           onScriptChange={(next) => setForm((p) => ({ ...p, script: next }))}
+          format={form.format}
         />
       </Field>
       </FieldGroup>

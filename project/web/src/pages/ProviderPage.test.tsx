@@ -20,6 +20,22 @@ function renderList(values: readonly string[], disabledValues?: Readonly<Record<
   )
 }
 
+// 行右侧的手动禁用按钮：传入 onDisable 时每行渲染「禁用」，已禁用的行变「恢复」。
+function renderListWithDisable(values: readonly string[], disabledValues?: Readonly<Record<string, boolean>>): string {
+  return renderToStaticMarkup(
+    <ProviderValueList
+      label="Base URLs"
+      placeholder="https://api.openai.com/v1"
+      values={values}
+      onChange={() => {}}
+      disabledValues={disabledValues}
+      disabledNote={i18n.t('provider:failoverStatus.disabledNote', { label: 'Base URL' })}
+      onRestore={() => {}}
+      onDisable={() => {}}
+    />,
+  )
+}
+
 function occurrences(html: string, needle: string): number {
   return html.split(needle).length - 1
 }
@@ -62,6 +78,40 @@ describe('ProviderValueList 自动禁用备注', () => {
     const html = renderList(['sk-1'], { 'sk-1': true })
     expect(html).toContain('This Base URL is disabled')
     expect(html).toContain('Restore directly')
+  })
+})
+
+describe('ProviderValueList 手动禁用按钮', () => {
+  afterEach(async () => {
+    await i18n.changeLanguage('zh')
+  })
+
+  it('传入 onDisable 时每个非空行的右侧都有「禁用」按钮', () => {
+    const html = renderListWithDisable(['https://a.example.com', 'https://b.example.com'])
+    expect(occurrences(html, '>禁用</button>')).toBe(2)
+  })
+
+  it('已禁用的行按钮变成「恢复」，未禁用的仍是「禁用」', () => {
+    const html = renderListWithDisable(
+      ['https://a.example.com', 'https://b.example.com'],
+      { 'https://a.example.com': true },
+    )
+    // 恢复按钮必须出现在禁用行（a）之后、下一行（b）之前。
+    expect(html.indexOf('https://a.example.com')).toBeLessThan(html.indexOf('>恢复</button>'))
+    expect(html.indexOf('>恢复</button>')).toBeLessThan(html.indexOf('https://b.example.com'))
+    expect(occurrences(html, '>禁用</button>')).toBe(1)
+  })
+
+  it('不传 onDisable 就不渲染禁用按钮（新建供应商场景）', () => {
+    expect(renderList(['https://a.example.com'])).not.toContain('>禁用</button>')
+    expect(renderList(['https://a.example.com'])).not.toContain('>恢复</button>')
+  })
+
+  it('英文界面跟着翻译', async () => {
+    await i18n.changeLanguage('en')
+    const html = renderListWithDisable(['https://a.example.com', 'https://b.example.com'], { 'https://b.example.com': true })
+    expect(occurrences(html, '>Disable</button>')).toBe(1)
+    expect(occurrences(html, '>Restore</button>')).toBe(1)
   })
 })
 

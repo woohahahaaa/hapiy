@@ -234,12 +234,11 @@ type RewriteRule struct {
 	Name   string `gorm:"not null" json:"name"`
 	Script string `gorm:"type:text" json:"script"`
 	Status bool   `gorm:"not null" json:"status"`
-	// Format gates which request container the rule runs on: "" (or "any")
-	// applies to both, "json" only to JSON bodies, "multipart" only to
-	// multipart/form-data bodies. The path syntax is shared — a multipart
-	// field name is the top-level key — the gate just keeps a rule from
-	// silently applying where its author did not expect it.
-	Format string `gorm:"type:text;default:''" json:"format"`
+	// Format gates which request container the rule runs on: "json" for JSON
+	// bodies (the default, and what rules written before this column existed
+	// mean), "multipart" for multipart/form-data bodies such as image edits.
+	// The two are exclusive: a rule belongs to exactly one container.
+	Format string `gorm:"type:text;default:'json'" json:"format"`
 }
 
 func (r *RewriteRule) BeforeCreate(tx *gorm.DB) error {
@@ -472,6 +471,11 @@ type AutoDisableState struct {
 	Dimension  string    `gorm:"not null;uniqueIndex:idx_auto_disable_dimension_value" json:"dimension"`
 	Value      string    `gorm:"not null;uniqueIndex:idx_auto_disable_dimension_value" json:"value"`
 	Disabled   bool      `gorm:"not null;default:false" json:"disabled"`
+	// Manual marks an operator-initiated disable (the provider editor's 禁用
+	// button). Manual disables never enter the auto-recovery pending table,
+	// so only an explicit restore re-enables them. A later failover disable
+	// of the same entity clears the flag back to auto semantics.
+	Manual     bool      `gorm:"not null;default:false" json:"manual"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

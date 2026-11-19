@@ -382,6 +382,12 @@ func ReconcileDisabledRecords(db *gorm.DB) {
 		return
 	}
 	for _, st := range states {
+		// Manual disables (the provider editor's 禁用 button) are excluded on
+		// purpose: no backfill, no reopen. They only leave via an explicit
+		// restore, so the auto-recovery table must never pick them up.
+		if st.Manual {
+			continue
+		}
 		var existing model.DisabledRecord
 		err := db.Where("provider_id = ? AND dimension = ? AND value = ?", st.ProviderID, st.Dimension, st.Value).
 			First(&existing).Error

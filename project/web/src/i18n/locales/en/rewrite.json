@@ -77,7 +77,8 @@
   },
   "path": {
     "headerPlaceholder": "Header name (no header. prefix)",
-    "gjsonPlaceholder": "gjson path"
+    "gjsonPlaceholder": "JSON path",
+    "multipartPlaceholder": "form field name"
   },
   "selectModePlaceholder": "Select operation",
   "field": {
@@ -88,7 +89,7 @@
     "invalidHint": "Strings need manual quotes"
   },
   "convention": {
-    "refHint": "No quotes → variable: header or gjson path",
+    "refHint": "No quotes → variable: header or JSON path",
     "crossDomainHint": "Cross-domain: add a header. or body. prefix",
     "literalHint": "true/false/null/number → JSON literal",
     "stringHint": "Quoted → fixed string, content inside quotes",
@@ -99,16 +100,16 @@
     "ariaLabel": "Invert match"
   },
   "gjson": {
-    "triggerLabel": "gjson path examples",
-    "triggerAria": "gjson path examples",
-    "syntaxTitle": "gjson path syntax",
+    "triggerLabel": "JSON path examples",
+    "triggerAria": "JSON path examples",
     "examples": {
-      "topLevel": "Top-level field",
-      "arrayIndex": "Field of array item 0",
-      "arrayLast": "Last array item (negative index)",
-      "nested": "Nested field",
-      "header": "HTTP header (with scope=header, use only the name, e.g. X-Request-ID)"
-    }
+      "topLevel": "The field named model (the model name)",
+      "arrayIndex": "The content of the 1st message",
+      "arrayLast": "The content of the last message",
+      "nested": "hello inside body",
+      "header": "A request header (switch to header and write the name only)"
+    },
+    "howTo": "Like an address: outermost name first, separated by dots. Counting starts at 0; -1 means the last one."
   },
   "form": {
     "name": "Name",
@@ -138,5 +139,17 @@
     "ruleFailed": "Rule {{index}} \"{{name}}\" failed: {{error}}",
     "unknownError": "Unknown error",
     "testFailed": "Test failed"
+  },
+  "multipart": {
+    "triggerLabel": "multipart path examples",
+    "triggerAria": "multipart path examples",
+    "examples": {
+      "field": "The row named model (the model name)",
+      "prompt": "The prompt row — what to draw goes here",
+      "sliceIndex": "The 1st reference image",
+      "fileHeader": "The 1st image's filename (its bytes can't change)",
+      "header": "A request header (switch to header and write the name only)"
+    },
+    "howTo": "Like a table: the path is a row name; rows sharing a name are counted 0, 1, 2."
   }
 }
