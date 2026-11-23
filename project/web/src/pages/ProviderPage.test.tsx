@@ -51,7 +51,8 @@ describe('ProviderValueList 自动禁用备注', () => {
       { 'https://b.example.com': true },
     )
     expect(occurrences(html, '已禁用')).toBe(1)
-    expect(occurrences(html, '直接恢复')).toBe(1)
+    // 备注行只是提示，不带操作按钮（恢复由行右侧按钮完成）。
+    expect(html).not.toContain('直接恢复')
     // 备注排在对应条目之后：b 的输入框先出现，然后是备注。
     expect(html.indexOf('https://b.example.com')).toBeLessThan(html.indexOf('已禁用'))
     expect(html.indexOf('已禁用')).toBeLessThan(html.indexOf('https://c.example.com'))
@@ -63,7 +64,7 @@ describe('ProviderValueList 自动禁用备注', () => {
       { 'sk-1': true, 'sk-3': true },
     )
     expect(occurrences(html, '已禁用')).toBe(2)
-    expect(occurrences(html, '直接恢复')).toBe(2)
+    expect(html).not.toContain('直接恢复')
   })
 
   it('没有禁用条目时不出现备注', () => {
@@ -77,7 +78,7 @@ describe('ProviderValueList 自动禁用备注', () => {
     await i18n.changeLanguage('en')
     const html = renderList(['sk-1'], { 'sk-1': true })
     expect(html).toContain('This Base URL is disabled')
-    expect(html).toContain('Restore directly')
+    expect(html).not.toContain('Restore directly')
   })
 })
 
@@ -91,7 +92,7 @@ describe('ProviderValueList 手动禁用按钮', () => {
     expect(occurrences(html, '>禁用</button>')).toBe(2)
   })
 
-  it('已禁用的行按钮变成「恢复」，未禁用的仍是「禁用」', () => {
+  it('已禁用的行按钮变成橙色「恢复」，未禁用的仍是「禁用」', () => {
     const html = renderListWithDisable(
       ['https://a.example.com', 'https://b.example.com'],
       { 'https://a.example.com': true },
@@ -100,6 +101,8 @@ describe('ProviderValueList 手动禁用按钮', () => {
     expect(html.indexOf('https://a.example.com')).toBeLessThan(html.indexOf('>恢复</button>'))
     expect(html.indexOf('>恢复</button>')).toBeLessThan(html.indexOf('https://b.example.com'))
     expect(occurrences(html, '>禁用</button>')).toBe(1)
+    // 恢复按钮带 warning 色类，与「禁用」区分。
+    expect(html).toContain('border-warning/50')
   })
 
   it('不传 onDisable 就不渲染禁用按钮（新建供应商场景）', () => {

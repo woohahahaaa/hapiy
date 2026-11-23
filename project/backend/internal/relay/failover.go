@@ -202,7 +202,8 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 			appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusHit, joinReasons("已切换通道", disableInfo)))
 			return rotated, nil
 		}
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, joinReasons("没有可切换的其他通道", disableInfo)))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, failoverNoTransferStatus(disableError, disableApplied), joinReasons("没有可切换的其他通道", disableInfo)))
+		return resp, err
 	case model.FailoverDimensionProvider:
 		fallbackPlan := e.resolveFallbackPlan(rule.FallbackProvider)
 		if rule.FallbackProvider == "" {
@@ -232,7 +233,7 @@ func (e *Engine) relayWithFailover(ctx context.Context, plan *ExecutionPlan, req
 		}
 	}
 	if dimension == model.FailoverDimensionProvider {
-		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusFailed, joinReasons("无支持该模型与 Endpoint 的可用回退供应商", disableInfo)))
+		appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, failoverNoTransferStatus(disableError, disableApplied), joinReasons("无支持该模型与 Endpoint 的可用回退供应商", disableInfo)))
 		return resp, fmt.Errorf("upstream failed for model %s at %s; no eligible fallback provider supports this model and endpoint: %w", req.Model, req.Path, err)
 	}
 	appendFailoverNotes(req, plan.FailoverRules, failoverNote(rule, service.RuleStatusNoEffect, disableInfo))
@@ -250,6 +251,22 @@ func failoverNote(rule *model.FailoverRule, status, reason string) *service.Rule
 		Rule:     rule.Name,
 		Status:   status,
 		Reason:   reason,
+	}
+}
+
+// failoverNoTransferStatus grades a matched rule's note when its transfer
+// half could not run because no target was available. Only a disable that
+// itself failed is a genuine execution error; a disable that landed while
+// the transfer had nowhere to go reads as 命中·部分生效; nothing applied at
+// all reads as 命中·未生效.
+func failoverNoTransferStatus(disableError string, disableApplied bool) string {
+	switch {
+	case disableError != "":
+		return service.RuleStatusFailed
+	case disableApplied:
+		return service.RuleStatusPartial
+	default:
+		return service.RuleStatusNoEffect
 	}
 }
 

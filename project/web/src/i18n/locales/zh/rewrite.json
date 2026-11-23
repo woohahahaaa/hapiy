@@ -98,13 +98,13 @@
     "triggerLabel": "JSON 路径示例",
     "triggerAria": "JSON 路径示例",
     "examples": {
-      "topLevel": "叫 model 的字段（模型名）",
-      "arrayIndex": "第 1 句话的内容",
-      "arrayLast": "最后一句话的内容",
-      "nested": "body 里的 hello",
-      "header": "请求头（切到 header 后只写名字）"
+      "topLevel": "顶层字段 model（模型名）",
+      "arrayIndex": "messages 数组第 1 个元素的 content 字段",
+      "arrayLast": "messages 数组最后一个元素的 content 字段",
+      "nested": "嵌套字段：body 内的 hello",
+      "header": "请求头（scope 为 header 时只写头字段名）"
     },
-    "howTo": "像报地址：从外往里写，用 . 隔开；第几个从 0 数起，-1 是最后一个。"
+    "howTo": "路径用于定位请求体中的字段：从顶层字段开始，逐级向下，层级之间以 . 分隔。访问数组元素时使用从 0 开始的下标，-1 表示最后一个元素。"
   },
   "form": {
     "name": "名称",
@@ -138,12 +138,12 @@
     "triggerLabel": "multipart 路径示例",
     "triggerAria": "multipart 路径示例",
     "examples": {
-      "field": "叫 model 的行（模型名）",
-      "prompt": "要画什么，写在这行",
-      "sliceIndex": "第 1 张参考图",
-      "fileHeader": "第 1 张图的文件名（内容改不了）",
-      "header": "请求头（切到 header 后只写名字）"
+      "field": "字段 model（模型名）",
+      "prompt": "字段 prompt（生成提示词）",
+      "sliceIndex": "字段 image 的第 1 个文件",
+      "fileHeader": "第 1 个文件的文件名（文件内容不可修改）",
+      "header": "请求头（scope 为 header 时只写头字段名）"
     },
-    "howTo": "像看表格：路径就是那一行的名字；同名的行按 0、1、2 数第几个。"
+    "howTo": "路径用于定位表单中的字段：multipart 请求体由若干字段组成，路径即字段名。同一字段名出现多次时，以下标区分，从 0 开始。文件字段只能修改文件名等元信息，不能修改文件内容。"
   }
 }

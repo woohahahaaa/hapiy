@@ -39,7 +39,7 @@
   "status": {
     "success": "成功",
     "failed": "报错",
-    "localError": "本地报错",
+    "localError": "hapiy 报错",
     "upstreamError": "上游报错"
   },
   "affinity": {

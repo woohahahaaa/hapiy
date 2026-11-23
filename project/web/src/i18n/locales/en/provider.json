@@ -27,7 +27,6 @@
     "key": "Key {{disabled}}/{{total}}",
     "disabledNote": "This {{label}} is disabled",
     "providerDisabledNote": "This provider is disabled",
-    "restoreDirect": "Restore directly",
     "restore": "Restore"
   },
   "dialog": {

@@ -40,7 +40,7 @@
   "status": {
     "success": "Success",
     "failed": "Error",
-    "localError": "Local error",
+    "localError": "hapiy error",
     "upstreamError": "Upstream error"
   },
   "affinity": {

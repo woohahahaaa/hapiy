@@ -6,7 +6,7 @@ hapiy is a **self-hosted AI gateway and agent onboarding manager**: one API surf
 
 - **Model gateway**: exposes OpenAI-compatible HTTP endpoints (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`, `/v1/images/generations`, `/v1/audio/speech`, `/v1/audio/transcriptions`), so clients only change a Base URL and a token; internally it forwards requests along the "Forwarding Rules" to OpenAI-compatible, Anthropic-compatible, self-hosted or third-party upstreams.
 - **Management**: providers and key pools, tokens and quota, request/response rewrite, concurrency control, failover and auto recovery, channel affinity.
-- **Monitoring & cost**: log capture, activity monitor, usage logs, usage and cost statistics.
+- **Monitoring & cost**: the activity monitor (active-requests panel at the bottom of Forwarding rules), usage logs, log capture, usage and cost statistics.
 - **Agent takeover**: take over config files of opencode, Codex, openclaw, WorkBuddy, DeepSeek Harness and more (locally or over SSH), writing the hapiy address and token into them.
 
 All data lives in a local SQLite database; single-process deployment.
@@ -15,9 +15,9 @@ A request's full journey: the client calls hapiy with `Authorization: Bearer hk-
 
 > Note: hapiy is a pass-through gateway; it does not change the OpenAI request/response format. Clients change two things: point the request URL at hapiy (for the OpenAI SDK, `base_url` is `http(s)://<hapiy address>/v1`) and replace the API Key with the `hk-` token created on the Tokens page.
 
-hapiy is mainly about solving the problems agents hit while calling models: slow upstreams, rate limits, upstream errors, client bugs, and costs that don't add up. There's a lot here, so hapiy is not a zero-learning-cost product—run through the typical scenarios below first and the rest gets easier.
+hapiy is mainly about solving the problems agents hit while calling models: slow upstreams, rate limits, upstream errors, client bugs, and costs that are hard to estimate. There's a lot here, so hapiy is not a zero-learning-cost product—run through the typical scenarios below first and the rest gets easier.
 
-We're also building a built-in assistant: eventually you won't need to understand these settings at all—just let it handle them for you.
+If you would rather skip the learning curve, the built-in assistant in the bottom-right corner can do the configuration for you: chat mode only answers questions, while execute mode can create, edit, enable or disable things (writes go through the real UI, just as if you clicked).
 
 ## Typical scenarios
 
@@ -27,10 +27,10 @@ These scenarios come from real use, organized as problem → fix → result.
 | --- | --- | --- | --- |
 | Flaky relays | Multiple relay providers are fast one minute and slow the next, or suddenly rate-limit; switching configs by hand is painful | Add them all under Providers; create a failover rule under Request Handling → Failover with triggers (first byte too slow, speed too low, upstream errors) and a hit threshold, then attach it to the route in Forwarding Rules | A slow provider is switched away automatically; your preferred route is still used while healthy, and a disabled one is restored automatically |
 | All relays down | Every relay is down, or an urgent task needs a faster route | Add an emergency request entry in Forwarding Rules and bind it to the official provider; normal entries keep preferring third parties | The official route is only used when no normal provider is available; any relay recovering switches things back |
-| Upstream errors | WorkBuddy calls GLM-5.3-flash through opencode go; `max_token` is set as GLM requires, but the upstream keeps saying it is too large | Turn on log capture for this request in Forwarding Rules, then export the request and response under Logs / Usage and compare them | Confirm the client sent the wrong value in minutes |
+| Upstream errors | WorkBuddy calls GLM-5.3-flash through opencode go; `max_token` is set as GLM requires, but the upstream keeps saying it is too large | Open the Log capture slot in Forwarding Rules for this one request, then export the request and response under Log Center → Log Capture and compare them | Confirm the client sent the wrong value in minutes |
 | Client bug | You have confirmed it is a client bug, but a fix is nowhere in sight | Create a request rewrite rule that sets `max_token` to a value the upstream accepts, and attach it to the route | The request is fixed before it leaves, so the task runs now |
-| Agent stuck | It says Working for 30–60 seconds; you cannot tell whether the upstream or the client is stuck | Open Activity Monitor and check connection state, chunks received, and average token speed | See whether it is stuck at connect, first byte, or streaming; kill it if needed |
-| Unclear costs | Relays price differently and cache hits change the bill, so the total is hard to work out | Set per-model prices under Providers; sync public prices from Model DB with a multiplier, or enter custom prices by hand; set the exchange rate under Settings → Currency | One consistent total across providers, so you can see where the money goes |
+| Agent stuck | It says Working for 30–60 seconds; you cannot tell whether the upstream or the client is stuck | Check the active-requests panel at the bottom of Forwarding rules: connection stage, chunks received, total and first-byte latency | See whether it is stuck at connect, first byte, or streaming; kill it if needed |
+| Unclear costs | Relays price differently and cache hits change the bill, so the total is hard to work out | Set per-model prices under Providers; sync public prices from models.dev with a multiplier, or enter custom prices by hand; set the exchange rate under Settings → Currency | One consistent total across providers, so you can see where the money goes |
 | Many agents and computers | Every new relay or model means editing JSON on each machine, and a missed parameter (like cache) can quietly raise costs | Use Agent Takeover → Managed models to sync enabled providers and models in one click; recommended configs catch omissions; edit remote configs over SSH | One change applies everywhere; syntax checks and rollback keep it safe |
 | Model returns 502 | DeepSeek harness calls dsv4.1flash via opencode go and gets a 502; the upstream says `x-opencode-session` is missing | Add a request rewrite rule that sets `header.x-opencode-session` from an existing session header or a fixed identifier, and attach it to the route | The header is filled in, the 502 is gone, and the model responds |
 
@@ -75,7 +75,7 @@ curl http://<hapiy address>/v1/chat/completions \
   -d '{"model":"your-model-name","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the forwarding rules show the animated path the request took, "Log Center → Activity" has the live request list, and "Usage Logs" shows this call's latency and token usage.
+`model` must be in the provider's model list (case-sensitive; an empty model list means any model name is accepted). Once the request succeeds, the forwarding rules show the animated path the request took, the active-requests panel at the bottom of the Forwarding rules page has the live request list, and "Usage Logs" shows this call's latency and token usage.
 
 ### When a call fails
 
@@ -128,6 +128,14 @@ curl http://<hapiy address>/v1/chat/completions \
 - Node positions (the layout) are saved separately from the forwarding-rules data.
 - "Version History" in the top-right corner previews and restores versions; the current version is archived first, so you can always go back. The system keeps a stable version every 5 minutes, up to 20.
 - If the same forwarding rules were edited on another page, hapiy asks you to refresh instead of merging automatically.
+
+### Activity monitor (active requests)
+
+The bottom of the Forwarding rules page is a resizable active-requests panel that refreshes every 2 seconds.
+
+- Each row is an in-flight request: current stage (queued, connecting upstream, waiting for the upstream response, receiving · chunk N · bytes read), start time, source, token, provider, model, channel affinity, streaming, and total / first-byte latency.
+- Unfinished requests can be killed with "Kill"; clicking a finished row opens that request's details.
+- The "Show active requests within N" control sets how long finished requests stay in the list.
 
 ## Models
 
@@ -246,20 +254,13 @@ Concurrency is not configured on the "Request Handling" page: it lives in a "Con
 
 Semantics: a request occupies a slot on arrival, the countdown starts when it completes, and the slot is released at zero; requests above the limit **queue** (they are not rejected immediately). Several routes sharing one slot node share the same window. When several concurrency slots are on a path, all of them must pass.
 
-## Monitor
-
-### Activity
-
-Live view of in-flight requests and running statistics.
-
-- The cards on top show total requests, successes, failures, success rate, total tokens, total tokens (cache hits deduped), cache hit rate, throughput, average latency and cost, with a date filter; "Clear usage" only clears statistics, not request records.
-- The "Active requests" table below refreshes every 2 seconds and shows each request's current stage (queued, connecting upstream, waiting for response, receiving…), TTFB and channel affinity; unfinished requests can be killed.
-- Clicking a finished row opens that request's details; "Show active requests within N" adjusts how long finished requests stay in the list.
+## Log Center
 
 ### Usage Logs
 
 Per-request details — the main place to troubleshoot and see usage.
 
+- The cards at the top show running statistics: total requests, successes, failures, success rate, total tokens, total tokens (cache hits deduped), cache hit rate, throughput, average latency and cost, with a date filter; "Clear usage" only clears statistics, not request records.
 - Columns: time, source, token, provider, model, channel affinity, Tokens (input / cache write / cache read / output and hit rate), streaming, cost, latency (total and TTFB), speed, status.
 - Filters: date, type (request / failover / auto recovery / manual recovery / system), source, token, provider, model, status.
 - Click any row for details: upstream URL, upstream Key (masked by default, hover to reveal), per-stage latency (queued / request rewrite / connect / TTFB / response rewrite / stream rewrite), failure reason and more.
@@ -300,67 +301,6 @@ The "Takeover Config Files" page manages the config file records:
 ### Enable switch
 
 The "Agent Takeover" entry is hidden from the sidebar by default; turn it on under "Settings → Agent Takeover" (the `/settings/other` page). **Reload the page** afterwards and the entry appears. The switch only controls the menu entry, not the feature.
-
-## MCP server
-
-hapiy can expose its gateway data as an MCP (Model Context Protocol) server so MCP-capable AI tools can query providers, models, usage, request logs and the forwarding rules directly, and can also create, update and delete providers or clear automatic disables. Upstream keys are only ever returned as their last 4 characters; usernames and passwords are never exposed.
-
-### Enable it
-
-Open "Settings → Other → MCP server" and turn the switch on. A key starting with `hm-` is generated automatically. The page lets you copy the endpoint and the key; "Regenerate" invalidates the previous key immediately.
-
-- The endpoint is always `<hapiy address>/mcp` over Streamable HTTP;
-- while the switch is off the path answers 404;
-- every request must carry `Authorization: Bearer <key>`.
-
-### Tools
-
-| Tool | Purpose |
-| --- | --- |
-| `list_providers` | Providers with endpoints, models, status and weight; never upstream keys |
-| `get_provider` | One provider in detail: base URLs, per-model endpoints, masked keys and notes |
-| `list_models` | Callable models plus their providers and endpoints |
-| `query_logs` | Request logs filtered by model/provider/token/status/time |
-| `get_usage_stats` | Requests, tokens, cost, cache hit rate, average latency |
-| `get_topology` | Nodes and wires of the forwarding rules |
-| `list_disabled_channels` | Channels currently disabled |
-| `list_agent_configs` | Managed agent config file records (contents excluded) |
-| `web_search` | Search public web pages (self-hosted SearXNG when configured, Bing otherwise) |
-| `create_provider` | Create a provider (name required, every other field optional) |
-| `update_provider` | Patch a provider; only the fields passed change |
-| `delete_provider` | Delete a provider (irreversible) |
-| `set_provider_status` | Enable or disable a provider |
-| `set_provider_workflow` | Enable or disable a provider workflow |
-| `set_provider_dedupe_v1` | Dedupe the `/v1` suffix when fetching models |
-| `reset_provider_disable` | Clear one automatic disable or a whole dimension |
-| `reset_all_provider_disable` | Clear one disable dimension across all providers |
-| `list_disabled_records` | Pending auto-disable records (keys masked) |
-| `replay_disabled_record` | Replay the captured request upstream, restore only on success |
-| `restore_disabled_record` | Restore the channel without probing upstream |
-| `extend_disabled_record_countdown` | Push a timed-recovery deadline back |
-
-### Console follow-along
-
-The built-in assistant writes through the same path a person would: create/update opens the real editor, fills it in and clicks save; delete opens the confirmation dialog and confirms it; every step is at least 0.3s apart. The console reports the outcome back to the assistant. External MCP clients still use the direct tools.
-
-### Connect a client
-
-opencode:
-
-```sh
-opencode mcp add hapiy --url http://<hapiy address>/mcp \
-  --header 'Authorization=Bearer {env:HAPIY_MCP_KEY}'
-opencode mcp list
-```
-
-Claude Code:
-
-```sh
-claude mcp add --transport http hapiy http://<hapiy address>/mcp \
-  --header "Authorization: Bearer <key>"
-```
-
-Any other client that supports remote MCP works the same way: the same URL plus an `Authorization: Bearer <key>` header. Keep the key in an environment variable rather than the config file.
 
 ## Settings
 
@@ -419,7 +359,6 @@ Currency and rate only affect records created afterwards; existing records keep 
 
 - The "Debug" menu is only visible in development builds.
 - The "Agent Takeover" switch is described above.
-- "MCP server" exposes read-only data to MCP clients; see the section above.
 
 ## Profile
 
@@ -435,7 +374,7 @@ Manages the login account:
 
 **How do I recover a disabled channel?** Under "Request Handling → Failover → Auto Recovery", the waiting list offers "Test upstream" and "Restore"; you can also click "Restore" per Provider / Base URL / Key on the provider edit page.
 
-**Is Usage Logs delayed?** Yes — logs are written from memory in batches, up to a few seconds late; the active requests under "Activity" are live.
+**Is Usage Logs delayed?** Yes — logs are written from memory in batches, up to a few seconds late; the active-requests panel at the bottom of Forwarding rules is live.
 
 **Are cost and quota the same thing?** No. A token's quota is deducted by token usage; "cost" is money computed from model prices. They are different measures.
 

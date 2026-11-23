@@ -336,7 +336,7 @@ func MigrateLogSources(db *gorm.DB) error {
 }
 
 // MigrateLogErrorOrigins backfills the error_origin column for failed rows
-// written before it existed. The dashboard then shows 本地报错 / 上游报错
+// written before it existed. The dashboard then shows hapiy 报错 / 上游报错
 // instead of the plain 报错 on old data. A failure that recorded an upstream
 // URL reached the upstream (or tried to, for transport errors), so it is
 // upstream; everything else was rejected or failed gateway-side. Idempotent:

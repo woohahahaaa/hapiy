@@ -1163,3 +1163,169 @@ func TestRelayRequest_failedTransferWritesServedProviderRow(t *testing.T) {
 		t.Fatalf("ServedProviderID must expose the attempted fallback provider, got %q", req.ServedProviderID)
 	}
 }
+
+// failoverNoteOf returns the first failover note recorded for the rule.
+func failoverNoteOf(req *RelayRequest, ruleID string) (service.RuleNote, bool) {
+	for _, note := range req.RuleNotes {
+		if note.Category == service.RuleCategoryFailover && note.RuleID == ruleID {
+			return note, true
+		}
+	}
+	return service.RuleNote{}, false
+}
+
+// countFailoverNotesOf counts the failover notes recorded for the rule; the
+// relay must record exactly one outcome line per rule per request.
+func countFailoverNotesOf(req *RelayRequest, ruleID string) int {
+	count := 0
+	for _, note := range req.RuleNotes {
+		if note.Category == service.RuleCategoryFailover && note.RuleID == ruleID {
+			count++
+		}
+	}
+	return count
+}
+
+// TestRelayWithFailover_providerNoFallback_readsPartial_whenDisableApplied
+// pins the no-transfer grading contract: a provider-dimension rule with
+// auto-disable but no eligible fallback disables the failing provider and
+// reads 命中·部分生效 — nothing it attempted failed, so it must not read
+// 命中·出错.
+func TestRelayWithFailover_providerNoFallback_readsPartial_whenDisableApplied(t *testing.T) {
+	// Given: provider-dimension rule with auto-disable, no fallback provider
+	// and no topology origin — the transfer half has nowhere to go.
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{}, &model.DisabledRecord{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	rule := &model.FailoverRule{
+		ID: "rule-1", Name: "供应商：转移 & 禁用",
+		Condition:     "timeout",
+		MatchPatterns: []string{"可用预算已用尽"},
+		Dimension:     model.FailoverDimensionProvider,
+		AutoDisable:   true,
+	}
+	plan := &ExecutionPlan{
+		Provider:      provider,
+		BaseURLs:      []string{upstream.URL},
+		Keys:          []string{"key"},
+		FailoverRules: []*model.FailoverRule{rule},
+	}
+	req := &RelayRequest{}
+
+	// When
+	_, err := engine.relayWithFailover(context.Background(), plan, req)
+
+	// Then: the request still fails (nothing to transfer to), but the note
+	// must read 命中·部分生效 with the disable info in its reason.
+	if err == nil {
+		t.Fatal("expected the original upstream error when no fallback provider is available")
+	}
+	note, ok := failoverNoteOf(req, rule.ID)
+	if !ok {
+		t.Fatalf("missing failover note for %s: %+v", rule.ID, req.RuleNotes)
+	}
+	if note.Status != service.RuleStatusPartial {
+		t.Fatalf("note status: want %q, got %q (reason %q)", service.RuleStatusPartial, note.Status, note.Reason)
+	}
+	if !strings.Contains(note.Reason, "无支持该模型与 Endpoint 的可用回退供应商") || !strings.Contains(note.Reason, "已自动禁用") {
+		t.Fatalf("note reason should carry both the no-fallback cause and the disable info, got %q", note.Reason)
+	}
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("provider should be auto-disabled when the disable half runs")
+	}
+}
+
+// TestRelayWithFailover_providerNoFallback_readsNoEffect_whenDisableNotConfigured
+// covers the skip-only rule: no transfer target and no disable means
+// nothing took effect, so the note reads 命中·未生效, not 命中·出错.
+func TestRelayWithFailover_providerNoFallback_readsNoEffect_whenDisableNotConfigured(t *testing.T) {
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{}, &model.DisabledRecord{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	rule := &model.FailoverRule{
+		ID: "rule-1", Name: "供应商：仅转移",
+		Condition:     "timeout",
+		MatchPatterns: []string{"可用预算已用尽"},
+		Dimension:     model.FailoverDimensionProvider,
+		AutoDisable:   false,
+	}
+	plan := &ExecutionPlan{
+		Provider:      provider,
+		BaseURLs:      []string{upstream.URL},
+		Keys:          []string{"key"},
+		FailoverRules: []*model.FailoverRule{rule},
+	}
+	req := &RelayRequest{}
+
+	_, err := engine.relayWithFailover(context.Background(), plan, req)
+	if err == nil {
+		t.Fatal("expected the original upstream error when no fallback provider is available")
+	}
+	note, ok := failoverNoteOf(req, rule.ID)
+	if !ok {
+		t.Fatalf("missing failover note for %s: %+v", rule.ID, req.RuleNotes)
+	}
+	if note.Status != service.RuleStatusNoEffect {
+		t.Fatalf("note status: want %q, got %q (reason %q)", service.RuleStatusNoEffect, note.Status, note.Reason)
+	}
+	if strings.Contains(note.Reason, "已自动禁用") {
+		t.Fatalf("skip-only rule must not claim a disable, got %q", note.Reason)
+	}
+	if engine.isDisabled(provider.ID, model.FailoverDimensionProvider, provider.ID) {
+		t.Fatal("skip-only rule must not disable the provider")
+	}
+}
+
+// TestRelayWithFailover_keyNoRotatableChannel_singleNoteReadsPartial covers
+// the key dimension with a single channel: no other key to rotate to, but
+// the disable landed. The rule must read 命中·部分生效 and record exactly
+// ONE note — the path used to fall through and append a second, bare note.
+func TestRelayWithFailover_keyNoRotatableChannel_singleNoteReadsPartial(t *testing.T) {
+	db := newRelayTestDB(t, &model.Provider{}, &model.AutoDisableState{}, &model.FailoverHitCounter{}, &model.DisabledRecord{})
+	upstream := failingServer(t, http.StatusTooManyRequests, "可用预算已用尽")
+	provider := &model.Provider{ID: "primary", Name: "primary"}
+	if err := db.Create(provider).Error; err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	engine := NewEngine(db)
+	rule := &model.FailoverRule{
+		ID: "rule-1", Name: "Key：转移 & 禁用",
+		Condition:     "timeout",
+		MatchPatterns: []string{"可用预算已用尽"},
+		Dimension:     model.FailoverDimensionKey,
+		AutoDisable:   true,
+	}
+	plan := &ExecutionPlan{
+		Provider:      provider,
+		BaseURLs:      []string{upstream.URL},
+		Keys:          []string{"key-1"},
+		FailoverRules: []*model.FailoverRule{rule},
+	}
+	req := &RelayRequest{}
+
+	_, err := engine.relayWithFailover(context.Background(), plan, req)
+	if err == nil {
+		t.Fatal("expected the original upstream error when no other channel exists")
+	}
+	if count := countFailoverNotesOf(req, rule.ID); count != 1 {
+		t.Fatalf("note count: want exactly 1, got %d (%+v)", count, req.RuleNotes)
+	}
+	note, _ := failoverNoteOf(req, rule.ID)
+	if note.Status != service.RuleStatusPartial {
+		t.Fatalf("note status: want %q, got %q (reason %q)", service.RuleStatusPartial, note.Status, note.Reason)
+	}
+	if !strings.Contains(note.Reason, "没有可切换的其他通道") || !strings.Contains(note.Reason, "已自动禁用") {
+		t.Fatalf("note reason should carry both the no-channel cause and the disable info, got %q", note.Reason)
+	}
+	if !engine.isDisabled(provider.ID, model.FailoverDimensionKey, "key-1") {
+		t.Fatal("key should be auto-disabled when the disable half runs")
+	}
+}

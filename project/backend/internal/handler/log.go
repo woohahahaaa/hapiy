@@ -24,7 +24,7 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 			query = query.Where("provider_name = ?", providerName)
 		}
 		if status := c.Query("status"); status != "" {
-			query = query.Where("status = ?", status)
+			query = applyLogStatusFilter(query, status)
 		}
 		if logType := c.Query("type"); logType != "" {
 			switch logType {
@@ -89,6 +89,20 @@ func ListLogs(db *gorm.DB) gin.HandlerFunc {
 			"total": total,
 		})
 	}
+}
+
+// applyLogStatusFilter narrows a logs query by the status filter value. Besides
+// the plain statuses it accepts "failed_upstream" / "failed_local", which split
+// failed rows by error_origin (upstream response vs. gateway-side rejection);
+// the dashboard status dropdown uses those two instead of a bare "failed".
+func applyLogStatusFilter(query *gorm.DB, status string) *gorm.DB {
+	switch status {
+	case "failed_upstream":
+		return query.Where("status = ? AND error_origin = ?", "failed", model.LogErrorOriginUpstream)
+	case "failed_local":
+		return query.Where("status = ? AND error_origin = ?", "failed", model.LogErrorOriginLocal)
+	}
+	return query.Where("status = ?", status)
 }
 
 // ListLogSources lists the distinct non-empty sources from the logs table,
@@ -300,7 +314,7 @@ func ClearLogs(db *gorm.DB) gin.HandlerFunc {
 				query = query.Where("model_name = ?", body.Filters.Model)
 			}
 			if body.Filters.Status != "" {
-				query = query.Where("status = ?", body.Filters.Status)
+				query = applyLogStatusFilter(query, body.Filters.Status)
 			}
 			if body.Filters.Source != "" {
 				query = service.ApplySourceFilter(query, body.Filters.Source)

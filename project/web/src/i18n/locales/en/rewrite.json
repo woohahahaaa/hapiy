@@ -103,13 +103,13 @@
     "triggerLabel": "JSON path examples",
     "triggerAria": "JSON path examples",
     "examples": {
-      "topLevel": "The field named model (the model name)",
-      "arrayIndex": "The content of the 1st message",
-      "arrayLast": "The content of the last message",
-      "nested": "hello inside body",
-      "header": "A request header (switch to header and write the name only)"
+      "topLevel": "The top-level field model (the model name)",
+      "arrayIndex": "The content field of the 1st element in the messages array",
+      "arrayLast": "The content field of the last element in the messages array",
+      "nested": "A nested field: hello inside body",
+      "header": "A request header (with scope set to header, write the header name only)"
     },
-    "howTo": "Like an address: outermost name first, separated by dots. Counting starts at 0; -1 means the last one."
+    "howTo": "Paths locate fields in the request body: start at the top-level field and go down level by level, separated by dots. Array elements use zero-based indexes; -1 refers to the last element."
   },
   "form": {
     "name": "Name",
@@ -144,12 +144,12 @@
     "triggerLabel": "multipart path examples",
     "triggerAria": "multipart path examples",
     "examples": {
-      "field": "The row named model (the model name)",
-      "prompt": "The prompt row — what to draw goes here",
-      "sliceIndex": "The 1st reference image",
-      "fileHeader": "The 1st image's filename (its bytes can't change)",
-      "header": "A request header (switch to header and write the name only)"
+      "field": "The field model (the model name)",
+      "prompt": "The field prompt (the generation prompt)",
+      "sliceIndex": "The 1st file of the field image",
+      "fileHeader": "The filename of the 1st file (its contents cannot be modified)",
+      "header": "A request header (with scope set to header, write the header name only)"
     },
-    "howTo": "Like a table: the path is a row name; rows sharing a name are counted 0, 1, 2."
+    "howTo": "Paths locate fields in the form: a multipart body consists of fields, and a path is the field name. When a field name appears more than once, use a zero-based index to pick one. File fields allow changing metadata such as the filename only, never the file contents."
   }
 }

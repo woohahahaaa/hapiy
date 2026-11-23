@@ -25,7 +25,7 @@ import {
 } from '@/components/wooh/dialog'
 import { toast } from '@/components/ui/toast'
 import { usePersistedState } from '@/hooks/use-persisted-state'
-import { dashboardApi, LOG_SOURCE_UNMARKED, type DateRange, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
+import { dashboardApi, LOG_SOURCE_UNMARKED, type DateRange, type LogStatusFilter, type LogTypeFilter, type UsageLog } from '@/lib/dashboard-api'
 
 // Format a stage time in seconds: 0 shows "0s", values above 0 floor at 0.1s.
 function fmtSeconds(val: number): string {
@@ -76,7 +76,11 @@ export function LogsPage() {
   const [modelFilter, setModelFilter] = usePersistedState('logs.model', 'all')
   const [providerFilter, setProviderFilter] = usePersistedState('logs.provider', 'all')
   const [typeFilter, setTypeFilter] = usePersistedState<LogTypeFilter | 'all'>('logs.type', 'all')
-  const [statusFilter, setStatusFilter] = usePersistedState('logs.status', 'all')
+  // 状态筛选：报错拆成「上游报错 / hapiy 报错」两类。旧版本缓存过未拆分的
+  // 'failed'，那个值现在已经没有对应选项——读到时按「全部状态」处理，
+  // 免得下拉框空着却还带着报错筛选。
+  const [statusFilter, setStatusFilter] = usePersistedState<LogStatusFilter | 'failed'>('logs.status', 'all')
+  const activeStatusFilter: LogStatusFilter = statusFilter === 'failed' ? 'all' : statusFilter
   const [tokenFilter, setTokenFilter] = usePersistedState('logs.token', 'all')
   const [sourceFilter, setSourceFilter] = usePersistedState('logs.source', 'all')
   const [dateRange, setDateRange] = usePersistedState<DateRange>('logs.dateRange', {})
@@ -96,13 +100,13 @@ export function LogsPage() {
       model: modelFilter !== 'all' ? modelFilter : undefined,
       provider: providerFilter !== 'all' ? providerFilter : undefined,
       type: typeFilter !== 'all' ? typeFilter : undefined,
-      status: statusFilter !== 'all' ? statusFilter : undefined,
+      status: activeStatusFilter !== 'all' ? activeStatusFilter : undefined,
       token: tokenFilter !== 'all' ? tokenFilter : undefined,
       source: sourceFilter !== 'all' ? sourceFilter : undefined,
       from: dateRange.from,
       to: dateRange.to,
     }),
-    [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to],
+    [modelFilter, providerFilter, typeFilter, activeStatusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to],
   )
 
   const fetchPage = useCallback(async () => {
@@ -148,7 +152,7 @@ export function LogsPage() {
       if (modelFilter !== 'all') filters.model = modelFilter
       if (providerFilter !== 'all') filters.provider = providerFilter
       if (typeFilter !== 'all') filters.type = typeFilter
-      if (statusFilter !== 'all') filters.status = statusFilter
+      if (activeStatusFilter !== 'all') filters.status = activeStatusFilter
       if (tokenFilter !== 'all') filters.token = tokenFilter
       if (sourceFilter !== 'all') filters.source = sourceFilter
       if (dateRange.from) filters.from = dateRange.from
@@ -160,7 +164,7 @@ export function LogsPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('error.clearFailed'))
     }
-  }, [modelFilter, providerFilter, typeFilter, statusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage, t])
+  }, [modelFilter, providerFilter, typeFilter, activeStatusFilter, tokenFilter, sourceFilter, dateRange.from, dateRange.to, fetchPage, t])
 
   const handleResetFilters = useCallback(() => {
     setTokenFilter('all')
@@ -519,8 +523,8 @@ export function LogsPage() {
                 </SelectContent>
               </Select>
               <Select
-                value={statusFilter}
-                onValueChange={(value) => handleFilterChange(setStatusFilter, value)}
+                value={activeStatusFilter}
+                onValueChange={(value) => setStatusFilter(value as LogStatusFilter)}
               >
                 <SelectTrigger size="sm" className="w-32">
                   <SelectValue placeholder={t('filters.status')} />
@@ -529,7 +533,8 @@ export function LogsPage() {
                   <SelectGroup>
                     <SelectItem value="all">{t('filters.allStatuses')}</SelectItem>
                     <SelectItem value="success">{t('status.success')}</SelectItem>
-                    <SelectItem value="failed">{t('status.failed')}</SelectItem>
+                    <SelectItem value="failed_upstream">{t('status.upstreamError')}</SelectItem>
+                    <SelectItem value="failed_local">{t('status.localError')}</SelectItem>
                   </SelectGroup>
                 </SelectContent>
               </Select>

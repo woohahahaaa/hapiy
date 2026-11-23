@@ -1261,20 +1261,17 @@ function ProviderForm({ provider, draft, autoSave, onSave, isSaving, useKey, onU
       }>
         <FieldGroup>
       {disableStatus?.provider && (
-        <div className="rounded-lg border border-border bg-muted p-3">
-          <div className="flex items-center gap-1.5 text-xs text-warning">
-            <AppIcon name="caution" size={14} />
-            <span>{t('failoverStatus.providerDisabledNote')}</span>
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
-              className="h-auto shrink-0 px-0 text-xs text-warning underline"
-              onClick={() => onResetDisableDimension('provider')}
-            >
-              {t('failoverStatus.restoreDirect')}
-            </Button>
-          </div>
+        <div className="flex items-center gap-1.5 rounded-lg border border-border bg-muted p-3 text-xs text-warning">
+          <AppIcon name="caution" size={14} />
+          <span>{t('failoverStatus.providerDisabledNote')}</span>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-warning/50 text-warning hover:bg-warning/10 hover:text-warning"
+            onClick={() => onResetDisableDimension('provider')}
+          >
+            {t('failoverStatus.restore')}
+          </Button>
         </div>
       )}
       <div className="grid grid-cols-2 gap-4">
@@ -1427,13 +1424,13 @@ type ProviderValueListProps = {
   readonly notes?: readonly string[]
   readonly onNotesChange?: (notes: readonly string[]) => void
   readonly notesPlaceholder?: string
-  // 被自动禁用（故障转移）的条目：值为 true 的行在下方追加一行备注
-  // （disabledNote，如「当前 Key 已禁用」），右侧带「直接恢复」文字按钮，
-  // 点击只恢复这一条。
+  // 被禁用（故障转移自动禁用或手动禁用）的条目：值为 true 的行在下方追加一行
+  // 纯提示备注（disabledNote，如「当前 Key 已禁用」），不带操作按钮；恢复由
+  // 行右侧的「恢复」按钮（onRestore）完成。
   readonly disabledValues?: Readonly<Record<string, boolean>>
   readonly disabledNote?: string
   readonly onRestore?: (value: string) => void
-  // 手动禁用：传入时每行右侧渲染「禁用」按钮（已禁用的行变「恢复」）。
+  // 手动禁用：传入时每行右侧渲染「禁用」按钮（已禁用的行变橙色「恢复」）。
   // 不传则不渲染（如新建供应商尚未落库）。
   readonly onDisable?: (value: string) => void
   // 该维度的选择策略（按顺序 / 均衡），显示在标题右侧；不传则不显示按钮。
@@ -1509,7 +1506,7 @@ export function ProviderValueList({ label, placeholder, values, onChange, stripT
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    className={isAutoDisabled ? 'border-warning/50 text-warning hover:bg-warning/10 hover:text-warning' : undefined}
                     onClick={() => (isAutoDisabled ? onRestore?.(trimmedValue) : onDisable(trimmedValue))}
                     aria-label={isAutoDisabled ? t('form.restoreValueAria', { label }) : t('form.disableValueAria', { label })}
                   >
@@ -1534,15 +1531,6 @@ export function ProviderValueList({ label, placeholder, values, onChange, stripT
                 <div className="flex items-center gap-1.5 px-1 text-xs text-warning">
                   <AppIcon name="caution" size={14} />
                   <span>{disabledNote}</span>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="h-auto shrink-0 px-0 text-xs text-warning underline"
-                    onClick={() => onRestore?.(trimmedValue)}
-                  >
-                    {t('failoverStatus.restoreDirect')}
-                  </Button>
                 </div>
               )}
             </Fragment>

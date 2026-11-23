@@ -228,6 +228,11 @@ export type LogListParams = {
 
 export type LogTypeFilter = '' | 'request' | 'channel_disabled' | 'channel_recovered_auto' | 'channel_recovered_manual' | 'system_admin'
 
+// Status filter values the usage table's dropdown sends. Failures are split by
+// origin (upstream vs. gateway side) — the backend maps the two "failed_*"
+// values to status = failed plus error_origin.
+export type LogStatusFilter = 'all' | 'success' | 'failed_upstream' | 'failed_local'
+
 // Sentinel passed to the logs/capture list+clear APIs for the "未标注来源"
 // filter option (rows whose source is empty). Backend maps it to source = ''.
 export const LOG_SOURCE_UNMARKED = '__unmarked__'
